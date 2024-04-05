@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/amzn/ion-go/ion"
-	"github.com/danielgtaylor/restish/cli"
-	"github.com/danielgtaylor/restish/openapi"
+	"github.com/barbich/restish/cli"
+	"github.com/barbich/restish/openapi"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/shamaton/msgpack/v2"
 	"github.com/spf13/cobra"
