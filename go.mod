@@ -13,7 +13,6 @@ require (
 	github.com/charmbracelet/glamour v0.6.0
 	github.com/danielgtaylor/casing v0.0.0-20210126043903-4e55e6373ac3
 	github.com/danielgtaylor/mexpr v1.8.0
-	github.com/danielgtaylor/restish v0.20.0
 	github.com/danielgtaylor/shorthand/v2 v2.1.1
 	github.com/eliukblau/pixterm v1.3.1
 	github.com/fxamacker/cbor/v2 v2.4.0
