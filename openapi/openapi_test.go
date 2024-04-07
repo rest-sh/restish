@@ -13,7 +13,7 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/danielgtaylor/restish/cli"
+	"github.com/barbich/restish/cli"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

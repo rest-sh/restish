@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/barbich/restish/cli"
 	"github.com/danielgtaylor/casing"
-	"github.com/danielgtaylor/restish/cli"
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/gosimple/slug"
 	"github.com/pb33f/libopenapi"

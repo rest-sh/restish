@@ -1,6 +1,8 @@
-module github.com/danielgtaylor/restish
+module github.com/barbich/restish
 
-go 1.18
+go 1.21
+
+toolchain go1.22.1
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
@@ -64,7 +66,7 @@ require (
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
-	github.com/microcosm-cc/bluemonday v1.0.21 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.26 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect

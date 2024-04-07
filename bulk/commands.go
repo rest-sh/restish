@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/barbich/restish/cli"
+	"github.com/barbich/restish/openapi"
 	"github.com/danielgtaylor/mexpr"
-	"github.com/danielgtaylor/restish/cli"
-	"github.com/danielgtaylor/restish/openapi"
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
