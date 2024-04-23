@@ -862,6 +862,151 @@ func Run() (returnErr error) {
 	return returnErr
 }
 
+// Run the CLI! Parse arguments, make requests, print responses.
+func RunEmbedded(args []string, overrideAuthPrefix, overrideAuthToken string, newOut, newErr io.Writer) (returnErr error) {
+
+	Root.SetArgs(args)
+	Root.Use = filepath.Base(args[0])
+	if os.Getenv("COLOR") != "" {
+		viper.Set("color", true)
+	}
+	if os.Getenv("NOCOLOR") != "" {
+		viper.Set("nocolor", true)
+	}
+	viper.Set("ni-override-auth-prefix", overrideAuthPrefix)
+	viper.Set("ni-override-auth-token", overrideAuthToken)
+	// Because we may be doing HTTP calls before cobra has parsed the flags
+	// we parse the GlobalFlags here and already set some config values
+	// to ensure they are available
+	if err := GlobalFlags.Parse(args[1:]); err != nil {
+		if err != pflag.ErrHelp {
+			panic(err)
+		}
+	}
+	if newOut != nil {
+		Root.SetOut(newOut)
+		Stdout = newOut
+	}
+	if newErr != nil {
+		Root.SetErr(newErr)
+		Stderr = newErr
+	}
+	if noCache, _ := GlobalFlags.GetBool("rsh-no-cache"); noCache {
+		viper.Set("rsh-no-cache", true)
+	}
+	if verbose, _ := GlobalFlags.GetBool("rsh-verbose"); verbose {
+		viper.Set("rsh-verbose", true)
+	}
+	if insecure, _ := GlobalFlags.GetBool("rsh-insecure"); insecure {
+		viper.Set("rsh-insecure", true)
+	}
+	if cert, _ := GlobalFlags.GetString("rsh-client-cert"); cert != "" {
+		viper.Set("rsh-client-cert", cert)
+	}
+	if key, _ := GlobalFlags.GetString("rsh-client-key"); key != "" {
+		viper.Set("rsh-client-key", key)
+	}
+	if caCert, _ := GlobalFlags.GetString("rsh-ca-cert"); caCert != "" {
+		viper.Set("rsh-ca-cert", caCert)
+	}
+	if query, _ := GlobalFlags.GetStringArray("rsh-query"); len(query) > 0 {
+		viper.Set("rsh-query", query)
+	}
+	if headers, _ := GlobalFlags.GetStringArray("rsh-header"); len(headers) > 0 {
+		viper.Set("rsh-header", headers)
+	}
+	profile, _ := GlobalFlags.GetString("rsh-profile")
+	viper.Set("rsh-profile", profile)
+	if retries, _ := GlobalFlags.GetInt("rsh-retry"); retries > 0 {
+		viper.Set("rsh-retry", retries)
+	}
+	if timeout, _ := GlobalFlags.GetDuration("rsh-timeout"); timeout > 0 {
+		viper.Set("rsh-timeout", timeout)
+	}
+
+	// Now that global flags are parsed we can enable verbose mode if requested.
+	if viper.GetBool("rsh-verbose") {
+		enableVerbose = true
+	}
+
+	// Load the API commands if we can.
+	if len(args) > 1 {
+		apiName := args[1]
+
+		if apiName == "help" && len(args) > 2 {
+			// The explicit `help` command is followed by the actual commands
+			// you want help with. The first one is the API name.
+			apiName = args[2]
+		}
+
+		loaded := false
+		if apiName != "help" && apiName != "head" && apiName != "options" && apiName != "get" && apiName != "post" && apiName != "put" && apiName != "patch" && apiName != "delete" && apiName != "api" && apiName != "links" && apiName != "edit" && apiName != "auth-header" {
+			// Try to find the registered config for this API. If not found,
+			// there is no need to do anything since the normal flow will catch
+			// the command being missing and print help.
+			if cfg, ok := configs[apiName]; ok {
+
+				// This is used to give context to findApi
+				// Smallest fix for https://github.com/danielgtaylor/restish/issues/128
+				viper.Set("api-name", apiName)
+
+				currentConfig = cfg
+				for _, cmd := range Root.Commands() {
+					if cmd.Use == apiName {
+						currentBase := cfg.Base
+						currentProfile := cfg.Profiles[profile]
+						if currentProfile == nil {
+							if profile != "default" {
+								return fmt.Errorf("invalid profile " + profile)
+							}
+						}
+						if currentProfile != nil && currentProfile.Base != "" {
+							currentBase = currentProfile.Base
+						}
+						if _, err := Load(currentBase, cmd); err != nil {
+							return err
+						}
+						loaded = true
+						break
+					}
+				}
+			}
+		}
+
+		if !loaded {
+			// This could be a URL or short-name as part of a URL for generic
+			// commands. We should load the config for shell completion.
+			if (apiName == "head" || apiName == "options" || apiName == "get" || apiName == "post" || apiName == "put" || apiName == "patch" || apiName == "delete") && len(args) > 2 {
+				apiName = args[2]
+			}
+			apiName = fixAddress(apiName)
+			if name, _ := findAPI(apiName); name != "" {
+				currentConfig = configs[name]
+			}
+		}
+	}
+
+	// Phew, we made it. Execute the command now that everything is loaded
+	// and all the relevant sub-commands are registered.
+	defer func() {
+		if err := recover(); err != nil {
+			LogError("Caught error: %v", err)
+			LogDebug("%s", string(debug.Stack()))
+			if e, ok := err.(error); ok {
+				returnErr = e
+			} else {
+				returnErr = fmt.Errorf("%v", err)
+			}
+		}
+	}()
+	if err := Root.Execute(); err != nil {
+		LogError("Error: %v", err)
+		returnErr = err
+	}
+
+	return returnErr
+}
+
 // GetExitCode returns the exit code to use based on the last HTTP status code.
 func GetExitCode() int {
 	if s := GetLastStatus() / 100; s > 2 && !viper.GetBool("rsh-ignore-status-code") {

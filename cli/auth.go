@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -161,6 +162,36 @@ func (a *ExternalToolAuth) OnRequest(req *http.Request, key string, params map[s
 			// A single value is supported for each header
 			req.Header.Set(k, v)
 		}
+	}
+	return nil
+}
+
+// ExternalOverrideAuth implements External Override Auth where
+// an HTTP Authorization token is passed in as an argument in non-interactive
+// mode.
+type ExternalOverrideAuth struct{}
+
+// Parameters define the External Override Auth parameter names.
+func (a *ExternalOverrideAuth) Parameters() []AuthParam {
+	return []AuthParam{
+		{Name: "prefix", Required: true},
+		{Name: "token", Required: true},
+	}
+}
+
+// OnRequest gets run before the request goes out on the wire.
+func (a *ExternalOverrideAuth) OnRequest(req *http.Request, key string, params map[string]string) error {
+	prefix := viper.GetString("ni-override-auth-prefix")
+	token := viper.GetString("ni-override-auth-token")
+
+	if token == "" {
+		return fmt.Errorf("no token provided")
+	}
+	switch len(prefix) > 0 {
+	case true:
+		req.Header.Add("Authorization", fmt.Sprintf("%s %s", prefix, token))
+	default:
+		req.Header.Add("Authorization", token)
 	}
 	return nil
 }
