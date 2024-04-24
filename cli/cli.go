@@ -862,7 +862,7 @@ func Run() (returnErr error) {
 	return returnErr
 }
 
-// Run the CLI! Parse arguments, make requests, print responses.
+// Run the CLI in embedded mode! Parse arguments, make requests, print responses.
 func RunEmbedded(runArgs []string, overrideAuthPrefix, overrideAuthToken string, newOut, newErr io.Writer) (returnErr error) {
 	// We need to register new commands at runtime based on the selected API
 	// so that we don't have to potentially refresh and parse every single
@@ -870,12 +870,11 @@ func RunEmbedded(runArgs []string, overrideAuthPrefix, overrideAuthToken string,
 	// the input args to find non-option arguments, get the first arg, and
 	// if it isn't from a well-known set try to load that API.
 	args := []string{}
-	for _, arg := range runArgs {
+	for _, arg := range os.Args {
 		if !strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "__") {
 			args = append(args, arg)
 		}
 	}
-	Root.Use = filepath.Base(args[0])
 
 	if os.Getenv("COLOR") != "" {
 		viper.Set("color", true)
@@ -889,12 +888,12 @@ func RunEmbedded(runArgs []string, overrideAuthPrefix, overrideAuthToken string,
 	// Because we may be doing HTTP calls before cobra has parsed the flags
 	// we parse the GlobalFlags here and already set some config values
 	// to ensure they are available
-	if err := GlobalFlags.Parse(args[1:]); err != nil {
+	if err := GlobalFlags.Parse(os.Args[1:]); err != nil {
 		if err != pflag.ErrHelp {
 			panic(err)
 		}
 	}
-	Root.SetArgs(args)
+
 	if newOut != nil {
 		Root.SetOut(newOut)
 		Stdout = newOut
@@ -943,12 +942,12 @@ func RunEmbedded(runArgs []string, overrideAuthPrefix, overrideAuthToken string,
 
 	// Load the API commands if we can.
 	if len(args) > 1 {
-		apiName := args[0]
+		apiName := args[1]
 
 		if apiName == "help" && len(args) > 2 {
 			// The explicit `help` command is followed by the actual commands
 			// you want help with. The first one is the API name.
-			apiName = args[1]
+			apiName = args[2]
 		}
 
 		loaded := false

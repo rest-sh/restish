@@ -3,11 +3,12 @@ package embedded
 import (
 	"fmt"
 	"io"
+	"os"
 
-	"github.com/danielgtaylor/restish/bulk"
-	"github.com/danielgtaylor/restish/cli"
-	"github.com/danielgtaylor/restish/oauth"
-	"github.com/danielgtaylor/restish/openapi"
+	"github.com/loicalleyne/restish/bulk"
+	"github.com/loicalleyne/restish/cli"
+	"github.com/loicalleyne/restish/oauth"
+	"github.com/loicalleyne/restish/openapi"
 )
 
 var version string = "embedded"
@@ -19,7 +20,10 @@ func Restish(appName string, args []string, overrideAuthPrefix, overrideAuthToke
 	default:
 		cli.Init(appName, version)
 	}
-
+	osArgsBackup := os.Args
+	defer func() { os.Args = osArgsBackup }()
+	os.Args = []string{"embedded"}
+	os.Args = append(os.Args, args...)
 	// Register default encodings, content type handlers, and link parsers.
 	cli.Defaults()
 
