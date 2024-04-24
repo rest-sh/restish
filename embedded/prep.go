@@ -5,10 +5,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/loicalleyne/restish/bulk"
-	"github.com/loicalleyne/restish/cli"
-	"github.com/loicalleyne/restish/oauth"
-	"github.com/loicalleyne/restish/openapi"
+	"github.com/danielgtaylor/restish/bulk"
+	"github.com/danielgtaylor/restish/cli"
+	"github.com/danielgtaylor/restish/oauth"
+	"github.com/danielgtaylor/restish/openapi"
+	"github.com/spf13/viper"
 )
 
 var version string = "embedded"
@@ -22,7 +23,7 @@ func Restish(appName string, args []string, overrideAuthPrefix, overrideAuthToke
 	}
 	osArgsBackup := os.Args
 	defer func() { os.Args = osArgsBackup }()
-	os.Args = []string{"embedded"}
+	os.Args = []string{"restish-embedded"}
 	os.Args = append(os.Args, args...)
 	// Register default encodings, content type handlers, and link parsers.
 	cli.Defaults()
@@ -37,10 +38,19 @@ func Restish(appName string, args []string, overrideAuthPrefix, overrideAuthToke
 	cli.AddAuth("oauth-authorization-code", &oauth.AuthorizationCodeHandler{})
 	if overrideAuthToken != "" {
 		cli.AddAuth("override", &cli.ExternalOverrideAuth{})
+		viper.Set("ni-override-auth-prefix", overrideAuthPrefix)
+		viper.Set("ni-override-auth-token", overrideAuthToken)
 	}
-
+	if newOut != nil {
+		cli.Root.SetOut(newOut)
+		cli.Stdout = newOut
+	}
+	if newErr != nil {
+		cli.Root.SetErr(newErr)
+		cli.Stderr = newErr
+	}
 	// Run the CLI, parsing arguments, making requests, and printing responses.
-	if err := cli.RunEmbedded(args, overrideAuthPrefix, overrideAuthToken, newOut, newErr); err != nil {
+	if err := cli.Run(); err != nil {
 		return fmt.Errorf("%w %v", err, cli.GetExitCode())
 	}
 	return nil
