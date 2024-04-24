@@ -12,9 +12,13 @@ import (
 
 var version string = "embedded"
 
-func Restish(args []string, overrideAuthPrefix, overrideAuthToken string, newOut, newErr io.Writer) error {
-
-	cli.Init("restish", version)
+func Restish(appName string, args []string, overrideAuthPrefix, overrideAuthToken string, newOut, newErr io.Writer) error {
+	switch appName {
+	case "":
+		return fmt.Errorf("no app name provided")
+	default:
+		cli.Init(appName, version)
+	}
 
 	// Register default encodings, content type handlers, and link parsers.
 	cli.Defaults()
