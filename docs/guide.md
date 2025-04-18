@@ -335,6 +335,7 @@ Restish has support for dynamic shell completion built-in. See the help for your
 $ restish completion bash --help
 $ restish completion zsh --help
 $ restish completion powershell --help
+$ restish completion fish --help
 ```
 
 If using Homebrew, you may need one additional step to [include the Homebrew completions path](https://docs.brew.sh/Shell-Completion) for your shell.
