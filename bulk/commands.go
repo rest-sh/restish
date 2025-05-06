@@ -1,6 +1,7 @@
 package bulk
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,7 +86,7 @@ func newInterpreter(expression, schemaURL string) mexpr.Interpreter {
 
 				if err := yaml.Unmarshal(body, &rootNode); err == nil {
 					if err := low.BuildModel(rootNode.Content[0], &ls); err == nil {
-						if err := ls.Build(rootNode.Content[0], index.NewSpecIndex(&rootNode)); err == nil {
+						if err := ls.Build(context.TODO(), rootNode.Content[0], index.NewSpecIndex(&rootNode)); err == nil {
 							s := base.NewSchema(&ls)
 							result := openapi.GenExample(s, 0)
 							if asMap, ok := result.(map[string]any); ok {

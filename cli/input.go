@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/shorthand/v2"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // Stdin represents the command input, which defaults to os.Stdin.

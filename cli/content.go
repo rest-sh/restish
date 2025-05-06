@@ -13,7 +13,7 @@ import (
 	"github.com/amzn/ion-go/ion"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/shamaton/msgpack/v2"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // ContentType is used to marshal/unmarshal data to various formats.

@@ -3,13 +3,16 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,11 +23,13 @@ import (
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/pb33f/libopenapi/resolver"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/pb33f/libopenapi/utils"
-	"github.com/rest-sh/restish/cli"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
+	"gopkg.in/yaml.v3"
+
+	"github.com/rest-sh/restish/cli"
 )
 
 // reOpenAPI3 is a regex used to detect OpenAPI files from their contents.
@@ -65,15 +70,30 @@ type Resolver interface {
 	Resolve(uri string) (*url.URL, error)
 }
 
+func getExt[T any](v *orderedmap.Map[string, *yaml.Node], key string) (T, error) {
+	var val T
+	if v == nil {
+		return val, errors.New("extension map is unset")
+	}
+
+	ext, exists := v.Get(key)
+	if !exists {
+		return val, fmt.Errorf("extension %q not found", key)
+	}
+
+	err := ext.Decode(&val)
+	if err == nil {
+		return val, nil
+	}
+
+	return val, err
+}
+
 // getExt returns an extension converted to some type with the given default
 // returned if the extension is not found or cannot be cast to that type.
-func getExt[T any](v map[string]any, key string, def T) T {
-	if v != nil {
-		if i := v[key]; i != nil {
-			if t, ok := i.(T); ok {
-				return t
-			}
-		}
+func getExtOr[T any](v *orderedmap.Map[string, *yaml.Node], key string, def T) T {
+	if val, err := getExt[T](v, key); err == nil {
+		return val
 	}
 
 	return def
@@ -82,22 +102,14 @@ func getExt[T any](v map[string]any, key string, def T) T {
 // getExtSlice returns an extension converted to some type with the given
 // default returned if the extension is not found or cannot be converted to
 // a slice of the correct type.
-func getExtSlice[T any](v map[string]any, key string, def []T) []T {
-	if v != nil {
-		if i := v[key]; i != nil {
-			if s, ok := i.([]any); ok && len(s) > 0 {
-				n := make([]T, len(s))
-				for i := 0; i < len(s); i++ {
-					if si, ok := s[i].(T); ok {
-						n[i] = si
-					}
-				}
-				return n
-			}
-		}
-	}
+func getExtSlice[T any](v *orderedmap.Map[string, *yaml.Node], key string, def []T) []T {
+	return getExtOr(v, key, def)
+}
 
-	return def
+func decodeYAML(node *yaml.Node) (any, error) {
+	var value any
+	err := node.Decode(&value)
+	return value, err
 }
 
 // getBasePath returns the basePath to which the operation paths need to be appended (if any)
@@ -116,7 +128,7 @@ func getBasePath(location *url.URL, servers []*v3.Server) (string, error) {
 
 		// Create a list with all possible parametrised server names
 		endpoints := []string{s.URL}
-		for k, v := range s.Variables {
+		for k, v := range s.Variables.FromOldest() {
 			key := fmt.Sprintf("{%s}", k)
 			if len(v.Enum) == 0 {
 				for i := range endpoints {
@@ -159,19 +171,26 @@ func getRequestInfo(op *v3.Operation) (string, *base.Schema, []interface{}) {
 	mts := make(map[string][]interface{})
 
 	if op.RequestBody != nil {
-		for mt, item := range op.RequestBody.Content {
+		for mt, item := range op.RequestBody.Content.FromOldest() {
 			var examples []any
 
 			if item.Example != nil {
-				examples = append(examples, item.Example)
+				ex, err := decodeYAML(item.Example)
+				if err != nil {
+					log.Fatal(err)
+				}
+				examples = append(examples, ex)
 			}
-			if len(item.Examples) > 0 {
-				keys := maps.Keys(item.Examples)
-				sort.Strings(keys)
+			if item.Examples != nil && item.Examples.Len() > 0 {
+				keys := slices.Sorted(item.Examples.KeysFromOldest())
 				for _, key := range keys {
-					ex := item.Examples[key]
-					if ex.Value != nil {
-						examples = append(examples, ex.Value)
+					ex := item.Examples.GetOrZero(key)
+					if ex != nil {
+						exVal, err := decodeYAML(ex.Value)
+						if err != nil {
+							log.Fatal(err)
+						}
+						examples = append(examples, exVal)
 					}
 				}
 			}
@@ -230,7 +249,7 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 	}
 
 	for _, p := range combinedParams {
-		if getExt(p.Extensions, ExtIgnore, false) {
+		if getExtOr(p.Extensions, ExtIgnore, false) {
 			continue
 		}
 
@@ -256,12 +275,28 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 				}
 			}
 
-			def = s.Default
-			example = s.Example
+			if s.Default != nil {
+				newDef, err := decodeYAML(s.Default)
+				if err != nil {
+					log.Fatal(err)
+				}
+				def = newDef
+			}
+			if s.Example != nil {
+				newExample, err := decodeYAML(s.Example)
+				if err != nil {
+					log.Fatal(err)
+				}
+				example = newExample
+			}
 		}
 
 		if p.Example != nil {
-			example = p.Example
+			var newExample any
+			if err := p.Example.Decode(&newExample); err != nil {
+				log.Fatal(err)
+			}
+			example = newExample
 		}
 
 		style := cli.StyleSimple
@@ -269,8 +304,8 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 			style = cli.StyleForm
 		}
 
-		displayName := getExt(p.Extensions, ExtName, "")
-		description := getExt(p.Extensions, ExtDescription, p.Description)
+		displayName := getExtOr(p.Extensions, ExtName, "")
+		description := getExtOr(p.Extensions, ExtDescription, p.Description)
 
 		param := &cli.Param{
 			Type:        typ,
@@ -314,7 +349,7 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 	if name == "" {
 		name = casing.Kebab(method + "-" + strings.Trim(uriTemplate.Path, "/"))
 	}
-	if override := getExt(op.Extensions, ExtName, ""); override != "" {
+	if override := getExtOr(op.Extensions, ExtName, ""); override != "" {
 		name = override
 	} else if oldName := slug.Make(op.OperationId); oldName != "" && oldName != name {
 		// For backward-compatibility, add the old naming scheme as an alias
@@ -323,8 +358,8 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 		aliases = append(aliases, oldName)
 	}
 
-	desc := getExt(op.Extensions, ExtDescription, op.Description)
-	hidden := getExt(op.Extensions, ExtHidden, false)
+	desc := getExtOr(op.Extensions, ExtDescription, op.Description)
+	hidden := getExtOr(op.Extensions, ExtHidden, false)
 
 	if len(pathParams) > 0 {
 		desc += "\n## Argument Schema:\n```schema\n{\n"
@@ -354,7 +389,13 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 		if len(reqExamples) > 0 {
 			wroteHeader := false
 			for _, ex := range reqExamples {
-				if _, ok := ex.(string); !ok {
+				var exContent string
+				if exString, ok := ex.(string); ok {
+					if exString == "<input.json" {
+						continue
+					}
+					exContent = "\n```\n" + strings.Trim(exString, "\n") + "\n```\n"
+				} else {
 					// Not a string, so it's structured data. Let's marshal it to the
 					// shorthand syntax if we can.
 					if m, ok := ex.(map[string]interface{}); ok {
@@ -384,25 +425,13 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 					encoder.Encode(ex)
 					b := buffer.Bytes()
 
-					if !wroteHeader {
-						desc += "\n## Input Example\n"
-						wroteHeader = true
-					}
-
-					desc += "\n```json\n" + strings.Trim(string(b), "\n") + "\n```\n"
-					continue
+					exContent = "\n```json\n" + strings.Trim(string(b), "\n") + "\n```\n"
 				}
-
-				if ex.(string) == "<input.json" {
-					continue
-				}
-
 				if !wroteHeader {
 					desc += "\n## Input Example\n"
 					wroteHeader = true
 				}
-
-				desc += "\n```\n" + strings.Trim(ex.(string), "\n") + "\n```\n"
+				desc += exContent
 			}
 		}
 
@@ -413,7 +442,7 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 
 	codes := []string{}
 	respMap := map[string]*v3.Response{}
-	for k, v := range op.Responses.Codes {
+	for k, v := range op.Responses.Codes.FromOldest() {
 		codes = append(codes, k)
 		respMap[k] = v
 	}
@@ -438,8 +467,8 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 		resp = respMap[code]
 
 		hash := [32]byte{}
-		if len(resp.Content) > 0 {
-			for ct, typeInfo := range resp.Content {
+		if resp.Content != nil && resp.Content.Len() > 0 {
+			for ct, typeInfo := range resp.Content.FromOldest() {
 				var s *base.Schema
 				hash = [32]byte{}
 				if typeInfo.Schema != nil {
@@ -492,7 +521,7 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 
 		if resp != nil {
 			desc += "\n## Response " + entries[0].code + ct + "\n"
-			respDesc := getExt(resp.Extensions, ExtDescription, resp.Description)
+			respDesc := getExtOr(resp.Extensions, ExtDescription, resp.Description)
 			if respDesc != "" {
 				desc += "\n" + respDesc + "\n"
 			} else if !hasSchema {
@@ -506,9 +535,8 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 		}
 
 		headers := respMap[entries[0].code].Headers
-		if len(headers) > 0 {
-			keys := maps.Keys(headers)
-			sort.Strings(keys)
+		if headers != nil && headers.Len() > 0 {
+			keys := slices.Sorted(headers.KeysFromOldest())
 			desc += "\nHeaders: " + strings.Join(keys, ", ") + "\n"
 		}
 
@@ -558,7 +586,7 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 		return cli.API{}, err
 	}
 
-	config := datamodel.NewOpenDocumentConfiguration()
+	config := datamodel.NewDocumentConfiguration()
 	schemeLower := strings.ToLower(location.Scheme)
 	if schemeLower == "http" || schemeLower == "https" {
 		// Set the base URL to resolve relative references.
@@ -567,6 +595,8 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 		// Set the base local directory path to resolve relative references.
 		config.BasePath = path.Dir(location.Path)
 	}
+	config.IgnorePolymorphicCircularReferences = true
+	config.IgnoreArrayCircularReferences = true
 
 	doc, err := libopenapi.NewDocumentWithConfiguration(data, config)
 	if err != nil {
@@ -577,16 +607,10 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 	switch doc.GetSpecInfo().SpecType {
 	case utils.OpenApi3:
 		result, errs := doc.BuildV3Model()
-		// Allow circular reference errors
-		for _, err := range errs {
-			if refErr, ok := err.(*resolver.ResolvingError); ok {
-				if refErr.CircularReference == nil {
-					return cli.API{}, fmt.Errorf("errors %v", errs)
-				}
-			} else {
-				return cli.API{}, fmt.Errorf("errors %v", errs)
-			}
+		if len(errs) > 0 {
+			return cli.API{}, fmt.Errorf("failed to load the OpenAPI document: %w", errors.Join(errs...))
 		}
+
 		model = result.Model
 	default:
 		return cli.API{}, fmt.Errorf("unsupported OpenAPI document")
@@ -600,8 +624,8 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 
 	operations := []cli.Operation{}
 	if model.Paths != nil {
-		for uri, path := range model.Paths.PathItems {
-			if getExt(path.Extensions, ExtIgnore, false) {
+		for uri, pathItem := range model.Paths.PathItems.FromOldest() {
+			if getExtOr(pathItem.Extensions, ExtIgnore, false) {
 				continue
 			}
 
@@ -610,23 +634,22 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 				return cli.API{}, err
 			}
 
-			for method, operation := range path.GetOperations() {
-				if operation == nil || getExt(operation.Extensions, ExtIgnore, false) {
+			for method, operation := range pathItem.GetOperations().FromOldest() {
+				if operation == nil || getExtOr(operation.Extensions, ExtIgnore, false) {
 					continue
 				}
 
-				operations = append(operations, openapiOperation(cmd, strings.ToUpper(method), resolved, path, operation))
+				operations = append(operations, openapiOperation(cmd, strings.ToUpper(method), resolved, pathItem, operation))
 			}
 		}
 	}
 
 	authSchemes := []cli.APIAuth{}
 	if model.Components != nil && model.Components.SecuritySchemes != nil {
-		keys := maps.Keys(model.Components.SecuritySchemes)
-		sort.Strings(keys)
+		keys := slices.Sorted(model.Components.SecuritySchemes.KeysFromOldest())
 
 		for _, key := range keys {
-			scheme := model.Components.SecuritySchemes[key]
+			scheme := model.Components.SecuritySchemes.Value(key)
 			switch scheme.Type {
 			case "apiKey":
 				// TODO: api key auth
@@ -677,8 +700,8 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 	short := ""
 	long := ""
 	if model.Info != nil {
-		short = getExt(model.Info.Extensions, ExtName, model.Info.Title)
-		long = getExt(model.Info.Extensions, ExtDescription, model.Info.Description)
+		short = getExtOr(model.Info.Extensions, ExtName, model.Info.Title)
+		long = getExtOr(model.Info.Extensions, ExtDescription, model.Info.Description)
 	}
 
 	api := cli.API{
@@ -699,13 +722,17 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 func loadAutoConfig(api *cli.API, model *v3.Document) {
 	var config *autoConfig
 
-	cfg := model.Extensions[ExtCLIConfig]
+	if model.Extensions == nil {
+		return
+	}
+
+	cfg := model.Extensions.Value(ExtCLIConfig)
 	if cfg == nil {
 		return
 	}
 
 	low := model.GoLow()
-	for k, v := range low.Extensions {
+	for k, v := range low.Extensions.FromOldest() {
 		if k.Value == ExtCLIConfig {
 			if err := v.ValueNode.Decode(&config); err != nil {
 				fmt.Fprintf(os.Stderr, "Unable to unmarshal x-cli-config: %v", err)
@@ -719,7 +746,7 @@ func loadAutoConfig(api *cli.API, model *v3.Document) {
 	params := map[string]string{}
 
 	if model.Components.SecuritySchemes != nil {
-		scheme := model.Components.SecuritySchemes[config.Security]
+		scheme := model.Components.SecuritySchemes.Value(config.Security)
 
 		// Convert it to the Restish security type and set some default params.
 		switch scheme.Type {

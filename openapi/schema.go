@@ -1,12 +1,14 @@
 package openapi
 
 import (
-	"encoding/base64"
+	"bytes"
 	"fmt"
-	"sort"
+	"log"
+	"slices"
 	"strings"
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"gopkg.in/yaml.v3"
 )
 
 type schemaMode int
@@ -22,8 +24,7 @@ func inferType(s *base.Schema) {
 		if s.Items != nil {
 			s.Type = []string{"array"}
 		}
-
-		if len(s.Properties) > 0 || s.AdditionalProperties != nil {
+		if (s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil {
 			s.Type = []string{"object"}
 		}
 	}
@@ -40,20 +41,16 @@ func isSimpleSchema(s *base.Schema) bool {
 	return s.Type[0] != "object"
 }
 
-// sortedSchemas is a hack to provide stable outputs from the schema and example
-// generation code because libopenapi has a race condition that determines the
-// order of resolved lists of schema proxies for all-of, any-of, one-of, etc.
-func sortedSchemas(s []*base.SchemaProxy) []*base.SchemaProxy {
-	sort.Slice(s, func(i, j int) bool {
-		ih := s[i].GoLow().Hash()
-		jh := s[j].GoLow().Hash()
-		return base64.StdEncoding.EncodeToString(ih[:]) < base64.StdEncoding.EncodeToString(jh[:])
-	})
-	return s
-}
-
 func renderSchema(s *base.Schema, indent string, mode schemaMode) string {
 	return renderSchemaInternal(s, indent, mode, map[[32]byte]bool{})
+}
+
+func derefOrDefault[T any](v *T) T {
+	if v != nil {
+		return *v
+	}
+	var d T
+	return d
 }
 
 func renderSchemaInternal(s *base.Schema, indent string, mode schemaMode, known map[[32]byte]bool) string {
@@ -75,8 +72,17 @@ func renderSchemaInternal(s *base.Schema, indent string, mode schemaMode, known 
 	} {
 		if len(of.schemas) > 0 {
 			out := of.label + "{\n"
-			for _, possible := range sortedSchemas(of.schemas) {
-				out += indent + "  " + renderSchemaInternal(possible.Schema(), indent+"  ", mode, known) + "\n"
+			for _, possible := range of.schemas {
+				sch := possible.Schema()
+				simple := isSimpleSchema(sch)
+				hash := sch.GoLow().Hash()
+				if simple || !known[hash] {
+					known[hash] = true
+					out += indent + "  " + renderSchemaInternal(possible.Schema(), indent+"  ", mode, known) + "\n"
+					known[hash] = false
+					continue
+				}
+				out += indent + "  <recursive ref>\n"
 			}
 			return out + indent + "}"
 		}
@@ -126,7 +132,11 @@ func renderSchemaInternal(s *base.Schema, indent string, mode schemaMode, known 
 		}
 
 		if s.Default != nil {
-			tags = append(tags, fmt.Sprintf("default:%v", s.Default))
+			def, err := yaml.Marshal(s.Default)
+			if err != nil {
+				log.Fatal(err)
+			}
+			tags = append(tags, fmt.Sprintf("default:%v", string(bytes.TrimSpace(def))))
 		}
 
 		if s.Format != "" {
@@ -148,7 +158,11 @@ func renderSchemaInternal(s *base.Schema, indent string, mode schemaMode, known 
 		if len(s.Enum) > 0 {
 			enums := []string{}
 			for _, e := range s.Enum {
-				enums = append(enums, fmt.Sprintf("%v", e))
+				ev, err := yaml.Marshal(e)
+				if err != nil {
+					log.Fatal(err)
+				}
+				enums = append(enums, fmt.Sprintf("%v", string(bytes.TrimSpace(ev))))
 			}
 
 			tags = append(tags, fmt.Sprintf("enum:%s", strings.Join(enums, ",")))
@@ -180,68 +194,68 @@ func renderSchemaInternal(s *base.Schema, indent string, mode schemaMode, known 
 		return "[<any>]"
 	case "object":
 		// Special case: object with nothing defined
-		if len(s.Properties) == 0 && s.AdditionalProperties == nil {
+		if (s.Properties == nil || s.Properties.Len() == 0) && s.AdditionalProperties == nil {
 			return "(object)"
 		}
 
-		obj := "{\n"
+		var obj strings.Builder
+		obj.WriteString("{\n")
 
-		keys := []string{}
-		for name := range s.Properties {
-			keys = append(keys, name)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(s.Properties.KeysFromOldest())
 
 		for _, name := range keys {
-			prop := s.Properties[name].Schema()
+			propVal := s.Properties.Value(name)
+			prop := propVal.Schema()
 			if prop == nil {
-				continue
-			}
-
-			if prop.ReadOnly && mode == modeWrite {
-				continue
-			} else if prop.WriteOnly && mode == modeRead {
-				continue
-			}
-
-			for _, req := range s.Required {
-				if req == name {
-					name += "*"
-					break
+				if err := propVal.GetBuildError(); err != nil {
+					log.Fatal(err)
 				}
+				continue
+			}
+
+			if derefOrDefault(prop.ReadOnly) && mode == modeWrite {
+				continue
+			} else if derefOrDefault(prop.WriteOnly) && mode == modeRead {
+				continue
+			}
+
+			if slices.Contains(s.Required, name) {
+				name += "*"
 			}
 
 			simple := isSimpleSchema(prop)
 			hash := prop.GoLow().Hash()
 			if simple || !known[hash] {
 				known[hash] = true
-				obj += indent + "  " + name + ": " + renderSchemaInternal(prop, indent+"  ", mode, known) + "\n"
+				obj.WriteString(indent + "  " + name + ": " + renderSchemaInternal(prop, indent+"  ", mode, known) + "\n")
 				known[hash] = false
 			} else {
-				obj += indent + "  " + name + ": <rescurive ref>\n"
+				obj.WriteString(indent + "  " + name + ": <rescurive ref>\n")
 			}
 		}
 
 		if s.AdditionalProperties != nil {
 			ap := s.AdditionalProperties
-			if sp, ok := ap.(*base.SchemaProxy); ok {
-				addl := sp.Schema()
-				simple := isSimpleSchema(addl)
-				hash := addl.GoLow().Hash()
-				if simple || !known[hash] {
-					known[hash] = true
-					obj += indent + "  " + "<any>: " + renderSchemaInternal(addl, indent+"  ", mode, known) + "\n"
-				} else {
-					obj += indent + "  <any>: <rescurive ref>\n"
+			if ap != nil {
+				if ap.IsA() && ap.A != nil {
+					addl := ap.A.Schema()
+					simple := isSimpleSchema(addl)
+					hash := addl.GoLow().Hash()
+					if simple || !known[hash] {
+						known[hash] = true
+						obj.WriteString(indent + "  " + "<any>: " + renderSchemaInternal(addl, indent+"  ", mode, known) + "\n")
+					} else {
+						obj.WriteString(indent + "  <any>: <rescurive ref>\n")
+					}
 				}
-			}
-			if b, ok := ap.(bool); ok && b {
-				obj += indent + "  <any>: <any>\n"
+				if ap.IsB() && ap.B {
+					obj.WriteString(indent + "  <any>: <any>\n")
+				}
 			}
 		}
 
-		obj += indent + "}"
-		return obj
+		obj.WriteString(indent + "}")
+		return obj.String()
 	}
 
 	return "<any>"

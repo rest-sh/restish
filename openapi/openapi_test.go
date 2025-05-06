@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,10 +15,12 @@ import (
 	"testing/iotest"
 
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/rest-sh/restish/cli"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
+
+	"github.com/rest-sh/restish/cli"
 )
 
 // parseURL parses the input as a URL ignoring any errors
@@ -64,9 +67,9 @@ func TestGetBasePath(t *testing.T) {
 			servers: []*v3.Server{
 				{
 					URL: "http://my-api.foo.bar/{mount}/api",
-					Variables: map[string]*v3.ServerVariable{
+					Variables: orderedmap.From(maps.All(map[string]*v3.ServerVariable{
 						"mount": {Default: "point"},
-					},
+					})),
 				},
 			},
 			output: "/point/api",
@@ -78,9 +81,9 @@ func TestGetBasePath(t *testing.T) {
 				{URL: "http://my-api.some.other.domain:12456"},
 				{
 					URL: "http://my-api.foo.bar/{mount}/api",
-					Variables: map[string]*v3.ServerVariable{
+					Variables: orderedmap.From(maps.All(map[string]*v3.ServerVariable{
 						"mount": {Default: "point"},
-					},
+					})),
 				},
 			},
 			output: "/point/api",
@@ -91,9 +94,9 @@ func TestGetBasePath(t *testing.T) {
 			servers: []*v3.Server{
 				{
 					URL: "http://my-api.foo.bar/{mount}/api",
-					Variables: map[string]*v3.ServerVariable{
+					Variables: orderedmap.From(maps.All(map[string]*v3.ServerVariable{
 						"mount": {Default: "point", Enum: []string{"vec", "point"}},
-					},
+					})),
 				},
 			},
 			output: "/vec/api",
@@ -105,9 +108,9 @@ func TestGetBasePath(t *testing.T) {
 				{URL: "http://my-api.some.other.domain:12456"},
 				{
 					URL: "http://my-api.foo.bar/{mount}/api",
-					Variables: map[string]*v3.ServerVariable{
+					Variables: orderedmap.From(maps.All(map[string]*v3.ServerVariable{
 						"mount": {Default: "point", Enum: []string{"vec", "point"}},
-					},
+					})),
 				},
 			},
 			output: "/vec/api",
@@ -118,10 +121,10 @@ func TestGetBasePath(t *testing.T) {
 			servers: []*v3.Server{
 				{
 					URL: "http://{env}my-api.foo.bar/{mount}/api",
-					Variables: map[string]*v3.ServerVariable{
+					Variables: orderedmap.From(maps.All(map[string]*v3.ServerVariable{
 						"env":   {Default: "pp"},
 						"mount": {Default: "point", Enum: []string{"vec", "point"}},
-					},
+					})),
 				},
 			},
 			output: "/vec/api",
