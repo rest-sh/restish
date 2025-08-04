@@ -1,6 +1,8 @@
 module github.com/rest-sh/restish
 
-go 1.24
+go 1.24.0
+
+toolchain go1.24.5
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
@@ -25,7 +27,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.16
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/pb33f/libopenapi v0.22.3
+	github.com/pb33f/libopenapi v0.25.1
 	github.com/schollz/progressbar/v3 v3.12.2
 	github.com/shamaton/msgpack/v2 v2.1.1
 	github.com/spf13/afero v1.9.3
@@ -64,7 +66,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
-	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
@@ -73,6 +74,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
+	github.com/pb33f/ordered-map/v2 v2.2.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
@@ -85,7 +87,6 @@ require (
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/twpayne/httpcache v1.0.0 // indirect
-	github.com/wk8/go-ordered-map/v2 v2.1.9-0.20240815153524-6ea36470d1bd // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/goldmark v1.5.3 // indirect
 	github.com/yuin/goldmark-emoji v1.0.1 // indirect
