@@ -94,6 +94,107 @@ type apiConfigs map[string]*APIConfig
 
 var configs apiConfigs
 var apiCommand *cobra.Command
+var localConfigPath string
+
+// findLocalConfig searches for a local API configuration file.
+// It looks in the current directory and walks up the directory tree.
+func findLocalConfig() string {
+	// First check if explicitly specified via flag
+	if configPath := viper.GetString("rsh-config"); configPath != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+		// If specified but doesn't exist, log and continue
+		LogDebug("Specified config file does not exist: %s", configPath)
+	}
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	// Walk up the directory tree
+	dir := cwd
+	for {
+		// Check for .restish.json
+		configPath := filepath.Join(dir, ".restish.json")
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+
+		// Check for .restish.yaml
+		configPath = filepath.Join(dir, ".restish.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root directory
+			break
+		}
+		dir = parent
+	}
+
+	return ""
+}
+
+// loadLocalConfig loads and merges a local configuration file with the global config.
+func loadLocalConfig(configPath string) error {
+	localApis := viper.New()
+
+	// Set config file path
+	localApis.SetConfigFile(configPath)
+
+	// Read the local config
+	if err := localApis.ReadInConfig(); err != nil {
+		return fmt.Errorf("error reading local config %s: %w", configPath, err)
+	}
+
+	// Get the directory containing the config file for resolving relative paths
+	configDir := filepath.Dir(configPath)
+
+	// Merge local configs into global configs
+	for k, v := range localApis.AllSettings() {
+		if k == "$schema" {
+			continue
+		}
+
+		// Convert to APIConfig to process spec_files
+		tmp := viper.New()
+		tmp.Set("config", v)
+		var localConfig APIConfig
+		if err := tmp.UnmarshalKey("config", &localConfig); err != nil {
+			LogError("Error unmarshaling local config for %s: %v", k, err)
+			continue
+		}
+
+		// Set the name field
+		localConfig.name = k
+
+		// Resolve relative spec_files paths
+		for i, specFile := range localConfig.SpecFiles {
+			// Skip if it's a URL
+			if strings.HasPrefix(specFile, "http://") || strings.HasPrefix(specFile, "https://") {
+				continue
+			}
+			// If it's a relative path, make it relative to the config file location
+			if !filepath.IsAbs(specFile) {
+				localConfig.SpecFiles[i] = filepath.Join(configDir, specFile)
+			}
+		}
+
+		// Set in global apis config (local overrides global)
+		apis.Set(k, localConfig)
+
+		// Also update the configs map directly
+		configs[k] = &localConfig
+	}
+
+	return nil
+}
 
 func initAPIConfig() {
 	apis = viper.New()
@@ -119,6 +220,18 @@ func initAPIConfig() {
 		// Attempt to update the config to add the schema for docs/validation.
 		apis.Set("$schema", "https://rest.sh/schemas/apis.json")
 		apis.WriteConfig()
+	}
+
+	// Initialize configs map before loading local config
+	configs = apiConfigs{}
+
+	// Load local configuration if found
+	localConfigPath = findLocalConfig()
+	if localConfigPath != "" {
+		LogDebug("Found local config at: %s", localConfigPath)
+		if err := loadLocalConfig(localConfigPath); err != nil {
+			LogError("Error loading local config: %v", err)
+		}
 	}
 
 	// Register api init sub-command to register the API.
@@ -236,7 +349,6 @@ func initAPIConfig() {
 	})
 
 	// Register API sub-commands
-	configs = apiConfigs{}
 	tmp := viper.New()
 	for k, v := range apis.AllSettings() {
 		if k == "$schema" {

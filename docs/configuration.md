@@ -25,21 +25,22 @@ You can quickly determine which is being used via `restish localhost -v 2>&1 | g
 
 The global options in addition to `--help` and `--version` are:
 
-| Argument                    | Env Var             | Example             | Description                                                                                |
-| --------------------------- | ------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
-| `-f`, `--rsh-filter`        | `RSH_FILTER`        | `body.users[].id`   | Filter response via [Shorthand query](https://github.com/danielgtaylor/shorthand#querying) |
-| `-H`, `--rsh-header`        | `RSH_HEADER`        | `Version:2020-05`   | Set a header name/value                                                                    |
-| `--rsh-insecure`            | `RSH_INSECURE`      |                     | Disable TLS certificate checks                                                             |
-| `--rsh-client-cert`         | `RSH_CLIENT_CERT`   | `/etc/ssl/cert.pem` | Path to a PEM encoded client certificate                                                   |
-| `--rsh-client-key`          | `RSH_CLIENT_KEY`    | `/etc/ssl/key.pem`  | Path to a PEM encoded private key                                                          |
-| `--rsh-ca-cert`             | `RSH_CA_CERT`       | `/etc/ssl/ca.pem`   | Path to a PEM encoded CA certificate                                                       |
-| `--rsh-no-paginate`         | `RSH_NO_PAGINATE`   |                     | Disable automatic `next` link pagination                                                   |
-| `-o`, `--rsh-output-format` | `RSH_OUTPUT_FORMAT` | `json`              | [Output format](/output.md), defaults to `auto`                                            |
-| `-p`, `--rsh-profile`       | `RSH_PROFILE`       | `testing`           | Auth profile name, defaults to `default`                                                   |
-| `-q`, `--rsh-query`         | `RSH_QUERY`         | `search=foo`        | Set a query parameter                                                                      |
-| `-r`, `--rsh-raw`           | `RSH_RAW`           |                     | Raw output for shell processing                                                            |
-| `-s`, `--rsh-server`        | `RSH_SERVER`        | `https://foo.com`   | Override API server base URL                                                               |
-| `-v`, `--rsh-verbose`       | `RSH_VERBOSE`       |                     | Enable verbose output                                                                      |
+| Argument                    | Env Var             | Example                    | Description                                                                                |
+| --------------------------- | ------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `--rsh-config`              | `RSH_CONFIG`        | `.restish.json`            | Path to API configuration file                                                             |
+| `-f`, `--rsh-filter`        | `RSH_FILTER`        | `body.users[].id`          | Filter response via [Shorthand query](https://github.com/danielgtaylor/shorthand#querying) |
+| `-H`, `--rsh-header`        | `RSH_HEADER`        | `Version:2020-05`          | Set a header name/value                                                                    |
+| `--rsh-insecure`            | `RSH_INSECURE`      |                            | Disable TLS certificate checks                                                             |
+| `--rsh-client-cert`         | `RSH_CLIENT_CERT`   | `/etc/ssl/cert.pem`        | Path to a PEM encoded client certificate                                                   |
+| `--rsh-client-key`          | `RSH_CLIENT_KEY`    | `/etc/ssl/key.pem`         | Path to a PEM encoded private key                                                          |
+| `--rsh-ca-cert`             | `RSH_CA_CERT`       | `/etc/ssl/ca.pem`          | Path to a PEM encoded CA certificate                                                       |
+| `--rsh-no-paginate`         | `RSH_NO_PAGINATE`   |                            | Disable automatic `next` link pagination                                                   |
+| `-o`, `--rsh-output-format` | `RSH_OUTPUT_FORMAT` | `json`                     | [Output format](/output.md), defaults to `auto`                                            |
+| `-p`, `--rsh-profile`       | `RSH_PROFILE`       | `testing`                  | Auth profile name, defaults to `default`                                                   |
+| `-q`, `--rsh-query`         | `RSH_QUERY`         | `search=foo`               | Set a query parameter                                                                      |
+| `-r`, `--rsh-raw`           | `RSH_RAW`           |                            | Raw output for shell processing                                                            |
+| `-s`, `--rsh-server`        | `RSH_SERVER`        | `https://foo.com`          | Override API server base URL                                                               |
+| `-v`, `--rsh-verbose`       | `RSH_VERBOSE`       |                            | Enable verbose output                                                                      |
 
 Configuration file keys are the same as long-form arguments without the `--` prefix.
 
@@ -64,6 +65,97 @@ $ restish api.rest.sh/images
 Should TTY autodetection for colored output cause any problems, you can manually disable colored output via the `NOCOLOR=1` environment variable.
 
 ## API configuration
+
+API configuration can be done in two ways:
+
+1. **Global configuration** - Stored in your user config directory (see paths below)
+2. **Local project configuration** - Stored in your project directory for easy sharing
+
+### Local Project Configuration
+
+Restish supports local configuration files that can be checked into version control and shared with your team. This is perfect for project-specific API configurations, making it easy to run API-specific commands in scripts without manual setup.
+
+#### Automatic Discovery
+
+Restish will automatically look for local configuration files in the following order:
+
+1. The path specified by the `--rsh-config` flag
+2. `.restish.json` in the current directory
+3. `.restish.yaml` in the current directory
+4. Walk up the directory tree looking for either file
+
+Local configurations are merged with global configurations, with local settings taking precedence.
+
+#### Example Local Configuration
+
+Create a `.restish.json` file in your project root:
+
+```json
+{
+  "my-project-api": {
+    "base": "https://api.myproject.com",
+    "spec_files": ["./openapi.yaml"],
+    "profiles": {
+      "default": {
+        "headers": {
+          "X-API-Version": "2024-01"
+        }
+      }
+    }
+  }
+}
+```
+
+Or use YAML with `.restish.yaml`:
+
+```yaml
+my-project-api:
+  base: https://api.myproject.com
+  spec_files:
+    - ./openapi.yaml
+  profiles:
+    default:
+      headers:
+        X-API-Version: "2024-01"
+```
+
+#### Relative Paths
+
+When using `spec_files` in a local configuration, relative paths are resolved relative to the configuration file location, not the current working directory. This makes it easy to organize your project:
+
+```
+my-project/
+├── .restish.json
+├── api/
+│   └── openapi.yaml
+└── scripts/
+    └── deploy.sh
+```
+
+In `.restish.json`:
+```json
+{
+  "my-api": {
+    "base": "https://api.example.com",
+    "spec_files": ["./api/openapi.yaml"]
+  }
+}
+```
+
+The script in `scripts/deploy.sh` can use the API without worrying about paths:
+```bash
+#!/bin/bash
+# Works from any directory in the project!
+restish my-api deploy --environment production
+```
+
+#### Specifying a Config File
+
+You can explicitly specify a configuration file using the `--rsh-config` flag:
+
+```bash
+$ restish --rsh-config /path/to/project/.restish.json my-api list-resources
+```
 
 ### Adding an API
 
