@@ -116,12 +116,12 @@ func completeCurrentConfig(cmd *cobra.Command, args []string, toComplete string,
 			if cmd.Use == currentConfig.name {
 				// This is the matching command. Load the URL and check each operation.
 				currentBase := currentConfig.Base
-				currentProfile := currentConfig.Profiles[viper.GetString("rsh-profile")]
-				if currentProfile == nil {
-					if viper.GetString("rsh-profile") != "default" {
-						panic("invalid profile " + viper.GetString("rsh-profile"))
-					}
+				profileName := viper.GetString("rsh-profile")
+				if err := validateProfile(profileName, currentConfig, currentConfig.name); err != nil {
+					LogError("%v", err)
+					return []string{}, cobra.ShellCompDirectiveError
 				}
+				currentProfile := currentConfig.Profiles[profileName]
 				if currentProfile != nil && currentProfile.Base != "" {
 					currentBase = currentProfile.Base
 				}
@@ -813,12 +813,10 @@ func Run() (returnErr error) {
 				for _, cmd := range Root.Commands() {
 					if cmd.Use == apiName {
 						currentBase := cfg.Base
-						currentProfile := cfg.Profiles[profile]
-						if currentProfile == nil {
-							if profile != "default" {
-								panic("invalid profile " + profile)
-							}
+						if err := validateProfile(profile, cfg, apiName); err != nil {
+							panic(err)
 						}
+						currentProfile := cfg.Profiles[profile]
 						if currentProfile != nil && currentProfile.Base != "" {
 							currentBase = currentProfile.Base
 						}

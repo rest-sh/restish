@@ -98,32 +98,45 @@ func TestFindLocalConfig(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	os.Chdir(tmpDir)
-	config := findLocalConfig()
-	assert.Equal(t, "", config)
+	configs := findAllLocalConfigs()
+	assert.Equal(t, 0, len(configs))
 
 	// Test case 2: .restish.json in current directory
 	configPath := tmpDir + "/.restish.json"
 	os.WriteFile(configPath, []byte(`{"test-api": {"base": "https://test.example.com"}}`), 0644)
-	config = findLocalConfig()
-	assert.Equal(t, configPath, config)
+	configs = findAllLocalConfigs()
+	assert.Equal(t, 1, len(configs))
+	assert.Equal(t, configPath, configs[0])
 
 	// Test case 3: .restish.yaml in current directory (should prefer .json)
 	yamlPath := tmpDir + "/.restish.yaml"
 	os.WriteFile(yamlPath, []byte(`test-api:\n  base: https://test.example.com`), 0644)
-	config = findLocalConfig()
-	assert.Equal(t, configPath, config)
+	configs = findAllLocalConfigs()
+	assert.Equal(t, 1, len(configs))
+	assert.Equal(t, configPath, configs[0])
 
 	// Test case 4: Only .restish.yaml exists
 	os.Remove(configPath)
-	config = findLocalConfig()
-	assert.Equal(t, yamlPath, config)
+	configs = findAllLocalConfigs()
+	assert.Equal(t, 1, len(configs))
+	assert.Equal(t, yamlPath, configs[0])
 
 	// Test case 5: Config in parent directory
 	subDir := tmpDir + "/subdir"
 	os.Mkdir(subDir, 0755)
 	os.Chdir(subDir)
-	config = findLocalConfig()
-	assert.Equal(t, yamlPath, config)
+	configs = findAllLocalConfigs()
+	assert.Equal(t, 1, len(configs))
+	assert.Equal(t, yamlPath, configs[0])
+
+	// Test case 6: Multiple configs in directory tree
+	subConfigPath := subDir + "/.restish.json"
+	os.WriteFile(subConfigPath, []byte(`{"sub-api": {"base": "https://sub.example.com"}}`), 0644)
+	configs = findAllLocalConfigs()
+	assert.Equal(t, 2, len(configs))
+	// Should be ordered from root to current (parent first, then child)
+	assert.Equal(t, yamlPath, configs[0])
+	assert.Equal(t, subConfigPath, configs[1])
 }
 
 func TestLoadLocalConfig(t *testing.T) {
@@ -159,4 +172,8 @@ func TestLoadLocalConfig(t *testing.T) {
 	assert.Equal(t, "/absolute/path.yaml", loadedConfig.SpecFiles[1])
 	// Check that URL was not modified
 	assert.Equal(t, "http://example.com/spec.yaml", loadedConfig.SpecFiles[2])
+
+	// Verify that localConfigSources was updated
+	assert.NotNil(t, localConfigSources)
+	assert.Equal(t, []string{configPath}, localConfigSources["local-api"])
 }
