@@ -13,7 +13,8 @@ builds:
       - linux
     goarch:
       - amd64
-      - arm64
+      # TODO(cfunkhouser): Re-enable once cross-compilation is worked out.
+      # - arm64
 
   # macOS
   - id: darwin-build
@@ -33,7 +34,8 @@ builds:
       - windows
     goarch:
       - amd64
-      - arm64
+      # TODO(cfunkhouser): Re-enable once cross-compilation is worked out.
+      # - arm64
 
 archives:
   - builds:
