@@ -7,7 +7,6 @@ before:
 builds:
   # Linux
   - id: linux-build
-    main: ./cmd/myapp
     env:
       - CGO_ENABLED=1
     goos:
@@ -18,7 +17,6 @@ builds:
 
   # macOS
   - id: darwin-build
-    main: ./cmd/myapp
     env:
       - CGO_ENABLED=1
     goos:
@@ -29,7 +27,6 @@ builds:
 
   # Windows
   - id: windows-build
-    main: ./cmd/myapp
     env:
       - CGO_ENABLED=1
     goos:
