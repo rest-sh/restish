@@ -5,18 +5,45 @@ before:
     - go mod download
 
 builds:
-  - env:
+  # Linux
+  - id: linux-build
+    main: ./cmd/myapp
+    env:
       - CGO_ENABLED=1
     goos:
       - linux
+    goarch:
+      - amd64
+      - arm64
+
+  # macOS
+  - id: darwin-build
+    main: ./cmd/myapp
+    env:
+      - CGO_ENABLED=1
+    goos:
       - darwin
+    goarch:
+      - amd64
+      - arm64
+
+  # Windows
+  - id: windows-build
+    main: ./cmd/myapp
+    env:
+      - CGO_ENABLED=1
+    goos:
       - windows
     goarch:
       - amd64
       - arm64
 
 archives:
-  - name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+  - builds:
+      - linux-build
+      - darwin-build
+      - windows-build
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:

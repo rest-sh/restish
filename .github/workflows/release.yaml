@@ -5,41 +5,72 @@ on:
     tags:
       - "*"
   workflow_dispatch: # Allow triggering manually.
+# ${{ secrets.GH_PAT }}
 
 jobs:
-  goreleaser:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-
-    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version: "1.24"
 
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y build-essential
+        # --- Install CGO deps per OS ---
+      - name: Setup Linux build environment
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y build-essential
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
+      - name: Setup macOS build environment
+        if: startsWith(matrix.os, 'macos')
         run: brew install gcc
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: choco install mingw
+      - name: Setup Windows build environment
+        if: startsWith(matrix.os, 'windows')
+        run: |
+          choco install mingw
+          echo "Path=C:/tools/mingw64/bin;$env:Path" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Run GoReleaser
+      - name: Set build ID
+        id: buildid
+        run: |
+          case "${{ runner.os }}" in
+            macOS)
+              echo "id=darwin-build" >> $GITHUB_OUTPUT
+              ;;
+            Windows)
+              echo "id=windows-build" >> $GITHUB_OUTPUT
+              ;;
+            Linux)
+              echo "id=linux-build" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "id=unknown-runner-os-${{ runner.os }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+        shell: bash
+
+      - name: Build with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
+          distribution: goreleaser
           version: latest
-          args: release --clean
+          args: release --clean --id ${{ steps.buildid.outputs.id }} --skip-publish
         env:
-          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.os }}
+          path: |
+            dist/*
+          if-no-files-found: error
