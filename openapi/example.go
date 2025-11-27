@@ -33,12 +33,22 @@ func genExampleInternal(s *base.Schema, mode schemaMode, known map[[32]byte]bool
 	if len(s.AllOf) > 0 {
 		result := map[string]any{}
 		for _, proxy := range s.AllOf {
-			tmp, err := genExampleInternal(proxy.Schema(), mode, known)
-			if err != nil {
-				return nil, err
+			nextSchema := proxy.Schema()
+			if nextSchema == nil {
+				return nil, proxy.GetBuildError()
 			}
-			if m, ok := tmp.(map[string]any); ok {
-				maps.Copy(result, m)
+			simple := isSimpleSchema(nextSchema)
+			hash := nextSchema.GoLow().Hash()
+			if simple || !known[hash] {
+				known[hash] = true
+				tmp, err := genExampleInternal(nextSchema, mode, known)
+				if err != nil {
+					return nil, err
+				}
+				known[hash] = false
+				if m, ok := tmp.(map[string]any); ok {
+					maps.Copy(result, m)
+				}
 			}
 		}
 		return result, nil
@@ -162,6 +172,9 @@ func genExampleInternal(s *base.Schema, mode schemaMode, known map[[32]byte]bool
 	case "array":
 		if s.Items != nil && s.Items.IsA() {
 			items := s.Items.A.Schema()
+			if items == nil {
+				return nil, s.Items.A.GetBuildError()
+			}
 			simple := isSimpleSchema(items)
 			hash := items.GoLow().Hash()
 			if simple || !known[hash] {
@@ -198,7 +211,7 @@ func genExampleInternal(s *base.Schema, mode schemaMode, known map[[32]byte]bool
 		for name, proxy := range s.Properties.FromOldest() {
 			prop := proxy.Schema()
 			if prop == nil {
-				continue
+				return nil, proxy.GetBuildError()
 			}
 			if derefOrDefault(prop.ReadOnly) && mode == modeWrite {
 				continue
@@ -226,6 +239,9 @@ func genExampleInternal(s *base.Schema, mode schemaMode, known map[[32]byte]bool
 			if ap != nil {
 				if ap.IsA() && ap.A != nil {
 					addl := ap.A.Schema()
+					if addl == nil {
+						return nil, ap.A.GetBuildError()
+					}
 					simple := isSimpleSchema(addl)
 					hash := addl.GoLow().Hash()
 					if simple || !known[hash] {
