@@ -5,107 +5,91 @@ on:
     tags:
       - "*"
   workflow_dispatch: # Allow triggering manually.
-# ${{ secrets.GH_PAT }}
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  # build-sysroots builds the sysroots for linux/amd64, linux/arm64, and
+  # windows/amd64. The macOS sysroots are handled in macos-prep.yaml.
+  # It is pinned to Ubuntu 24.04 for now, because we want to be intentional
+  # about moving to a newer OS release version. OS version changes may impact
+  # the commands below, and the resulting sysroots.
+  build-sysroots:
+    runs-on: ubuntu-24.04
+
+    env:
+      SYSROOT_DIR: ${{ github.workspace }}/sysroots
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
+      # TODO(cfunkhouser): Restore from cache and skip the following.
 
-      - name: Setup Linux build environment
-        if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install -y build-essential
-
-      - name: Setup macOS build environment
-        if: startsWith(matrix.os, 'macos')
-        run: brew install gcc
-
-      - name: Setup Windows build environment
-        if: startsWith(matrix.os, 'windows')
+      # This step assumes the Ubuntu execution environment will be x86_64. If
+      # this step fails with APT installation errors including 404s, it's likely
+      # that this action is scheduled in an ARM-native environment, and will
+      # need updating.
+      - name: Install cross-build dependencies
         run: |
-          choco install mingw
-          echo "Path=C:/tools/mingw64/bin;$env:Path" | Out-File -FilePath $env:GITHUB_PATH -Append
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            g++-aarch64-linux-gnu \
+            g++-x86-64-linux-gnu \
+            gcc-aarch64-linux-gnu \
+            gcc-x86-64-linux-gnu \
+            libc6-dev-amd64-cross \
+            libc6-dev-arm64-cross \
+            mingw-w64 \
+            rsync \
+            tar
 
-      - name: Set build ID
-        id: buildid
+      - name: Generate linux/amd64 sysroot
         run: |
-          case "${{ runner.os }}" in
-            macOS)
-              echo "id=darwin-build" >> $GITHUB_OUTPUT
-              ;;
-            Windows)
-              echo "id=windows-build" >> $GITHUB_OUTPUT
-              ;;
-            Linux)
-              echo "id=linux-build" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "id=unknown-runner-os-${{ runner.os }}" >> $GITHUB_OUTPUT
-              ;;
-          esac
-        shell: bash
+          export TRIPLET=x86_64-linux-gnu
+          mkdir -p $SYSROOT_DIR/$TRIPLET
+          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
+          rsync -a /usr/include/ $SYSROOT_DIR/$TRIPLET/include/
+          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
 
-      - name: Build with GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: build --clean --id ${{ steps.buildid.outputs.id }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      - name: Generate linux/arm64 sysroot
+        run: |
+          export TRIPLET=aarch64-linux-gnu
+          mkdir -p $SYSROOT_DIR/$TRIPLET
+          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
+          rsync -a /usr/include/ $SYSROOT_DIR/$TRIPLET/include/
+          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
 
-      - name: Upload artifacts
+      - name: Generate windows/amd64 MinGW-w64 sysroot
+        run: |
+          TRIPLET=x86_64-w64-mingw32
+          mkdir -p $SYSROOT_DIR/$TRIPLET
+          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
+          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
+
+      - name: Upload sysroots
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.os }}
-          path: |
-            dist/*
-          if-no-files-found: error
+          name: restish-cgo-sysroots
+          path: $SYSROOT_DIR/*.tar.gz
+          retention-days: 14
 
-  publish:
-    name: Publish
-    runs-on: ubuntu-latest
-    needs: build
+  # goreleaser:
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v5
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts-ubuntu-latest
-          path: dist/
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v2
+  #       with:
+  #         go-version: 1.24
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts-macos-latest
-          path: dist/
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: artifacts-windows-latest
-          path: dist/
-
-      - name: Publish with GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  #     - name: Run GoReleaser
+  #       uses: goreleaser/goreleaser-action@v2
+  #       with:
+  #         version: latest
+  #         args: release --clean
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GH_PAT }}

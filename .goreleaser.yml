@@ -5,44 +5,22 @@ before:
     - go mod download
 
 builds:
-  # Linux
-  - id: linux-build
+  - id: restish
     env:
-      - CGO_ENABLED=1
-    goos:
-      - linux
-    goarch:
-      - amd64
-      # TODO(cfunkhouser): Re-enable once cross-compilation is worked out.
-      # - arm64
-
-  # macOS
-  - id: darwin-build
-    env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - darwin
-    goarch:
-      - amd64
-      - arm64
-
-  # Windows
-  - id: windows-build
-    env:
-      - CGO_ENABLED=1
-    goos:
+      - linux
       - windows
     goarch:
       - amd64
-      # TODO(cfunkhouser): Re-enable once cross-compilation is worked out.
-      # - arm64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
 
 archives:
-  - builds:
-      - linux-build
-      - darwin-build
-      - windows-build
-    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+  - name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
