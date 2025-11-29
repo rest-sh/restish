@@ -69,22 +69,52 @@ jobs:
           path: ${{ github.workspace }}/sysroots/*.tar.gz
           retention-days: 14
 
-  # goreleaser:
-  #   runs-on: ubuntu-latest
+  goreleaser:
+    runs-on: ubuntu-latest
 
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v5
+    env:
+      SYSROOT_DIR: ${{ github.workspace }}/sysroots
 
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v2
-  #       with:
-  #         go-version: 1.24
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-  #     - name: Run GoReleaser
-  #       uses: goreleaser/goreleaser-action@v2
-  #       with:
-  #         version: latest
-  #         args: release --clean
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+      - name: Download sysroots
+        uses: actions/download-artifact@v5
+        with:
+          name: restish-cgo-sysroots
+          path: ${{ github.workspace }}/sysroots/
+
+      - name: Unpack all sysroots
+        run: |
+          find $SYSROOT_DIR -maxdepth 1 -name '*.tar.gz' -exec tar -C $SYSROOT_DIR -xf {} \;
+          ls -l $SYSROOT_DIR
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Build using goreleaser-cross
+        run: |
+          docker run --rm \
+            -e CGO_ENABLED=1 \
+            -e GITHUB_TOKEN=${{ secrets.GH_PAT }} \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $PWD/workspace/sysroots:/sysroot \
+            -v $PWD:/workspace \
+            -w /workspace \
+            ghcr.io/goreleaser/goreleaser-cross:v1.24-v2.12.7 \
+            release --clean
+
+      # - name: Set up Go
+      #   uses: actions/setup-go@v2
+      #   with:
+      #     go-version: 1.24
+
+      # - name: Run GoReleaser
+      #   uses: goreleaser/goreleaser-action@v2
+      #   with:
+      #     version: latest
+      #     args: release --clean
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GH_PAT }}
