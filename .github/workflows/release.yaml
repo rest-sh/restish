@@ -70,6 +70,8 @@ jobs:
           retention-days: 14
 
   goreleaser:
+    needs: build-sysroots
+
     runs-on: ubuntu-latest
 
     env:
