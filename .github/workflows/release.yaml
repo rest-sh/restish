@@ -105,7 +105,7 @@ jobs:
             -v $PWD/workspace/sysroots:/sysroot \
             -v $PWD:/workspace \
             -w /workspace \
-            ghcr.io/goreleaser/goreleaser-cross:v1.24-v2.12.7 \
+            ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
             release --clean
 
       # - name: Set up Go
