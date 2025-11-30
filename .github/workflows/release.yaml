@@ -8,8 +8,6 @@ on:
 
 jobs:
   goreleaser:
-    needs: build-sysroots
-
     runs-on: ubuntu-latest
 
     steps:
@@ -25,16 +23,3 @@ jobs:
             -w /workspace \
             ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
             release --clean --verbose
-
-      # - name: Set up Go
-      #   uses: actions/setup-go@v2
-      #   with:
-      #     go-version: 1.24
-
-      # - name: Run GoReleaser
-      #   uses: goreleaser/goreleaser-action@v2
-      #   with:
-      #     version: latest
-      #     args: release --clean
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GH_PAT }}
