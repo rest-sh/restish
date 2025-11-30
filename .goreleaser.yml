@@ -5,6 +5,8 @@ project_name: restish
 before:
   hooks:
     - go mod download
+    # TODO: Figure out how to test with CGO on all platforms.
+    - go test -v ./...
 
 builds:
   - id: restish-darwin-amd64
