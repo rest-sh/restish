@@ -7,106 +7,24 @@ on:
   workflow_dispatch: # Allow triggering manually.
 
 jobs:
-  # build-sysroots builds the sysroots for linux/amd64, linux/arm64, and
-  # windows/amd64. The macOS sysroots are handled in macos-prep.yaml.
-  # It is pinned to Ubuntu 24.04 for now, because we want to be intentional
-  # about moving to a newer OS release version. OS version changes may impact
-  # the commands below, and the resulting sysroots.
-  build-sysroots:
-    runs-on: ubuntu-24.04
-
-    env:
-      SYSROOT_DIR: ${{ github.workspace }}/sysroots
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      # TODO(cfunkhouser): Restore from cache and skip the following.
-
-      - name: Install cross-build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            g++-aarch64-linux-gnu \
-            g++-x86-64-linux-gnu \
-            gcc-aarch64-linux-gnu \
-            gcc-x86-64-linux-gnu \
-            libc6-dev-amd64-cross \
-            libc6-dev-arm64-cross \
-            mingw-w64 \
-            rsync \
-            tar
-
-      - name: Generate linux/amd64 sysroot
-        run: |
-          export TRIPLET=x86_64-linux-gnu
-          mkdir -p $SYSROOT_DIR/$TRIPLET
-          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
-          rsync -a /usr/include/ $SYSROOT_DIR/$TRIPLET/include/
-          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
-
-      - name: Generate linux/arm64 sysroot
-        run: |
-          export TRIPLET=aarch64-linux-gnu
-          mkdir -p $SYSROOT_DIR/$TRIPLET
-          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
-          rsync -a /usr/include/ $SYSROOT_DIR/$TRIPLET/include/
-          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
-
-      - name: Generate windows/amd64 MinGW-w64 sysroot
-        run: |
-          TRIPLET=x86_64-w64-mingw32
-          mkdir -p $SYSROOT_DIR/$TRIPLET
-          rsync -a /usr/$TRIPLET/ $SYSROOT_DIR/$TRIPLET/
-          tar -czf $SYSROOT_DIR/${TRIPLET}.tar.gz -C $SYSROOT_DIR $TRIPLET
-
-      - name: Upload sysroots
-        uses: actions/upload-artifact@v4
-        with:
-          name: restish-cgo-sysroots
-          path: ${{ github.workspace }}/sysroots/*.tar.gz
-          retention-days: 14
-
   goreleaser:
     needs: build-sysroots
 
     runs-on: ubuntu-latest
 
-    env:
-      SYSROOT_DIR: ${{ github.workspace }}/sysroots
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
-      - name: Download sysroots
-        uses: actions/download-artifact@v5
-        with:
-          name: restish-cgo-sysroots
-          path: ${{ github.workspace }}/sysroots/
-
-      - name: Unpack all sysroots
-        run: |
-          find $SYSROOT_DIR -maxdepth 1 -name '*.tar.gz' -exec tar -C $SYSROOT_DIR -xf {} \;
-          ls -l $SYSROOT_DIR
-
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
 
       - name: Build using goreleaser-cross
         run: |
           docker run --rm \
             -e CGO_ENABLED=1 \
             -e GITHUB_TOKEN=${{ secrets.GH_PAT }} \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD/workspace/sysroots:/sysroot \
             -v $PWD:/workspace \
             -w /workspace \
             ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
-            release --clean
+            release --clean --verbose
 
       # - name: Set up Go
       #   uses: actions/setup-go@v2
