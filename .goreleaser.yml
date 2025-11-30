@@ -66,12 +66,7 @@ archives:
         formats:
           - zip
 
-# brews:
-#   - repository:
-#       owner: danielgtaylor
-#       name: homebrew-restish
-#     homepage: https://rest.sh/
-#     description: Restish is a CLI for interacting with REST-ish HTTP APIs with some nice features built-in.
+# TODO(#306): Return homebrew publication.
 
 checksum:
   name_template: "checksums.txt"
