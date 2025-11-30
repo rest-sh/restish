@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Generate App Token for GoReleaser
-        id: app-token
+        id: releaser-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.RELEASER_APP_ID }}
@@ -25,7 +25,7 @@ jobs:
         run: |
           docker run --rm \
             -e CGO_ENABLED=1 \
-            -e GITHUB_TOKEN=${{ steps.app-token.outputs.token }} \
+            -e GITHUB_TOKEN=${{ steps.releaser-token.outputs.token }} \
             -v $PWD:/workspace \
             -w /workspace \
             ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
