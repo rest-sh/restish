@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/h2non/gock.v1"
 )
 
@@ -54,7 +55,7 @@ func TestRequestPagination(t *testing.T) {
 	assert.Equal(t, resp.Status, http.StatusOK)
 
 	// Content length should be the sum of all combined.
-	assert.Equal(t, resp.Headers["Content-Length"], "15")
+	assert.Equal(t, "15", resp.Headers["Content-Length"])
 
 	// Response body should be a concatenation of all pages.
 	assert.Equal(t, []interface{}{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, resp.Body)
@@ -197,12 +198,61 @@ func TestRequestRetryTimeout(t *testing.T) {
 		Times(2).
 		Reply(http.StatusOK).
 		Delay(2 * time.Millisecond)
-		// Note: delay seems to have a bug where subsequent requests without the
-		// delay are still delayed... For now just have it reply twice.
+	// Note: delay seems to have a bug where subsequent requests without the
+	// delay are still delayed... For now just have it reply twice.
 
 	req, _ := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	_, err := MakeRequest(req)
 
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "timed out")
+}
+
+func TestNoContentResponsesWithEncodingHeader(t *testing.T) {
+	defer gock.Off()
+
+	testCases := []struct {
+		name    string
+		headers map[string]string
+	}{
+		{
+			name: "no encoding header",
+		},
+		{
+			name: "gzip encoding header",
+			headers: map[string]string{
+				"Content-Encoding": "gzip",
+			},
+		},
+		{
+			name: "brotli encoding header",
+			headers: map[string]string{
+				"Content-Encoding": "br",
+			},
+		},
+		{
+			name: "deflate encoding header",
+			headers: map[string]string{
+				"Content-Encoding": "deflate",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			reset(false)
+
+			gock.New("http://example.com").
+				Get("/").
+				Reply(http.StatusNoContent).
+				SetHeaders(tc.headers)
+
+			req, err := http.NewRequest(http.MethodGet, "http://example.com/", nil)
+			require.NoError(t, err)
+
+			assert.NotPanics(t, func() {
+				MakeRequestAndFormat(req)
+			})
+		})
+	}
 }
