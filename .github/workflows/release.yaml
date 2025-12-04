@@ -20,6 +20,9 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASER_APP_ID }}
           private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+          repositories: |
+            homebrew-tap
+            restish
 
       - name: Build using goreleaser-cross
         run: |

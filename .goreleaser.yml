@@ -66,7 +66,16 @@ archives:
         formats:
           - zip
 
-# TODO(#306): Return homebrew publication.
+homebrew_casks:
+  - name: restish
+    homepage: https://rest.sh
+    description: "Restish is a CLI for interacting with REST-ish HTTP APIs with some nice features built-in."
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      pull_request:
+        enabled: true
+        draft: true # TODO(cfunkhouser): Delete after testing.
 
 checksum:
   name_template: "checksums.txt"
