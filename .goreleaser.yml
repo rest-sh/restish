@@ -80,6 +80,16 @@ homebrew_casks:
     commit_author:
       name: Restish Releaser
       email: release@rest.sh
+    hooks:
+      post:
+        # This hook is used to remove the quarantine attribute on macOS, which
+        # can prevent the app from running properly after installation. The
+        # "real" solution would be to sign the binary, but we do not currently
+        # have an Apple Developer account to do so.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/restish"]
+          end
 
 checksum:
   name_template: "checksums.txt"
