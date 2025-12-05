@@ -24,11 +24,17 @@ jobs:
             homebrew-tap
             restish
 
+      - name: Decode SSH Private Key
+        run: |
+          echo "${{ secrets.HOMEBREW_REPO_SSH_KEY }}" | base64 -d > /tmp/homebrew_repo_id_ed25519
+        shell: bash
+
       - name: Build using goreleaser-cross
         run: |
           docker run --rm \
             -e CGO_ENABLED=1 \
             -e GITHUB_TOKEN=${{ steps.releaser-token.outputs.token }} \
+            -v /tmp/homebrew_repo_id_ed25519:/tmp/homebrew_repo_id_ed25519:ro \
             -v $PWD:/workspace \
             -w /workspace \
             ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
