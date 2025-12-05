@@ -34,7 +34,7 @@ jobs:
           docker run --rm \
             -e CGO_ENABLED=1 \
             -e GITHUB_TOKEN=${{ steps.releaser-token.outputs.token }} \
-            -v /tmp/homebrew_repo_id_ed25519:/tmp/homebrew_repo_id_ed25519:ro \
+            -v /tmp/homebrew_repo_id_ed25519:/tmp/homebrew_repo_id_ed25519 \
             -v $PWD:/workspace \
             -w /workspace \
             ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
