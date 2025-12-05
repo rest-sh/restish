@@ -77,7 +77,7 @@ homebrew_casks:
         enabled: true
         draft: true # TODO(cfunkhouser): Delete after testing.
       git:
-        url: 'ssh://git@github.com:rest-sh/homebrew-tap.git'
+        url: "git@github.com:rest-sh/homebrew-tap.git"
         private_key: /tmp/homebrew_repo_id_ed25519
 
 checksum:
