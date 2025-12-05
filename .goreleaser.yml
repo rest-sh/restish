@@ -73,14 +73,7 @@ homebrew_casks:
     repository:
       owner: rest-sh
       name: homebrew-tap
-      branch: restish-release
-      pull_request:
-        enabled: true
-        draft: true # TODO(cfunkhouser): Delete after testing.
-        base:
-          owner: rest-sh
-          name: homebrew-tap
-          branch: main
+      branch: main
       git:
         url: "git@github.com:rest-sh/homebrew-tap.git"
         private_key: /tmp/homebrew_repo_id_ed25519
