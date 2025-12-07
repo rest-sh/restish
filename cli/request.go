@@ -491,24 +491,34 @@ func (r Response) Map() map[string]any {
 // ParseResponse takes an HTTP response and tries to parse it using the
 // registered content types. It returns a map representing the request,
 func ParseResponse(resp *http.Response) (Response, error) {
-	var parsed interface{}
+	var parsed any
 
-	// Handle content encodings
-	defer resp.Body.Close()
-	if err := DecodeResponse(resp); err != nil {
-		return Response{}, err
-	}
+	if resp.StatusCode == http.StatusNoContent {
+		if resp.ContentLength > 0 {
+			return Response{}, fmt.Errorf("server returned HTTP %d but the body is %d byte(s)", http.StatusNoContent, resp.ContentLength)
+		}
+	} else {
+		// Handle content encodings
+		defer resp.Body.Close()
+		content, err := DecodeResponse(resp)
+		if err != nil {
+			return Response{}, err
+		}
 
-	data, _ := io.ReadAll(resp.Body)
+		data, err := io.ReadAll(content)
+		if err != nil {
+			return Response{}, fmt.Errorf("failed to read response body: %w", err)
+		}
 
-	if len(data) > 0 {
-		if viper.GetBool("rsh-raw") && viper.GetString("rsh-filter") == "" {
-			// Raw mode without filtering, don't parse the response.
-			parsed = data
-		} else {
-			ct := resp.Header.Get("content-type")
-			if err := Unmarshal(ct, data, &parsed); err != nil {
+		if len(data) > 0 {
+			if viper.GetBool("rsh-raw") && viper.GetString("rsh-filter") == "" {
+				// Raw mode without filtering, don't parse the response.
 				parsed = data
+			} else {
+				ct := resp.Header.Get("content-type")
+				if err := Unmarshal(ct, data, &parsed); err != nil {
+					parsed = data
+				}
 			}
 		}
 	}
