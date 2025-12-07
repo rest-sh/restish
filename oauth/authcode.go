@@ -216,7 +216,7 @@ type AuthorizationCodeTokenSource struct {
 
 func (ac *AuthorizationCodeTokenSource) getRedirectUrl() string {
 	if ac.RedirectURL == "" {
-		return "http://localhost:8484"
+		return "http://localhost:8484/"
 	}
 
 	return ac.RedirectURL
