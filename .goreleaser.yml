@@ -80,6 +80,12 @@ homebrew_casks:
     commit_author:
       name: Restish Releaser
       email: release@rest.sh
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/restish"]
+          end
 
 checksum:
   name_template: "checksums.txt"
