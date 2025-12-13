@@ -205,6 +205,16 @@ func MakeRequest(req *http.Request, options ...requestOption) (*http.Response, e
 		if caCert := viper.GetString("rsh-ca-cert"); caCert != "" {
 			config.TLS.CACert = caCert
 		}
+		if pkcs11Label := viper.GetString("rsh-pkcs11-label"); pkcs11Label != "" {
+			config.TLS.PKCS11 = &PKCS11Config{
+				Label: pkcs11Label,
+			}
+		}
+		if pkcs11Path := viper.GetString("rsh-pkcs11-path"); pkcs11Path != "" {
+			if config.TLS.PKCS11 != nil && config.TLS.PKCS11.Label != "" {
+				config.TLS.PKCS11.Path = pkcs11Path
+			}
+		}
 
 		if config.TLS.InsecureSkipVerify {
 			LogWarning("Disabling TLS security checks")
