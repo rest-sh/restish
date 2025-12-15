@@ -40,7 +40,7 @@ func buildAcceptEncodingHeader() string {
 func DecodeResponse(resp *http.Response) error {
 	contentEncoding := resp.Header.Get("content-encoding")
 
-	if contentEncoding == "" {
+	if contentEncoding == "" || contentEncoding == "identity" {
 		// Nothing to do!
 		return nil
 	}
