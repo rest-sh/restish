@@ -116,12 +116,12 @@ func completeCurrentConfig(cmd *cobra.Command, args []string, toComplete string,
 			if cmd.Use == currentConfig.name {
 				// This is the matching command. Load the URL and check each operation.
 				currentBase := currentConfig.Base
-				currentProfile := currentConfig.Profiles[viper.GetString("rsh-profile")]
-				if currentProfile == nil {
-					if viper.GetString("rsh-profile") != "default" {
-						panic("invalid profile " + viper.GetString("rsh-profile"))
-					}
+				profileName := viper.GetString("rsh-profile")
+				if err := validateProfile(profileName, currentConfig, currentConfig.name); err != nil {
+					LogError("%v", err)
+					return []string{}, cobra.ShellCompDirectiveError
 				}
+				currentProfile := currentConfig.Profiles[profileName]
 				if currentProfile != nil && currentProfile.Base != "" {
 					currentBase = currentProfile.Base
 				}
@@ -553,6 +553,7 @@ Not after (expires): %s (%s)
 	AddGlobalFlag("rsh-ignore-status-code", "", "Do not set exit code from HTTP status code", false, false)
 	AddGlobalFlag("rsh-retry", "", "Number of times to retry on certain failures", 2, false)
 	AddGlobalFlag("rsh-timeout", "t", "Timeout for HTTP requests", time.Duration(0), false)
+	AddGlobalFlag("rsh-config", "", "Path to API configuration file", "", false)
 
 	Root.RegisterFlagCompletionFunc("rsh-output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"auto", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
@@ -778,6 +779,9 @@ func Run() (returnErr error) {
 	if timeout, _ := GlobalFlags.GetDuration("rsh-timeout"); timeout > 0 {
 		viper.Set("rsh-timeout", timeout)
 	}
+	if config, _ := GlobalFlags.GetString("rsh-config"); config != "" {
+		viper.Set("rsh-config", config)
+	}
 
 	// Now that global flags are parsed we can enable verbose mode if requested.
 	if viper.GetBool("rsh-verbose") {
@@ -809,12 +813,10 @@ func Run() (returnErr error) {
 				for _, cmd := range Root.Commands() {
 					if cmd.Use == apiName {
 						currentBase := cfg.Base
-						currentProfile := cfg.Profiles[profile]
-						if currentProfile == nil {
-							if profile != "default" {
-								panic("invalid profile " + profile)
-							}
+						if err := validateProfile(profile, cfg, apiName); err != nil {
+							panic(err)
 						}
+						currentProfile := cfg.Profiles[profile]
 						if currentProfile != nil && currentProfile.Base != "" {
 							currentBase = currentProfile.Base
 						}
