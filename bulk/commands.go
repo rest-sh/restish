@@ -20,12 +20,13 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/low"
 	lowbase "github.com/pb33f/libopenapi/datamodel/low/base"
 	"github.com/pb33f/libopenapi/index"
-	"github.com/rest-sh/restish/cli"
-	"github.com/rest-sh/restish/openapi"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
+	"github.com/rest-sh/restish/cli"
+	"github.com/rest-sh/restish/openapi"
 )
 
 var afs afero.Fs = afero.NewOsFs()
@@ -77,9 +78,14 @@ func newInterpreter(expression, schemaURL string) mexpr.Interpreter {
 		// keeping in my opinion.
 		req, _ := http.NewRequest(http.MethodGet, schemaURL, nil)
 		if resp, err := cli.MakeRequest(req); err == nil && resp.StatusCode < 300 {
-			cli.DecodeResponse(resp)
 			defer resp.Body.Close()
-			if body, err := io.ReadAll(resp.Body); err == nil {
+
+			content, err := cli.DecodeResponse(resp)
+			if err != nil {
+				panic(err)
+			}
+
+			if body, err := io.ReadAll(content); err == nil {
 
 				var rootNode yaml.Node
 				var ls lowbase.Schema

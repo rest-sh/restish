@@ -48,6 +48,13 @@ var encodingTests = []struct {
 }
 
 func TestEncodings(parent *testing.T) {
+	AddEncoding("deflate", &DeflateEncoding{})
+	AddEncoding("gzip", &GzipEncoding{})
+	AddEncoding("br", &BrotliEncoding{})
+	parent.Cleanup(func() {
+		encodings = nil
+	})
+
 	for _, tt := range encodingTests {
 		parent.Run(tt.name, func(t *testing.T) {
 			resp := &http.Response{
@@ -57,10 +64,10 @@ func TestEncodings(parent *testing.T) {
 				Body: io.NopCloser(bytes.NewReader(tt.data)),
 			}
 
-			err := DecodeResponse(resp)
+			content, err := DecodeResponse(resp)
 			assert.NoError(t, err)
 
-			data, err := io.ReadAll(resp.Body)
+			data, err := io.ReadAll(content)
 			assert.NoError(t, err)
 			assert.Equal(t, "hello world", string(data))
 		})
