@@ -99,6 +99,12 @@ func initAPIConfig() {
 	apis = viper.New()
 
 	apis.SetConfigName("apis")
+	// set cwd config path
+	cwd, err := os.Getwd()
+	if err == nil {
+		apis.AddConfigPath(filepath.Join(cwd, ".restish"))
+	}
+
 	apis.AddConfigPath(viper.GetString("config-directory"))
 
 	// Write a blank cache if no file is already there. Later you can use
@@ -110,7 +116,7 @@ func initAPIConfig() {
 		}
 	}
 
-	err := apis.ReadInConfig()
+	err = apis.ReadInConfig()
 	if err != nil {
 		panic(err)
 	}
