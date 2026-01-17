@@ -129,7 +129,12 @@ func (p Param) AddFlag(flags *pflag.FlagSet) interface{} {
 		if def == nil {
 			def = ""
 		}
-		return flags.String(name, def.(string), p.Description)
+		// Handle cases where OpenAPI spec has non-string default for string param
+		defStr, ok := def.(string)
+		if !ok {
+			defStr = fmt.Sprintf("%v", def)
+		}
+		return flags.String(name, defStr, p.Description)
 	case "array[boolean]":
 		if def == nil {
 			def = []bool{}
@@ -154,7 +159,11 @@ func (p Param) AddFlag(flags *pflag.FlagSet) interface{} {
 		} else {
 			tmp := []string{}
 			for _, item := range def.([]interface{}) {
-				tmp = append(tmp, item.(string))
+				if s, ok := item.(string); ok {
+					tmp = append(tmp, s)
+				} else {
+					tmp = append(tmp, fmt.Sprintf("%v", item))
+				}
 			}
 			def = tmp
 		}
