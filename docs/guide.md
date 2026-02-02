@@ -14,6 +14,14 @@ If you have [Homebrew](https://brew.sh/), you can install Restish via the [offic
 $ brew install rest-sh/tap/restish
 ```
 
+### Install via mise
+
+If you have [mise](https://mise.jdx.dev), you can install Restish with a command like:
+
+```bash
+$ mise use -g restish@latest
+```
+
 ### Install via Nixpkgs
 
 If you use Nixpkgs, you can install the [Restish derivation](https://search.nixos.org/packages?channel=unstable&query=restish), e.g. using `nix-env`:
