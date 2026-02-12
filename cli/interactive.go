@@ -16,7 +16,7 @@ var surveyOpts = []survey.AskOpt{}
 type asker interface {
 	askConfirm(message string, def bool, help string) bool
 	askInput(message string, def string, required bool, help string) string
-	askSelect(message string, options []string, def interface{}, help string) string
+	askSelect(message string, options []string, def any, help string) string
 }
 
 type defaultAsker struct{}
@@ -58,7 +58,7 @@ func (a defaultAsker) askInput(message string, def string, required bool, help s
 	return resp
 }
 
-func (a defaultAsker) askSelect(message string, options []string, def interface{}, help string) string {
+func (a defaultAsker) askSelect(message string, options []string, def any, help string) string {
 	resp := ""
 	err := survey.AskOne(&survey.Select{
 		Message: message,
@@ -186,7 +186,7 @@ func askAuth(a asker, auth *APIAuth) {
 		authTypes = append(authTypes, k)
 	}
 
-	var name interface{}
+	var name any
 	if auth.Name != "" {
 		name = auth.Name
 	}

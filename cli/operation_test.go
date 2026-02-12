@@ -20,7 +20,7 @@ func TestOperation(t *testing.T) {
 		MatchParam("def3", "abc").
 		MatchHeader("Accept", "application/json").
 		Reply(200).
-		JSON(map[string]interface{}{
+		JSON(map[string]any{
 			"hello": "world",
 		})
 

@@ -20,7 +20,7 @@ const (
 	StyleForm
 )
 
-func typeConvert(from, to interface{}) interface{} {
+func typeConvert(from, to any) any {
 	return reflect.ValueOf(from).Convert(reflect.TypeOf(to)).Interface()
 }
 
@@ -32,19 +32,19 @@ type Param struct {
 	Description string      `json:"description,omitempty" yaml:"description,omitempty"`
 	Style       Style       `json:"style,omitempty" yaml:"style,omitempty"`
 	Explode     bool        `json:"explode,omitempty" yaml:"explide,omitempty"`
-	Default     interface{} `json:"default,omitempty" yaml:"default,omitempty"`
-	Example     interface{} `json:"example,omitempty" yaml:"example,omitempty"`
+	Default     any `json:"default,omitempty" yaml:"default,omitempty"`
+	Example     any `json:"example,omitempty" yaml:"example,omitempty"`
 }
 
 // Parse the parameter from a string input (e.g. command line argument)
-func (p Param) Parse(value string) (interface{}, error) {
+func (p Param) Parse(value string) (any, error) {
 	// TODO: parse based on the type, used mostly for path parameter parsing
 	// which is almost always a string anyway.
 	return value, nil
 }
 
 // Serialize the parameter based on the type/style/explode configuration.
-func (p Param) Serialize(value interface{}) []string {
+func (p Param) Serialize(value any) []string {
 	v := reflect.ValueOf(value)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
@@ -105,7 +105,7 @@ func (p Param) OptionName() string {
 }
 
 // AddFlag adds a new option flag to a command's flag set for this parameter.
-func (p Param) AddFlag(flags *pflag.FlagSet) interface{} {
+func (p Param) AddFlag(flags *pflag.FlagSet) any {
 	name := p.OptionName()
 	def := p.Default
 
@@ -153,7 +153,7 @@ func (p Param) AddFlag(flags *pflag.FlagSet) interface{} {
 			def = []string{}
 		} else {
 			tmp := []string{}
-			for _, item := range def.([]interface{}) {
+			for _, item := range def.([]any) {
 				tmp = append(tmp, item.(string))
 			}
 			def = tmp

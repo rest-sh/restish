@@ -33,7 +33,7 @@ type Operation struct {
 
 // command returns a Cobra command instance for this operation.
 func (o Operation) command() *cobra.Command {
-	flags := map[string]interface{}{}
+	flags := map[string]any{}
 
 	use := slug.Make(o.Name)
 	for _, p := range o.PathParams {

@@ -10,7 +10,7 @@ import (
 )
 
 // GenExample creates a dummy example from a given schema.
-func GenExample(schema *base.Schema, mode schemaMode) interface{} {
+func GenExample(schema *base.Schema, mode schemaMode) any {
 	example, err := genExampleInternal(schema, mode, map[[32]byte]bool{})
 	if err != nil {
 		log.Fatal(err)

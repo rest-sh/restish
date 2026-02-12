@@ -30,7 +30,7 @@ func TestContentTypes(parent *testing.T) {
 
 			assert.False(t, tt.ct.Detect("bad-content-type"))
 
-			var data interface{}
+			var data any
 			err := tt.ct.Unmarshal(tt.data, &data)
 			assert.NoError(t, err)
 

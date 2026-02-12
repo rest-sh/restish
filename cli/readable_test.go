@@ -9,14 +9,14 @@ import (
 
 func TestReadableMarshal(t *testing.T) {
 	created, _ := time.Parse(time.RFC3339, "2020-01-01T12:34:56Z")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"binary":     []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 		"created":    created,
 		"date":       created.Truncate(24 * time.Hour),
 		"id":         "test",
-		"emptyMap":   map[string]interface{}{},
+		"emptyMap":   map[string]any{},
 		"emptyArray": []string{},
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"saved": true,
 			"self":  "https://example.com/nested",
 		},
@@ -47,8 +47,8 @@ func TestReadableMarshal(t *testing.T) {
 }
 
 func TestSingleItemWithNewlines(t *testing.T) {
-	data := []interface{}{
-		map[string]interface{}{
+	data := []any{
+		map[string]any{
 			"id":      1234,
 			"created": "2020-08-12",
 		},

@@ -34,7 +34,7 @@ func getEditor() string {
 	return editor
 }
 
-func edit(addr string, args []string, interactive, noPrompt bool, exitFunc func(int), editMarshal func(interface{}) ([]byte, error), editUnmarshal func([]byte, interface{}) error, ext string) {
+func edit(addr string, args []string, interactive, noPrompt bool, exitFunc func(int), editMarshal func(any) ([]byte, error), editUnmarshal func([]byte, any) error, ext string) {
 	if !interactive && len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "No arguments passed to modify the resource. Use `-i` to enable interactive mode.")
 		exitFunc(1)
@@ -62,8 +62,8 @@ export EDITOR="vim"`)
 	}
 
 	// Convert from CBOR or other formats which might allow map[any]any to the
-	// constraints of JSON (i.e. map[string]interface{}).
-	var data interface{} = resp.Map()
+	// constraints of JSON (i.e. map[string]any).
+	var data any = resp.Map()
 	data = makeJSONSafe(data)
 
 	filter := viper.GetString("rsh-filter")
@@ -71,7 +71,7 @@ export EDITOR="vim"`)
 		filter = "body"
 	}
 
-	var logger func(format string, a ...interface{})
+	var logger func(format string, a ...any)
 	if enableVerbose {
 		logger = LogDebug
 	}
@@ -81,7 +81,7 @@ export EDITOR="vim"`)
 	panicOnErr(err)
 	data = filtered
 
-	if _, ok := data.(map[string]interface{}); !ok {
+	if _, ok := data.(map[string]any); !ok {
 		fmt.Fprintln(os.Stderr, "Resource didn't return an object.")
 		exitFunc(1)
 		return
@@ -102,7 +102,7 @@ export EDITOR="vim"`)
 	// 2. Get and then analyse the response schema for that operation.
 	// 3. Remove corresponding fields from `data`.
 
-	var modified interface{} = data
+	var modified any = data
 
 	if len(args) > 0 {
 		modified, err = shorthand.Unmarshal(strings.Join(args, " "), shorthand.ParseOptions{EnableFileInput: true, EnableObjectDetection: true}, modified)

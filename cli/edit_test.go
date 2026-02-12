@@ -17,7 +17,7 @@ func TestEditSuccess(t *testing.T) {
 		Get("/items/foo").
 		Reply(http.StatusOK).
 		SetHeader("Etag", "abc123").
-		JSON(map[string]interface{}{
+		JSON(map[string]any{
 			"foo": 123,
 		})
 
@@ -76,7 +76,7 @@ func TestEditNoChange(t *testing.T) {
 		Get("/items/foo").
 		Reply(http.StatusOK).
 		SetHeader("Etag", "abc123").
-		JSON(map[string]interface{}{
+		JSON(map[string]any{
 			"foo": 123,
 		})
 
@@ -95,7 +95,7 @@ func TestEditNotObject(t *testing.T) {
 		Get("/items/foo").
 		Reply(http.StatusOK).
 		SetHeader("Etag", "abc123").
-		JSON([]interface{}{
+		JSON([]any{
 			123,
 		})
 

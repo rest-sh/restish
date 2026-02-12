@@ -33,19 +33,19 @@ func TestRequestPagination(t *testing.T) {
 		// Page 1 links to page 2
 		SetHeader("Link", "</paginated2>; rel=\"next\"").
 		SetHeader("Content-Length", "7").
-		JSON([]interface{}{1, 2, 3})
+		JSON([]any{1, 2, 3})
 	gock.New("http://example.com").
 		Get("/paginated2").
 		Reply(http.StatusOK).
 		// Page 2 links to page 3
 		SetHeader("Link", "</paginated3>; rel=\"next\"").
 		SetHeader("Content-Length", "5").
-		JSON([]interface{}{4, 5})
+		JSON([]any{4, 5})
 	gock.New("http://example.com").
 		Get("/paginated3").
 		Reply(http.StatusOK).
 		SetHeader("Content-Length", "3").
-		JSON([]interface{}{6})
+		JSON([]any{6})
 
 	req, _ := http.NewRequest(http.MethodGet, "http://example.com/paginated", nil)
 	resp, err := GetParsedResponse(req)
@@ -57,7 +57,7 @@ func TestRequestPagination(t *testing.T) {
 	assert.Equal(t, resp.Headers["Content-Length"], "15")
 
 	// Response body should be a concatenation of all pages.
-	assert.Equal(t, []interface{}{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, resp.Body)
+	assert.Equal(t, []any{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, resp.Body)
 }
 
 type authHookFailure struct{}

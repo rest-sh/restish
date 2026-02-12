@@ -63,7 +63,7 @@ func expectExitCode(t *testing.T, expected int) {
 func TestGetURI(t *testing.T) {
 	defer gock.Off()
 
-	gock.New("http://example.com").Get("/foo").Reply(200).JSON(map[string]interface{}{
+	gock.New("http://example.com").Get("/foo").Reply(200).JSON(map[string]any{
 		"Hello": "World",
 	})
 
@@ -76,7 +76,7 @@ func TestGetURI(t *testing.T) {
 func TestPostURI(t *testing.T) {
 	defer gock.Off()
 
-	gock.New("http://example.com").Post("/foo").Reply(200).JSON(map[string]interface{}{
+	gock.New("http://example.com").Post("/foo").Reply(200).JSON(map[string]any{
 		"id":    1,
 		"value": 123,
 	})
@@ -90,7 +90,7 @@ func TestPostURI(t *testing.T) {
 func TestPutURI400(t *testing.T) {
 	defer gock.Off()
 
-	gock.New("http://example.com").Put("/foo/1").Reply(422).JSON(map[string]interface{}{
+	gock.New("http://example.com").Put("/foo/1").Reply(422).JSON(map[string]any{
 		"detail": "Invalid input",
 	})
 
@@ -103,7 +103,7 @@ func TestPutURI400(t *testing.T) {
 func TestIgnoreStatusCodeExit(t *testing.T) {
 	defer gock.Off()
 
-	gock.New("http://example.com").Put("/foo/1").Reply(400).JSON(map[string]interface{}{
+	gock.New("http://example.com").Put("/foo/1").Reply(400).JSON(map[string]any{
 		"detail": "Invalid input",
 	})
 
@@ -185,7 +185,7 @@ func TestLinks(t *testing.T) {
 func TestDefaultOutput(t *testing.T) {
 	defer gock.Off()
 
-	gock.New("http://example.com").Get("/foo").Reply(200).JSON(map[string]interface{}{
+	gock.New("http://example.com").Get("/foo").Reply(200).JSON(map[string]any{
 		"hello": "world",
 	})
 
@@ -220,7 +220,7 @@ func TestLoadCache(t *testing.T) {
 	// Only *one* set of remote requests should be made. After that it should be
 	// using the cache.
 	gock.New("https://example.com/").Reply(404)
-	gock.New("https://example.com/openapi.json").Reply(200).JSON(map[string]interface{}{
+	gock.New("https://example.com/openapi.json").Reply(200).JSON(map[string]any{
 		"openapi": "3.0.0",
 	})
 

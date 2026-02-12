@@ -13,7 +13,7 @@ import (
 var enableVerbose bool
 
 // LogDebug logs a debug message if --rsh-verbose (-v) was passed.
-func LogDebug(format string, values ...interface{}) {
+func LogDebug(format string, values ...any) {
 	if enableVerbose {
 		fmt.Fprintf(Stderr, "%s %s\n", au.Index(243, "DEBUG:"), fmt.Sprintf(format, values...))
 	}
@@ -58,17 +58,17 @@ func LogDebugResponse(start time.Time, resp *http.Response) {
 }
 
 // LogInfo logs an info message.
-func LogInfo(format string, values ...interface{}) {
+func LogInfo(format string, values ...any) {
 	fmt.Fprintf(Stderr, "%s %s\n", au.Index(74, "INFO:"), fmt.Sprintf(format, values...))
 }
 
 // LogWarning logs a warning message.
-func LogWarning(format string, values ...interface{}) {
+func LogWarning(format string, values ...any) {
 	fmt.Fprintf(Stderr, "%s %s\n", au.Index(222, "WARN:"), fmt.Sprintf(format, values...))
 }
 
 // LogError logs an error message.
-func LogError(format string, values ...interface{}) {
+func LogError(format string, values ...any) {
 	// TODO: stack traces?
 	fmt.Fprintf(Stderr, "%s %s\n", au.BgIndex(204, "ERROR:").White().Bold(), fmt.Sprintf(format, values...))
 }

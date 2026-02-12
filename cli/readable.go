@@ -12,11 +12,11 @@ import (
 )
 
 // MarshalReadable marshals a value into a human-friendly readable format.
-func MarshalReadable(v interface{}) ([]byte, error) {
+func MarshalReadable(v any) ([]byte, error) {
 	return marshalReadable("", v)
 }
 
-func marshalReadable(indent string, v interface{}) ([]byte, error) {
+func marshalReadable(indent string, v any) ([]byte, error) {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Invalid:

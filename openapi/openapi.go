@@ -167,8 +167,8 @@ func getBasePath(location *url.URL, servers []*v3.Server) (string, error) {
 	return location.Path, nil
 }
 
-func getRequestInfo(op *v3.Operation) (string, *base.Schema, []interface{}) {
-	mts := make(map[string][]interface{})
+func getRequestInfo(op *v3.Operation) (string, *base.Schema, []any) {
+	mts := make(map[string][]any)
 
 	if op.RequestBody != nil {
 		for mt, item := range op.RequestBody.Content.FromOldest() {
@@ -212,7 +212,7 @@ func getRequestInfo(op *v3.Operation) (string, *base.Schema, []interface{}) {
 	for _, short := range []string{"json", "yaml", "*"} {
 		for mt, item := range mts {
 			if strings.Contains(mt, short) || short == "*" {
-				return mt, item[0].(*base.Schema), item[1].([]interface{})
+				return mt, item[0].(*base.Schema), item[1].([]any)
 			}
 		}
 	}
@@ -253,8 +253,8 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 			continue
 		}
 
-		var def interface{}
-		var example interface{}
+		var def any
+		var example any
 
 		typ := "string"
 		var schema *base.Schema
@@ -398,7 +398,7 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 				} else {
 					// Not a string, so it's structured data. Let's marshal it to the
 					// shorthand syntax if we can.
-					if m, ok := ex.(map[string]interface{}); ok {
+					if m, ok := ex.(map[string]any); ok {
 						exs := shorthand.MarshalCLI(m)
 
 						if len(exs) < 150 {

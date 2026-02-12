@@ -287,9 +287,9 @@ var MarkdownStyle = ansi.StyleConfig{
 
 // makeJSONSafe walks an interface to ensure all maps use string keys so that
 // encoding to JSON (or YAML) works. Some unmarshallers (e.g. CBOR) will
-// create map[interface{}]interface{} which causes problems marshalling.
+// create map[any]any which causes problems marshalling.
 // See https://github.com/fxamacker/cbor/issues/206
-func makeJSONSafe(obj interface{}) interface{} {
+func makeJSONSafe(obj any) any {
 	value := reflect.ValueOf(obj)
 
 	for value.Kind() == reflect.Ptr {
@@ -304,13 +304,13 @@ func makeJSONSafe(obj interface{}) interface{} {
 			// encoding for JSON and gives you an array of integers instead.
 			return obj
 		}
-		returnSlice := make([]interface{}, value.Len())
+		returnSlice := make([]any, value.Len())
 		for i := 0; i < value.Len(); i++ {
 			returnSlice[i] = makeJSONSafe(value.Index(i).Interface())
 		}
 		return returnSlice
 	case reflect.Map:
-		tmpData := make(map[string]interface{})
+		tmpData := make(map[string]any)
 		for _, k := range value.MapKeys() {
 			kStr := ""
 			if s, ok := k.Interface().(string); ok {
@@ -341,7 +341,7 @@ func makeJSONSafe(obj interface{}) interface{} {
 // based on displayable unicode character ranges and whitespace. If true,
 // then the body is also returned as a byte slice ready to be written to
 // stdout.
-func printable(body interface{}) ([]byte, bool) {
+func printable(body any) ([]byte, bool) {
 	if s, ok := body.(string); ok {
 		return []byte(s), true
 	}
@@ -469,7 +469,7 @@ func (f *DefaultFormatter) formatRaw(data any) ([]byte, string, bool) {
 			return encoded, lexer, true
 		}
 
-		for _, item := range data.([]interface{}) {
+		for _, item := range data.([]any) {
 			switch item.(type) {
 			case nil, bool, int, int64, float64, string:
 				// The above are scalars used by decoders
@@ -483,7 +483,7 @@ func (f *DefaultFormatter) formatRaw(data any) ([]byte, string, bool) {
 
 		if scalars {
 			var encoded []byte
-			for _, item := range data.([]interface{}) {
+			for _, item := range data.([]any) {
 				if item == nil {
 					encoded = append(encoded, []byte("null\n")...)
 				} else if f, ok := item.(float64); ok && f == float64(int64(f)) {
