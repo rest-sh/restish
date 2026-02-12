@@ -12,7 +12,7 @@ var paramInputs = []struct {
 	Type     string
 	Style    Style
 	Explode  bool
-	Value    interface{}
+	Value    any
 	Expected []string
 }{
 	{"bool-simple", "boolean", StyleSimple, false, true, []string{"true"}},

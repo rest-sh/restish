@@ -50,13 +50,13 @@ func TestLinkHeaderParser(t *testing.T) {
 func TestHALParser(t *testing.T) {
 	r := &Response{
 		Links: Links{},
-		Body: map[string]interface{}{
-			"_links": map[string]interface{}{
+		Body: map[string]any{
+			"_links": map[string]any{
 				"curies": nil,
-				"self": map[string]interface{}{
+				"self": map[string]any{
 					"href": "/self",
 				},
-				"item": map[string]interface{}{
+				"item": map[string]any{
 					"href": "/item",
 				},
 			},
@@ -73,17 +73,17 @@ func TestHALParser(t *testing.T) {
 func TestHALParserArray(t *testing.T) {
 	r := &Response{
 		Links: Links{},
-		Body: []interface{}{
-			map[string]interface{}{
-				"_links": map[string]interface{}{
-					"self": map[string]interface{}{
+		Body: []any{
+			map[string]any{
+				"_links": map[string]any{
+					"self": map[string]any{
 						"href": "/one",
 					},
 				},
 			},
-			map[string]interface{}{
-				"_links": map[string]interface{}{
-					"self": map[string]interface{}{
+			map[string]any{
+				"_links": map[string]any{
+					"self": map[string]any{
 						"href": "/two",
 					},
 				},
@@ -101,27 +101,27 @@ func TestHALParserArray(t *testing.T) {
 func TestTerrificallySimpleJSONParser(t *testing.T) {
 	r := &Response{
 		Links: Links{},
-		Body: map[string]interface{}{
+		Body: map[string]any{
 			"self": "/self",
-			"things": []interface{}{
-				map[string]interface{}{
+			"things": []any{
+				map[string]any{
 					"self": "/foo",
 					"name": "Foo",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"self": "/bar",
 					"name": "Bar",
 				},
 				// Weird object with int keys instead of strings? Possible with binary
 				// formats but not JSON itself.
-				&map[int]interface{}{
-					5: map[string]interface{}{
+				&map[int]any{
+					5: map[string]any{
 						"self": "/weird",
 					},
 				},
 			},
-			"other": map[string]interface{}{
-				"self": map[string]interface{}{
+			"other": map[string]any{
+				"self": map[string]any{
 					"foo": "bar",
 				},
 			},
@@ -142,8 +142,8 @@ func TestTerrificallySimpleJSONParser(t *testing.T) {
 func TestSirenParser(t *testing.T) {
 	r := &Response{
 		Links: Links{},
-		Body: map[string]interface{}{
-			"links": []map[string]interface{}{
+		Body: map[string]any{
+			"links": []map[string]any{
 				{"rel": []string{"self"}, "href": "/self"},
 				{"rel": []string{"one", "two"}, "href": "/multi"},
 				{"rel": []string{"invalid"}},
@@ -162,14 +162,14 @@ func TestSirenParser(t *testing.T) {
 func TestJSONAPIParser(t *testing.T) {
 	r := &Response{
 		Links: Links{},
-		Body: map[string]interface{}{
-			"links": map[string]interface{}{
+		Body: map[string]any{
+			"links": map[string]any{
 				"self": "/self",
 			},
-			"data": []interface{}{
-				map[string]interface{}{
-					"links": map[string]interface{}{
-						"self": map[string]interface{}{
+			"data": []any{
+				map[string]any{
+					"links": map[string]any{
+						"self": map[string]any{
 							"href": "/item",
 						},
 					},

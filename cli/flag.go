@@ -9,7 +9,7 @@ import (
 )
 
 // AddGlobalFlag will make a new global flag on the root command.
-func AddGlobalFlag(name, short, description string, defaultValue interface{}, multi bool) {
+func AddGlobalFlag(name, short, description string, defaultValue any, multi bool) {
 	viper.SetDefault(name, defaultValue)
 
 	flags := Root.PersistentFlags()

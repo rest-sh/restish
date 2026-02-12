@@ -19,8 +19,8 @@ import (
 // ContentType is used to marshal/unmarshal data to various formats.
 type ContentType interface {
 	Detect(contentType string) bool
-	Marshal(value interface{}) ([]byte, error)
-	Unmarshal(data []byte, value interface{}) error
+	Marshal(value any) ([]byte, error)
+	Unmarshal(data []byte, value any) error
 }
 
 // PrettyMarshaller describes an optional method that ContentTypes can implement
@@ -64,7 +64,7 @@ func buildAcceptHeader() string {
 }
 
 // Marshal a value to the given content type, e.g. `application/json`.
-func Marshal(contentType string, value interface{}) ([]byte, error) {
+func Marshal(contentType string, value any) ([]byte, error) {
 	for _, entry := range contentTypes {
 		if entry.ct.Detect(contentType) {
 			return entry.ct.Marshal(value)
@@ -101,7 +101,7 @@ func MarshalShort(name string, pretty bool, value any) ([]byte, error) {
 }
 
 // Unmarshal raw data from the given content type into a value.
-func Unmarshal(contentType string, data []byte, value interface{}) error {
+func Unmarshal(contentType string, data []byte, value any) error {
 	for _, entry := range contentTypes {
 		if entry.ct.Detect(contentType) {
 			LogDebug("Unmarshalling from %s", entry.name)
@@ -139,7 +139,7 @@ func (t Text) Detect(contentType string) bool {
 }
 
 // Marshal the value to a text string.
-func (t Text) Marshal(value interface{}) ([]byte, error) {
+func (t Text) Marshal(value any) ([]byte, error) {
 	if s, ok := value.(string); ok {
 		return []byte(s), nil
 	}
@@ -152,7 +152,7 @@ func (t Text) Marshal(value interface{}) ([]byte, error) {
 }
 
 // Unmarshal the value from a text string.
-func (t Text) Unmarshal(data []byte, value interface{}) error {
+func (t Text) Unmarshal(data []byte, value any) error {
 	v := reflect.ValueOf(value)
 
 	if v.Kind() != reflect.Ptr {
@@ -176,8 +176,8 @@ func (t Table) Detect(contentType string) bool {
 }
 
 // Marshal the value to a table string.
-func (t Table) Marshal(value interface{}) ([]byte, error) {
-	d, ok := makeJSONSafe(value).([]interface{})
+func (t Table) Marshal(value any) ([]byte, error) {
+	d, ok := makeJSONSafe(value).([]any)
 	if !ok {
 		return nil, fmt.Errorf("error building table. Must be array of objects")
 	}
@@ -186,21 +186,21 @@ func (t Table) Marshal(value interface{}) ([]byte, error) {
 }
 
 // Unmarshal the value from a table string.
-func (t Table) Unmarshal(data []byte, value interface{}) error {
+func (t Table) Unmarshal(data []byte, value any) error {
 	return fmt.Errorf("unimplemented")
 }
 
 // Only applicable to collection of repeating objects.
 // Filter down to a collection of objects first then apply the table output.
 // Simpletable has much more styling that can be applied.
-func setTable(data []interface{}) ([]byte, error) {
+func setTable(data []any) ([]byte, error) {
 	table := simpletable.New()
 
 	var headerCells []*simpletable.Cell
 	defineHeader := true
 	for _, maps := range data {
 		var bodyCells []*simpletable.Cell
-		if mapData, ok := maps.(map[string]interface{}); ok {
+		if mapData, ok := maps.(map[string]any); ok {
 			// Discover headers for repeating objects
 			// Iterate first instance of one of the repeating objects
 			if defineHeader {
@@ -262,14 +262,14 @@ func (t Gron) Detect(contentType string) bool {
 }
 
 // Marshal the value to a gron string.
-func (t Gron) Marshal(value interface{}) ([]byte, error) {
+func (t Gron) Marshal(value any) ([]byte, error) {
 	pb := NewPathBuffer([][]byte{[]byte("body")})
 	out := make([]byte, 0, 1024)
 	return marshalGron(pb, value, false, out)
 }
 
 // Unmarshal the value from a gron string.
-func (t Gron) Unmarshal(data []byte, value interface{}) error {
+func (t Gron) Unmarshal(data []byte, value any) error {
 	return json.Unmarshal(data, value)
 }
 
@@ -288,7 +288,7 @@ func (j JSON) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded JSON.
-func (j JSON) Marshal(value interface{}) ([]byte, error) {
+func (j JSON) Marshal(value any) ([]byte, error) {
 	// The default encoder escapes '<', '>', and '&' which we don't want
 	// since we are not a browser. Disable this with an encoder instance.
 	// See https://stackoverflow.com/a/28596225/164268
@@ -302,7 +302,7 @@ func (j JSON) Marshal(value interface{}) ([]byte, error) {
 }
 
 // MarshalPretty the value to pretty encoded JSON.
-func (j JSON) MarshalPretty(value interface{}) ([]byte, error) {
+func (j JSON) MarshalPretty(value any) ([]byte, error) {
 	// The default encoder escapes '<', '>', and '&' which we don't want
 	// since we are not a browser. Disable this with an encoder instance.
 	// See https://stackoverflow.com/a/28596225/164268
@@ -317,7 +317,7 @@ func (j JSON) MarshalPretty(value interface{}) ([]byte, error) {
 }
 
 // Unmarshal the value from encoded JSON.
-func (j JSON) Unmarshal(data []byte, value interface{}) error {
+func (j JSON) Unmarshal(data []byte, value any) error {
 	return json.Unmarshal(data, value)
 }
 
@@ -336,12 +336,12 @@ func (y YAML) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded YAML.
-func (y YAML) Marshal(value interface{}) ([]byte, error) {
+func (y YAML) Marshal(value any) ([]byte, error) {
 	return yaml.Marshal(value)
 }
 
 // Unmarshal the value from encoded YAML.
-func (y YAML) Unmarshal(data []byte, value interface{}) error {
+func (y YAML) Unmarshal(data []byte, value any) error {
 	return yaml.Unmarshal(data, value)
 }
 
@@ -360,12 +360,12 @@ func (c CBOR) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded YAML.
-func (c CBOR) Marshal(value interface{}) ([]byte, error) {
+func (c CBOR) Marshal(value any) ([]byte, error) {
 	return cbor.Marshal(value)
 }
 
 // Unmarshal the value from encoded YAML.
-func (c CBOR) Unmarshal(data []byte, value interface{}) error {
+func (c CBOR) Unmarshal(data []byte, value any) error {
 	return cbor.Unmarshal(data, value)
 }
 
@@ -384,12 +384,12 @@ func (m MsgPack) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded YAML.
-func (m MsgPack) Marshal(value interface{}) ([]byte, error) {
+func (m MsgPack) Marshal(value any) ([]byte, error) {
 	return msgpack.Marshal(value)
 }
 
 // Unmarshal the value from encoded YAML.
-func (m MsgPack) Unmarshal(data []byte, value interface{}) error {
+func (m MsgPack) Unmarshal(data []byte, value any) error {
 	return msgpack.Unmarshal(data, value)
 }
 
@@ -407,12 +407,12 @@ func (i Ion) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded binary Ion.
-func (i Ion) Marshal(value interface{}) ([]byte, error) {
+func (i Ion) Marshal(value any) ([]byte, error) {
 	return ion.MarshalBinary(makeJSONSafe(value))
 }
 
 // MarshalPretty the value to pretty encoded JSON.
-func (i Ion) MarshalPretty(value interface{}) ([]byte, error) {
+func (i Ion) MarshalPretty(value any) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	tw := ion.NewTextWriterOpts(buf, ion.TextWriterPretty|ion.TextWriterQuietFinish)
 	err := ion.MarshalTo(tw, makeJSONSafe(value))
@@ -423,7 +423,7 @@ func (i Ion) MarshalPretty(value interface{}) ([]byte, error) {
 }
 
 // Unmarshal the value form encoded binary or text Ion.
-func (i Ion) Unmarshal(data []byte, value interface{}) error {
+func (i Ion) Unmarshal(data []byte, value any) error {
 	return ion.Unmarshal(data, value)
 }
 
@@ -436,11 +436,11 @@ func (r Readable) Detect(contentType string) bool {
 }
 
 // Marshal the value to encoded binary Ion.
-func (r Readable) Marshal(value interface{}) ([]byte, error) {
+func (r Readable) Marshal(value any) ([]byte, error) {
 	return MarshalReadable(value)
 }
 
 // Unmarshal the value form encoded binary or text Ion.
-func (i Readable) Unmarshal(data []byte, value interface{}) error {
+func (i Readable) Unmarshal(data []byte, value any) error {
 	return fmt.Errorf("unimplemented")
 }

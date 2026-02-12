@@ -11,7 +11,7 @@ import (
 
 func TestPrintable(t *testing.T) {
 	// Printable with BOM
-	var body interface{} = []byte("\uFEFF\t\r\n Just a tést!.$%^{}/")
+	var body any = []byte("\uFEFF\t\r\n Just a tést!.$%^{}/")
 	_, ok := printable(body)
 	assert.True(t, ok)
 
@@ -151,7 +151,7 @@ var formatterTests = []struct {
 		name:   "raw-large-json-num",
 		raw:    true,
 		filter: "body",
-		body: []interface{}{
+		body: []any{
 			nil,
 			float64(1000000000000000),
 			float64(1.2e5),

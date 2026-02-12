@@ -91,8 +91,8 @@ type HALParser struct{}
 
 // ParseLinks processes the links in a parsed response.
 func (h HALParser) ParseLinks(resp *Response) error {
-	entries := []interface{}{}
-	if l, ok := resp.Body.([]interface{}); ok {
+	entries := []any{}
+	if l, ok := resp.Body.([]any); ok {
 		entries = l
 	} else {
 		entries = append(entries, resp.Body)
@@ -127,7 +127,7 @@ func (t TerrificallySimpleJSONParser) ParseLinks(resp *Response) error {
 }
 
 // walk the response body recursively to find any `self` links.
-func (t TerrificallySimpleJSONParser) walk(resp *Response, key string, value interface{}) error {
+func (t TerrificallySimpleJSONParser) walk(resp *Response, key string, value any) error {
 	v := reflect.ValueOf(value)
 
 	switch v.Kind() {
@@ -201,7 +201,7 @@ func (s SirenParser) ParseLinks(resp *Response) error {
 	return nil
 }
 
-func getJSONAPIlinks(links map[string]interface{}, resp *Response, isItem bool) {
+func getJSONAPIlinks(links map[string]any, resp *Response, isItem bool) {
 	for k, v := range links {
 		rel := k
 		if isItem && k == "self" {
@@ -215,7 +215,7 @@ func getJSONAPIlinks(links map[string]interface{}, resp *Response, isItem bool) 
 			})
 		}
 
-		if m, ok := v.(map[string]interface{}); ok {
+		if m, ok := v.(map[string]any); ok {
 			if s, ok := m["href"].(string); ok {
 				resp.Links[rel] = append(resp.Links[rel], &Link{
 					Rel: rel,
@@ -231,17 +231,17 @@ type JSONAPIParser struct{}
 
 // ParseLinks processes the links in a parsed response.
 func (j JSONAPIParser) ParseLinks(resp *Response) error {
-	if b, ok := resp.Body.(map[string]interface{}); ok {
+	if b, ok := resp.Body.(map[string]any); ok {
 		// Find top-level links
-		if l, ok := b["links"].(map[string]interface{}); ok {
+		if l, ok := b["links"].(map[string]any); ok {
 			getJSONAPIlinks(l, resp, false)
 		}
 
 		// Find collection item links
-		if d, ok := b["data"].([]interface{}); ok {
+		if d, ok := b["data"].([]any); ok {
 			for _, item := range d {
-				if m, ok := item.(map[string]interface{}); ok {
-					if l, ok := m["links"].(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
+					if l, ok := m["links"].(map[string]any); ok {
 						getJSONAPIlinks(l, resp, true)
 					}
 				}

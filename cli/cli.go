@@ -376,7 +376,7 @@ func Init(name string, version string) {
 		Run: func(cmd *cobra.Command, args []string) {
 			switch *editFormat {
 			case "json":
-				edit(args[0], args[1:], *interactive, *noPrompt, os.Exit, func(v interface{}) ([]byte, error) {
+				edit(args[0], args[1:], *interactive, *noPrompt, os.Exit, func(v any) ([]byte, error) {
 					return json.MarshalIndent(v, "", "  ")
 				}, json.Unmarshal, ".json")
 			case "yaml":
@@ -501,7 +501,7 @@ Not after (expires): %s (%s)
 				panic(err)
 			}
 
-			var output interface{} = resp.Links
+			var output any = resp.Links
 
 			if len(args) > 1 {
 				tmp := []*Link{}

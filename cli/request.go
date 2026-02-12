@@ -451,7 +451,7 @@ type Response struct {
 	Status  int               `json:"status"`
 	Headers map[string]string `json:"headers"`
 	Links   Links             `json:"links"`
-	Body    interface{}       `json:"body"`
+	Body    any               `json:"body"`
 }
 
 // Map returns a map representing this response matching the encoded JSON.
@@ -491,7 +491,7 @@ func (r Response) Map() map[string]any {
 // ParseResponse takes an HTTP response and tries to parse it using the
 // registered content types. It returns a map representing the request,
 func ParseResponse(resp *http.Response) (Response, error) {
-	var parsed interface{}
+	var parsed any
 
 	// Handle content encodings
 	defer resp.Body.Close()
@@ -569,7 +569,7 @@ func GetParsedResponse(req *http.Request, options ...requestOption) (Response, e
 
 		LogDebug("Found pagination via rel=next link: %s", links["next"][0].URI)
 
-		if _, ok := parsed.Body.([]interface{}); !ok {
+		if _, ok := parsed.Body.([]any); !ok {
 			// TODO: support non-list formats like JSON:API
 			LogWarning("Skipping auto-pagination: response body not a list, not sure how to merge")
 			break
@@ -591,14 +591,14 @@ func GetParsedResponse(req *http.Request, options ...requestOption) (Response, e
 			return Response{}, err
 		}
 
-		if l, ok := parsedNext.Body.([]interface{}); ok {
+		if l, ok := parsedNext.Body.([]any); ok {
 			// The last request in the chain will be the one that gets displayed
 			// for the proto/status/headers, plus the merged body/links.
 			parsed.Proto = parsedNext.Proto
 			parsed.Status = parsedNext.Status
 			parsed.Headers = parsedNext.Headers
 			parsed.Links = parsedNext.Links
-			parsed.Body = append(parsed.Body.([]interface{}), l...)
+			parsed.Body = append(parsed.Body.([]any), l...)
 
 			for name, links := range parsedNext.Links {
 				allLinks[name] = append(allLinks[name], links...)

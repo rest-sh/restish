@@ -28,7 +28,7 @@ func (a *mockAsker) askInput(message string, def string, required bool, help str
 	return a.responses[a.pos-1]
 }
 
-func (a *mockAsker) askSelect(message string, options []string, def interface{}, help string) string {
+func (a *mockAsker) askSelect(message string, options []string, def any, help string) string {
 	a.pos++
 	a.t.Log("select", a.responses[a.pos-1])
 	return a.responses[a.pos-1]
@@ -43,7 +43,7 @@ func TestInteractive(t *testing.T) {
 
 	defer gock.Off()
 
-	gock.New("http://api.example.com").Get("/").Reply(200).JSON(map[string]interface{}{
+	gock.New("http://api.example.com").Get("/").Reply(200).JSON(map[string]any{
 		"Hello": "World",
 	})
 
@@ -182,7 +182,7 @@ func TestInteractiveAutoConfig(t *testing.T) {
 
 	defer gock.Off()
 
-	gock.New("http://api2.example.com").Get("/").Reply(200).JSON(map[string]interface{}{
+	gock.New("http://api2.example.com").Get("/").Reply(200).JSON(map[string]any{
 		"Hello": "World",
 	})
 

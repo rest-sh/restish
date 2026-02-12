@@ -5,8 +5,8 @@ package cli
 type AutoConfigVar struct {
 	Description string        `json:"description,omitempty" yaml:"description,omitempty"`
 	Example     string        `json:"example,omitempty" yaml:"example,omitempty"`
-	Default     interface{}   `json:"default,omitempty" yaml:"default,omitempty"`
-	Enum        []interface{} `json:"enum,omitempty" yaml:"enum,omitempty"`
+	Default     any   `json:"default,omitempty" yaml:"default,omitempty"`
+	Enum        []any `json:"enum,omitempty" yaml:"enum,omitempty"`
 
 	// Exclude the value from being sent to the server. This essentially makes
 	// it a value which is only used in param templates.
