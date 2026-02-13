@@ -20,6 +20,7 @@ Features include:
   - Automatic configuration of API auth if advertised by the API
   - Shell command completion for Bash, Fish, Zsh, Powershell
 - Automatic pagination of resource collections via [RFC 5988](https://tools.ietf.org/html/rfc5988) `prev` and `next` hypermedia links
+- Local project configuration files for easy sharing and version control
 - API endpoint-based auth built-in with support for profiles:
   - HTTP Basic
   - API key via header or query param

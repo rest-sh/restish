@@ -61,9 +61,98 @@ type APIConfig struct {
 }
 
 // Save the API configuration to disk.
+// If the API came from local config file(s), choose which one to save to.
+// Otherwise, save to the global config.
 func (a APIConfig) Save() error {
+	// Check if this API came from local config file(s)
+	if sourcePaths, isLocal := localConfigSources[a.name]; isLocal && len(sourcePaths) > 0 {
+		// Use the top-most (closest to cwd) config by default
+		targetPath := sourcePaths[len(sourcePaths)-1]
+		return a.saveToLocalConfig(targetPath)
+	}
+
+	// Save to global config
 	apis.Set(a.name, a)
 	return apis.WriteConfig()
+}
+
+// SaveWithPrompt saves the API configuration, optionally prompting the user
+// to choose which config file to save to when multiple sources exist.
+func (a APIConfig) SaveWithPrompt(asker asker) error {
+	// Check if this API came from local config file(s)
+	sourcePaths, isLocal := localConfigSources[a.name]
+
+	if !isLocal || len(sourcePaths) == 0 {
+		// Save to global config
+		apis.Set(a.name, a)
+		return apis.WriteConfig()
+	}
+
+	if len(sourcePaths) == 1 {
+		// Only one source, save there
+		return a.saveToLocalConfig(sourcePaths[0])
+	}
+
+	// Multiple sources - let user choose
+	options := make([]string, len(sourcePaths))
+	for i, path := range sourcePaths {
+		// Make paths relative to cwd for easier reading
+		if cwd, err := os.Getwd(); err == nil {
+			if relPath, err := filepath.Rel(cwd, path); err == nil {
+				options[i] = relPath
+			} else {
+				options[i] = path
+			}
+		} else {
+			options[i] = path
+		}
+	}
+	options = append(options, "Global config")
+
+	choice := asker.askSelect("Choose where to save the configuration", options, nil, "")
+
+	if choice == "Global config" {
+		// Save to global config
+		apis.Set(a.name, a)
+		return apis.WriteConfig()
+	}
+
+	// Find the selected path
+	for i, opt := range options[:len(sourcePaths)] {
+		if opt == choice {
+			return a.saveToLocalConfig(sourcePaths[i])
+		}
+	}
+
+	// Fallback to last path
+	return a.saveToLocalConfig(sourcePaths[len(sourcePaths)-1])
+}
+
+// saveToLocalConfig saves the API configuration to a specific local config file.
+func (a APIConfig) saveToLocalConfig(configPath string) error {
+	localApis := viper.New()
+	localApis.SetConfigFile(configPath)
+
+	// Try to read existing config
+	if err := localApis.ReadInConfig(); err != nil {
+		// If file doesn't exist, that's ok, we'll create it
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("error reading local config %s: %w", configPath, err)
+		}
+	}
+
+	// Update or add this API's config
+	localApis.Set(a.name, a)
+
+	// Write back to the file
+	if err := localApis.WriteConfig(); err != nil {
+		// If WriteConfig fails because file doesn't exist, try SafeWriteConfig
+		if err := localApis.SafeWriteConfig(); err != nil {
+			return fmt.Errorf("error writing local config %s: %w", configPath, err)
+		}
+	}
+
+	return nil
 }
 
 // Return colorized string of configuration in JSON or YAML
@@ -94,6 +183,276 @@ type apiConfigs map[string]*APIConfig
 
 var configs apiConfigs
 var apiCommand *cobra.Command
+var localConfigPath string
+var localConfigSources map[string][]string // Track ALL config files for each API (from root to cwd)
+
+// deepMergeProfile merges source profile into dest profile.
+// Fields in source override fields in dest, except for maps which are merged.
+func deepMergeProfile(dest, source *APIProfile) {
+	if source.Base != "" {
+		dest.Base = source.Base
+	}
+
+	// Merge headers
+	if len(source.Headers) > 0 {
+		if dest.Headers == nil {
+			dest.Headers = make(map[string]string)
+		}
+		for k, v := range source.Headers {
+			dest.Headers[k] = v
+		}
+	}
+
+	// Merge query params
+	if len(source.Query) > 0 {
+		if dest.Query == nil {
+			dest.Query = make(map[string]string)
+		}
+		for k, v := range source.Query {
+			dest.Query[k] = v
+		}
+	}
+
+	// Override auth if specified
+	if source.Auth != nil {
+		if dest.Auth == nil {
+			dest.Auth = &APIAuth{}
+		}
+		dest.Auth.Name = source.Auth.Name
+		if source.Auth.Params != nil {
+			if dest.Auth.Params == nil {
+				dest.Auth.Params = make(map[string]string)
+			}
+			for k, v := range source.Auth.Params {
+				dest.Auth.Params[k] = v
+			}
+		}
+	}
+}
+
+// deepMergeAPIConfig merges source config into dest config.
+// This allows configs to be built up across multiple files.
+func deepMergeAPIConfig(dest, source *APIConfig) {
+	if source.Base != "" {
+		dest.Base = source.Base
+	}
+
+	if source.OperationBase != "" {
+		dest.OperationBase = source.OperationBase
+	}
+
+	// Merge spec files (append, no duplicates)
+	if len(source.SpecFiles) > 0 {
+		existingSpecs := make(map[string]bool)
+		for _, spec := range dest.SpecFiles {
+			existingSpecs[spec] = true
+		}
+		for _, spec := range source.SpecFiles {
+			if !existingSpecs[spec] {
+				dest.SpecFiles = append(dest.SpecFiles, spec)
+			}
+		}
+	}
+
+	// Deep merge profiles
+	if len(source.Profiles) > 0 {
+		if dest.Profiles == nil {
+			dest.Profiles = make(map[string]*APIProfile)
+		}
+		for profileName, sourceProfile := range source.Profiles {
+			if sourceProfile == nil {
+				continue
+			}
+			if dest.Profiles[profileName] == nil {
+				// Profile doesn't exist in dest, create it
+				dest.Profiles[profileName] = &APIProfile{}
+			}
+			deepMergeProfile(dest.Profiles[profileName], sourceProfile)
+		}
+	}
+
+	// Merge TLS config
+	if source.TLS != nil {
+		if dest.TLS == nil {
+			dest.TLS = &TLSConfig{}
+		}
+		if source.TLS.InsecureSkipVerify {
+			dest.TLS.InsecureSkipVerify = true
+		}
+		if source.TLS.Cert != "" {
+			dest.TLS.Cert = source.TLS.Cert
+		}
+		if source.TLS.Key != "" {
+			dest.TLS.Key = source.TLS.Key
+		}
+		if source.TLS.CACert != "" {
+			dest.TLS.CACert = source.TLS.CACert
+		}
+		if source.TLS.PKCS11 != nil {
+			if dest.TLS.PKCS11 == nil {
+				dest.TLS.PKCS11 = &PKCS11Config{}
+			}
+			if source.TLS.PKCS11.Path != "" {
+				dest.TLS.PKCS11.Path = source.TLS.PKCS11.Path
+			}
+			if source.TLS.PKCS11.Label != "" {
+				dest.TLS.PKCS11.Label = source.TLS.PKCS11.Label
+			}
+		}
+	}
+}
+
+// validateProfile checks if a profile exists in the given config.
+// If not, it returns an error with available profiles listed.
+func validateProfile(profileName string, config *APIConfig, configName string) error {
+	if profileName == "default" && config.Profiles[profileName] == nil {
+		// Default profile is always valid, even if not explicitly defined
+		return nil
+	}
+
+	if config.Profiles[profileName] != nil {
+		return nil
+	}
+
+	// Profile doesn't exist, build helpful error message
+	available := []string{}
+	for p := range config.Profiles {
+		available = append(available, p)
+	}
+	sort.Strings(available)
+
+	if len(available) == 0 {
+		return fmt.Errorf("profile '%s' not found for API '%s' (no profiles defined)", profileName, configName)
+	}
+
+	return fmt.Errorf("profile '%s' not found for API '%s'. Available profiles: %s",
+		profileName, configName, strings.Join(available, ", "))
+}
+
+// findAllLocalConfigs searches for all local API configuration files.
+// It walks up the directory tree from current directory to root and returns
+// all found config files in order from root to current directory.
+func findAllLocalConfigs() []string {
+	var configPaths []string
+
+	// First check if explicitly specified via flag
+	if configPath := viper.GetString("rsh-config"); configPath != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			return []string{configPath}
+		}
+		// If specified but doesn't exist, log and continue
+		LogDebug("Specified config file does not exist: %s", configPath)
+	}
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+
+	// Walk up the directory tree and collect all config paths
+	dir := cwd
+	for {
+		// Check for .restish.json first
+		configPath := filepath.Join(dir, ".restish.json")
+		if _, err := os.Stat(configPath); err == nil {
+			configPaths = append(configPaths, configPath)
+		} else {
+			// Check for .restish.yaml
+			configPath = filepath.Join(dir, ".restish.yaml")
+			if _, err := os.Stat(configPath); err == nil {
+				configPaths = append(configPaths, configPath)
+			}
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root directory
+			break
+		}
+		dir = parent
+	}
+
+	// Reverse the list so configs are loaded from root to current directory
+	// This way, configs closer to cwd override those further away
+	for i, j := 0, len(configPaths)-1; i < j; i, j = i+1, j-1 {
+		configPaths[i], configPaths[j] = configPaths[j], configPaths[i]
+	}
+
+	return configPaths
+}
+
+// loadLocalConfig loads and merges a local configuration file with the global config.
+func loadLocalConfig(configPath string) error {
+	localApis := viper.New()
+
+	// Set config file path
+	localApis.SetConfigFile(configPath)
+
+	// Read the local config
+	if err := localApis.ReadInConfig(); err != nil {
+		return fmt.Errorf("error reading local config %s: %w", configPath, err)
+	}
+
+	// Get the directory containing the config file for resolving relative paths
+	configDir := filepath.Dir(configPath)
+
+	// Merge local configs into global configs
+	for k, v := range localApis.AllSettings() {
+		if k == "$schema" {
+			continue
+		}
+
+		// Convert to APIConfig to process spec_files
+		tmp := viper.New()
+		tmp.Set("config", v)
+		var localConfig APIConfig
+		if err := tmp.UnmarshalKey("config", &localConfig); err != nil {
+			LogError("Error unmarshaling local config for %s: %v", k, err)
+			continue
+		}
+
+		// Set the name field
+		localConfig.name = k
+
+		// Resolve relative spec_files paths
+		for i, specFile := range localConfig.SpecFiles {
+			// Skip if it's a URL
+			if strings.HasPrefix(specFile, "http://") || strings.HasPrefix(specFile, "https://") {
+				continue
+			}
+			// If it's a relative path, make it relative to the config file location
+			if !filepath.IsAbs(specFile) {
+				localConfig.SpecFiles[i] = filepath.Join(configDir, specFile)
+			}
+		}
+
+		// Deep merge with existing config if it exists
+		existingConfig := configs[k]
+		if existingConfig != nil {
+			// Config already exists, deep merge
+			deepMergeAPIConfig(existingConfig, &localConfig)
+			existingConfig.name = k
+		} else {
+			// New config, just add it
+			localConfig.name = k
+			configs[k] = &localConfig
+
+			// Set in global apis config
+			apis.Set(k, localConfig)
+		}
+
+		// Track all config files that contribute to this API
+		// They are tracked in order from root to cwd
+		if localConfigSources == nil {
+			localConfigSources = make(map[string][]string)
+		}
+		localConfigSources[k] = append(localConfigSources[k], configPath)
+	}
+
+	return nil
+}
 
 func initAPIConfig() {
 	apis = viper.New()
@@ -119,6 +478,23 @@ func initAPIConfig() {
 		// Attempt to update the config to add the schema for docs/validation.
 		apis.Set("$schema", "https://rest.sh/schemas/apis.json")
 		apis.WriteConfig()
+	}
+
+	// Initialize configs map before loading local config
+	configs = apiConfigs{}
+
+	// Load all local configurations found up the directory tree
+	localConfigPaths := findAllLocalConfigs()
+	if len(localConfigPaths) > 0 {
+		LogDebug("Found %d local config(s)", len(localConfigPaths))
+		for _, configPath := range localConfigPaths {
+			LogDebug("Loading local config: %s", configPath)
+			if err := loadLocalConfig(configPath); err != nil {
+				LogError("Error loading local config %s: %v", configPath, err)
+			}
+		}
+		// Store the closest (last) config path for reference
+		localConfigPath = localConfigPaths[len(localConfigPaths)-1]
 	}
 
 	// Register api init sub-command to register the API.
@@ -236,7 +612,6 @@ func initAPIConfig() {
 	})
 
 	// Register API sub-commands
-	configs = apiConfigs{}
 	tmp := viper.New()
 	for k, v := range apis.AllSettings() {
 		if k == "$schema" {

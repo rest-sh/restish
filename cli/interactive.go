@@ -402,6 +402,18 @@ func askInitAPI(a asker, cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Show info if this is a local config
+	if sourcePaths, isLocal := localConfigSources[config.name]; isLocal && len(sourcePaths) > 0 {
+		if len(sourcePaths) == 1 {
+			fmt.Printf("Note: This API is configured in: %s\n", sourcePaths[0])
+		} else {
+			fmt.Printf("Note: This API is configured across %d files:\n", len(sourcePaths))
+			for _, path := range sourcePaths {
+				fmt.Printf("  - %s\n", path)
+			}
+		}
+	}
+
 	for {
 		options := []string{
 			"Change base URI (" + config.Base + ")",
@@ -431,7 +443,11 @@ func askInitAPI(a asker, cmd *cobra.Command, args []string) {
 		case choice == "Edit TLS configuration":
 			askTLSConfig(a, config)
 		case choice == "Save and exit":
-			config.Save()
+			if err := config.SaveWithPrompt(a); err != nil {
+				fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+				return
+			}
+			fmt.Println("Configuration saved successfully")
 			return
 		}
 	}
