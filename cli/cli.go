@@ -549,6 +549,8 @@ Not after (expires): %s (%s)
 	AddGlobalFlag("rsh-insecure", "", "Disable SSL verification", false, false)
 	AddGlobalFlag("rsh-client-cert", "", "Path to a PEM encoded client certificate", "", false)
 	AddGlobalFlag("rsh-client-key", "", "Path to a PEM encoded private key", "", false)
+	AddGlobalFlag("rsh-pkcs11-label", "", "Label of the PKCS11 token", "", false)
+	AddGlobalFlag("rsh-pkcs11-path", "", "Path to the PKCS11 library", "", false)
 	AddGlobalFlag("rsh-ca-cert", "", "Path to a PEM encoded CA cert", "", false)
 	AddGlobalFlag("rsh-ignore-status-code", "", "Do not set exit code from HTTP status code", false, false)
 	AddGlobalFlag("rsh-retry", "", "Number of times to retry on certain failures", 2, false)
@@ -763,6 +765,12 @@ func Run() (returnErr error) {
 	}
 	if caCert, _ := GlobalFlags.GetString("rsh-ca-cert"); caCert != "" {
 		viper.Set("rsh-ca-cert", caCert)
+	}
+	if pkcs11Label, _ := GlobalFlags.GetString("rsh-pkcs11-label"); pkcs11Label != "" {
+		viper.Set("rsh-pkcs11-label", pkcs11Label)
+	}
+	if pkcs11Path, _ := GlobalFlags.GetString("rsh-pkcs11-path"); pkcs11Path != "" {
+		viper.Set("rsh-pkcs11-path", pkcs11Path)
 	}
 	if query, _ := GlobalFlags.GetStringArray("rsh-query"); len(query) > 0 {
 		viper.Set("rsh-query", query)
