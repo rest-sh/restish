@@ -553,6 +553,7 @@ Not after (expires): %s (%s)
 	AddGlobalFlag("rsh-ignore-status-code", "", "Do not set exit code from HTTP status code", false, false)
 	AddGlobalFlag("rsh-retry", "", "Number of times to retry on certain failures", 2, false)
 	AddGlobalFlag("rsh-timeout", "t", "Timeout for HTTP requests", time.Duration(0), false)
+	AddGlobalFlag("rsh-blindly-accept-cli-extensions", "", "Accept x-cli-* extensions without prompting (for automation)", false, false)
 
 	Root.RegisterFlagCompletionFunc("rsh-output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"auto", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
@@ -777,6 +778,9 @@ func Run() (returnErr error) {
 	}
 	if timeout, _ := GlobalFlags.GetDuration("rsh-timeout"); timeout > 0 {
 		viper.Set("rsh-timeout", timeout)
+	}
+	if blindlyAccept, _ := GlobalFlags.GetBool("rsh-blindly-accept-cli-extensions"); blindlyAccept {
+		viper.Set("rsh-blindly-accept-cli-extensions", true)
 	}
 
 	// Now that global flags are parsed we can enable verbose mode if requested.

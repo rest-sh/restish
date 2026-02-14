@@ -230,7 +230,7 @@ func paramSchema(p *cli.Param, s *base.Schema) string {
 	return schemaDesc
 }
 
-func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, path *v3.PathItem, op *v3.Operation) cli.Operation {
+func openapiOperation(_ *cobra.Command, method string, uriTemplate *url.URL, path *v3.PathItem, op *v3.Operation) cli.Operation {
 	var pathParams, queryParams, headerParams []*cli.Param
 	var pathSchemas, querySchemas, headerSchemas []*base.Schema = []*base.Schema{}, []*base.Schema{}, []*base.Schema{}
 
@@ -580,6 +580,96 @@ func openapiOperation(cmd *cobra.Command, method string, uriTemplate *url.URL, p
 	}
 }
 
+// cliExtensionNames contains all the x-cli-* extension names we look for
+var cliExtensionNames = []string{
+	ExtName,
+	ExtAliases,
+	ExtDescription,
+	ExtIgnore,
+	ExtHidden,
+	ExtCLIConfig,
+}
+
+// collectCLIExtensions scans an OpenAPI document and collects all x-cli-* extensions found
+func collectCLIExtensions(model *v3.Document) cli.CLIExtensions {
+	var extensions []cli.CLIExtension
+
+	// Helper to check and add extensions from an extension map
+	addExtensions := func(extMap *orderedmap.Map[string, *yaml.Node], location string) {
+		if extMap == nil {
+			return
+		}
+		for _, extName := range cliExtensionNames {
+			if val, err := getExt[any](extMap, extName); err == nil {
+				extensions = append(extensions, cli.CLIExtension{
+					Location: location,
+					Name:     extName,
+					Value:    val,
+				})
+			}
+		}
+	}
+
+	// Check document-level extensions
+	if model.Extensions != nil {
+		addExtensions(model.Extensions, "document")
+	}
+
+	// Check info-level extensions
+	if model.Info != nil && model.Info.Extensions != nil {
+		addExtensions(model.Info.Extensions, "info")
+	}
+
+	// Check path and operation level extensions
+	if model.Paths != nil {
+		for pathURI, pathItem := range model.Paths.PathItems.FromOldest() {
+			if pathItem.Extensions != nil {
+				addExtensions(pathItem.Extensions, "path:"+pathURI)
+			}
+
+			// Check each operation
+			for method, operation := range pathItem.GetOperations().FromOldest() {
+				if operation == nil {
+					continue
+				}
+				opLocation := "operation:" + method + ":" + pathURI
+
+				if operation.Extensions != nil {
+					addExtensions(operation.Extensions, opLocation)
+				}
+
+				// Check parameters
+				for _, param := range operation.Parameters {
+					if param.Extensions != nil {
+						addExtensions(param.Extensions, opLocation+":param:"+param.Name)
+					}
+				}
+
+				// Check responses
+				if operation.Responses != nil {
+					for code, resp := range operation.Responses.Codes.FromOldest() {
+						if resp != nil && resp.Extensions != nil {
+							addExtensions(resp.Extensions, opLocation+":response:"+code)
+						}
+					}
+					if operation.Responses.Default != nil && operation.Responses.Default.Extensions != nil {
+						addExtensions(operation.Responses.Default.Extensions, opLocation+":response:default")
+					}
+				}
+			}
+
+			// Check path-level parameters
+			for _, param := range pathItem.Parameters {
+				if param.Extensions != nil {
+					addExtensions(param.Extensions, "path:"+pathURI+":param:"+param.Name)
+				}
+			}
+		}
+	}
+
+	return cli.CLIExtensions{Extensions: extensions}
+}
+
 func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *http.Response) (cli.API, error) {
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -704,10 +794,14 @@ func loadOpenAPI3(cfg Resolver, cmd *cobra.Command, location *url.URL, resp *htt
 		long = getExtOr(model.Info.Extensions, ExtDescription, model.Info.Description)
 	}
 
+	// Collect all CLI extensions found in the document
+	cliExtensions := collectCLIExtensions(&model)
+
 	api := cli.API{
-		Short:      short,
-		Long:       long,
-		Operations: operations,
+		Short:         short,
+		Long:          long,
+		Operations:    operations,
+		CLIExtensions: cliExtensions,
 	}
 
 	if len(authSchemes) > 0 {

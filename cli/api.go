@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -18,16 +20,54 @@ import (
 	"golang.org/x/text/language"
 )
 
+// CLIExtension represents a single x-cli-* extension found in an OpenAPI spec
+type CLIExtension struct {
+	Location string `json:"location" yaml:"location"` // Where the extension was found (e.g., "operation:getUsers", "parameter:userId")
+	Name     string `json:"name" yaml:"name"`         // The extension name (e.g., "x-cli-name")
+	Value    any    `json:"value" yaml:"value"`       // The extension value
+}
+
+// CLIExtensions holds information about all x-cli-* extensions found in an API spec
+type CLIExtensions struct {
+	Extensions []CLIExtension `json:"extensions,omitempty" yaml:"extensions,omitempty"`
+}
+
+// HasExtensions returns true if any CLI extensions were found
+func (c *CLIExtensions) HasExtensions() bool {
+	return len(c.Extensions) > 0
+}
+
+// Summary returns a human-readable summary of the extensions found
+func (c *CLIExtensions) Summary() string {
+	if !c.HasExtensions() {
+		return ""
+	}
+
+	// Count extensions by type
+	counts := make(map[string]int)
+	for _, ext := range c.Extensions {
+		counts[ext.Name]++
+	}
+
+	var sb strings.Builder
+	sb.WriteString("CLI extensions found:\n")
+	for name, count := range counts {
+		sb.WriteString(fmt.Sprintf("  - %s: %d occurrence(s)\n", name, count))
+	}
+	return sb.String()
+}
+
 // API represents an abstracted API description used to build CLI commands
 // around available resources, operations, and links. An API is produced by
 // a Loader and cached by the CLI in-between runs when possible.
 type API struct {
-	RestishVersion string      `json:"restish_version" yaml:"restish_version"`
-	Short          string      `json:"short" yaml:"short"`
-	Long           string      `json:"long,omitempty" yaml:"long,omitempty"`
-	Operations     []Operation `json:"operations,omitempty" yaml:"operations,omitempty"`
-	Auth           []APIAuth   `json:"auth,omitempty" yaml:"auth,omitempty"`
-	AutoConfig     AutoConfig  `json:"auto_config,omitempty" yaml:"auto_config,omitempty"`
+	RestishVersion string        `json:"restish_version" yaml:"restish_version"`
+	Short          string        `json:"short" yaml:"short"`
+	Long           string        `json:"long,omitempty" yaml:"long,omitempty"`
+	Operations     []Operation   `json:"operations,omitempty" yaml:"operations,omitempty"`
+	Auth           []APIAuth     `json:"auth,omitempty" yaml:"auth,omitempty"`
+	AutoConfig     AutoConfig    `json:"auto_config,omitempty" yaml:"auto_config,omitempty"`
+	CLIExtensions  CLIExtensions `json:"cli_extensions,omitempty" yaml:"cli_extensions,omitempty"`
 }
 
 // Merge two APIs together. Takes the description if none is set and merges
@@ -80,6 +120,11 @@ func setupRootFromAPI(root *cobra.Command, api *API) {
 func load(root *cobra.Command, entrypoint, spec url.URL, resp *http.Response, name string, loader Loader) (API, error) {
 	api, err := loader.Load(entrypoint, spec, resp)
 	if err != nil {
+		return API{}, err
+	}
+
+	// Check for CLI extensions and prompt for acceptance
+	if err := checkCLIExtensions(&api); err != nil {
 		return API{}, err
 	}
 
@@ -282,4 +327,56 @@ func Load(entrypoint string, root *cobra.Command) (API, error) {
 	}
 
 	return API{}, fmt.Errorf("could not detect API type: %s", entrypoint)
+}
+
+// checkCLIExtensions checks if the API contains CLI extensions and prompts the user
+// for confirmation if they haven't blindly accepted them. Returns an error if the
+// user declines to accept the extensions.
+func checkCLIExtensions(api *API) error {
+	if !api.CLIExtensions.HasExtensions() {
+		return nil
+	}
+
+	// If the user has blindly accepted extensions, skip the prompt
+	if viper.GetBool("rsh-blindly-accept-cli-extensions") {
+		LogDebug("CLI extensions found but blindly accepted via flag")
+		return nil
+	}
+
+	// Check if we're in a TTY - if not, we can't prompt interactively
+	if !viper.GetBool("tty") {
+		return fmt.Errorf("spec contains x-cli-* extensions but interactive warning not possible; use --blindly-accept-cli-extensions flag to accept extensions in non-interactive environments")
+	}
+
+	// Display warning and prompt for confirmation
+	fmt.Fprintln(Stderr, "")
+	fmt.Fprintln(Stderr, "╔════════════════════════════════════════════════════════════════════════════╗")
+	fmt.Fprintln(Stderr, "║                         CLI EXTENSIONS DETECTED!                           ║")
+	fmt.Fprintln(Stderr, "╚════════════════════════════════════════════════════════════════════════════╝")
+	fmt.Fprintln(Stderr, "")
+	fmt.Fprintln(Stderr, "This API specification contains x-cli-* extensions that modify CLI behavior.")
+	fmt.Fprintln(Stderr, "")
+	fmt.Fprintln(Stderr, api.CLIExtensions.Summary())
+	fmt.Fprintln(Stderr, "")
+	fmt.Fprintln(Stderr, "While these extensions are typically benign, a malicious API could use them")
+	fmt.Fprintln(Stderr, "to disguise commands or mislead you about what operations will be performed.")
+	fmt.Fprintln(Stderr, "")
+
+	var resp bool
+	err := survey.AskOne(&survey.Confirm{
+		Message: "Do you understand and accept the risk of using these CLI extensions?",
+		Default: false,
+	}, &resp)
+	if err == terminal.InterruptErr {
+		os.Exit(0)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to prompt for CLI extension acceptance: %w", err)
+	}
+
+	if !resp {
+		return fmt.Errorf("CLI extensions were not accepted. To use this API, you must accept the extensions or use --blindly-accept-cli-extensions flag")
+	}
+
+	return nil
 }
