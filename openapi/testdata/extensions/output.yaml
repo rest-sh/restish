@@ -41,3 +41,26 @@ operations:
       - type: "array[string]"
         name: q
         display_name: query
+cli_extensions:
+  extensions:
+    - location: "operation:get:/items/{item-id}"
+      name: x-cli-name
+      value: getItem
+    - location: "operation:get:/items/{item-id}"
+      name: x-cli-aliases
+      value:
+        - get-item
+        - getitem
+        - gi
+    - location: "operation:get:/items/{item-id}:param:q"
+      name: x-cli-name
+      value: query
+    - location: "operation:get:/items/{item-id}:param:MyHeader"
+      name: x-cli-ignore
+      value: true
+    - location: "operation:get:/items/{item-id}:response:200"
+      name: x-cli-description
+      value: CLI-specific description override
+    - location: "operation:delete:/items/{item-id}"
+      name: x-cli-ignore
+      value: true

@@ -27,3 +27,13 @@ auto_config:
       authorize_url: https://example.com/authorize
       client_id: ""
       token_url: https://example.com/token
+cli_extensions:
+  extensions:
+    - location: document
+      name: x-cli-config
+      value:
+        security: default
+        prompt:
+          client_id:
+            description: Client identifier
+            example: abc123
