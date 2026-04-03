@@ -80,11 +80,12 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 
 // paramInfo holds the information we need about a single parameter.
 type paramInfo struct {
-	name     string // original API parameter name
-	flagName string // kebab-case flag name
-	in       string // "path", "query", "header", "cookie"
+	name     string   // original API parameter name
+	flagName string   // kebab-case flag name
+	in       string   // "path", "query", "header", "cookie"
 	required bool
 	desc     string
+	enum     []string // allowed values from OpenAPI schema enum, if present
 }
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
@@ -115,12 +116,23 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 		if d := paramExtString(p, "x-cli-description"); d != "" {
 			desc = d
 		}
+		var enumVals []string
+		if p.Schema != nil {
+			if schema := p.Schema.Schema(); schema != nil {
+				for _, node := range schema.Enum {
+					if node != nil {
+						enumVals = append(enumVals, node.Value)
+					}
+				}
+			}
+		}
 		allParams[p.Name] = &paramInfo{
 			name:     p.Name,
 			flagName: flagName,
 			in:       p.In,
 			required: req,
 			desc:     desc,
+			enum:     enumVals,
 		}
 	}
 
@@ -203,6 +215,25 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 
 	for _, p := range optional {
 		cmd.Flags().String(p.flagName, "", p.desc)
+		if len(p.enum) > 0 {
+			vals := p.enum
+			_ = cmd.RegisterFlagCompletionFunc(p.flagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+				return vals, cobra.ShellCompDirectiveNoFileComp
+			})
+		}
+	}
+
+	// Register valid args for required positional params that have enum values.
+	// Cobra uses ValidArgsFunction for the first positional arg completion.
+	if len(required) > 0 {
+		reqWithEnum := required // capture
+		cmd.ValidArgsFunction = func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+			idx := len(args)
+			if idx < len(reqWithEnum) && len(reqWithEnum[idx].enum) > 0 {
+				return reqWithEnum[idx].enum, cobra.ShellCompDirectiveNoFileComp
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
 	}
 
 	return cmd

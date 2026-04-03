@@ -42,6 +42,7 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addAuthHeaderCommand(root)
 	c.addAPICommand(root)
 	c.addCacheCommand(root)
+	c.addSetupCommand(root)
 	return root
 }
 

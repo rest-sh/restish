@@ -1,0 +1,86 @@
+package cli_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// TestCompletionScripts verifies that Cobra generates non-empty completion
+// scripts for each supported shell.
+func TestCompletionScripts(t *testing.T) {
+	shells := []string{"bash", "zsh", "fish", "powershell"}
+	for _, shell := range shells {
+		t.Run(shell, func(t *testing.T) {
+			c, out, _ := newTestCLI()
+			c.ConfigPath = t.TempDir() + "/restish.json"
+			if err := c.Run([]string{"restish", "completion", shell}); err != nil {
+				t.Fatalf("completion %s: %v", shell, err)
+			}
+			if out.Len() == 0 {
+				t.Errorf("completion %s: got empty output", shell)
+			}
+		})
+	}
+}
+
+// TestSetupWritesAlias verifies that "setup zsh" appends the noglob alias to
+// the shell rc file.
+func TestSetupWritesAlias(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "setup", "zsh"}); err != nil {
+		t.Fatalf("setup zsh: %v", err)
+	}
+
+	rcPath := filepath.Join(home, ".zshrc")
+	data, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read zshrc: %v", err)
+	}
+	if !strings.Contains(string(data), "noglob restish") {
+		t.Errorf("expected noglob alias in zshrc, got: %q", string(data))
+	}
+	if !strings.Contains(out.String(), ".zshrc") {
+		t.Errorf("expected confirmation with rc path, got: %q", out.String())
+	}
+}
+
+// TestSetupIdempotent verifies that running "setup" twice does not duplicate
+// the alias.
+func TestSetupIdempotent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	for i := 0; i < 2; i++ {
+		c, _, _ := newTestCLI()
+		c.ConfigPath = t.TempDir() + "/restish.json"
+		if err := c.Run([]string{"restish", "setup", "bash"}); err != nil {
+			t.Fatalf("run %d: setup bash: %v", i, err)
+		}
+	}
+
+	rcPath := filepath.Join(home, ".bashrc")
+	data, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read bashrc: %v", err)
+	}
+	count := strings.Count(string(data), "noglob restish")
+	if count != 1 {
+		t.Errorf("expected alias to appear exactly once, got %d times:\n%s", count, string(data))
+	}
+}
+
+// TestSetupUnsupportedShell verifies that an unknown shell returns an error.
+func TestSetupUnsupportedShell(t *testing.T) {
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "setup", "tcsh"})
+	if err == nil {
+		t.Fatal("expected error for unsupported shell")
+	}
+}
