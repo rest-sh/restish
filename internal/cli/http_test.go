@@ -159,9 +159,9 @@ func TestHTTPServerOverride(t *testing.T) {
 }
 
 // TestHTTPResponseBody verifies that the response body is written to stdout.
+// Uses a JSON content-type so the body is decoded and re-encoded as an object.
 func TestHTTPResponseBody(t *testing.T) {
-	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{"hello":"world"}`)
+	srv := jsonServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)

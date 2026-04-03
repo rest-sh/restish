@@ -3,10 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 )
@@ -42,9 +42,8 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 	}
 }
 
-// runHTTP reads global flags, executes the HTTP request, and writes the
-// response body to stdout. Response normalization and formatting will be
-// added in Step 4.
+// runHTTP reads global flags, executes the HTTP request, normalizes the
+// response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	rawURL := args[0]
 
@@ -53,14 +52,40 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 		return err
 	}
 
-	resp, err := request.Do(context.Background(), method, rawURL, nil, opts)
+	httpResp, err := request.Do(context.Background(), method, rawURL, nil, opts)
 	if err != nil {
 		return fmt.Errorf("network: %w", err)
 	}
-	defer resp.Body.Close()
 
-	_, err = io.Copy(c.Stdout, resp.Body)
-	return err
+	resp, err := output.Normalize(httpResp)
+	if err != nil {
+		return err
+	}
+
+	if err := c.formatResponse(cmd, resp); err != nil {
+		return err
+	}
+
+	ignoreStatus, _ := cmd.Flags().GetBool("rsh-ignore-status-code")
+	if !ignoreStatus {
+		if code := output.StatusToExitCode(resp.Status); code != 0 {
+			return &ExitCodeError{Code: code}
+		}
+	}
+	return nil
+}
+
+// formatResponse selects and applies the right formatter for this invocation.
+func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	fmts := output.DefaultFormatters()
+
+	formatter, ok := output.Select(fmts, fmtName, output.IsTerminal(c.Stdout))
+	if !ok {
+		return fmt.Errorf("unknown output format %q; available: readable, json", fmtName)
+	}
+
+	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
 }
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.
