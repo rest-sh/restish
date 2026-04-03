@@ -118,6 +118,20 @@ func (c *CLI) Run(args []string) error {
 	c.cfg = cfg
 
 	root := c.newRootCmd()
+
+	// Register generated commands for APIs whose spec is already cached.
+	// (Network discovery is not triggered here; use "restish api sync <name>"
+	// to prime the cache for an API.)
+	for apiName, apiCfg := range cfg.APIs {
+		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, c.loaders)
+		if err != nil || s == nil {
+			continue
+		}
+		if apiCmd := c.buildAPICommand(apiName, apiCfg, s); apiCmd != nil {
+			root.AddCommand(apiCmd)
+		}
+	}
+
 	root.SetArgs(args[1:])
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)

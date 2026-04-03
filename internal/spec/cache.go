@@ -57,6 +57,16 @@ func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
 	return os.WriteFile(cacheFile(cacheDir, apiName), data, 0o644)
 }
 
+// LoadFromCache reads the cached spec for apiName, re-parses it using loaders,
+// and returns the result. Returns nil, nil when the cache is empty or expired.
+func LoadFromCache(cacheDir, apiName, version string, loaders []Loader) (*APISpec, error) {
+	entry, ok := readCache(cacheDir, apiName, version)
+	if !ok {
+		return nil, nil
+	}
+	return load(entry.ContentType, entry.Raw, loaders)
+}
+
 // InvalidateCache removes the cached spec file for apiName.
 // Returns nil if the file did not exist.
 func InvalidateCache(cacheDir, apiName string) error {
