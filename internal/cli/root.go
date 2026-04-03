@@ -43,6 +43,7 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addAPICommand(root)
 	c.addCacheCommand(root)
 	c.addSetupCommand(root)
+	c.addLinksCommand(root)
 	return root
 }
 

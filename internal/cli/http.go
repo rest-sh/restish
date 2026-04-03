@@ -13,6 +13,7 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
+	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/input"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
@@ -120,6 +121,17 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	resp, err := output.Normalize(httpResp, c.content)
 	if err != nil {
 		return err
+	}
+
+	// Populate links from hypermedia parsers. httpResp headers/request are still
+	// accessible even after Normalize has closed and consumed the body.
+	if httpResp.Request != nil {
+		if links := hypermedia.Parse(httpResp.Request.URL, httpResp.Header, resp.Body, c.linkParsers); len(links) > 0 {
+			resp.Links = make(map[string]any, len(links))
+			for k, v := range links {
+				resp.Links[k] = v
+			}
+		}
 	}
 
 	if err := c.formatResponse(cmd, resp); err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/content"
+	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
@@ -48,20 +49,28 @@ type CLI struct {
 	// Set to a small value in tests to avoid slow retries.
 	RetryBaseDelay time.Duration
 
-	cfg     *config.Config
-	content *content.Registry
-	loaders []spec.Loader
+	cfg         *config.Config
+	content     *content.Registry
+	loaders     []spec.Loader
+	linkParsers []hypermedia.Parser
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
 func New() *CLI {
 	return &CLI{
-		Stdin:   os.Stdin,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		content: content.Default(),
-		loaders: spec.DefaultLoaders(),
+		Stdin:       os.Stdin,
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+		content:     content.Default(),
+		loaders:     spec.DefaultLoaders(),
+		linkParsers: hypermedia.DefaultParsers(),
 	}
+}
+
+// AddLinkParser registers an additional hypermedia link parser. Parsers are
+// called in registration order; later parsers can override earlier ones.
+func (c *CLI) AddLinkParser(p hypermedia.Parser) {
+	c.linkParsers = append(c.linkParsers, p)
 }
 
 // AddContentType registers an additional content type with the CLI's registry.
