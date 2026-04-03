@@ -26,8 +26,10 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 	apiCmd := &cobra.Command{
 		Use:   apiName,
 		Short: fmt.Sprintf("Commands generated from the %s API spec", apiName),
-		// Allow the bare "myapi/path" shorthand to fall through to root RunE.
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.Name())
+			}
 			return cmd.Help()
 		},
 	}
@@ -86,26 +88,43 @@ type paramInfo struct {
 }
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
+// Returns nil when the operation is excluded via x-cli-ignore.
 func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.Operation) *cobra.Command {
-	cmdName := toKebabCase(op.OperationId)
+	// x-cli-ignore: exclude this operation from the CLI entirely.
+	if opExtBool(op, "x-cli-ignore") {
+		return nil
+	}
 
-	// Separate required (positional) from optional (flag) params.
-	// Path params are collected in path-template order; required query/header follow.
+	// Derive command name from operationId, with x-cli-name override.
+	cmdName := toKebabCase(op.OperationId)
+	if name := opExtString(op, "x-cli-name"); name != "" {
+		cmdName = name
+	}
+
+	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
 	pathParamOrder := extractPathParamNames(opPath)
 
 	allParams := make(map[string]*paramInfo)
 	for _, p := range op.Parameters {
 		req := p.Required != nil && *p.Required
+		flagName := toKebabCase(p.Name)
+		if n := paramExtString(p, "x-cli-name"); n != "" {
+			flagName = n
+		}
+		desc := p.Description
+		if d := paramExtString(p, "x-cli-description"); d != "" {
+			desc = d
+		}
 		allParams[p.Name] = &paramInfo{
 			name:     p.Name,
-			flagName: toKebabCase(p.Name),
+			flagName: flagName,
 			in:       p.In,
 			required: req,
-			desc:     p.Description,
+			desc:     desc,
 		}
 	}
 
-	// Build required list: path params (in path order) then required query.
+	// Required: path params (in path order) then required query params.
 	var required []*paramInfo
 	for _, name := range pathParamOrder {
 		if pi, ok := allParams[name]; ok {
@@ -118,35 +137,39 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 		}
 	}
 
-	// Optional: all non-required, non-path params.
+	// Optional: non-required, non-path params.
 	var optional []*paramInfo
 	for _, p := range op.Parameters {
 		if p.In == "path" {
-			continue // already in required
+			continue
 		}
-		req := p.Required != nil && *p.Required
-		if !req {
+		if req := p.Required != nil && *p.Required; !req {
 			optional = append(optional, allParams[p.Name])
 		}
 	}
 
-	// Build Use string: "cmd-name <arg1> <arg2>"
+	// Build Use string.
 	use := cmdName
 	for _, p := range required {
 		use += " <" + p.flagName + ">"
 	}
-	// Request body is indicated by "..." when present.
 	if op.RequestBody != nil {
 		use += " [body...]"
 	}
 
+	// Short and long descriptions, with x-cli-description override.
 	short := op.Summary
+	if desc := opExtString(op, "x-cli-description"); desc != "" {
+		short = desc
+	}
 	if short == "" {
 		short = fmt.Sprintf("%s %s", method, opPath)
 	}
 
-	// Build the long description: operation description + positional arg docs.
 	long := op.Description
+	if desc := opExtString(op, "x-cli-description"); desc != "" {
+		long = desc
+	}
 	if len(required) > 0 {
 		var argDocs strings.Builder
 		if long != "" {
@@ -162,12 +185,14 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 	}
 
 	deprecated := op.Deprecated != nil && *op.Deprecated
-	hidden := extensionBool(op, "x-cli-hidden")
+	hidden := opExtBool(op, "x-cli-hidden")
+	aliases := opExtStrings(op, "x-cli-aliases")
 
 	cmd := &cobra.Command{
 		Use:        use,
 		Short:      short,
 		Long:       long,
+		Aliases:    aliases,
 		Args:       cobra.MinimumNArgs(len(required)),
 		Hidden:     hidden,
 		Deprecated: deprecatedNotice(deprecated),
@@ -176,7 +201,6 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 		},
 	}
 
-	// Register optional param flags (all as strings for now).
 	for _, p := range optional {
 		cmd.Flags().String(p.flagName, "", p.desc)
 	}
@@ -266,9 +290,8 @@ func toKebabCase(s string) string {
 	return result
 }
 
-// extensionBool reads a boolean OpenAPI extension value from an operation.
-// Returns false if the extension is absent or not a boolean.
-func extensionBool(op *v3high.Operation, key string) bool {
+// opExtBool reads a boolean extension from an operation.
+func opExtBool(op *v3high.Operation, key string) bool {
 	if op.Extensions == nil {
 		return false
 	}
@@ -277,6 +300,48 @@ func extensionBool(op *v3high.Operation, key string) bool {
 		return false
 	}
 	var v bool
+	_ = node.Decode(&v)
+	return v
+}
+
+// opExtString reads a string extension from an operation.
+func opExtString(op *v3high.Operation, key string) string {
+	if op.Extensions == nil {
+		return ""
+	}
+	node := op.Extensions.GetOrZero(key)
+	if node == nil {
+		return ""
+	}
+	var v string
+	_ = node.Decode(&v)
+	return v
+}
+
+// opExtStrings reads a string-slice extension from an operation.
+func opExtStrings(op *v3high.Operation, key string) []string {
+	if op.Extensions == nil {
+		return nil
+	}
+	node := op.Extensions.GetOrZero(key)
+	if node == nil {
+		return nil
+	}
+	var v []string
+	_ = node.Decode(&v)
+	return v
+}
+
+// paramExtString reads a string extension from a parameter.
+func paramExtString(p *v3high.Parameter, key string) string {
+	if p.Extensions == nil {
+		return ""
+	}
+	node := p.Extensions.GetOrZero(key)
+	if node == nil {
+		return ""
+	}
+	var v string
 	_ = node.Decode(&v)
 	return v
 }
