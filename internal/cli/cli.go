@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/content"
+	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
 // Version is the current build version, set at build time via -ldflags.
@@ -37,12 +40,17 @@ type CLI struct {
 	// Used in tests to point at a temp dir; leave empty to use the platform default.
 	CachePath string
 
+	// SpecCachePath overrides the default API spec cache directory.
+	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	SpecCachePath string
+
 	// RetryBaseDelay overrides the 1 s default backoff base for retries.
 	// Set to a small value in tests to avoid slow retries.
 	RetryBaseDelay time.Duration
 
 	cfg     *config.Config
 	content *content.Registry
+	loaders []spec.Loader
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -52,6 +60,7 @@ func New() *CLI {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		content: content.Default(),
+		loaders: spec.DefaultLoaders(),
 	}
 }
 
@@ -63,6 +72,37 @@ func (c *CLI) AddContentType(ct *content.ContentType) {
 // AddEncoding registers an additional compression encoding with the CLI's registry.
 func (c *CLI) AddEncoding(e *content.Encoding) {
 	c.content.AddEncoding(e)
+}
+
+// AddLoader registers an additional spec loader. Higher-priority loaders
+// that detect the same content type take precedence over built-in loaders.
+func (c *CLI) AddLoader(l spec.Loader) {
+	c.loaders = append(c.loaders, l)
+}
+
+// specCacheDir returns the effective directory for API spec CBOR files.
+func (c *CLI) specCacheDir() string {
+	if c.SpecCachePath != "" {
+		return c.SpecCachePath
+	}
+	return config.DefaultSpecCacheDir()
+}
+
+// discoverSpec runs spec discovery for the named API using the registered loaders.
+func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, error) {
+	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
+		return nil, nil
+	}
+	api := c.cfg.APIs[apiName]
+	cfg := spec.DiscoverConfig{
+		APIName:   apiName,
+		BaseURL:   api.BaseURL,
+		SpecURL:   api.SpecURL,
+		CacheDir:  c.specCacheDir(),
+		Version:   Version,
+		Transport: http.DefaultTransport,
+	}
+	return spec.Discover(ctx, cfg, c.loaders)
 }
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).

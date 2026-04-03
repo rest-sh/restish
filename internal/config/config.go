@@ -76,6 +76,13 @@ func DefaultTokenCachePath() string {
 	return filepath.Join(defaultDir(), "tokens.json")
 }
 
+// DefaultSpecCacheDir returns the directory for cached API spec CBOR files.
+// Spec cache files live at <dir>/<apiname>.cbor.
+func DefaultSpecCacheDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".cache", "restish")
+}
+
 // DefaultCacheDir returns the directory for cached HTTP responses,
 // honoring the RSH_CACHE_DIR environment variable override.
 func DefaultCacheDir() string {
