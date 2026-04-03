@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/content"
 	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
+	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
@@ -53,6 +54,7 @@ type CLI struct {
 	content     *content.Registry
 	loaders     []spec.Loader
 	linkParsers []hypermedia.Parser
+	formatters  map[string]output.Formatter
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -64,6 +66,7 @@ func New() *CLI {
 		content:     content.Default(),
 		loaders:     spec.DefaultLoaders(),
 		linkParsers: hypermedia.DefaultParsers(),
+		formatters:  output.DefaultFormatters(),
 	}
 }
 
@@ -71,6 +74,16 @@ func New() *CLI {
 // called in registration order; later parsers can override earlier ones.
 func (c *CLI) AddLinkParser(p hypermedia.Parser) {
 	c.linkParsers = append(c.linkParsers, p)
+}
+
+// AddFormatter registers a named response formatter. Use the same name to
+// override a built-in formatter (e.g. "json") or a new name to add a custom
+// format selectable via -o <name>.
+func (c *CLI) AddFormatter(name string, f output.Formatter) {
+	if c.formatters == nil {
+		c.formatters = output.DefaultFormatters()
+	}
+	c.formatters[name] = f
 }
 
 // AddContentType registers an additional content type with the CLI's registry.

@@ -171,6 +171,11 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 
 // formatResponse applies any filter then selects and runs the formatter.
 func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
+	// Silent mode: suppress all output.
+	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+		return nil
+	}
+
 	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
 	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
 	filterLang, _ := cmd.Flags().GetString("rsh-filter-lang")
@@ -236,10 +241,25 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		outResp = &output.Response{Body: filtered}
 	}
 
-	fmts := output.DefaultFormatters()
+	fmts := c.formatters
+	if fmts == nil {
+		fmts = output.DefaultFormatters()
+	}
+
+	// For the table format, configure it from flags before selecting.
+	if fmtName == "table" {
+		cols, _ := cmd.Flags().GetString("rsh-columns")
+		sortBy, _ := cmd.Flags().GetString("rsh-sort-by")
+		tf := &output.TableFormatter{SortBy: sortBy}
+		if cols != "" {
+			tf.Columns = strings.Split(cols, ",")
+		}
+		fmts["table"] = tf
+	}
+
 	formatter, ok := output.Select(fmts, fmtName, tty)
 	if !ok {
-		return fmt.Errorf("unknown output format %q; available: readable, json, raw", fmtName)
+		return fmt.Errorf("unknown output format %q; available: readable, json, raw, table, gron, cbor", fmtName)
 	}
 
 	// For non-TTY filtered output, use JSON formatter (not raw bytes) since

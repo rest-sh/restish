@@ -9,12 +9,16 @@ type Formatter interface {
 }
 
 // DefaultFormatters returns the built-in set of formatters.
-// Additional formatters are registered on the CLI struct (Step 21+).
+// The "table" entry here uses default (zero-value) column settings;
+// callers that need --rsh-columns / --rsh-sort-by should replace it.
 func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
 		"json":     &JSONFormatter{},
 		"raw":      &RawFormatter{},
 		"readable": &ReadableFormatter{},
+		"table":    &TableFormatter{},
+		"gron":     &GronFormatter{},
+		"cbor":     &CBORFormatter{},
 	}
 }
 
