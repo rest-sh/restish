@@ -28,6 +28,10 @@ type CLI struct {
 	// a password without consuming the body stdin.
 	PassReader io.Reader
 
+	// TokenCachePath overrides the default token cache file location.
+	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	TokenCachePath string
+
 	cfg     *config.Config
 	content *content.Registry
 }

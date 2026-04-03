@@ -53,8 +53,9 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	if err := handler.OnRequest(req, prof.Auth.Params); err != nil {
+	if err := handler.OnRequest(req, params); err != nil {
 		return fmt.Errorf("building auth header: %w", err)
 	}
 
@@ -71,6 +72,15 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 	switch ac.Type {
 	case "http-basic":
 		return &auth.HTTPBasic{Prompter: c.promptSecret}, nil
+	case "oauth-client-credentials":
+		return &auth.ClientCredentials{
+			Cache: auth.NewTokenCache(c.tokenCachePath()),
+		}, nil
+	case "oauth-authorization-code":
+		return &auth.AuthorizationCode{
+			Cache:  auth.NewTokenCache(c.tokenCachePath()),
+			Stderr: c.Stderr,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown auth type %q", ac.Type)
 	}
@@ -78,7 +88,8 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 
 // authOnRequest returns an OnRequest hook for the given profile's auth config,
 // or nil when no auth is configured.
-func (c *CLI) authOnRequest(prof *config.ProfileConfig) func(*http.Request) error {
+// apiName and profileName are injected into params as "_cache_key".
+func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileConfig) func(*http.Request) error {
 	if prof == nil || prof.Auth == nil {
 		return nil
 	}
@@ -86,10 +97,28 @@ func (c *CLI) authOnRequest(prof *config.ProfileConfig) func(*http.Request) erro
 	if err != nil {
 		return func(*http.Request) error { return err }
 	}
-	params := prof.Auth.Params
+	params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
 	return func(req *http.Request) error {
 		return handler.OnRequest(req, params)
 	}
+}
+
+// buildAuthParams returns a copy of rawParams with "_cache_key" injected.
+func (c *CLI) buildAuthParams(apiName, profileName string, rawParams map[string]string) map[string]string {
+	params := make(map[string]string, len(rawParams)+1)
+	for k, v := range rawParams {
+		params[k] = v
+	}
+	params["_cache_key"] = apiName + ":" + profileName
+	return params
+}
+
+// tokenCachePath returns the effective path for the token cache file.
+func (c *CLI) tokenCachePath() string {
+	if c.TokenCachePath != "" {
+		return c.TokenCachePath
+	}
+	return config.DefaultTokenCachePath()
 }
 
 // promptSecret writes prompt to Stderr then reads a secret.

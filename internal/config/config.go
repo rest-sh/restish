@@ -68,6 +68,14 @@ func DefaultPath() string {
 	return filepath.Join(defaultDir(), "restish.json")
 }
 
+// DefaultTokenCachePath returns the path to the token cache file.
+func DefaultTokenCachePath() string {
+	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "tokens.json")
+	}
+	return filepath.Join(defaultDir(), "tokens.json")
+}
+
 // defaultDir returns the platform-appropriate config directory.
 // macOS and Linux use ~/.config/restish (XDG convention).
 // Windows uses %APPDATA%\restish.

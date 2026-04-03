@@ -257,7 +257,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 	if prof != nil {
 		opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
 		opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-		opts.OnRequest = c.authOnRequest(prof)
+		opts.OnRequest = c.authOnRequest(apiName, profileName, prof)
 	}
 
 	return expanded, opts
