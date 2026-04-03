@@ -161,3 +161,42 @@ func TestResponseBodyOnError(t *testing.T) {
 		t.Errorf("expected body output even on 404, got invalid output: %q", out.String())
 	}
 }
+
+// TestFilterShorthand verifies that -f body.name extracts the right field.
+func TestFilterShorthand(t *testing.T) {
+	srv := jsonServer(t, 200, `{"name":"Alice","age":30}`)
+	c, out, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(out.String())
+	// JSON-encoded string result.
+	if got != `"Alice"` {
+		t.Errorf("got %q, want %q", got, `"Alice"`)
+	}
+}
+
+// TestFilterRaw verifies that -r strips quotes from string results.
+func TestFilterRaw(t *testing.T) {
+	srv := jsonServer(t, 200, `{"name":"Alice"}`)
+	c, out, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(out.String())
+	if got != "Alice" {
+		t.Errorf("got %q, want %q", got, "Alice")
+	}
+}
+
+// TestFilterHeaders verifies that --rsh-headers is shorthand for -f headers.
+func TestFilterHeaders(t *testing.T) {
+	srv := jsonServer(t, 200, `{}`)
+	c, out, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "get", "--rsh-headers", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Content-Type") {
+		t.Errorf("expected headers in output, got: %s", out.String())
+	}
+}
