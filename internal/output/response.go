@@ -1,11 +1,11 @@
 package output
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+
+	"github.com/danielgtaylor/restish/v2/internal/content"
 )
 
 // Response is the normalized form of every HTTP response before formatting.
@@ -17,11 +17,15 @@ type Response struct {
 	// Links is populated by hypermedia parsers (Step 18); empty until then.
 	Links map[string]any `json:"links,omitempty"`
 	Body  any            `json:"body"`
+	// Raw holds the original, unmodified response body bytes. Used by
+	// RawFormatter to write the body to a file/pipe without modification.
+	Raw []byte `json:"-"`
 }
 
-// Normalize reads resp.Body, decodes it, and returns a Response.
-// resp.Body is fully consumed and closed before this returns.
-func Normalize(resp *http.Response) (*Response, error) {
+// Normalize reads resp.Body, decodes it using the provided content registry,
+// and returns a Response. resp.Body is fully consumed and closed before this
+// returns.
+func Normalize(resp *http.Response, reg *content.Registry) (*Response, error) {
 	defer resp.Body.Close()
 
 	// Canonicalise headers. Go's http package already canonicalises keys;
@@ -33,7 +37,7 @@ func Normalize(resp *http.Response) (*Response, error) {
 		}
 	}
 
-	body, err := decodeBody(resp)
+	body, raw, err := decodeBody(resp, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -43,36 +47,32 @@ func Normalize(resp *http.Response) (*Response, error) {
 		Status:  resp.StatusCode,
 		Headers: headers,
 		Body:    body,
+		Raw:     raw,
 	}, nil
 }
 
-// decodeBody reads the response body and decodes it based on Content-Type.
-// JSON bodies are parsed into Go values; everything else is kept as a string.
-// Content-type handling is expanded in Step 5.
-func decodeBody(resp *http.Response) (any, error) {
-	data, err := io.ReadAll(resp.Body)
+// decodeBody reads the response body, decompresses it if needed, then decodes
+// it using the content registry. Returns the raw bytes alongside the decoded
+// value so callers can write the original bytes unchanged if needed.
+func decodeBody(resp *http.Response, reg *content.Registry) (decoded any, raw []byte, err error) {
+	encoding := resp.Header.Get("Content-Encoding")
+	reader, err := reg.Decompress(encoding, resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
+		return nil, nil, fmt.Errorf("decompressing response: %w", err)
 	}
-	if len(data) == 0 {
-		return nil, nil
+	defer reader.Close()
+
+	raw, err = io.ReadAll(reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading response body: %w", err)
+	}
+	if len(raw) == 0 {
+		return nil, nil, nil
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if isJSON(ct) {
-		var v any
-		if err := json.Unmarshal(data, &v); err == nil {
-			return v, nil
-		}
-		// Malformed JSON: fall through and return as string.
-	}
-
-	return string(data), nil
-}
-
-func isJSON(contentType string) bool {
-	ct := strings.ToLower(contentType)
-	return strings.Contains(ct, "application/json") || strings.Contains(ct, "+json")
+	decoded, err = reg.Decode(ct, raw)
+	return decoded, raw, err
 }
 
 // StatusToExitCode maps an HTTP status code to a CLI exit code.

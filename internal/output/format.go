@@ -13,6 +13,7 @@ type Formatter interface {
 func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
 		"json":     &JSONFormatter{},
+		"raw":      &RawFormatter{},
 		"readable": &ReadableFormatter{},
 	}
 }
@@ -22,7 +23,8 @@ func DefaultFormatters() map[string]Formatter {
 //
 //   - If fmtName is set and recognised, that formatter is returned.
 //   - If fmtName is unrecognised, nil is returned so the caller can error.
-//   - Otherwise: "readable" for TTY, "json" for non-TTY.
+//   - TTY default: "readable" (syntax-highlighted, human-friendly).
+//   - Non-TTY default: "raw" (original bytes, safe for pipes and file redirects).
 func Select(fmts map[string]Formatter, fmtName string, tty bool) (Formatter, bool) {
 	if fmtName != "" {
 		f, ok := fmts[fmtName]
@@ -31,5 +33,5 @@ func Select(fmts map[string]Formatter, fmtName string, tty bool) (Formatter, boo
 	if tty {
 		return fmts["readable"], true
 	}
-	return fmts["json"], true
+	return fmts["raw"], true
 }

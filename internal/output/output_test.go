@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danielgtaylor/restish/v2/internal/content"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 )
+
+var testRegistry = content.Default()
 
 // makeResp builds a minimal *http.Response for use in tests.
 func makeResp(status int, contentType, body string) *http.Response {
@@ -35,7 +38,7 @@ func makeResp(status int, contentType, body string) *http.Response {
 
 func TestNormalize_JSONBody(t *testing.T) {
 	resp := makeResp(200, "application/json", `{"name":"Alice","age":30}`)
-	r, err := output.Normalize(resp)
+	r, err := output.Normalize(resp, testRegistry)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,7 +53,7 @@ func TestNormalize_JSONBody(t *testing.T) {
 
 func TestNormalize_NonJSONBody(t *testing.T) {
 	resp := makeResp(200, "text/plain", "hello world")
-	r, err := output.Normalize(resp)
+	r, err := output.Normalize(resp, testRegistry)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +64,7 @@ func TestNormalize_NonJSONBody(t *testing.T) {
 
 func TestNormalize_EmptyBody(t *testing.T) {
 	resp := makeResp(204, "", "")
-	r, err := output.Normalize(resp)
+	r, err := output.Normalize(resp, testRegistry)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,7 +75,7 @@ func TestNormalize_EmptyBody(t *testing.T) {
 
 func TestNormalize_Status(t *testing.T) {
 	resp := makeResp(404, "application/json", `{}`)
-	r, err := output.Normalize(resp)
+	r, err := output.Normalize(resp, testRegistry)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -86,7 +89,7 @@ func TestNormalize_HeadersCanonicalized(t *testing.T) {
 	// Go's http package canonicalizes keys automatically; verify they arrive
 	// in the Response using the canonical (title-case) form.
 	resp.Header.Set("x-custom-header", "testval")
-	r, err := output.Normalize(resp)
+	r, err := output.Normalize(resp, testRegistry)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +101,7 @@ func TestNormalize_HeadersCanonicalized(t *testing.T) {
 func TestNormalize_Proto(t *testing.T) {
 	resp := makeResp(200, "application/json", `{}`)
 	resp.Proto = "HTTP/2.0"
-	r, _ := output.Normalize(resp)
+	r, _ := output.Normalize(resp, testRegistry)
 	if r.Proto != "HTTP/2.0" {
 		t.Errorf("expected proto HTTP/2.0, got %q", r.Proto)
 	}
@@ -262,15 +265,15 @@ func TestSelect_TTYDefaultsToReadable(t *testing.T) {
 	}
 }
 
-func TestSelect_NonTTYDefaultsToJSON(t *testing.T) {
+func TestSelect_NonTTYDefaultsToRaw(t *testing.T) {
 	fmts := output.DefaultFormatters()
 	f, ok := output.Select(fmts, "", false)
 	if !ok {
 		t.Fatal("Select returned !ok")
 	}
-	_, isJSON := f.(*output.JSONFormatter)
-	if !isJSON {
-		t.Errorf("expected JSONFormatter for non-TTY, got %T", f)
+	_, isRaw := f.(*output.RawFormatter)
+	if !isRaw {
+		t.Errorf("expected RawFormatter for non-TTY, got %T", f)
 	}
 }
 

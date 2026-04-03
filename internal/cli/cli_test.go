@@ -11,11 +11,10 @@ import (
 // newTestCLI returns a CLI wired to in-memory buffers for use in tests.
 func newTestCLI() (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	var stdout, stderr bytes.Buffer
-	c := &cli.CLI{
-		Stdin:  strings.NewReader(""),
-		Stdout: &stdout,
-		Stderr: &stderr,
-	}
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
 	return c, &stdout, &stderr
 }
 

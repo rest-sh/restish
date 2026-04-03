@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/danielgtaylor/restish/v2/internal/content"
 )
 
 // Version is the current build version, set at build time via -ldflags.
@@ -22,16 +23,28 @@ type CLI struct {
 	// to point at a temp file; leave empty to use the platform default.
 	ConfigPath string
 
-	cfg *config.Config
+	cfg     *config.Config
+	content *content.Registry
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
 func New() *CLI {
 	return &CLI{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		Stdin:   os.Stdin,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+		content: content.Default(),
 	}
+}
+
+// AddContentType registers an additional content type with the CLI's registry.
+func (c *CLI) AddContentType(ct *content.ContentType) {
+	c.content.AddContentType(ct)
+}
+
+// AddEncoding registers an additional compression encoding with the CLI's registry.
+func (c *CLI) AddEncoding(e *content.Encoding) {
+	c.content.AddEncoding(e)
 }
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).

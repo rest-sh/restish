@@ -22,6 +22,10 @@ type Options struct {
 	Insecure bool
 	// Timeout is the request timeout. Zero means no timeout.
 	Timeout time.Duration
+	// AcceptHeader, if non-empty, is sent as the Accept request header.
+	AcceptHeader string
+	// AcceptEncodingHeader, if non-empty, is sent as the Accept-Encoding header.
+	AcceptEncodingHeader string
 }
 
 // Do executes an HTTP request and returns the response.
@@ -35,6 +39,13 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
+	}
+
+	if opts.AcceptHeader != "" {
+		req.Header.Set("Accept", opts.AcceptHeader)
+	}
+	if opts.AcceptEncodingHeader != "" {
+		req.Header.Set("Accept-Encoding", opts.AcceptEncodingHeader)
 	}
 
 	// Apply extra headers. First colon separates name from value so header

@@ -57,7 +57,7 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 		return fmt.Errorf("network: %w", err)
 	}
 
-	resp, err := output.Normalize(httpResp)
+	resp, err := output.Normalize(httpResp, c.content)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	formatter, ok := output.Select(fmts, fmtName, output.IsTerminal(c.Stdout))
 	if !ok {
-		return fmt.Errorf("unknown output format %q; available: readable, json", fmtName)
+		return fmt.Errorf("unknown output format %q; available: readable, json, raw", fmtName)
 	}
 
 	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
@@ -106,10 +106,12 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	}
 
 	return request.Options{
-		Headers:  headers,
-		Query:    query,
-		Server:   server,
-		Insecure: insecure,
-		Timeout:  timeout,
+		Headers:              headers,
+		Query:                query,
+		Server:               server,
+		Insecure:             insecure,
+		Timeout:              timeout,
+		AcceptHeader:         c.content.AcceptHeader(),
+		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
 	}, nil
 }
