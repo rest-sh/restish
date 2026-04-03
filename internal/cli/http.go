@@ -79,7 +79,8 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	if profileName == "" {
 		profileName = "default"
 	}
-	rawURL, opts = c.applyAPIProfile(rawURL, profileName, opts)
+	var apiName string
+	rawURL, apiName, opts = c.applyAPIProfile(rawURL, profileName, opts)
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
@@ -131,6 +132,17 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 			for k, v := range links {
 				resp.Links[k] = v
 			}
+		}
+	}
+
+	// Pagination: if this is a GET and there's a next link, paginate.
+	if method == "GET" {
+		var pagCfg *config.PaginationConfig
+		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
+			pagCfg = c.cfg.APIs[apiName].Pagination
+		}
+		if did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg); did {
+			return err
 		}
 	}
 
@@ -245,17 +257,18 @@ func (c *CLI) isAPIShortName(arg string) bool {
 // name and, if so, expands it to the full URL and prepends persistent headers
 // and query params from the active profile.
 //
-// If rawURL is not an API short name it is returned unchanged.
-func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, request.Options) {
+// Returns (expandedURL, apiName, opts). apiName is empty when rawURL is not
+// an API short name.
+func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, string, request.Options) {
 	if c.cfg == nil || len(c.cfg.APIs) == 0 {
-		return rawURL, opts
+		return rawURL, "", opts
 	}
 
 	// Split "apiname/rest/of/path" → apiName="apiname", rest="rest/of/path"
 	apiName, rest, _ := strings.Cut(rawURL, "/")
 	api, ok := c.cfg.APIs[apiName]
 	if !ok {
-		return rawURL, opts
+		return rawURL, "", opts
 	}
 
 	// Determine effective base URL and profile.
@@ -282,7 +295,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		opts.OnRequest = c.authOnRequest(apiName, profileName, prof)
 	}
 
-	return expanded, opts
+	return expanded, apiName, opts
 }
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.

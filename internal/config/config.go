@@ -30,6 +30,22 @@ type APIConfig struct {
 	SpecURL string `json:"spec_url,omitempty"`
 	// Profiles is a map of profile name to profile configuration.
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
+	// Pagination holds optional per-API pagination configuration.
+	Pagination *PaginationConfig `json:"pagination,omitempty"`
+}
+
+// PaginationConfig holds per-API pagination settings.
+type PaginationConfig struct {
+	// ItemsPath is a filter expression that extracts the items array from the
+	// response body (e.g. "data" for JSON:API, "results" for some REST APIs).
+	// When empty, the body itself is used (if it is an array).
+	ItemsPath string `json:"items_path,omitempty"`
+	// NextPath is a filter expression that extracts the next-page URL from the
+	// response body (alternative to Link header rel="next").
+	NextPath string `json:"next_path,omitempty"`
+	// NextParam is the query parameter name to use for cursor-based pagination.
+	// The cursor value is extracted using NextPath.
+	NextParam string `json:"next_param,omitempty"`
 }
 
 // ProfileConfig holds per-profile overrides for an API.

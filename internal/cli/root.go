@@ -65,4 +65,8 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
 	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and 5xx responses (-1 = use default of 2; 0 = disable)")
+	pf.Bool("rsh-no-paginate", false, "Disable automatic pagination (return only the first page)")
+	pf.Bool("rsh-collect", false, "Collect all pages then apply filter (default: stream items as they arrive)")
+	pf.Int("rsh-max-pages", 25, "Maximum number of pages to fetch (0 = unlimited)")
+	pf.Int("rsh-max-items", 0, "Maximum number of items to collect across all pages (0 = unlimited)")
 }

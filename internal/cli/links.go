@@ -42,7 +42,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	if profileName == "" {
 		profileName = "default"
 	}
-	uri, opts = c.applyAPIProfile(uri, profileName, opts)
+	uri, _, opts = c.applyAPIProfile(uri, profileName, opts)
 
 	httpResp, err := request.Do(context.Background(), "GET", uri, nil, opts)
 	if err != nil {
