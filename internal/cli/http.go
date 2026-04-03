@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/input"
 	"github.com/danielgtaylor/restish/v2/internal/output"
@@ -57,6 +59,16 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Resolve API short names and merge persistent profile headers/query.
+	profileName, _ := cmd.Flags().GetString("rsh-profile")
+	if profileName == "" {
+		profileName = os.Getenv("RSH_PROFILE")
+	}
+	if profileName == "" {
+		profileName = "default"
+	}
+	rawURL, opts = c.applyAPIProfile(rawURL, profileName, opts)
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
@@ -199,6 +211,55 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, outResp, output.ColorEnabled(c.Stdout))
+}
+
+// isAPIShortName reports whether arg (with no path separator) exactly matches a
+// registered API name in the config.
+func (c *CLI) isAPIShortName(arg string) bool {
+	return c.cfg != nil && c.cfg.APIs[arg] != nil
+}
+
+// applyAPIProfile checks whether rawURL begins with a registered API short
+// name and, if so, expands it to the full URL and prepends persistent headers
+// and query params from the active profile.
+//
+// If rawURL is not an API short name it is returned unchanged.
+func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, request.Options) {
+	if c.cfg == nil || len(c.cfg.APIs) == 0 {
+		return rawURL, opts
+	}
+
+	// Split "apiname/rest/of/path" → apiName="apiname", rest="rest/of/path"
+	apiName, rest, _ := strings.Cut(rawURL, "/")
+	api, ok := c.cfg.APIs[apiName]
+	if !ok {
+		return rawURL, opts
+	}
+
+	// Determine effective base URL and profile.
+	baseURL := api.BaseURL
+	var prof *config.ProfileConfig
+	if api.Profiles != nil {
+		prof = api.Profiles[profileName]
+		if prof != nil && prof.BaseURL != "" {
+			baseURL = prof.BaseURL
+		}
+	}
+
+	// Build the expanded URL.
+	expanded := strings.TrimRight(baseURL, "/")
+	if rest != "" {
+		expanded = expanded + "/" + rest
+	}
+
+	// Prepend persistent profile headers/query so flag-supplied values take
+	// precedence (they appear later in the slice, and are applied last).
+	if prof != nil {
+		opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
+		opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
+	}
+
+	return expanded, opts
 }
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.

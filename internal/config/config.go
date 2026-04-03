@@ -23,10 +23,32 @@ type Config struct {
 }
 
 // APIConfig holds per-API configuration.
-// Additional fields (profiles, auth, spec discovery) are added in later steps.
 type APIConfig struct {
 	// BaseURL is the base URL for all requests to this API.
 	BaseURL string `json:"base_url,omitempty"`
+	// SpecURL is the URL of the OpenAPI spec for this API (optional).
+	SpecURL string `json:"spec_url,omitempty"`
+	// Profiles is a map of profile name to profile configuration.
+	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
+}
+
+// ProfileConfig holds per-profile overrides for an API.
+type ProfileConfig struct {
+	// BaseURL overrides the API-level base_url when this profile is active.
+	BaseURL string `json:"base_url,omitempty"`
+	// Headers is a list of persistent "Name: Value" headers sent with every request.
+	Headers []string `json:"headers,omitempty"`
+	// Query is a list of persistent "key=value" query params sent with every request.
+	Query []string `json:"query,omitempty"`
+	// Auth holds authentication configuration for this profile.
+	Auth *AuthConfig `json:"auth,omitempty"`
+}
+
+// AuthConfig holds authentication configuration for a profile.
+// The full set of auth fields is populated in Steps 9–10.
+type AuthConfig struct {
+	// Type identifies the auth mechanism (e.g. "http-basic", "oauth-client-credentials").
+	Type string `json:"type,omitempty"`
 }
 
 // CacheConfig holds cache settings.

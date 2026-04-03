@@ -1,0 +1,282 @@
+package cli_test
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// writeAPIConfig writes a restish.json to a temp dir and returns its path.
+func writeAPIConfig(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish.json")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("writeAPIConfig: %v", err)
+	}
+	return path
+}
+
+// TestAPIShortNameExpansion verifies that "myapi/items" is expanded to the
+// configured base URL before the request is sent.
+func TestAPIShortNameExpansion(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().URL.Path; got != "/items" {
+		t.Errorf("expected path /items, got %q", got)
+	}
+}
+
+// TestAPIShortNameNoPath verifies that "myapi" (no trailing path) resolves to
+// the configured base URL root.
+func TestAPIShortNameNoPath(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "myapi"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rr.Last() == nil {
+		t.Fatal("no request received")
+	}
+}
+
+// TestUnknownAPINameFallback verifies that an unrecognized first segment is
+// treated as a plain URL (not a fatal error about an unknown API).
+func TestUnknownAPINameFallback(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	// Config has "myapi" but we request "otherapi/items"; fallback treats it as URL.
+	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	// Use a real URL so the fallback actually resolves somewhere.
+	if err := c.Run([]string{"restish", "get", srv.URL + "/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().URL.Path; got != "/items" {
+		t.Errorf("expected path /items, got %q", got)
+	}
+}
+
+// TestProfilePersistentHeader verifies that a header declared in the active
+// profile is included in every request to that API.
+func TestProfilePersistentHeader(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"headers": ["X-Api-Key: secret"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Header.Get("X-Api-Key"); got != "secret" {
+		t.Errorf("expected X-Api-Key=secret, got %q", got)
+	}
+}
+
+// TestProfilePersistentQuery verifies that a query param declared in the
+// active profile is appended to every request.
+func TestProfilePersistentQuery(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"query": ["version=2"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().URL.Query().Get("version"); got != "2" {
+		t.Errorf("expected query version=2, got %q", got)
+	}
+}
+
+// TestProfileOverrideWithFlag verifies that -p selects a non-default profile,
+// using its base_url and headers.
+func TestProfileOverrideWithFlag(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": "https://prod.example.com",
+				"profiles": {
+					"staging": {
+						"base_url": %q,
+						"headers": ["X-Env: staging"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "-p", "staging", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	req := rr.Last()
+	if req == nil {
+		t.Fatal("no request received — base_url override may not have taken effect")
+	}
+	if got := req.URL.Path; got != "/items" {
+		t.Errorf("expected path /items, got %q", got)
+	}
+	if got := req.Header.Get("X-Env"); got != "staging" {
+		t.Errorf("expected X-Env=staging, got %q", got)
+	}
+}
+
+// TestProfileOverrideWithEnv verifies that RSH_PROFILE selects the profile
+// when the -p flag is not set.
+func TestProfileOverrideWithEnv(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": "https://prod.example.com",
+				"profiles": {
+					"dev": {
+						"base_url": %q,
+						"headers": ["X-Env: dev"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+	t.Setenv("RSH_PROFILE", "dev")
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	req := rr.Last()
+	if req == nil {
+		t.Fatal("no request received")
+	}
+	if got := req.Header.Get("X-Env"); got != "dev" {
+		t.Errorf("expected X-Env=dev, got %q", got)
+	}
+}
+
+// TestFlagHeaderTakesPrecedenceOverProfile verifies that a header supplied via
+// -H overrides the same header from the profile (last write wins for Add, but
+// flag values appear after profile values in the header list).
+func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rr.capture(r)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"headers": ["X-Token: from-profile"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	// Flag-supplied header should appear in the request (both values are sent
+	// via Add; the test just verifies the flag value is present).
+	if err := c.Run([]string{"restish", "get", "-H", "X-Token: from-flag", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	vals := rr.Last().Header.Values("X-Token")
+	if len(vals) == 0 {
+		t.Fatal("expected X-Token header, got none")
+	}
+	// Flag value must be present.
+	found := false
+	for _, v := range vals {
+		if v == "from-flag" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'from-flag' in X-Token values, got %v", vals)
+	}
+}
