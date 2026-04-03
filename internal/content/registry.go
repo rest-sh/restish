@@ -58,6 +58,11 @@ func (r *Registry) AddContentType(ct *ContentType) {
 	r.contentTypes = append(r.contentTypes, ct)
 }
 
+// ContentTypes returns all registered content types in registration order.
+func (r *Registry) ContentTypes() []*ContentType {
+	return r.contentTypes
+}
+
 // AddEncoding registers a compression encoding.
 func (r *Registry) AddEncoding(e *Encoding) {
 	r.encodings = append(r.encodings, e)

@@ -80,6 +80,14 @@ func (c *CLI) AddLoader(l spec.Loader) {
 	c.loaders = append(c.loaders, l)
 }
 
+// configFilePath returns the effective config file path.
+func (c *CLI) configFilePath() string {
+	if c.ConfigPath != "" {
+		return c.ConfigPath
+	}
+	return config.DefaultPath()
+}
+
 // specCacheDir returns the effective directory for API spec CBOR files.
 func (c *CLI) specCacheDir() string {
 	if c.SpecCachePath != "" {

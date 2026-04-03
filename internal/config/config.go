@@ -108,6 +108,19 @@ func defaultDir() string {
 	return ".restish"
 }
 
+// Save serialises cfg as indented JSON and writes it to path, creating the
+// parent directory if necessary.  Existing JSONC comments are not preserved.
+func Save(path string, cfg *Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config: marshal: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("config: mkdir: %w", err)
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
 // Load reads and parses the JSONC config file at path.
 // If the file does not exist, an empty default Config is returned without error —
 // a missing config file is normal for first-time users.
