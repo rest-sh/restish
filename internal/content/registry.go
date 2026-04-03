@@ -192,6 +192,18 @@ func (r *Registry) Decompress(encoding string, reader io.Reader) (io.ReadCloser,
 	return nil, fmt.Errorf("unsupported Content-Encoding %q", encoding)
 }
 
+// MIMETypeForName returns the primary MIME type for the content type registered
+// under the given short name (e.g. "json" → "application/json"). Returns an
+// empty string if no match is found.
+func (r *Registry) MIMETypeForName(name string) string {
+	for _, ct := range r.contentTypes {
+		if ct.Name == name && len(ct.MIMETypes) > 0 {
+			return ct.MIMETypes[0]
+		}
+	}
+	return ""
+}
+
 // find returns the last-registered ContentType whose MIMETypes list contains
 // a match for mimeType (exact or wildcard). Returns nil if none match.
 func (r *Registry) find(mimeType string) *ContentType {

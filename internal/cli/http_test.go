@@ -1,7 +1,9 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,7 @@ import (
 type requestRecorder struct {
 	mu   sync.Mutex
 	last *http.Request
+	body []byte
 }
 
 func (rr *requestRecorder) capture(r *http.Request) {
@@ -24,6 +27,9 @@ func (rr *requestRecorder) capture(r *http.Request) {
 		Method: r.Method,
 		URL:    r.URL,
 		Header: r.Header.Clone(),
+	}
+	if r.Body != nil {
+		rr.body, _ = io.ReadAll(r.Body)
 	}
 }
 
@@ -212,5 +218,91 @@ func TestHTTPInsecure(t *testing.T) {
 	if err := c2.Run([]string{"restish", "get", "--rsh-insecure", srv.URL}); err != nil {
 		t.Errorf("unexpected error with --rsh-insecure: %v", err)
 	}
+}
 
+// TestShorthandBody verifies that positional args are parsed as shorthand and
+// sent as a JSON body with the correct Content-Type.
+func TestShorthandBody(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	// Shell would split "name: Alice, age: 30" into tokens; simulate that here.
+	if err := c.Run([]string{"restish", "post", srv.URL, "name:", "Alice,", "age:", "30"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := rr.Last()
+	ct := req.Header.Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rr.body, &body); err != nil {
+		t.Fatalf("body is not valid JSON: %v — body: %s", err, rr.body)
+	}
+	if body["name"] != "Alice" {
+		t.Errorf("name: got %v, want Alice", body["name"])
+	}
+}
+
+// TestShorthandBodyNested verifies deep shorthand paths.
+func TestShorthandBodyNested(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "post", srv.URL, "user.address.city:", "NYC"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rr.body, &body); err != nil {
+		t.Fatalf("body is not valid JSON: %v — body: %s", err, rr.body)
+	}
+	user, _ := body["user"].(map[string]any)
+	addr, _ := user["address"].(map[string]any)
+	if addr["city"] != "NYC" {
+		t.Errorf("city: got %v, want NYC", addr["city"])
+	}
+}
+
+// TestNoBodyWhenNoArgs verifies that GET requests with no positional args
+// send no body and no Content-Type.
+func TestNoBodyWhenNoArgs(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(rr.body) != 0 {
+		t.Errorf("expected no body for GET with no args, got %q", rr.body)
+	}
+	if ct := rr.Last().Header.Get("Content-Type"); ct != "" {
+		t.Errorf("expected no Content-Type for GET with no args, got %q", ct)
+	}
+}
+
+// TestStdinBody verifies that piped stdin is sent as the request body.
+func TestStdinBody(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	c.Stdin = strings.NewReader(`{"from":"stdin"}`)
+	if err := c.Run([]string{"restish", "post", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rr.body, &body); err != nil {
+		t.Fatalf("body not valid JSON: %v — body: %s", err, rr.body)
+	}
+	if body["from"] != "stdin" {
+		t.Errorf("from: got %v, want stdin", body["from"])
+	}
 }

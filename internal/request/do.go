@@ -26,6 +26,10 @@ type Options struct {
 	AcceptHeader string
 	// AcceptEncodingHeader, if non-empty, is sent as the Accept-Encoding header.
 	AcceptEncodingHeader string
+	// ContentType overrides the Content-Type header when a body is present.
+	// If empty and a body is present, the caller is responsible for setting
+	// the header via Headers.
+	ContentType string
 }
 
 // Do executes an HTTP request and returns the response.

@@ -15,6 +15,15 @@ func IsTerminal(w io.Writer) bool {
 	return false
 }
 
+// IsTerminalReader reports whether r is a real terminal (TTY).
+// Used to detect whether stdin is interactive.
+func IsTerminalReader(r io.Reader) bool {
+	if f, ok := r.(*os.File); ok {
+		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+	}
+	return false
+}
+
 // ColorEnabled reports whether ANSI color output should be used for w.
 // Rules (in priority order):
 //  1. NOCOLOR or NO_COLOR env var → off

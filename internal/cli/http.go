@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/restish/v2/internal/input"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/spf13/cobra"
@@ -46,13 +49,46 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	rawURL := args[0]
+	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
 		return err
 	}
 
-	httpResp, err := request.Do(context.Background(), method, rawURL, nil, opts)
+	// Build request body from shorthand args and/or piped stdin.
+	stdinIsTTY := output.IsTerminalReader(c.Stdin)
+	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs)
+	if err != nil {
+		return fmt.Errorf("building request body: %w", err)
+	}
+
+	var bodyReader *bytes.Reader
+	if bodyVal != nil {
+		ct := opts.ContentType
+		if ct == "" {
+			ct = "application/json"
+		}
+		// Determine the full MIME type for marshalling.
+		mimeType := c.content.MIMETypeForName(ct)
+		if mimeType == "" {
+			mimeType = ct
+		}
+		encoded, err := c.content.Encode(mimeType, bodyVal)
+		if err != nil {
+			return fmt.Errorf("encoding request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(encoded)
+		if opts.ContentType == "" {
+			opts.Headers = append(opts.Headers, "Content-Type: "+mimeType)
+		}
+	}
+
+	var reqBody io.Reader
+	if bodyReader != nil {
+		reqBody = bodyReader
+	}
+	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
 	if err != nil {
 		return fmt.Errorf("network: %w", err)
 	}
@@ -105,6 +141,8 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		}
 	}
 
+	contentType, _ := cmd.Flags().GetString("rsh-content-type")
+
 	return request.Options{
 		Headers:              headers,
 		Query:                query,
@@ -113,5 +151,6 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		Timeout:              timeout,
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
+		ContentType:          contentType,
 	}, nil
 }
