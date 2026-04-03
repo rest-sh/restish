@@ -41,6 +41,7 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addHTTPCommands(root)
 	c.addAuthHeaderCommand(root)
 	c.addAPICommand(root)
+	c.addCacheCommand(root)
 	return root
 }
 
@@ -60,4 +61,5 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
 	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
+	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
 }

@@ -18,6 +18,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// cacheDir returns the effective HTTP response cache directory, checking the
+// CachePath override (used in tests), then RSH_CACHE_DIR, then the default.
+func (c *CLI) cacheDir() string {
+	if c.CachePath != "" {
+		return c.CachePath
+	}
+	return config.DefaultCacheDir()
+}
+
 // addHTTPCommands registers the generic HTTP verb commands on root.
 func (c *CLI) addHTTPCommands(root *cobra.Command) {
 	verbs := []struct {
@@ -269,6 +278,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	query, _ := cmd.Flags().GetStringArray("rsh-query")
 	server, _ := cmd.Flags().GetString("rsh-server")
 	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
+	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
 	timeoutStr, _ := cmd.Flags().GetString("rsh-timeout")
 
 	var timeout time.Duration
@@ -291,5 +301,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
 		ContentType:          contentType,
+		CacheDir:             c.cacheDir(),
+		NoCache:              noCache,
 	}, nil
 }

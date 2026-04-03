@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/danielgtaylor/restish/v2/internal/cache"
+	"github.com/gregjones/httpcache"
 )
 
 // Options controls per-request behavior derived from CLI flags.
@@ -34,6 +37,12 @@ type Options struct {
 	// params have been applied, immediately before the request is sent.
 	// Auth handlers use this hook to inject credentials.
 	OnRequest func(*http.Request) error
+	// CacheDir, if non-empty, enables RFC 7234 response caching in that
+	// directory.  NoCache overrides this and skips the cache entirely.
+	CacheDir string
+	// NoCache, when true, bypasses the response cache for this request
+	// (no read, no write).
+	NoCache bool
 }
 
 // Do executes an HTTP request and returns the response.
@@ -85,8 +94,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 	}
 
+	transport := buildTransport(opts)
 	client := &http.Client{
-		Transport: newTransport(opts.Insecure),
+		Transport: transport,
 		Timeout:   opts.Timeout,
 	}
 
@@ -102,4 +112,22 @@ func newTransport(insecure bool) http.RoundTripper {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 	}
 	return tr
+}
+
+// buildTransport returns the appropriate RoundTripper for opts.
+// When caching is enabled, it wraps the base transport with an RFC 7234
+// caching transport backed by the disk cache.
+func buildTransport(opts Options) http.RoundTripper {
+	base := newTransport(opts.Insecure)
+	if opts.NoCache || opts.CacheDir == "" {
+		return base
+	}
+	dc, err := cache.New(opts.CacheDir, cache.DefaultMaxBytes)
+	if err != nil {
+		// Cache unavailable; fall back to non-caching transport.
+		return base
+	}
+	ct := httpcache.NewTransport(dc)
+	ct.Transport = base
+	return ct
 }

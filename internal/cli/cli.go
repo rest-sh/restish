@@ -32,6 +32,10 @@ type CLI struct {
 	// Used in tests to point at a temp dir; leave empty to use the platform default.
 	TokenCachePath string
 
+	// CachePath overrides the default HTTP response cache directory.
+	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	CachePath string
+
 	cfg     *config.Config
 	content *content.Registry
 }
