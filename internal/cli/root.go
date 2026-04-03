@@ -39,6 +39,7 @@ commands for registered APIs via OpenAPI 3.`,
 
 	c.addGlobalFlags(root)
 	c.addHTTPCommands(root)
+	c.addAuthHeaderCommand(root)
 	return root
 }
 

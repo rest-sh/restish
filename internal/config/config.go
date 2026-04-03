@@ -45,10 +45,11 @@ type ProfileConfig struct {
 }
 
 // AuthConfig holds authentication configuration for a profile.
-// The full set of auth fields is populated in Steps 9–10.
 type AuthConfig struct {
 	// Type identifies the auth mechanism (e.g. "http-basic", "oauth-client-credentials").
 	Type string `json:"type,omitempty"`
+	// Params holds handler-specific configuration, e.g. {"username": "alice"}.
+	Params map[string]string `json:"params,omitempty"`
 }
 
 // CacheConfig holds cache settings.

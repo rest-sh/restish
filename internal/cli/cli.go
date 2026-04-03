@@ -23,6 +23,11 @@ type CLI struct {
 	// to point at a temp file; leave empty to use the platform default.
 	ConfigPath string
 
+	// PassReader, if non-nil, is used as the source for secret prompts (e.g.
+	// password input). Falls back to Stdin when nil. Set in tests to provide
+	// a password without consuming the body stdin.
+	PassReader io.Reader
+
 	cfg     *config.Config
 	content *content.Registry
 }

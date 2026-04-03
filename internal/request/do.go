@@ -30,6 +30,10 @@ type Options struct {
 	// If empty and a body is present, the caller is responsible for setting
 	// the header via Headers.
 	ContentType string
+	// OnRequest, if non-nil, is called after all standard headers and query
+	// params have been applied, immediately before the request is sent.
+	// Auth handlers use this hook to inject credentials.
+	OnRequest func(*http.Request) error
 }
 
 // Do executes an HTTP request and returns the response.
@@ -73,6 +77,12 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			q.Add(key, value)
 		}
 		req.URL.RawQuery = q.Encode()
+	}
+
+	if opts.OnRequest != nil {
+		if err := opts.OnRequest(req); err != nil {
+			return nil, fmt.Errorf("auth: %w", err)
+		}
 	}
 
 	client := &http.Client{
