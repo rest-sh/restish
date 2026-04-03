@@ -119,6 +119,16 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 		return fmt.Errorf("network: %w", err)
 	}
 
+	// Streaming responses (SSE, NDJSON) are handled before body normalization.
+	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		switch kind {
+		case "sse":
+			return c.handleSSE(cmd, httpResp)
+		case "ndjson":
+			return c.handleNDJSON(cmd, httpResp)
+		}
+	}
+
 	resp, err := output.Normalize(httpResp, c.content)
 	if err != nil {
 		return err
