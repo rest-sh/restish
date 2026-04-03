@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -279,15 +280,31 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	server, _ := cmd.Flags().GetString("rsh-server")
 	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
 	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
-	timeoutStr, _ := cmd.Flags().GetString("rsh-timeout")
 
+	// --rsh-timeout, falling back to RSH_TIMEOUT env var.
+	timeoutStr, _ := cmd.Flags().GetString("rsh-timeout")
+	if timeoutStr == "" {
+		timeoutStr = os.Getenv("RSH_TIMEOUT")
+	}
 	var timeout time.Duration
 	if timeoutStr != "" {
 		var parseErr error
 		timeout, parseErr = time.ParseDuration(timeoutStr)
 		if parseErr != nil {
-			return request.Options{}, fmt.Errorf("invalid --rsh-timeout %q: %w", timeoutStr, parseErr)
+			return request.Options{}, fmt.Errorf("invalid timeout %q: %w", timeoutStr, parseErr)
 		}
+	}
+
+	// --rsh-retry, falling back to RSH_RETRY env var; default is 2 when
+	// neither is set.  The flag default is -1 (sentinel = "not set by user").
+	retry := 2
+	if envVal := os.Getenv("RSH_RETRY"); envVal != "" {
+		if n, err := strconv.Atoi(envVal); err == nil {
+			retry = n
+		}
+	}
+	if flagVal, _ := cmd.Flags().GetInt("rsh-retry"); flagVal >= 0 {
+		retry = flagVal
 	}
 
 	contentType, _ := cmd.Flags().GetString("rsh-content-type")
@@ -303,5 +320,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		ContentType:          contentType,
 		CacheDir:             c.cacheDir(),
 		NoCache:              noCache,
+		Retry:                retry,
+		RetryBaseDelay:       c.RetryBaseDelay,
 	}, nil
 }

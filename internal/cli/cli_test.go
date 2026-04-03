@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
 )
 
 // newTestCLI returns a CLI wired to in-memory buffers for use in tests.
+// RetryBaseDelay is set to 1 ms so retry backoffs don't slow down the suite.
 func newTestCLI() (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	var stdout, stderr bytes.Buffer
 	c := cli.New()
 	c.Stdin = strings.NewReader("")
 	c.Stdout = &stdout
 	c.Stderr = &stderr
+	c.RetryBaseDelay = time.Millisecond
 	return c, &stdout, &stderr
 }
 

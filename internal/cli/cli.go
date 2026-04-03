@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"os"
+	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/content"
@@ -35,6 +36,10 @@ type CLI struct {
 	// CachePath overrides the default HTTP response cache directory.
 	// Used in tests to point at a temp dir; leave empty to use the platform default.
 	CachePath string
+
+	// RetryBaseDelay overrides the 1 s default backoff base for retries.
+	// Set to a small value in tests to avoid slow retries.
+	RetryBaseDelay time.Duration
 
 	cfg     *config.Config
 	content *content.Registry

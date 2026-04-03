@@ -43,6 +43,12 @@ type Options struct {
 	// NoCache, when true, bypasses the response cache for this request
 	// (no read, no write).
 	NoCache bool
+	// Retry is the maximum number of retry attempts for network errors and
+	// 5xx responses.  Zero disables retries.
+	Retry int
+	// RetryBaseDelay is the base delay for the first retry backoff interval.
+	// Defaults to 1 s when zero.
+	RetryBaseDelay time.Duration
 }
 
 // Do executes an HTTP request and returns the response.
@@ -115,19 +121,34 @@ func newTransport(insecure bool) http.RoundTripper {
 }
 
 // buildTransport returns the appropriate RoundTripper for opts.
-// When caching is enabled, it wraps the base transport with an RFC 7234
-// caching transport backed by the disk cache.
+// Layer order (outermost → innermost):
+//
+//	httpcache.Transport → retryTransport → http.Transport
+//
+// The retry transport sits below the cache so that only cache misses (real
+// server requests) are retried.
 func buildTransport(opts Options) http.RoundTripper {
 	base := newTransport(opts.Insecure)
+
+	// Wrap with retry if requested.
+	var inner http.RoundTripper = base
+	if opts.Retry > 0 {
+		delay := opts.RetryBaseDelay
+		if delay == 0 {
+			delay = time.Second
+		}
+		inner = retryTransport{inner: base, maxRetry: opts.Retry, baseDelay: delay}
+	}
+
 	if opts.NoCache || opts.CacheDir == "" {
-		return base
+		return inner
 	}
 	dc, err := cache.New(opts.CacheDir, cache.DefaultMaxBytes)
 	if err != nil {
-		// Cache unavailable; fall back to non-caching transport.
-		return base
+		// Cache unavailable; fall back without caching.
+		return inner
 	}
 	ct := httpcache.NewTransport(dc)
-	ct.Transport = base
+	ct.Transport = inner
 	return ct
 }

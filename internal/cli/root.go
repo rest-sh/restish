@@ -62,4 +62,5 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
+	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and 5xx responses (-1 = use default of 2; 0 = disable)")
 }
