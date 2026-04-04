@@ -191,8 +191,8 @@ func TestHTTPTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
-	if !strings.Contains(err.Error(), "network:") {
-		t.Errorf("expected 'network:' prefix in error, got: %v", err)
+	if !strings.Contains(err.Error(), "network") {
+		t.Errorf("expected 'network' in error, got: %v", err)
 	}
 }
 

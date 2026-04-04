@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"net/http"
+
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
@@ -116,7 +118,12 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	}
 	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
 	if err != nil {
-		return fmt.Errorf("network: %w", err)
+		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
+	}
+
+	// Verbose logging to stderr.
+	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && httpResp.Request != nil {
+		c.logVerbose(httpResp)
 	}
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
@@ -275,6 +282,25 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, outResp, output.ColorEnabled(c.Stdout))
+}
+
+// logVerbose prints request and response summary lines to stderr.
+func (c *CLI) logVerbose(resp *http.Response) {
+	req := resp.Request
+	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, req.URL)
+	for k, vs := range req.Header {
+		for _, v := range vs {
+			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
+		}
+	}
+	fmt.Fprintln(c.Stderr, ">")
+	fmt.Fprintf(c.Stderr, "< %s %d %s\n", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode))
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			fmt.Fprintf(c.Stderr, "< %s: %s\n", k, v)
+		}
+	}
+	fmt.Fprintln(c.Stderr, "<")
 }
 
 // isAPIShortName reports whether arg (with no path separator) exactly matches a

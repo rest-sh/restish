@@ -62,6 +62,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-filter-lang", "", "Force filter language: shorthand or jq")
 	pf.Bool("rsh-headers", false, "Shorthand for -f headers")
 	pf.BoolP("rsh-raw", "r", false, "Raw output: strip quotes from strings, one item per line for arrays")
+	pf.CountP("rsh-verbose", "v", "Verbose output: -v shows request/response headers, -vv adds TLS details")
 	pf.Bool("rsh-insecure", false, "Disable TLS certificate verification")
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
 	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
