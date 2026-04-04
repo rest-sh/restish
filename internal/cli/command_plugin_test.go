@@ -1,0 +1,141 @@
+package cli_test
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type captureWriter struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (w *captureWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+
+func (w *captureWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.String()
+}
+
+func installCmdPlugin(t *testing.T) {
+	t.Helper()
+	skipNoCmdPlugin(t)
+
+	data, err := os.ReadFile(testCmdPluginBin)
+	if err != nil {
+		t.Fatalf("read cmd plugin: %v", err)
+	}
+
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(pluginDir, "restish-cmdplugin")
+	if runtime.GOOS == "windows" {
+		dest += ".exe"
+	}
+	if err := os.WriteFile(dest, data, 0o755); err != nil {
+		t.Fatalf("write cmd plugin: %v", err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+}
+
+func TestCommandPluginHelp(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	_ = c.Run([]string{"restish", "--help"})
+
+	if !strings.Contains(out.String(), "greet") {
+		t.Errorf("expected 'greet' in help output, got:\n%s", out.String())
+	}
+}
+
+func TestCommandPluginGreet(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, out, _ := newTestCLI()
+	var errOut captureWriter
+	c.Stderr = &errOut
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "greet"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "Greeting in progress") {
+		t.Errorf("expected progress on stderr, got:\n%s", errOut.String())
+	}
+	if !strings.Contains(out.String(), "Hello from plugin") {
+		t.Errorf("expected greeting in stdout, got:\n%s", out.String())
+	}
+}
+
+func TestCommandPluginFetch(t *testing.T) {
+	installCmdPlugin(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"fetched":true}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "fetch", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "fetched") {
+		t.Errorf("expected fetched output, got:\n%s", out.String())
+	}
+}
+
+func TestCommandPluginProgress(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, _, _ := newTestCLI()
+	var errOut captureWriter
+	c.Stderr = &errOut
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	_ = c.Run([]string{"restish", "greet"})
+	if !strings.Contains(errOut.String(), "Greeting in progress") {
+		t.Errorf("expected progress on stderr, got:\n%s", errOut.String())
+	}
+}
+
+func TestCommandPluginExitCode(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "fail"}); err == nil {
+		t.Fatal("expected error for exit_code=1, got nil")
+	}
+}
+
+func TestCommandPluginDeath(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "die"})
+	if err == nil {
+		t.Fatal("expected error for plugin crash, got nil")
+	}
+	if !strings.Contains(err.Error(), "died") && !strings.Contains(err.Error(), "EOF") && !strings.Contains(err.Error(), "truncated") {
+		t.Errorf("expected process death error, got: %v", err)
+	}
+}

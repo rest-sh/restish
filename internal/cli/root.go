@@ -47,6 +47,7 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addSetupCommand(root)
 	c.addLinksCommand(root)
 	c.addPluginCommand(root)
+	c.addCommandPlugins(root)
 	return root
 }
 

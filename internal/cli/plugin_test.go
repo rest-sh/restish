@@ -14,6 +14,7 @@ var testPluginBin string
 
 // testHookPluginBin is the path to the compiled hook test plugin binary.
 var testHookPluginBin string
+var testCmdPluginBin string
 
 // TestMain compiles the test plugin binaries once for the whole test run.
 func TestMain(m *testing.M) {
@@ -35,6 +36,19 @@ func TestMain(m *testing.M) {
 	if runtime.GOOS == "windows" {
 		hookBin += ".exe"
 	}
+
+	// Build cmdplugin.
+	cmdBin := filepath.Join(os.TempDir(), "restish-cmdplugin")
+	if runtime.GOOS == "windows" {
+		cmdBin += ".exe"
+	}
+	cmd3 := exec.Command("go", "build", "-o", cmdBin, "./testdata/cmdplugin")
+	cmd3.Dir = testdataDir()
+	if out, err := cmd3.CombinedOutput(); err != nil {
+		_ = out
+	} else {
+		testCmdPluginBin = cmdBin
+	}
 	cmd2 := exec.Command("go", "build", "-o", hookBin, "./testdata/hookplugin")
 	cmd2.Dir = testdataDir()
 	if out, err := cmd2.CombinedOutput(); err != nil {
@@ -50,6 +64,9 @@ func TestMain(m *testing.M) {
 	}
 	if testHookPluginBin != "" {
 		_ = os.Remove(testHookPluginBin)
+	}
+	if testCmdPluginBin != "" {
+		_ = os.Remove(testCmdPluginBin)
 	}
 	os.Exit(code)
 }
@@ -73,6 +90,13 @@ func skipNoHookPlugin(t *testing.T) {
 	t.Helper()
 	if testHookPluginBin == "" {
 		t.Skip("hook plugin binary not compiled; skipping hook plugin tests")
+	}
+}
+
+func skipNoCmdPlugin(t *testing.T) {
+	t.Helper()
+	if testCmdPluginBin == "" {
+		t.Skip("command plugin binary not compiled; skipping command plugin tests")
 	}
 }
 
