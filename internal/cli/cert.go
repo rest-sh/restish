@@ -33,6 +33,10 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	opts, err = c.resolveTLSSigner(opts)
+	if err != nil {
+		return err
+	}
 
 	targetURL, err := request.Normalize(args[0], opts.Server)
 	if err != nil {

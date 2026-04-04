@@ -3,9 +3,12 @@ package cli
 import (
 	"fmt"
 	"net/http"
+	"os/exec"
+	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/plugin"
+	"github.com/danielgtaylor/restish/v2/internal/request"
 )
 
 // pluginsForHook returns all discovered plugins that declare the given hook.
@@ -20,6 +23,38 @@ func (c *CLI) pluginsForHook(hook string) []plugin.Plugin {
 		}
 	}
 	return result
+}
+
+func (c *CLI) pluginForHook(name, hook string) (plugin.Plugin, bool) {
+	for _, p := range c.pluginsForHook(hook) {
+		if p.Manifest.Name == name {
+			return p, true
+		}
+	}
+	return plugin.Plugin{}, false
+}
+
+func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
+	if opts.TLSSignerName == "" || opts.TLSSignerPath != "" {
+		return opts, nil
+	}
+	if p, ok := c.pluginForHook(opts.TLSSignerName, "tls-signer"); ok {
+		opts.TLSSignerPath = p.Path
+		return opts, nil
+	}
+	path, err := exec.LookPath(opts.TLSSignerName)
+	if err == nil {
+		opts.TLSSignerPath = path
+		return opts, nil
+	}
+	if !strings.HasPrefix(opts.TLSSignerName, "restish-") {
+		path, err = exec.LookPath("restish-" + opts.TLSSignerName)
+		if err == nil {
+			opts.TLSSignerPath = path
+			return opts, nil
+		}
+	}
+	return opts, fmt.Errorf("tls signer plugin %q not found", opts.TLSSignerName)
 }
 
 // runAuthHookPlugins invokes all "auth" hook plugins for the given API request.

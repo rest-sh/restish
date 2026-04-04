@@ -90,6 +90,10 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	}
 	var apiName string
 	rawURL, apiName, opts = c.applyAPIProfile(rawURL, profileName, opts)
+	opts, err = c.resolveTLSSigner(opts)
+	if err != nil {
+		return err
+	}
 
 	// Chain request-middleware plugins after auth.
 	origOnReq := opts.OnRequest
@@ -380,6 +384,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
 		opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
 		opts.OnRequest = c.authOnRequest(apiName, profileName, prof)
+		if opts.TLSSignerName == "" {
+			opts.TLSSignerName = prof.TLSSigner
+		}
 	}
 
 	return expanded, apiName, opts
@@ -393,6 +400,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
 	clientCert, _ := cmd.Flags().GetString("rsh-client-cert")
 	clientKey, _ := cmd.Flags().GetString("rsh-client-key")
+	tlsSigner, _ := cmd.Flags().GetString("rsh-tls-signer")
 	caCert, _ := cmd.Flags().GetString("rsh-ca-cert")
 	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
 	tlsMinVersionStr, _ := cmd.Flags().GetString("tls-min-version")
@@ -436,6 +444,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		Insecure:             insecure,
 		ClientCertPath:       clientCert,
 		ClientKeyPath:        clientKey,
+		TLSSignerName:        tlsSigner,
 		CACertPath:           caCert,
 		TLSMinVersion:        tlsMinVersion,
 		Timeout:              timeout,

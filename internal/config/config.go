@@ -56,6 +56,8 @@ type ProfileConfig struct {
 	Headers []string `json:"headers,omitempty"`
 	// Query is a list of persistent "key=value" query params sent with every request.
 	Query []string `json:"query,omitempty"`
+	// TLSSigner selects a tls-signer plugin for mTLS client certificate signing.
+	TLSSigner string `json:"tls_signer,omitempty"`
 	// Auth holds authentication configuration for this profile.
 	Auth *AuthConfig `json:"auth,omitempty"`
 }

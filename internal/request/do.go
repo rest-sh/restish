@@ -28,6 +28,10 @@ type Options struct {
 	ClientCertPath string
 	// ClientKeyPath is the PEM client private key path for mTLS.
 	ClientKeyPath string
+	// TLSSignerPath is the executable path of a tls-signer plugin for mTLS.
+	TLSSignerPath string
+	// TLSSignerName records the logical signer name before CLI resolution.
+	TLSSignerName string
 	// CACertPath is an optional PEM CA bundle to trust in addition to system roots.
 	CACertPath string
 	// TLSMinVersion constrains the minimum TLS version when connecting over HTTPS.

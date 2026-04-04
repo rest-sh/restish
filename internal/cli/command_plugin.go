@@ -225,6 +225,11 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		profileName = "default"
 	}
 	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
+	opts, err = c.resolveTLSSigner(opts)
+	if err != nil {
+		reply := map[string]any{"type": "http-response", "error": err.Error()}
+		return writer.WriteMessage(reply)
+	}
 	origOnReq := opts.OnRequest
 	opts.OnRequest = func(req *http.Request) error {
 		if origOnReq != nil {

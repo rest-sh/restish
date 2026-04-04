@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 )
 
 // TLSVersionFromString maps CLI values like TLS1.2 and TLS1.3 to crypto/tls constants.
@@ -29,6 +31,10 @@ func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
 		MinVersion:         opts.TLSMinVersion,
 	}
 
+	if opts.TLSSignerPath != "" && (opts.ClientCertPath != "" || opts.ClientKeyPath != "") {
+		return nil, fmt.Errorf("tls signer cannot be used together with client certificate/key files")
+	}
+
 	if opts.ClientCertPath != "" || opts.ClientKeyPath != "" {
 		if opts.ClientCertPath == "" || opts.ClientKeyPath == "" {
 			return nil, fmt.Errorf("both client certificate and key are required for mTLS")
@@ -38,6 +44,16 @@ func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
 			return nil, fmt.Errorf("loading client certificate: %w", err)
 		}
 		cfg.Certificates = []tls.Certificate{cert}
+	}
+
+	if opts.TLSSignerPath != "" {
+		cert, err := internalplugin.TLSCertificateFromPlugin(opts.TLSSignerPath)
+		if err != nil {
+			return nil, err
+		}
+		cfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return cert, nil
+		}
 	}
 
 	if opts.CACertPath != "" {

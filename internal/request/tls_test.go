@@ -1,15 +1,21 @@
 package request_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +104,161 @@ func TestTLSConfigFromOptionsWithClientCertificate(t *testing.T) {
 	}
 }
 
+func TestTLSConfigFromOptionsWithTLSSigner(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	certPEM, keyPEM, _ := selfSignedCert(t, "client")
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "client.pem")
+	keyPath := filepath.Join(dir, "client.key")
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	t.Setenv("RSH_TLS_SIGNER_CERT", certPath)
+	t.Setenv("RSH_TLS_SIGNER_KEY", keyPath)
+
+	cfg, err := request.TLSConfigFromOptions(request.Options{TLSSignerPath: pluginPath})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.GetClientCertificate == nil {
+		t.Fatal("expected GetClientCertificate to be configured")
+	}
+	cert, err := cfg.GetClientCertificate(&tls.CertificateRequestInfo{})
+	if err != nil {
+		t.Fatalf("GetClientCertificate: %v", err)
+	}
+	if cert == nil || cert.Leaf == nil {
+		t.Fatal("expected plugin-provided certificate")
+	}
+}
+
+func TestTLSSignerHandshake(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	caPEM, caKeyPEM, caCert := selfSignedCert(t, "Test CA")
+	serverCertPEM, serverKeyPEM := signedCert(t, caCert, caKeyPEM, "localhost", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	clientCertPEM, clientKeyPEM := signedCert(t, caCert, caKeyPEM, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.pem")
+	clientCertPath := filepath.Join(dir, "client.pem")
+	clientKeyPath := filepath.Join(dir, "client.key")
+	for path, data := range map[string][]byte{
+		caPath:         caPEM,
+		clientCertPath: clientCertPEM,
+		clientKeyPath:  clientKeyPEM,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
+	if err != nil {
+		t.Fatalf("server key pair: %v", err)
+	}
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AppendCertsFromPEM(caPEM)
+	server := tlsServer(t, serverCert, clientCAPool)
+
+	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
+	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
+	t.Setenv("RSH_TLS_SIGNER_MODE", "")
+
+	resp, err := request.Do(context.Background(), "GET", server.URL, nil, request.Options{
+		CACertPath:    caPath,
+		TLSSignerPath: pluginPath,
+	})
+	if err != nil {
+		t.Fatalf("request.Do: %v", err)
+	}
+	resp.Body.Close()
+}
+
+func TestTLSSignerErrorResponse(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	caPEM, caKeyPEM, caCert := selfSignedCert(t, "Test CA")
+	serverCertPEM, serverKeyPEM := signedCert(t, caCert, caKeyPEM, "localhost", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	clientCertPEM, clientKeyPEM := signedCert(t, caCert, caKeyPEM, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.pem")
+	clientCertPath := filepath.Join(dir, "client.pem")
+	clientKeyPath := filepath.Join(dir, "client.key")
+	for path, data := range map[string][]byte{
+		caPath:         caPEM,
+		clientCertPath: clientCertPEM,
+		clientKeyPath:  clientKeyPEM,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
+	if err != nil {
+		t.Fatalf("server key pair: %v", err)
+	}
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AppendCertsFromPEM(caPEM)
+	server := tlsServer(t, serverCert, clientCAPool)
+
+	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
+	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
+	t.Setenv("RSH_TLS_SIGNER_MODE", "error")
+
+	_, err = request.Do(context.Background(), "GET", server.URL, nil, request.Options{
+		CACertPath:    caPath,
+		TLSSignerPath: pluginPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "device removed") {
+		t.Fatalf("expected plugin error, got %v", err)
+	}
+}
+
+func TestTLSSignerDeath(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	caPEM, caKeyPEM, caCert := selfSignedCert(t, "Test CA")
+	serverCertPEM, serverKeyPEM := signedCert(t, caCert, caKeyPEM, "localhost", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	clientCertPEM, clientKeyPEM := signedCert(t, caCert, caKeyPEM, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.pem")
+	clientCertPath := filepath.Join(dir, "client.pem")
+	clientKeyPath := filepath.Join(dir, "client.key")
+	for path, data := range map[string][]byte{
+		caPath:         caPEM,
+		clientCertPath: clientCertPEM,
+		clientKeyPath:  clientKeyPEM,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
+	if err != nil {
+		t.Fatalf("server key pair: %v", err)
+	}
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AppendCertsFromPEM(caPEM)
+	server := tlsServer(t, serverCert, clientCAPool)
+
+	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
+	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
+	t.Setenv("RSH_TLS_SIGNER_MODE", "die")
+
+	_, err = request.Do(context.Background(), "GET", server.URL, nil, request.Options{
+		CACertPath:    caPath,
+		TLSSignerPath: pluginPath,
+	})
+	if err == nil || (!strings.Contains(err.Error(), "tls-signer") && !strings.Contains(err.Error(), "EOF")) {
+		t.Fatalf("expected plugin death error, got %v", err)
+	}
+}
+
 func selfSignedCert(t *testing.T, commonName string) ([]byte, []byte, *x509.Certificate) {
 	t.Helper()
 
@@ -134,4 +295,98 @@ func selfSignedCert(t *testing.T, commonName string) ([]byte, []byte, *x509.Cert
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	return certPEM, keyPEM, cert
+}
+
+func signedCert(t *testing.T, caCert *x509.Certificate, caKeyPEM []byte, commonName string, usages []x509.ExtKeyUsage) ([]byte, []byte) {
+	t.Helper()
+	caBlock, _ := pem.Decode(caKeyPEM)
+	if caBlock == nil {
+		t.Fatal("invalid CA key")
+	}
+	caKey, err := x509.ParsePKCS1PrivateKey(caBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse CA key: %v", err)
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		t.Fatalf("serial: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName: commonName,
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           usages,
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+}
+
+func buildTLSSignerPlugin(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "restish-test-tls-signer")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	cmd := exec.Command("go", "build", "-o", bin, "./testdata/tlssigner")
+	cmd.Dir = requestTestDir(t)
+	cmd.Env = append(os.Environ(), "GOCACHE=/tmp/restish-gocache")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build tls signer plugin: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func requestTestDir(t *testing.T) string {
+	t.Helper()
+	_, file, _, _ := runtime.Caller(0)
+	return filepath.Dir(file)
+}
+
+func tlsServer(t *testing.T, cert tls.Certificate, clientCAPool *x509.CertPool) *tlsServerHandle {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    clientCAPool,
+	})
+	if err != nil {
+		t.Fatalf("tls.Listen: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	handle := &tlsServerHandle{URL: fmt.Sprintf("https://localhost:%d", port), ln: ln}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 4096)
+				_, _ = c.Read(buf)
+				_, _ = c.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"))
+			}(conn)
+		}
+	}()
+	t.Cleanup(func() { _ = ln.Close() })
+	return handle
+}
+
+type tlsServerHandle struct {
+	URL string
+	ln  net.Listener
 }

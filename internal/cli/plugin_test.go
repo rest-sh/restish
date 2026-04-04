@@ -16,6 +16,7 @@ var testPluginBin string
 var testHookPluginBin string
 var testCmdPluginBin string
 var testMCPPluginBin string
+var testTLSSignerPluginBin string
 
 // TestMain compiles the test plugin binaries once for the whole test run.
 func TestMain(m *testing.M) {
@@ -62,6 +63,18 @@ func TestMain(m *testing.M) {
 	} else {
 		testMCPPluginBin = mcpBin
 	}
+
+	tlsSignerBin := filepath.Join(os.TempDir(), "restish-test-tls-signer")
+	if runtime.GOOS == "windows" {
+		tlsSignerBin += ".exe"
+	}
+	cmd5 := exec.Command("go", "build", "-o", tlsSignerBin, "../request/testdata/tlssigner")
+	cmd5.Dir = testdataDir()
+	if out, err := cmd5.CombinedOutput(); err != nil {
+		_ = out
+	} else {
+		testTLSSignerPluginBin = tlsSignerBin
+	}
 	cmd2 := exec.Command("go", "build", "-o", hookBin, "./testdata/hookplugin")
 	cmd2.Dir = testdataDir()
 	if out, err := cmd2.CombinedOutput(); err != nil {
@@ -83,6 +96,9 @@ func TestMain(m *testing.M) {
 	}
 	if testMCPPluginBin != "" {
 		_ = os.Remove(testMCPPluginBin)
+	}
+	if testTLSSignerPluginBin != "" {
+		_ = os.Remove(testTLSSignerPluginBin)
 	}
 	os.Exit(code)
 }
@@ -120,6 +136,13 @@ func skipNoMCPPlugin(t *testing.T) {
 	t.Helper()
 	if testMCPPluginBin == "" {
 		t.Skip("mcp plugin binary not compiled; skipping mcp plugin tests")
+	}
+}
+
+func skipNoTLSSignerPlugin(t *testing.T) {
+	t.Helper()
+	if testTLSSignerPluginBin == "" {
+		t.Skip("tls-signer plugin binary not compiled; skipping tls-signer plugin tests")
 	}
 }
 

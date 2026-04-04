@@ -70,6 +70,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Bool("rsh-insecure", false, "Disable TLS certificate verification")
 	pf.String("rsh-client-cert", "", "Path to a PEM encoded client certificate for mTLS")
 	pf.String("rsh-client-key", "", "Path to a PEM encoded private key for mTLS")
+	pf.String("rsh-tls-signer", "", "TLS signer plugin to use for mTLS client certificate signing")
 	pf.String("rsh-ca-cert", "", "Path to a PEM encoded CA certificate to trust")
 	pf.String("tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3")
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
