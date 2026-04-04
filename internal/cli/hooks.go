@@ -1,0 +1,176 @@
+package cli
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/danielgtaylor/restish/v2/internal/plugin"
+)
+
+// pluginsForHook returns all discovered plugins that declare the given hook.
+func (c *CLI) pluginsForHook(hook string) []plugin.Plugin {
+	var result []plugin.Plugin
+	for _, p := range c.plugins {
+		for _, h := range p.Manifest.Hooks {
+			if h == hook {
+				result = append(result, p)
+				break
+			}
+		}
+	}
+	return result
+}
+
+// runAuthHookPlugins invokes all "auth" hook plugins for the given API request.
+// The returned headers from each plugin are merged into req. rawParams are the
+// profile auth params (without internal keys) and are forwarded to the plugin.
+func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, req *http.Request) error {
+	for _, p := range c.pluginsForHook("auth") {
+		headers := headerMap(req.Header)
+		in := map[string]any{
+			"type":    "auth",
+			"api":     apiName,
+			"profile": profileName,
+			"params":  rawParams,
+			"request": map[string]any{
+				"method":  req.Method,
+				"uri":     req.URL.String(),
+				"headers": headers,
+			},
+		}
+		var out map[string]any
+		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+			return fmt.Errorf("auth plugin %s: %w", p.Manifest.Name, err)
+		}
+		applyRequestUpdate(req, out)
+	}
+	return nil
+}
+
+// runRequestMiddlewarePlugins invokes all "request-middleware" hook plugins.
+// The returned headers/method/uri from each plugin are applied to req.
+func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
+	for _, p := range c.pluginsForHook("request-middleware") {
+		in := map[string]any{
+			"type": "request-middleware",
+			"request": map[string]any{
+				"method":  req.Method,
+				"uri":     req.URL.String(),
+				"headers": headerMap(req.Header),
+			},
+		}
+		var out map[string]any
+		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+			return fmt.Errorf("request-middleware plugin %s: %w", p.Manifest.Name, err)
+		}
+		applyRequestUpdate(req, out)
+	}
+	return nil
+}
+
+// HookFollowRequest is returned by response-middleware plugins that want to
+// chain a new request.
+type HookFollowRequest struct {
+	Method string
+	URI    string
+}
+
+// runResponseMiddlewarePlugins invokes all "response-middleware" hook plugins.
+// Returns (drop, follow, err). drop=true means suppress all output. follow is
+// non-nil when the plugin wants Restish to issue a new request.
+func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
+	for _, p := range c.pluginsForHook("response-middleware") {
+		in := map[string]any{
+			"type": "response-middleware",
+			"request": map[string]any{
+				"method":  req.Method,
+				"uri":     req.URL.String(),
+				"headers": headerMap(req.Header),
+			},
+			"response": map[string]any{
+				"status":  resp.Status,
+				"headers": resp.Headers,
+				"body":    resp.Body,
+			},
+		}
+		var out map[string]any
+		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+			return false, nil, fmt.Errorf("response-middleware plugin %s: %w", p.Manifest.Name, err)
+		}
+
+		if d, ok := out["drop"].(bool); ok && d {
+			return true, nil, nil
+		}
+
+		if f, ok := out["follow"].(map[string]any); ok {
+			method, _ := f["method"].(string)
+			uri, _ := f["uri"].(string)
+			if method == "" {
+				method = "GET"
+			}
+			return false, &HookFollowRequest{Method: method, URI: uri}, nil
+		}
+
+		if r, ok := out["response"].(map[string]any); ok {
+			if body, hasBody := r["body"]; hasBody {
+				resp.Body = body
+			}
+			if hdrs, ok := r["headers"].(map[string]any); ok {
+				if resp.Headers == nil {
+					resp.Headers = make(map[string]string)
+				}
+				for k, v := range hdrs {
+					switch vt := v.(type) {
+					case string:
+						resp.Headers[k] = vt
+					case []any:
+						if len(vt) > 0 {
+							if sv, ok := vt[0].(string); ok {
+								resp.Headers[k] = sv
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false, nil, nil
+}
+
+// applyRequestUpdate merges the "request" section of a plugin reply into req.
+// Only the "headers" field is currently applied; method/uri changes are ignored
+// since the request has already been prepared for sending.
+func applyRequestUpdate(req *http.Request, out map[string]any) {
+	reqOut, ok := out["request"].(map[string]any)
+	if !ok {
+		return
+	}
+	hdrs, ok := reqOut["headers"].(map[string]any)
+	if !ok {
+		return
+	}
+	for k, v := range hdrs {
+		switch vt := v.(type) {
+		case []any:
+			req.Header.Del(k)
+			for _, s := range vt {
+				if sv, ok := s.(string); ok {
+					req.Header.Add(k, sv)
+				}
+			}
+		case string:
+			req.Header.Set(k, vt)
+		}
+	}
+}
+
+// headerMap converts an http.Header (map[string][]string) to map[string][]string
+// as a plain Go map suitable for CBOR serialization.
+func headerMap(h http.Header) map[string][]string {
+	m := make(map[string][]string, len(h))
+	for k, vs := range h {
+		m[k] = vs
+	}
+	return m
+}

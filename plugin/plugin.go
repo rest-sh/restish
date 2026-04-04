@@ -13,9 +13,22 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"github.com/fxamacker/cbor/v2"
 )
+
+// decMode is a CBOR decode mode configured to use map[string]any for all CBOR
+// maps (including nested ones), rather than the default map[interface{}]interface{}.
+var decMode = func() cbor.DecMode {
+	dm, err := cbor.DecOptions{
+		DefaultMapType: reflect.TypeOf(map[string]any{}),
+	}.DecMode()
+	if err != nil {
+		panic("plugin: creating CBOR decode mode: " + err.Error())
+	}
+	return dm
+}()
 
 // maxMessageSize is the maximum allowed message size (64 MiB).
 const maxMessageSize = 64 * 1024 * 1024
@@ -69,7 +82,7 @@ func ReadMessage(r io.Reader, v any) error {
 		return fmt.Errorf("plugin: read payload: %w", err)
 	}
 
-	if err := cbor.Unmarshal(payload, v); err != nil {
+	if err := decMode.Unmarshal(payload, v); err != nil {
 		return fmt.Errorf("plugin: unmarshal: %w", err)
 	}
 	return nil

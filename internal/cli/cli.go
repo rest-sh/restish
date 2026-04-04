@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/content"
 	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/output"
+	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
@@ -55,6 +56,7 @@ type CLI struct {
 	loaders     []spec.Loader
 	linkParsers []hypermedia.Parser
 	formatters  map[string]output.Formatter
+	plugins     []internalplugin.Plugin
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -146,6 +148,9 @@ func (c *CLI) Run(args []string) error {
 		return err
 	}
 	c.cfg = cfg
+
+	// Discover hook plugins at startup (silently skip broken ones).
+	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), nil)
 
 	root := c.newRootCmd()
 

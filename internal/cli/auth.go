@@ -90,16 +90,34 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 // or nil when no auth is configured.
 // apiName and profileName are injected into params as "_cache_key".
 func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileConfig) func(*http.Request) error {
-	if prof == nil || prof.Auth == nil {
+	// Determine whether built-in auth is configured.
+	var builtinOnReq func(*http.Request) error
+	if prof != nil && prof.Auth != nil {
+		handler, err := c.authHandlerFor(prof.Auth)
+		if err != nil {
+			return func(*http.Request) error { return err }
+		}
+		params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
+		rawParams := prof.Auth.Params
+		builtinOnReq = func(req *http.Request) error {
+			if err := handler.OnRequest(req, params); err != nil {
+				return err
+			}
+			return c.runAuthHookPlugins(apiName, profileName, rawParams, req)
+		}
+	}
+
+	// Auth hook plugins run even when no built-in auth is configured.
+	hookPlugins := c.pluginsForHook("auth")
+	if builtinOnReq == nil && len(hookPlugins) == 0 {
 		return nil
 	}
-	handler, err := c.authHandlerFor(prof.Auth)
-	if err != nil {
-		return func(*http.Request) error { return err }
+	if builtinOnReq != nil {
+		return builtinOnReq
 	}
-	params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
+	// No built-in auth but hook plugins exist.
 	return func(req *http.Request) error {
-		return handler.OnRequest(req, params)
+		return c.runAuthHookPlugins(apiName, profileName, nil, req)
 	}
 }
 

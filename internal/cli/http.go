@@ -65,6 +65,13 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
+	return c.runHTTPInternal(cmd, method, args, false)
+}
+
+// runHTTPInternal is the implementation of runHTTP. followMode=true is used for
+// follow-up requests triggered by response-middleware plugins; in that mode,
+// response-middleware is skipped to prevent infinite loops.
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -83,6 +90,17 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	}
 	var apiName string
 	rawURL, apiName, opts = c.applyAPIProfile(rawURL, profileName, opts)
+
+	// Chain request-middleware plugins after auth.
+	origOnReq := opts.OnRequest
+	opts.OnRequest = func(req *http.Request) error {
+		if origOnReq != nil {
+			if err := origOnReq(req); err != nil {
+				return err
+			}
+		}
+		return c.runRequestMiddlewarePlugins(req)
+	}
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
@@ -149,6 +167,21 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 			for k, v := range links {
 				resp.Links[k] = v
 			}
+		}
+	}
+
+	// Response-middleware plugins: can modify, drop, or follow.
+	// Skipped in follow mode to prevent infinite loops.
+	if !followMode && httpResp.Request != nil {
+		drop, followReq, mwErr := c.runResponseMiddlewarePlugins(httpResp.Request, resp)
+		if mwErr != nil {
+			return mwErr
+		}
+		if drop {
+			return nil
+		}
+		if followReq != nil {
+			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true)
 		}
 	}
 
