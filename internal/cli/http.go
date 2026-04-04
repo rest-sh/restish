@@ -391,7 +391,15 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	query, _ := cmd.Flags().GetStringArray("rsh-query")
 	server, _ := cmd.Flags().GetString("rsh-server")
 	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
+	clientCert, _ := cmd.Flags().GetString("rsh-client-cert")
+	clientKey, _ := cmd.Flags().GetString("rsh-client-key")
+	caCert, _ := cmd.Flags().GetString("rsh-ca-cert")
 	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
+	tlsMinVersionStr, _ := cmd.Flags().GetString("tls-min-version")
+	tlsMinVersion, err := request.TLSVersionFromString(tlsMinVersionStr)
+	if err != nil {
+		return request.Options{}, err
+	}
 
 	// --rsh-timeout, falling back to RSH_TIMEOUT env var.
 	timeoutStr, _ := cmd.Flags().GetString("rsh-timeout")
@@ -426,6 +434,10 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		Query:                query,
 		Server:               server,
 		Insecure:             insecure,
+		ClientCertPath:       clientCert,
+		ClientKeyPath:        clientKey,
+		CACertPath:           caCert,
+		TLSMinVersion:        tlsMinVersion,
 		Timeout:              timeout,
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),

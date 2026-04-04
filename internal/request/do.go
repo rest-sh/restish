@@ -2,7 +2,6 @@ package request
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +24,14 @@ type Options struct {
 	Insecure bool
 	// Timeout is the request timeout. Zero means no timeout.
 	Timeout time.Duration
+	// ClientCertPath is the PEM client certificate path for mTLS.
+	ClientCertPath string
+	// ClientKeyPath is the PEM client private key path for mTLS.
+	ClientKeyPath string
+	// CACertPath is an optional PEM CA bundle to trust in addition to system roots.
+	CACertPath string
+	// TLSMinVersion constrains the minimum TLS version when connecting over HTTPS.
+	TLSMinVersion uint16
 	// AcceptHeader, if non-empty, is sent as the Accept request header.
 	AcceptHeader string
 	// AcceptEncodingHeader, if non-empty, is sent as the Accept-Encoding header.
@@ -112,12 +119,16 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 // newTransport returns an HTTP transport based on http.DefaultTransport.
 // Cloning from the default preserves proxy settings (HTTP_PROXY, HTTPS_PROXY,
 // NO_PROXY) and other production-appropriate defaults.
-func newTransport(insecure bool) http.RoundTripper {
+func newTransport(opts Options) (http.RoundTripper, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	if insecure {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+	cfg, err := TLSConfigFromOptions(opts)
+	if err != nil {
+		return nil, err
 	}
-	return tr
+	if cfg.InsecureSkipVerify || cfg.MinVersion != 0 || len(cfg.Certificates) > 0 || cfg.RootCAs != nil {
+		tr.TLSClientConfig = cfg
+	}
+	return tr, nil
 }
 
 // buildTransport returns the appropriate RoundTripper for opts.
@@ -128,7 +139,13 @@ func newTransport(insecure bool) http.RoundTripper {
 // The retry transport sits below the cache so that only cache misses (real
 // server requests) are retried.
 func buildTransport(opts Options) http.RoundTripper {
-	base := newTransport(opts.Insecure)
+	base, err := newTransport(opts)
+	if err != nil {
+		// TLS config invalid; use a small transport that returns the config error.
+		return roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, err
+		})
+	}
 
 	// Wrap with retry if requested.
 	var inner http.RoundTripper = base
@@ -151,4 +168,10 @@ func buildTransport(opts Options) http.RoundTripper {
 	ct := httpcache.NewTransport(dc)
 	ct.Transport = inner
 	return ct
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
