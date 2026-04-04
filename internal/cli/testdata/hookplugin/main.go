@@ -1,13 +1,16 @@
-// hookplugin is a test Restish plugin that implements the auth,
-// request-middleware, and response-middleware hooks for unit tests.
+// hookplugin is a test Restish plugin that implements auth, request-middleware,
+// response-middleware, formatter, and loader hooks for unit tests.
 //
-// Auth hook: always adds Authorization: Bearer hook-token.
-// Request middleware: adds X-Trace-Id: hook-trace-123.
-// Response middleware: behaviour is controlled by RSH_HOOK_RM_BEHAVIOR:
+// Auth hook:              adds Authorization: Bearer hook-token.
+// Request middleware:     adds X-Trace-Id: hook-trace-123.
+// Response middleware:    behaviour controlled by RSH_HOOK_RM_BEHAVIOR:
 //
 //	""          → adds "plugin_added":true to the response body (if map)
 //	"drop"      → returns {"drop":true}
 //	"follow:<u>"→ returns {"follow":{"method":"GET","uri":"<u>"}}
+//
+// Formatter hook:         writes "HOOK FORMATTED\n" to stdout (raw, no CBOR).
+// Loader hook:            returns a minimal OpenAPI 3.0 JSON spec via CBOR.
 package main
 
 import (
@@ -19,15 +22,32 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+// minimalOpenAPI is a minimal OpenAPI 3.0 spec returned by the loader hook.
+const minimalOpenAPI = `{
+  "openapi": "3.0.0",
+  "info": {"title": "Hook Plugin API", "version": "1.0.0"},
+  "paths": {
+    "/hook-items": {
+      "get": {
+        "operationId": "listHookItems",
+        "summary": "List hook items",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+
 func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--rsh-plugin-manifest" {
 			manifest := map[string]any{
-				"name":                "hookplugin",
-				"version":             "1.0.0",
-				"description":         "Test hook plugin",
-				"restish_api_version": 1,
-				"hooks":               []string{"auth", "request-middleware", "response-middleware"},
+				"name":                 "hookplugin",
+				"version":              "1.0.0",
+				"description":          "Test hook plugin",
+				"restish_api_version":  1,
+				"hooks":                []string{"auth", "request-middleware", "response-middleware", "formatter", "loader"},
+				"formatter_names":      []string{"hookformat"},
+				"loader_content_types": []string{"application/x-hook-api"},
 			}
 			data, err := cbor.Marshal(manifest)
 			if err != nil {
@@ -110,6 +130,21 @@ func main() {
 				},
 			}
 			plugin.WriteMessage(os.Stdout, out) //nolint:errcheck
+		}
+
+	case "formatter":
+		// Write raw (non-CBOR) output directly to stdout.
+		fmt.Fprint(os.Stdout, "HOOK FORMATTED\n")
+
+	case "loader":
+		// Return a minimal OpenAPI spec via CBOR framing.
+		out := map[string]any{
+			"content_type": "application/openapi+json",
+			"body":         minimalOpenAPI,
+		}
+		if err := plugin.WriteMessage(os.Stdout, out); err != nil {
+			fmt.Fprintln(os.Stderr, "write:", err)
+			os.Exit(1)
 		}
 
 	default:

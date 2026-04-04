@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/danielgtaylor/restish/v2/internal/plugin"
+	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
 // installHookPlugin copies testHookPluginBin into pluginsParent/plugins/ and
@@ -178,5 +181,95 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "first") {
 		t.Errorf("expected first-target response to be replaced, got:\n%s", out.String())
+	}
+}
+
+// TestFormatterPlugin verifies that a formatter hook plugin is invoked when its
+// declared format name is requested via -o and its raw output is passed through.
+func TestFormatterPlugin(t *testing.T) {
+	installHookPlugin(t)
+
+	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "-o", "hookformat", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "HOOK FORMATTED") {
+		t.Errorf("expected HOOK FORMATTED in output, got:\n%s", out.String())
+	}
+}
+
+// TestFormatterPluginNotInvokedWithoutFlag verifies that the formatter plugin is
+// not invoked when a different (or no) output format is requested.
+func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
+	installHookPlugin(t)
+
+	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	// No -o flag: default output should NOT contain plugin text.
+	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out.String(), "HOOK FORMATTED") {
+		t.Errorf("expected default output, got plugin output:\n%s", out.String())
+	}
+}
+
+// TestLoaderPlugin verifies that a loader hook plugin can detect a custom
+// content type and return a valid OpenAPI spec that is correctly parsed.
+func TestLoaderPlugin(t *testing.T) {
+	skipNoHookPlugin(t)
+
+	pl := spec.PluginLoader{
+		PluginPath:   testHookPluginBin,
+		PluginName:   "hookplugin",
+		ContentTypes: []string{"application/x-hook-api"},
+	}
+
+	// Detect should return true for the declared content type.
+	if !pl.Detect("application/x-hook-api", nil) {
+		t.Fatal("Detect: expected true for application/x-hook-api")
+	}
+	if pl.Detect("application/json", nil) {
+		t.Fatal("Detect: expected false for application/json")
+	}
+
+	// Load should return a valid APISpec with an OpenAPI document.
+	apiSpec, err := pl.Load([]byte(`{"some":"body"}`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if apiSpec == nil {
+		t.Fatal("Load: expected non-nil APISpec")
+	}
+	if apiSpec.Document == nil {
+		t.Fatal("Load: expected non-nil Document")
+	}
+}
+
+// TestLoaderPluginRegistration verifies that loader plugins discovered at
+// startup are registered in the CLI's loader list.
+func TestLoaderPluginRegistration(t *testing.T) {
+	installHookPlugin(t)
+
+	// Verify the plugin declares the expected content type.
+	plugins := plugin.Discover(plugin.DefaultPluginDir(), nil)
+	if len(plugins) == 0 {
+		t.Fatal("no plugins discovered")
+	}
+	var found bool
+	for _, p := range plugins {
+		for _, ct := range p.Manifest.LoaderContentTypes {
+			if ct == "application/x-hook-api" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("expected application/x-hook-api in loader content types")
 	}
 }

@@ -25,6 +25,12 @@ type Manifest struct {
 	Description       string   `json:"description"         cbor:"description"`
 	RestishAPIVersion int      `json:"restish_api_version" cbor:"restish_api_version"`
 	Hooks             []string `json:"hooks,omitempty"     cbor:"hooks,omitempty"`
+	// FormatterNames lists the output format names this plugin handles when
+	// the "formatter" hook is declared. Each name is available via -o <name>.
+	FormatterNames []string `json:"formatter_names,omitempty" cbor:"formatter_names,omitempty"`
+	// LoaderContentTypes lists the MIME types this plugin can convert to an
+	// OpenAPI descriptor when the "loader" hook is declared.
+	LoaderContentTypes []string `json:"loader_content_types,omitempty" cbor:"loader_content_types,omitempty"`
 }
 
 // Plugin is a discovered plugin executable together with its manifest.

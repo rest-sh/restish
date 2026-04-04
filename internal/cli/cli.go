@@ -152,6 +152,23 @@ func (c *CLI) Run(args []string) error {
 	// Discover hook plugins at startup (silently skip broken ones).
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), nil)
 
+	// Register plugin-provided formatters and loaders.
+	for _, p := range c.plugins {
+		for _, name := range p.Manifest.FormatterNames {
+			c.formatters[name] = &output.PluginFormatter{
+				PluginPath: p.Path,
+				FormatName: name,
+			}
+		}
+		if len(p.Manifest.LoaderContentTypes) > 0 {
+			c.loaders = append(c.loaders, spec.PluginLoader{
+				PluginPath:   p.Path,
+				PluginName:   p.Manifest.Name,
+				ContentTypes: p.Manifest.LoaderContentTypes,
+			})
+		}
+	}
+
 	root := c.newRootCmd()
 
 	// Register generated commands for APIs whose spec is already cached.
