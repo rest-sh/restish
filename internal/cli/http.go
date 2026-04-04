@@ -387,9 +387,34 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		if opts.TLSSignerName == "" {
 			opts.TLSSignerName = prof.TLSSigner
 		}
+		if len(prof.TLSSignerParams) > 0 {
+			if opts.TLSSignerParams == nil {
+				opts.TLSSignerParams = map[string]string{}
+			}
+			for k, v := range prof.TLSSignerParams {
+				if _, exists := opts.TLSSignerParams[k]; !exists {
+					opts.TLSSignerParams[k] = v
+				}
+			}
+		}
 	}
 
 	return expanded, apiName, opts
+}
+
+func parseKVStrings(values []string) (map[string]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(values))
+	for _, item := range values {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("%q: expected \"key=value\" format", item)
+		}
+		out[strings.TrimSpace(key)] = value
+	}
+	return out, nil
 }
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.
@@ -401,6 +426,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	clientCert, _ := cmd.Flags().GetString("rsh-client-cert")
 	clientKey, _ := cmd.Flags().GetString("rsh-client-key")
 	tlsSigner, _ := cmd.Flags().GetString("rsh-tls-signer")
+	tlsSignerParamsRaw, _ := cmd.Flags().GetStringArray("rsh-tls-signer-param")
 	caCert, _ := cmd.Flags().GetString("rsh-ca-cert")
 	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
 	tlsMinVersionStr, _ := cmd.Flags().GetString("tls-min-version")
@@ -436,6 +462,10 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	}
 
 	contentType, _ := cmd.Flags().GetString("rsh-content-type")
+	tlsSignerParams, err := parseKVStrings(tlsSignerParamsRaw)
+	if err != nil {
+		return request.Options{}, fmt.Errorf("invalid tls signer param: %w", err)
+	}
 
 	return request.Options{
 		Headers:              headers,
@@ -445,6 +475,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		ClientCertPath:       clientCert,
 		ClientKeyPath:        clientKey,
 		TLSSignerName:        tlsSigner,
+		TLSSignerParams:      tlsSignerParams,
 		CACertPath:           caCert,
 		TLSMinVersion:        tlsMinVersion,
 		Timeout:              timeout,

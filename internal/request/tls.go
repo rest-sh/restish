@@ -47,7 +47,7 @@ func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
 	}
 
 	if opts.TLSSignerPath != "" {
-		cert, err := internalplugin.TLSCertificateFromPlugin(opts.TLSSignerPath)
+		cert, err := internalplugin.TLSCertificateFromPlugin(opts.TLSSignerPath, opts.TLSSignerParams)
 		if err != nil {
 			return nil, err
 		}

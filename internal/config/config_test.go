@@ -84,6 +84,38 @@ func TestLoad_ValidAPIs(t *testing.T) {
 	}
 }
 
+func TestLoad_ProfileTLSSignerParams(t *testing.T) {
+	path := writeConfig(t, `{
+		"apis": {
+			"demo": {
+				"profiles": {
+					"default": {
+						"tls_signer": "pkcs11",
+						"tls_signer_params": {
+							"module": "/usr/local/lib/pkcs11.so",
+							"slot": "0"
+						}
+					}
+				}
+			}
+		}
+	}`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	prof := cfg.APIs["demo"].Profiles["default"]
+	if prof.TLSSigner != "pkcs11" {
+		t.Fatalf("unexpected tls_signer: %q", prof.TLSSigner)
+	}
+	if prof.TLSSignerParams["module"] != "/usr/local/lib/pkcs11.so" {
+		t.Fatalf("unexpected module param: %q", prof.TLSSignerParams["module"])
+	}
+	if prof.TLSSignerParams["slot"] != "0" {
+		t.Fatalf("unexpected slot param: %q", prof.TLSSignerParams["slot"])
+	}
+}
+
 func TestLoad_CacheConfig(t *testing.T) {
 	path := writeConfig(t, `{"cache": {"max_size": "500MB"}}`)
 	cfg, err := config.Load(path)

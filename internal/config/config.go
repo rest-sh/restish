@@ -58,6 +58,8 @@ type ProfileConfig struct {
 	Query []string `json:"query,omitempty"`
 	// TLSSigner selects a tls-signer plugin for mTLS client certificate signing.
 	TLSSigner string `json:"tls_signer,omitempty"`
+	// TLSSignerParams passes plugin-specific configuration to the tls-signer.
+	TLSSignerParams map[string]string `json:"tls_signer_params,omitempty"`
 	// Auth holds authentication configuration for this profile.
 	Auth *AuthConfig `json:"auth,omitempty"`
 }

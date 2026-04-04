@@ -32,6 +32,8 @@ type Options struct {
 	TLSSignerPath string
 	// TLSSignerName records the logical signer name before CLI resolution.
 	TLSSignerName string
+	// TLSSignerParams holds plugin-specific configuration for the tls-signer.
+	TLSSignerParams map[string]string
 	// CACertPath is an optional PEM CA bundle to trust in addition to system roots.
 	CACertPath string
 	// TLSMinVersion constrains the minimum TLS version when connecting over HTTPS.

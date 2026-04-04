@@ -58,8 +58,6 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}
-	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
-	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
 	t.Setenv("RSH_TLS_SIGNER_MODE", "")
 
 	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
@@ -88,12 +86,16 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 				"base_url": %q,
 				"profiles": {
 					"default": {
-						"tls_signer": "test-tls-signer"
+						"tls_signer": "test-tls-signer",
+						"tls_signer_params": {
+							"cert_path": %q,
+							"key_path": %q
+						}
 					}
 				}
 			}
 		}
-	}`, baseURL)
+	}`, baseURL, clientCertPath, clientKeyPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -32,12 +32,32 @@ func main() {
 		}
 	}
 
-	certPEM, err := os.ReadFile(os.Getenv("RSH_TLS_SIGNER_CERT"))
+	var init map[string]any
+	if err := plugin.ReadMessage(os.Stdin, &init); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if init["type"] != "init" {
+		fmt.Fprintln(os.Stderr, "expected init message")
+		os.Exit(1)
+	}
+	params, _ := init["params"].(map[string]any)
+
+	certPath := os.Getenv("RSH_TLS_SIGNER_CERT")
+	keyPath := os.Getenv("RSH_TLS_SIGNER_KEY")
+	if text, _ := params["cert_path"].(string); text != "" {
+		certPath = text
+	}
+	if text, _ := params["key_path"].(string); text != "" {
+		keyPath = text
+	}
+
+	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	keyPEM, err := os.ReadFile(os.Getenv("RSH_TLS_SIGNER_KEY"))
+	keyPEM, err := os.ReadFile(keyPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -19,10 +19,17 @@ import (
 // TLSCertificateFromPlugin starts a tls-signer plugin, waits for its ready
 // message, and returns a tls.Certificate whose PrivateKey proxies Sign calls
 // back to the plugin.
-func TLSCertificateFromPlugin(path string) (*tls.Certificate, error) {
+func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certificate, error) {
 	stdout, stdin, stderr, proc, err := startTLSSigner(path)
 	if err != nil {
 		return nil, err
+	}
+	if err := pluginwire.WriteMessage(stdin, map[string]any{
+		"type":   "init",
+		"params": params,
+	}); err != nil {
+		_ = proc.Process.Kill()
+		return nil, fmt.Errorf("tls-signer %s: init: %w", filepath.Base(path), err)
 	}
 
 	var ready map[string]any

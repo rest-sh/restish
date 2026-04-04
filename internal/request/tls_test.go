@@ -116,10 +116,13 @@ func TestTLSConfigFromOptionsWithTLSSigner(t *testing.T) {
 	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
-	t.Setenv("RSH_TLS_SIGNER_CERT", certPath)
-	t.Setenv("RSH_TLS_SIGNER_KEY", keyPath)
-
-	cfg, err := request.TLSConfigFromOptions(request.Options{TLSSignerPath: pluginPath})
+	cfg, err := request.TLSConfigFromOptions(request.Options{
+		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": certPath,
+			"key_path":  keyPath,
+		},
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -163,13 +166,15 @@ func TestTLSSignerHandshake(t *testing.T) {
 	clientCAPool.AppendCertsFromPEM(caPEM)
 	server := tlsServer(t, serverCert, clientCAPool)
 
-	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
-	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
 	t.Setenv("RSH_TLS_SIGNER_MODE", "")
 
 	resp, err := request.Do(context.Background(), "GET", server.URL, nil, request.Options{
 		CACertPath:    caPath,
 		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": clientCertPath,
+			"key_path":  clientKeyPath,
+		},
 	})
 	if err != nil {
 		t.Fatalf("request.Do: %v", err)
@@ -205,13 +210,15 @@ func TestTLSSignerErrorResponse(t *testing.T) {
 	clientCAPool.AppendCertsFromPEM(caPEM)
 	server := tlsServer(t, serverCert, clientCAPool)
 
-	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
-	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
 	t.Setenv("RSH_TLS_SIGNER_MODE", "error")
 
 	_, err = request.Do(context.Background(), "GET", server.URL, nil, request.Options{
 		CACertPath:    caPath,
 		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": clientCertPath,
+			"key_path":  clientKeyPath,
+		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "device removed") {
 		t.Fatalf("expected plugin error, got %v", err)
@@ -246,13 +253,15 @@ func TestTLSSignerDeath(t *testing.T) {
 	clientCAPool.AppendCertsFromPEM(caPEM)
 	server := tlsServer(t, serverCert, clientCAPool)
 
-	t.Setenv("RSH_TLS_SIGNER_CERT", clientCertPath)
-	t.Setenv("RSH_TLS_SIGNER_KEY", clientKeyPath)
 	t.Setenv("RSH_TLS_SIGNER_MODE", "die")
 
 	_, err = request.Do(context.Background(), "GET", server.URL, nil, request.Options{
 		CACertPath:    caPath,
 		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": clientCertPath,
+			"key_path":  clientKeyPath,
+		},
 	})
 	if err == nil || (!strings.Contains(err.Error(), "tls-signer") && !strings.Contains(err.Error(), "EOF")) {
 		t.Fatalf("expected plugin death error, got %v", err)
