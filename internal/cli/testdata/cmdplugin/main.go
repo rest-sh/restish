@@ -32,6 +32,7 @@ func main() {
 				"commands": []any{
 					map[string]any{"name": "greet", "short": "Greet the user"},
 					map[string]any{"name": "fetch", "short": "Fetch a URL via Restish"},
+					map[string]any{"name": "pipe", "short": "Echo stdin via passthrough stdio", "passthrough_stdio": true},
 					map[string]any{"name": "fail", "short": "Exit with code 1"},
 					map[string]any{"name": "die", "short": "Crash unexpectedly"},
 				},
@@ -89,6 +90,31 @@ func main() {
 		_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 0})
 	case "fail":
 		_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 1})
+	case "pipe":
+		for {
+			var in map[string]any
+			if err := plugin.ReadMessage(os.Stdin, &in); err != nil {
+				os.Exit(1)
+			}
+			switch in["type"] {
+			case "stdin-data":
+				data, _ := in["data"].([]byte)
+				if len(data) == 0 {
+					if arr, ok := in["data"].([]any); ok {
+						for _, item := range arr {
+							if n, ok := item.(uint64); ok {
+								data = append(data, byte(n))
+							}
+						}
+					}
+				}
+				_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "stdout-data", "data": append([]byte("OUT:"), data...)})
+				_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "stderr-data", "data": append([]byte("ERR:"), data...)})
+			case "stdin-close":
+				_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 0})
+				return
+			}
+		}
 	case "die":
 		os.Exit(1)
 	default:

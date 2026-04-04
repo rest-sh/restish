@@ -64,6 +64,9 @@ func TestCommandPluginHelp(t *testing.T) {
 	if !strings.Contains(out.String(), "greet") {
 		t.Errorf("expected 'greet' in help output, got:\n%s", out.String())
 	}
+	if !strings.Contains(out.String(), "pipe") {
+		t.Errorf("expected 'pipe' in help output, got:\n%s", out.String())
+	}
 }
 
 func TestCommandPluginGreet(t *testing.T) {
@@ -137,5 +140,25 @@ func TestCommandPluginDeath(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "died") && !strings.Contains(err.Error(), "EOF") && !strings.Contains(err.Error(), "truncated") {
 		t.Errorf("expected process death error, got: %v", err)
+	}
+}
+
+func TestCommandPluginPassthroughStdio(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, out, _ := newTestCLI()
+	var errOut captureWriter
+	c.Stderr = &errOut
+	c.Stdin = strings.NewReader("hello\n")
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "pipe"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := out.String(); got != "OUT:hello\n" {
+		t.Fatalf("unexpected stdout passthrough: %q", got)
+	}
+	if got := errOut.String(); got != "ERR:hello\n" {
+		t.Fatalf("unexpected stderr passthrough: %q", got)
 	}
 }

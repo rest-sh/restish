@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
@@ -29,9 +30,10 @@ var commandPluginDecMode = func() cbor.DecMode {
 }()
 
 type CommandDecl struct {
-	Name  string `cbor:"name" json:"name"`
-	Short string `cbor:"short" json:"short"`
-	Long  string `cbor:"long" json:"long"`
+	Name             string `cbor:"name" json:"name"`
+	Short            string `cbor:"short" json:"short"`
+	Long             string `cbor:"long" json:"long"`
+	PassthroughStdio bool   `cbor:"passthrough_stdio" json:"passthrough_stdio"`
 }
 
 type CommandsResponse struct {
@@ -70,14 +72,25 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 				Long:  decl.Long,
 				Args:  cobra.ArbitraryArgs,
 				RunE: func(cmd *cobra.Command, args []string) error {
-					return c.runCommandPlugin(cmd, pluginPath, decl.Name, args)
+					return c.runCommandPlugin(cmd, pluginPath, decl, args)
 				},
 			})
 		}
 	}
 }
 
-func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath, commandName string, args []string) error {
+type commandPluginWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *commandPluginWriter) WriteMessage(v any) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return pluginwire.WriteMessage(w.w, v)
+}
+
+func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl CommandDecl, args []string) error {
 	proc := exec.Command(pluginPath, append(terminalContextFlags(c), args...)...)
 	proc.Stderr = cmd.ErrOrStderr()
 
@@ -93,14 +106,19 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath, commandName strin
 		return fmt.Errorf("command plugin: start: %w", err)
 	}
 
+	writer := &commandPluginWriter{w: stdinPipe}
 	initMsg := map[string]any{
 		"type":    "init",
-		"command": commandName,
+		"command": decl.Name,
 		"args":    args,
 	}
-	if err := pluginwire.WriteMessage(stdinPipe, initMsg); err != nil {
+	if err := writer.WriteMessage(initMsg); err != nil {
 		_ = proc.Process.Kill()
 		return fmt.Errorf("command plugin: send init: %w", err)
+	}
+
+	if decl.PassthroughStdio {
+		go c.streamPluginStdin(writer)
 	}
 
 	var loopErr error
@@ -115,7 +133,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath, commandName strin
 			break
 		}
 
-		done, err := c.handleCommandPluginMessage(cmd, stdinPipe, msg)
+		done, err := c.handleCommandPluginMessage(cmd, writer, msg)
 		if err != nil {
 			loopErr = err
 			break
@@ -130,7 +148,30 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath, commandName strin
 	return loopErr
 }
 
-func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, stdinPipe io.Writer, msg map[string]any) (bool, error) {
+func (c *CLI) streamPluginStdin(writer *commandPluginWriter) {
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := c.Stdin.Read(buf)
+		if n > 0 {
+			data := append([]byte(nil), buf[:n]...)
+			if writeErr := writer.WriteMessage(map[string]any{
+				"type": "stdin-data",
+				"data": data,
+			}); writeErr != nil {
+				return
+			}
+		}
+		if err == io.EOF {
+			_ = writer.WriteMessage(map[string]any{"type": "stdin-close"})
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, msg map[string]any) (bool, error) {
 	msgType, _ := msg["type"].(string)
 	switch msgType {
 	case "done":
@@ -140,9 +181,17 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, stdinPipe io.Writer
 		}
 		return true, nil
 	case "http-request":
-		return false, c.handlePluginHTTPRequest(cmd, stdinPipe, msg)
+		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
+	case "stdout-data":
+		if data := msgBytes(msg["data"]); len(data) > 0 {
+			_, _ = c.Stdout.Write(data)
+		}
+	case "stderr-data":
+		if data := msgBytes(msg["data"]); len(data) > 0 {
+			_, _ = cmd.ErrOrStderr().Write(data)
+		}
 	case "progress", "spinner", "log":
 		if text, _ := msg["text"].(string); text != "" {
 			fmt.Fprintln(cmd.ErrOrStderr(), text)
@@ -155,7 +204,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, stdinPipe io.Writer
 	return false, nil
 }
 
-func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, stdinPipe io.Writer, msg map[string]any) error {
+func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginWriter, msg map[string]any) error {
 	method, _ := msg["method"].(string)
 	if method == "" {
 		method = "GET"
@@ -185,14 +234,14 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, stdinPipe io.Writer, m
 	httpResp, err := request.Do(context.Background(), method, rawURL, nil, opts)
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return pluginwire.WriteMessage(stdinPipe, reply)
+		return writer.WriteMessage(reply)
 	}
 	defer httpResp.Body.Close()
 
 	resp, err := output.Normalize(httpResp, c.content)
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return pluginwire.WriteMessage(stdinPipe, reply)
+		return writer.WriteMessage(reply)
 	}
 
 	reply := map[string]any{
@@ -201,7 +250,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, stdinPipe io.Writer, m
 		"headers": resp.Headers,
 		"body":    resp.Body,
 	}
-	return pluginwire.WriteMessage(stdinPipe, reply)
+	return writer.WriteMessage(reply)
 }
 
 func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg map[string]any) error {
@@ -252,4 +301,28 @@ func isEOFLike(err error) bool {
 	}
 	s := err.Error()
 	return strings.Contains(s, "EOF") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
+}
+
+func msgBytes(v any) []byte {
+	switch vt := v.(type) {
+	case []byte:
+		return vt
+	case string:
+		return []byte(vt)
+	case []any:
+		out := make([]byte, 0, len(vt))
+		for _, item := range vt {
+			switch b := item.(type) {
+			case uint64:
+				out = append(out, byte(b))
+			case int64:
+				out = append(out, byte(b))
+			case int:
+				out = append(out, byte(b))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
