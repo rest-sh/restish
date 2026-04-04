@@ -39,6 +39,7 @@ commands for registered APIs via OpenAPI 3.`,
 
 	c.addGlobalFlags(root)
 	c.addHTTPCommands(root)
+	c.addEditCommand(root)
 	c.addAuthHeaderCommand(root)
 	c.addAPICommand(root)
 	c.addCacheCommand(root)

@@ -12,7 +12,6 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 )
 
-
 // ReadableFormatter writes the full response (status line, headers, body) in
 // a human-friendly format. When color is true, the output is syntax-highlighted
 // using chroma with restishStyle. The body is always valid JSON so it can be
@@ -82,4 +81,15 @@ func highlight(w io.Writer, lexer chroma.Lexer, data []byte) error {
 	}
 
 	return formatter.Format(w, restishStyle, iter)
+}
+
+// HighlightWithLexer renders data with the provided chroma lexer and the
+// shared Restish terminal style. It falls back to the original data if
+// highlighting fails.
+func HighlightWithLexer(lexer chroma.Lexer, data []byte) ([]byte, error) {
+	var buf strings.Builder
+	if err := highlight(&buf, lexer, data); err != nil {
+		return data, err
+	}
+	return []byte(buf.String()), nil
 }
