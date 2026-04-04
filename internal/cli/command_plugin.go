@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/danielgtaylor/restish/v2/internal/spec"
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/spf13/cobra"
@@ -182,6 +184,8 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		return true, nil
 	case "http-request":
 		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
+	case "api-spec":
+		return false, c.handlePluginAPISpec(writer, msg)
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
 	case "stdout-data":
@@ -231,7 +235,34 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		return c.runRequestMiddlewarePlugins(req)
 	}
 
-	httpResp, err := request.Do(context.Background(), method, rawURL, nil, opts)
+	if headers, ok := msg["headers"].(map[string]any); ok {
+		for name, value := range headers {
+			if text, ok := value.(string); ok && text != "" {
+				opts.Headers = append(opts.Headers, name+": "+text)
+			}
+		}
+	}
+
+	var reqBody io.Reader
+	if bodyVal, ok := msg["body"]; ok && bodyVal != nil {
+		ct, _ := msg["content_type"].(string)
+		if ct == "" {
+			ct = "application/json"
+		}
+		mimeType := c.content.MIMETypeForName(ct)
+		if mimeType == "" {
+			mimeType = ct
+		}
+		encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyVal)
+		if err != nil {
+			reply := map[string]any{"type": "http-response", "error": err.Error()}
+			return writer.WriteMessage(reply)
+		}
+		opts.Headers = append(opts.Headers, "Content-Type: "+actualContentType)
+		reqBody = bytes.NewReader(encoded)
+	}
+
+	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)
@@ -272,6 +303,56 @@ func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg map[string]any) error
 		}
 	}
 	return c.formatResponse(cmd, resp)
+}
+
+func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg map[string]any) error {
+	apiName, _ := msg["name"].(string)
+	if apiName == "" {
+		return writer.WriteMessage(map[string]any{
+			"type":  "api-spec-response",
+			"error": "missing api name",
+		})
+	}
+	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[apiName] == nil {
+		return writer.WriteMessage(map[string]any{
+			"type":  "api-spec-response",
+			"name":  apiName,
+			"error": fmt.Sprintf("unknown API %q", apiName),
+		})
+	}
+
+	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, c.loaders)
+	if err != nil {
+		return writer.WriteMessage(map[string]any{
+			"type":  "api-spec-response",
+			"name":  apiName,
+			"error": err.Error(),
+		})
+	}
+	if s == nil {
+		s, err = c.discoverSpec(context.Background(), apiName)
+		if err != nil {
+			return writer.WriteMessage(map[string]any{
+				"type":  "api-spec-response",
+				"name":  apiName,
+				"error": err.Error(),
+			})
+		}
+	}
+	if s == nil || len(s.Raw) == 0 {
+		return writer.WriteMessage(map[string]any{
+			"type":  "api-spec-response",
+			"name":  apiName,
+			"error": fmt.Sprintf("no spec available for %q", apiName),
+		})
+	}
+
+	return writer.WriteMessage(map[string]any{
+		"type":         "api-spec-response",
+		"name":         apiName,
+		"content_type": s.ContentType,
+		"raw":          s.Raw,
+	})
 }
 
 func msgInt(msg map[string]any, key string) int {
