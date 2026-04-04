@@ -8,7 +8,7 @@ import (
 )
 
 func TestBody_NoArgsNoStdin(t *testing.T) {
-	body, err := input.Body(strings.NewReader(""), true, nil)
+	body, err := input.Body(strings.NewReader(""), true, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestBody_ShorthandArgs(t *testing.T) {
 	// Simulate: restish post /url name: Alice, age: 30
 	// Shell splits into tokens; we receive them already split.
 	args := []string{"name:", "Alice,", "age:", "30"}
-	body, err := input.Body(strings.NewReader(""), true, args)
+	body, err := input.Body(strings.NewReader(""), true, args, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestBody_ShorthandArgs(t *testing.T) {
 
 func TestBody_NestedShorthand(t *testing.T) {
 	args := []string{"user.address.city:", "NYC"}
-	body, err := input.Body(strings.NewReader(""), true, args)
+	body, err := input.Body(strings.NewReader(""), true, args, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestBody_NestedShorthand(t *testing.T) {
 
 func TestBody_StdinPassthrough(t *testing.T) {
 	// Simulate piped stdin with no args — parsed into a Go value.
-	body, err := input.Body(strings.NewReader(`{"piped":true}`), false, nil)
+	body, err := input.Body(strings.NewReader(`{"piped":true}`), false, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestBody_StdinPassthrough(t *testing.T) {
 func TestBody_StdinPlusArgsPatch(t *testing.T) {
 	// Stdin JSON is the base; shorthand args patch on top.
 	args := []string{"name:", "Alice"}
-	body, err := input.Body(strings.NewReader(`{"name":"Bob","age":25}`), false, args)
+	body, err := input.Body(strings.NewReader(`{"name":"Bob","age":25}`), false, args, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,5 +102,20 @@ func TestBody_StdinPlusArgsPatch(t *testing.T) {
 	}
 	if m["name"] != "Alice" {
 		t.Errorf("name: got %v, want Alice (patched)", m["name"])
+	}
+}
+
+func TestBody_FormKeepsFileReferenceLiteral(t *testing.T) {
+	args := []string{"file:", "@upload.txt"}
+	body, err := input.Body(strings.NewReader(""), true, args, "form")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := body.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T", body)
+	}
+	if got := m["file"]; got != "@upload.txt" {
+		t.Fatalf("expected literal file reference, got %v", got)
 	}
 }

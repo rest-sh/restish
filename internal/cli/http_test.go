@@ -1,11 +1,15 @@
 package cli_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -304,5 +308,82 @@ func TestStdinBody(t *testing.T) {
 	}
 	if body["from"] != "stdin" {
 		t.Errorf("from: got %v, want stdin", body["from"])
+	}
+}
+
+func TestFormBody(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	err := c.Run([]string{
+		"restish", "post", "-c", "form", srv.URL,
+		"username:", "alice,", "password:", "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := rr.Last()
+	if got := req.Header.Get("Content-Type"); !strings.Contains(got, "application/x-www-form-urlencoded") {
+		t.Fatalf("expected form content type, got %q", got)
+	}
+	body := string(rr.body)
+	if body != "password=secret&username=alice" && body != "username=alice&password=secret" {
+		t.Fatalf("unexpected form body: %q", body)
+	}
+}
+
+func TestMultipartBody(t *testing.T) {
+	var rr requestRecorder
+	srv := newTestServer(t, &rr, 200, `{}`)
+
+	c, _, _ := newTestCLI()
+	uploadPath := filepath.Join("testdata", "upload.txt")
+	err := c.Run([]string{
+		"restish", "post", "-c", "multipart", srv.URL,
+		"name:", "alice,", "file:", "@" + uploadPath,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := rr.Last()
+	contentType := req.Header.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	if !strings.HasPrefix(contentType, "multipart/form-data;") {
+		t.Fatalf("expected multipart content type, got %q", contentType)
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(rr.body), params["boundary"])
+	parts := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		content, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		parts[part.FormName()] = string(content)
+		filenames[part.FormName()] = part.FileName()
+	}
+
+	if parts["name"] != "alice" {
+		t.Fatalf("name part: got %q", parts["name"])
+	}
+	if parts["file"] != "hello from upload\n" {
+		t.Fatalf("file part: got %q", parts["file"])
+	}
+	if filenames["file"] != "upload.txt" {
+		t.Fatalf("expected upload.txt filename, got %q", filenames["file"])
 	}
 }

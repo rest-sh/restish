@@ -23,9 +23,9 @@ import (
 // by the content registry, or nil if there is no body.
 // stdinReader is cli.Stdin; pass strings.NewReader("") with stdinIsTTY=true
 // in tests to simulate an empty terminal.
-func Body(stdinReader io.Reader, stdinIsTTY bool, args []string) (any, error) {
+func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string) (any, error) {
 	opts := shorthand.ParseOptions{
-		EnableFileInput:       true,
+		EnableFileInput:       enableFileInput(contentType),
 		EnableObjectDetection: true,
 	}
 
@@ -66,4 +66,13 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string) (any, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func enableFileInput(contentType string) bool {
+	switch strings.ToLower(contentType) {
+	case "form", "multipart", "application/x-www-form-urlencoded", "multipart/form-data":
+		return false
+	default:
+		return true
+	}
 }

@@ -27,6 +27,10 @@ type ContentType struct {
 	Quality float32
 	// Marshal encodes v into bytes.
 	Marshal func(v any) ([]byte, error)
+	// MarshalContentType optionally encodes v and returns the concrete
+	// Content-Type to send. This is useful for formats like multipart where
+	// runtime parameters (for example a boundary) are required.
+	MarshalContentType func(v any) ([]byte, string, error)
 	// Unmarshal decodes data into a Go value.
 	Unmarshal func(data []byte) (any, error)
 }
@@ -176,11 +180,32 @@ func makeJSONSafe(v any) any {
 // Encode marshals v using the content type matching mimeType.
 // Returns an error if no matching content type is registered.
 func (r *Registry) Encode(mimeType string, v any) ([]byte, error) {
+	data, _, err := r.EncodeWithType(mimeType, v)
+	return data, err
+}
+
+// EncodeWithType marshals v using the content type matching mimeType and
+// returns both the encoded bytes and the concrete Content-Type header value.
+func (r *Registry) EncodeWithType(mimeType string, v any) ([]byte, string, error) {
 	ct := r.find(mimeType)
 	if ct == nil {
-		return nil, fmt.Errorf("no encoder for content type %q", mimeType)
+		return nil, "", fmt.Errorf("no encoder for content type %q", mimeType)
 	}
-	return ct.Marshal(v)
+	if ct.MarshalContentType != nil {
+		data, concreteType, err := ct.MarshalContentType(v)
+		if err != nil {
+			return nil, "", err
+		}
+		if concreteType == "" {
+			concreteType = mimeType
+		}
+		return data, concreteType, nil
+	}
+	data, err := ct.Marshal(v)
+	if err != nil {
+		return nil, "", err
+	}
+	return data, mimeType, nil
 }
 
 // Decompress wraps r with a decompressor for the named encoding.

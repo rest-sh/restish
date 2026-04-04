@@ -104,7 +104,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs)
+	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType)
 	if err != nil {
 		return fmt.Errorf("building request body: %w", err)
 	}
@@ -120,14 +120,12 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		if mimeType == "" {
 			mimeType = ct
 		}
-		encoded, err := c.content.Encode(mimeType, bodyVal)
+		encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyVal)
 		if err != nil {
 			return fmt.Errorf("encoding request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(encoded)
-		if opts.ContentType == "" {
-			opts.Headers = append(opts.Headers, "Content-Type: "+mimeType)
-		}
+		opts.Headers = append(opts.Headers, "Content-Type: "+actualContentType)
 	}
 
 	var reqBody io.Reader

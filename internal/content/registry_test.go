@@ -5,6 +5,10 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"io"
+	"mime"
+	"mime/multipart"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -142,5 +146,69 @@ func TestTextMIMEType(t *testing.T) {
 	}
 	if s, ok := out.(string); !ok || s != "hello world" {
 		t.Errorf("expected string, got %T(%v)", out, out)
+	}
+}
+
+func TestFormEncoding(t *testing.T) {
+	data, err := reg.Encode("application/x-www-form-urlencoded", map[string]any{
+		"username": "alice",
+		"password": "secret",
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	got := string(data)
+	if got != "password=secret&username=alice" && got != "username=alice&password=secret" {
+		t.Fatalf("unexpected form body: %q", got)
+	}
+}
+
+func TestMultipartEncodingIncludesFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "upload.txt")
+	if err := os.WriteFile(path, []byte("hello upload"), 0o644); err != nil {
+		t.Fatalf("write upload: %v", err)
+	}
+
+	data, contentType, err := reg.EncodeWithType("multipart/form-data", map[string]any{
+		"name": "alice",
+		"file": "@" + path,
+	})
+	if err != nil {
+		t.Fatalf("encode with type: %v", err)
+	}
+
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(data), params["boundary"])
+
+	parts := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		content, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		parts[part.FormName()] = string(content)
+		filenames[part.FormName()] = part.FileName()
+	}
+
+	if parts["name"] != "alice" {
+		t.Fatalf("name part: got %q", parts["name"])
+	}
+	if parts["file"] != "hello upload" {
+		t.Fatalf("file part: got %q", parts["file"])
+	}
+	if filenames["file"] != "upload.txt" {
+		t.Fatalf("file name: got %q", filenames["file"])
 	}
 }
