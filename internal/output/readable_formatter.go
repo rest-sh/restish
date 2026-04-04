@@ -12,6 +12,7 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 )
 
+
 // ReadableFormatter writes the full response (status line, headers, body) in
 // a human-friendly format. When color is true, the output is syntax-highlighted
 // using chroma with restishStyle. The body is always valid JSON so it can be
