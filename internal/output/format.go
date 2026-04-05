@@ -19,6 +19,7 @@ func DefaultFormatters() map[string]Formatter {
 		"table":    &TableFormatter{},
 		"gron":     &GronFormatter{},
 		"cbor":     &CBORFormatter{},
+		"image":    &ImageFormatter{},
 	}
 }
 

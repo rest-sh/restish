@@ -48,6 +48,7 @@ the same response. For example:
 The formatting model is intentionally adaptive:
 
 - explicit `-o <format>` wins
+- TTY + `image/*` content type → `image` formatter (inline terminal rendering)
 - TTY default is `readable`
 - non-TTY default is `raw`
 
@@ -129,7 +130,9 @@ The current implementation reflects this design directly:
 - `internal/output/readable_formatter.go` renders the interactive view
 - `internal/output/json_formatter.go` and `internal/output/raw_formatter.go`
   cover the common machine-oriented paths
-- `internal/cli/http.go` applies filtering before selecting the formatter
+- `internal/output/image_formatter.go` renders `image/*` responses inline on TTY
+- `internal/cli/http.go` applies filtering before selecting the formatter; it also
+  performs content-type-aware dispatch for `image/*` before calling `Select()`
 
 One design detail worth preserving is that the normalized response carries both
 decoded `Body` and original `Raw` bytes. That dual representation is what lets

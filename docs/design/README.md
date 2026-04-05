@@ -44,6 +44,7 @@ concepts introduced earlier in the sequence.
 - [011-pagination-and-hypermedia.md](/Users/daniel/src/restish2/docs/design/011-pagination-and-hypermedia.md) - Link extraction, automatic pagination, and collection handling across pages.
 - [012-streaming.md](/Users/daniel/src/restish2/docs/design/012-streaming.md) - SSE and NDJSON streaming behavior, per-event filtering, and output rules.
 - [013-caching-and-retries.md](/Users/daniel/src/restish2/docs/design/013-caching-and-retries.md) - HTTP response caching, transport layering, and retry behavior.
+- [025-image-rendering.md](/Users/daniel/src/restish2/docs/design/025-image-rendering.md) - Terminal image rendering for image/* responses: Kitty, iTerm2, and half-block fallback.
 
 **Workflows And UX**
 

@@ -299,9 +299,20 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		fmts["table"] = tf
 	}
 
+	// Content-type-aware auto-dispatch: on a TTY with no explicit format or
+	// filter, route image/* responses directly to the image formatter so they
+	// render inline instead of falling through to readable.
+	if tty && fmtName == "" && filterExpr == "@" {
+		if ct := resp.Headers["Content-Type"]; strings.HasPrefix(ct, "image/") {
+			if imgFmt, has := fmts["image"]; has {
+				return imgFmt.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+			}
+		}
+	}
+
 	formatter, ok := output.Select(fmts, fmtName, tty)
 	if !ok {
-		return fmt.Errorf("unknown output format %q; available: readable, json, raw, table, gron, cbor", fmtName)
+		return fmt.Errorf("unknown output format %q; available: readable, json, raw, table, gron, cbor, image", fmtName)
 	}
 
 	// For non-TTY filtered output, use JSON formatter (not raw bytes) since
