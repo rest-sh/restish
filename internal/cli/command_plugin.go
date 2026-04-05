@@ -69,10 +69,11 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 			decl := decl
 			pluginPath := p.Path
 			root.AddCommand(&cobra.Command{
-				Use:   decl.Name,
-				Short: decl.Short,
-				Long:  decl.Long,
-				Args:  cobra.ArbitraryArgs,
+				Use:                decl.Name,
+				Short:              decl.Short,
+				Long:               decl.Long,
+				Args:               cobra.ArbitraryArgs,
+				DisableFlagParsing: true,
 				RunE: func(cmd *cobra.Command, args []string) error {
 					return c.runCommandPlugin(cmd, pluginPath, decl, args)
 				},

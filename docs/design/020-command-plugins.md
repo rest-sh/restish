@@ -9,6 +9,10 @@ they run.
 This plugin type is for workflow-oriented features that do not fit naturally
 into a single request hook.
 
+In practice that often means one plugin-defined top-level entry point, such as
+`bulk` or `mcp`, with the plugin itself owning any nested subcommands and
+workflow-specific flags behind that entry point.
+
 ## Problem
 
 Some extensions need to:
@@ -35,6 +39,11 @@ That command returns a CBOR payload describing one or more commands, including:
 - `passthrough_stdio`
 
 Each declaration becomes a Cobra command on the root CLI.
+
+Restish deliberately disables host-side flag parsing for those commands before
+launching the plugin. That lets the plugin receive raw arguments such as
+`bulk init --url-template=...` and implement its own subcommand tree, flags,
+and `--help` behavior without forcing the host to understand every plugin's UX.
 
 When the user runs one of those commands, Restish starts the plugin and sends
 an initial message:

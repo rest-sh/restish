@@ -60,3 +60,4 @@ concepts introduced earlier in the sequence.
 - [021-tls-signer-plugins.md](/Users/daniel/src/restish2/docs/design/021-tls-signer-plugins.md) - External mTLS signing for hardware-backed or otherwise non-exportable client keys.
 - [022-restish-pkcs11-plugin.md](/Users/daniel/src/restish2/docs/design/022-restish-pkcs11-plugin.md) - The concrete PKCS#11 TLS-signer plugin, including token selection, PIN sourcing, and crypto11 integration.
 - [023-restish-mcp-plugin.md](/Users/daniel/src/restish2/docs/design/023-restish-mcp-plugin.md) - The concrete MCP command plugin that exposes OpenAPI operations as MCP tools over stdio.
+- [024-restish-bulk-plugin.md](/Users/daniel/src/restish2/docs/design/024-restish-bulk-plugin.md) - The concrete bulk-management command plugin that revives the v1 checkout workflow out of process.
