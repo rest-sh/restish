@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,15 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 )
+
+// CurrentPluginAPIVersion is the highest plugin protocol version this build of
+// Restish understands. Plugins that declare a higher version may use protocol
+// features that this host cannot handle; a warning is emitted during discovery.
+const CurrentPluginAPIVersion = 1
+
+// errorWriter receives plugin-discovery warnings. Defaults to os.Stderr;
+// tests may redirect it to suppress or capture output.
+var errorWriter io.Writer = os.Stderr
 
 // Manifest is the metadata a plugin reports when called with
 // --rsh-plugin-manifest.
@@ -129,6 +139,11 @@ func LoadManifest(path string) (*Manifest, error) {
 	}
 	if m.RestishAPIVersion < 1 {
 		return nil, fmt.Errorf("plugin %s: manifest missing or invalid restish_api_version", filepath.Base(path))
+	}
+	if m.RestishAPIVersion > CurrentPluginAPIVersion {
+		// Warn but still load: the plugin may work for the features it actually uses.
+		fmt.Fprintf(errorWriter, "warning: plugin %s declares restish_api_version %d but this host only supports %d; some features may not work\n",
+			filepath.Base(path), m.RestishAPIVersion, CurrentPluginAPIVersion)
 	}
 
 	return &m, nil

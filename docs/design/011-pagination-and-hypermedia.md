@@ -50,7 +50,6 @@ Per-API pagination config can refine how page data is interpreted:
 
 - `items_path` extracts the collection from a nested body field
 - `next_path` can extract a next-page URL from the body
-- `next_param` is reserved for cursor-style follow-up behavior
 
 The overall intent is:
 

@@ -84,6 +84,13 @@ The plugin may:
 The follow-up path is especially important: the plugin asks Restish to issue
 the request, so auth, retries, TLS, and other core behaviors still apply.
 
+**Known limitation:** the `follow` message only carries `method` and `uri`.
+There is no way to attach a request body or additional headers to the
+follow-up request. Follow is therefore only appropriate for bodyless
+redirects (e.g. redirecting a GET to a different endpoint). If a plugin
+needs to issue a follow-up request with a body, it should use the command
+plugin protocol instead.
+
 ### Loader Hook
 
 Loader plugins let Restish recognize non-built-in spec formats. A loader plugin

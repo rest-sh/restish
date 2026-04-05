@@ -24,32 +24,44 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 	if err != nil {
 		return nil, err
 	}
+
+	// cleanup kills the process and releases all associated resources. It is
+	// called on every error path before TLSCertificateFromPlugin returns.
+	// Closing stdin before Kill allows the plugin to observe EOF and shut down
+	// gracefully on platforms where Kill delivery is not instantaneous.
+	cleanup := func() {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		_ = proc.Process.Kill()
+		_ = proc.Wait()
+	}
+
 	if err := pluginwire.WriteMessage(stdin, map[string]any{
 		"type":   "init",
 		"params": params,
 	}); err != nil {
-		_ = proc.Process.Kill()
+		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: init: %w", filepath.Base(path), err)
 	}
 
 	var ready map[string]any
 	if err := readTLSSignerMessage(stdout, &ready); err != nil {
-		_ = proc.Process.Kill()
+		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready: %w", filepath.Base(path), err)
 	}
 	if msgType, _ := ready["type"].(string); msgType != "ready" {
-		_ = proc.Process.Kill()
+		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: expected ready message, got %q", filepath.Base(path), msgType)
 	}
 
-	der := msgBytes(ready["certificate"])
+	der := MsgBytes(ready["certificate"])
 	if len(der) == 0 {
-		_ = proc.Process.Kill()
+		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready message missing certificate", filepath.Base(path))
 	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		_ = proc.Process.Kill()
+		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: parse certificate: %w", filepath.Base(path), err)
 	}
 
@@ -69,15 +81,31 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 	return tlsCert, nil
 }
 
+// PluginSigner implements crypto.Signer by delegating Sign operations to a
+// long-lived tls-signer plugin subprocess.
 type PluginSigner struct {
 	path   string
 	stdin  io.WriteCloser
-	stdout io.Reader
+	stdout io.ReadCloser
 	stderr *bytes.Buffer
 	proc   *exec.Cmd
 	pub    crypto.PublicKey
 
-	mu sync.Mutex
+	mu   sync.Mutex
+	dead bool // set to true after any fatal error; guarded by mu
+}
+
+// shutdown kills the plugin process and releases its resources.
+// It must be called with mu held. Subsequent calls are no-ops.
+func (s *PluginSigner) shutdown() {
+	if s.dead {
+		return
+	}
+	s.dead = true
+	_ = s.stdin.Close()
+	_ = s.stdout.Close()
+	_ = s.proc.Process.Kill()
+	_ = s.proc.Wait()
 }
 
 func (s *PluginSigner) Public() crypto.PublicKey {
@@ -88,8 +116,8 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.proc.ProcessState != nil && s.proc.ProcessState.Exited() {
-		return nil, fmt.Errorf("tls-signer %s: process exited", filepath.Base(s.path))
+	if s.dead {
+		return nil, fmt.Errorf("tls-signer %s: process has exited", filepath.Base(s.path))
 	}
 
 	hash := crypto.Hash(0)
@@ -112,24 +140,26 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 		msg["salt_length"] = saltLength
 	}
 	if err := pluginwire.WriteMessage(s.stdin, msg); err != nil {
+		s.shutdown()
 		return nil, fmt.Errorf("tls-signer %s: write sign request: %w", filepath.Base(s.path), err)
 	}
 
 	var reply map[string]any
 	if err := readTLSSignerMessage(s.stdout, &reply); err != nil {
+		s.shutdown()
 		return nil, fmt.Errorf("tls-signer %s: sign reply: %w", filepath.Base(s.path), err)
 	}
 	if text, _ := reply["error"].(string); text != "" {
 		return nil, fmt.Errorf("tls-signer %s: %s", filepath.Base(s.path), text)
 	}
-	sig := msgBytes(reply["signature"])
+	sig := MsgBytes(reply["signature"])
 	if len(sig) == 0 {
 		return nil, fmt.Errorf("tls-signer %s: sign reply missing signature", filepath.Base(s.path))
 	}
 	return sig, nil
 }
 
-func startTLSSigner(path string) (io.Reader, io.WriteCloser, *bytes.Buffer, *exec.Cmd, error) {
+func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, *exec.Cmd, error) {
 	proc := exec.Command(path)
 	stdin, err := proc.StdinPipe()
 	if err != nil {
@@ -147,7 +177,13 @@ func startTLSSigner(path string) (io.Reader, io.WriteCloser, *bytes.Buffer, *exe
 	return stdout, stdin, &stderr, proc, nil
 }
 
-func readTLSSignerMessage(r io.Reader, out any) error {
+// readTLSSignerMessage reads one CBOR message from r with a 10-second timeout.
+//
+// If the deadline fires, r is closed to unblock the background reader goroutine
+// and the function waits for that goroutine to exit before returning — so there
+// is no goroutine leak regardless of whether the read succeeded or timed out.
+// Callers should treat any error as fatal and shut down the signer process.
+func readTLSSignerMessage(r io.ReadCloser, out any) error {
 	type result struct{ err error }
 	done := make(chan result, 1)
 	go func() {
@@ -157,30 +193,8 @@ func readTLSSignerMessage(r io.Reader, out any) error {
 	case res := <-done:
 		return res.err
 	case <-time.After(10 * time.Second):
+		_ = r.Close() // unblocks the goroutine above
+		<-done        // wait for it to exit — no leak
 		return fmt.Errorf("timed out waiting for plugin reply")
-	}
-}
-
-func msgBytes(v any) []byte {
-	switch data := v.(type) {
-	case []byte:
-		return data
-	case string:
-		return []byte(data)
-	case []any:
-		out := make([]byte, 0, len(data))
-		for _, item := range data {
-			switch n := item.(type) {
-			case uint64:
-				out = append(out, byte(n))
-			case int64:
-				out = append(out, byte(n))
-			case int:
-				out = append(out, byte(n))
-			}
-		}
-		return out
-	default:
-		return nil
 	}
 }

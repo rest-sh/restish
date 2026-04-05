@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
@@ -120,8 +121,13 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 		return fmt.Errorf("command plugin: send init: %w", err)
 	}
 
+	// done is closed when the command loop exits, signalling streamPluginStdin
+	// to stop forwarding. For TTY stdin the inner reader goroutine may remain
+	// briefly blocked until the user interacts, but it will exit promptly once
+	// stdinPipe is closed and the next write fails.
+	done := make(chan struct{})
 	if decl.PassthroughStdio {
-		go c.streamPluginStdin(writer)
+		go c.streamPluginStdin(writer, done)
 	}
 
 	var loopErr error
@@ -146,29 +152,66 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 		}
 	}
 
+	close(done)
 	_ = stdinPipe.Close()
 	_ = proc.Wait()
 	return loopErr
 }
 
-func (c *CLI) streamPluginStdin(writer *commandPluginWriter) {
-	buf := make([]byte, 32*1024)
-	for {
-		n, err := c.Stdin.Read(buf)
-		if n > 0 {
-			data := append([]byte(nil), buf[:n]...)
-			if writeErr := writer.WriteMessage(map[string]any{
-				"type": "stdin-data",
-				"data": data,
-			}); writeErr != nil {
+// streamPluginStdin forwards c.Stdin to the command plugin as "stdin-data"
+// messages until stdin closes, a write error occurs, or done is closed.
+//
+// An inner goroutine performs the blocking Read from c.Stdin so that the outer
+// goroutine can select on both the read result and the done signal. When done
+// is closed the outer goroutine exits immediately; the inner goroutine remains
+// alive only until c.Stdin yields its next byte (TTY) or closes (pipe), at
+// which point it exits through the done-guarded channel send.
+func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{}) {
+	type chunk struct {
+		data []byte
+		err  error
+	}
+	reads := make(chan chunk, 4)
+
+	go func() {
+		buf := make([]byte, 32*1024)
+		for {
+			n, err := c.Stdin.Read(buf)
+			var data []byte
+			if n > 0 {
+				data = make([]byte, n)
+				copy(data, buf[:n])
+			}
+			select {
+			case reads <- chunk{data: data, err: err}:
+			case <-done:
+				return
+			}
+			if err != nil {
 				return
 			}
 		}
-		if err == io.EOF {
-			_ = writer.WriteMessage(map[string]any{"type": "stdin-close"})
-			return
-		}
-		if err != nil {
+	}()
+
+	for {
+		select {
+		case r := <-reads:
+			if len(r.data) > 0 {
+				if writeErr := writer.WriteMessage(map[string]any{
+					"type": "stdin-data",
+					"data": r.data,
+				}); writeErr != nil {
+					return
+				}
+			}
+			if r.err == io.EOF {
+				_ = writer.WriteMessage(map[string]any{"type": "stdin-close"})
+				return
+			}
+			if r.err != nil {
+				return
+			}
+		case <-done:
 			return
 		}
 	}
@@ -190,11 +233,11 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
 	case "stdout-data":
-		if data := msgBytes(msg["data"]); len(data) > 0 {
+		if data := internalplugin.MsgBytes(msg["data"]); len(data) > 0 {
 			_, _ = c.Stdout.Write(data)
 		}
 	case "stderr-data":
-		if data := msgBytes(msg["data"]); len(data) > 0 {
+		if data := internalplugin.MsgBytes(msg["data"]); len(data) > 0 {
 			_, _ = cmd.ErrOrStderr().Write(data)
 		}
 	case "progress", "spinner", "log":
@@ -390,26 +433,3 @@ func isEOFLike(err error) bool {
 	return strings.Contains(s, "EOF") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
 }
 
-func msgBytes(v any) []byte {
-	switch vt := v.(type) {
-	case []byte:
-		return vt
-	case string:
-		return []byte(vt)
-	case []any:
-		out := make([]byte, 0, len(vt))
-		for _, item := range vt {
-			switch b := item.(type) {
-			case uint64:
-				out = append(out, byte(b))
-			case int64:
-				out = append(out, byte(b))
-			case int:
-				out = append(out, byte(b))
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}

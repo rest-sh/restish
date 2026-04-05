@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
@@ -25,13 +25,16 @@ func CallFormatterHook(path string, in any) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, path)
 	cmd.Stdin = &stdin
 	cmd.Stdout = &stdout
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), err, msg)
+		}
 		return nil, fmt.Errorf("hook %s: exec: %w", filepath.Base(path), err)
 	}
 	return stdout.Bytes(), nil
@@ -42,7 +45,8 @@ func CallFormatterHook(path string, in any) ([]byte, error) {
 // unmarshals it into out (which must be a pointer).
 //
 // The plugin must exit 0 for the call to succeed; a non-zero exit is returned
-// as an error. The plugin has 30 seconds to respond before it is killed.
+// as an error along with any text the plugin wrote to stderr. The plugin has
+// 30 seconds to respond before it is killed.
 func CallHook(path string, in, out any) error {
 	var stdin bytes.Buffer
 	if err := pluginwire.WriteMessage(&stdin, in); err != nil {
@@ -52,13 +56,16 @@ func CallHook(path string, in, out any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, path)
 	cmd.Stdin = &stdin
 	cmd.Stdout = &stdout
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), err, msg)
+		}
 		return fmt.Errorf("hook %s: exec: %w", filepath.Base(path), err)
 	}
 

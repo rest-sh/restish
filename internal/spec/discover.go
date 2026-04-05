@@ -79,30 +79,31 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	defer cancel()
 
 	type result struct {
-		spec *APISpec
-		ttl  time.Duration
-		err  error
+		spec     *APISpec
+		ttl      time.Duration
+		err      error
+		priority int // 0 = explicit SpecURL (preferred for errors); 1 = heuristic probes
 	}
 
 	// Use a large buffer so goroutines never block on send.
 	ch := make(chan result, 16)
 	var wg sync.WaitGroup
 
-	launch := func(fn func() (string, []byte, time.Duration, error)) {
+	launch := func(priority int, fn func() (string, []byte, time.Duration, error)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			ct, body, ttl, err := fn()
 			if err != nil {
 				select {
-				case ch <- result{err: err}:
+				case ch <- result{err: err, priority: priority}:
 				case <-ctx.Done():
 				}
 				return
 			}
 			spec, loadErr := load(ct, body, loaders)
 			select {
-			case ch <- result{spec: spec, ttl: ttl, err: loadErr}:
+			case ch <- result{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
 			case <-ctx.Done():
 			}
 		}()
@@ -113,17 +114,17 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		tr = http.DefaultTransport
 	}
 
-	// Explicit spec URL.
+	// Explicit spec URL (priority 0 — most authoritative error source).
 	if cfg.SpecURL != "" {
 		u := cfg.SpecURL
-		launch(func() (string, []byte, time.Duration, error) {
+		launch(0, func() (string, []byte, time.Duration, error) {
 			return fetchBytes(ctx, u, tr)
 		})
 	}
 
 	// Probe base URL: extract Link headers and try the body itself.
 	baseURL := cfg.BaseURL
-	launch(func() (string, []byte, time.Duration, error) {
+	launch(1, func() (string, []byte, time.Duration, error) {
 		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr)
 		if err != nil {
 			return "", nil, 0, err
@@ -134,7 +135,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		// counter is still ≥1 when the inner wg.Add(1) is called.
 		for _, lu := range linkURLs {
 			u := lu
-			launch(func() (string, []byte, time.Duration, error) {
+			launch(1, func() (string, []byte, time.Duration, error) {
 				return fetchBytes(ctx, u, tr)
 			})
 		}
@@ -144,7 +145,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	// Well-known paths.
 	for _, path := range []string{"/openapi.json", "/openapi.yaml"} {
 		u := joinURL(cfg.BaseURL, path)
-		launch(func() (string, []byte, time.Duration, error) {
+		launch(1, func() (string, []byte, time.Duration, error) {
 			return fetchBytes(ctx, u, tr)
 		})
 	}
@@ -155,19 +156,24 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		close(ch)
 	}()
 
-	var lastErr error
+	// Collect errors, preferring lower-priority values (0 = SpecURL is most
+	// authoritative). This ensures a 401 from an explicit SpecURL beats a 404
+	// from a well-known-path probe, regardless of goroutine arrival order.
+	bestErrPriority := int(^uint(0) >> 1) // max int
+	var bestErr error
 	for r := range ch {
 		if r.spec != nil {
 			cancel() // stop remaining probes
 			return r.spec, r.ttl, nil
 		}
-		if r.err != nil {
-			lastErr = r.err
+		if r.err != nil && r.priority <= bestErrPriority {
+			bestErrPriority = r.priority
+			bestErr = r.err
 		}
 	}
 
-	if lastErr != nil {
-		return nil, 0, fmt.Errorf("spec discovery failed: %w", lastErr)
+	if bestErr != nil {
+		return nil, 0, fmt.Errorf("spec discovery failed: %w", bestErr)
 	}
 	return nil, 0, fmt.Errorf("no API spec found at %s", cfg.BaseURL)
 }
@@ -224,8 +230,9 @@ func cacheTTL(resp *http.Response) time.Duration {
 	return 0
 }
 
-// linkRel matches a Link header value and captures the URL and rel attribute.
-var linkRel = regexp.MustCompile(`<([^>]+)>\s*(?:;[^;]*)*;\s*rel="([^"]+)"`)
+// linkRel matches a Link header entry and captures the URL and rel value.
+// RFC 8288 allows both quoted (rel="next") and unquoted (rel=next) forms.
+var linkRel = regexp.MustCompile(`<([^>]+)>[^<]*\brel=(?:"([^"]+)"|([^\s,;]+))`)
 
 // extractSpecLinks parses Link response headers and returns URLs whose rel is
 // "service-desc" or "describedby".
@@ -233,7 +240,11 @@ func extractSpecLinks(baseURL string, h http.Header) []string {
 	var out []string
 	for _, header := range h["Link"] {
 		for _, match := range linkRel.FindAllStringSubmatch(header, -1) {
+			// match[2] = quoted rel value; match[3] = unquoted rel value.
 			rel := match[2]
+			if rel == "" {
+				rel = match[3]
+			}
 			if rel == "service-desc" || rel == "describedby" {
 				u := resolveRef(baseURL, match[1])
 				if u != "" {

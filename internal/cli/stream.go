@@ -83,8 +83,9 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		// EOF / cancelled context: not an error for streaming.
-		return nil
+		// Surface unexpected I/O errors on stderr so users can distinguish a
+		// network interruption from a clean end-of-stream.
+		fmt.Fprintf(c.Stderr, "warning: SSE stream error: %v\n", err)
 	}
 	return nil
 }
@@ -113,7 +114,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil // treat I/O errors as EOF for streaming
+		fmt.Fprintf(c.Stderr, "warning: NDJSON stream error: %v\n", err)
 	}
 	return nil
 }

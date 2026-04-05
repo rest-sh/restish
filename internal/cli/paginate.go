@@ -53,7 +53,10 @@ func (c *CLI) runPagination(
 	var allItems []any
 
 	// Process first page.
-	items := pageItems(firstResp.Body, pagCfg)
+	items, filterErr := pageItems(firstResp.Body, pagCfg)
+	if filterErr != nil {
+		fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
+	}
 	items, done := applyItemLimits(items, allItems, maxItems)
 	if collect {
 		allItems = append(allItems, items...)
@@ -100,7 +103,10 @@ func (c *CLI) runPagination(
 			}
 		}
 
-		items = pageItems(resp.Body, pagCfg)
+		items, filterErr = pageItems(resp.Body, pagCfg)
+		if filterErr != nil {
+			fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
+		}
 		items, done = applyItemLimits(items, allItems, maxItems)
 		if collect {
 			allItems = append(allItems, items...)
@@ -147,28 +153,31 @@ func (c *CLI) streamItems(items []any) error {
 
 // pageItems extracts the items array from a page body using pagCfg.ItemsPath.
 // Falls back to treating the body as an array, or wrapping it as a single item.
-func pageItems(body any, pagCfg *config.PaginationConfig) []any {
+// A non-nil filterErr is returned when ItemsPath is set but the filter fails,
+// so callers can surface the problem rather than silently returning no items.
+func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 	if pagCfg != nil && pagCfg.ItemsPath != "" {
 		if m, ok := body.(map[string]any); ok {
 			result, err := filter.Apply(pagCfg.ItemsPath, m, filter.LangAuto)
-			if err == nil {
-				if arr, ok := result.([]any); ok {
-					return arr
-				}
-				if result != nil {
-					return []any{result}
-				}
+			if err != nil {
+				return nil, fmt.Errorf("items_path filter %q: %w", pagCfg.ItemsPath, err)
+			}
+			if arr, ok := result.([]any); ok {
+				return arr, nil
+			}
+			if result != nil {
+				return []any{result}, nil
 			}
 		}
-		return nil
+		return nil, nil
 	}
 	if arr, ok := body.([]any); ok {
-		return arr
+		return arr, nil
 	}
 	if body != nil {
-		return []any{body}
+		return []any{body}, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // resolveNextURL returns the next-page URL from resp.Links or pagCfg.NextPath.
@@ -180,7 +189,7 @@ func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) stri
 		}
 	}
 	// 2. Per-API next_path override (extracts URL directly from body).
-	if pagCfg != nil && pagCfg.NextPath != "" && pagCfg.NextParam == "" {
+	if pagCfg != nil && pagCfg.NextPath != "" {
 		if m, ok := resp.Body.(map[string]any); ok {
 			result, err := filter.Apply(pagCfg.NextPath, m, filter.LangAuto)
 			if err == nil {

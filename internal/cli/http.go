@@ -371,6 +371,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 			baseURL = prof.BaseURL
 		}
 	}
+	if prof == nil && profileName != "default" {
+		fmt.Fprintf(c.Stderr, "warning: profile %q not found for API %q; using API defaults\n", profileName, apiName)
+	}
 
 	// Build the expanded URL.
 	expanded := strings.TrimRight(baseURL, "/")

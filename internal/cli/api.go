@@ -149,6 +149,9 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	}
 	cfg.APIs[apiName] = apiCfg
 
+	if config.HasComments(cfgPath) {
+		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved\n", cfgPath)
+	}
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
@@ -226,7 +229,11 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return config.Save(c.configFilePath(), c.cfg)
+	cfgPath := c.configFilePath()
+	if config.HasComments(cfgPath) {
+		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved\n", cfgPath)
+	}
+	return config.Save(cfgPath, c.cfg)
 }
 
 // setAPIField updates a single field of apiCfg identified by a dot-path key.

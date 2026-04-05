@@ -43,9 +43,6 @@ type PaginationConfig struct {
 	// NextPath is a filter expression that extracts the next-page URL from the
 	// response body (alternative to Link header rel="next").
 	NextPath string `json:"next_path,omitempty"`
-	// NextParam is the query parameter name to use for cursor-based pagination.
-	// The cursor value is extracted using NextPath.
-	NextParam string `json:"next_param,omitempty"`
 }
 
 // ProfileConfig holds per-profile overrides for an API.
@@ -126,6 +123,17 @@ func defaultDir() string {
 		return filepath.Join(home, ".config", "restish")
 	}
 	return ".restish"
+}
+
+// HasComments reports whether the config file at path contains JSONC comments.
+// Returns false when the file does not exist or cannot be read.
+// Use this before calling Save to warn users that comments will be lost.
+func HasComments(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return string(jsonc.ToJSON(data)) != string(data)
 }
 
 // Save serialises cfg as indented JSON and writes it to path, creating the
