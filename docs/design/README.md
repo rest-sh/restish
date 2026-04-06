@@ -25,6 +25,7 @@ concepts introduced earlier in the sequence.
 
 **Foundations**
 
+- [000-restish-v1-baseline.md](/Users/daniel/src/restish2/docs/design/000-restish-v1-baseline.md) - Feature inventory of Restish v1, captured as the baseline that informed v2 design.
 - [001-cli-architecture.md](/Users/daniel/src/restish2/docs/design/001-cli-architecture.md) - Central `CLI` object, reduced global state, and registry-based composition.
 - [002-config-and-profiles.md](/Users/daniel/src/restish2/docs/design/002-config-and-profiles.md) - Single-file config model, API registrations, and profile layering.
 - [003-content-types-and-encodings.md](/Users/daniel/src/restish2/docs/design/003-content-types-and-encodings.md) - Registry-driven body encoding/decoding and compression handling.
