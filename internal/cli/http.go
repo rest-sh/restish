@@ -65,19 +65,25 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
-	return c.runHTTPInternal(cmd, method, args, false)
+	return c.runHTTPInternal(cmd, method, args, false, nil)
 }
 
 // runHTTPInternal is the implementation of runHTTP. followMode=true is used for
 // follow-up requests triggered by response-middleware plugins; in that mode,
 // response-middleware is skipped to prevent infinite loops.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool) error {
+// extraHeaders holds additional "Name: Value" strings injected by generated
+// commands (e.g. OpenAPI header/cookie parameters) that must not be stored on
+// the cobra.Command itself since command objects are reused across invocations.
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
 		return err
+	}
+	if len(extraHeaders) > 0 {
+		opts.Headers = append(opts.Headers, extraHeaders...)
 	}
 
 	// Resolve API short names and merge persistent profile headers/query.
@@ -183,7 +189,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 			return nil
 		}
 		if followReq != nil {
-			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true)
+			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil)
 		}
 	}
 

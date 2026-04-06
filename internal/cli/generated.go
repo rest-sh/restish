@@ -246,30 +246,40 @@ func (c *CLI) runGeneratedOp(
 	required, optional []*paramInfo,
 	args []string,
 ) error {
-	// Substitute required params into the path and build query string.
+	// Substitute required params into the path, query string, and headers.
 	path := opPath
 	q := url.Values{}
+	var extraHeaders []string
 	bodyArgStart := len(required)
 
 	for i, p := range required {
 		val := args[i]
-		if p.in == "path" {
+		switch p.in {
+		case "path":
 			path = strings.ReplaceAll(path, "{"+p.name+"}", url.PathEscape(val))
-		} else if p.in == "query" {
+		case "query":
 			q.Set(p.name, val)
+		case "header":
+			extraHeaders = append(extraHeaders, p.name+": "+val)
+		case "cookie":
+			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+val)
 		}
 	}
 
-	// Collect optional query param flags.
+	// Collect optional param flags.
 	for _, p := range optional {
-		if p.in != "query" {
-			continue
-		}
 		val, err := cmd.Flags().GetString(p.flagName)
 		if err != nil || val == "" {
 			continue
 		}
-		q.Set(p.name, val)
+		switch p.in {
+		case "query":
+			q.Set(p.name, val)
+		case "header":
+			extraHeaders = append(extraHeaders, p.name+": "+val)
+		case "cookie":
+			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+val)
+		}
 	}
 
 	// Build the raw URL using the "apiname/path" shorthand.
@@ -279,7 +289,7 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
-	return c.runHTTP(cmd, method, append([]string{rawURL}, bodyArgs...))
+	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders)
 }
 
 // extractPathParamNames returns path parameter names in left-to-right order
