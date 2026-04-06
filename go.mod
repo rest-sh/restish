@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/ThalesIgnite/crypto11 v1.2.5
 	github.com/alecthomas/chroma/v2 v2.23.1
+	github.com/amazon-ion/ion-go v1.5.0
 	github.com/andybalholm/brotli v1.2.1
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/danielgtaylor/mexpr v1.9.0

@@ -12,12 +12,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/shamaton/msgpack/v2"
 	"go.yaml.in/yaml/v3"
 )
 
-// Default returns a Registry pre-loaded with JSON, YAML, CBOR, msgpack,
+// Default returns a Registry pre-loaded with JSON, YAML, CBOR, msgpack, Ion,
 // plain text, and gzip/deflate/brotli encodings.
 func Default() *Registry {
 	r := New()
@@ -80,6 +81,22 @@ func Default() *Registry {
 		Unmarshal: func(data []byte) (any, error) {
 			var v any
 			if err := msgpack.Unmarshal(data, &v); err != nil {
+				return nil, err
+			}
+			return v, nil
+		},
+	})
+
+	r.AddContentType(&ContentType{
+		Name:      "ion",
+		MIMETypes: []string{"application/ion", "text/ion"},
+		Quality:   0.8,
+		Marshal: func(v any) ([]byte, error) {
+			return ion.MarshalText(v)
+		},
+		Unmarshal: func(data []byte) (any, error) {
+			var v any
+			if err := ion.Unmarshal(data, &v); err != nil {
 				return nil, err
 			}
 			return v, nil
