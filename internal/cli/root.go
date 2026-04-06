@@ -49,6 +49,7 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addLinksCommand(root)
 	c.addPluginCommand(root)
 	c.addCommandPlugins(root)
+	c.setupMarkdownHelp(root)
 	return root
 }
 
