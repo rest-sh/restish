@@ -48,6 +48,35 @@ func installHookPlugin(t *testing.T) string {
 	return pluginDir
 }
 
+func installCSVPlugin(t *testing.T) string {
+	t.Helper()
+	skipNoCSVPlugin(t)
+
+	data, err := os.ReadFile(testCSVPluginBin)
+	if err != nil {
+		t.Fatalf("read csv plugin: %v", err)
+	}
+
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(pluginDir, "restish-csv")
+	if runtime.GOOS == "windows" {
+		dest += ".exe"
+	}
+	if err := os.WriteFile(dest, data, 0o755); err != nil {
+		t.Fatalf("write csv plugin: %v", err)
+	}
+
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+
+	return pluginDir
+}
+
 // hookJSONServer starts a test server that always responds with status and JSON body.
 func hookJSONServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
@@ -216,6 +245,27 @@ func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
 
 	if strings.Contains(out.String(), "HOOK FORMATTED") {
 		t.Errorf("expected default output, got plugin output:\n%s", out.String())
+	}
+}
+
+func TestCSVFormatterPlugin(t *testing.T) {
+	installCSVPlugin(t)
+
+	srv := hookJSONServer(t, 200, `[{"id":1,"name":"alpha"},{"id":2,"name":"beta","active":true}]`)
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "-o", "csv", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"active,id,name",
+		",1,alpha",
+		"true,2,beta",
+		"",
+	}, "\n")
+	if got := out.String(); got != want {
+		t.Fatalf("csv output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
 

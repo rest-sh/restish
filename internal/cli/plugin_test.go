@@ -18,6 +18,7 @@ var testCmdPluginBin string
 var testMCPPluginBin string
 var testBulkPluginBin string
 var testTLSSignerPluginBin string
+var testCSVPluginBin string
 
 // TestMain compiles the test plugin binaries once for the whole test run.
 func TestMain(m *testing.M) {
@@ -77,6 +78,18 @@ func TestMain(m *testing.M) {
 		testBulkPluginBin = bulkBin
 	}
 
+	csvBin := filepath.Join(os.TempDir(), "restish-csv")
+	if runtime.GOOS == "windows" {
+		csvBin += ".exe"
+	}
+	cmdCSV := exec.Command("go", "build", "-o", csvBin, "../../cmd/restish-csv")
+	cmdCSV.Dir = testdataDir()
+	if out, err := cmdCSV.CombinedOutput(); err != nil {
+		_ = out
+	} else {
+		testCSVPluginBin = csvBin
+	}
+
 	tlsSignerBin := filepath.Join(os.TempDir(), "restish-test-tls-signer")
 	if runtime.GOOS == "windows" {
 		tlsSignerBin += ".exe"
@@ -115,6 +128,9 @@ func TestMain(m *testing.M) {
 	}
 	if testTLSSignerPluginBin != "" {
 		_ = os.Remove(testTLSSignerPluginBin)
+	}
+	if testCSVPluginBin != "" {
+		_ = os.Remove(testCSVPluginBin)
 	}
 	os.Exit(code)
 }
@@ -166,6 +182,13 @@ func skipNoTLSSignerPlugin(t *testing.T) {
 	t.Helper()
 	if testTLSSignerPluginBin == "" {
 		t.Skip("tls-signer plugin binary not compiled; skipping tls-signer plugin tests")
+	}
+}
+
+func skipNoCSVPlugin(t *testing.T) {
+	t.Helper()
+	if testCSVPluginBin == "" {
+		t.Skip("csv plugin binary not compiled; skipping csv plugin tests")
 	}
 }
 
