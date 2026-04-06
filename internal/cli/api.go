@@ -133,8 +133,14 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	// Build the API config entry.
 	apiCfg := &config.APIConfig{BaseURL: baseURL}
 	if apiSpec != nil {
-		if xcli, err := spec.ReadXCLIConfig(apiSpec); err == nil && xcli != nil {
-			applyXCLIConfig(apiCfg, xcli)
+		xcli, _ := spec.ReadXCLIConfig(apiSpec)
+		if xcli == nil && apiSpec.Document != nil {
+			// No x-cli-config extension — try to derive auth from the spec's
+			// declared security schemes.
+			xcli = spec.FallbackXCLIConfig(apiSpec.Document)
+		}
+		if xcli != nil {
+			applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
 		}
 	}
 
