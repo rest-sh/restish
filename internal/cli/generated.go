@@ -55,7 +55,7 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 			if mo.op == nil || mo.op.OperationId == "" {
 				continue
 			}
-			cmd := c.buildOperationCommand(apiName, path, mo.method, mo.op)
+			cmd := c.buildOperationCommand(apiName, path, mo.method, mo.op, apiCfg.OperationBase)
 			if cmd == nil {
 				continue
 			}
@@ -90,7 +90,10 @@ type paramInfo struct {
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
 // Returns nil when the operation is excluded via x-cli-ignore.
-func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.Operation) *cobra.Command {
+// operationBase, when non-empty, replaces the apiName short-name prefix in
+// generated URLs so operations are served from a different host/path than
+// the API root.
+func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.Operation, operationBase string) *cobra.Command {
 	// x-cli-ignore: exclude this operation from the CLI entirely.
 	if opExtBool(op, "x-cli-ignore") {
 		return nil
@@ -209,7 +212,7 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 		Hidden:     hidden,
 		Deprecated: deprecatedNotice(deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runGeneratedOp(cmd, apiName, opPath, method, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, opPath, method, required, optional, args, operationBase)
 		},
 	}
 
@@ -245,6 +248,7 @@ func (c *CLI) runGeneratedOp(
 	apiName, opPath, method string,
 	required, optional []*paramInfo,
 	args []string,
+	operationBase string,
 ) error {
 	// Substitute required params into the path, query string, and headers.
 	path := opPath
@@ -282,8 +286,16 @@ func (c *CLI) runGeneratedOp(
 		}
 	}
 
-	// Build the raw URL using the "apiname/path" shorthand.
-	rawURL := apiName + path
+	// Build the raw URL. When operation_base is set, use it as the full URL
+	// prefix instead of the short-name shorthand so that generated commands
+	// hit a different host/path than the API root (auth is still applied via
+	// the operation_base prefix match in applyAPIProfile).
+	var rawURL string
+	if operationBase != "" {
+		rawURL = strings.TrimRight(operationBase, "/") + path
+	} else {
+		rawURL = apiName + path
+	}
 	if qs := q.Encode(); qs != "" {
 		rawURL += "?" + qs
 	}

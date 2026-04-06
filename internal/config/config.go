@@ -27,7 +27,17 @@ type APIConfig struct {
 	// BaseURL is the base URL for all requests to this API.
 	BaseURL string `json:"base_url,omitempty"`
 	// SpecURL is the URL of the OpenAPI spec for this API (optional).
+	// Mutually exclusive with SpecFiles; SpecFiles takes precedence when both are set.
 	SpecURL string `json:"spec_url,omitempty"`
+	// SpecFiles is an ordered list of local file paths or URLs to load the API
+	// spec from. Multiple files are deep-merged in order (later entries win on
+	// conflict). When set, network spec discovery is skipped entirely.
+	SpecFiles []string `json:"spec_files,omitempty"`
+	// OperationBase, when set, is used as the URL prefix for paths generated
+	// from OpenAPI operations instead of base_url. Useful when the spec's
+	// servers block differs from the actual base URL, or when operations are
+	// served from a different host than the API root.
+	OperationBase string `json:"operation_base,omitempty"`
 	// Profiles is a map of profile name to profile configuration.
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
 	// Pagination holds optional per-API pagination configuration.

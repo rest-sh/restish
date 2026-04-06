@@ -376,6 +376,41 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 	apiName, rest, _ := strings.Cut(rawURL, "/")
 	api, ok := c.cfg.APIs[apiName]
 	if !ok {
+		// Fallback: rawURL may be a full URL built from an operation_base prefix.
+		// Check if any registered API's operation_base is a prefix of rawURL,
+		// and if so apply that API's profile for auth/headers without rewriting
+		// the URL (it is already correct).
+		for name, apiCfg := range c.cfg.APIs {
+			if apiCfg.OperationBase == "" {
+				continue
+			}
+			base := strings.TrimRight(apiCfg.OperationBase, "/")
+			if strings.HasPrefix(rawURL, base) {
+				var prof *config.ProfileConfig
+				if apiCfg.Profiles != nil {
+					prof = apiCfg.Profiles[profileName]
+				}
+				if prof != nil {
+					opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
+					opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
+					opts.OnRequest = c.authOnRequest(name, profileName, prof)
+					if opts.TLSSignerName == "" {
+						opts.TLSSignerName = prof.TLSSigner
+					}
+					for k, v := range prof.TLSSignerParams {
+						if opts.TLSSignerParams == nil {
+							opts.TLSSignerParams = map[string]string{}
+						}
+						if _, exists := opts.TLSSignerParams[k]; !exists {
+							opts.TLSSignerParams[k] = v
+						}
+					}
+				} else {
+					opts.OnRequest = c.authOnRequest(name, profileName, nil)
+				}
+				return rawURL, name, opts
+			}
+		}
 		return rawURL, "", opts
 	}
 

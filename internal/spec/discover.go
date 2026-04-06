@@ -6,10 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // DiscoverConfig holds parameters for spec discovery for a single API.
@@ -19,7 +23,12 @@ type DiscoverConfig struct {
 	// BaseURL is the API's root URL.
 	BaseURL string
 	// SpecURL, if non-empty, is checked before probing other locations.
+	// Ignored when SpecFiles is set.
 	SpecURL string
+	// SpecFiles, when non-empty, is an ordered list of local file paths or
+	// URLs to load the spec from. Multiple files are deep-merged in order
+	// (later entries win on conflict). Network discovery is skipped entirely.
+	SpecFiles []string
 	// CacheDir is the directory for CBOR spec cache files.
 	CacheDir string
 	// Version is the running restish version; cache entries with a different
@@ -46,7 +55,26 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 		}
 	}
 
-	// 2-5. Network discovery (parallel).
+	// 2. Explicit spec files (local paths or URLs) bypass all network probing.
+	if len(cfg.SpecFiles) > 0 {
+		spec, err := loadSpecFiles(ctx, cfg, loaders)
+		if err != nil {
+			return nil, err
+		}
+		if spec != nil && cfg.CacheDir != "" {
+			entry := &cacheEntry{
+				Version:     cfg.Version,
+				FetchedAt:   time.Now(),
+				ExpiresAt:   time.Now().Add(24 * time.Hour),
+				ContentType: spec.ContentType,
+				Raw:         spec.Raw,
+			}
+			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
+		}
+		return spec, nil
+	}
+
+	// 3-6. Network discovery (parallel).
 	spec, ttl, err := discoverFromNetwork(ctx, cfg, loaders)
 	if err != nil {
 		return nil, err
@@ -272,4 +300,102 @@ func resolveRef(base, ref string) string {
 // joinURL appends path to base, stripping any trailing slash from base.
 func joinURL(base, path string) string {
 	return strings.TrimRight(base, "/") + path
+}
+
+// loadSpecFiles loads the ordered list of spec files from cfg.SpecFiles,
+// merges them in order (later entries win on conflict), and returns a single
+// APISpec whose Raw bytes are re-serialized YAML.
+func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
+	tr := cfg.Transport
+	if tr == nil {
+		tr = http.DefaultTransport
+	}
+
+	var merged map[string]any
+	var lastCT string
+
+	for _, src := range cfg.SpecFiles {
+		var ct string
+		var data []byte
+		var err error
+
+		if isLocalPath(src) {
+			ct, data, err = readLocalFile(src)
+		} else {
+			ct, data, _, err = fetchBytes(ctx, src, tr)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("spec file %q: %w", src, err)
+		}
+
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return nil, fmt.Errorf("spec file %q: parse: %w", src, err)
+		}
+		merged = deepMerge(merged, doc)
+		lastCT = ct
+	}
+
+	if merged == nil {
+		return nil, nil
+	}
+
+	// Re-serialize the merged document as YAML so existing loaders can parse it.
+	raw, err := yaml.Marshal(merged)
+	if err != nil {
+		return nil, fmt.Errorf("merging spec files: re-serialise: %w", err)
+	}
+	if lastCT == "" {
+		lastCT = "application/yaml"
+	}
+	return load(lastCT, raw, loaders)
+}
+
+// isLocalPath reports whether s is a local filesystem path rather than a URL.
+// A string is local if it has no scheme (no "://") or uses the "file://" scheme.
+func isLocalPath(s string) bool {
+	if strings.HasPrefix(s, "file://") {
+		return true
+	}
+	return !strings.Contains(s, "://")
+}
+
+// readLocalFile reads a local spec file, stripping any leading "file://" prefix.
+// The content-type is inferred from the file extension.
+func readLocalFile(path string) (contentType string, data []byte, err error) {
+	path = strings.TrimPrefix(path, "file://")
+	path = filepath.Clean(path)
+	data, err = os.ReadFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		contentType = "application/json"
+	default:
+		contentType = "application/yaml"
+	}
+	return contentType, data, nil
+}
+
+// deepMerge recursively merges overlay into base. overlay values take
+// precedence; maps are merged recursively; all other types are replaced.
+// Returns a new map; base and overlay are not modified.
+func deepMerge(base, overlay map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(overlay))
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, v := range overlay {
+		if bv, ok := result[k]; ok {
+			if bMap, ok := bv.(map[string]any); ok {
+				if oMap, ok := v.(map[string]any); ok {
+					result[k] = deepMerge(bMap, oMap)
+					continue
+				}
+			}
+		}
+		result[k] = v
+	}
+	return result
 }
