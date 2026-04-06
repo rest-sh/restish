@@ -312,7 +312,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	formatter, ok := output.Select(fmts, fmtName, tty)
 	if !ok {
-		return fmt.Errorf("unknown output format %q; available: readable, json, raw, table, gron, cbor, image", fmtName)
+		return fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
 
 	// For non-TTY filtered output, use JSON formatter (not raw bytes) since

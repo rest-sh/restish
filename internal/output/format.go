@@ -1,6 +1,10 @@
 package output
 
-import "io"
+import (
+	"io"
+	"sort"
+	"strings"
+)
 
 // Formatter renders a normalized Response to a writer.
 // color indicates whether ANSI escape sequences are appropriate.
@@ -20,7 +24,19 @@ func DefaultFormatters() map[string]Formatter {
 		"gron":     &GronFormatter{},
 		"cbor":     &CBORFormatter{},
 		"image":    &ImageFormatter{},
+		"yaml":     &YAMLFormatter{},
 	}
+}
+
+// FormatterNames returns the sorted list of registered formatter names,
+// suitable for use in help text and error messages.
+func FormatterNames(fmts map[string]Formatter) string {
+	names := make([]string, 0, len(fmts))
+	for name := range fmts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // Select picks the right formatter given an explicit format name and whether
