@@ -81,6 +81,8 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 			Cache:  auth.NewTokenCache(c.tokenCachePath()),
 			Stderr: c.Stderr,
 		}, nil
+	case "external-tool":
+		return &auth.ExternalTool{}, nil
 	default:
 		return nil, fmt.Errorf("unknown auth type %q", ac.Type)
 	}

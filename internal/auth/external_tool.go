@@ -1,0 +1,129 @@
+package auth
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+// ExternalTool delegates authentication to an external program. The program
+// receives the outbound request as JSON on stdin and returns header updates
+// (and optionally a new URI) as JSON on stdout.
+//
+// Config params:
+//
+//	commandline  (required) shell command to run; executed via $SHELL -c
+//	omitbody     (optional) "true" skips sending the request body to the tool
+//
+// Wire format (stdin → tool):
+//
+//	{"method":"GET","uri":"https://...","headers":{...},"body":"..."}
+//
+// Wire format (tool → stdout):
+//
+//	{"headers":{"X-Sig":"..."}}          — merge headers only
+//	{"uri":"https://...","headers":{...}} — also rewrite the URI
+//
+// An empty or absent stdout response is a no-op (tool declined to mutate).
+// Compatible with the v1 external-tool auth wire format.
+type ExternalTool struct{}
+
+func (a *ExternalTool) Parameters() []Param {
+	return []Param{
+		{Name: "commandline", Description: "Shell command to run for auth (executed via $SHELL -c)", Required: true},
+		{Name: "omitbody", Description: "Set to \"true\" to skip sending the request body to the tool"},
+	}
+}
+
+// externalToolRequest is the JSON structure sent to the tool on stdin.
+type externalToolRequest struct {
+	Method  string      `json:"method"`
+	URI     string      `json:"uri"`
+	Headers http.Header `json:"headers"`
+	Body    string      `json:"body"`
+}
+
+// externalToolResponse is the JSON structure read from the tool's stdout.
+type externalToolResponse struct {
+	URI     string      `json:"uri,omitempty"`
+	Headers http.Header `json:"headers,omitempty"`
+}
+
+func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) error {
+	commandLine := params["commandline"]
+	if commandLine == "" {
+		return fmt.Errorf("external-tool auth: missing required param \"commandline\"")
+	}
+	omitBody := strings.EqualFold(params["omitbody"], "true")
+
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	cmd := exec.Command(shell, "-c", commandLine)
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("external-tool auth: %w", err)
+	}
+
+	// Read and restore the request body if we need to forward it.
+	bodyStr := ""
+	if req.Body != nil && !omitBody {
+		bodyBytes, err := io.ReadAll(req.Body)
+		if err != nil {
+			return fmt.Errorf("external-tool auth: reading request body: %w", err)
+		}
+		bodyStr = string(bodyBytes)
+		req.Body = io.NopCloser(strings.NewReader(bodyStr))
+	}
+
+	payload, err := json.Marshal(externalToolRequest{
+		Method:  req.Method,
+		URI:     req.URL.String(),
+		Headers: req.Header,
+		Body:    bodyStr,
+	})
+	if err != nil {
+		return fmt.Errorf("external-tool auth: marshalling request: %w", err)
+	}
+
+	if _, err = stdin.Write(payload); err != nil {
+		return fmt.Errorf("external-tool auth: writing to tool: %w", err)
+	}
+	stdin.Close()
+
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("external-tool auth: tool exited with error: %w", err)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+
+	var updates externalToolResponse
+	if err := json.Unmarshal(out, &updates); err != nil {
+		return fmt.Errorf("external-tool auth: parsing tool response: %w", err)
+	}
+
+	if updates.URI != "" {
+		parsed, err := req.URL.Parse(updates.URI)
+		if err != nil {
+			return fmt.Errorf("external-tool auth: parsing updated URI: %w", err)
+		}
+		req.URL = parsed
+		req.Host = parsed.Host
+	}
+
+	for key, vals := range updates.Headers {
+		for _, v := range vals {
+			req.Header.Set(key, v)
+		}
+	}
+	return nil
+}
