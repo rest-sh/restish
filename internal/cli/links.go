@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/output"
@@ -35,13 +34,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = os.Getenv("RSH_PROFILE")
-	}
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 	uri, _, opts = c.applyAPIProfile(uri, profileName, opts)
 
 	httpResp, err := request.Do(context.Background(), "GET", uri, nil, opts)

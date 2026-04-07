@@ -268,10 +268,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		return err
 	}
 
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {

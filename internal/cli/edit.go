@@ -42,13 +42,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = os.Getenv("RSH_PROFILE")
-	}
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 
 	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
 	origOnReq := opts.OnRequest

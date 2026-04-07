@@ -87,13 +87,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	}
 
 	// Resolve API short names and merge persistent profile headers/query.
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = os.Getenv("RSH_PROFILE")
-	}
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 	var apiName string
 	rawURL, apiName, opts = c.applyAPIProfile(rawURL, profileName, opts)
 	opts, err = c.resolveTLSSigner(opts)

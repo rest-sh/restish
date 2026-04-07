@@ -32,13 +32,7 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 	}
 	api := c.cfg.APIs[apiName]
 
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = os.Getenv("RSH_PROFILE")
-	}
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 
 	if api.Profiles == nil || api.Profiles[profileName] == nil {
 		return fmt.Errorf("API %q has no profile %q", apiName, profileName)

@@ -13,6 +13,7 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
+	"github.com/spf13/cobra"
 )
 
 // Version is the current build version, set at build time via -ldflags.
@@ -112,6 +113,18 @@ func (c *CLI) configFilePath() string {
 	return config.DefaultPath()
 }
 
+// profileFromCmd returns the active profile name from the --rsh-profile flag,
+// falling back to the RSH_PROFILE environment variable, then "default".
+func (c *CLI) profileFromCmd(cmd *cobra.Command) string {
+	name, _ := cmd.Flags().GetString("rsh-profile")
+	if name == "" {
+		name = os.Getenv("RSH_PROFILE")
+	}
+	if name == "" {
+		return "default"
+	}
+	return name
+}
 // specCacheDir returns the effective directory for API spec CBOR files.
 func (c *CLI) specCacheDir() string {
 	if c.SpecCachePath != "" {

@@ -73,13 +73,7 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
 
-	profileName, _ := cmd.Flags().GetString("rsh-profile")
-	if profileName == "" {
-		profileName = os.Getenv("RSH_PROFILE")
-	}
-	if profileName == "" {
-		profileName = "default"
-	}
+	profileName := c.profileFromCmd(cmd)
 
 	key := apiName + ":" + profileName
 	tc := auth.NewTokenCache(c.tokenCachePath())
