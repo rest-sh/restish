@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/auth"
@@ -26,6 +27,18 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Short: "Delete the cached OAuth2 token for a named API",
 		Args:  cobra.ExactArgs(1),
 		RunE:  c.runClearAuthCache,
+	})
+	apiCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List all configured APIs",
+		Args:  cobra.NoArgs,
+		RunE:  c.runAPIList,
+	})
+	apiCmd.AddCommand(&cobra.Command{
+		Use:   "delete <name>",
+		Short: "Remove a configured API",
+		Args:  cobra.ExactArgs(1),
+		RunE:  c.runAPIDelete,
 	})
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "sync <name>",
@@ -281,5 +294,46 @@ func (c *CLI) runAPIContentTypes(cmd *cobra.Command, args []string) error {
 	for _, ct := range c.content.ContentTypes() {
 		fmt.Fprintf(c.Stdout, "%-12s %s\n", ct.Name, strings.Join(ct.MIMETypes, ", "))
 	}
+	return nil
+}
+
+// runAPIList prints all configured APIs with their base URL and profile count.
+func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
+	if c.cfg == nil || len(c.cfg.APIs) == 0 {
+		fmt.Fprintln(c.Stdout, "No APIs configured.")
+		return nil
+	}
+	names := make([]string, 0, len(c.cfg.APIs))
+	for name := range c.cfg.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		api := c.cfg.APIs[name]
+		profileCount := len(api.Profiles)
+		profileSuffix := fmt.Sprintf("%d profile", profileCount)
+		if profileCount != 1 {
+			profileSuffix += "s"
+		}
+		fmt.Fprintf(c.Stdout, "%-20s %-40s %s\n", name, api.BaseURL, profileSuffix)
+	}
+	return nil
+}
+
+// runAPIDelete removes a configured API and saves the updated config.
+func (c *CLI) runAPIDelete(cmd *cobra.Command, args []string) error {
+	apiName := args[0]
+	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
+		return fmt.Errorf("unknown API %q", apiName)
+	}
+	delete(c.cfg.APIs, apiName)
+	cfgPath := c.configFilePath()
+	if config.HasComments(cfgPath) {
+		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
+	}
+	if err := config.Save(cfgPath, c.cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.Stdout, "Deleted API %q\n", apiName)
 	return nil
 }
