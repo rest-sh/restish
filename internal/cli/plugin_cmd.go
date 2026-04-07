@@ -149,11 +149,15 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stderr, "plugin exited: %v\n", err)
 	}
 
-	// Attempt to decode CBOR messages from the captured stdout.
+	// Attempt to decode all CBOR messages from the captured stdout.
 	data := stdoutBuf.Bytes()
 	if len(data) > 0 {
-		var v any
-		if decErr := pluginwire.ReadMessage(bytes.NewReader(data), &v); decErr == nil {
+		r := bytes.NewReader(data)
+		for r.Len() > 0 {
+			var v any
+			if decErr := pluginwire.ReadMessage(r, &v); decErr != nil {
+				break
+			}
 			b, _ := json.MarshalIndent(v, "", "  ")
 			fmt.Fprintf(c.Stderr, "[debug] decoded CBOR message:\n%s\n", b)
 		}
