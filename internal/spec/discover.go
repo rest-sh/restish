@@ -138,10 +138,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		}()
 	}
 
-	tr := cfg.Transport
-	if tr == nil {
-		tr = http.DefaultTransport
-	}
+	tr := effectiveTransport(cfg)
 
 	// Explicit spec URL (priority 0 — most authoritative error source).
 	if cfg.SpecURL != "" {
@@ -244,6 +241,14 @@ func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper) (c
 	return ct, body, ttl, links, nil
 }
 
+// effectiveTransport returns cfg.Transport when set, or http.DefaultTransport.
+func effectiveTransport(cfg DiscoverConfig) http.RoundTripper {
+	if cfg.Transport != nil {
+		return cfg.Transport
+	}
+	return http.DefaultTransport
+}
+
 // cacheTTL extracts the cache duration from a response's Cache-Control header.
 func cacheTTL(resp *http.Response) time.Duration {
 	cc := resp.Header.Get("Cache-Control")
@@ -306,10 +311,7 @@ func joinURL(base, path string) string {
 // merges them in order (later entries win on conflict), and returns a single
 // APISpec whose Raw bytes are re-serialized YAML.
 func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
-	tr := cfg.Transport
-	if tr == nil {
-		tr = http.DefaultTransport
-	}
+	tr := effectiveTransport(cfg)
 
 	var merged map[string]any
 	var lastCT string
