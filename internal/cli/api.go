@@ -155,7 +155,11 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s\n", apiName, baseURL)
+	if apiSpec != nil {
+		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (spec loaded — run 'restish %s --help')\n", apiName, baseURL, apiName)
+	} else {
+		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
+	}
 	return nil
 }
 
