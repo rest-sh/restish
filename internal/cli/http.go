@@ -413,14 +413,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 					if opts.TLSSignerName == "" {
 						opts.TLSSignerName = prof.TLSSigner
 					}
-					for k, v := range prof.TLSSignerParams {
-						if opts.TLSSignerParams == nil {
-							opts.TLSSignerParams = map[string]string{}
-						}
-						if _, exists := opts.TLSSignerParams[k]; !exists {
-							opts.TLSSignerParams[k] = v
-						}
-					}
+					opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
 				} else {
 					opts.OnRequest = c.authOnRequest(name, profileName, nil)
 				}
@@ -458,19 +451,27 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		if opts.TLSSignerName == "" {
 			opts.TLSSignerName = prof.TLSSigner
 		}
-		if len(prof.TLSSignerParams) > 0 {
-			if opts.TLSSignerParams == nil {
-				opts.TLSSignerParams = map[string]string{}
-			}
-			for k, v := range prof.TLSSignerParams {
-				if _, exists := opts.TLSSignerParams[k]; !exists {
-					opts.TLSSignerParams[k] = v
-				}
-			}
-		}
+		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
 	}
 
 	return expanded, apiName, opts
+}
+
+// mergeTLSSignerParams merges src entries into dst, not overwriting existing
+// keys. Returns the (possibly newly allocated) dst map.
+func mergeTLSSignerParams(dst, src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]string, len(src))
+	}
+	for k, v := range src {
+		if _, exists := dst[k]; !exists {
+			dst[k] = v
+		}
+	}
+	return dst
 }
 
 func parseKVStrings(values []string) (map[string]string, error) {
