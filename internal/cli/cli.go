@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -159,8 +161,11 @@ func (c *CLI) Run(args []string) error {
 	}
 	c.cfg = cfg
 
-	// Discover hook plugins at startup (silently skip broken ones).
-	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), nil)
+	// Discover hook plugins at startup; warn about broken plugins so users
+	// know their plugin is not active rather than silently ignoring it.
+	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), func(path string, err error) {
+		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
+	})
 
 	// Register plugin-provided formatters and loaders.
 	for _, p := range c.plugins {
