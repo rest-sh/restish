@@ -150,7 +150,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	cfg.APIs[apiName] = apiCfg
 
 	if config.HasComments(cfgPath) {
-		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved\n", cfgPath)
+		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
 	}
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
@@ -239,7 +239,7 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 
 	cfgPath := c.configFilePath()
 	if config.HasComments(cfgPath) {
-		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved\n", cfgPath)
+		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
 	}
 	return config.Save(cfgPath, c.cfg)
 }
