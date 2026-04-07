@@ -72,47 +72,15 @@ func (r *Registry) AddEncoding(e *Encoding) {
 	r.encodings = append(r.encodings, e)
 }
 
-// AcceptHeader returns a sorted Accept header value built from all registered
-// content types, ordered by quality descending.
-func (r *Registry) AcceptHeader() string {
-	type entry struct {
-		mime string
-		q    float32
-	}
-	var entries []entry
-	for _, ct := range r.contentTypes {
-		for _, mt := range ct.MIMETypes {
-			if strings.HasSuffix(mt, "/*") {
-				// e.g. "text/*" → keep as-is
-			}
-			entries = append(entries, entry{mt, ct.Quality})
-		}
-	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		return entries[i].q > entries[j].q
-	})
-	parts := make([]string, len(entries))
-	for i, e := range entries {
-		if e.q == 1.0 {
-			parts[i] = e.mime
-		} else {
-			parts[i] = fmt.Sprintf("%s;q=%.1f", e.mime, e.q)
-		}
-	}
-	return strings.Join(parts, ", ")
+// qualityEntry pairs a token name with its negotiation quality value.
+type qualityEntry struct {
+	name string
+	q    float32
 }
 
-// AcceptEncodingHeader returns a sorted Accept-Encoding header value built
-// from all registered encodings, ordered by quality descending.
-func (r *Registry) AcceptEncodingHeader() string {
-	type entry struct {
-		name string
-		q    float32
-	}
-	entries := make([]entry, len(r.encodings))
-	for i, e := range r.encodings {
-		entries[i] = entry{e.Name, e.Quality}
-	}
+// buildQualityHeader sorts entries by quality descending and formats them as
+// a comma-separated Accept / Accept-Encoding header value.
+func buildQualityHeader(entries []qualityEntry) string {
 	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].q > entries[j].q
 	})
@@ -125,6 +93,28 @@ func (r *Registry) AcceptEncodingHeader() string {
 		}
 	}
 	return strings.Join(parts, ", ")
+}
+
+// AcceptHeader returns a sorted Accept header value built from all registered
+// content types, ordered by quality descending.
+func (r *Registry) AcceptHeader() string {
+	var entries []qualityEntry
+	for _, ct := range r.contentTypes {
+		for _, mt := range ct.MIMETypes {
+			entries = append(entries, qualityEntry{mt, ct.Quality})
+		}
+	}
+	return buildQualityHeader(entries)
+}
+
+// AcceptEncodingHeader returns a sorted Accept-Encoding header value built
+// from all registered encodings, ordered by quality descending.
+func (r *Registry) AcceptEncodingHeader() string {
+	entries := make([]qualityEntry, len(r.encodings))
+	for i, e := range r.encodings {
+		entries[i] = qualityEntry{e.Name, e.Quality}
+	}
+	return buildQualityHeader(entries)
 }
 
 // Decode finds the best-matching registered content type for mimeType,
