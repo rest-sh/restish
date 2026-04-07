@@ -121,13 +121,13 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 		return fmt.Errorf("command plugin: send init: %w", err)
 	}
 
-	// done is closed when the command loop exits, signalling streamPluginStdin
+	// stopCh is closed when the command loop exits, signalling streamPluginStdin
 	// to stop forwarding. For TTY stdin the inner reader goroutine may remain
 	// briefly blocked until the user interacts, but it will exit promptly once
 	// stdinPipe is closed and the next write fails.
-	done := make(chan struct{})
+	stopCh := make(chan struct{})
 	if decl.PassthroughStdio {
-		go c.streamPluginStdin(writer, done)
+		go c.streamPluginStdin(writer, stopCh)
 	}
 
 	var loopErr error
@@ -152,7 +152,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 		}
 	}
 
-	close(done)
+	close(stopCh)
 	_ = stdinPipe.Close()
 	_ = proc.Wait()
 	return loopErr
