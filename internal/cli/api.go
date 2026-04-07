@@ -235,7 +235,9 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 }
 
 // runAPISet updates a single config field for a named API using a dot-path key.
-// Supported keys: base_url, spec_url, profiles.<name>.base_url.
+// Supported keys: base_url, spec_url, operation_base, profiles.<name>.base_url,
+// profiles.<name>.auth.type, profiles.<name>.auth.params.<param>,
+// profiles.<name>.tls_signer.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	key := args[1]
@@ -258,6 +260,15 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 }
 
 // setAPIField updates a single field of apiCfg identified by a dot-path key.
+// Supported keys:
+//
+//	base_url
+//	spec_url
+//	operation_base
+//	profiles.<name>.base_url
+//	profiles.<name>.auth.type
+//	profiles.<name>.auth.params.<param>
+//	profiles.<name>.tls_signer
 func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 	parts := strings.SplitN(key, ".", 3)
 	switch parts[0] {
@@ -265,6 +276,8 @@ func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 		apiCfg.BaseURL = value
 	case "spec_url":
 		apiCfg.SpecURL = value
+	case "operation_base":
+		apiCfg.OperationBase = value
 	case "profiles":
 		if len(parts) < 3 {
 			return fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
@@ -277,9 +290,33 @@ func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 			apiCfg.Profiles[profileName] = &config.ProfileConfig{}
 		}
 		prof := apiCfg.Profiles[profileName]
-		switch parts[2] {
+		subParts := strings.SplitN(parts[2], ".", 3)
+		switch subParts[0] {
 		case "base_url":
 			prof.BaseURL = value
+		case "tls_signer":
+			prof.TLSSigner = value
+		case "auth":
+			if len(subParts) < 2 {
+				return fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
+			}
+			if prof.Auth == nil {
+				prof.Auth = &config.AuthConfig{}
+			}
+			switch subParts[1] {
+			case "type":
+				prof.Auth.Type = value
+			case "params":
+				if len(subParts) < 3 {
+					return fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
+				}
+				if prof.Auth.Params == nil {
+					prof.Auth.Params = make(map[string]string)
+				}
+				prof.Auth.Params[subParts[2]] = value
+			default:
+				return fmt.Errorf("unsupported auth field %q", subParts[1])
+			}
 		default:
 			return fmt.Errorf("unsupported profile field %q", parts[2])
 		}
