@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,13 +66,6 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 		shell = "/bin/sh"
 	}
 
-	cmd := exec.Command(shell, "-c", commandLine)
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("external-tool auth: %w", err)
-	}
-
 	// Read and restore the request body if we need to forward it.
 	bodyStr := ""
 	if req.Body != nil && !omitBody {
@@ -93,10 +87,11 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 		return fmt.Errorf("external-tool auth: marshalling request: %w", err)
 	}
 
-	if _, err = stdin.Write(payload); err != nil {
-		return fmt.Errorf("external-tool auth: writing to tool: %w", err)
-	}
-	stdin.Close()
+	cmd := exec.Command(shell, "-c", commandLine)
+	// Assign stdin directly so exec's internals copy the bytes after Start.
+	// Using StdinPipe + manual write before Start would deadlock for payloads
+	// larger than the OS pipe buffer (~64 KB).
+	cmd.Stdin = bytes.NewReader(payload)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -120,9 +115,12 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 		req.Host = parsed.Host
 	}
 
+	// Use Del+Add so multi-value headers are fully replaced, not overwritten
+	// one value at a time (which would only keep the last value).
 	for key, vals := range updates.Headers {
+		req.Header.Del(key)
 		for _, v := range vals {
-			req.Header.Set(key, v)
+			req.Header.Add(key, v)
 		}
 	}
 	return nil

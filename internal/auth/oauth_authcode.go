@@ -280,14 +280,20 @@ func codeChallenge(verifier string) string {
 
 // DefaultOpenBrowser opens url in the system default browser.
 func DefaultOpenBrowser(rawURL string) error {
+	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		return exec.Command("open", rawURL).Start()
+		cmd = exec.Command("open", rawURL)
 	case "windows":
-		return exec.Command("cmd", "/c", "start", rawURL).Start()
+		cmd = exec.Command("cmd", "/c", "start", rawURL)
 	default:
-		return exec.Command("xdg-open", rawURL).Start()
+		cmd = exec.Command("xdg-open", rawURL)
 	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() //nolint:errcheck
+	return nil
 }
 
 // freePort returns the string representation of an available local TCP port.
@@ -357,4 +363,3 @@ func redirectPortFrom(authURL string) string {
 func RedirectPortFrom(authURL string) string {
 	return redirectPortFrom(authURL)
 }
-

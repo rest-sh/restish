@@ -212,7 +212,11 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no editor found; set $VISUAL or $EDITOR")
 	}
 	cfgPath := c.configFilePath()
-	editorCmd := exec.Command(editor, cfgPath)
+	parts, err := splitCommandLine(editor)
+	if err != nil {
+		return fmt.Errorf("parsing editor command: %w", err)
+	}
+	editorCmd := exec.Command(parts[0], append(parts[1:], cfgPath)...)
 	editorCmd.Stdin = os.Stdin
 	editorCmd.Stdout = os.Stdout
 	editorCmd.Stderr = os.Stderr
