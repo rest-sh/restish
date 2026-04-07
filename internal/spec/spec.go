@@ -1,7 +1,12 @@
 // Package spec handles API specification discovery, loading, and caching.
 package spec
 
-import "github.com/pb33f/libopenapi"
+import (
+	"sync"
+
+	"github.com/pb33f/libopenapi"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+)
 
 // Loader detects and parses an API specification format.
 // Multiple loaders may be registered; the highest-priority one that detects
@@ -24,6 +29,20 @@ type APISpec struct {
 	// Document is the libopenapi parsed representation.
 	// Nil when loaded from cache before re-parsing.
 	Document libopenapi.Document
+
+	// modelOnce guards lazy construction of the V3 model.
+	modelOnce  sync.Once
+	modelResult *libopenapi.DocumentModel[v3.Document]
+	modelErr   error
+}
+
+// V3Model returns the built V3 document model, memoizing the result so that
+// Document.BuildV3Model() is called at most once per APISpec.
+func (s *APISpec) V3Model() (*libopenapi.DocumentModel[v3.Document], error) {
+	s.modelOnce.Do(func() {
+		s.modelResult, s.modelErr = s.Document.BuildV3Model()
+	})
+	return s.modelResult, s.modelErr
 }
 
 // DefaultLoaders returns the built-in set of loaders.

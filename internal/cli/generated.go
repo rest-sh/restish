@@ -19,7 +19,7 @@ import (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
-	model, err := s.Document.BuildV3Model()
+	model, err := s.V3Model()
 	if err != nil || model == nil || model.Model.Paths == nil {
 		return nil
 	}

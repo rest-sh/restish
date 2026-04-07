@@ -175,7 +175,7 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 	// Build the security scheme map once (best-effort).
 	schemeMap := map[string]*v3high.SecurityScheme{}
 	if s != nil && s.Document != nil {
-		if model, err := s.Document.BuildV3Model(); err == nil &&
+		if model, err := s.V3Model(); err == nil &&
 			model != nil &&
 			model.Model.Components != nil &&
 			model.Model.Components.SecuritySchemes != nil {
