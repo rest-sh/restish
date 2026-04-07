@@ -199,18 +199,69 @@ func applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 	}
 }
 
-// runAPIShow prints the config for a named API as indented JSON.
+// runAPIShow prints the config for a named API as indented JSON,
+// with secret auth params replaced by "***".
 func (c *CLI) runAPIShow(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
-	data, err := json.MarshalIndent(c.cfg.APIs[apiName], "", "  ")
+
+	// Round-trip through JSON so we can redact secrets without modifying the live config.
+	raw, err := json.Marshal(c.cfg.APIs[apiName])
+	if err != nil {
+		return err
+	}
+	var view map[string]any
+	if err := json.Unmarshal(raw, &view); err != nil {
+		return err
+	}
+	c.redactAPIShowSecrets(c.cfg.APIs[apiName], view)
+
+	data, err := json.MarshalIndent(view, "", "  ")
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(c.Stdout, string(data))
 	return nil
+}
+
+// redactAPIShowSecrets replaces secret auth param values with "***" in the
+// JSON view map so they are not printed in plaintext.
+func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any) {
+	profiles, _ := view["profiles"].(map[string]any)
+	if profiles == nil {
+		return
+	}
+	for profName, profAny := range profiles {
+		profMap, _ := profAny.(map[string]any)
+		if profMap == nil {
+			continue
+		}
+		authMap, _ := profMap["auth"].(map[string]any)
+		if authMap == nil {
+			continue
+		}
+		params, _ := authMap["params"].(map[string]any)
+		if params == nil {
+			continue
+		}
+		prof := apiCfg.Profiles[profName]
+		if prof == nil || prof.Auth == nil {
+			continue
+		}
+		handler, err := c.authHandlerFor(prof.Auth)
+		if err != nil {
+			continue
+		}
+		for _, p := range handler.Parameters() {
+			if p.Secret {
+				if _, ok := params[p.Name]; ok {
+					params[p.Name] = "***"
+				}
+			}
+		}
+	}
 }
 
 // runAPIEdit opens the restish config file in $VISUAL or $EDITOR.
