@@ -260,6 +260,11 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return fmt.Errorf("filter: %w", err)
 	}
 
+	if filtered == nil && filterExpr != "@" && filterExpr != "body" && filterExpr != "headers" &&
+		!strings.HasPrefix(filterExpr, "body.") && !strings.HasPrefix(filterExpr, "headers.") {
+		fmt.Fprintf(c.Stderr, "hint: filter returned no results; to access response body fields use 'body.%s'\n", filterExpr)
+	}
+
 	// --rsh-raw: write plain text without encoding.
 	if rawMode {
 		s := filter.RawOutput(filtered)
