@@ -68,7 +68,7 @@ func (c *pluginClient) request(method, uri string, headers map[string]string, bo
 	}
 
 	resp := &httpResponse{
-		Status:  msgInt(reply["status"]),
+		Status:  pluginwire.MsgInt(reply["status"]),
 		Headers: mapString(reply["headers"]),
 		Body:    reply["body"],
 	}
@@ -124,35 +124,6 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return len(p), nil
-}
-
-func msgStrings(v any) []string {
-	items, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if text, ok := item.(string); ok {
-			out = append(out, text)
-		}
-	}
-	return out
-}
-
-func msgInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case uint64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
 }
 
 func mapString(v any) map[string]string {

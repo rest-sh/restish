@@ -68,14 +68,14 @@ func main() {
 		if msg["type"] != "sign" {
 			continue
 		}
-		digest := msgBytes(msg["digest"])
+		digest := plugin.MsgBytes(msg["digest"])
 		if len(digest) == 0 {
 			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": "missing digest"})
 			continue
 		}
 		hash := msgHash(msg["hash"])
 		padding, _ := msg["padding"].(string)
-		saltLength := msgInt(msg["salt_length"])
+		saltLength := plugin.MsgInt(msg["salt_length"])
 		sig, err := signer.Sign(rand.Reader, digest, buildSignerOpts(hash, padding, saltLength))
 		if err != nil {
 			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": err.Error()})
@@ -155,45 +155,8 @@ func envMap() map[string]string {
 	return out
 }
 
-func msgBytes(v any) []byte {
-	switch data := v.(type) {
-	case []byte:
-		return data
-	case []any:
-		out := make([]byte, 0, len(data))
-		for _, item := range data {
-			switch n := item.(type) {
-			case uint64:
-				out = append(out, byte(n))
-			case int64:
-				out = append(out, byte(n))
-			case int:
-				out = append(out, byte(n))
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 func msgHash(v any) crypto.Hash {
-	return crypto.Hash(msgInt(v))
-}
-
-func msgInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case uint64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
+	return crypto.Hash(plugin.MsgInt(v))
 }
 
 func fail(err error) {

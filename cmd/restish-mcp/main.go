@@ -36,7 +36,7 @@ func main() {
 		return
 	}
 
-	args := msgStrings(initMsg["args"])
+	args := plugin.MsgStrings(initMsg["args"])
 	client := newPluginClient(os.Stdin, os.Stdout)
 	cfg, err := ParseArgs(args)
 	if err == nil {
@@ -103,7 +103,7 @@ func (c *pluginClient) readLoop() {
 		}
 		switch msg["type"] {
 		case "stdin-data":
-			if data := msgBytes(msg["data"]); len(data) > 0 {
+			if data := plugin.MsgBytes(msg["data"]); len(data) > 0 {
 				if _, err := c.stdinPipeW.Write(data); err != nil {
 					return
 				}
@@ -139,7 +139,7 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 		return nil, io.EOF
 	}
 	resp := &HTTPResponse{
-		Status:  msgInt(reply["status"]),
+		Status:  plugin.MsgInt(reply["status"]),
 		Headers: mapAny(reply["headers"]),
 		Body:    reply["body"],
 	}
@@ -165,7 +165,7 @@ func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 		case "api-spec-response":
 			goto haveReply
 		case "stdin-data":
-			if data := msgBytes(reply["data"]); len(data) > 0 {
+			if data := plugin.MsgBytes(reply["data"]); len(data) > 0 {
 				_, _ = c.pendingStdin.Write(data)
 			}
 		case "stdin-close":
@@ -178,7 +178,7 @@ haveReply:
 	if text, _ := reply["error"].(string); text != "" {
 		return nil, fmt.Errorf("%s", text)
 	}
-	raw := msgBytes(reply["raw"])
+	raw := plugin.MsgBytes(reply["raw"])
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("api %q returned an empty spec", name)
 	}
@@ -228,58 +228,6 @@ func writeCBOR(v any) {
 	_, _ = os.Stdout.Write(data)
 }
 
-func msgStrings(v any) []string {
-	items, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if text, ok := item.(string); ok {
-			out = append(out, text)
-		}
-	}
-	return out
-}
-
-func msgBytes(v any) []byte {
-	switch data := v.(type) {
-	case []byte:
-		return data
-	case string:
-		return []byte(data)
-	case []any:
-		out := make([]byte, 0, len(data))
-		for _, item := range data {
-			switch n := item.(type) {
-			case uint64:
-				out = append(out, byte(n))
-			case int64:
-				out = append(out, byte(n))
-			case int:
-				out = append(out, byte(n))
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func msgInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case uint64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
-}
 
 func mapAny(v any) map[string]any {
 	m, ok := v.(map[string]any)
