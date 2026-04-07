@@ -16,10 +16,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/request"
+)
+
+var (
+	tlsSignerBuildOnce sync.Once
+	tlsSignerPluginBin string
+	tlsSignerBuildErr  error
 )
 
 func TestTLSVersionFromString(t *testing.T) {
@@ -346,17 +353,27 @@ func signedCert(t *testing.T, caCert *x509.Certificate, caKeyPEM []byte, commonN
 
 func buildTLSSignerPlugin(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "restish-test-tls-signer")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
+	tlsSignerBuildOnce.Do(func() {
+		bin := filepath.Join(os.TempDir(), "restish-test-tls-signer-request-tests")
+		if runtime.GOOS == "windows" {
+			bin += ".exe"
+		}
+		cmd := exec.Command("go", "build", "-o", bin, "./testdata/tlssigner")
+		cmd.Dir = requestTestDir(t)
+		cmd.Env = append(os.Environ(), "GOCACHE=/tmp/restish-gocache")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			tlsSignerBuildErr = fmt.Errorf("build tls signer plugin: %w\n%s", err, out)
+			return
+		}
+		tlsSignerPluginBin = bin
+	})
+	if tlsSignerBuildErr != nil {
+		t.Fatal(tlsSignerBuildErr)
 	}
-	cmd := exec.Command("go", "build", "-o", bin, "./testdata/tlssigner")
-	cmd.Dir = requestTestDir(t)
-	cmd.Env = append(os.Environ(), "GOCACHE=/tmp/restish-gocache")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build tls signer plugin: %v\n%s", err, out)
+	if tlsSignerPluginBin == "" {
+		t.Fatal("tls signer plugin build did not produce a binary")
 	}
-	return bin
+	return tlsSignerPluginBin
 }
 
 func requestTestDir(t *testing.T) string {
