@@ -140,11 +140,7 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).
 func (c *CLI) Run(args []string) error {
-	path := c.ConfigPath
-	if path == "" {
-		path = config.DefaultPath()
-	}
-	cfg, err := config.Load(path)
+	cfg, err := config.Load(c.configFilePath())
 	if err != nil {
 		return err
 	}
