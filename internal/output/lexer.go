@@ -1,6 +1,8 @@
 package output
 
 import (
+	"sync"
+
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 )
@@ -13,9 +15,12 @@ const (
 	IndentLevel2
 )
 
-// readableIndentDepth tracks the current bracket nesting depth. Package-level
-// state is safe here because a CLI processes one response at a time.
-// Reset to 0 before each highlight call.
+// readableIndentMu guards readableIndentDepth for concurrent Format calls
+// (e.g., table output rendering multiple rows, or tests with -parallel).
+var readableIndentMu sync.Mutex
+
+// readableIndentDepth tracks the current bracket nesting depth. Protected by
+// readableIndentMu; callers must hold the lock before reset and highlight.
 var readableIndentDepth int
 
 // ReadableLexer is a custom chroma lexer for Restish readable output.

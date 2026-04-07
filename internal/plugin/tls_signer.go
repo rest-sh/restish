@@ -167,11 +167,14 @@ func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, 
 	}
 	stdout, err := proc.StdoutPipe()
 	if err != nil {
+		stdin.Close()
 		return nil, nil, nil, nil, fmt.Errorf("tls-signer %s: stdout pipe: %w", filepath.Base(path), err)
 	}
 	var stderr bytes.Buffer
 	proc.Stderr = &stderr
 	if err := proc.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
 		return nil, nil, nil, nil, fmt.Errorf("tls-signer %s: start: %w", filepath.Base(path), err)
 	}
 	return stdout, stdin, &stderr, proc, nil

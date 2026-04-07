@@ -295,6 +295,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	// For the table format, configure it from flags before selecting.
+	// Copy the map first so we don't mutate the shared c.formatters.
 	if fmtName == "table" {
 		cols, _ := cmd.Flags().GetString("rsh-columns")
 		sortBy, _ := cmd.Flags().GetString("rsh-sort-by")
@@ -302,7 +303,12 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		if cols != "" {
 			tf.Columns = strings.Split(cols, ",")
 		}
-		fmts["table"] = tf
+		copied := make(map[string]output.Formatter, len(fmts))
+		for k, v := range fmts {
+			copied[k] = v
+		}
+		copied["table"] = tf
+		fmts = copied
 	}
 
 	// Content-type-aware auto-dispatch: on a TTY with no explicit format or

@@ -60,8 +60,11 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 		return err
 	}
 
+	readableIndentMu.Lock()
 	readableIndentDepth = 0
-	return highlight(w, ReadableLexer, data)
+	err = highlight(w, ReadableLexer, data)
+	readableIndentMu.Unlock()
+	return err
 }
 
 // highlight tokenizes data with the given lexer and writes chroma-colored

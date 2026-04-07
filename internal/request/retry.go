@@ -58,8 +58,12 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		if resp.StatusCode >= 500 {
 			if attempt < rt.maxRetry {
-				// Not the final attempt — drain and close so the connection
-				// can be reused, then retry.
+				// Only drain and retry if we can recreate the body (or there is none).
+				// If GetBody is nil the body is not replayable; return now with body intact.
+				if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
+					return resp, nil
+				}
+				// Drain and close so the connection can be reused, then retry.
 				_, _ = io.Copy(io.Discard, resp.Body)
 				_ = resp.Body.Close()
 				continue
@@ -76,18 +80,25 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // waitDuration returns the duration to wait before the next attempt.
-// It honours the Retry-After response header when present; otherwise it
-// computes exponential backoff with ±25 % jitter.
+// It honours the Retry-After response header when present (capped at 60s);
+// otherwise it computes exponential backoff with ±25 % jitter.
 func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Duration {
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			// Integer seconds form.
 			if secs, parseErr := strconv.Atoi(ra); parseErr == nil && secs > 0 {
-				return time.Duration(secs) * time.Second
+				wait := time.Duration(secs) * time.Second
+				if wait > 60*time.Second {
+					wait = 60 * time.Second
+				}
+				return wait
 			}
 			// HTTP-date form.
 			if t, parseErr := http.ParseTime(ra); parseErr == nil {
 				if wait := time.Until(t); wait > 0 {
+					if wait > 60*time.Second {
+						wait = 60 * time.Second
+					}
 					return wait
 				}
 			}
@@ -99,7 +110,10 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 	if base > 30*time.Second {
 		base = 30 * time.Second
 	}
-	// Add ±25 % jitter.
+	// Add ±25 % jitter. Guard against base < 2 to avoid rand.Int64N(0) panic.
+	if int64(base) < 2 {
+		return base
+	}
 	jitter := time.Duration(rand.Int64N(int64(base)/2)) - base/4
 	wait := base + jitter
 	if wait < 0 {
