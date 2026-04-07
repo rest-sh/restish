@@ -68,7 +68,7 @@ func (c *CLI) runPagination(
 
 	nextURL := firstNextURL
 	page := 1
-	ttyErr := output.IsTerminal(c.Stderr)
+	stderrIsTTY := output.IsTerminal(c.Stderr)
 
 	for !done && nextURL != "" {
 		// Safety: max pages check (page is 1-indexed, firstResp is page 1).
@@ -79,7 +79,7 @@ func (c *CLI) runPagination(
 		page++
 
 		// Progress feedback on TTY stderr.
-		if ttyErr {
+		if stderrIsTTY {
 			fmt.Fprintf(c.Stderr, "\rfetching page %d...", page)
 		}
 
@@ -119,7 +119,7 @@ func (c *CLI) runPagination(
 	}
 
 	// Erase progress line on TTY.
-	if ttyErr {
+	if stderrIsTTY {
 		fmt.Fprintf(c.Stderr, "\r")
 	}
 
