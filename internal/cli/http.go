@@ -504,7 +504,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	tlsSignerParamsRaw, _ := cmd.Flags().GetStringArray("rsh-tls-signer-param")
 	caCert, _ := cmd.Flags().GetString("rsh-ca-cert")
 	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
-	tlsMinVersionStr, _ := cmd.Flags().GetString("tls-min-version")
+	tlsMinVersionStr, _ := cmd.Flags().GetString("rsh-tls-min-version")
 	tlsMinVersion, err := request.TLSVersionFromString(tlsMinVersionStr)
 	if err != nil {
 		return request.Options{}, err

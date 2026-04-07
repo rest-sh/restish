@@ -75,7 +75,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-tls-signer", "", "TLS signer plugin to use for mTLS client certificate signing")
 	pf.StringArray("rsh-tls-signer-param", nil, `TLS signer plugin parameter in "key=value" format (repeatable)`)
 	pf.String("rsh-ca-cert", "", "Path to a PEM encoded CA certificate to trust")
-	pf.String("tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3")
+	pf.String("rsh-tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3")
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
 	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
