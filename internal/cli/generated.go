@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/spf13/cobra"
@@ -320,22 +321,20 @@ func extractPathParamNames(path string) []string {
 // "getItemById" → "get-item-by-id", "ListUsers" → "list-users".
 func toKebabCase(s string) string {
 	var b strings.Builder
-	runes := []rune(s)
-	for i, r := range runes {
-		if i > 0 && unicode.IsUpper(r) {
-			// Insert dash before an uppercase letter that follows a lowercase
-			// letter, or before an uppercase that is followed by a lowercase
-			// (handles acronyms: "getHTTPClient" → "get-http-client").
-			prev := runes[i-1]
-			next := rune(0)
-			if i+1 < len(runes) {
-				next = runes[i+1]
+	var prev rune
+	for i, r := range s {
+		if prev != 0 && unicode.IsUpper(r) {
+			// Look ahead to get the next rune without allocating a rune slice.
+			var next rune
+			if j := i + utf8.RuneLen(r); j < len(s) {
+				next, _ = utf8.DecodeRuneInString(s[j:])
 			}
 			if unicode.IsLower(prev) || (unicode.IsUpper(prev) && unicode.IsLower(next)) {
 				b.WriteRune('-')
 			}
 		}
 		b.WriteRune(unicode.ToLower(r))
+		prev = r
 	}
 	// Replace underscores and spaces with dashes, collapse multiple dashes.
 	result := strings.ReplaceAll(b.String(), "_", "-")
