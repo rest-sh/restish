@@ -39,6 +39,9 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
 
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
 	scanner := bufio.NewScanner(resp.Body)
+	// Increase the max token size to 1 MiB to accommodate large SSE payloads.
+	// The default 64 KiB limit causes silent data loss on large events.
+	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
 
 	var dataLines []string
 	count := 0
@@ -97,6 +100,8 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
 
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
 	scanner := bufio.NewScanner(resp.Body)
+	// Increase the max token size to 1 MiB to accommodate large NDJSON lines.
+	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
 	count := 0
 
 	for scanner.Scan() {

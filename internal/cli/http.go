@@ -343,11 +343,16 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 }
 
 // logVerbose prints request and response summary lines to stderr.
+// Sensitive request headers (Authorization, Cookie, Set-Cookie,
+// Proxy-Authorization) are redacted to avoid leaking credentials.
 func (c *CLI) logVerbose(resp *http.Response) {
 	req := resp.Request
 	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, req.URL)
 	for k, vs := range req.Header {
 		for _, v := range vs {
+			if isSensitiveHeader(k) {
+				v = "<redacted>"
+			}
 			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
 		}
 	}
@@ -359,6 +364,16 @@ func (c *CLI) logVerbose(resp *http.Response) {
 		}
 	}
 	fmt.Fprintln(c.Stderr, "<")
+}
+
+// isSensitiveHeader reports whether a header name carries credentials and
+// should be redacted in verbose output.
+func isSensitiveHeader(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Authorization", "Cookie", "Set-Cookie", "Proxy-Authorization":
+		return true
+	}
+	return false
 }
 
 // isAPIShortName reports whether arg (with no path separator) exactly matches a
@@ -484,6 +499,9 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	query, _ := cmd.Flags().GetStringArray("rsh-query")
 	server, _ := cmd.Flags().GetString("rsh-server")
 	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
+	if insecure {
+		fmt.Fprintln(c.Stderr, "warning: TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
+	}
 	clientCert, _ := cmd.Flags().GetString("rsh-client-cert")
 	clientKey, _ := cmd.Flags().GetString("rsh-client-key")
 	tlsSigner, _ := cmd.Flags().GetString("rsh-tls-signer")

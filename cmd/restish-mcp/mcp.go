@@ -12,12 +12,17 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 )
 
 const DefaultMaxResultBytes = 16 * 1024
+
+// maxRPCPayloadBytes caps the Content-Length accepted from an MCP client to
+// prevent memory exhaustion. Matches the CBOR plugin protocol limit.
+const maxRPCPayloadBytes = 64 << 20 // 64 MiB
 
 type HTTPRequest struct {
 	Method      string
@@ -548,7 +553,12 @@ func formatToolResult(resp *HTTPResponse, maxBytes int) (string, bool) {
 	}
 
 	if maxBytes > 0 && len(bodyText) > maxBytes {
-		bodyText = bodyText[:maxBytes] + "\n... truncated ..."
+		// Walk back to a UTF-8 code-point boundary so we don't split a multi-byte rune.
+		cut := maxBytes
+		for cut > 0 && !utf8.RuneStart(bodyText[cut]) {
+			cut--
+		}
+		bodyText = bodyText[:cut] + "\n... truncated ..."
 	}
 	return bodyText, isError
 }
@@ -598,6 +608,9 @@ func readFrame(r *bufio.Reader) ([]byte, error) {
 			n, err := strconv.Atoi(value)
 			if err != nil {
 				return nil, fmt.Errorf("invalid content-length %q", value)
+			}
+			if n < 0 || n > maxRPCPayloadBytes {
+				return nil, fmt.Errorf("content-length %d out of range (max %d)", n, maxRPCPayloadBytes)
 			}
 			length = n
 		}
