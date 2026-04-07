@@ -267,7 +267,7 @@ func (c *CLI) runGeneratedOp(
 		case "header":
 			extraHeaders = append(extraHeaders, p.name+": "+val)
 		case "cookie":
-			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+val)
+			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.PathEscape(val))
 		}
 	}
 
@@ -283,7 +283,7 @@ func (c *CLI) runGeneratedOp(
 		case "header":
 			extraHeaders = append(extraHeaders, p.name+": "+val)
 		case "cookie":
-			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+val)
+			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.PathEscape(val))
 		}
 	}
 
