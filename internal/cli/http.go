@@ -119,7 +119,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return fmt.Errorf("building request body: %w", err)
 	}
 
-	var bodyReader *bytes.Reader
+	var reqBody io.Reader
 	if bodyVal != nil {
 		ct := opts.ContentType
 		if ct == "" {
@@ -134,14 +134,10 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		if err != nil {
 			return fmt.Errorf("encoding request body: %w", err)
 		}
-		bodyReader = bytes.NewReader(encoded)
+		reqBody = bytes.NewReader(encoded)
 		opts.Headers = append(opts.Headers, "Content-Type: "+actualContentType)
 	}
 
-	var reqBody io.Reader
-	if bodyReader != nil {
-		reqBody = bodyReader
-	}
 	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
