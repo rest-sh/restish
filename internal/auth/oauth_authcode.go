@@ -105,14 +105,8 @@ func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[stri
 	if u := params["token_url"]; u != "" {
 		return u, nil
 	}
-	if issuer := params["issuer_url"]; issuer != "" {
-		oidc, err := DiscoverOIDC(ctx, h.HTTPClient, issuer)
-		if err != nil {
-			return "", err
-		}
-		return oidc.TokenEndpoint, nil
-	}
-	return "", fmt.Errorf("oauth-authorization-code: token_url or issuer_url is required")
+	_, tokenURL, err := h.resolveEndpoints(ctx, params)
+	return tokenURL, err
 }
 
 func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[string]string) (authorizeURL, tokenURL string, err error) {
