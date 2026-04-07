@@ -27,7 +27,7 @@ type DiskCache struct {
 // New returns a DiskCache rooted at dir with the given size cap.
 // dir is created if it does not exist.
 func New(dir string, maxBytes int64) (*DiskCache, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("cache: create dir %s: %w", dir, err)
 	}
 	return &DiskCache{dir: dir, maxBytes: maxBytes}, nil
@@ -62,10 +62,10 @@ func (c *DiskCache) Get(key string) ([]byte, bool) {
 // size exceeds the configured limit.
 func (c *DiskCache) Set(key string, data []byte) {
 	p := c.filePath(key)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
-	_ = os.WriteFile(p, data, 0o644)
+	_ = os.WriteFile(p, data, 0o600)
 	c.evictIfNeeded()
 }
 

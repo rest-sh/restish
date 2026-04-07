@@ -47,14 +47,14 @@ func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
 
 // writeCache serialises entry to the CBOR cache file.
 func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return fmt.Errorf("spec cache: mkdir: %w", err)
 	}
 	data, err := cbor.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("spec cache: marshal: %w", err)
 	}
-	return os.WriteFile(cacheFile(cacheDir, apiName), data, 0o644)
+	return os.WriteFile(cacheFile(cacheDir, apiName), data, 0o600)
 }
 
 // LoadFromCache reads the cached spec for apiName, re-parses it using loaders,
