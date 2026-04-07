@@ -337,10 +337,8 @@ func (c *CLI) confirmEdit() (bool, error) {
 }
 
 func supportsMergePatch(headers map[string]string) bool {
-	for _, key := range []string{"Accept-Patch", "Accept-patch"} {
-		if value := headers[key]; strings.Contains(strings.ToLower(value), "application/merge-patch+json") {
-			return true
-		}
+	if value := headers["Accept-Patch"]; strings.Contains(strings.ToLower(value), "application/merge-patch+json") {
+		return true
 	}
 	return false
 }
