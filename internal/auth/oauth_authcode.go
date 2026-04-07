@@ -279,7 +279,10 @@ func DefaultOpenBrowser(rawURL string) error {
 	case "darwin":
 		cmd = exec.Command("open", rawURL)
 	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", rawURL)
+		// Pass an explicit empty title ("") before the URL so that special
+		// characters in the URL are not misinterpreted as window title or
+		// cmd /c start flags.
+		cmd = exec.Command("cmd", "/c", "start", "", rawURL)
 	default:
 		cmd = exec.Command("xdg-open", rawURL)
 	}
