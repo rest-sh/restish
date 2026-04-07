@@ -17,6 +17,9 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/danielgtaylor/shorthand/v2"
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
 )
@@ -381,51 +384,9 @@ func buildMergePatch(original, modified any) any {
 }
 
 func unifiedDiff(oldName, newName, oldText, newText string) string {
-	if oldText == newText {
+	edits := myers.ComputeEdits(span.URIFromPath(oldName), oldText, newText)
+	if len(edits) == 0 {
 		return ""
 	}
-	oldLines := splitLines(oldText)
-	newLines := splitLines(newText)
-
-	prefix := 0
-	for prefix < len(oldLines) && prefix < len(newLines) && oldLines[prefix] == newLines[prefix] {
-		prefix++
-	}
-
-	suffix := 0
-	for suffix < len(oldLines)-prefix && suffix < len(newLines)-prefix &&
-		oldLines[len(oldLines)-1-suffix] == newLines[len(newLines)-1-suffix] {
-		suffix++
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "--- %s\n", oldName)
-	fmt.Fprintf(&b, "+++ %s\n", newName)
-	fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", prefix+1, len(oldLines)-prefix-suffix, prefix+1, len(newLines)-prefix-suffix)
-	for _, line := range oldLines[prefix : len(oldLines)-suffix] {
-		b.WriteString("-")
-		b.WriteString(line)
-		if !strings.HasSuffix(line, "\n") {
-			b.WriteString("\n")
-		}
-	}
-	for _, line := range newLines[prefix : len(newLines)-suffix] {
-		b.WriteString("+")
-		b.WriteString(line)
-		if !strings.HasSuffix(line, "\n") {
-			b.WriteString("\n")
-		}
-	}
-	return b.String()
-}
-
-func splitLines(s string) []string {
-	if s == "" {
-		return nil
-	}
-	lines := strings.SplitAfter(s, "\n")
-	if lines[len(lines)-1] == "" {
-		return lines[:len(lines)-1]
-	}
-	return lines
+	return fmt.Sprint(gotextdiff.ToUnified(oldName, newName, oldText, edits))
 }
