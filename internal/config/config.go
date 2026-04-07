@@ -86,21 +86,24 @@ type CacheConfig struct {
 	MaxSize string `json:"max_size,omitempty"`
 }
 
+// configDir returns the effective config directory, honoring the
+// RSH_CONFIG_DIR environment variable override.
+func configDir() string {
+	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	return defaultDir()
+}
+
 // DefaultPath returns the path to the default config file, honoring
 // the RSH_CONFIG_DIR environment variable override.
 func DefaultPath() string {
-	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "restish.json")
-	}
-	return filepath.Join(defaultDir(), "restish.json")
+	return filepath.Join(configDir(), "restish.json")
 }
 
 // DefaultTokenCachePath returns the path to the token cache file.
 func DefaultTokenCachePath() string {
-	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "tokens.json")
-	}
-	return filepath.Join(defaultDir(), "tokens.json")
+	return filepath.Join(configDir(), "tokens.json")
 }
 
 // DefaultSpecCacheDir returns the directory for cached API spec CBOR files.
