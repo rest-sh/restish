@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -249,8 +250,7 @@ func cacheTTL(resp *http.Response) time.Duration {
 	for _, part := range strings.Split(cc, ",") {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "max-age=") {
-			var secs int
-			if _, err := fmt.Sscanf(part[8:], "%d", &secs); err == nil && secs > 0 {
+			if secs, err := strconv.Atoi(part[8:]); err == nil && secs > 0 {
 				return time.Duration(secs) * time.Second
 			}
 		}
