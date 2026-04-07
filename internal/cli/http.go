@@ -95,6 +95,10 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return err
 	}
 
+	// Build the transport once so all paginated requests share the same
+	// http.Transport connection pool (avoids a new TCP+TLS handshake per page).
+	opts.Transport = request.BuildTransport(opts)
+
 	// Chain request-middleware plugins after auth.
 	origOnReq := opts.OnRequest
 	opts.OnRequest = func(req *http.Request) error {

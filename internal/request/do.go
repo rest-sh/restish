@@ -62,6 +62,12 @@ type Options struct {
 	// RetryBaseDelay is the base delay for the first retry backoff interval.
 	// Defaults to 1 s when zero.
 	RetryBaseDelay time.Duration
+	// Transport, if non-nil, is reused for every request instead of building
+	// a new one from the TLS/cache/retry options. Callers that make multiple
+	// requests with the same options (e.g. pagination) should pre-build a
+	// transport via BuildTransport and set it here so that the underlying
+	// http.Transport's connection pool is reused across requests.
+	Transport http.RoundTripper
 }
 
 // Do executes an HTTP request and returns the response.
@@ -113,7 +119,10 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 	}
 
-	transport := buildTransport(opts)
+	transport := opts.Transport
+	if transport == nil {
+		transport = BuildTransport(opts)
+	}
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   opts.Timeout,
@@ -137,14 +146,14 @@ func newTransport(opts Options) (http.RoundTripper, error) {
 	return tr, nil
 }
 
-// buildTransport returns the appropriate RoundTripper for opts.
+// BuildTransport returns the appropriate RoundTripper for opts.
 // Layer order (outermost → innermost):
 //
 //	httpcache.Transport → retryTransport → http.Transport
 //
 // The retry transport sits below the cache so that only cache misses (real
 // server requests) are retried.
-func buildTransport(opts Options) http.RoundTripper {
+func BuildTransport(opts Options) http.RoundTripper {
 	base, err := newTransport(opts)
 	if err != nil {
 		// TLS config invalid; use a small transport that returns the config error.
