@@ -867,7 +867,11 @@ func commonPrefix(entries []listEntry) string {
 			}
 		}
 	}
-	return strings.Join(prefix, "/") + "/"
+	joined := strings.Join(prefix, "/")
+	if joined != "" && !strings.HasSuffix(joined, "/") {
+		joined += "/"
+	}
+	return joined
 }
 
 func getFirstKey(item any, keys ...string) string {
@@ -883,13 +887,15 @@ func getFirstKey(item any, keys ...string) string {
 	return ""
 }
 
+// urlTemplatePlaceholder matches {key} placeholders in URL templates.
+var urlTemplatePlaceholder = regexp.MustCompile(`\{[^}]+\}`)
+
 func renderURLTemplate(template string, item any) string {
 	m, ok := item.(map[string]any)
 	if !ok {
 		return ""
 	}
-	re := regexp.MustCompile(`\{[^}]+\}`)
-	return re.ReplaceAllStringFunc(template, func(match string) string {
+	return urlTemplatePlaceholder.ReplaceAllStringFunc(template, func(match string) string {
 		key := strings.Trim(match, "{}")
 		return fmt.Sprintf("%v", m[key])
 	})
