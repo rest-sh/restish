@@ -286,9 +286,10 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 }
 
 // runAPISet updates a single config field for a named API using a dot-path key.
-// Supported keys: base_url, spec_url, operation_base, profiles.<name>.base_url,
-// profiles.<name>.auth.type, profiles.<name>.auth.params.<param>,
-// profiles.<name>.tls_signer.
+// Supported keys: base_url, spec_url, operation_base,
+// pagination.items_path, pagination.next_path,
+// profiles.<name>.base_url, profiles.<name>.auth.type,
+// profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	key := args[1]
@@ -316,6 +317,8 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 //	base_url
 //	spec_url
 //	operation_base
+//	pagination.items_path
+//	pagination.next_path
 //	profiles.<name>.base_url
 //	profiles.<name>.auth.type
 //	profiles.<name>.auth.params.<param>
@@ -329,6 +332,21 @@ func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 		apiCfg.SpecURL = value
 	case "operation_base":
 		apiCfg.OperationBase = value
+	case "pagination":
+		if len(parts) < 2 {
+			return fmt.Errorf("invalid key %q: expected pagination.<field>", key)
+		}
+		if apiCfg.Pagination == nil {
+			apiCfg.Pagination = &config.PaginationConfig{}
+		}
+		switch parts[1] {
+		case "items_path":
+			apiCfg.Pagination.ItemsPath = value
+		case "next_path":
+			apiCfg.Pagination.NextPath = value
+		default:
+			return fmt.Errorf("unsupported pagination field %q", parts[1])
+		}
 	case "profiles":
 		if len(parts) < 3 {
 			return fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
