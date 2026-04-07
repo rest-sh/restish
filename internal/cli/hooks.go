@@ -144,6 +144,13 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 			if method == "" {
 				method = "GET"
 			}
+			// Warn about keys that are not yet honoured so plugin authors know
+			// their follow payload was partially ignored.
+			for _, unsupported := range []string{"body", "headers", "query"} {
+				if _, has := f[unsupported]; has {
+					fmt.Fprintf(c.Stderr, "warning: response-middleware 'follow.%s' is not supported and was ignored\n", unsupported)
+				}
+			}
 			return false, &HookFollowRequest{Method: method, URI: uri}, nil
 		}
 
