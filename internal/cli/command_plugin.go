@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -18,19 +17,8 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 	"github.com/spf13/cobra"
 )
-
-var commandPluginDecMode = func() cbor.DecMode {
-	dm, err := cbor.DecOptions{
-		DefaultMapType: reflect.TypeOf(map[string]any{}),
-	}.DecMode()
-	if err != nil {
-		panic("command plugin: creating CBOR decode mode: " + err.Error())
-	}
-	return dm
-}()
 
 type CommandDecl struct {
 	Name             string `cbor:"name" json:"name"`
@@ -54,7 +42,7 @@ func loadCommandPluginCommands(path string) ([]CommandDecl, error) {
 	}
 
 	var resp CommandsResponse
-	if err := commandPluginDecMode.Unmarshal(out, &resp); err != nil {
+	if err := pluginwire.DecMode.Unmarshal(out, &resp); err != nil {
 		return nil, fmt.Errorf("plugin %s: commands decode: %w", filepath.Base(path), err)
 	}
 	return resp.Commands, nil

@@ -18,9 +18,11 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-// decMode is a CBOR decode mode configured to use map[string]any for all CBOR
+// DecMode is a CBOR decode mode configured to use map[string]any for all CBOR
 // maps (including nested ones), rather than the default map[interface{}]interface{}.
-var decMode = func() cbor.DecMode {
+// Plugin authors can use it to decode unframed CBOR payloads (e.g. manifest and
+// commands responses) without reimplementing the same DecOptions.
+var DecMode = func() cbor.DecMode {
 	dm, err := cbor.DecOptions{
 		DefaultMapType: reflect.TypeOf(map[string]any{}),
 	}.DecMode()
@@ -82,7 +84,7 @@ func ReadMessage(r io.Reader, v any) error {
 		return fmt.Errorf("plugin: read payload: %w", err)
 	}
 
-	if err := decMode.Unmarshal(payload, v); err != nil {
+	if err := DecMode.Unmarshal(payload, v); err != nil {
 		return fmt.Errorf("plugin: unmarshal: %w", err)
 	}
 	return nil
