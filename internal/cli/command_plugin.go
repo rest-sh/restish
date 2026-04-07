@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/output"
+	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
@@ -248,6 +248,10 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if text, _ := msg["text"].(string); text != "" {
 			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", text)
 		}
+	default:
+		if msgType != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unhandled plugin message type %q\n", msgType)
+		}
 	}
 	return false, nil
 }
@@ -432,4 +436,3 @@ func isEOFLike(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "EOF") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
 }
-
