@@ -54,7 +54,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	plugins := plugin.Discover(plugin.DefaultPluginDir(), c.cfg.AllowedPlugins, func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	})
+	}, c.pluginManifestCachePath())
 
 	if len(plugins) == 0 {
 		fmt.Fprintln(c.Stdout, "No plugins found.")

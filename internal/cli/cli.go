@@ -51,6 +51,11 @@ type CLI struct {
 	// Used in tests to point at a temp dir; leave empty to use the platform default.
 	SpecCachePath string
 
+	// PluginManifestCachePath overrides the default plugin manifest cache file.
+	// Used in tests to prevent writing to ~/.config/restish; leave empty to
+	// use the platform default (~/.config/restish/plugin-manifest-cache.cbor).
+	PluginManifestCachePath string
+
 	// RetryBaseDelay overrides the 1 s default backoff base for retries.
 	// Set to a small value in tests to avoid slow retries.
 	RetryBaseDelay time.Duration
@@ -160,6 +165,14 @@ func (c *CLI) specCacheDir() string {
 	return config.DefaultSpecCacheDir()
 }
 
+// pluginManifestCachePath returns the effective plugin manifest cache file path.
+func (c *CLI) pluginManifestCachePath() string {
+	if c.PluginManifestCachePath != "" {
+		return c.PluginManifestCachePath
+	}
+	return internalplugin.DefaultManifestCachePath()
+}
+
 // discoverSpec runs spec discovery for the named API using the registered loaders.
 func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, error) {
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
@@ -196,7 +209,7 @@ func (c *CLI) Run(args []string) error {
 	// know their plugin is not active rather than silently ignoring it.
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), cfg.AllowedPlugins, func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	})
+	}, c.pluginManifestCachePath())
 
 	// Register plugin-provided formatters and loaders.
 	for _, p := range c.plugins {

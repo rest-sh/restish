@@ -64,13 +64,38 @@ type Plugin struct {
 // abort discovery. Pass nil for errFn to silently skip broken plugins.
 // When allowedPlugins is non-empty only executables whose base name appears in
 // the list are loaded; all others are silently skipped.
-func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error)) []Plugin {
+// manifestCacheFile, when non-empty, enables a CBOR on-disk manifest cache
+// keyed by plugin path + mtime. This avoids subprocess spawns on every
+// invocation when the plugin binary has not changed.
+func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error), manifestCacheFile string) []Plugin {
 	seen := map[string]bool{}
 	var plugins []Plugin
 
 	allowed := make(map[string]bool, len(allowedPlugins))
 	for _, name := range allowedPlugins {
 		allowed[name] = true
+	}
+
+	cache := loadManifestCache(manifestCacheFile)
+	cacheUpdated := false
+
+	resolveManifest := func(path string) (*Manifest, error) {
+		info, statErr := os.Stat(path)
+		if statErr == nil && manifestCacheFile != "" {
+			mtime := info.ModTime().UnixNano()
+			if entry, ok := cache[path]; ok && entry.Mtime == mtime {
+				m := entry.Manifest
+				return &m, nil
+			}
+			m, err := LoadManifest(path)
+			if err != nil {
+				return nil, err
+			}
+			cache[path] = manifestCacheEntry{Mtime: mtime, Manifest: *m}
+			cacheUpdated = true
+			return m, nil
+		}
+		return LoadManifest(path)
 	}
 
 	add := func(path string) {
@@ -81,7 +106,7 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 			return
 		}
 		seen[path] = true
-		m, err := LoadManifest(path)
+		m, err := resolveManifest(path)
 		if err != nil {
 			if errFn != nil {
 				errFn(path, err)
@@ -136,6 +161,10 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 				}
 			}
 		}
+	}
+
+	if cacheUpdated && manifestCacheFile != "" {
+		saveManifestCache(manifestCacheFile, cache)
 	}
 
 	return plugins
@@ -193,6 +222,24 @@ func DefaultPluginDir() string {
 		return filepath.Join(home, ".config", "restish", "plugins")
 	}
 	return filepath.Join(".restish", "plugins")
+}
+
+// DefaultManifestCachePath returns the path to the on-disk plugin manifest
+// cache file. Stored next to the config file to be automatically cleaned up
+// when users wipe their config directory.
+func DefaultManifestCachePath() string {
+	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "plugin-manifest-cache.cbor")
+	}
+	if runtime.GOOS == "windows" {
+		if dir := os.Getenv("APPDATA"); dir != "" {
+			return filepath.Join(dir, "restish", "plugin-manifest-cache.cbor")
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".config", "restish", "plugin-manifest-cache.cbor")
+	}
+	return filepath.Join(".restish", "plugin-manifest-cache.cbor")
 }
 
 // isExecutable reports whether path is a regular executable file.
