@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"net/http"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
@@ -75,7 +75,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
-	return c.runHTTPInternal(cmd, method, args, false, nil)
+	return c.runHTTPInternal(cmd, method, args, false, nil, false)
 }
 
 // runHTTPInternal is the implementation of runHTTP. followMode=true is used for
@@ -84,7 +84,9 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 // extraHeaders holds additional "Name: Value" strings injected by generated
 // commands (e.g. OpenAPI header/cookie parameters) that must not be stored on
 // the cobra.Command itself since command objects are reused across invocations.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string) error {
+// noAuth strips authentication when following a redirect to a different host,
+// preventing credentialed SSRF via a compromised response-middleware plugin.
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -103,6 +105,22 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {
 		return err
+	}
+
+	// When following a cross-host redirect, strip credentials to prevent
+	// a compromised plugin from issuing credentialed requests to arbitrary hosts.
+	if noAuth {
+		opts.OnRequest = nil
+		var filtered []string
+		for _, h := range opts.Headers {
+			lower := strings.ToLower(h)
+			if !strings.HasPrefix(lower, "authorization:") &&
+				!strings.HasPrefix(lower, "cookie:") &&
+				!strings.HasPrefix(lower, "proxy-authorization:") {
+				filtered = append(filtered, h)
+			}
+		}
+		opts.Headers = filtered
 	}
 
 	// Build the transport once so all paginated requests share the same
@@ -193,7 +211,14 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 			return nil
 		}
 		if followReq != nil {
-			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil)
+			crossHost := false
+			if followU, parseErr := url.Parse(followReq.URI); parseErr == nil {
+				crossHost = !strings.EqualFold(followU.Hostname(), httpResp.Request.URL.Hostname())
+			}
+			if crossHost {
+				fmt.Fprintf(c.Stderr, "warning: response-middleware follow to different host %q — stripping credentials\n", followReq.URI)
+			}
+			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost)
 		}
 	}
 

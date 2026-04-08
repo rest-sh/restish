@@ -68,9 +68,9 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 
 // paramInfo holds the information we need about a single parameter.
 type paramInfo struct {
-	name     string   // original API parameter name
-	flagName string   // kebab-case flag name
-	in       string   // "path", "query", "header", "cookie"
+	name     string // original API parameter name
+	flagName string // kebab-case flag name
+	in       string // "path", "query", "header", "cookie"
 	required bool
 	desc     string
 	enum     []string // allowed values from OpenAPI schema enum, if present
@@ -289,7 +289,7 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
-	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders)
+	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, false)
 }
 
 // extractPathParamNames returns path parameter names in left-to-right order
