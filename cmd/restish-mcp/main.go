@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 	"github.com/pb33f/libopenapi"
 )
 
@@ -16,10 +15,29 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		switch arg {
 		case "--rsh-plugin-manifest":
-			writeCBOR(Manifest())
+			if err := plugin.WriteManifest(os.Stdout, plugin.Manifest{
+				Name:              "mcp",
+				Version:           "1.0.0",
+				Description:       "Expose registered APIs as MCP tools",
+				RestishAPIVersion: 1,
+				Hooks:             []string{"command"},
+			}); err != nil {
+				fmt.Fprintln(os.Stderr, "manifest:", err)
+				os.Exit(2)
+			}
 			return
 		case "--rsh-plugin-commands":
-			writeCBOR(Commands())
+			if err := plugin.WriteCommands(os.Stdout, []plugin.CommandDecl{
+				{
+					Name:             "mcp",
+					Short:            "Serve registered APIs over the Model Context Protocol",
+					Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.",
+					PassthroughStdio: true,
+				},
+			}); err != nil {
+				fmt.Fprintln(os.Stderr, "commands:", err)
+				os.Exit(2)
+			}
 			return
 		}
 	}
@@ -32,7 +50,7 @@ func main() {
 	command, _ := initMsg["command"].(string)
 	if command != "mcp" {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", command)
-		_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 1})
+		_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone, ExitCode: 1})
 		return
 	}
 
@@ -214,15 +232,6 @@ func (w *stdoutWriter) Write(p []byte) (int, error) {
 
 func (c *pluginClient) newStdoutWriter() io.Writer {
 	return &stdoutWriter{client: c}
-}
-
-func writeCBOR(v any) {
-	data, err := cbor.Marshal(v)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "marshal:", err)
-		os.Exit(2)
-	}
-	_, _ = os.Stdout.Write(data)
 }
 
 

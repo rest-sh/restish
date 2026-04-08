@@ -5,17 +5,34 @@ import (
 	"os"
 
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 )
 
 func main() {
 	for _, arg := range os.Args[1:] {
 		switch arg {
 		case "--rsh-plugin-manifest":
-			writeCBOR(manifest())
+			if err := pluginwire.WriteManifest(os.Stdout, pluginwire.Manifest{
+				Name:              "bulk",
+				Version:           "1.0.0",
+				Description:       "Git-like bulk resource management for API collections",
+				RestishAPIVersion: 1,
+				Hooks:             []string{"command"},
+			}); err != nil {
+				fmt.Fprintln(os.Stderr, "manifest:", err)
+				os.Exit(2)
+			}
 			return
 		case "--rsh-plugin-commands":
-			writeCBOR(commands())
+			if err := pluginwire.WriteCommands(os.Stdout, []pluginwire.CommandDecl{
+				{
+					Name:  "bulk",
+					Short: "Git-like bulk resource management for API resources",
+					Long:  "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.",
+				},
+			}); err != nil {
+				fmt.Fprintln(os.Stderr, "commands:", err)
+				os.Exit(2)
+			}
 			return
 		}
 	}
@@ -33,35 +50,4 @@ func main() {
 		return
 	}
 	_ = client.done(0)
-}
-
-func manifest() map[string]any {
-	return map[string]any{
-		"name":                "bulk",
-		"version":             "1.0.0",
-		"description":         "Git-like bulk resource management for API collections",
-		"restish_api_version": 1,
-		"hooks":               []string{"command"},
-	}
-}
-
-func commands() map[string]any {
-	return map[string]any{
-		"commands": []any{
-			map[string]any{
-				"name":  "bulk",
-				"short": "Git-like bulk resource management for API resources",
-				"long":  "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.",
-			},
-		},
-	}
-}
-
-func writeCBOR(v any) {
-	data, err := cbor.Marshal(v)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "marshal:", err)
-		os.Exit(2)
-	}
-	_, _ = os.Stdout.Write(data)
 }

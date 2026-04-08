@@ -1,0 +1,69 @@
+package plugin
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/fxamacker/cbor/v2"
+)
+
+// Manifest is the metadata a plugin reports when called with
+// --rsh-plugin-manifest. Plugin authors populate and write this with
+// WriteManifest instead of manually marshalling CBOR.
+type Manifest struct {
+	Name              string   `cbor:"name" json:"name"`
+	Version           string   `cbor:"version,omitempty" json:"version,omitempty"`
+	Description       string   `cbor:"description,omitempty" json:"description,omitempty"`
+	RestishAPIVersion int      `cbor:"restish_api_version" json:"restish_api_version"`
+	Hooks             []string `cbor:"hooks,omitempty" json:"hooks,omitempty"`
+	// FormatterNames lists the output format names this plugin registers when
+	// the "formatter" hook is declared.
+	FormatterNames []string `cbor:"formatter_names,omitempty" json:"formatter_names,omitempty"`
+	// LoaderContentTypes lists the MIME types this plugin handles when the
+	// "loader" hook is declared.
+	LoaderContentTypes []string `cbor:"loader_content_types,omitempty" json:"loader_content_types,omitempty"`
+	// AuthAPINames, when non-empty, restricts the "auth" hook to the listed
+	// API names so the plugin is not invoked for every unrelated API.
+	AuthAPINames []string `cbor:"auth_api_names,omitempty" json:"auth_api_names,omitempty"`
+}
+
+// CommandDecl describes one command that a command-plugin exposes.
+// It is used in the response to --rsh-plugin-commands.
+type CommandDecl struct {
+	Name             string `cbor:"name" json:"name"`
+	Short            string `cbor:"short,omitempty" json:"short,omitempty"`
+	Long             string `cbor:"long,omitempty" json:"long,omitempty"`
+	PassthroughStdio bool   `cbor:"passthrough_stdio,omitempty" json:"passthrough_stdio,omitempty"`
+}
+
+// WriteManifest serialises m as unframed CBOR and writes it to w.
+// It is the canonical way to respond to --rsh-plugin-manifest.
+//
+//	case "--rsh-plugin-manifest":
+//	    return plugin.WriteManifest(os.Stdout, m)
+func WriteManifest(w io.Writer, m Manifest) error {
+	data, err := cbor.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("plugin: marshal manifest: %w", err)
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+// WriteCommands serialises cmds as an unframed CBOR map with a "commands"
+// array and writes it to w. It is the canonical way to respond to
+// --rsh-plugin-commands.
+//
+//	case "--rsh-plugin-commands":
+//	    return plugin.WriteCommands(os.Stdout, cmds)
+func WriteCommands(w io.Writer, cmds []CommandDecl) error {
+	type wrapper struct {
+		Commands []CommandDecl `cbor:"commands"`
+	}
+	data, err := cbor.Marshal(wrapper{Commands: cmds})
+	if err != nil {
+		return fmt.Errorf("plugin: marshal commands: %w", err)
+	}
+	_, err = w.Write(data)
+	return err
+}

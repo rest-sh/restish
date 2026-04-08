@@ -102,28 +102,6 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-func Manifest() map[string]any {
-	return map[string]any{
-		"name":                "mcp",
-		"version":             "1.0.0",
-		"description":         "Expose registered APIs as MCP tools",
-		"restish_api_version": 1,
-		"hooks":               []string{"command"},
-	}
-}
-
-func Commands() map[string]any {
-	return map[string]any{
-		"commands": []any{
-			map[string]any{
-				"name":              "mcp",
-				"short":             "Serve registered APIs over the Model Context Protocol",
-				"long":              "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.",
-				"passthrough_stdio": true,
-			},
-		},
-	}
-}
 
 func Run(stdin io.Reader, stdout io.Writer, fetchSpec SpecFetcher, exec HTTPExecutor, args []string) error {
 	cfg, err := ParseArgs(args)
