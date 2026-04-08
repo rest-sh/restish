@@ -57,11 +57,11 @@ func main() {
 		}
 	}
 	if err != nil {
-		_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "stderr-data", "data": []byte(err.Error() + "\n")})
-		_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 1})
+		_ = plugin.WriteMessage(os.Stdout, plugin.StderrDataMsg{Type: plugin.MsgTypeStderrData, Data: []byte(err.Error() + "\n")})
+		_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone, ExitCode: 1})
 		return
 	}
-	_ = plugin.WriteMessage(os.Stdout, map[string]any{"type": "done", "exit_code": 0})
+	_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone})
 }
 
 type pluginClient struct {
@@ -102,34 +102,34 @@ func (c *pluginClient) readLoop() {
 			return
 		}
 		switch msg["type"] {
-		case "stdin-data":
+		case plugin.MsgTypeStdinData:
 			if data := plugin.MsgBytes(msg["data"]); len(data) > 0 {
 				if _, err := c.stdinPipeW.Write(data); err != nil {
 					return
 				}
 			}
-		case "stdin-close":
+		case plugin.MsgTypeStdinClose:
 			_ = c.stdinPipeW.Close()
-		case "http-response":
+		case plugin.MsgTypeHTTPResponse:
 			c.httpRespCh <- msg
 		}
 	}
 }
 
 func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
-	msg := map[string]any{
-		"type":   "http-request",
-		"method": req.Method,
-		"uri":    req.URI,
+	msg := plugin.HTTPRequestMsg{
+		Type:   plugin.MsgTypeHTTPRequest,
+		Method: req.Method,
+		URI:    req.URI,
 	}
 	if len(req.Headers) > 0 {
-		msg["headers"] = req.Headers
+		msg.Headers = req.Headers
 	}
 	if req.Body != nil {
-		msg["body"] = req.Body
+		msg.Body = req.Body
 	}
 	if req.ContentType != "" {
-		msg["content_type"] = req.ContentType
+		msg.ContentType = req.ContentType
 	}
 	if err := c.writeMessage(msg); err != nil {
 		return nil, err
@@ -150,10 +150,7 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 }
 
 func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
-	if err := c.writeMessage(map[string]any{
-		"type": "api-spec",
-		"name": name,
-	}); err != nil {
+	if err := c.writeMessage(plugin.APISpecMsg{Type: plugin.MsgTypeAPISpec, Name: name}); err != nil {
 		return nil, err
 	}
 	var reply map[string]any
@@ -162,13 +159,13 @@ func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 			return nil, err
 		}
 		switch msgType, _ := reply["type"].(string); msgType {
-		case "api-spec-response":
+		case plugin.MsgTypeAPISpecResponse:
 			goto haveReply
-		case "stdin-data":
+		case plugin.MsgTypeStdinData:
 			if data := plugin.MsgBytes(reply["data"]); len(data) > 0 {
 				_, _ = c.pendingStdin.Write(data)
 			}
-		case "stdin-close":
+		case plugin.MsgTypeStdinClose:
 			c.stdinClosed = true
 		default:
 			return nil, fmt.Errorf("unexpected plugin reply %q while loading %s", msgType, name)
@@ -209,7 +206,7 @@ func (w *stdoutWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if err := w.client.writeMessage(map[string]any{"type": "stdout-data", "data": append([]byte(nil), p...)}); err != nil {
+	if err := w.client.writeMessage(plugin.StdoutDataMsg{Type: plugin.MsgTypeStdoutData, Data: append([]byte(nil), p...)}); err != nil {
 		return 0, err
 	}
 	return len(p), nil

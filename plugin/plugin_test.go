@@ -83,8 +83,44 @@ func TestReadMessageTruncatedStream(t *testing.T) {
 	}
 }
 
-// TestLargeMessageRoundTrip verifies that a message larger than 64 KiB
-// round-trips correctly.
+// TestTypedMessageRoundTrip verifies that a typed message struct written with
+// WriteMessage decodes back to the same map representation the host uses,
+// confirming that cbor struct tags match the stringly-keyed wire format.
+func TestTypedMessageRoundTrip(t *testing.T) {
+	msg := plugin.HTTPRequestMsg{
+		Type:    plugin.MsgTypeHTTPRequest,
+		Method:  "POST",
+		URI:     "https://api.example.com/items",
+		NoCache: true,
+		Filter:  "body.items",
+	}
+
+	var buf bytes.Buffer
+	if err := plugin.WriteMessage(&buf, msg); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := plugin.ReadMessage(&buf, &decoded); err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+
+	if decoded["type"] != plugin.MsgTypeHTTPRequest {
+		t.Errorf("type: got %v, want %q", decoded["type"], plugin.MsgTypeHTTPRequest)
+	}
+	if decoded["method"] != "POST" {
+		t.Errorf("method: got %v, want POST", decoded["method"])
+	}
+	if decoded["uri"] != "https://api.example.com/items" {
+		t.Errorf("uri: got %v", decoded["uri"])
+	}
+	if decoded["no_cache"] != true {
+		t.Errorf("no_cache: got %v, want true", decoded["no_cache"])
+	}
+	if decoded["filter"] != "body.items" {
+		t.Errorf("filter: got %v, want body.items", decoded["filter"])
+	}
+}
 func TestLargeMessageRoundTrip(t *testing.T) {
 	// Build a slice of 10,000 elements to produce >64KB payload.
 	large := make([]string, 10_000)
