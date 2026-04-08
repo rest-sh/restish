@@ -62,7 +62,14 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 }
 
 // authHandlerFor returns the Handler for the given AuthConfig.
+// Custom handlers registered via CLI.AddAuthHandler take precedence over
+// built-in handlers.
 func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
+	if c.customAuthHandlers != nil {
+		if h, ok := c.customAuthHandlers[ac.Type]; ok {
+			return h, nil
+		}
+	}
 	switch ac.Type {
 	case "http-basic":
 		return &auth.HTTPBasic{Prompter: c.promptSecret}, nil

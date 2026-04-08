@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	authpkg "github.com/danielgtaylor/restish/v2/auth"
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/content"
 	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
@@ -54,12 +55,13 @@ type CLI struct {
 	// Set to a small value in tests to avoid slow retries.
 	RetryBaseDelay time.Duration
 
-	cfg         *config.Config
-	content     *content.Registry
-	loaders     []spec.Loader
-	linkParsers []hypermedia.Parser
-	formatters  map[string]output.Formatter
-	plugins     []internalplugin.Plugin
+	cfg                *config.Config
+	content            *content.Registry
+	loaders            []spec.Loader
+	linkParsers        []hypermedia.Parser
+	formatters         map[string]output.Formatter
+	plugins            []internalplugin.Plugin
+	customAuthHandlers map[string]authpkg.Handler
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -99,6 +101,21 @@ func (c *CLI) AddContentType(ct *content.ContentType) {
 // AddEncoding registers an additional compression encoding with the CLI's registry.
 func (c *CLI) AddEncoding(e *content.Encoding) {
 	c.content.AddEncoding(e)
+}
+
+// AddAuthHandler registers a custom auth handler under the given type name.
+// The name is used in the profile's auth.type config field.
+// Built-in names (http-basic, oauth-client-credentials,
+// oauth-authorization-code, external-tool) can be overridden.
+// Call this before CLI.Run.
+//
+// Use the github.com/danielgtaylor/restish/v2/auth package for the Handler
+// and Param types when implementing custom auth.
+func (c *CLI) AddAuthHandler(name string, handler authpkg.Handler) {
+	if c.customAuthHandlers == nil {
+		c.customAuthHandlers = make(map[string]authpkg.Handler)
+	}
+	c.customAuthHandlers[name] = handler
 }
 
 // AddLoader registers an additional spec loader. Higher-priority loaders
