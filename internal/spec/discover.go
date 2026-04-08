@@ -321,6 +321,23 @@ func joinURL(base, path string) string {
 func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
 	tr := effectiveTransport(cfg)
 
+	// Fast path: single file needs no merge; avoid an extra unmarshal+marshal.
+	if len(cfg.SpecFiles) == 1 {
+		src := cfg.SpecFiles[0]
+		var ct string
+		var data []byte
+		var err error
+		if isLocalPath(src) {
+			ct, data, err = readLocalFile(src)
+		} else {
+			ct, data, _, err = fetchBytes(ctx, src, tr)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("spec file %q: %w", src, err)
+		}
+		return load(ct, data, loaders)
+	}
+
 	var merged map[string]any
 	var lastCT string
 
