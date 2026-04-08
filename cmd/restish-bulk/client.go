@@ -2,18 +2,13 @@ package main
 
 import (
 	"io"
-	"strings"
 
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 )
 
-type terminalContext struct {
-	Color bool
-}
-
 type pluginClient struct {
 	*pluginwire.CommandClient
-	term terminalContext
+	term pluginwire.TerminalContext
 }
 
 type httpResponse struct {
@@ -23,21 +18,11 @@ type httpResponse struct {
 	Error   string
 }
 
-func newPluginClient(in io.Reader, out io.Writer, term terminalContext) *pluginClient {
+func newPluginClient(in io.Reader, out io.Writer, term pluginwire.TerminalContext) *pluginClient {
 	return &pluginClient{
 		CommandClient: pluginwire.NewCommandClient(in, out),
 		term:          term,
 	}
-}
-
-func terminalContextFromArgs(args []string) terminalContext {
-	var ctx terminalContext
-	for _, arg := range args {
-		if value, ok := strings.CutPrefix(arg, "--rsh-color="); ok {
-			ctx.Color = value == "true"
-		}
-	}
-	return ctx
 }
 
 func (c *pluginClient) request(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
