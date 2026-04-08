@@ -1,0 +1,27 @@
+---
+title: Contributing
+linkTitle: Contributing
+weight: 70
+description: Contributor setup, architecture notes, and design records for Restish v2.
+---
+
+# Contributing
+
+Contributor docs are separated from the end-user guides on purpose. Start here
+if you want to build Restish itself, work on the docs site, or understand the
+core architecture before changing behavior.
+
+## Start Here
+
+- [Development Setup](./development-setup/) for the local toolchain and common
+  commands.
+- [Design Records](./design-records/) for the subsystem-level architecture
+  documents in [`docs/design/`](/Users/daniel/src/restish2/docs/design/README.md).
+
+## Good Next Steps
+
+- Read the CLI architecture record before changing shared command behavior.
+- Check subsystem design docs before editing auth, spec loading, output, or
+  plugin runtime code.
+- Keep public docs focused on user workflows, then link deeper design notes
+  when architecture context matters.

@@ -1,0 +1,14 @@
+{
+  "name": "restish-docs-hugo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "hugo server",
+    "build": "hugo"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "postcss-cli": "^11.0.1"
+  }
+}
