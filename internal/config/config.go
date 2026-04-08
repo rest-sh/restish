@@ -26,6 +26,17 @@ type Config struct {
 	// ["restish-foo", "restish-bar"]).  When empty (the default), all
 	// discovered plugins are loaded.
 	AllowedPlugins []string `json:"allowed_plugins,omitempty"`
+
+	// Plugins holds per-plugin configuration keyed by plugin name (without the
+	// "restish-" prefix). Each value is stored as raw JSON so that restish
+	// itself does not need to know the shape of each plugin's config.
+	// Plugins can read their config via the "config-read" message.
+	//
+	// Example restish.json entry:
+	//   "plugins": {
+	//     "bulk": { "concurrency": 4, "retry": true }
+	//   }
+	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
 }
 
 // APIConfig holds per-API configuration.
@@ -205,3 +216,17 @@ func (e *ParseError) Error() string {
 }
 
 func (e *ParseError) Unwrap() error { return e.Err }
+
+// PluginConfig unmarshals the configuration stored under plugins[name] into v.
+// Returns nil without modifying v when no config exists for that plugin.
+// name should be the plugin's short name (without the "restish-" prefix).
+func (c *Config) PluginConfig(name string, v any) error {
+	if c == nil || c.Plugins == nil {
+		return nil
+	}
+	raw, ok := c.Plugins[name]
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(raw, v)
+}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -518,8 +519,21 @@ func (c *CLI) handlePluginConfirm(writer *commandPluginWriter, msg map[string]an
 func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg map[string]any) error {
 	apiName, _ := msg["api"].(string)
 	profileName, _ := msg["profile"].(string)
+	pluginName, _ := msg["plugin"].(string)
 
 	reply := map[string]any{"type": "config-read-response"}
+
+	// Return plugin-specific config when requested.
+	if pluginName != "" && c.cfg != nil && c.cfg.Plugins != nil {
+		raw, ok := c.cfg.Plugins[pluginName]
+		if ok {
+			var pluginCfg any
+			if err := json.Unmarshal(raw, &pluginCfg); err == nil {
+				reply["plugin_config"] = pluginCfg
+			}
+		}
+	}
+
 	if c.cfg == nil || apiName == "" {
 		return writer.WriteMessage(reply)
 	}

@@ -114,11 +114,16 @@ type ListProfilesResponseMsg struct {
 }
 
 // ConfigReadMsg asks the host for the effective configuration of an API
-// profile (base URL, persistent headers and query params).
+// profile (base URL, persistent headers and query params), and/or the
+// plugin-specific config stored under plugins[Plugin] in restish.json.
 type ConfigReadMsg struct {
 	Type    string `cbor:"type"`
-	API     string `cbor:"api"`
+	API     string `cbor:"api,omitempty"`
 	Profile string `cbor:"profile,omitempty"`
+	// Plugin is the plugin's short name (without the "restish-" prefix).
+	// When set, the response includes PluginConfig populated from
+	// restish.json's plugins[Plugin] entry.
+	Plugin string `cbor:"plugin,omitempty"`
 }
 
 // ConfigReadResponseMsg is the host reply to a ConfigReadMsg.
@@ -129,6 +134,9 @@ type ConfigReadResponseMsg struct {
 	Headers []string `cbor:"headers,omitempty"`
 	Query   []string `cbor:"query,omitempty"`
 	Error   string   `cbor:"error,omitempty"`
+	// PluginConfig holds the parsed plugins[name] entry from restish.json,
+	// or nil when no config is stored for this plugin.
+	PluginConfig any `cbor:"plugin_config,omitempty"`
 }
 
 // PromptMsg asks the host to display a message and read one line from the
