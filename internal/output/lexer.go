@@ -1,8 +1,6 @@
 package output
 
 import (
-	"sync"
-
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 )
@@ -15,13 +13,9 @@ const (
 	IndentLevel2
 )
 
-// readableIndentMu guards readableIndentDepth for concurrent Format calls
-// (e.g., table output rendering multiple rows, or tests with -parallel).
-var readableIndentMu sync.Mutex
-
-// readableIndentDepth tracks the current bracket nesting depth. Protected by
-// readableIndentMu; callers must hold the lock before reset and highlight.
-var readableIndentDepth int
+// indentDepthKey is the MutatorContext key used to store per-tokenise-call
+// bracket nesting depth inside the chroma LexerState.
+type indentDepthKey struct{}
 
 // ReadableLexer is a custom chroma lexer for Restish readable output.
 // It extends JSON tokenization with special-case patterns for:
@@ -133,22 +127,25 @@ var HTTPPreambleLexer = lexers.Register(chroma.MustNewLexer(
 	},
 ))
 
-func readableIndentStart(groups []string, _ *chroma.LexerState) chroma.Iterator {
+func readableIndentStart(groups []string, state *chroma.LexerState) chroma.Iterator {
+	depth, _ := state.Get(indentDepthKey{}).(int)
 	tok := chroma.Token{
-		Type:  chroma.TokenType(9000 + (readableIndentDepth % 3)),
+		Type:  chroma.TokenType(9000 + (depth % 3)),
 		Value: groups[0],
 	}
-	readableIndentDepth++
+	state.Set(indentDepthKey{}, depth+1)
 	return chroma.Literator(tok)
 }
 
-func readableIndentEnd(groups []string, _ *chroma.LexerState) chroma.Iterator {
-	if readableIndentDepth > 0 {
-		readableIndentDepth--
+func readableIndentEnd(groups []string, state *chroma.LexerState) chroma.Iterator {
+	depth, _ := state.Get(indentDepthKey{}).(int)
+	if depth > 0 {
+		depth--
 	}
 	tok := chroma.Token{
-		Type:  chroma.TokenType(9000 + (readableIndentDepth % 3)),
+		Type:  chroma.TokenType(9000 + (depth % 3)),
 		Value: groups[0],
 	}
+	state.Set(indentDepthKey{}, depth)
 	return chroma.Literator(tok)
 }
