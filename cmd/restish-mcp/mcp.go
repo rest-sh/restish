@@ -16,6 +16,8 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
+
+	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
 const DefaultMaxResultBytes = 16 * 1024
@@ -213,22 +215,11 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 
 	var tools []*Tool
 	for path, pathItem := range model.Model.Paths.PathItems.FromOldest() {
-		for _, item := range []struct {
-			Method string
-			Op     *v3high.Operation
-		}{
-			{"GET", pathItem.Get},
-			{"POST", pathItem.Post},
-			{"PUT", pathItem.Put},
-			{"PATCH", pathItem.Patch},
-			{"DELETE", pathItem.Delete},
-			{"HEAD", pathItem.Head},
-			{"OPTIONS", pathItem.Options},
-		} {
+		for _, item := range spec.PathItemMethods(pathItem) {
 			if item.Op == nil || item.Op.OperationId == "" {
 				continue
 			}
-			if opExtBool(item.Op, "x-cli-ignore") || opExtBool(item.Op, "x-mcp-ignore") {
+			if spec.OpExtBool(item.Op, "x-cli-ignore") || spec.OpExtBool(item.Op, "x-mcp-ignore") {
 				continue
 			}
 			if opts.ReadOnly && item.Method != "GET" && item.Method != "HEAD" {
@@ -650,17 +641,4 @@ func valueString(v any) string {
 	default:
 		return fmt.Sprint(v)
 	}
-}
-
-func opExtBool(op *v3high.Operation, key string) bool {
-	if op.Extensions == nil {
-		return false
-	}
-	node := op.Extensions.GetOrZero(key)
-	if node == nil {
-		return false
-	}
-	var v bool
-	_ = node.Decode(&v)
-	return v
 }
