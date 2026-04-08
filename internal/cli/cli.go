@@ -134,6 +134,7 @@ func (c *CLI) profileFromCmd(cmd *cobra.Command) string {
 	}
 	return name
 }
+
 // specCacheDir returns the effective directory for API spec CBOR files.
 func (c *CLI) specCacheDir() string {
 	if c.SpecCachePath != "" {
@@ -162,6 +163,12 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).
 func (c *CLI) Run(args []string) error {
+	// On first run (no config file yet), suggest shell setup if on a supported
+	// shell so users discover the noglob alias before hitting the foot-gun.
+	if _, statErr := os.Stat(c.configFilePath()); os.IsNotExist(statErr) && output.IsTerminal(c.Stderr) {
+		c.hintShellSetup()
+	}
+
 	cfg, err := config.Load(c.configFilePath())
 	if err != nil {
 		return err

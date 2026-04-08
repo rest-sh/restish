@@ -76,3 +76,18 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
 	return nil
 }
+
+// hintShellSetup prints a first-run tip suggesting shell setup when the
+// current shell is a supported one.  Called only when the config file is
+// absent (true first run) and stderr is a TTY.
+func (c *CLI) hintShellSetup() {
+	shellPath := os.Getenv("SHELL")
+	if shellPath == "" {
+		return
+	}
+	shell := strings.ToLower(filepath.Base(shellPath))
+	if _, ok := shellSetups[shell]; !ok {
+		return
+	}
+	fmt.Fprintf(c.Stderr, "tip: run `restish setup %s` to configure your shell (prevents glob expansion issues)\n", shell)
+}
