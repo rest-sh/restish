@@ -20,6 +20,12 @@ type Config struct {
 
 	// Cache holds global cache settings.
 	Cache CacheConfig `json:"cache,omitempty"`
+
+	// AllowedPlugins, when non-empty, restricts plugin auto-discovery to
+	// executables whose base names appear in this list (e.g.
+	// ["restish-foo", "restish-bar"]).  When empty (the default), all
+	// discovered plugins are loaded.
+	AllowedPlugins []string `json:"allowed_plugins,omitempty"`
 }
 
 // APIConfig holds per-API configuration.

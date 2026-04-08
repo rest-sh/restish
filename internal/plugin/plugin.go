@@ -52,12 +52,22 @@ type Plugin struct {
 // Discover finds all restish-* plugins on PATH and in pluginDir.
 // Errors loading individual plugin manifests are reported via errFn but do not
 // abort discovery. Pass nil for errFn to silently skip broken plugins.
-func Discover(pluginDir string, errFn func(path string, err error)) []Plugin {
+// When allowedPlugins is non-empty only executables whose base name appears in
+// the list are loaded; all others are silently skipped.
+func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error)) []Plugin {
 	seen := map[string]bool{}
 	var plugins []Plugin
 
+	allowed := make(map[string]bool, len(allowedPlugins))
+	for _, name := range allowedPlugins {
+		allowed[name] = true
+	}
+
 	add := func(path string) {
 		if seen[path] {
+			return
+		}
+		if len(allowed) > 0 && !allowed[filepath.Base(path)] {
 			return
 		}
 		seen[path] = true

@@ -221,7 +221,7 @@ func TestDiscover_FindsPluginsInDir(t *testing.T) {
 
 	// Point PATH to our temp dir only so Discover finds our plugin.
 	t.Setenv("PATH", dir)
-	plugins := Discover("", nil)
+	plugins := Discover("", nil, nil)
 	if len(plugins) == 0 {
 		t.Fatal("expected at least one plugin to be discovered")
 	}
@@ -240,7 +240,7 @@ func TestDiscover_SkipsBrokenPlugins(t *testing.T) {
 
 	t.Setenv("PATH", dir)
 	var errs []string
-	plugins := Discover("", func(p string, err error) {
+	plugins := Discover("", nil, func(p string, err error) {
 		errs = append(errs, err.Error())
 	})
 	if len(plugins) != 0 {
@@ -262,7 +262,7 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 
 	// Add dir twice to PATH to test deduplication.
 	t.Setenv("PATH", dir+":"+dir)
-	plugins := Discover("", nil)
+	plugins := Discover("", nil, nil)
 	if len(plugins) != 1 {
 		t.Errorf("expected 1 unique plugin, got %d", len(plugins))
 	}
@@ -270,8 +270,28 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 
 func TestDiscover_EmptyPath_NoPlugins(t *testing.T) {
 	t.Setenv("PATH", "")
-	plugins := Discover("", nil)
+	plugins := Discover("", nil, nil)
 	if len(plugins) != 0 {
 		t.Errorf("expected 0 plugins for empty PATH, got %d", len(plugins))
+	}
+}
+
+func TestDiscover_AllowedPlugins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	m1 := Manifest{Name: "allowed", RestishAPIVersion: CurrentPluginAPIVersion}
+	m2 := Manifest{Name: "blocked", RestishAPIVersion: CurrentPluginAPIVersion}
+	writeScript(t, dir, "restish-allowed", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m1)))
+	writeScript(t, dir, "restish-blocked", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m2)))
+
+	t.Setenv("PATH", dir)
+	plugins := Discover("", []string{"restish-allowed"}, nil)
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if plugins[0].Manifest.Name != "allowed" {
+		t.Errorf("Name: got %q, want %q", plugins[0].Manifest.Name, "allowed")
 	}
 }
