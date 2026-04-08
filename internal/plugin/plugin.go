@@ -87,22 +87,32 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 	}
 
 	// Scan PATH.
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			name := e.Name()
-			if !strings.HasPrefix(name, "restish-") {
-				continue
-			}
-			full := filepath.Join(dir, name)
-			if isExecutable(full) {
+	if len(allowed) > 0 {
+		// Fast path: look up each allowed plugin directly instead of
+		// enumerating every entry in every PATH directory.
+		for name := range allowed {
+			if full, err := exec.LookPath(name); err == nil {
 				add(full)
+			}
+		}
+	} else {
+		for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				name := e.Name()
+				if !strings.HasPrefix(name, "restish-") {
+					continue
+				}
+				full := filepath.Join(dir, name)
+				if isExecutable(full) {
+					add(full)
+				}
 			}
 		}
 	}
