@@ -308,6 +308,10 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		reqBody = bytes.NewReader(encoded)
 	}
 
+	// no_paginate is accepted per protocol. Plugin http-requests are currently
+	// always single-shot; when auto-pagination is added for delegated requests,
+	// no_paginate:true will suppress it.
+
 	reqCtx := context.Background()
 	if timeoutSec := msgInt(msg, "timeout"); timeoutSec > 0 {
 		var cancel context.CancelFunc
