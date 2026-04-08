@@ -263,6 +263,14 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)
 	}
+
+	if noCache, _ := msg["no_cache"].(bool); noCache {
+		opts.NoCache = true
+	}
+	if ttl := msgInt(msg, "cache_ttl"); ttl > 0 {
+		opts.Headers = append(opts.Headers, fmt.Sprintf("Cache-Control: max-age=%d", ttl))
+	}
+
 	origOnReq := opts.OnRequest
 	opts.OnRequest = func(req *http.Request) error {
 		if origOnReq != nil {
