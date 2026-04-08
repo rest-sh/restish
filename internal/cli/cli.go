@@ -107,6 +107,13 @@ func (c *CLI) AddLoader(l spec.Loader) {
 	c.loaders = append(c.loaders, l)
 }
 
+// Config returns the loaded configuration after Run has been called, or nil
+// if Run has not yet been called or configuration loading failed.
+// Embedders can use this to inspect configured APIs and profiles.
+func (c *CLI) Config() *config.Config {
+	return c.cfg
+}
+
 // configFilePath returns the effective config file path.
 func (c *CLI) configFilePath() string {
 	if c.ConfigPath != "" {
