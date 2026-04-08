@@ -140,9 +140,12 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
 	result := item
 	if filterExpr != "" {
 		doc := map[string]any{"body": item}
-		filtered, err := filter.Apply(filterExpr, doc, filter.LangAuto)
+		filtered, handled, err := c.filterOutput(cmd, filterExpr, doc, filter.LangAuto)
 		if err != nil {
-			return fmt.Errorf("filter: %w", err)
+			return err
+		}
+		if handled {
+			return nil
 		}
 		result = filtered
 	}

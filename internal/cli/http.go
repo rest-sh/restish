@@ -257,7 +257,6 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
 	filterLang, _ := cmd.Flags().GetString("rsh-filter-lang")
 	headersOnly, _ := cmd.Flags().GetBool("rsh-headers")
-	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
 	tty := output.IsTerminal(c.Stdout)
 
 	if headersOnly {
@@ -294,9 +293,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		"body":    resp.Body,
 	}
 
-	filtered, err := filter.Apply(filterExpr, doc, lang)
+	filtered, handled, err := c.filterOutput(cmd, filterExpr, doc, lang)
 	if err != nil {
-		return fmt.Errorf("filter: %w", err)
+		return err
 	}
 
 	if filtered == nil && filterExpr != "@" && filterExpr != "body" && filterExpr != "headers" &&
@@ -304,9 +303,8 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		fmt.Fprintf(c.Stderr, "hint: filter returned no results; to access response body fields use 'body.%s'\n", filterExpr)
 	}
 
-	// --rsh-raw: write plain text without encoding.
-	if rawMode {
-		return c.writeRaw(filtered)
+	if handled {
+		return nil
 	}
 
 	// If the filter selected a sub-value (not the full response), wrap it in
