@@ -121,6 +121,9 @@ func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[str
 		if e != nil {
 			return "", "", e
 		}
+		if e := validateOIDCEndpoints(issuer, oidc); e != nil {
+			return "", "", e
+		}
 		if authorizeURL == "" {
 			authorizeURL = oidc.AuthorizationEndpoint
 		}

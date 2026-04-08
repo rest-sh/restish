@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -49,6 +50,37 @@ func DiscoverOIDC(ctx context.Context, client *http.Client, issuerURL string) (*
 		return nil, fmt.Errorf("OIDC discovery from %s: %w", issuerURL, err)
 	}
 	return &cfg, nil
+}
+
+// validateOIDCEndpoints checks that every non-empty endpoint URL in cfg uses
+// the https scheme and shares the same hostname as issuerURL.  This prevents a
+// malicious OIDC server from redirecting token traffic to an attacker host.
+// Validation is skipped when issuerURL itself uses http:// (e.g. local dev).
+func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
+	issuer, err := url.Parse(issuerURL)
+	if err != nil {
+		return fmt.Errorf("OIDC: invalid issuer URL %q: %w", issuerURL, err)
+	}
+	// Only enforce for HTTPS issuers; HTTP issuers are already insecure (dev/test).
+	if issuer.Scheme != "https" {
+		return nil
+	}
+	for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.TokenEndpoint} {
+		if endpoint == "" {
+			continue
+		}
+		u, err := url.Parse(endpoint)
+		if err != nil {
+			return fmt.Errorf("OIDC: invalid endpoint URL %q: %w", endpoint, err)
+		}
+		if u.Scheme != "https" {
+			return fmt.Errorf("OIDC: endpoint %q must use https", endpoint)
+		}
+		if !strings.EqualFold(u.Hostname(), issuer.Hostname()) {
+			return fmt.Errorf("OIDC: endpoint hostname %q does not match issuer hostname %q", u.Hostname(), issuer.Hostname())
+		}
+	}
+	return nil
 }
 
 // FetchToken posts formBody (URL-encoded) to tokenURL and returns a CachedToken.

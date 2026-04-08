@@ -58,6 +58,9 @@ func (h *ClientCredentials) resolveToken(ctx context.Context, params map[string]
 		if err != nil {
 			return "", err
 		}
+		if err := validateOIDCEndpoints(issuer, oidc); err != nil {
+			return "", err
+		}
 		tokenURL = oidc.TokenEndpoint
 	}
 
