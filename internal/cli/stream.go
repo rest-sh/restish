@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -149,12 +148,7 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
 	}
 
 	if rawMode {
-		s := filter.RawOutput(result)
-		if !strings.HasSuffix(s, "\n") {
-			s += "\n"
-		}
-		_, err := io.WriteString(c.Stdout, s)
-		return err
+		return c.writeRaw(result)
 	}
 
 	b, err := json.Marshal(result)

@@ -281,12 +281,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	// --rsh-raw: write plain text without encoding.
 	if rawMode {
-		s := filter.RawOutput(filtered)
-		if !strings.HasSuffix(s, "\n") {
-			s += "\n"
-		}
-		_, err := io.WriteString(c.Stdout, s)
-		return err
+		return c.writeRaw(filtered)
 	}
 
 	// If the filter selected a sub-value (not the full response), wrap it in
@@ -349,6 +344,18 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, outResp, output.ColorEnabled(c.Stdout))
+}
+
+// writeRaw writes value to stdout as plain text (via filter.RawOutput),
+// appending a newline if the result does not already end with one.
+// Used by both formatResponse and formatStreamItem for --rsh-raw output.
+func (c *CLI) writeRaw(value any) error {
+	s := filter.RawOutput(value)
+	if !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	_, err := io.WriteString(c.Stdout, s)
+	return err
 }
 
 // logVerbose prints request and response summary lines to stderr.
