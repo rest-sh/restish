@@ -1,17 +1,21 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
@@ -225,6 +229,10 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		return false, c.handlePluginListProfiles(writer, msg)
 	case "config-read":
 		return false, c.handlePluginConfigRead(writer, msg)
+	case "prompt":
+		return false, c.handlePluginPrompt(writer, msg)
+	case "confirm":
+		return false, c.handlePluginConfirm(writer, msg)
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
 	case "stdout-data":
@@ -415,6 +423,77 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg map[string]an
 		"name":         apiName,
 		"content_type": s.ContentType,
 		"raw":          s.Raw,
+	})
+}
+
+func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg map[string]any) error {
+	message, _ := msg["message"].(string)
+	hidden, _ := msg["hidden"].(bool)
+	fmt.Fprint(c.Stderr, message)
+
+	var value string
+	var readErr error
+
+	if hidden {
+		if f, ok := c.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+			var raw []byte
+			raw, readErr = term.ReadPassword(int(f.Fd()))
+			fmt.Fprintln(c.Stderr) // restore cursor to new line
+			value = string(raw)
+		} else {
+			// Non-TTY (pipe/test): read one line without special echo control.
+			scanner := bufio.NewScanner(c.Stdin)
+			if scanner.Scan() {
+				value = strings.TrimRight(scanner.Text(), "\r\n")
+			} else {
+				readErr = scanner.Err()
+				if readErr == nil {
+					readErr = fmt.Errorf("unexpected EOF reading prompt")
+				}
+			}
+		}
+	} else {
+		scanner := bufio.NewScanner(c.Stdin)
+		if scanner.Scan() {
+			value = strings.TrimRight(scanner.Text(), "\r\n")
+		} else {
+			readErr = scanner.Err()
+			if readErr == nil {
+				readErr = fmt.Errorf("unexpected EOF reading prompt")
+			}
+		}
+	}
+
+	if readErr != nil {
+		return writer.WriteMessage(map[string]any{
+			"type":  "prompt-response",
+			"error": readErr.Error(),
+		})
+	}
+	return writer.WriteMessage(map[string]any{
+		"type":  "prompt-response",
+		"value": value,
+	})
+}
+
+func (c *CLI) handlePluginConfirm(writer *commandPluginWriter, msg map[string]any) error {
+	message, _ := msg["message"].(string)
+	fmt.Fprint(c.Stderr, message)
+
+	scanner := bufio.NewScanner(c.Stdin)
+	var line string
+	if scanner.Scan() {
+		line = strings.TrimSpace(strings.ToLower(scanner.Text()))
+	} else if err := scanner.Err(); err != nil {
+		return writer.WriteMessage(map[string]any{
+			"type":  "confirm-response",
+			"error": err.Error(),
+		})
+	}
+	confirmed := line == "y" || line == "yes"
+	return writer.WriteMessage(map[string]any{
+		"type":  "confirm-response",
+		"value": confirmed,
 	})
 }
 
