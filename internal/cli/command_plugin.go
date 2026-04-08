@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/request"
@@ -346,11 +347,28 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		return writer.WriteMessage(reply)
 	}
 
+	body := resp.Body
+	if filterExpr, _ := msg["filter"].(string); filterExpr != "" {
+		doc := map[string]any{
+			"proto":   resp.Proto,
+			"status":  resp.Status,
+			"headers": resp.Headers,
+			"links":   resp.Links,
+			"body":    resp.Body,
+		}
+		filtered, ferr := filter.Apply(filterExpr, doc, filter.LangAuto)
+		if ferr != nil {
+			reply := map[string]any{"type": "http-response", "error": ferr.Error()}
+			return writer.WriteMessage(reply)
+		}
+		body = filtered
+	}
+
 	reply := map[string]any{
 		"type":    "http-response",
 		"status":  resp.Status,
 		"headers": resp.Headers,
-		"body":    resp.Body,
+		"body":    body,
 	}
 	return writer.WriteMessage(reply)
 }
