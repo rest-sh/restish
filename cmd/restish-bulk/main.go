@@ -45,9 +45,9 @@ func main() {
 
 	client := newPluginClient(os.Stdin, os.Stdout, terminalContextFromArgs(os.Args[1:]))
 	if err := run(client, pluginwire.MsgStrings(initMsg["args"])); err != nil {
-		_ = client.stderr([]byte(err.Error() + "\n"))
-		_ = client.done(1)
+		_ = client.Stderr([]byte(err.Error() + "\n"))
+		_ = client.Done(1)
 		return
 	}
-	_ = client.done(0)
+	_ = client.Done(0)
 }

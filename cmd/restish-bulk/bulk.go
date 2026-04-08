@@ -71,8 +71,8 @@ func run(client *pluginClient, args []string) error {
 	a := &app{client: client}
 	root := a.newRootCmd()
 	root.SetArgs(args)
-	root.SetOut(&streamWriter{write: client.stdout})
-	root.SetErr(&streamWriter{write: client.stderr})
+	root.SetOut(client.StdoutWriter())
+	root.SetErr(client.StderrWriter())
 	return root.Execute()
 }
 
@@ -141,7 +141,7 @@ func (a *app) newListCmd() *cobra.Command {
 				return err
 			}
 			for _, path := range files {
-				if err := a.client.stdout([]byte(path + "\n")); err != nil {
+				if err := a.client.Stdout([]byte(path + "\n")); err != nil {
 					return err
 				}
 				if filterExpr == "" {
@@ -163,7 +163,7 @@ func (a *app) newListCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if err := a.client.stdout(append(formatted, '\n')); err != nil {
+				if err := a.client.Stdout(append(formatted, '\n')); err != nil {
 					return err
 				}
 			}
@@ -212,7 +212,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 					fmt.Fprintln(&buf, changed.String())
 				}
 			}
-			return a.client.stdout(buf.Bytes())
+			return a.client.Stdout(buf.Bytes())
 		},
 	}
 }
@@ -415,12 +415,12 @@ func (a *app) pull(m *Meta) error {
 	sort.Slice(updates, func(i, j int) bool { return updates[i].Path < updates[j].Path })
 
 	if len(updates) == 0 {
-		return a.client.stdout([]byte("Already up to date.\n"))
+		return a.client.Stdout([]byte("Already up to date.\n"))
 	}
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Pulling %d resource(s)...\n", len(updates))
-	if err := a.client.stderr(buf.Bytes()); err != nil {
+	if err := a.client.Stderr(buf.Bytes()); err != nil {
 		return err
 	}
 
@@ -439,7 +439,7 @@ func (a *app) pull(m *Meta) error {
 		}
 		_ = m.save()
 		if f.isChangedLocal(true) {
-			if err := a.client.warn("skipping due to local edits: " + f.Path); err != nil {
+			if err := a.client.Warn("skipping due to local edits: " + f.Path); err != nil {
 				return err
 			}
 			continue
@@ -610,12 +610,12 @@ func (a *app) localDiff(meta *Meta, files []string) error {
 		}
 		changed = true
 		diff := unifiedDiff("remote "+meta.Base+strings.TrimSuffix(path, ".json"), "local "+path, original, modified)
-		if err := a.client.stdout([]byte(diff)); err != nil {
+		if err := a.client.Stdout([]byte(diff)); err != nil {
 			return err
 		}
 	}
 	if !changed {
-		return a.client.stdout([]byte("No local changes\n"))
+		return a.client.Stdout([]byte("No local changes\n"))
 	}
 	return nil
 }
@@ -630,7 +630,7 @@ func (a *app) remoteDiff(meta *Meta) error {
 		return err
 	}
 	if len(remote) == 0 {
-		return a.client.stdout([]byte("No remote changes\n"))
+		return a.client.Stdout([]byte("No remote changes\n"))
 	}
 	for _, changed := range remote {
 		original, err := os.ReadFile(changed.File.Path)
@@ -648,7 +648,7 @@ func (a *app) remoteDiff(meta *Meta) error {
 			modified = nil
 		}
 		diff := unifiedDiff("local "+changed.File.Path, "remote "+meta.Base+strings.TrimSuffix(changed.File.Path, ".json"), original, modified)
-		if err := a.client.stdout([]byte(diff)); err != nil {
+		if err := a.client.Stdout([]byte(diff)); err != nil {
 			return err
 		}
 	}
