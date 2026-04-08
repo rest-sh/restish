@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,8 +22,10 @@ const DefaultMaxBytes = 100 * 1024 * 1024
 // httpcache.Cache interface (Get/Set/Delete) and additionally provides Info
 // and Clear for the "restish cache" subcommands.
 type DiskCache struct {
-	dir      string
-	maxBytes int64
+	dir          string
+	maxBytes     int64
+	sizeEstimate int64      // atomic: running byte-count estimate; may drift upward
+	evictMu      sync.Mutex // only one eviction goroutine at a time
 }
 
 // New returns a DiskCache rooted at dir with the given size cap.
@@ -66,6 +70,7 @@ func (c *DiskCache) Set(key string, data []byte) {
 		return
 	}
 	_ = os.WriteFile(p, data, 0o600)
+	atomic.AddInt64(&c.sizeEstimate, int64(len(data)))
 	c.evictIfNeeded()
 }
 
@@ -97,26 +102,54 @@ func (c *DiskCache) allFiles() ([]fileEntry, int64, error) {
 	return entries, total, err
 }
 
+// evictIfNeeded triggers a background LRU eviction pass when the in-memory
+// size estimate exceeds maxBytes.  The estimate is conservative: it can drift
+// upward (e.g. a key that was already present gets overwritten), so the real
+// check is performed by the goroutine with an accurate directory walk.
 func (c *DiskCache) evictIfNeeded() {
 	if c.maxBytes <= 0 {
 		return
 	}
-	entries, total, err := c.allFiles()
-	if err != nil || total <= c.maxBytes {
+	// Fast-path: estimate is still under the cap; skip the directory walk.
+	if atomic.LoadInt64(&c.sizeEstimate) <= c.maxBytes {
 		return
 	}
-	// Sort oldest-first (LRU).
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].mtime.Before(entries[j].mtime)
-	})
-	for _, e := range entries {
-		if total <= c.maxBytes {
-			break
-		}
-		if err := os.Remove(e.path); err == nil {
-			total -= e.size
-		}
+	// Only one eviction goroutine at a time; others can skip.
+	if !c.evictMu.TryLock() {
+		return
 	}
+	go func() {
+		defer c.evictMu.Unlock()
+		entries, total, err := c.allFiles()
+		if err != nil {
+			return
+		}
+		// Replace the estimate with the accurate value.
+		atomic.StoreInt64(&c.sizeEstimate, total)
+		if total <= c.maxBytes {
+			return
+		}
+		// Sort oldest-first (LRU).
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].mtime.Before(entries[j].mtime)
+		})
+		for _, e := range entries {
+			if total <= c.maxBytes {
+				break
+			}
+			if err := os.Remove(e.path); err == nil {
+				total -= e.size
+			}
+		}
+		atomic.StoreInt64(&c.sizeEstimate, total)
+	}()
+}
+
+// WaitEvict blocks until any pending background eviction goroutine has
+// finished. It is intended for use in tests only.
+func (c *DiskCache) WaitEvict() {
+	c.evictMu.Lock()
+	c.evictMu.Unlock() //nolint:staticcheck
 }
 
 // Info holds statistics about the cache.

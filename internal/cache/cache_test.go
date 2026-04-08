@@ -164,6 +164,8 @@ func TestEviction_LRU(t *testing.T) {
 	for _, k := range keys {
 		c.Set(k, []byte("12345")) // 5 bytes each
 	}
+	// Wait for the background eviction goroutine to finish.
+	c.WaitEvict()
 
 	// After setting 6 entries at 5 bytes each (30 bytes total) with a 20-byte cap,
 	// at least one eviction should have occurred.
