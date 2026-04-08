@@ -56,6 +56,7 @@ concepts introduced earlier in the sequence.
 
 **Extensibility**
 
+- [../plugin-quickstart.md](/Users/daniel/src/restish2/docs/plugin-quickstart.md) - Fastest path to a working plugin, with small formatter and command-plugin examples.
 - [018-plugin-architecture-overview.md](/Users/daniel/src/restish2/docs/design/018-plugin-architecture-overview.md) - Discovery, manifests, plugin categories, and the relationship to the in-process registry model.
 - [019-hook-plugins.md](/Users/daniel/src/restish2/docs/design/019-hook-plugins.md) - Short-lived auth, middleware, loader, and formatter plugins.
 - [020-command-plugins.md](/Users/daniel/src/restish2/docs/design/020-command-plugins.md) - Long-lived workflow commands that delegate HTTP and formatting back to Restish.
