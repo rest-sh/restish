@@ -308,7 +308,13 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		reqBody = bytes.NewReader(encoded)
 	}
 
-	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
+	reqCtx := context.Background()
+	if timeoutSec := msgInt(msg, "timeout"); timeoutSec > 0 {
+		var cancel context.CancelFunc
+		reqCtx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+		defer cancel()
+	}
+	httpResp, err := request.Do(reqCtx, method, rawURL, reqBody, opts)
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)
