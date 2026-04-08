@@ -223,6 +223,8 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		return false, c.handlePluginListAPIs(writer)
 	case "list-profiles":
 		return false, c.handlePluginListProfiles(writer, msg)
+	case "config-read":
+		return false, c.handlePluginConfigRead(writer, msg)
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
 	case "stdout-data":
@@ -414,6 +416,33 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg map[string]an
 		"content_type": s.ContentType,
 		"raw":          s.Raw,
 	})
+}
+
+func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg map[string]any) error {
+	apiName, _ := msg["api"].(string)
+	profileName, _ := msg["profile"].(string)
+
+	reply := map[string]any{"type": "config-read-response"}
+	if c.cfg == nil || apiName == "" {
+		return writer.WriteMessage(reply)
+	}
+	apiCfg := c.cfg.APIs[apiName]
+	if apiCfg == nil {
+		reply["error"] = fmt.Sprintf("unknown API %q", apiName)
+		return writer.WriteMessage(reply)
+	}
+	baseURL := apiCfg.BaseURL
+	if profileName != "" {
+		if prof := apiCfg.Profiles[profileName]; prof != nil {
+			if prof.BaseURL != "" {
+				baseURL = prof.BaseURL
+			}
+			reply["headers"] = prof.Headers
+			reply["query"] = prof.Query
+		}
+	}
+	reply["base_url"] = baseURL
+	return writer.WriteMessage(reply)
 }
 
 func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter) error {
