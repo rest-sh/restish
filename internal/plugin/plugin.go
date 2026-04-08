@@ -41,6 +41,11 @@ type Manifest struct {
 	// LoaderContentTypes lists the MIME types this plugin can convert to an
 	// OpenAPI descriptor when the "loader" hook is declared.
 	LoaderContentTypes []string `json:"loader_content_types,omitempty" cbor:"loader_content_types,omitempty"`
+	// AuthAPINames, when non-empty, limits the "auth" hook to only fire for
+	// requests targeting the named APIs. Plugins that handle auth for a
+	// specific API should declare this to avoid unnecessary subprocess spawns
+	// for all other APIs.
+	AuthAPINames []string `json:"auth_api_names,omitempty" cbor:"auth_api_names,omitempty"`
 }
 
 // Plugin is a discovered plugin executable together with its manifest.

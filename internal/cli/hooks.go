@@ -60,8 +60,22 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 // runAuthHookPlugins invokes all "auth" hook plugins for the given API request.
 // The returned headers from each plugin are merged into req. rawParams are the
 // profile auth params (without internal keys) and are forwarded to the plugin.
+// Plugins that declare auth_api_names in their manifest are only called when
+// apiName appears in that list.
 func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, req *http.Request) error {
 	for _, p := range c.pluginsForHook("auth") {
+		if len(p.Manifest.AuthAPINames) > 0 {
+			matched := false
+			for _, name := range p.Manifest.AuthAPINames {
+				if name == apiName {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
 		headers := headerMap(req.Header)
 		in := map[string]any{
 			"type":    "auth",
