@@ -59,7 +59,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.StringArrayP("rsh-header", "H", nil, `Request header in "Name: Value" format (repeatable)`)
 	pf.StringArrayP("rsh-query", "q", nil, `Query parameter in "key=value" format (repeatable)`)
 	pf.StringP("rsh-server", "s", "", "Override scheme://host for all requests (e.g. https://staging.example.com)")
-	pf.StringP("rsh-output-format", "o", "", "Output format: "+output.FormatterNames(c.formatters)+" (default: readable on TTY, raw otherwise)")
+	pf.StringP("rsh-output-format", "o", "", "Output format: "+output.FormatterNames(c.formatters)+" (default: readable on TTY, raw otherwise; see --rsh-columns, --rsh-sort-by for table)")
 	pf.BoolP("rsh-silent", "S", false, "Suppress all output; only the exit code conveys success or failure")
 	pf.String("rsh-columns", "", "Comma-separated column names for -o table (e.g. id,name,status)")
 	pf.String("rsh-sort-by", "", "Sort -o table rows by this column name")
