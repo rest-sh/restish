@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	authpkg "github.com/danielgtaylor/restish/v2/auth"
@@ -231,9 +232,12 @@ func (c *CLI) Run(args []string) error {
 	root := c.newRootCmd()
 
 	// Register generated commands for APIs whose spec is already cached.
+	// When the first positional arg names a configured API, only load that
+	// API's cached spec to avoid eagerly parsing every registered API.
 	// (Network discovery is not triggered here; use "restish api sync <name>"
 	// to prime the cache for an API.)
-	for apiName, apiCfg := range cfg.APIs {
+	for _, apiName := range c.generatedAPINames(args, cfg) {
+		apiCfg := cfg.APIs[apiName]
 		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, c.loaders)
 		if err != nil || s == nil {
 			continue
@@ -247,4 +251,22 @@ func (c *CLI) Run(args []string) error {
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
 	return root.Execute()
+}
+
+// generatedAPINames returns the APIs whose generated commands should be
+// registered for this invocation. When args[1] names a configured API, only
+// that API is loaded; otherwise all configured APIs remain available.
+func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
+	if len(args) > 1 {
+		if _, ok := cfg.APIs[args[1]]; ok {
+			return []string{args[1]}
+		}
+	}
+
+	names := make([]string, 0, len(cfg.APIs))
+	for name := range cfg.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

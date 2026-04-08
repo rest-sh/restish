@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
 	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/danielgtaylor/restish/v2/internal/spec"
 )
 
 // specWithOperations returns an OpenAPI 3.1 spec JSON string.
@@ -155,6 +157,23 @@ func (e *generatedEnv) newCaptureCLI() (*cli.CLI, *strings.Builder) {
 	return c, &out
 }
 
+type countingLoader struct {
+	detects atomic.Int32
+}
+
+func (l *countingLoader) Detect(contentType string, body []byte) bool {
+	l.detects.Add(1)
+	return false
+}
+
+func (l *countingLoader) Load(body []byte) (*spec.APISpec, error) {
+	return nil, nil
+}
+
+func (l *countingLoader) Priority() int {
+	return 1000
+}
+
 // TestGeneratedCommandKebabCase verifies that operationId "listItems" becomes
 // the command name "list-items".
 func TestGeneratedCommandKebabCase(t *testing.T) {
@@ -169,6 +188,66 @@ func TestGeneratedCommandKebabCase(t *testing.T) {
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
 		t.Fatalf("list-items failed: %v", err)
+	}
+}
+
+func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	specDoc := specWithOperations(srv.URL)
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specDoc)
+	})
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"alpha": {BaseURL: srv.URL},
+			"beta":  {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	for _, name := range []string{"alpha", "beta"} {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.ConfigPath = cfgFile
+		c.SpecCachePath = cacheDir
+		c.RetryBaseDelay = 0
+		if err := c.Run([]string{"restish", "api", "sync", name}); err != nil {
+			t.Fatalf("api sync %s: %v", name, err)
+		}
+	}
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.ConfigPath = cfgFile
+	c.SpecCachePath = cacheDir
+	c.RetryBaseDelay = 0
+	loader := &countingLoader{}
+	c.AddLoader(loader)
+
+	if err := c.Run([]string{"restish", "alpha", "list-items"}); err != nil {
+		t.Fatalf("alpha list-items: %v", err)
+	}
+	if got := loader.detects.Load(); got != 1 {
+		t.Fatalf("loader Detect called %d times, want 1 targeted API load", got)
 	}
 }
 
