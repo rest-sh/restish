@@ -25,6 +25,10 @@ type Manifest struct {
 	// AuthAPINames, when non-empty, restricts the "auth" hook to the listed
 	// API names so the plugin is not invoked for every unrelated API.
 	AuthAPINames []string `cbor:"auth_api_names,omitempty" json:"auth_api_names,omitempty"`
+	// NeedsAuthSecrets, when true, tells Restish to forward secret auth
+	// params (passwords, client secrets) to this plugin. When false (the
+	// default) secret params are omitted to minimise secret exposure.
+	NeedsAuthSecrets bool `cbor:"needs_auth_secrets,omitempty" json:"needs_auth_secrets,omitempty"`
 }
 
 // CommandDecl describes one command that a command-plugin exposes.

@@ -95,11 +95,17 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		}
 		params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
 		rawParams := prof.Auth.Params
+		secretKeys := make(map[string]bool)
+		for _, p := range handler.Parameters() {
+			if p.Secret {
+				secretKeys[p.Name] = true
+			}
+		}
 		builtinOnReq = func(req *http.Request) error {
 			if err := handler.OnRequest(req, params); err != nil {
 				return err
 			}
-			return c.runAuthHookPlugins(apiName, profileName, rawParams, req)
+			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 		}
 	}
 
@@ -113,7 +119,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 	}
 	// No built-in auth but hook plugins exist.
 	return func(req *http.Request) error {
-		return c.runAuthHookPlugins(apiName, profileName, nil, req)
+		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
 }
 

@@ -59,10 +59,12 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 
 // runAuthHookPlugins invokes all "auth" hook plugins for the given API request.
 // The returned headers from each plugin are merged into req. rawParams are the
-// profile auth params (without internal keys) and are forwarded to the plugin.
+// profile auth params (without internal keys) and are forwarded to the plugin;
+// params whose key appears in secretKeys are omitted unless the plugin manifest
+// declares NeedsAuthSecrets.
 // Plugins that declare auth_api_names in their manifest are only called when
 // apiName appears in that list.
-func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, req *http.Request) error {
+func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
 	for _, p := range c.pluginsForHook("auth") {
 		if len(p.Manifest.AuthAPINames) > 0 {
 			matched := false
@@ -76,12 +78,23 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 				continue
 			}
 		}
+		params := rawParams
+		if !p.Manifest.NeedsAuthSecrets && len(secretKeys) > 0 {
+			// Build a copy with secret params removed.
+			redacted := make(map[string]string, len(rawParams))
+			for k, v := range rawParams {
+				if !secretKeys[k] {
+					redacted[k] = v
+				}
+			}
+			params = redacted
+		}
 		headers := headerMap(req.Header)
 		in := map[string]any{
 			"type":    "auth",
 			"api":     apiName,
 			"profile": profileName,
-			"params":  rawParams,
+			"params":  params,
 			"request": map[string]any{
 				"method":  req.Method,
 				"uri":     req.URL.String(),

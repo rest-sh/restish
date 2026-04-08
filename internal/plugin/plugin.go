@@ -46,6 +46,11 @@ type Manifest struct {
 	// specific API should declare this to avoid unnecessary subprocess spawns
 	// for all other APIs.
 	AuthAPINames []string `json:"auth_api_names,omitempty" cbor:"auth_api_names,omitempty"`
+	// NeedsAuthSecrets, when true, causes the full auth params map (including
+	// secret values such as passwords and client secrets) to be forwarded to
+	// this plugin's auth hook. When false (the default) secret params are
+	// omitted before dispatch to reduce secret exposure.
+	NeedsAuthSecrets bool `json:"needs_auth_secrets,omitempty" cbor:"needs_auth_secrets,omitempty"`
 }
 
 // Plugin is a discovered plugin executable together with its manifest.
