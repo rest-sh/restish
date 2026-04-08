@@ -12,34 +12,21 @@ import (
 )
 
 func main() {
-	for _, arg := range os.Args[1:] {
-		switch arg {
-		case "--rsh-plugin-manifest":
-			if err := plugin.WriteManifest(os.Stdout, plugin.Manifest{
-				Name:              "mcp",
-				Version:           "1.0.0",
-				Description:       "Expose registered APIs as MCP tools",
-				RestishAPIVersion: 1,
-				Hooks:             []string{"command"},
-			}); err != nil {
-				fmt.Fprintln(os.Stderr, "manifest:", err)
-				os.Exit(2)
-			}
-			return
-		case "--rsh-plugin-commands":
-			if err := plugin.WriteCommands(os.Stdout, []plugin.CommandDecl{
-				{
-					Name:             "mcp",
-					Short:            "Serve registered APIs over the Model Context Protocol",
-					Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.",
-					PassthroughStdio: true,
-				},
-			}); err != nil {
-				fmt.Fprintln(os.Stderr, "commands:", err)
-				os.Exit(2)
-			}
-			return
-		}
+	if plugin.HandleStartupFlags(os.Stdout, plugin.Manifest{
+		Name:              "mcp",
+		Version:           "1.0.0",
+		Description:       "Expose registered APIs as MCP tools",
+		RestishAPIVersion: 1,
+		Hooks:             []string{"command"},
+	}, []plugin.CommandDecl{
+		{
+			Name:             "mcp",
+			Short:            "Serve registered APIs over the Model Context Protocol",
+			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.",
+			PassthroughStdio: true,
+		},
+	}) {
+		return
 	}
 
 	var initMsg map[string]any
