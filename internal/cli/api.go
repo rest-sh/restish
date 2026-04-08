@@ -147,7 +147,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 			xcli = spec.FallbackXCLIConfig(apiSpec.Document)
 		}
 		if xcli != nil {
-			applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
+			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
 		}
 	}
 
@@ -177,7 +177,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 }
 
 // applyXCLIConfig merges x-cli-config fields into apiCfg.
-func applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
+// Auth type "external-tool" is rejected: a server-provided x-cli-config
+// could otherwise pre-seed arbitrary shell-command execution on the next
+// authenticated request.
+func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 	if len(xcli.Profiles) == 0 {
 		return
 	}
@@ -190,6 +193,10 @@ func applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 			Query:   xp.Query,
 		}
 		if xp.Auth != nil {
+			if xp.Auth.Type == "external-tool" {
+				fmt.Fprintf(c.Stderr, "warning: x-cli-config: auth type %q is not permitted; skipping profile %q\n", xp.Auth.Type, name)
+				continue
+			}
 			prof.Auth = &config.AuthConfig{
 				Type:   xp.Auth.Type,
 				Params: xp.Auth.Params,
