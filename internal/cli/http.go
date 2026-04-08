@@ -31,6 +31,16 @@ func (c *CLI) cacheDir() string {
 	return config.DefaultCacheDir()
 }
 
+// maxBodyBytes returns the response body size cap derived from the
+// --rsh-max-body-size flag (MiB). Zero or negative means use the default.
+func maxBodyBytes(cmd *cobra.Command) int64 {
+	mib, _ := cmd.Flags().GetInt("rsh-max-body-size")
+	if mib <= 0 {
+		return output.DefaultMaxBodyBytes
+	}
+	return int64(mib) * 1024 * 1024
+}
+
 // addHTTPCommands registers the generic HTTP verb commands on root.
 func (c *CLI) addHTTPCommands(root *cobra.Command) {
 	verbs := []struct {
@@ -156,7 +166,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		}
 	}
 
-	resp, err := output.Normalize(httpResp, c.content)
+	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}

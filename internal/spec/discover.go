@@ -17,6 +17,11 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// maxSpecBytes caps the body read during spec discovery (50 MiB).
+// OpenAPI specs are rarely larger than a few megabytes; this prevents an
+// untrusted server from exhausting memory during api configure / api sync.
+const maxSpecBytes = 50 * 1024 * 1024
+
 // DiscoverConfig holds parameters for spec discovery for a single API.
 type DiscoverConfig struct {
 	// APIName is the registered short name (used as the cache key).
@@ -226,9 +231,12 @@ func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper) (c
 		return "", nil, 0, nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
 	}
 
-	body, err = io.ReadAll(resp.Body)
+	body, err = io.ReadAll(io.LimitReader(resp.Body, maxSpecBytes+1))
 	if err != nil {
 		return "", nil, 0, nil, err
+	}
+	if int64(len(body)) > maxSpecBytes {
+		return "", nil, 0, nil, fmt.Errorf("spec body from %s exceeds limit of %d bytes", rawURL, maxSpecBytes)
 	}
 
 	ct = resp.Header.Get("Content-Type")

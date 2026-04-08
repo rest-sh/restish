@@ -86,4 +86,5 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Bool("rsh-collect", false, "Collect all pages then apply filter (default: stream items as they arrive)")
 	pf.Int("rsh-max-pages", 25, "Maximum number of pages to fetch (0 = unlimited)")
 	pf.Int("rsh-max-items", 0, "Maximum number of items to collect across all pages (0 = unlimited)")
+	pf.Int("rsh-max-body-size", 0, fmt.Sprintf("Maximum response body size in MiB (0 = default %d MiB)", output.DefaultMaxBodyBytes/(1024*1024)))
 }

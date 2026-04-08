@@ -38,7 +38,7 @@ func makeResp(status int, contentType, body string) *http.Response {
 
 func TestNormalize_JSONBody(t *testing.T) {
 	resp := makeResp(200, "application/json", `{"name":"Alice","age":30}`)
-	r, err := output.Normalize(resp, testRegistry)
+	r, err := output.Normalize(resp, testRegistry, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestNormalize_JSONBody(t *testing.T) {
 
 func TestNormalize_NonJSONBody(t *testing.T) {
 	resp := makeResp(200, "text/plain", "hello world")
-	r, err := output.Normalize(resp, testRegistry)
+	r, err := output.Normalize(resp, testRegistry, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestNormalize_NonJSONBody(t *testing.T) {
 
 func TestNormalize_EmptyBody(t *testing.T) {
 	resp := makeResp(204, "", "")
-	r, err := output.Normalize(resp, testRegistry)
+	r, err := output.Normalize(resp, testRegistry, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestNormalize_EmptyBody(t *testing.T) {
 
 func TestNormalize_Status(t *testing.T) {
 	resp := makeResp(404, "application/json", `{}`)
-	r, err := output.Normalize(resp, testRegistry)
+	r, err := output.Normalize(resp, testRegistry, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestNormalize_HeadersCanonicalized(t *testing.T) {
 	// Go's http package canonicalizes keys automatically; verify they arrive
 	// in the Response using the canonical (title-case) form.
 	resp.Header.Set("x-custom-header", "testval")
-	r, err := output.Normalize(resp, testRegistry)
+	r, err := output.Normalize(resp, testRegistry, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestNormalize_HeadersCanonicalized(t *testing.T) {
 func TestNormalize_Proto(t *testing.T) {
 	resp := makeResp(200, "application/json", `{}`)
 	resp.Proto = "HTTP/2.0"
-	r, _ := output.Normalize(resp, testRegistry)
+	r, _ := output.Normalize(resp, testRegistry, 0)
 	if r.Proto != "HTTP/2.0" {
 		t.Errorf("expected proto HTTP/2.0, got %q", r.Proto)
 	}

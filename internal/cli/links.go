@@ -42,7 +42,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("network: %w", err)
 	}
 
-	resp, err := output.Normalize(httpResp, c.content)
+	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}

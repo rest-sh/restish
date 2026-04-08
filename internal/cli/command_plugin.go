@@ -307,7 +307,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 	}
 	defer httpResp.Body.Close()
 
-	resp, err := output.Normalize(httpResp, c.content)
+	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)

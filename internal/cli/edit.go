@@ -68,7 +68,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		c.logVerbose(httpResp)
 	}
 
-	resp, err := output.Normalize(httpResp, c.content)
+	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		c.logVerbose(updateResp)
 	}
 
-	normalized, err := output.Normalize(updateResp, c.content)
+	normalized, err := output.Normalize(updateResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}

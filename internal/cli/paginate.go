@@ -88,7 +88,7 @@ func (c *CLI) runPagination(
 			return fmt.Errorf("paginate page %d: %w", page, err)
 		}
 
-		resp, err := output.Normalize(httpResp, c.content)
+		resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
 		if err != nil {
 			return fmt.Errorf("paginate page %d normalize: %w", page, err)
 		}

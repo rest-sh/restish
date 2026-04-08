@@ -8,6 +8,10 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/content"
 )
 
+// DefaultMaxBodyBytes is the default cap on response body reads (100 MiB).
+// A server cannot allocate more than this per response.
+const DefaultMaxBodyBytes int64 = 100 * 1024 * 1024
+
 // Response is the normalized form of every HTTP response before formatting.
 // All formatters receive this struct; nothing downstream touches *http.Response.
 type Response struct {
@@ -24,9 +28,14 @@ type Response struct {
 
 // Normalize reads resp.Body, decodes it using the provided content registry,
 // and returns a Response. resp.Body is fully consumed and closed before this
-// returns.
-func Normalize(resp *http.Response, reg *content.Registry) (*Response, error) {
+// returns. maxBytes caps the body read; pass DefaultMaxBodyBytes or 0 to use
+// the default.
+func Normalize(resp *http.Response, reg *content.Registry, maxBytes int64) (*Response, error) {
 	defer resp.Body.Close()
+
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxBodyBytes
+	}
 
 	// Canonicalise headers. Go's http package already canonicalises keys;
 	// we flatten multi-value headers to the first value for simplicity.
@@ -37,7 +46,7 @@ func Normalize(resp *http.Response, reg *content.Registry) (*Response, error) {
 		}
 	}
 
-	body, raw, err := decodeBody(resp, reg)
+	body, raw, err := decodeBody(resp, reg, maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +63,7 @@ func Normalize(resp *http.Response, reg *content.Registry) (*Response, error) {
 // decodeBody reads the response body, decompresses it if needed, then decodes
 // it using the content registry. Returns the raw bytes alongside the decoded
 // value so callers can write the original bytes unchanged if needed.
-func decodeBody(resp *http.Response, reg *content.Registry) (decoded any, raw []byte, err error) {
+func decodeBody(resp *http.Response, reg *content.Registry, maxBytes int64) (decoded any, raw []byte, err error) {
 	encoding := resp.Header.Get("Content-Encoding")
 	reader, err := reg.Decompress(encoding, resp.Body)
 	if err != nil {
@@ -62,9 +71,13 @@ func decodeBody(resp *http.Response, reg *content.Registry) (decoded any, raw []
 	}
 	defer reader.Close()
 
-	raw, err = io.ReadAll(reader)
+	// Read up to maxBytes+1 so we can detect a body that exceeds the limit.
+	raw, err = io.ReadAll(io.LimitReader(reader, maxBytes+1))
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading response body: %w", err)
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, nil, fmt.Errorf("response body exceeds limit of %d bytes; use --rsh-max-body-size to increase", maxBytes)
 	}
 	if len(raw) == 0 {
 		return nil, nil, nil
