@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -218,6 +219,10 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
 	case "api-spec":
 		return false, c.handlePluginAPISpec(writer, msg)
+	case "list-apis":
+		return false, c.handlePluginListAPIs(writer)
+	case "list-profiles":
+		return false, c.handlePluginListProfiles(writer, msg)
 	case "response":
 		return false, c.handlePluginResponse(cmd, msg)
 	case "stdout-data":
@@ -408,6 +413,40 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg map[string]an
 		"name":         apiName,
 		"content_type": s.ContentType,
 		"raw":          s.Raw,
+	})
+}
+
+func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter) error {
+	var names []string
+	if c.cfg != nil {
+		names = make([]string, 0, len(c.cfg.APIs))
+		for name := range c.cfg.APIs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+	}
+	return writer.WriteMessage(map[string]any{
+		"type": "list-apis-response",
+		"apis": names,
+	})
+}
+
+func (c *CLI) handlePluginListProfiles(writer *commandPluginWriter, msg map[string]any) error {
+	apiName, _ := msg["api"].(string)
+	var profileNames []string
+	if c.cfg != nil && apiName != "" {
+		if apiCfg := c.cfg.APIs[apiName]; apiCfg != nil {
+			profileNames = make([]string, 0, len(apiCfg.Profiles))
+			for name := range apiCfg.Profiles {
+				profileNames = append(profileNames, name)
+			}
+			sort.Strings(profileNames)
+		}
+	}
+	return writer.WriteMessage(map[string]any{
+		"type":     "list-profiles-response",
+		"api":      apiName,
+		"profiles": profileNames,
 	})
 }
 
