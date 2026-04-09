@@ -162,9 +162,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	cfg.APIs[apiName] = apiCfg
 
 	if config.HasComments(cfgPath) {
-		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
-	}
-	if err := config.Save(cfgPath, cfg); err != nil {
+		if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
+			return err
+		}
+	} else if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
 	if apiSpec != nil {
@@ -312,7 +313,11 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 
 	cfgPath := c.configFilePath()
 	if config.HasComments(cfgPath) {
-		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
+		jsonPath, err := apiConfigJSONPath(apiName, key)
+		if err != nil {
+			return err
+		}
+		return config.SaveConfigValue(cfgPath, jsonPath, value)
 	}
 	return config.Save(cfgPath, c.cfg)
 }
@@ -401,6 +406,54 @@ func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 	return nil
 }
 
+func apiConfigJSONPath(apiName, key string) ([]string, error) {
+	parts := strings.SplitN(key, ".", 3)
+	path := []string{"apis", apiName}
+	switch parts[0] {
+	case "base_url", "spec_url", "operation_base":
+		return append(path, parts[0]), nil
+	case "pagination":
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid key %q: expected pagination.<field>", key)
+		}
+		switch parts[1] {
+		case "items_path", "next_path":
+			return append(path, "pagination", parts[1]), nil
+		default:
+			return nil, fmt.Errorf("unsupported pagination field %q", parts[1])
+		}
+	case "profiles":
+		if len(parts) < 3 {
+			return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
+		}
+		profileName := parts[1]
+		subParts := strings.SplitN(parts[2], ".", 3)
+		switch subParts[0] {
+		case "base_url", "tls_signer":
+			return append(path, "profiles", profileName, subParts[0]), nil
+		case "auth":
+			if len(subParts) < 2 {
+				return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
+			}
+			switch subParts[1] {
+			case "type":
+				return append(path, "profiles", profileName, "auth", "type"), nil
+			case "params":
+				if len(subParts) < 3 {
+					return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
+				}
+				return append(path, "profiles", profileName, "auth", "params", subParts[2]), nil
+			default:
+				return nil, fmt.Errorf("unsupported auth field %q", subParts[1])
+			}
+		default:
+			return nil, fmt.Errorf("unsupported profile field %q", parts[2])
+		}
+	default:
+		return nil, fmt.Errorf("unsupported field %q", key)
+	}
+}
+
 // runAPIContentTypes lists all registered content types and their MIME types.
 func (c *CLI) runAPIContentTypes(cmd *cobra.Command, args []string) error {
 	for _, ct := range c.content.ContentTypes() {
@@ -441,9 +494,10 @@ func (c *CLI) runAPIDelete(cmd *cobra.Command, args []string) error {
 	delete(c.cfg.APIs, apiName)
 	cfgPath := c.configFilePath()
 	if config.HasComments(cfgPath) {
-		fmt.Fprintf(c.Stderr, "note: JSONC comments in %s will not be preserved; use 'restish api edit' to keep them\n", cfgPath)
-	}
-	if err := config.Save(cfgPath, c.cfg); err != nil {
+		if err := config.DeleteAPIConfig(cfgPath, apiName); err != nil {
+			return err
+		}
+	} else if err := config.Save(cfgPath, c.cfg); err != nil {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "Deleted API %q\n", apiName)

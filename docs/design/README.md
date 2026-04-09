@@ -65,3 +65,4 @@ concepts introduced earlier in the sequence.
 - [023-restish-mcp-plugin.md](/Users/daniel/src/restish2/docs/design/023-restish-mcp-plugin.md) - The concrete MCP command plugin that exposes OpenAPI operations as MCP tools over stdio.
 - [024-restish-bulk-plugin.md](/Users/daniel/src/restish2/docs/design/024-restish-bulk-plugin.md) - The concrete bulk-management command plugin that revives the v1 checkout workflow out of process.
 - [026-restish-csv-plugin.md](/Users/daniel/src/restish2/docs/design/026-restish-csv-plugin.md) - The concrete formatter-hook plugin that turns array-shaped responses into CSV.
+- [027-comment-preserving-config-edits.md](/Users/daniel/src/restish2/docs/design/027-comment-preserving-config-edits.md) - Narrow JSONC-aware config patching for `api configure`, `api set`, and `api delete`.

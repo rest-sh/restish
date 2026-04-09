@@ -139,6 +139,8 @@ The current implementation reflects this design directly:
 
 - `internal/config/config.go` defines the single-file typed config model and
   JSONC parsing behavior
+- `internal/config/jsonc_patch.go` preserves comments for targeted object-path
+  edits made by config-management commands
 - `internal/cli/http.go` applies API and profile settings to outgoing requests
 - `internal/cli/api.go` exposes management commands like `api configure`,
   `api show`, `api set`, and `api edit`

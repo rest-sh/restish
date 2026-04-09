@@ -191,6 +191,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
 
+	return parseConfigBytes(path, data)
+}
+
+func parseConfigBytes(path string, data []byte) (*Config, error) {
+
 	// Strip JSONC comments before parsing so users can annotate their config.
 	stripped := jsonc.ToJSON(data)
 

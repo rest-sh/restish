@@ -155,6 +155,177 @@ func TestAPISet(t *testing.T) {
 	}
 }
 
+func TestAPISetPreservesJSONCComments(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  // API registrations
+  "apis": {
+    // Main API
+    "myapi": {
+      "base_url": "https://old.example.com" // keep this note
+    }
+  }
+}`)
+
+	c, _, errOut := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"}); err != nil {
+		t.Fatalf("api set: %v", err)
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// API registrations") {
+		t.Fatalf("expected top-level comment to be preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "// Main API") {
+		t.Fatalf("expected member comment to be preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "// keep this note") {
+		t.Fatalf("expected inline comment to be preserved:\n%s", got)
+	}
+	if strings.Contains(errOut.String(), "will not be preserved") {
+		t.Fatalf("did not expect comment-loss warning, got %q", errOut.String())
+	}
+	if !strings.Contains(got, "https://new.example.com") {
+		t.Fatalf("expected updated value in file:\n%s", got)
+	}
+}
+
+func TestAPISetCreatesNestedJSONCPath(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    // Main API
+    "myapi": {
+      "base_url": "https://api.example.com"
+    }
+  }
+}`)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", "profiles.default.auth.params.token", "secret"}); err != nil {
+		t.Fatalf("api set nested: %v", err)
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// Main API") {
+		t.Fatalf("expected existing comment to be preserved:\n%s", got)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].Profiles["default"].Auth.Params["token"]; got != "secret" {
+		t.Fatalf("token after set: got %q, want secret", got)
+	}
+}
+
+func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  // Existing APIs
+  "apis": {
+    "other": {
+      "base_url": "https://other.example.com"
+    }
+  }
+}`)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	c.SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if !strings.Contains(out.String(), "myapi") {
+		t.Fatalf("expected configure output, got %q", out.String())
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// Existing APIs") {
+		t.Fatalf("expected existing comment to be preserved:\n%s", got)
+	}
+	if !strings.Contains(got, `"myapi"`) {
+		t.Fatalf("expected new api entry:\n%s", got)
+	}
+}
+
+func TestAPIDeletePreservesJSONCComments(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    // Keep this API
+    "keep": {
+      "base_url": "https://keep.example.com"
+    },
+    // Remove this API
+    "remove": {
+      "base_url": "https://remove.example.com"
+    }
+  }
+}`)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "delete", "remove"}); err != nil {
+		t.Fatalf("api delete: %v", err)
+	}
+	if !strings.Contains(out.String(), "Deleted API") {
+		t.Fatalf("expected delete output, got %q", out.String())
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// Keep this API") {
+		t.Fatalf("expected kept comment to remain:\n%s", got)
+	}
+	if strings.Contains(got, "remove.example.com") {
+		t.Fatalf("expected API to be removed:\n%s", got)
+	}
+}
+
 // TestAPISyncClearsCache (verifies api sync already tested in spec_test.go,
 // but also that it reports success from the api subcommand path).
 func TestAPISyncReportsSuccess(t *testing.T) {
