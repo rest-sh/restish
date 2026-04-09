@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/filter"
+	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -127,13 +128,16 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
 // and writes the result to stdout.
 func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
 	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
 	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
 
 	// Try to parse as JSON; fall back to string.
 	var item any = data
 	var parsed any
+	parsedJSON := false
 	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
 		item = parsed
+		parsedJSON = true
 	}
 
 	// Apply filter.
@@ -152,6 +156,28 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
 
 	if rawMode {
 		return c.writeRaw(result)
+	}
+
+	tty := output.IsTerminal(c.Stdout)
+	color := output.ColorEnabled(c.Stdout)
+	if fmtName == "readable" || (fmtName == "" && tty) {
+		if !parsedJSON {
+			return c.writeRaw(result)
+		}
+		b, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return err
+		}
+		b = append(b, '\n')
+		if color {
+			highlighted, err := output.HighlightWithLexer(output.ReadableLexer, b)
+			if err == nil {
+				_, err = c.Stdout.Write(highlighted)
+				return err
+			}
+		}
+		_, err = c.Stdout.Write(b)
+		return err
 	}
 
 	b, err := json.Marshal(result)

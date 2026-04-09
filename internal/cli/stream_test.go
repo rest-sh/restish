@@ -1,7 +1,9 @@
 package cli_test
 
 import (
+	"bytes"
 	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,4 +138,71 @@ func TestSSEWithFilter(t *testing.T) {
 	if strings.Contains(got, `"n":`) {
 		t.Errorf("unexpected 'n' field after filter, got:\n%s", got)
 	}
+}
+
+func TestSSEReadableOutputWithColor(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseBody(`{"n":1,"type":"a"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI()
+	var out bytes.Buffer
+	c.Stdout = &out
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	t.Setenv("COLOR", "1")
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	stripped := stripANSI(got)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stripped)), new(any)); err != nil {
+		t.Fatalf("expected highlighted stream output to remain valid JSON, got %q: %v", stripped, err)
+	}
+	if !strings.Contains(stripped, "\n  ") {
+		t.Errorf("expected readable output to be pretty-printed, got %q", stripped)
+	}
+}
+
+func TestSSEReadableOutputPlainTextStaysPlain(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: plain text event\n\n")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if got != "plain text event\n" {
+		t.Fatalf("expected plain text stream output, got %q", got)
+	}
+}
+
+func stripANSI(s string) string {
+	var out strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			i += 2
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
+				i++
+			}
+			i++
+			continue
+		}
+		out.WriteByte(s[i])
+		i++
+	}
+	return out.String()
 }
