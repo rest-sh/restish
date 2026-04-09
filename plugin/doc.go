@@ -7,7 +7,7 @@
 //   - command plugins for top-level workflow commands
 //   - TLS signer plugins for external mTLS signing
 //
-// Startup contract
+// # Startup contract
 //
 // Plugin binaries are discovered as executables named "restish-<name>".
 // Restish starts them with one of these startup flags:
@@ -18,7 +18,7 @@
 // Most plugins should use HandleStartupFlags or Run instead of manually
 // handling startup flags.
 //
-// Runtime transport
+// # Runtime transport
 //
 // All messages — startup responses and runtime messages alike — are plain
 // CBOR data items written directly to stdin/stdout. CBOR is self-delimiting,
@@ -34,7 +34,7 @@
 // ReadMessage on it for every read. Discarding the Decoder between calls loses
 // bytes that were already buffered internally.
 //
-// Command-plugin messages
+// # Command-plugin messages
 //
 // Command plugins should prefer the typed message structs in messages.go:
 //
@@ -48,7 +48,7 @@
 //
 // For simple command plugins, plugin.Run and CommandClient are usually enough.
 //
-// Hook-plugin payload shapes
+// # Hook-plugin payload shapes
 //
 // Hook plugins receive one CBOR map and, except for formatter hooks, return
 // one CBOR reply map.
