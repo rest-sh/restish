@@ -56,8 +56,8 @@ an initial message:
 }
 ```
 
-From there, the plugin and Restish exchange structured CBOR messages until the
-plugin sends `done` or dies.
+From there, the plugin and Restish exchange CBOR data items until the plugin
+sends `done` or dies.
 
 ### Messages From Plugin To Restish
 

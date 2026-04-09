@@ -48,7 +48,8 @@ func main() {
 	}
 
 	var initMsg map[string]any
-	if err := plugin.ReadMessage(os.Stdin, &initMsg); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	if err := dec.ReadMessage(&initMsg); err != nil {
 		fmt.Fprintln(os.Stderr, "read init:", err)
 		os.Exit(1)
 	}
@@ -78,7 +79,7 @@ func main() {
 			"uri":    fetchURL,
 		})
 		var httpResp map[string]any
-		if err := plugin.ReadMessage(os.Stdin, &httpResp); err != nil {
+		if err := dec.ReadMessage(&httpResp); err != nil {
 			fmt.Fprintln(os.Stderr, "read http-response:", err)
 			os.Exit(1)
 		}
@@ -93,7 +94,7 @@ func main() {
 	case "pipe":
 		for {
 			var in map[string]any
-			if err := plugin.ReadMessage(os.Stdin, &in); err != nil {
+			if err := dec.ReadMessage(&in); err != nil {
 				os.Exit(1)
 			}
 			switch in["type"] {

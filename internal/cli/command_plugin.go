@@ -126,9 +126,10 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 	}
 
 	var loopErr error
+	dec := pluginwire.NewDecoder(stdoutPipe)
 	for {
 		var msg map[string]any
-		if err := pluginwire.ReadMessage(stdoutPipe, &msg); err != nil {
+		if err := dec.ReadMessage(&msg); err != nil {
 			if isEOFLike(err) {
 				loopErr = fmt.Errorf("command plugin %s: process died unexpectedly", filepath.Base(pluginPath))
 			} else {

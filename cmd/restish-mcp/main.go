@@ -30,7 +30,8 @@ func main() {
 	}
 
 	var initMsg map[string]any
-	if err := plugin.ReadMessage(os.Stdin, &initMsg); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	if err := dec.ReadMessage(&initMsg); err != nil {
 		fmt.Fprintln(os.Stderr, "read init:", err)
 		os.Exit(1)
 	}
@@ -42,7 +43,7 @@ func main() {
 	}
 
 	args := plugin.MsgStrings(initMsg["args"])
-	client := newPluginClient(os.Stdin, os.Stdout)
+	client := newPluginClient(dec, os.Stdout)
 	cfg, err := ParseArgs(args)
 	if err == nil {
 		var tools []*Tool
@@ -70,7 +71,7 @@ func main() {
 }
 
 type pluginClient struct {
-	in           io.Reader
+	dec          *plugin.Decoder
 	out          io.Writer
 	stdinPipeW   *io.PipeWriter
 	stdinReader  io.Reader
@@ -80,10 +81,10 @@ type pluginClient struct {
 	writeMu      sync.Mutex
 }
 
-func newPluginClient(in io.Reader, out io.Writer) *pluginClient {
+func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 	pr, pw := io.Pipe()
 	return &pluginClient{
-		in:          in,
+		dec:         dec,
 		out:         out,
 		stdinPipeW:  pw,
 		stdinReader: pr,
@@ -103,7 +104,7 @@ func (c *pluginClient) readLoop() {
 	}
 	for {
 		var msg map[string]any
-		if err := plugin.ReadMessage(c.in, &msg); err != nil {
+		if err := c.dec.ReadMessage(&msg); err != nil {
 			return
 		}
 		switch msg["type"] {
@@ -160,7 +161,7 @@ func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 	}
 	var reply map[string]any
 	for {
-		if err := plugin.ReadMessage(c.in, &reply); err != nil {
+		if err := c.dec.ReadMessage(&reply); err != nil {
 			return nil, err
 		}
 		switch msgType, _ := reply["type"].(string); msgType {

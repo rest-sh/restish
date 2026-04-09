@@ -13,15 +13,24 @@ import (
 // Most command plugins should create one with NewCommandClient and use it
 // for all communication with the host.
 type CommandClient struct {
-	in      io.Reader
+	dec     *Decoder
 	out     io.Writer
 	writeMu sync.Mutex
 }
 
 // NewCommandClient returns a CommandClient backed by the given reader/writer.
 // Pass os.Stdin and os.Stdout from a plugin's main function.
+// A single Decoder is created from in and reused for all reads, so it is safe
+// to call ReadMessage on the client after NewCommandClient returns.
 func NewCommandClient(in io.Reader, out io.Writer) *CommandClient {
-	return &CommandClient{in: in, out: out}
+	return &CommandClient{dec: NewDecoder(in), out: out}
+}
+
+// ReadMessage reads one CBOR message from the host into v. Use this when the
+// plugin needs to receive messages that are not covered by Do (for example,
+// stdin-data frames in passthrough-stdio commands).
+func (c *CommandClient) ReadMessage(v any) error {
+	return c.dec.ReadMessage(v)
 }
 
 // Do sends one HTTP request to the host and blocks until the response
@@ -35,7 +44,7 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 		return nil, err
 	}
 	var reply HTTPResponseMsg
-	if err := ReadMessage(c.in, &reply); err != nil {
+	if err := c.dec.ReadMessage(&reply); err != nil {
 		return nil, err
 	}
 	if reply.Type != MsgTypeHTTPResponse {
@@ -66,8 +75,8 @@ func (c *CommandClient) Done(exitCode int) error {
 	return c.WriteMessage(DoneMsg{Type: MsgTypeDone, ExitCode: exitCode})
 }
 
-// WriteMessage serialises v as a length-prefixed CBOR frame and sends it to
-// the host.  It is safe to call from multiple goroutines.
+// WriteMessage serialises v as a CBOR data item and sends it to the host.
+// It is safe to call from multiple goroutines.
 func (c *CommandClient) WriteMessage(v any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()

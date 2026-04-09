@@ -24,7 +24,8 @@ func main() {
 	}
 
 	var initMsg map[string]any
-	if err := plugin.ReadMessage(os.Stdin, &initMsg); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	if err := dec.ReadMessage(&initMsg); err != nil {
 		fail(err)
 	}
 	if initMsg["type"] != "init" {
@@ -62,7 +63,7 @@ func main() {
 
 	for {
 		var msg map[string]any
-		if err := plugin.ReadMessage(os.Stdin, &msg); err != nil {
+		if err := dec.ReadMessage(&msg); err != nil {
 			fail(err)
 		}
 		if msg["type"] != "sign" {

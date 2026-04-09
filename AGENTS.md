@@ -48,15 +48,15 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state â
 | `internal/hypermedia/` | Automatic pagination link parsers: RFC 5988, HAL, Siren, JSON:API, TSJ                            |
 | `internal/input/`      | CLI shorthand parsing for structured request bodies                                               |
 | `internal/plugin/`     | Plugin discovery, manifest loading, hook dispatch, TLS signer coordination                        |
-| `plugin/`              | Public package with `WriteMessage`/`ReadMessage` CBOR framing helpers for plugin authors          |
+| `plugin/`              | Public package with `WriteMessage`/`ReadMessage` (one-shot) and `NewDecoder`/`(*Decoder).ReadMessage` (streaming) CBOR helpers for plugin authors |
 
 ### Plugin System
 
-Plugins are executables named `restish-<name>` on PATH or in `~/.config/restish/plugins/`. Invoked with `--rsh-plugin-manifest` to declare capabilities. Transport is **length-prefixed CBOR** (4-byte big-endian length + CBOR payload) over stdin/stdout.
+Plugins are executables named `restish-<name>` on PATH or in `~/.config/restish/plugins/`. Invoked with `--rsh-plugin-manifest` to declare capabilities. Transport is **plain CBOR** (self-delimiting CBOR data items, no length prefix) over stdin/stdout.
 
 Three plugin types:
 
-**Hook plugins** (short-lived): Restish writes one CBOR message, reads one reply, plugin exits. Hooks: `auth`, `request-middleware`, `response-middleware`, `loader`, `formatter`. 30-second timeout. Implementation: `internal/plugin/hook.go`.
+**Hook plugins** (short-lived): Restish writes one CBOR data item to stdin, reads one reply from stdout, plugin exits. Hooks: `auth`, `request-middleware`, `response-middleware`, `loader`, `formatter`. 30-second timeout. Implementation: `internal/plugin/hook.go`.
 
 **Command plugins** (long-lived): Plugin declares `command` hook; Restish discovers subcommands via `--rsh-plugin-commands`. Bidirectional CBOR conversation where plugin can delegate HTTP calls, formatting, and I/O back to Restish. Plugin sends `done` to exit. Implementation: `internal/cli/command_plugin.go`.
 

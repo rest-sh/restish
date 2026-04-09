@@ -2,9 +2,11 @@ package plugin_test
 
 import (
 	"bytes"
-	"encoding/binary"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/fxamacker/cbor/v2"
 
 	"github.com/danielgtaylor/restish/v2/plugin"
 )
@@ -44,42 +46,42 @@ func TestWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
-// TestLengthPrefixIsCorrect verifies that the 4-byte big-endian prefix equals
-// the actual payload length.
-func TestLengthPrefixIsCorrect(t *testing.T) {
+// TestWriteMessageIsRawCBOR verifies that WriteMessage produces a plain CBOR
+// data item with no additional framing (no length prefix, etc.).
+func TestWriteMessageIsRawCBOR(t *testing.T) {
 	var buf bytes.Buffer
 	if err := plugin.WriteMessage(&buf, "test"); err != nil {
 		t.Fatalf("WriteMessage: %v", err)
 	}
 
 	data := buf.Bytes()
-	if len(data) < 4 {
-		t.Fatalf("output too short: %d bytes", len(data))
+	// The output must be valid CBOR that decodes back to our value.
+	var got any
+	if err := cbor.Unmarshal(data, &got); err != nil {
+		t.Fatalf("output is not valid CBOR: %v", err)
 	}
-	declared := binary.BigEndian.Uint32(data[:4])
-	actual := uint32(len(data) - 4)
-	if declared != actual {
-		t.Errorf("length prefix %d != actual payload length %d", declared, actual)
+	if got != "test" {
+		t.Errorf("decoded value: got %v, want %q", got, "test")
 	}
 }
 
-// TestReadMessageTruncatedStream verifies that ReadMessage on a truncated
-// stream returns a descriptive error.
+// TestReadMessageTruncatedStream verifies that ReadMessage on a stream that
+// ends mid-item returns a descriptive error.
 func TestReadMessageTruncatedStream(t *testing.T) {
-	// Write a 4-byte prefix claiming 100 bytes but provide only 4.
-	var buf bytes.Buffer
-	var prefix [4]byte
-	binary.BigEndian.PutUint32(prefix[:], 100)
-	buf.Write(prefix[:])
-	// No payload bytes.
+	// Start a CBOR text string of 100 bytes but provide only 2 bytes of content.
+	// CBOR major type 3 (text string), additional info 24 (one-byte length follows),
+	// length = 100, then only 2 bytes of actual content.
+	buf := bytes.NewReader([]byte{0x78, 0x64, 'a', 'b'})
 
 	var got any
-	err := plugin.ReadMessage(&buf, &got)
+	err := plugin.ReadMessage(buf, &got)
 	if err == nil {
 		t.Fatal("expected error for truncated stream, got nil")
 	}
-	if !strings.Contains(err.Error(), "truncated") {
-		t.Errorf("expected 'truncated' in error, got: %v", err)
+	// The error should mention truncation or EOF.
+	s := err.Error()
+	if !strings.Contains(s, "EOF") && !strings.Contains(s, "truncat") {
+		t.Errorf("expected EOF or truncat in error, got: %v", err)
 	}
 }
 
@@ -121,6 +123,7 @@ func TestTypedMessageRoundTrip(t *testing.T) {
 		t.Errorf("filter: got %v, want body.items", decoded["filter"])
 	}
 }
+
 func TestLargeMessageRoundTrip(t *testing.T) {
 	// Build a slice of 10,000 elements to produce >64KB payload.
 	large := make([]string, 10_000)
@@ -139,5 +142,46 @@ func TestLargeMessageRoundTrip(t *testing.T) {
 	}
 	if len(got) != len(large) {
 		t.Errorf("length mismatch: got %d, want %d", len(got), len(large))
+	}
+}
+
+// TestDecoderSequentialPipe verifies that NewDecoder correctly reads multiple
+// CBOR items sent sequentially through an os.Pipe, simulating the subprocess
+// stdin/stdout channel used by command and TLS-signer plugins.
+//
+// The cbor.Decoder maintains a 512-byte internal read buffer, so a fresh
+// decoder created per ReadMessage call would silently discard buffered bytes
+// belonging to later items. This test catches that regression.
+func TestDecoderSequentialPipe(t *testing.T) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+
+	messages := []map[string]any{
+		{"type": "init", "command": "greet"},
+		{"type": "http-request", "method": "GET", "uri": "https://example.com/foo"},
+		{"type": "done", "exit_code": uint64(0)},
+	}
+
+	go func() {
+		defer pw.Close()
+		for _, msg := range messages {
+			if wErr := plugin.WriteMessage(pw, msg); wErr != nil {
+				return
+			}
+		}
+	}()
+
+	dec := plugin.NewDecoder(pr)
+	for i, want := range messages {
+		var got map[string]any
+		if err := dec.ReadMessage(&got); err != nil {
+			t.Fatalf("ReadMessage[%d]: %v", i, err)
+		}
+		if got["type"] != want["type"] {
+			t.Errorf("msg[%d] type: got %q, want %q", i, got["type"], want["type"])
+		}
 	}
 }

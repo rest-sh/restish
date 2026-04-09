@@ -33,7 +33,8 @@ func main() {
 	}
 
 	var init map[string]any
-	if err := plugin.ReadMessage(os.Stdin, &init); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	if err := dec.ReadMessage(&init); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -88,7 +89,7 @@ func main() {
 	mode := os.Getenv("RSH_TLS_SIGNER_MODE")
 	for {
 		var msg map[string]any
-		if err := plugin.ReadMessage(os.Stdin, &msg); err != nil {
+		if err := dec.ReadMessage(&msg); err != nil {
 			os.Exit(1)
 		}
 		if msg["type"] != "sign" {

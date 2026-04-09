@@ -20,14 +20,27 @@ Use the smallest plugin shape that fits your job:
 
 Start with a hook plugin unless you know you need a custom command lifecycle.
 
+## The Wire Protocol
+
+All messages between Restish and plugins — including manifest responses,
+command declarations, hook inputs/outputs, and command-plugin runtime messages —
+are plain CBOR data items written directly to stdin/stdout. CBOR is
+self-delimiting, so no length prefix or other framing is needed. Any language
+with a CBOR library can implement a plugin.
+
+The startup flags (`--rsh-plugin-manifest`, `--rsh-plugin-commands`) use the
+same format as runtime messages: write one CBOR map to stdout and exit.
+
 ## The Public Helper Package
 
-Plugin authors should build against the public
+Plugin authors in Go should build against the public
 [`plugin`](/Users/daniel/src/restish2/plugin/plugin.go) package.
 
 The helpers you will use most often are:
 
-- `plugin.WriteMessage` and `plugin.ReadMessage` for framed CBOR messages
+- `plugin.WriteMessage` and `plugin.ReadMessage` for CBOR messages (one-shot);
+  `plugin.NewDecoder` + `(*Decoder).ReadMessage` for streaming reads (command
+  and TLS-signer plugins that receive multiple messages on the same stdin)
 - `plugin.WriteManifest` and `plugin.WriteCommands` for startup responses
 - `plugin.HandleStartupFlags` for `--rsh-plugin-manifest` and
   `--rsh-plugin-commands`
@@ -166,11 +179,12 @@ These are the best examples in the repo:
 ## Common Pitfalls
 
 - Plugin executables must be named `restish-<name>`.
-- Manifests and command declarations are unframed CBOR, not length-prefixed
-  CBOR messages.
-- Command-plugin runtime messages are framed CBOR; use `plugin.ReadMessage` and
-  `plugin.WriteMessage`.
+- All messages — startup responses and runtime messages alike — are plain CBOR
+  data items. Use `plugin.WriteMessage` for all writes. For reads, use
+  `plugin.ReadMessage` for one-shot hook plugin reads; for command and
+  TLS-signer plugins that loop over messages, create a `plugin.NewDecoder` once
+  and call `ReadMessage` on it throughout.
 - Formatter plugins write final bytes to stdout directly after reading the
-  request; they do not send a CBOR reply envelope.
+  request; they do not send a CBOR reply.
 - If you start a subprocess or long-lived goroutine inside a plugin, make sure
   it exits cleanly when stdin closes.

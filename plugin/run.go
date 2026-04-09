@@ -54,14 +54,14 @@ func Run(m Manifest, cmds []CommandDecl, fn func(command string, args []string, 
 	}
 
 	var initMsg map[string]any
-	if err := ReadMessage(os.Stdin, &initMsg); err != nil {
+	client := NewCommandClient(os.Stdin, os.Stdout)
+	if err := client.ReadMessage(&initMsg); err != nil {
 		fmt.Fprintln(os.Stderr, "read init:", err)
 		os.Exit(1)
 	}
 
 	command, _ := initMsg["command"].(string)
 	args := MsgStrings(initMsg["args"])
-	client := NewCommandClient(os.Stdin, os.Stdout)
 
 	if err := fn(command, args, client); err != nil {
 		_ = client.Stderr([]byte(err.Error() + "\n"))

@@ -54,11 +54,12 @@ how each plugin participates:
 - the `command` hook enables command discovery through a separate command
   protocol
 
-The transport between Restish and plugins uses length-prefixed CBOR messages
-for structured request/reply interactions. The public
+The transport between Restish and plugins uses plain CBOR messages over
+stdin/stdout. Each message is a single self-delimiting CBOR data item — no
+length prefix or other framing is added. This means any language with a CBOR
+library can implement a plugin without custom framing code. The public
 [`plugin`](/Users/daniel/src/restish2/plugin/plugin.go) package provides
-`WriteMessage` and `ReadMessage` helpers so plugin authors do not need to
-reimplement framing.
+`WriteMessage` and `ReadMessage` helpers for Go plugin authors.
 
 One important boundary is that plugins are additive to, not replacements for,
 the in-process registry model described earlier in the design docs. Restish
@@ -105,7 +106,7 @@ without forking the main executable.
 The current implementation lives primarily in:
 
 - `internal/plugin/plugin.go` for discovery, manifests, and default directories
-- `plugin/plugin.go` for public CBOR framing helpers
+- `plugin/plugin.go` for public CBOR message helpers
 - `internal/cli/cli.go` for startup registration of plugin loaders and
   formatters
 - `internal/cli/plugin_cmd.go` for user-facing `restish plugin ...` commands

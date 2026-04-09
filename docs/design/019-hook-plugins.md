@@ -3,9 +3,8 @@
 ## Summary
 
 Hook plugins are short-lived subprocesses that handle a single extension point
-per invocation. Restish writes one structured CBOR message to the plugin's
-stdin, reads either one CBOR reply or raw formatter output, and then the plugin
-exits.
+per invocation. Restish writes one CBOR data item to the plugin's stdin, reads
+either one CBOR reply or raw formatter output, and then the plugin exits.
 
 This model is used for:
 
@@ -36,7 +35,7 @@ The hook-plugin contract is intentionally one-shot:
 1. Restish selects discovered plugins whose manifest declares a hook.
 2. It builds a hook-specific input message.
 3. It starts the plugin executable.
-4. It writes one CBOR-framed request to stdin.
+4. It writes one CBOR data item to stdin.
 5. It reads one result from stdout.
 6. The plugin exits.
 
@@ -114,8 +113,8 @@ Formatter plugins declare `formatter_names` in the manifest. Each declared name
 becomes available through `-o <name>`.
 
 Formatter hooks are slightly different from the other hook types: Restish still
-sends a CBOR-framed request on stdin, but stdout is treated as raw formatted
-bytes rather than a CBOR reply envelope.
+sends a CBOR data item on stdin, but stdout is treated as raw formatted bytes
+rather than a CBOR reply.
 
 The input contains:
 
@@ -138,10 +137,11 @@ loader, or auth hook to ship as a custom Restish build.
 That would expose too much of Restish's internal representation. Requiring
 loader plugins to hand back OpenAPI keeps the seam smaller and more stable.
 
-### Use raw JSON everywhere instead of CBOR framing
+### Use raw JSON everywhere instead of CBOR
 
 JSON would be easier to inspect manually, but CBOR is more efficient for binary
-payloads and maps naturally to byte-oriented plugin messages.
+payloads, maps naturally to byte-oriented plugin messages, and is self-delimiting
+over a stream.
 
 ## Notes
 

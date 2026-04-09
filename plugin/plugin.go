@@ -5,8 +5,11 @@
 // or other framing is added. This means any CBOR library can read and write
 // plugin messages without implementing custom framing.
 //
-// Use WriteMessage to write one message and ReadMessage to read one message.
-// Both functions are safe for concurrent use on independent readers/writers.
+// Use WriteMessage to send a message. For reading, use NewDecoder and call
+// ReadMessage on the returned Decoder — this is necessary whenever multiple
+// messages will be read from the same reader (os.Stdin in command and
+// TLS-signer plugins). The standalone ReadMessage function is provided as a
+// convenience for true one-shot reads only (hook plugins).
 package plugin
 
 import (
@@ -43,15 +46,36 @@ func WriteMessage(w io.Writer, v any) error {
 	return nil
 }
 
-// ReadMessage reads one CBOR data item from r and unmarshals it into v (which
-// must be a pointer). Because CBOR is self-delimiting, ReadMessage consumes
-// exactly the bytes that belong to the next data item and no more.
+// Decoder reads sequential CBOR messages from a stream. It maintains an
+// internal read buffer, so a single Decoder instance must be reused for all
+// reads from the same underlying reader — discarding it between calls would
+// lose bytes that were already buffered.
 //
-// ReadMessage is safe to call repeatedly on the same reader: each call
-// advances r past exactly one CBOR item regardless of what follows.
-func ReadMessage(r io.Reader, v any) error {
-	if err := DecMode.NewDecoder(r).Decode(v); err != nil {
+// Use NewDecoder for any reader from which multiple messages will be read
+// (os.Stdin in a command or TLS-signer plugin). Hook plugins that receive
+// exactly one message may use the package-level ReadMessage instead.
+type Decoder struct {
+	dec *cbor.Decoder
+}
+
+// NewDecoder returns a Decoder that reads from r.
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{dec: DecMode.NewDecoder(r)}
+}
+
+// ReadMessage reads one CBOR data item and unmarshals it into v (which must
+// be a pointer).
+func (d *Decoder) ReadMessage(v any) error {
+	if err := d.dec.Decode(v); err != nil {
 		return fmt.Errorf("plugin: read: %w", err)
 	}
 	return nil
+}
+
+// ReadMessage reads one CBOR data item from r and unmarshals it into v (which
+// must be a pointer). It is intended for one-shot reads such as hook plugins.
+// For command or TLS-signer plugins that receive multiple messages, create a
+// Decoder with NewDecoder and call ReadMessage on that instead.
+func ReadMessage(r io.Reader, v any) error {
+	return NewDecoder(r).ReadMessage(v)
 }

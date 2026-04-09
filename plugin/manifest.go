@@ -1,11 +1,6 @@
 package plugin
 
-import (
-	"fmt"
-	"io"
-
-	"github.com/fxamacker/cbor/v2"
-)
+import "io"
 
 // Manifest is the metadata a plugin reports when called with
 // --rsh-plugin-manifest. Plugin authors populate and write this with
@@ -40,23 +35,17 @@ type CommandDecl struct {
 	PassthroughStdio bool   `cbor:"passthrough_stdio,omitempty" json:"passthrough_stdio,omitempty"`
 }
 
-// WriteManifest serialises m as unframed CBOR and writes it to w.
+// WriteManifest serialises m as a CBOR data item and writes it to w.
 // It is the canonical way to respond to --rsh-plugin-manifest.
 //
 //	case "--rsh-plugin-manifest":
 //	    return plugin.WriteManifest(os.Stdout, m)
 func WriteManifest(w io.Writer, m Manifest) error {
-	data, err := cbor.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("plugin: marshal manifest: %w", err)
-	}
-	_, err = w.Write(data)
-	return err
+	return WriteMessage(w, m)
 }
 
-// WriteCommands serialises cmds as an unframed CBOR map with a "commands"
-// array and writes it to w. It is the canonical way to respond to
-// --rsh-plugin-commands.
+// WriteCommands serialises cmds as a CBOR map with a "commands" array and
+// writes it to w. It is the canonical way to respond to --rsh-plugin-commands.
 //
 //	case "--rsh-plugin-commands":
 //	    return plugin.WriteCommands(os.Stdout, cmds)
@@ -64,10 +53,5 @@ func WriteCommands(w io.Writer, cmds []CommandDecl) error {
 	type wrapper struct {
 		Commands []CommandDecl `cbor:"commands"`
 	}
-	data, err := cbor.Marshal(wrapper{Commands: cmds})
-	if err != nil {
-		return fmt.Errorf("plugin: marshal commands: %w", err)
-	}
-	_, err = w.Write(data)
-	return err
+	return WriteMessage(w, wrapper{Commands: cmds})
 }

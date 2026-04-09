@@ -12,20 +12,27 @@
 // Plugin binaries are discovered as executables named "restish-<name>".
 // Restish starts them with one of these startup flags:
 //
-//   - --rsh-plugin-manifest: write an unframed CBOR Manifest
-//   - --rsh-plugin-commands: write an unframed CBOR command list for command plugins
+//   - --rsh-plugin-manifest: write a CBOR Manifest to stdout
+//   - --rsh-plugin-commands: write a CBOR command list to stdout (command plugins)
 //
 // Most plugins should use HandleStartupFlags or Run instead of manually
-// decoding startup flags.
+// handling startup flags.
 //
 // Runtime transport
 //
-// After startup, runtime protocol messages use length-prefixed CBOR framing:
+// All messages — startup responses and runtime messages alike — are plain
+// CBOR data items written directly to stdin/stdout. CBOR is self-delimiting,
+// so no length prefix or other framing is needed. Any language with a CBOR
+// library can implement a plugin.
 //
-//	[ 4-byte big-endian uint32 length ][ CBOR payload ]
+// Use WriteMessage and ReadMessage for runtime messages. WriteManifest and
+// WriteCommands are convenience wrappers for startup responses.
 //
-// Use WriteMessage and ReadMessage for framed runtime messages.
-// Use WriteManifest and WriteCommands for unframed startup responses.
+// For hook plugins that read a single message, ReadMessage(r, v) is sufficient.
+// Command and TLS-signer plugins receive multiple messages on the same stdin,
+// so they must create one Decoder with NewDecoder(os.Stdin) and call
+// ReadMessage on it for every read. Discarding the Decoder between calls loses
+// bytes that were already buffered internally.
 //
 // Command-plugin messages
 //
@@ -43,8 +50,8 @@
 //
 // Hook-plugin payload shapes
 //
-// Hook plugins currently receive one framed CBOR map and, except for formatter
-// hooks, return one framed CBOR reply map.
+// Hook plugins receive one CBOR map and, except for formatter hooks, return
+// one CBOR reply map.
 //
 //   - auth:
 //     request contains api_name, profile_name, params, and request metadata

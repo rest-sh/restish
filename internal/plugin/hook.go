@@ -40,16 +40,16 @@ func callHookRaw(path string, in any) ([]byte, error) {
 }
 
 // CallFormatterHook spawns the plugin at path, writes in as a CBOR message to
-// stdin, and returns all bytes written to stdout as raw (unframed) output.
+// stdin, and returns all bytes written to stdout as raw output.
 // This is used for formatter plugins whose output is the formatted data itself,
-// not a CBOR envelope.
+// not a CBOR reply.
 func CallFormatterHook(path string, in any) ([]byte, error) {
 	return callHookRaw(path, in)
 }
 
-// CallHook spawns the plugin at path, writes in as a length-prefixed CBOR
-// message to the plugin's stdin, reads one CBOR reply from stdout, and
-// unmarshals it into out (which must be a pointer).
+// CallHook spawns the plugin at path, writes in as a CBOR message to the
+// plugin's stdin, reads one CBOR reply from stdout, and unmarshals it into out
+// (which must be a pointer).
 //
 // The plugin must exit 0 for the call to succeed; a non-zero exit is returned
 // as an error along with any text the plugin wrote to stderr. The plugin has

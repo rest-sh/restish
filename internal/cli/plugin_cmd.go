@@ -152,10 +152,10 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 	// Attempt to decode all CBOR messages from the captured stdout.
 	data := stdoutBuf.Bytes()
 	if len(data) > 0 {
-		r := bytes.NewReader(data)
-		for r.Len() > 0 {
+		dec := pluginwire.NewDecoder(bytes.NewReader(data))
+		for {
 			var v any
-			if decErr := pluginwire.ReadMessage(r, &v); decErr != nil {
+			if decErr := dec.ReadMessage(&v); decErr != nil {
 				break
 			}
 			b, _ := json.MarshalIndent(v, "", "  ")

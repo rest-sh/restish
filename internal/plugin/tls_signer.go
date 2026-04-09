@@ -44,8 +44,9 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 		return nil, fmt.Errorf("tls-signer %s: init: %w", filepath.Base(path), err)
 	}
 
+	dec := pluginwire.NewDecoder(stdout)
 	var ready map[string]any
-	if err := readTLSSignerMessage(stdout, &ready); err != nil {
+	if err := readTLSSignerMessage(dec, stdout, &ready); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready: %w", filepath.Base(path), err)
 	}
@@ -69,6 +70,7 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 		path:   path,
 		stdin:  stdin,
 		stdout: stdout,
+		dec:    dec,
 		stderr: stderr,
 		proc:   proc,
 		pub:    cert.PublicKey,
@@ -87,6 +89,7 @@ type PluginSigner struct {
 	path   string
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
+	dec    *pluginwire.Decoder
 	stderr *bytes.Buffer
 	proc   *exec.Cmd
 	pub    crypto.PublicKey
@@ -145,7 +148,7 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 	}
 
 	var reply map[string]any
-	if err := readTLSSignerMessage(s.stdout, &reply); err != nil {
+	if err := readTLSSignerMessage(s.dec, s.stdout, &reply); err != nil {
 		s.shutdown()
 		return nil, fmt.Errorf("tls-signer %s: sign reply: %w", filepath.Base(s.path), err)
 	}
@@ -180,24 +183,25 @@ func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, 
 	return stdout, stdin, &stderr, proc, nil
 }
 
-// readTLSSignerMessage reads one CBOR message from r with a 10-second timeout.
+// readTLSSignerMessage reads one CBOR data item from dec with a 10-second timeout.
 //
-// If the deadline fires, r is closed to unblock the background reader goroutine
-// and the function waits for that goroutine to exit before returning — so there
-// is no goroutine leak regardless of whether the read succeeded or timed out.
-// Callers should treat any error as fatal and shut down the signer process.
-func readTLSSignerMessage(r io.ReadCloser, out any) error {
+// If the deadline fires, closer is closed to unblock the background reader
+// goroutine and the function waits for that goroutine to exit before returning
+// — so there is no goroutine leak regardless of whether the read succeeded or
+// timed out. Callers should treat any error as fatal and shut down the signer
+// process.
+func readTLSSignerMessage(dec *pluginwire.Decoder, closer io.Closer, out any) error {
 	type result struct{ err error }
 	done := make(chan result, 1)
 	go func() {
-		done <- result{err: pluginwire.ReadMessage(r, out)}
+		done <- result{err: dec.ReadMessage(out)}
 	}()
 	select {
 	case res := <-done:
 		return res.err
 	case <-time.After(10 * time.Second):
-		_ = r.Close() // unblocks the goroutine above
-		<-done        // wait for it to exit — no leak
+		_ = closer.Close() // unblocks the goroutine above
+		<-done             // wait for it to exit — no leak
 		return fmt.Errorf("timed out waiting for plugin reply")
 	}
 }
