@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
@@ -29,28 +28,14 @@ func (c *CLI) FetchResponse(ctx context.Context, method, rawURL, profileName str
 		opts.Headers = rawHeaders
 	}
 
-	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
-	var err error
-	opts, err = c.resolveTLSSigner(opts)
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
-	opts.Transport = request.BuildTransport(opts)
 
-	// Wrap OnRequest so request middleware plugins are also invoked.
-	origOnReq := opts.OnRequest
-	opts.OnRequest = func(req *http.Request) error {
-		if origOnReq != nil {
-			if err := origOnReq(req); err != nil {
-				return err
-			}
-		}
-		return c.runRequestMiddlewarePlugins(req)
-	}
-
-	httpResp, err := request.Do(ctx, method, rawURL, nil, opts)
+	httpResp, err := c.sendPreparedRequest(ctx, method, prepared)
 	if err != nil {
 		return nil, err
 	}
-	return output.Normalize(httpResp, c.content, output.DefaultMaxBodyBytes)
+	return c.normalizeHTTPResponse(httpResp, output.DefaultMaxBodyBytes)
 }

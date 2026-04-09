@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 )
 
@@ -35,21 +32,30 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	profileName := c.profileFromCmd(cmd)
-	uri, _, opts = c.applyAPIProfile(uri, profileName, opts)
+	prepared, err := c.prepareRequest(uri, profileName, opts, nil, nil, false)
+	if err != nil {
+		return err
+	}
+	uri = prepared.rawURL
 
-	httpResp, err := request.Do(context.Background(), "GET", uri, nil, opts)
+	httpResp, err := c.sendPreparedRequest(context.Background(), "GET", prepared)
 	if err != nil {
 		return fmt.Errorf("network: %w", err)
 	}
 
-	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
+	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}
 
 	var links map[string]string
-	if httpResp.Request != nil {
-		links = hypermedia.Parse(httpResp.Request.URL, httpResp.Header, resp.Body, c.linkParsers)
+	if len(resp.Links) > 0 {
+		links = make(map[string]string, len(resp.Links))
+		for rel, value := range resp.Links {
+			if href, ok := value.(string); ok {
+				links[rel] = href
+			}
+		}
 	}
 
 	// Filter to requested rels if specified.

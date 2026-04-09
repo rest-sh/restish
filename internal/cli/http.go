@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/input"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
@@ -94,49 +92,10 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	if err != nil {
 		return err
 	}
-	if len(extraHeaders) > 0 {
-		opts.Headers = append(opts.Headers, extraHeaders...)
-	}
 
-	// Resolve API short names and merge persistent profile headers/query.
+	// Resolve API short names and merge persistent profile settings.
 	profileName := c.profileFromCmd(cmd)
 	var apiName string
-	rawURL, apiName, opts = c.applyAPIProfile(rawURL, profileName, opts)
-	opts, err = c.resolveTLSSigner(opts)
-	if err != nil {
-		return err
-	}
-
-	// When following a cross-host redirect, strip credentials to prevent
-	// a compromised plugin from issuing credentialed requests to arbitrary hosts.
-	if noAuth {
-		opts.OnRequest = nil
-		var filtered []string
-		for _, h := range opts.Headers {
-			lower := strings.ToLower(h)
-			if !strings.HasPrefix(lower, "authorization:") &&
-				!strings.HasPrefix(lower, "cookie:") &&
-				!strings.HasPrefix(lower, "proxy-authorization:") {
-				filtered = append(filtered, h)
-			}
-		}
-		opts.Headers = filtered
-	}
-
-	// Build the transport once so all paginated requests share the same
-	// http.Transport connection pool (avoids a new TCP+TLS handshake per page).
-	opts.Transport = request.BuildTransport(opts)
-
-	// Chain request-middleware plugins after auth.
-	origOnReq := opts.OnRequest
-	opts.OnRequest = func(req *http.Request) error {
-		if origOnReq != nil {
-			if err := origOnReq(req); err != nil {
-				return err
-			}
-		}
-		return c.runRequestMiddlewarePlugins(req)
-	}
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
@@ -145,26 +104,15 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return fmt.Errorf("building request body: %w", err)
 	}
 
-	var reqBody io.Reader
-	if bodyVal != nil {
-		ct := opts.ContentType
-		if ct == "" {
-			ct = "application/json"
-		}
-		// Determine the full MIME type for marshalling.
-		mimeType := c.content.MIMETypeForName(ct)
-		if mimeType == "" {
-			mimeType = ct
-		}
-		encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyVal)
-		if err != nil {
-			return fmt.Errorf("encoding request body: %w", err)
-		}
-		reqBody = bytes.NewReader(encoded)
-		opts.Headers = append(opts.Headers, "Content-Type: "+actualContentType)
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth)
+	if err != nil {
+		return err
 	}
+	rawURL = prepared.rawURL
+	apiName = prepared.apiName
+	opts = prepared.opts
 
-	httpResp, err := request.Do(context.Background(), method, rawURL, reqBody, opts)
+	httpResp, err := c.sendPreparedRequest(context.Background(), method, prepared)
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
 	}
@@ -184,20 +132,9 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		}
 	}
 
-	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
+	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return err
-	}
-
-	// Populate links from hypermedia parsers. httpResp headers/request are still
-	// accessible even after Normalize has closed and consumed the body.
-	if httpResp.Request != nil {
-		if links := hypermedia.Parse(httpResp.Request.URL, httpResp.Header, resp.Body, c.linkParsers); len(links) > 0 {
-			resp.Links = make(map[string]any, len(links))
-			for k, v := range links {
-				resp.Links[k] = v
-			}
-		}
 	}
 
 	// Response-middleware plugins: can modify, drop, or follow.

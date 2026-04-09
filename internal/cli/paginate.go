@@ -7,7 +7,6 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/spf13/cobra"
@@ -88,19 +87,9 @@ func (c *CLI) runPagination(
 			return fmt.Errorf("paginate page %d: %w", page, err)
 		}
 
-		resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
+		resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 		if err != nil {
 			return fmt.Errorf("paginate page %d normalize: %w", page, err)
-		}
-
-		// Parse links for this page.
-		if httpResp.Request != nil {
-			if links := hypermedia.Parse(httpResp.Request.URL, httpResp.Header, resp.Body, c.linkParsers); len(links) > 0 {
-				resp.Links = make(map[string]any, len(links))
-				for k, v := range links {
-					resp.Links[k] = v
-				}
-			}
 		}
 
 		items, filterErr = pageItems(resp.Body, pagCfg)

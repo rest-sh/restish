@@ -2,12 +2,10 @@ package cli
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +19,6 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
-	"github.com/danielgtaylor/restish/v2/internal/request"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/spf13/cobra"
@@ -275,28 +272,12 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 	}
 
 	profileName := c.profileFromCmd(cmd)
-	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
-	opts, err = c.resolveTLSSigner(opts)
-	if err != nil {
-		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return writer.WriteMessage(reply)
-	}
 
 	if noCache, _ := msg["no_cache"].(bool); noCache {
 		opts.NoCache = true
 	}
 	if ttl := msgInt(msg, "cache_ttl"); ttl > 0 {
 		opts.Headers = append(opts.Headers, fmt.Sprintf("Cache-Control: max-age=%d", ttl))
-	}
-
-	origOnReq := opts.OnRequest
-	opts.OnRequest = func(req *http.Request) error {
-		if origOnReq != nil {
-			if err := origOnReq(req); err != nil {
-				return err
-			}
-		}
-		return c.runRequestMiddlewarePlugins(req)
 	}
 
 	if headers, ok := msg["headers"].(map[string]any); ok {
@@ -307,23 +288,9 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		}
 	}
 
-	var reqBody io.Reader
-	if bodyVal, ok := msg["body"]; ok && bodyVal != nil {
-		ct, _ := msg["content_type"].(string)
-		if ct == "" {
-			ct = "application/json"
-		}
-		mimeType := c.content.MIMETypeForName(ct)
-		if mimeType == "" {
-			mimeType = ct
-		}
-		encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyVal)
-		if err != nil {
-			reply := map[string]any{"type": "http-response", "error": err.Error()}
-			return writer.WriteMessage(reply)
-		}
-		opts.Headers = append(opts.Headers, "Content-Type: "+actualContentType)
-		reqBody = bytes.NewReader(encoded)
+	bodyVal := msg["body"]
+	if bodyVal != nil {
+		opts.ContentType, _ = msg["content_type"].(string)
 	}
 
 	// no_paginate is accepted per protocol. Plugin http-requests are currently
@@ -336,14 +303,19 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		reqCtx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 		defer cancel()
 	}
-	httpResp, err := request.Do(reqCtx, method, rawURL, reqBody, opts)
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, nil, false)
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)
 	}
-	defer httpResp.Body.Close()
 
-	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
+	httpResp, err := c.sendPreparedRequest(reqCtx, method, prepared)
+	if err != nil {
+		reply := map[string]any{"type": "http-response", "error": err.Error()}
+		return writer.WriteMessage(reply)
+	}
+
+	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		reply := map[string]any{"type": "http-response", "error": err.Error()}
 		return writer.WriteMessage(reply)

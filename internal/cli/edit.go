@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"reflect"
@@ -46,20 +45,14 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	profileName := c.profileFromCmd(cmd)
-
-	rawURL, _, opts = c.applyAPIProfile(rawURL, profileName, opts)
-	origOnReq := opts.OnRequest
-	opts.OnRequest = func(req *http.Request) error {
-		if origOnReq != nil {
-			if err := origOnReq(req); err != nil {
-				return err
-			}
-		}
-		return c.runRequestMiddlewarePlugins(req)
-	}
 	opts.ContentType = ""
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, nil, nil, false)
+	if err != nil {
+		return err
+	}
+	rawURL = prepared.rawURL
 
-	httpResp, err := request.Do(context.Background(), "GET", rawURL, nil, opts)
+	httpResp, err := c.sendPreparedRequest(context.Background(), "GET", prepared)
 	if err != nil {
 		return fmt.Errorf("network error for GET %s: %w", rawURL, err)
 	}
@@ -68,7 +61,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		c.logVerbose(httpResp)
 	}
 
-	resp, err := output.Normalize(httpResp, c.content, maxBodyBytes(cmd))
+	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return err
 	}
