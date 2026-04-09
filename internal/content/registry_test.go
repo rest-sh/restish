@@ -98,10 +98,17 @@ func TestAcceptHeader(t *testing.T) {
 	if iCBOR > iJSON {
 		t.Errorf("cbor should appear before json in Accept header: %q", h)
 	}
+	iSSE := strings.Index(h, "text/event-stream")
+	if iSSE == -1 {
+		t.Fatalf("text/event-stream missing from Accept header: %q", h)
+	}
 	// text/* with lowest q must be last
 	iText := strings.Index(h, "text/*")
 	if iText == -1 {
 		t.Fatalf("text/* missing from Accept header: %q", h)
+	}
+	if iSSE > iText {
+		t.Errorf("text/event-stream should appear before text/* in Accept header: %q", h)
 	}
 	if iText < iJSON {
 		t.Errorf("text/* should appear after json in Accept header: %q", h)

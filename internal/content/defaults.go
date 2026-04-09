@@ -150,7 +150,7 @@ func Default() *Registry {
 
 	r.AddContentType(&ContentType{
 		Name:      "text",
-		MIMETypes: []string{"text/*"},
+		MIMETypes: []string{"text/event-stream", "text/*"},
 		Quality:   0.2,
 		Marshal: func(v any) ([]byte, error) {
 			if s, ok := v.(string); ok {
