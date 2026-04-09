@@ -3,31 +3,31 @@ package cli_test
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
 )
 
-// jsonServer starts an httptest.Server that responds with status and a JSON body.
-func jsonServer(t *testing.T, status int, body string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+func useJSONResponse(c *cli.CLI, status int, body string) {
+	c.HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
 }
 
 // TestJSONOutput verifies that a non-TTY invocation outputs the body as JSON.
 func TestJSONOutput(t *testing.T) {
-	srv := jsonServer(t, 200, `{"name":"Alice","score":42}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{"name":"Alice","score":42}`)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -52,9 +52,9 @@ func TestJSONOutput(t *testing.T) {
 
 // TestReadableOutput verifies that -o readable includes the status line and headers.
 func TestReadableOutput(t *testing.T) {
-	srv := jsonServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-o", "readable", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{"hello":"world"}`)
+	if err := c.Run([]string{"restish", "get", "-o", "readable", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := out.String()
@@ -70,9 +70,9 @@ func TestReadableOutput(t *testing.T) {
 // TestReadableBodyIsValidJSON verifies that the body section of -o readable output
 // is parseable JSON (no ANSI codes since we're not a TTY).
 func TestReadableBodyIsValidJSON(t *testing.T) {
-	srv := jsonServer(t, 200, `{"key":"value"}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-o", "readable", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{"key":"value"}`)
+	if err := c.Run([]string{"restish", "get", "-o", "readable", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -91,9 +91,9 @@ func TestReadableBodyIsValidJSON(t *testing.T) {
 
 // TestExitCode4xx verifies that a 4xx response returns ExitCodeError{Code:4}.
 func TestExitCode4xx(t *testing.T) {
-	srv := jsonServer(t, 404, `{"error":"not found"}`)
 	c, _, _ := newTestCLI()
-	err := c.Run([]string{"restish", "get", srv.URL})
+	useJSONResponse(c, 404, `{"error":"not found"}`)
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
 
 	var exitErr *cli.ExitCodeError
 	if !errors.As(err, &exitErr) {
@@ -106,9 +106,9 @@ func TestExitCode4xx(t *testing.T) {
 
 // TestExitCode5xx verifies that a 5xx response returns ExitCodeError{Code:5}.
 func TestExitCode5xx(t *testing.T) {
-	srv := jsonServer(t, 500, `{"error":"boom"}`)
 	c, _, _ := newTestCLI()
-	err := c.Run([]string{"restish", "get", srv.URL})
+	useJSONResponse(c, 500, `{"error":"boom"}`)
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
 
 	var exitErr *cli.ExitCodeError
 	if !errors.As(err, &exitErr) {
@@ -121,9 +121,9 @@ func TestExitCode5xx(t *testing.T) {
 
 // TestExitCode2xx verifies that a 2xx response returns nil.
 func TestExitCode2xx(t *testing.T) {
-	srv := jsonServer(t, 200, `{}`)
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{}`)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Errorf("expected nil error for 200, got: %v", err)
 	}
 }
@@ -131,9 +131,9 @@ func TestExitCode2xx(t *testing.T) {
 // TestIgnoreStatusCode verifies that --rsh-ignore-status-code returns nil
 // even for 4xx/5xx responses.
 func TestIgnoreStatusCode(t *testing.T) {
-	srv := jsonServer(t, 500, `{"error":"server error"}`)
 	c, _, _ := newTestCLI()
-	err := c.Run([]string{"restish", "get", "--rsh-ignore-status-code", srv.URL})
+	useJSONResponse(c, 500, `{"error":"server error"}`)
+	err := c.Run([]string{"restish", "get", "--rsh-ignore-status-code", "https://api.example.com/items"})
 	if err != nil {
 		t.Errorf("expected nil with --rsh-ignore-status-code, got: %v", err)
 	}
@@ -141,9 +141,9 @@ func TestIgnoreStatusCode(t *testing.T) {
 
 // TestUnknownOutputFormat verifies that -o nosuchformat returns an error.
 func TestUnknownOutputFormat(t *testing.T) {
-	srv := jsonServer(t, 200, `{}`)
 	c, _, _ := newTestCLI()
-	err := c.Run([]string{"restish", "get", "-o", "nosuchformat", srv.URL})
+	useJSONResponse(c, 200, `{}`)
+	err := c.Run([]string{"restish", "get", "-o", "nosuchformat", "https://api.example.com/items"})
 	if err == nil {
 		t.Fatal("expected error for unknown output format, got nil")
 	}
@@ -152,9 +152,9 @@ func TestUnknownOutputFormat(t *testing.T) {
 // TestResponseBodyOnError verifies that a 4xx response still writes the body
 // to stdout before returning the exit code error.
 func TestResponseBodyOnError(t *testing.T) {
-	srv := jsonServer(t, 404, `{"error":"not found"}`)
 	c, out, _ := newTestCLI()
-	_ = c.Run([]string{"restish", "get", srv.URL}) // ignore the ExitCodeError
+	useJSONResponse(c, 404, `{"error":"not found"}`)
+	_ = c.Run([]string{"restish", "get", "https://api.example.com/items"}) // ignore the ExitCodeError
 
 	var v any
 	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
@@ -164,9 +164,9 @@ func TestResponseBodyOnError(t *testing.T) {
 
 // TestFilterShorthand verifies that -f body.name extracts the right field.
 func TestFilterShorthand(t *testing.T) {
-	srv := jsonServer(t, 200, `{"name":"Alice","age":30}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-f", "body.name", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{"name":"Alice","age":30}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := strings.TrimSpace(out.String())
@@ -178,9 +178,9 @@ func TestFilterShorthand(t *testing.T) {
 
 // TestFilterRaw verifies that -r strips quotes from string results.
 func TestFilterRaw(t *testing.T) {
-	srv := jsonServer(t, 200, `{"name":"Alice"}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{"name":"Alice"}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := strings.TrimSpace(out.String())
@@ -191,9 +191,9 @@ func TestFilterRaw(t *testing.T) {
 
 // TestFilterHeaders verifies that --rsh-headers is shorthand for -f headers.
 func TestFilterHeaders(t *testing.T) {
-	srv := jsonServer(t, 200, `{}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "--rsh-headers", srv.URL}); err != nil {
+	useJSONResponse(c, 200, `{}`)
+	if err := c.Run([]string{"restish", "get", "--rsh-headers", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), "Content-Type") {

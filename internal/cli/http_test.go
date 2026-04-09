@@ -3,7 +3,6 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/danielgtaylor/restish/v2/internal/cli"
 )
 
 // requestRecorder is a small helper that captures the last HTTP request
@@ -43,22 +44,17 @@ func (rr *requestRecorder) Last() *http.Request {
 	return rr.last
 }
 
-// newTestServer starts an httptest.Server. The handler records each request
-// via rr and responds with the given status and body.
-func newTestServer(t *testing.T, rr *requestRecorder, status int, body string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Consume body before clone to avoid a potential race with the
-		// http server framework draining it after the handler returns.
-		_ = r.Body
-		rr.capture(r)
-		w.WriteHeader(status)
-		if body != "" {
-			fmt.Fprint(w, body)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+func useTransport(c *cli.CLI, fn roundTripperFunc) {
+	c.HTTPTransport = fn
+}
+
+func jsonResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Proto:      "HTTP/1.1",
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
 }
 
 // TestHTTPVerbs verifies that each lowercase verb sends the correct HTTP method.
@@ -67,9 +63,12 @@ func TestHTTPVerbs(t *testing.T) {
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
 			var rr requestRecorder
-			srv := newTestServer(t, &rr, 200, "")
 			c, _, _ := newTestCLI()
-			if err := c.Run([]string{"restish", strings.ToLower(method), srv.URL}); err != nil {
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				rr.capture(r)
+				return jsonResponse(200, `{}`), nil
+			})
+			if err := c.Run([]string{"restish", strings.ToLower(method), "https://api.example.com/items"}); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got := rr.Last().Method; got != method {
@@ -82,9 +81,12 @@ func TestHTTPVerbs(t *testing.T) {
 // TestHTTPVerbUppercaseAlias verifies that the uppercase alias (e.g. GET) also works.
 func TestHTTPVerbUppercaseAlias(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "GET", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "GET", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().Method; got != "GET" {
@@ -95,9 +97,12 @@ func TestHTTPVerbUppercaseAlias(t *testing.T) {
 // TestBareURL verifies that a URL without an explicit verb is treated as GET.
 func TestBareURL(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().Method; got != "GET" {
@@ -108,9 +113,12 @@ func TestBareURL(t *testing.T) {
 // TestHTTPHeader verifies that -H adds the header to the request.
 func TestHTTPHeader(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-H", "X-Test: hello", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "-H", "X-Test: hello", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().Header.Get("X-Test"); got != "hello" {
@@ -121,12 +129,15 @@ func TestHTTPHeader(t *testing.T) {
 // TestHTTPHeaderRepeatable verifies that multiple -H flags all take effect.
 func TestHTTPHeaderRepeatable(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	err := c.Run([]string{"restish", "get",
 		"-H", "X-First: one",
 		"-H", "X-Second: two",
-		srv.URL,
+		"https://api.example.com/items",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,9 +154,12 @@ func TestHTTPHeaderRepeatable(t *testing.T) {
 // TestHTTPQuery verifies that -q appends a query parameter to the request.
 func TestHTTPQuery(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "-q", "foo=bar", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "-q", "foo=bar", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().URL.Query().Get("foo"); got != "bar" {
@@ -156,10 +170,13 @@ func TestHTTPQuery(t *testing.T) {
 // TestHTTPServerOverride verifies that -s replaces the scheme and host.
 func TestHTTPServerOverride(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, "")
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	// The URL argument points nowhere meaningful; -s redirects to our test server.
-	err := c.Run([]string{"restish", "get", "-s", srv.URL, "https://api.example.com/items"})
+	err := c.Run([]string{"restish", "get", "-s", "https://staging.example.com", "https://api.example.com/items"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,9 +188,11 @@ func TestHTTPServerOverride(t *testing.T) {
 // TestHTTPResponseBody verifies that the response body is written to stdout.
 // Uses a JSON content-type so the body is decoded and re-encoded as an object.
 func TestHTTPResponseBody(t *testing.T) {
-	srv := jsonServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{"hello":"world"}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), `"hello"`) {
@@ -184,14 +203,12 @@ func TestHTTPResponseBody(t *testing.T) {
 // TestHTTPTimeout verifies that --rsh-timeout causes the request to fail
 // when the server is too slow.
 func TestHTTPTimeout(t *testing.T) {
-	// A server that hangs until its context is cancelled.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	t.Cleanup(srv.Close)
-
 	c, _, _ := newTestCLI()
-	err := c.Run([]string{"restish", "get", "--rsh-timeout", "50ms", srv.URL})
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+	err := c.Run([]string{"restish", "get", "--rsh-timeout", "50ms", "https://api.example.com/items"})
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
@@ -228,11 +245,13 @@ func TestHTTPInsecure(t *testing.T) {
 // sent as a JSON body with the correct Content-Type.
 func TestShorthandBody(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	// Shell would split "name: Alice, age: 30" into tokens; simulate that here.
-	if err := c.Run([]string{"restish", "post", srv.URL, "name:", "Alice,", "age:", "30"}); err != nil {
+	if err := c.Run([]string{"restish", "post", "https://api.example.com/items", "name:", "Alice,", "age:", "30"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -254,10 +273,12 @@ func TestShorthandBody(t *testing.T) {
 // TestShorthandBodyNested verifies deep shorthand paths.
 func TestShorthandBodyNested(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "post", srv.URL, "user.address.city:", "NYC"}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "post", "https://api.example.com/items", "user.address.city:", "NYC"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -276,10 +297,12 @@ func TestShorthandBodyNested(t *testing.T) {
 // send no body and no Content-Type.
 func TestNoBodyWhenNoArgs(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -294,11 +317,13 @@ func TestNoBodyWhenNoArgs(t *testing.T) {
 // TestStdinBody verifies that piped stdin is sent as the request body.
 func TestStdinBody(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	c.Stdin = strings.NewReader(`{"from":"stdin"}`)
-	if err := c.Run([]string{"restish", "post", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "post", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -313,11 +338,13 @@ func TestStdinBody(t *testing.T) {
 
 func TestFormBody(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	err := c.Run([]string{
-		"restish", "post", "-c", "form", srv.URL,
+		"restish", "post", "-c", "form", "https://api.example.com/items",
 		"username:", "alice,", "password:", "secret",
 	})
 	if err != nil {
@@ -336,12 +363,14 @@ func TestFormBody(t *testing.T) {
 
 func TestMultipartBody(t *testing.T) {
 	var rr requestRecorder
-	srv := newTestServer(t, &rr, 200, `{}`)
-
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
 	uploadPath := filepath.Join("testdata", "upload.txt")
 	err := c.Run([]string{
-		"restish", "post", "-c", "multipart", srv.URL,
+		"restish", "post", "-c", "multipart", "https://api.example.com/items",
 		"name:", "alice,", "file:", "@" + uploadPath,
 	})
 	if err != nil {

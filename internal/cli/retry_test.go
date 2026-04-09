@@ -1,8 +1,9 @@
 package cli_test
 
 import (
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -11,20 +12,22 @@ import (
 // returns 503 twice and then 200, the request ultimately succeeds.
 func TestRetrySucceedsAfterTransientFailures(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		n := callCount.Add(1)
 		if n <= 2 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
 
-	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("expected success after retries, got: %v", err)
 	}
 	if n := callCount.Load(); n != 3 {
@@ -36,15 +39,20 @@ func TestRetrySucceedsAfterTransientFailures(t *testing.T) {
 // immediately without any retry.
 func TestRetryNotAttemptedFor4xx(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount.Add(1)
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
-
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		callCount.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    r,
+		}, nil
+	})
+
 	// Ignore the exit-code error; we just want to count server hits.
-	_ = c.Run([]string{"restish", "get", "--rsh-no-cache", "--rsh-ignore-status-code", srv.URL})
+	_ = c.Run([]string{"restish", "get", "--rsh-no-cache", "--rsh-ignore-status-code", "https://api.example.com/items"})
 	if n := callCount.Load(); n != 1 {
 		t.Errorf("4xx should not be retried; expected 1 call, got %d", n)
 	}
@@ -54,14 +62,19 @@ func TestRetryNotAttemptedFor4xx(t *testing.T) {
 // request even when the server always returns 503.
 func TestRetryZeroDisablesRetries(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount.Add(1)
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	t.Cleanup(srv.Close)
-
 	c, _, _ := newTestCLI()
-	_ = c.Run([]string{"restish", "get", "--rsh-no-cache", "--rsh-ignore-status-code", "--rsh-retry", "0", srv.URL})
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		callCount.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    r,
+		}, nil
+	})
+
+	_ = c.Run([]string{"restish", "get", "--rsh-no-cache", "--rsh-ignore-status-code", "--rsh-retry", "0", "https://api.example.com/items"})
 	if n := callCount.Load(); n != 1 {
 		t.Errorf("--rsh-retry 0: expected 1 call, got %d", n)
 	}
@@ -71,21 +84,22 @@ func TestRetryZeroDisablesRetries(t *testing.T) {
 // used as the wait duration (the test uses a 0-second value to stay fast).
 func TestRetryAfterHeaderRespected(t *testing.T) {
 	var callCount atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		n := callCount.Add(1)
 		if n == 1 {
-			w.Header().Set("Retry-After", "0")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Retry-After": []string{"0"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
 
-	c, _, _ := newTestCLI()
-	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
 	if n := callCount.Load(); n != 2 {

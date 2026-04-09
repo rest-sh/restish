@@ -1,9 +1,7 @@
 package cli_test
 
 import (
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,14 +22,13 @@ func writeAPIConfig(t *testing.T, content string) string {
 // configured base URL before the request is sent.
 func TestAPIShortNameExpansion(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
@@ -46,14 +43,13 @@ func TestAPIShortNameExpansion(t *testing.T) {
 // the configured base URL root.
 func TestAPIShortNameNoPath(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
 	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "myapi"}); err != nil {
@@ -68,19 +64,18 @@ func TestAPIShortNameNoPath(t *testing.T) {
 // treated as a plain URL (not a fatal error about an unknown API).
 func TestUnknownAPINameFallback(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
 	// Config has "myapi" but we request "otherapi/items"; fallback treats it as URL.
-	cfg := fmt.Sprintf(`{"apis":{"myapi":{"base_url":%q}}}`, srv.URL)
-	c, _, _ := newTestCLI()
+	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	// Use a real URL so the fallback actually resolves somewhere.
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://fallback.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().URL.Path; got != "/items" {
@@ -92,16 +87,16 @@ func TestUnknownAPINameFallback(t *testing.T) {
 // profile is included in every request to that API.
 func TestProfilePersistentHeader(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"headers": ["X-Api-Key: secret"]
@@ -109,8 +104,7 @@ func TestProfilePersistentHeader(t *testing.T) {
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
@@ -125,16 +119,16 @@ func TestProfilePersistentHeader(t *testing.T) {
 // active profile is appended to every request.
 func TestProfilePersistentQuery(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"query": ["version=2"]
@@ -142,8 +136,7 @@ func TestProfilePersistentQuery(t *testing.T) {
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
@@ -158,26 +151,25 @@ func TestProfilePersistentQuery(t *testing.T) {
 // using its base_url and headers.
 func TestProfileOverrideWithFlag(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
 				"base_url": "https://prod.example.com",
 				"profiles": {
 					"staging": {
-						"base_url": %q,
+						"base_url": "https://staging.example.com",
 						"headers": ["X-Env: staging"]
 					}
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "-p", "staging", "myapi/items"}); err != nil {
@@ -199,26 +191,25 @@ func TestProfileOverrideWithFlag(t *testing.T) {
 // when the -p flag is not set.
 func TestProfileOverrideWithEnv(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
 				"base_url": "https://prod.example.com",
 				"profiles": {
 					"dev": {
-						"base_url": %q,
+						"base_url": "https://dev.example.com",
 						"headers": ["X-Env: dev"]
 					}
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 	t.Setenv("RSH_PROFILE", "dev")
 
@@ -239,16 +230,16 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 // flag values appear after profile values in the header list).
 func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"headers": ["X-Token: from-profile"]
@@ -256,8 +247,7 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	// Flag-supplied header should appear in the request (both values are sent

@@ -3,8 +3,8 @@ package cli_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -34,24 +34,41 @@ func specWithXCLIConfig(baseURL string) string {
 // TestAPIConfigure verifies that "api configure" fetches the spec, reads
 // x-cli-config, and writes a config file with the pre-populated fields.
 func TestAPIConfigure(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
-
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, specWithXCLIConfig(srv.URL))
-	})
-
 	cfgFile := t.TempDir() + "/restish.json"
 
 	c, out, _ := newTestCLI()
 	c.ConfigPath = cfgFile
 	c.SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api configure: %v", err)
 	}
 
@@ -68,8 +85,8 @@ func TestAPIConfigure(t *testing.T) {
 	if !ok {
 		t.Fatal("expected myapi in config")
 	}
-	if api.BaseURL != srv.URL {
-		t.Errorf("base_url: got %q, want %q", api.BaseURL, srv.URL)
+	if api.BaseURL != "https://api.example.com" {
+		t.Errorf("base_url: got %q, want %q", api.BaseURL, "https://api.example.com")
 	}
 	prof := api.Profiles["default"]
 	if prof == nil {
@@ -141,16 +158,21 @@ func TestAPISet(t *testing.T) {
 // TestAPISyncClearsCache (verifies api sync already tested in spec_test.go,
 // but also that it reports success from the api subcommand path).
 func TestAPISyncReportsSuccess(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, minimalOpenAPI)
+	c := newSpecTestCLI(t, "syncapi", "https://api.example.com")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	c := newSpecTestCLI(t, "syncapi", srv.URL)
 	var out strings.Builder
 	c.Stdout = &out
 	if err := c.Run([]string{"restish", "api", "sync", "syncapi"}); err != nil {

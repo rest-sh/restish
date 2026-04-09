@@ -3,9 +3,8 @@ package cli_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -57,26 +56,37 @@ func writeFile(path string, data []byte) error {
 // advertised in a Link: <url>; rel="service-desc" response header.
 func TestSpecDiscoveryViaLinkHeader(t *testing.T) {
 	var specHits atomic.Int32
-
-	specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		specHits.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, minimalOpenAPI)
-	}))
-	t.Cleanup(specSrv.Close)
-
-	baseSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Link", fmt.Sprintf(`<%s>; rel="service-desc"`, specSrv.URL))
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(baseSrv.Close)
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Link": []string{`<https://spec.example.com/openapi.json>; rel="service-desc"`}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://spec.example.com/openapi.json":
+			specHits.Add(1)
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
 	cacheDir := t.TempDir()
 	cfg := spec.DiscoverConfig{
-		APIName:  "testapi",
-		BaseURL:  baseSrv.URL,
-		CacheDir: cacheDir,
-		Version:  "test",
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		CacheDir:  cacheDir,
+		Version:   "test",
+		Transport: tr,
 	}
 
 	apiSpec, err := spec.Discover(context.Background(), cfg, spec.DefaultLoaders())
@@ -94,22 +104,27 @@ func TestSpecDiscoveryViaLinkHeader(t *testing.T) {
 // TestSpecDiscoveryViaWellKnownPath verifies that /openapi.json is probed
 // during discovery.
 func TestSpecDiscoveryViaWellKnownPath(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, minimalOpenAPI)
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
 
 	cfg := spec.DiscoverConfig{
-		APIName:  "testapi",
-		BaseURL:  srv.URL,
-		CacheDir: t.TempDir(),
-		Version:  "test",
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		CacheDir:  t.TempDir(),
+		Version:   "test",
+		Transport: tr,
 	}
 
 	apiSpec, err := spec.Discover(context.Background(), cfg, spec.DefaultLoaders())
@@ -125,24 +140,29 @@ func TestSpecDiscoveryViaWellKnownPath(t *testing.T) {
 // not hit the server (result is served from the CBOR cache).
 func TestSpecCacheReusedOnSecondDiscover(t *testing.T) {
 	var hits atomic.Int32
-	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, minimalOpenAPI)
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			hits.Add(1)
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
 
 	cacheDir := t.TempDir()
 	cfg := spec.DiscoverConfig{
-		APIName:  "testapi",
-		BaseURL:  srv.URL,
-		CacheDir: cacheDir,
-		Version:  "test",
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		CacheDir:  cacheDir,
+		Version:   "test",
+		Transport: tr,
 	}
 
 	// First discover: fetches from network.
@@ -165,19 +185,22 @@ func TestSpecCacheReusedOnSecondDiscover(t *testing.T) {
 // TestAPISync forces a fresh spec fetch after the cache has been primed.
 func TestAPISync(t *testing.T) {
 	var hits atomic.Int32
-	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, minimalOpenAPI)
+	c := newSpecTestCLI(t, "myapi", "https://api.example.com")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			hits.Add(1)
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	c := newSpecTestCLI(t, "myapi", srv.URL)
 
 	// Load config so the CLI knows about the API.
 	if err := runCLI(c, "restish", "api", "sync", "myapi"); err != nil {
@@ -200,22 +223,33 @@ func TestAPISync(t *testing.T) {
 // TestSpecUnknownContentTypeDoesNotCrash verifies that a non-spec response at
 // a well-known path is gracefully ignored.
 func TestSpecUnknownContentTypeDoesNotCrash(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, "<html>not a spec</html>")
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"text/html"}},
+				Body:       io.NopCloser(strings.NewReader("<html>not a spec</html>")),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
 
 	cfg := spec.DiscoverConfig{
-		APIName:  "testapi",
-		BaseURL:  srv.URL,
-		CacheDir: t.TempDir(),
-		Version:  "test",
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		CacheDir:  t.TempDir(),
+		Version:   "test",
+		Transport: tr,
 	}
 
 	// Discovery should fail gracefully (no panic, just "not found").

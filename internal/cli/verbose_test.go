@@ -1,9 +1,8 @@
 package cli_test
 
 import (
-	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -11,17 +10,18 @@ import (
 // TestVerboseOutputToStderr verifies that -v writes request/response details
 // to stderr and not to stdout.
 func TestVerboseOutputToStderr(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"msg":"hi"}`)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
 	c, out, errOut := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/hello", "-v"}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"msg":"hi"}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/hello"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -49,17 +49,18 @@ func TestVerboseOutputToStderr(t *testing.T) {
 // TestNonVerboseOutputClean verifies that without -v, stderr is empty for
 // a successful request.
 func TestNonVerboseOutputClean(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{}`)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
 	c, _, errOut := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/hello"}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/hello"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if errOut.Len() != 0 {
