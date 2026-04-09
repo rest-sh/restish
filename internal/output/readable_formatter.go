@@ -19,27 +19,8 @@ import (
 type ReadableFormatter struct{}
 
 func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	// Build plain-text preamble: status line + headers.
-	var preamble strings.Builder
-	fmt.Fprintf(&preamble, "%s %d %s\n", resp.Proto, resp.Status, http.StatusText(resp.Status))
-
-	keys := make([]string, 0, len(resp.Headers))
-	for k := range resp.Headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		fmt.Fprintf(&preamble, "%s: %s\n", k, resp.Headers[k])
-	}
-
-	if color {
-		if err := highlight(w, HTTPPreambleLexer, []byte(preamble.String())); err != nil {
-			return err
-		}
-	} else {
-		if _, err := io.WriteString(w, preamble.String()); err != nil {
-			return err
-		}
+	if err := writeHTTPPreamble(w, resp, color); err != nil {
+		return err
 	}
 
 	fmt.Fprintln(w) // blank line between headers and body
@@ -47,6 +28,9 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	// Body.
 	if resp.Body == nil {
 		return nil
+	}
+	if strings.HasPrefix(resp.Headers["Content-Type"], "image/") && len(resp.Raw) > 0 {
+		return (&ImageFormatter{}).Format(w, resp, color)
 	}
 
 	data, err := json.MarshalIndent(resp.Body, "", "  ")
@@ -61,6 +45,27 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	}
 
 	return highlight(w, ReadableLexer, data)
+}
+
+func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
+	var preamble strings.Builder
+	fmt.Fprintf(&preamble, "%s %d %s\n", resp.Proto, resp.Status, http.StatusText(resp.Status))
+
+	keys := make([]string, 0, len(resp.Headers))
+	for k := range resp.Headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(&preamble, "%s: %s\n", k, resp.Headers[k])
+	}
+
+	if color {
+		return highlight(w, HTTPPreambleLexer, []byte(preamble.String()))
+	}
+
+	_, err := io.WriteString(w, preamble.String())
+	return err
 }
 
 // highlight tokenizes data with the given lexer and writes chroma-colored

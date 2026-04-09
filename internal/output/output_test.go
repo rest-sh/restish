@@ -3,6 +3,7 @@ package output_test
 import (
 	"bytes"
 	"encoding/json"
+	"image/color"
 	"io"
 	"net/http"
 	"strings"
@@ -248,6 +249,38 @@ func TestReadableFormatter_NilBodyNoBody(t *testing.T) {
 	// Should have status line but no body content after the blank line.
 	if !strings.Contains(buf.String(), "204") {
 		t.Errorf("expected 204 in readable output: %q", buf.String())
+	}
+}
+
+func TestReadableFormatter_ImageBodyIncludesHeadersAndRenderedImage(t *testing.T) {
+	clearGraphicsEnv(t)
+
+	data := makePNG(t, 4, 4, color.RGBA{255, 0, 0, 255})
+	resp := &output.Response{
+		Proto:  "HTTP/1.1",
+		Status: 200,
+		Headers: map[string]string{
+			"Content-Type": "image/png",
+			"X-Test":       "present",
+		},
+		Body: string(data),
+		Raw:  data,
+	}
+
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "Content-Type") {
+		t.Errorf("expected readable image output to include headers")
+	}
+	if !strings.Contains(got, "X-Test") {
+		t.Errorf("expected readable image output to include custom headers")
+	}
+	if !strings.Contains(got, "▀") {
+		t.Errorf("expected readable image output to render the image inline")
 	}
 }
 

@@ -338,17 +338,6 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		fmts = copied
 	}
 
-	// Content-type-aware auto-dispatch: on a TTY with no explicit format or
-	// filter, route image/* responses directly to the image formatter so they
-	// render inline instead of falling through to readable.
-	if tty && fmtName == "" && filterExpr == "@" {
-		if ct := resp.Headers["Content-Type"]; strings.HasPrefix(ct, "image/") {
-			if imgFmt, has := fmts["image"]; has {
-				return imgFmt.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
-			}
-		}
-	}
-
 	formatter, ok := output.Select(fmts, fmtName, tty)
 	if !ok {
 		return fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
