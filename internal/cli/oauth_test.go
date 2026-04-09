@@ -2,11 +2,11 @@ package cli_test
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,36 +14,47 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/auth"
 )
 
-// newOAuthTokenServer starts a test token server that responds with the given
-// access token. callCount is incremented on each request.
-func newOAuthTokenServer(t *testing.T, callCount *atomic.Int32, accessToken string) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"access_token":%q,"token_type":"bearer","expires_in":3600}`, accessToken)
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+func oauthTokenResponse(r *http.Request, accessToken string) *http.Response {
+	return &http.Response{
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"access_token":"` + accessToken + `","token_type":"bearer","expires_in":3600}`,
+		)),
+		Request: r,
+	}
 }
 
 // TestOAuthClientCredentials_BearerHeader verifies that an API configured with
 // oauth-client-credentials adds the correct Authorization: Bearer header.
 func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 	var tokenCount atomic.Int32
-	tokenSrv := newOAuthTokenServer(t, &tokenCount, "cc-token")
-
 	var rr requestRecorder
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(apiSrv.Close)
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "cc-token"), nil
+		case "https://api.example.com/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -51,16 +62,14 @@ func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 							"params": {
 								"client_id": "myid",
 								"client_secret": "mysecret",
-								"token_url": %q
+								"token_url": "https://oauth.example.com/token"
 							}
 						}
 					}
 				}
 			}
 		}
-	}`, apiSrv.URL, tokenSrv.URL)
-
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
@@ -76,17 +85,28 @@ func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 // the cached token (token endpoint called only once).
 func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 	var tokenCount atomic.Int32
-	tokenSrv := newOAuthTokenServer(t, &tokenCount, "cached-cc-token")
+	transport := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "cached-cc-token"), nil
+		case "https://api.example.com/items":
+			return jsonResponse(200, `{}`), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(apiSrv.Close)
-
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -94,14 +114,14 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 							"params": {
 								"client_id": "myid",
 								"client_secret": "mysecret",
-								"token_url": %q
+								"token_url": "https://oauth.example.com/token"
 							}
 						}
 					}
 				}
 			}
 		}
-	}`, apiSrv.URL, tokenSrv.URL)
+	}`
 
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 
@@ -109,6 +129,7 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 	c1, _, _ := newTestCLI()
 	c1.ConfigPath = writeAPIConfig(t, cfg)
 	c1.TokenCachePath = cacheFile
+	useTransport(c1, transport)
 	if err := c1.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("first request: %v", err)
 	}
@@ -117,6 +138,7 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 	c2, _, _ := newTestCLI()
 	c2.ConfigPath = c1.ConfigPath
 	c2.TokenCachePath = cacheFile
+	useTransport(c2, transport)
 	if err := c2.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("second request: %v", err)
 	}
@@ -130,29 +152,39 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 // causes the CLI to discover the token endpoint via OIDC discovery.
 func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 	var tokenCount atomic.Int32
-	tokenSrv := newOAuthTokenServer(t, &tokenCount, "oidc-cc-token")
-
-	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/.well-known/openid-configuration" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"token_endpoint":%q}`, tokenSrv.URL)
-	}))
-	t.Cleanup(discoverySrv.Close)
-
 	var rr requestRecorder
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(apiSrv.Close)
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://issuer.example.com/.well-known/openid-configuration":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"token_endpoint":"https://issuer.example.com/token"}`)),
+				Request:    r,
+			}, nil
+		case "https://issuer.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "oidc-cc-token"), nil
+		case "https://api.example.com/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -160,16 +192,14 @@ func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 							"params": {
 								"client_id": "myid",
 								"client_secret": "mysecret",
-								"issuer_url": %q
+								"issuer_url": "https://issuer.example.com"
 							}
 						}
 					}
 				}
 			}
 		}
-	}`, apiSrv.URL, discoverySrv.URL)
-
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
@@ -185,19 +215,31 @@ func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 // causes the handler to re-fetch a new one from the token endpoint.
 func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 	var tokenCount atomic.Int32
-	tokenSrv := newOAuthTokenServer(t, &tokenCount, "new-token")
-
 	var rr requestRecorder
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(apiSrv.Close)
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "new-token"), nil
+		case "https://api.example.com/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -205,14 +247,14 @@ func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 							"params": {
 								"client_id": "myid",
 								"client_secret": "mysecret",
-								"token_url": %q
+								"token_url": "https://oauth.example.com/token"
 							}
 						}
 					}
 				}
 			}
 		}
-	}`, apiSrv.URL, tokenSrv.URL)
+	}`
 
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 
@@ -223,7 +265,6 @@ func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 		Expiry:      time.Now().Add(-time.Hour),
 	})
 
-	c, _, _ := newTestCLI()
 	c.ConfigPath = writeAPIConfig(t, cfg)
 	c.TokenCachePath = cacheFile
 

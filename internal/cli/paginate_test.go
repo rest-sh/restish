@@ -2,60 +2,46 @@ package cli_test
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/danielgtaylor/restish/v2/internal/cli"
 )
 
-
-// threePageServer creates a test server with three pages of items linked via
-// RFC 5988 Link headers (rel="next").
-func threePageServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	pages := []struct {
-		body string
-		next string
-	}{
-		{`[1,2,3]`, srv.URL + "/items?page=2"},
-		{`[4,5,6]`, srv.URL + "/items?page=3"},
-		{`[7,8,9]`, ""},
-	}
-
-	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
-		page := r.URL.Query().Get("page")
-		var idx int
-		switch page {
-		case "2":
-			idx = 1
-		case "3":
-			idx = 2
-		default:
-			idx = 0
+func useThreePageTransport(c *cli.CLI) {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		pages := map[string]struct {
+			body string
+			next string
+		}{
+			"":  {`[1,2,3]`, "https://api.example.com/items?page=2"},
+			"2": {`[4,5,6]`, "https://api.example.com/items?page=3"},
+			"3": {`[7,8,9]`, ""},
 		}
-		p := pages[idx]
+		p := pages[r.URL.Query().Get("page")]
+		headers := http.Header{"Content-Type": []string{"application/json"}}
 		if p.next != "" {
-			w.Header().Set("Link", fmt.Sprintf(`<%s>; rel="next"`, p.next))
+			headers.Set("Link", `<`+p.next+`>; rel="next"`)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, p.body)
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(p.body)),
+			Request:    r,
+		}, nil
 	})
-	return srv
 }
 
 // TestPaginationThreePages verifies that auto-pagination collects items from
 // all three pages when streaming.
 func TestPaginationThreePages(t *testing.T) {
-	srv := threePageServer(t)
-
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items"}); err != nil {
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -71,11 +57,10 @@ func TestPaginationThreePages(t *testing.T) {
 // TestPaginationNoPaginate verifies that --rsh-no-paginate returns only the
 // first page.
 func TestPaginationNoPaginate(t *testing.T) {
-	srv := threePageServer(t)
-
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "--rsh-no-paginate"}); err != nil {
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-no-paginate"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -97,11 +82,10 @@ func TestPaginationNoPaginate(t *testing.T) {
 // TestPaginationMaxPages verifies that --rsh-max-pages 1 stops after one page
 // and emits a warning to stderr.
 func TestPaginationMaxPages(t *testing.T) {
-	srv := threePageServer(t)
-
 	c, out, errOut := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "--rsh-max-pages", "1"}); err != nil {
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -127,11 +111,10 @@ func TestPaginationMaxPages(t *testing.T) {
 // TestPaginationCollect verifies that --rsh-collect + -f length returns the
 // total item count across all pages.
 func TestPaginationCollect(t *testing.T) {
-	srv := threePageServer(t)
-
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "--rsh-collect", "-f", ".body | length"}); err != nil {
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-collect", "-f", ".body | length"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -144,19 +127,10 @@ func TestPaginationCollect(t *testing.T) {
 // TestPaginationItemsPath verifies that per-API items_path extracts items from
 // a nested field.
 func TestPaginationItemsPath(t *testing.T) {
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"data":[1,2,3],"meta":{"total":3}}`)
-	})
-
 	cfgData, _ := json.Marshal(map[string]any{
 		"apis": map[string]any{
 			"myapi": map[string]any{
-				"base_url":   srv.URL,
+				"base_url":   "https://api.example.com",
 				"pagination": map[string]any{"items_path": "data"},
 			},
 		},
@@ -168,7 +142,16 @@ func TestPaginationItemsPath(t *testing.T) {
 
 	c, out, _ := newTestCLI()
 	c.ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items"}); err != nil {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":[1,2,3],"meta":{"total":3}}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -184,12 +167,11 @@ func TestPaginationItemsPath(t *testing.T) {
 // TestPaginationProgressOnStderr verifies that progress output goes to stderr
 // not stdout when paginating.
 func TestPaginationProgressOnStderr(t *testing.T) {
-	srv := threePageServer(t)
-
 	// Use the full CLI so we can inspect stdout vs stderr.
 	c, out, errOut := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "--rsh-max-pages", "1"}); err != nil {
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 

@@ -2,9 +2,7 @@ package cli_test
 
 import (
 	"encoding/base64"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -13,16 +11,16 @@ import (
 // Authorization: Basic header on every request.
 func TestBasicAuthHeader(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -33,8 +31,7 @@ func TestBasicAuthHeader(t *testing.T) {
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, _ := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
@@ -52,16 +49,16 @@ func TestBasicAuthHeader(t *testing.T) {
 // a prompt is written to stderr and the password is read from stdin.
 func TestBasicAuthPasswordPrompt(t *testing.T) {
 	var rr requestRecorder
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c, _, errBuf := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
+		return jsonResponse(200, `{}`), nil
+	})
 
-	cfg := fmt.Sprintf(`{
+	cfg := `{
 		"apis": {
 			"myapi": {
-				"base_url": %q,
+				"base_url": "https://api.example.com",
 				"profiles": {
 					"default": {
 						"auth": {
@@ -72,8 +69,7 @@ func TestBasicAuthPasswordPrompt(t *testing.T) {
 				}
 			}
 		}
-	}`, srv.URL)
-	c, _, errBuf := newTestCLI()
+	}`
 	c.ConfigPath = writeAPIConfig(t, cfg)
 	// Provide the password via PassReader (keeps Stdin free for body reads).
 	c.PassReader = strings.NewReader("hunter2\n")
