@@ -513,6 +513,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	}
 
 	return request.Options{
+		BaseTransport:        c.baseHTTPTransport(),
 		Headers:              headers,
 		Query:                query,
 		Server:               server,

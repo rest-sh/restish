@@ -1,10 +1,7 @@
 package auth
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -16,21 +13,16 @@ import (
 // access token without opening a browser.
 func TestAuthCode_RefreshToken(t *testing.T) {
 	var refreshCallCount atomic.Int32
-	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
 		if err := r.ParseForm(); err != nil {
-			http.Error(w, "bad form", 400)
-			return
+			return testResponse(400, "text/plain", "bad form"), nil
 		}
 		if gt := r.FormValue("grant_type"); gt != "refresh_token" {
-			http.Error(w, fmt.Sprintf("unexpected grant_type %q", gt), 400)
-			return
+			t.Fatalf("unexpected grant_type %q", gt)
 		}
 		refreshCallCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		resp := tokenResponse{AccessToken: "refreshed-token", TokenType: "bearer", ExpiresIn: 3600}
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	t.Cleanup(tokenSrv.Close)
+		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600}`), nil
+	})
 
 	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
@@ -44,7 +36,8 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 
 	// OpenBrowser must NOT be called (refresh avoids the browser flow).
 	h := &AuthorizationCode{
-		Cache: cache,
+		Cache:      cache,
+		HTTPClient: client,
 		OpenBrowser: func(url string) error {
 			t.Errorf("OpenBrowser called unexpectedly with %q", url)
 			return nil
@@ -54,7 +47,7 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	params := map[string]string{
 		"client_id":  "id1",
-		"token_url":  tokenSrv.URL,
+		"token_url":  "https://auth.example.com/token",
 		"_cache_key": cacheKey,
 	}
 	if err := h.OnRequest(req, params); err != nil {

@@ -2,12 +2,33 @@ package spec
 
 import (
 	"context"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func httpResponse(status int, contentType, body string, headers http.Header) *http.Response {
+	if headers == nil {
+		headers = http.Header{}
+	}
+	if contentType != "" {
+		headers.Set("Content-Type", contentType)
+	}
+	return &http.Response{
+		StatusCode: status,
+		Header:     headers,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
 
 // ---- deepMerge -----------------------------------------------------------
 
@@ -269,15 +290,16 @@ func TestLoadSpecFiles_MissingFile(t *testing.T) {
 
 func TestLoadSpecFiles_NetworkSource(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Network","version":"1.0.0"},"paths":{}}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(spec))
-	}))
-	defer srv.Close()
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != "https://api.example.com/openapi.json" {
+			t.Fatalf("unexpected URL %q", r.URL.String())
+		}
+		return httpResponse(200, "application/json", spec, nil), nil
+	})
 
 	cfg := DiscoverConfig{
-		SpecFiles: []string{srv.URL + "/openapi.json"},
-		Transport: srv.Client().Transport,
+		SpecFiles: []string{"https://api.example.com/openapi.json"},
+		Transport: tr,
 	}
 	result, err := loadSpecFiles(context.Background(), cfg, DefaultLoaders())
 	if err != nil {
@@ -292,17 +314,18 @@ func TestLoadSpecFiles_NetworkSource(t *testing.T) {
 
 func TestDiscover_ExplicitSpecURL(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Direct","version":"1.0.0"},"paths":{}}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(spec))
-	}))
-	defer srv.Close()
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/spec.json" {
+			return httpResponse(200, "application/json", spec, nil), nil
+		}
+		return httpResponse(404, "text/plain", "not found", nil), nil
+	})
 
 	cfg := DiscoverConfig{
 		APIName:   "testapi",
-		BaseURL:   srv.URL,
-		SpecURL:   srv.URL + "/spec.json",
-		Transport: srv.Client().Transport,
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/spec.json",
+		Transport: tr,
 	}
 	result, err := Discover(context.Background(), cfg, DefaultLoaders())
 	if err != nil {
@@ -315,21 +338,19 @@ func TestDiscover_ExplicitSpecURL(t *testing.T) {
 
 func TestDiscover_WellKnownPath(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"WellKnown","version":"1.0.0"},"paths":{}}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/openapi.json":
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(spec))
+			return httpResponse(200, "application/json", spec, nil), nil
 		default:
-			http.NotFound(w, r)
+			return httpResponse(404, "text/plain", "not found", nil), nil
 		}
-	}))
-	defer srv.Close()
+	})
 
 	cfg := DiscoverConfig{
 		APIName:   "wellknown",
-		BaseURL:   srv.URL,
-		Transport: srv.Client().Transport,
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
 	}
 	result, err := Discover(context.Background(), cfg, DefaultLoaders())
 	if err != nil {
@@ -342,25 +363,23 @@ func TestDiscover_WellKnownPath(t *testing.T) {
 
 func TestDiscover_LinkHeader(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Linked","version":"1.0.0"},"paths":{}}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/":
-			w.Header().Set("Link", `</spec.json>; rel="service-desc"`)
-			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<html>welcome</html>`))
+			headers := http.Header{}
+			headers.Set("Link", `</spec.json>; rel="service-desc"`)
+			return httpResponse(200, "text/html", `<html>welcome</html>`, headers), nil
 		case "/spec.json":
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(spec))
+			return httpResponse(200, "application/json", spec, nil), nil
 		default:
-			http.NotFound(w, r)
+			return httpResponse(404, "text/plain", "not found", nil), nil
 		}
-	}))
-	defer srv.Close()
+	})
 
 	cfg := DiscoverConfig{
 		APIName:   "linked",
-		BaseURL:   srv.URL + "/",
-		Transport: srv.Client().Transport,
+		BaseURL:   "https://api.example.com/",
+		Transport: tr,
 	}
 	result, err := Discover(context.Background(), cfg, DefaultLoaders())
 	if err != nil {
@@ -374,21 +393,19 @@ func TestDiscover_LinkHeader(t *testing.T) {
 func TestDiscover_Cache(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Cached","version":"1.0.0"},"paths":{}}`
 	var callCount int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		callCount++
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(spec))
-	}))
-	defer srv.Close()
+		return httpResponse(200, "application/json", spec, nil), nil
+	})
 
 	cacheDir := t.TempDir()
 	cfg := DiscoverConfig{
 		APIName:   "cached",
-		BaseURL:   srv.URL,
-		SpecURL:   srv.URL + "/spec.json",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/spec.json",
 		CacheDir:  cacheDir,
 		Version:   "v2.0.0",
-		Transport: srv.Client().Transport,
+		Transport: tr,
 	}
 
 	// First call: network fetch + cache write (may hit multiple probes in parallel).

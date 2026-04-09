@@ -52,6 +52,11 @@ type CLI struct {
 	// Used in tests to point at a temp dir; leave empty to use the platform default.
 	SpecCachePath string
 
+	// HTTPTransport overrides the base HTTP transport used for outbound
+	// requests and spec discovery. Primarily used in tests to avoid real
+	// network listeners.
+	HTTPTransport http.RoundTripper
+
 	// PluginManifestCachePath overrides the default plugin manifest cache file.
 	// Used in tests to prevent writing to ~/.config/restish; leave empty to
 	// use the platform default (~/.config/restish/plugin-manifest-cache.cbor).
@@ -187,9 +192,16 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		SpecFiles: api.SpecFiles,
 		CacheDir:  c.specCacheDir(),
 		Version:   Version,
-		Transport: http.DefaultTransport,
+		Transport: c.baseHTTPTransport(),
 	}
 	return spec.Discover(ctx, cfg, c.loaders)
+}
+
+func (c *CLI) baseHTTPTransport() http.RoundTripper {
+	if c.HTTPTransport != nil {
+		return c.HTTPTransport
+	}
+	return http.DefaultTransport
 }
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).

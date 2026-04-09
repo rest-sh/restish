@@ -1,46 +1,42 @@
 package auth
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// newTokenServer returns an httptest.Server that responds to POST requests with
-// a JSON token response. callCount is incremented on each request.
-func newTokenServer(t *testing.T, callCount *atomic.Int32, accessToken string, expiresIn int) *httptest.Server {
+func newTokenClient(t *testing.T, callCount *atomic.Int32, accessToken string, expiresIn int) *http.Client {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return testHTTPClient(func(r *http.Request) (*http.Response, error) {
 		callCount.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		resp := tokenResponse{
-			AccessToken: accessToken,
-			TokenType:   "bearer",
-			ExpiresIn:   expiresIn,
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
 		}
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
+			t.Fatalf("expected form content type, got %q", ct)
+		}
+		return testResponse(200, "application/json", fmt.Sprintf(`{"access_token":%q,"token_type":"bearer","expires_in":%d}`, accessToken, expiresIn)), nil
+	})
 }
 
 func TestClientCredentials_FetchesToken(t *testing.T) {
 	var count atomic.Int32
-	srv := newTokenServer(t, &count, "access-abc", 3600)
+	client := newTokenClient(t, &count, "access-abc", 3600)
 
 	h := &ClientCredentials{
-		Cache: NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache:      NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		HTTPClient: client,
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
 	params := map[string]string{
 		"client_id":     "id1",
 		"client_secret": "sec1",
-		"token_url":     srv.URL,
+		"token_url":     "https://auth.example.com/token",
 		"_cache_key":    "myapi:default",
 	}
 	if err := h.OnRequest(req, params); err != nil {
@@ -53,24 +49,22 @@ func TestClientCredentials_FetchesToken(t *testing.T) {
 
 func TestClientCredentials_CachesToken(t *testing.T) {
 	var count atomic.Int32
-	srv := newTokenServer(t, &count, "cached-token", 3600)
+	client := newTokenClient(t, &count, "cached-token", 3600)
 
 	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	params := map[string]string{
 		"client_id":     "id1",
 		"client_secret": "sec1",
-		"token_url":     srv.URL,
+		"token_url":     "https://auth.example.com/token",
 		"_cache_key":    "myapi:default",
 	}
 
-	// First call: should hit the token endpoint.
-	h := &ClientCredentials{Cache: cache}
+	h := &ClientCredentials{Cache: cache, HTTPClient: client}
 	req1, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	if err := h.OnRequest(req1, params); err != nil {
 		t.Fatalf("first request: %v", err)
 	}
 
-	// Second call: should use the cached token.
 	req2, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	if err := h.OnRequest(req2, params); err != nil {
 		t.Fatalf("second request: %v", err)
@@ -86,23 +80,21 @@ func TestClientCredentials_CachesToken(t *testing.T) {
 
 func TestClientCredentials_ExpiredToken_Refetches(t *testing.T) {
 	var count atomic.Int32
-	srv := newTokenServer(t, &count, "fresh-token", 3600)
+	client := newTokenClient(t, &count, "fresh-token", 3600)
 
 	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
-
-	// Pre-populate cache with an expired token.
 	_ = cache.Set(cacheKey, CachedToken{
 		AccessToken: "old-token",
-		Expiry:      time.Now().Add(-time.Hour), // already expired
+		Expiry:      time.Now().Add(-time.Hour),
 	})
 
-	h := &ClientCredentials{Cache: cache}
+	h := &ClientCredentials{Cache: cache, HTTPClient: client}
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	params := map[string]string{
 		"client_id":     "id1",
 		"client_secret": "sec1",
-		"token_url":     srv.URL,
+		"token_url":     "https://auth.example.com/token",
 		"_cache_key":    cacheKey,
 	}
 	if err := h.OnRequest(req, params); err != nil {
@@ -117,29 +109,35 @@ func TestClientCredentials_ExpiredToken_Refetches(t *testing.T) {
 }
 
 func TestClientCredentials_OIDCDiscovery(t *testing.T) {
-	// Token server.
 	var count atomic.Int32
-	tokenSrv := newTokenServer(t, &count, "oidc-token", 3600)
-
-	// OIDC discovery server.
-	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/.well-known/openid-configuration" {
-			http.NotFound(w, r)
-			return
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://auth.example.com/.well-known/openid-configuration":
+			return testResponse(200, "application/json", `{"token_endpoint":"https://auth.example.com/token"}`), nil
+		case "https://auth.example.com/token":
+			count.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.FormValue("grant_type"); got != "client_credentials" {
+				t.Fatalf("grant_type = %q", got)
+			}
+			return testResponse(200, "application/json", `{"access_token":"oidc-token","token_type":"bearer","expires_in":3600}`), nil
+		default:
+			t.Fatalf("unexpected URL %q", r.URL.String())
+			return nil, nil
 		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"token_endpoint":%q}`, tokenSrv.URL)
-	}))
-	t.Cleanup(discoverySrv.Close)
+	})
 
 	h := &ClientCredentials{
-		Cache: NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache:      NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		HTTPClient: client,
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	params := map[string]string{
 		"client_id":     "id1",
 		"client_secret": "sec1",
-		"issuer_url":    discoverySrv.URL,
+		"issuer_url":    "https://auth.example.com",
 		"_cache_key":    "myapi:default",
 	}
 	if err := h.OnRequest(req, params); err != nil {
@@ -147,5 +145,34 @@ func TestClientCredentials_OIDCDiscovery(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer oidc-token" {
 		t.Errorf("Authorization: got %q, want %q", got, "Bearer oidc-token")
+	}
+	if n := count.Load(); n != 1 {
+		t.Errorf("expected token endpoint called once, got %d", n)
+	}
+}
+
+func TestClientCredentials_SendsExpectedFormFields(t *testing.T) {
+	var got url.Values
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		got = r.Form
+		return testResponse(200, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":3600}`), nil
+	})
+
+	h := &ClientCredentials{HTTPClient: client}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	params := map[string]string{
+		"client_id":     "id1",
+		"client_secret": "sec1",
+		"token_url":     "https://auth.example.com/token",
+		"scopes":        "read write",
+	}
+	if err := h.OnRequest(req, params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Get("client_id") != "id1" || got.Get("client_secret") != "sec1" || got.Get("scope") != "read write" {
+		t.Fatalf("unexpected form values: %#v", got)
 	}
 }

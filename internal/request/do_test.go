@@ -4,24 +4,35 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/request"
 )
 
-func TestDo_BasicGet(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			t.Errorf("expected GET, got %s", r.Method)
-		}
-		w.WriteHeader(200)
-		_, _ = io.WriteString(w, "hello")
-	}))
-	t.Cleanup(srv.Close)
+type roundTripperFunc func(*http.Request) (*http.Response, error)
 
-	resp, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{})
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func response(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func TestDo_BasicGet(t *testing.T) {
+	resp, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			return response(200, "hello"), nil
+		}),
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,13 +49,11 @@ func TestDo_BasicGet(t *testing.T) {
 
 func TestDo_Headers(t *testing.T) {
 	var gotHeader string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get("X-Custom")
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	_, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			gotHeader = r.Header.Get("X-Custom")
+			return response(200, ""), nil
+		}),
 		Headers: []string{"X-Custom: test-value"},
 	})
 	if err != nil {
@@ -57,14 +66,11 @@ func TestDo_Headers(t *testing.T) {
 
 func TestDo_HeaderWithColonInValue(t *testing.T) {
 	var gotHeader string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get("Authorization")
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	// The value itself contains a colon; only the first colon separates name from value.
-	_, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			gotHeader = r.Header.Get("Authorization")
+			return response(200, ""), nil
+		}),
 		Headers: []string{"Authorization: Bearer tok:en"},
 	})
 	if err != nil {
@@ -76,12 +82,10 @@ func TestDo_HeaderWithColonInValue(t *testing.T) {
 }
 
 func TestDo_InvalidHeader(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	_, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return response(200, ""), nil
+		}),
 		Headers: []string{"no-colon-at-all"},
 	})
 	if err == nil {
@@ -91,13 +95,11 @@ func TestDo_InvalidHeader(t *testing.T) {
 
 func TestDo_Query(t *testing.T) {
 	var gotQuery string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query().Get("page")
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	_, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			gotQuery = r.URL.Query().Get("page")
+			return response(200, ""), nil
+		}),
 		Query: []string{"page=2"},
 	})
 	if err != nil {
@@ -109,12 +111,10 @@ func TestDo_Query(t *testing.T) {
 }
 
 func TestDo_InvalidQueryParam(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
-	t.Cleanup(srv.Close)
-
-	_, err := request.Do(context.Background(), "GET", srv.URL, nil, request.Options{
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return response(200, ""), nil
+		}),
 		Query: []string{"no-equals-sign"},
 	})
 	if err == nil {
@@ -124,15 +124,13 @@ func TestDo_InvalidQueryParam(t *testing.T) {
 
 func TestDo_Post_WithBody(t *testing.T) {
 	var gotBody string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		gotBody = string(b)
-		w.WriteHeader(201)
-	}))
-	t.Cleanup(srv.Close)
-
-	body := strings.NewReader(`{"name":"test"}`)
-	resp, err := request.Do(context.Background(), "POST", srv.URL, body, request.Options{})
+	resp, err := request.Do(context.Background(), "POST", "https://api.example.com/items", strings.NewReader(`{"name":"test"}`), request.Options{
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(r.Body)
+			gotBody = string(b)
+			return response(201, ""), nil
+		}),
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

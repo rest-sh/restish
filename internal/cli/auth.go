@@ -75,12 +75,14 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 		return &auth.HTTPBasic{Prompter: c.promptSecret}, nil
 	case "oauth-client-credentials":
 		return &auth.ClientCredentials{
-			Cache: auth.NewTokenCache(c.tokenCachePath()),
+			Cache:      auth.NewTokenCache(c.tokenCachePath()),
+			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 		}, nil
 	case "oauth-authorization-code":
 		return &auth.AuthorizationCode{
-			Cache:  auth.NewTokenCache(c.tokenCachePath()),
-			Stderr: c.Stderr,
+			Cache:      auth.NewTokenCache(c.tokenCachePath()),
+			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
+			Stderr:     c.Stderr,
 		}, nil
 	case "external-tool":
 		return &auth.ExternalTool{}, nil

@@ -14,6 +14,10 @@ import (
 
 // Options controls per-request behavior derived from CLI flags.
 type Options struct {
+	// BaseTransport, when non-nil, is the underlying transport to wrap with
+	// TLS/cache/retry behavior. This is primarily useful in tests that want to
+	// avoid real network listeners.
+	BaseTransport http.RoundTripper
 	// Headers is a list of "Name: Value" header strings to add to the request.
 	Headers []string
 	// Query is a list of "key=value" query parameter strings to append.
@@ -135,6 +139,24 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 // Cloning from the default preserves proxy settings (HTTP_PROXY, HTTPS_PROXY,
 // NO_PROXY) and other production-appropriate defaults.
 func newTransport(opts Options) (http.RoundTripper, error) {
+	if opts.BaseTransport != nil {
+		if tr, ok := opts.BaseTransport.(*http.Transport); ok {
+			cloned := tr.Clone()
+			cfg, err := TLSConfigFromOptions(opts)
+			if err != nil {
+				return nil, err
+			}
+			if cfg.InsecureSkipVerify || cfg.MinVersion != 0 || len(cfg.Certificates) > 0 || cfg.RootCAs != nil {
+				cloned.TLSClientConfig = cfg
+			}
+			return cloned, nil
+		}
+		if hasTLSOptions(opts) {
+			return nil, fmt.Errorf("custom base transport does not support TLS option overrides")
+		}
+		return opts.BaseTransport, nil
+	}
+
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	cfg, err := TLSConfigFromOptions(opts)
 	if err != nil {
@@ -144,6 +166,15 @@ func newTransport(opts Options) (http.RoundTripper, error) {
 		tr.TLSClientConfig = cfg
 	}
 	return tr, nil
+}
+
+func hasTLSOptions(opts Options) bool {
+	return opts.Insecure ||
+		opts.ClientCertPath != "" ||
+		opts.ClientKeyPath != "" ||
+		opts.TLSSignerPath != "" ||
+		opts.CACertPath != "" ||
+		opts.TLSMinVersion != 0
 }
 
 // BuildTransport returns the appropriate RoundTripper for opts.

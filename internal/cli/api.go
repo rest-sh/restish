@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"sort"
@@ -133,7 +132,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		BaseURL:   baseURL,
 		CacheDir:  c.specCacheDir(),
 		Version:   Version,
-		Transport: http.DefaultTransport,
+		Transport: c.baseHTTPTransport(),
 	}
 	apiSpec, _ := spec.Discover(context.Background(), discCfg, c.loaders)
 
