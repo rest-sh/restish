@@ -177,35 +177,6 @@ func (o *jsoncObject) member(key string) *jsoncMember {
 	return nil
 }
 
-func (o *jsoncObject) shifted(delta int) *jsoncObject {
-	shifted := &jsoncObject{
-		lbrace: o.lbrace + delta,
-		rbrace: o.rbrace + delta,
-	}
-	shifted.members = make([]jsoncMember, len(o.members))
-	for i, member := range o.members {
-		shifted.members[i] = jsoncMember{
-			key:      member.key,
-			start:    member.start + delta,
-			end:      member.end + delta,
-			comma:    member.comma,
-			keyStart: member.keyStart + delta,
-			value: jsoncValue{
-				kind:  member.value.kind,
-				start: member.value.start + delta,
-				end:   member.value.end + delta,
-			},
-		}
-		if member.comma >= 0 {
-			shifted.members[i].comma = member.comma + delta
-		}
-		if member.value.object != nil {
-			shifted.members[i].value.object = member.value.object.shifted(delta)
-		}
-	}
-	return shifted
-}
-
 func memberRemovalSpan(obj *jsoncObject, member *jsoncMember) (int, int) {
 	index := -1
 	for i := range obj.members {
@@ -535,8 +506,8 @@ func (p *jsoncParser) parseNumber(i int) (int, error) {
 }
 
 func (p *jsoncParser) parseLiteral(i int) (int, error) {
-	for _, lit := range []string{"true", "false", "null"} {
-		if strings.HasPrefix(string(p.data[i:]), lit) {
+	for _, lit := range [][]byte{[]byte("true"), []byte("false"), []byte("null")} {
+		if bytes.HasPrefix(p.data[i:], lit) {
 			return i + len(lit), nil
 		}
 	}
