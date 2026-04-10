@@ -305,6 +305,72 @@ func TestJSONCSetPath_PreservesBlockComment(t *testing.T) {
 	}
 }
 
+func TestJSONCSetPath_PreservesUntouchedDeepSiblings(t *testing.T) {
+	input := []byte(`{
+  "apis": {
+    "target": {
+      "base_url": "https://old.example.com"
+    },
+    "other": {
+      // keep this nested structure exactly
+      "profiles": [
+        {
+          "name": "default",
+          "auth": {
+            "type": "bearer",
+            "params": {
+              "token": "secret"
+            }
+          }
+        }
+      ]
+    }
+  }
+}`)
+
+	got, err := jsoncSetPath(input, []string{"apis", "target", "base_url"}, "https://new.example.com")
+	if err != nil {
+		t.Fatalf("jsoncSetPath: %v", err)
+	}
+
+	out := string(got)
+	if !strings.Contains(out, `"base_url": "https://new.example.com"`) {
+		t.Fatalf("expected target value update:\n%s", out)
+	}
+	if !strings.Contains(out, `// keep this nested structure exactly`) {
+		t.Fatalf("expected untouched sibling comment preserved:\n%s", out)
+	}
+	if !strings.Contains(out, `"token": "secret"`) {
+		t.Fatalf("expected untouched sibling nested value preserved:\n%s", out)
+	}
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
+	}
+}
+
+func TestJSONCSetPath_PreservesTriviaAroundValue(t *testing.T) {
+	input := []byte(`{
+  "apis": {
+    "myapi": {
+      "base_url" /* before colon */ : /* before value */ "https://old.example.com" // keep
+    }
+  }
+}`)
+
+	got, err := jsoncSetPath(input, []string{"apis", "myapi", "base_url"}, "https://new.example.com")
+	if err != nil {
+		t.Fatalf("jsoncSetPath: %v", err)
+	}
+
+	out := string(got)
+	if !strings.Contains(out, `"base_url" /* before colon */ : /* before value */ "https://new.example.com" // keep`) {
+		t.Fatalf("expected trivia around value preserved:\n%s", out)
+	}
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
+	}
+}
+
 func TestJSONCSetPath_PreservesCRLFInput(t *testing.T) {
 	input := []byte("{\r\n  \"apis\": {\r\n    \"myapi\": {\r\n      \"base_url\": \"https://old.example.com\"\r\n    }\r\n  }\r\n}")
 
@@ -316,8 +382,8 @@ func TestJSONCSetPath_PreservesCRLFInput(t *testing.T) {
 	if !strings.Contains(out, "\r\n") {
 		t.Fatalf("expected CRLF newlines to remain present:\n%q", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
-		t.Fatalf("patched config should still parse: %v", err)
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
 
@@ -332,8 +398,8 @@ func TestJSONCSetPath_PreservesTabIndentation(t *testing.T) {
 	if !strings.Contains(out, "\t\t\"myapi\": {\"base_url\": \"https://api.example.com\"}") {
 		t.Fatalf("expected tab indentation to be reused:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
-		t.Fatalf("patched config should still parse: %v", err)
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
 
@@ -345,11 +411,62 @@ func TestJSONCSetPath_RejectsInvalidJSONC(t *testing.T) {
 	}
 }
 
+func TestJSONCSetPath_RejectsInvalidUntouchedNestedJSONC(t *testing.T) {
+	input := []byte(`{
+  "apis": {
+    "target": {
+      "base_url": "https://old.example.com"
+    },
+    "other": {
+      "profiles": [}
+    }
+  }
+}`)
+
+	if _, err := jsoncSetPath(input, []string{"apis", "target", "base_url"}, "https://new.example.com"); err == nil {
+		t.Fatal("expected invalid nested JSONC to fail even off the edited path")
+	}
+}
+
 func TestJSONCSetPath_RejectsNonObjectRoot(t *testing.T) {
 	input := []byte(`[]`)
 
 	if _, err := jsoncSetPath(input, []string{"apis", "myapi"}, map[string]any{}); err == nil {
 		t.Fatal("expected non-object root to fail")
+	}
+}
+
+func TestJSONCSetPath_EscapedObjectKey(t *testing.T) {
+	input := []byte("{\n  \"apis\": {\n    \"myapi\": {\n      \"quote\\\"key\": \"old\"\n    }\n  }\n}")
+
+	got, err := jsoncSetPath(input, []string{"apis", "myapi", "quote\"key"}, "new")
+	if err != nil {
+		t.Fatalf("jsoncSetPath: %v", err)
+	}
+
+	out := string(got)
+	if !strings.Contains(out, `"quote\"key": "new"`) {
+		t.Fatalf("expected escaped key to be updated:\n%s", out)
+	}
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
+	}
+}
+
+func TestJSONCSetPath_UnicodeEscapedObjectKey(t *testing.T) {
+	input := []byte("{\n  \"apis\": {\n    \"myapi\": {\n      \"na\\u006de\": \"old\"\n    }\n  }\n}")
+
+	got, err := jsoncSetPath(input, []string{"apis", "myapi", "name"}, "new")
+	if err != nil {
+		t.Fatalf("jsoncSetPath: %v", err)
+	}
+
+	out := string(got)
+	if !strings.Contains(out, `"na\u006de": "new"`) {
+		t.Fatalf("expected unicode-escaped key to be updated in place:\n%s", out)
+	}
+	if _, err := parseJSONC(got); err != nil {
+		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
 
