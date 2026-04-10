@@ -31,6 +31,10 @@ const (
 	// Host → plugin passthrough-stdio data.
 	MsgTypeStdinData  = "stdin-data"
 	MsgTypeStdinClose = "stdin-close"
+
+	// TLS signer plugin protocol.
+	MsgTypeTLSSignerSign  = "sign"  // host → plugin: sign request
+	MsgTypeTLSSignerReady = "ready" // plugin → host: ready with certificate
 )
 
 // InitMsg is the first message sent from the host to the plugin after startup.
@@ -212,4 +216,119 @@ type StdinDataMsg struct {
 // StdinCloseMsg signals that the host's stdin has reached EOF.
 type StdinCloseMsg struct {
 	Type string `cbor:"type"`
+}
+
+// ─── TLS signer plugin protocol ──────────────────────────────────────────────
+
+// TLSSignerInitMsg is sent by the host to a tls-signer plugin at startup.
+// The Type field is MsgTypeInit ("init").
+type TLSSignerInitMsg struct {
+	Type   string            `cbor:"type"`
+	Params map[string]string `cbor:"params"`
+}
+
+// TLSSignerReadyMsg is sent by the plugin when it has loaded its certificate
+// and is ready to sign. Type is MsgTypeTLSSignerReady ("ready").
+type TLSSignerReadyMsg struct {
+	Type        string `cbor:"type"`
+	Certificate []byte `cbor:"certificate"`
+}
+
+// TLSSignerSignMsg is sent by the host to request a signature.
+// Type is MsgTypeTLSSignerSign ("sign").
+type TLSSignerSignMsg struct {
+	Type   string `cbor:"type"`
+	Digest []byte `cbor:"digest"`
+	// Hash is the crypto.Hash value cast to uint64. 0 means no specific hash.
+	Hash       uint64 `cbor:"hash,omitempty"`
+	Padding    string `cbor:"padding,omitempty"`
+	SaltLength int    `cbor:"salt_length,omitempty"`
+}
+
+// TLSSignerSignedMsg is the plugin's reply to a TLSSignerSignMsg.
+// It carries either a Signature or an Error, never both.
+// This message has no Type field.
+type TLSSignerSignedMsg struct {
+	Signature []byte `cbor:"signature,omitempty"`
+	Error     string `cbor:"error,omitempty"`
+}
+
+// ─── Hook plugin protocol ─────────────────────────────────────────────────────
+
+// HookRequest carries the current HTTP request state forwarded to hook plugins.
+type HookRequest struct {
+	Method  string              `cbor:"method" json:"method"`
+	URI     string              `cbor:"uri" json:"uri"`
+	Headers map[string][]string `cbor:"headers" json:"headers"`
+}
+
+// HookRequestHeaderUpdate holds headers that a hook plugin wants to set or
+// replace on the outgoing request. Only headers are applied; method and URI
+// fields are intentionally absent because the request has already been prepared.
+type HookRequestHeaderUpdate struct {
+	// Each value is either a string or []string.
+	Headers map[string]any `cbor:"headers,omitempty" json:"headers,omitempty"`
+}
+
+// AuthHookInput is sent to plugins registered for the "auth" hook.
+type AuthHookInput struct {
+	Type    string            `cbor:"type" json:"type"`
+	API     string            `cbor:"api" json:"api"`
+	Profile string            `cbor:"profile" json:"profile"`
+	Params  map[string]string `cbor:"params" json:"params"`
+	Request HookRequest       `cbor:"request" json:"request"`
+}
+
+// AuthHookOutput is the reply from an "auth" hook plugin.
+type AuthHookOutput struct {
+	Request *HookRequestHeaderUpdate `cbor:"request,omitempty" json:"request,omitempty"`
+}
+
+// RequestMiddlewareInput is sent to plugins registered for the
+// "request-middleware" hook.
+type RequestMiddlewareInput struct {
+	Type    string      `cbor:"type" json:"type"`
+	Request HookRequest `cbor:"request" json:"request"`
+}
+
+// RequestMiddlewareOutput is the reply from a "request-middleware" hook plugin.
+type RequestMiddlewareOutput struct {
+	Request *HookRequestHeaderUpdate `cbor:"request,omitempty" json:"request,omitempty"`
+}
+
+// HookResponse carries the current HTTP response state forwarded to hook plugins.
+type HookResponse struct {
+	Status  int               `cbor:"status" json:"status"`
+	Headers map[string]string `cbor:"headers" json:"headers"`
+	Body    any               `cbor:"body" json:"body"`
+}
+
+// ResponseMiddlewareInput is sent to plugins registered for the
+// "response-middleware" hook.
+type ResponseMiddlewareInput struct {
+	Type     string       `cbor:"type" json:"type"`
+	Request  HookRequest  `cbor:"request" json:"request"`
+	Response HookResponse `cbor:"response" json:"response"`
+}
+
+// FollowRequest instructs the host to issue a follow-up HTTP request.
+// Only Method and URI are supported.
+type FollowRequest struct {
+	Method string `cbor:"method,omitempty" json:"method,omitempty"`
+	URI    string `cbor:"uri" json:"uri"`
+}
+
+// HookResponseUpdate carries partial response modifications from a
+// "response-middleware" plugin.
+type HookResponseUpdate struct {
+	Body any `cbor:"body,omitempty" json:"body,omitempty"`
+	// Each value is either a string or []string.
+	Headers map[string]any `cbor:"headers,omitempty" json:"headers,omitempty"`
+}
+
+// ResponseMiddlewareOutput is the reply from a "response-middleware" hook plugin.
+type ResponseMiddlewareOutput struct {
+	Drop     bool                `cbor:"drop,omitempty" json:"drop,omitempty"`
+	Follow   *FollowRequest      `cbor:"follow,omitempty" json:"follow,omitempty"`
+	Response *HookResponseUpdate `cbor:"response,omitempty" json:"response,omitempty"`
 }

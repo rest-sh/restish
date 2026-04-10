@@ -8,7 +8,7 @@ import (
 )
 
 func TestParsePKCS11ConfigAliases(t *testing.T) {
-	cfg, err := parsePKCS11Config(map[string]any{
+	cfg, err := parsePKCS11Config(map[string]string{
 		"path":  "/tmp/opensc.so",
 		"label": "YubiKey PIV",
 		"pin":   "123456",
@@ -28,7 +28,7 @@ func TestParsePKCS11ConfigAliases(t *testing.T) {
 }
 
 func TestParsePKCS11ConfigRequiresSingleSelector(t *testing.T) {
-	_, err := parsePKCS11Config(map[string]any{
+	_, err := parsePKCS11Config(map[string]string{
 		"module":      "/tmp/opensc.so",
 		"token_label": "A",
 		"serial":      "B",
@@ -40,7 +40,7 @@ func TestParsePKCS11ConfigRequiresSingleSelector(t *testing.T) {
 }
 
 func TestParsePKCS11ConfigUsesPinEnvAndSlot(t *testing.T) {
-	cfg, err := parsePKCS11Config(map[string]any{
+	cfg, err := parsePKCS11Config(map[string]string{
 		"module":  "/tmp/opensc.so",
 		"slot":    "7",
 		"pin_env": "MY_PIN",
@@ -58,7 +58,7 @@ func TestParsePKCS11ConfigUsesPinEnvAndSlot(t *testing.T) {
 
 func TestParsePKCS11ConfigPromptsForPIN(t *testing.T) {
 	prompted := false
-	cfg, err := parsePKCS11Config(map[string]any{
+	cfg, err := parsePKCS11Config(map[string]string{
 		"module":      "/tmp/opensc.so",
 		"token_label": "YubiKey PIV",
 	}, map[string]string{}, func() (string, error) {

@@ -29,20 +29,19 @@ func main() {
 		return
 	}
 
-	var initMsg map[string]any
 	dec := plugin.NewDecoder(os.Stdin)
+	var initMsg plugin.InitMsg
 	if err := dec.ReadMessage(&initMsg); err != nil {
 		fmt.Fprintln(os.Stderr, "read init:", err)
 		os.Exit(1)
 	}
-	command, _ := initMsg["command"].(string)
-	if command != "mcp" {
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", command)
+	if initMsg.Command != "mcp" {
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", initMsg.Command)
 		_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone, ExitCode: 1})
 		return
 	}
 
-	args := plugin.MsgStrings(initMsg["args"])
+	args := initMsg.Args
 	client := newPluginClient(dec, os.Stdout)
 	cfg, err := ParseArgs(args)
 	if err == nil {
@@ -75,7 +74,7 @@ type pluginClient struct {
 	out          io.Writer
 	stdinPipeW   *io.PipeWriter
 	stdinReader  io.Reader
-	httpRespCh   chan map[string]any
+	httpRespCh   chan plugin.HTTPResponseMsg
 	pendingStdin bytes.Buffer
 	stdinClosed  bool
 	writeMu      sync.Mutex
@@ -88,7 +87,7 @@ func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 		out:         out,
 		stdinPipeW:  pw,
 		stdinReader: pr,
-		httpRespCh:  make(chan map[string]any, 1),
+		httpRespCh:  make(chan plugin.HTTPResponseMsg, 1),
 	}
 }
 
@@ -103,21 +102,25 @@ func (c *pluginClient) readLoop() {
 		_ = c.stdinPipeW.Close()
 	}
 	for {
-		var msg map[string]any
-		if err := c.dec.ReadMessage(&msg); err != nil {
+		raw, err := c.dec.ReadRaw()
+		if err != nil {
 			return
 		}
-		switch msg["type"] {
+		switch plugin.MessageType(raw) {
 		case plugin.MsgTypeStdinData:
-			if data := plugin.MsgBytes(msg["data"]); len(data) > 0 {
-				if _, err := c.stdinPipeW.Write(data); err != nil {
+			var msg plugin.StdinDataMsg
+			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil && len(msg.Data) > 0 {
+				if _, err := c.stdinPipeW.Write(msg.Data); err != nil {
 					return
 				}
 			}
 		case plugin.MsgTypeStdinClose:
 			_ = c.stdinPipeW.Close()
 		case plugin.MsgTypeHTTPResponse:
-			c.httpRespCh <- msg
+			var msg plugin.HTTPResponseMsg
+			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil {
+				c.httpRespCh <- msg
+			}
 		}
 	}
 }
@@ -144,56 +147,56 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 	if !ok {
 		return nil, io.EOF
 	}
-	resp := &HTTPResponse{
-		Status:  plugin.MsgInt(reply["status"]),
-		Headers: mapAny(reply["headers"]),
-		Body:    reply["body"],
-	}
-	if text, _ := reply["error"].(string); text != "" {
-		resp.Error = text
-	}
-	return resp, nil
+	return &HTTPResponse{
+		Status:  reply.Status,
+		Headers: reply.Headers,
+		Body:    reply.Body,
+		Error:   reply.Error,
+	}, nil
 }
 
 func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 	if err := c.writeMessage(plugin.APISpecMsg{Type: plugin.MsgTypeAPISpec, Name: name}); err != nil {
 		return nil, err
 	}
-	var reply map[string]any
+	var reply plugin.APISpecResponseMsg
 	for {
-		if err := c.dec.ReadMessage(&reply); err != nil {
+		raw, err := c.dec.ReadRaw()
+		if err != nil {
 			return nil, err
 		}
-		switch msgType, _ := reply["type"].(string); msgType {
+		switch plugin.MessageType(raw) {
 		case plugin.MsgTypeAPISpecResponse:
+			if err := plugin.DecMode.Unmarshal(raw, &reply); err != nil {
+				return nil, fmt.Errorf("decode api spec response: %w", err)
+			}
 			goto haveReply
 		case plugin.MsgTypeStdinData:
-			if data := plugin.MsgBytes(reply["data"]); len(data) > 0 {
-				_, _ = c.pendingStdin.Write(data)
+			var msg plugin.StdinDataMsg
+			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil && len(msg.Data) > 0 {
+				_, _ = c.pendingStdin.Write(msg.Data)
 			}
 		case plugin.MsgTypeStdinClose:
 			c.stdinClosed = true
 		default:
-			return nil, fmt.Errorf("unexpected plugin reply %q while loading %s", msgType, name)
+			return nil, fmt.Errorf("unexpected plugin reply %q while loading %s", plugin.MessageType(raw), name)
 		}
 	}
 haveReply:
-	if text, _ := reply["error"].(string); text != "" {
-		return nil, fmt.Errorf("%s", text)
+	if reply.Error != "" {
+		return nil, fmt.Errorf("%s", reply.Error)
 	}
-	raw := plugin.MsgBytes(reply["raw"])
-	if len(raw) == 0 {
+	if len(reply.Raw) == 0 {
 		return nil, fmt.Errorf("api %q returned an empty spec", name)
 	}
-	doc, err := libopenapi.NewDocument(raw)
+	doc, err := libopenapi.NewDocument(reply.Raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse spec for %q: %w", name, err)
 	}
-	contentType, _ := reply["content_type"].(string)
 	return &APISpec{
 		Name:        name,
-		ContentType: contentType,
-		Raw:         raw,
+		ContentType: reply.ContentType,
+		Raw:         reply.Raw,
 		Document:    doc,
 	}, nil
 }
@@ -220,13 +223,4 @@ func (w *stdoutWriter) Write(p []byte) (int, error) {
 
 func (c *pluginClient) newStdoutWriter() io.Writer {
 	return &stdoutWriter{client: c}
-}
-
-
-func mapAny(v any) map[string]any {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil
-	}
-	return m
 }

@@ -37,7 +37,7 @@ type pkcs11Config struct {
 	LoginNotSupported bool
 }
 
-func parsePKCS11Config(params map[string]any, env map[string]string, promptPIN func() (string, error)) (*pkcs11Config, error) {
+func parsePKCS11Config(params map[string]string, env map[string]string, promptPIN func() (string, error)) (*pkcs11Config, error) {
 	modulePath := firstString(params, "module", "path")
 	if modulePath == "" {
 		modulePath = env["PKCS11_MODULE_PATH"]
@@ -116,19 +116,20 @@ func buildSignerOpts(hash crypto.Hash, padding string, saltLength int) crypto.Si
 	return hash
 }
 
-func firstString(params map[string]any, keys ...string) string {
+func firstString(params map[string]string, keys ...string) string {
 	for _, key := range keys {
-		if text, ok := params[key].(string); ok && text != "" {
-			return strings.TrimSpace(text)
+		if text := strings.TrimSpace(params[key]); text != "" {
+			return text
 		}
 	}
 	return ""
 }
 
-func firstBool(params map[string]any, keys ...string) bool {
+func firstBool(params map[string]string, keys ...string) bool {
 	for _, key := range keys {
-		if value, ok := params[key].(bool); ok {
-			return value
+		v := strings.TrimSpace(params[key])
+		if v == "true" || v == "1" {
+			return true
 		}
 	}
 	return false

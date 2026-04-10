@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 )
 
 // minimalOpenAPI is a minimal OpenAPI 3.0 spec returned by the loader hook.
@@ -37,42 +36,35 @@ const minimalOpenAPI = `{
   }
 }`
 
+var manifest = plugin.Manifest{
+	Name:               "hookplugin",
+	Version:            "1.0.0",
+	Description:        "Test hook plugin",
+	RestishAPIVersion:  1,
+	Hooks:              []string{"auth", "request-middleware", "response-middleware", "formatter", "loader"},
+	FormatterNames:     []string{"hookformat"},
+	LoaderContentTypes: []string{"application/x-hook-api"},
+}
+
 func main() {
-	for _, arg := range os.Args[1:] {
-		if arg == "--rsh-plugin-manifest" {
-			manifest := map[string]any{
-				"name":                 "hookplugin",
-				"version":              "1.0.0",
-				"description":          "Test hook plugin",
-				"restish_api_version":  1,
-				"hooks":                []string{"auth", "request-middleware", "response-middleware", "formatter", "loader"},
-				"formatter_names":      []string{"hookformat"},
-				"loader_content_types": []string{"application/x-hook-api"},
-			}
-			data, err := cbor.Marshal(manifest)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "marshal:", err)
-				os.Exit(2)
-			}
-			os.Stdout.Write(data)
-			os.Exit(0)
-		}
+	if plugin.HandleStartupFlags(os.Stdout, manifest, nil) {
+		return
 	}
 
-	// Read one CBOR message from stdin.
-	var msg map[string]any
-	if err := plugin.ReadMessage(os.Stdin, &msg); err != nil {
+	// Hook plugins receive exactly one message on stdin.
+	raw, err := plugin.NewDecoder(os.Stdin).ReadRaw()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "read:", err)
 		os.Exit(1)
 	}
 
-	hookType, _ := msg["type"].(string)
-
-	switch hookType {
+	switch plugin.MessageType(raw) {
 	case "auth":
-		out := map[string]any{
-			"request": map[string]any{
-				"headers": map[string]any{
+		var msg plugin.AuthHookInput
+		_ = plugin.DecMode.Unmarshal(raw, &msg)
+		out := plugin.AuthHookOutput{
+			Request: &plugin.HookRequestHeaderUpdate{
+				Headers: map[string]any{
 					"Authorization": []any{"Bearer hook-token"},
 				},
 			},
@@ -83,18 +75,15 @@ func main() {
 		}
 
 	case "request-middleware":
-		req, _ := msg["request"].(map[string]any)
-		hdrs, _ := req["headers"].(map[string]any)
-		if hdrs == nil {
-			hdrs = map[string]any{}
+		var msg plugin.RequestMiddlewareInput
+		_ = plugin.DecMode.Unmarshal(raw, &msg)
+		hdrs := map[string]any{}
+		for k, vs := range msg.Request.Headers {
+			hdrs[k] = vs
 		}
 		hdrs["X-Trace-Id"] = []any{"hook-trace-123"}
-		out := map[string]any{
-			"request": map[string]any{
-				"method":  req["method"],
-				"uri":     req["uri"],
-				"headers": hdrs,
-			},
+		out := plugin.RequestMiddlewareOutput{
+			Request: &plugin.HookRequestHeaderUpdate{Headers: hdrs},
 		}
 		if err := plugin.WriteMessage(os.Stdout, out); err != nil {
 			fmt.Fprintln(os.Stderr, "write:", err)
@@ -102,42 +91,33 @@ func main() {
 		}
 
 	case "response-middleware":
+		var msg plugin.ResponseMiddlewareInput
+		_ = plugin.DecMode.Unmarshal(raw, &msg)
+
 		behavior := os.Getenv("RSH_HOOK_RM_BEHAVIOR")
 		switch {
 		case behavior == "drop":
-			out := map[string]any{"drop": true}
-			plugin.WriteMessage(os.Stdout, out) //nolint:errcheck
+			plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{Drop: true}) //nolint:errcheck
 		case strings.HasPrefix(behavior, "follow:"):
 			uri := strings.TrimPrefix(behavior, "follow:")
-			out := map[string]any{
-				"follow": map[string]any{
-					"method": "GET",
-					"uri":    uri,
-				},
-			}
-			plugin.WriteMessage(os.Stdout, out) //nolint:errcheck
+			plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{ //nolint:errcheck
+				Follow: &plugin.FollowRequest{Method: "GET", URI: uri},
+			})
 		default:
-			// Add plugin_added:true to body map.
-			respMsg, _ := msg["response"].(map[string]any)
-			body, _ := respMsg["body"].(map[string]any)
+			body, _ := msg.Response.Body.(map[string]any)
 			if body == nil {
 				body = map[string]any{}
 			}
 			body["plugin_added"] = true
-			out := map[string]any{
-				"response": map[string]any{
-					"body": body,
-				},
-			}
-			plugin.WriteMessage(os.Stdout, out) //nolint:errcheck
+			plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{ //nolint:errcheck
+				Response: &plugin.HookResponseUpdate{Body: body},
+			})
 		}
 
 	case "formatter":
-		// Write raw (non-CBOR) output directly to stdout.
 		fmt.Fprint(os.Stdout, "HOOK FORMATTED\n")
 
 	case "loader":
-		// Return a minimal OpenAPI spec via CBOR framing.
 		out := map[string]any{
 			"content_type": "application/openapi+json",
 			"body":         minimalOpenAPI,
@@ -148,7 +128,6 @@ func main() {
 		}
 
 	default:
-		// Unknown hook type: exit without writing (no-op).
 		os.Exit(0)
 	}
 }

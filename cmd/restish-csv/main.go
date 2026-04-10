@@ -9,7 +9,6 @@ import (
 	"sort"
 
 	"github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 )
 
 type formatterRequest struct {
@@ -46,18 +45,14 @@ func main() {
 }
 
 func writeManifest() {
-	data, err := cbor.Marshal(map[string]any{
-		"name":                "csv",
-		"version":             "1.0.0",
-		"description":         "Formatter plugin that renders array-shaped responses as CSV",
-		"restish_api_version": 1,
-		"hooks":               []string{"formatter"},
-		"formatter_names":     []string{"csv"},
-	})
-	if err != nil {
-		fail(fmt.Errorf("marshal manifest: %w", err))
-	}
-	if _, err := os.Stdout.Write(data); err != nil {
+	if err := plugin.WriteManifest(os.Stdout, plugin.Manifest{
+		Name:              "csv",
+		Version:           "1.0.0",
+		Description:       "Formatter plugin that renders array-shaped responses as CSV",
+		RestishAPIVersion: 1,
+		Hooks:             []string{"formatter"},
+		FormatterNames:    []string{"csv"},
+	}); err != nil {
 		fail(fmt.Errorf("write manifest: %w", err))
 	}
 }

@@ -72,6 +72,28 @@ func (d *Decoder) ReadMessage(v any) error {
 	return nil
 }
 
+// ReadRaw reads the next CBOR data item from the stream and returns it as raw
+// bytes. The caller can inspect the bytes (e.g. with MessageType) and then
+// decode into a specific typed struct using DecMode.Unmarshal.
+func (d *Decoder) ReadRaw() ([]byte, error) {
+	var raw cbor.RawMessage
+	if err := d.dec.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("plugin: read: %w", err)
+	}
+	return raw, nil
+}
+
+// MessageType returns the "type" field of a raw CBOR message without fully
+// decoding it. Returns an empty string if the field is absent or the data is
+// not valid CBOR.
+func MessageType(raw []byte) string {
+	var env struct {
+		Type string `cbor:"type"`
+	}
+	_ = DecMode.Unmarshal(raw, &env)
+	return env.Type
+}
+
 // ReadMessage reads one CBOR data item from r and unmarshals it into v (which
 // must be a pointer). It is intended for one-shot reads such as hook plugins.
 // For command or TLS-signer plugins that receive multiple messages, create a

@@ -11,32 +11,31 @@ import (
 
 	"github.com/ThalesIgnite/crypto11"
 	"github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 	"golang.org/x/term"
 )
 
 func main() {
-	for _, arg := range os.Args[1:] {
-		if arg == "--rsh-plugin-manifest" {
-			writeManifest()
-			return
-		}
+	if plugin.HandleStartupFlags(os.Stdout, plugin.Manifest{
+		Name:              "pkcs11",
+		Version:           "1.0.0",
+		Description:       "TLS signer plugin for PKCS#11 devices like YubiKey",
+		RestishAPIVersion: 1,
+		Hooks:             []string{"tls-signer"},
+	}, nil) {
+		return
 	}
 
-	var initMsg map[string]any
 	dec := plugin.NewDecoder(os.Stdin)
+
+	var initMsg plugin.TLSSignerInitMsg
 	if err := dec.ReadMessage(&initMsg); err != nil {
 		fail(err)
 	}
-	if initMsg["type"] != "init" {
-		fail(fmt.Errorf("expected init message"))
-	}
-	params, _ := initMsg["params"].(map[string]any)
-	if params == nil {
-		params = map[string]any{}
+	if initMsg.Type != plugin.MsgTypeInit {
+		fail(fmt.Errorf("expected init message, got %q", initMsg.Type))
 	}
 
-	cfg, err := parsePKCS11Config(params, envMap(), promptPIN)
+	cfg, err := parsePKCS11Config(initMsg.Params, envMap(), promptPIN)
 	if err != nil {
 		fail(err)
 	}
@@ -54,51 +53,33 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	if err := plugin.WriteMessage(os.Stdout, map[string]any{
-		"type":        "ready",
-		"certificate": leafDER,
+	if err := plugin.WriteMessage(os.Stdout, plugin.TLSSignerReadyMsg{
+		Type:        plugin.MsgTypeTLSSignerReady,
+		Certificate: leafDER,
 	}); err != nil {
 		fail(err)
 	}
 
 	for {
-		var msg map[string]any
+		var msg plugin.TLSSignerSignMsg
 		if err := dec.ReadMessage(&msg); err != nil {
 			fail(err)
 		}
-		if msg["type"] != "sign" {
+		if msg.Type != plugin.MsgTypeTLSSignerSign {
 			continue
 		}
-		digest := plugin.MsgBytes(msg["digest"])
-		if len(digest) == 0 {
-			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": "missing digest"})
+		if len(msg.Digest) == 0 {
+			_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: "missing digest"})
 			continue
 		}
-		hash := msgHash(msg["hash"])
-		padding, _ := msg["padding"].(string)
-		saltLength := plugin.MsgInt(msg["salt_length"])
-		sig, err := signer.Sign(rand.Reader, digest, buildSignerOpts(hash, padding, saltLength))
+		hash := crypto.Hash(msg.Hash)
+		sig, err := signer.Sign(rand.Reader, msg.Digest, buildSignerOpts(hash, msg.Padding, msg.SaltLength))
 		if err != nil {
-			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": err.Error()})
+			_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: err.Error()})
 			continue
 		}
-		_ = plugin.WriteMessage(os.Stdout, map[string]any{"signature": sig})
+		_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Signature: sig})
 	}
-}
-
-func writeManifest() {
-	data, err := cbor.Marshal(map[string]any{
-		"name":                "pkcs11",
-		"version":             "1.0.0",
-		"description":         "TLS signer plugin for PKCS#11 devices like YubiKey",
-		"restish_api_version": 1,
-		"hooks":               []string{"tls-signer"},
-	})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "marshal:", err)
-		os.Exit(2)
-	}
-	_, _ = os.Stdout.Write(data)
 }
 
 func loadCertificate(ctx *crypto11.Context) (*tls.Certificate, crypto11.Signer, error) {
@@ -154,10 +135,6 @@ func envMap() map[string]string {
 		}
 	}
 	return out
-}
-
-func msgHash(v any) crypto.Hash {
-	return crypto.Hash(plugin.MsgInt(v))
 }
 
 func fail(err error) {

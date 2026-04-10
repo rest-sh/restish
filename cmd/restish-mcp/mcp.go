@@ -36,7 +36,7 @@ type HTTPRequest struct {
 
 type HTTPResponse struct {
 	Status  int
-	Headers map[string]any
+	Headers map[string]string
 	Body    any
 	Error   string
 }

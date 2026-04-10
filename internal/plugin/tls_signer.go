@@ -36,26 +36,26 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 		_ = proc.Wait()
 	}
 
-	if err := pluginwire.WriteMessage(stdin, map[string]any{
-		"type":   "init",
-		"params": params,
+	if err := pluginwire.WriteMessage(stdin, pluginwire.TLSSignerInitMsg{
+		Type:   pluginwire.MsgTypeInit,
+		Params: params,
 	}); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: init: %w", filepath.Base(path), err)
 	}
 
 	dec := pluginwire.NewDecoder(stdout)
-	var ready map[string]any
+	var ready pluginwire.TLSSignerReadyMsg
 	if err := readTLSSignerMessage(dec, stdout, &ready); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready: %w", filepath.Base(path), err)
 	}
-	if msgType, _ := ready["type"].(string); msgType != "ready" {
+	if ready.Type != pluginwire.MsgTypeTLSSignerReady {
 		cleanup()
-		return nil, fmt.Errorf("tls-signer %s: expected ready message, got %q", filepath.Base(path), msgType)
+		return nil, fmt.Errorf("tls-signer %s: expected ready message, got %q", filepath.Base(path), ready.Type)
 	}
 
-	der := MsgBytes(ready["certificate"])
+	der := ready.Certificate
 	if len(der) == 0 {
 		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready message missing certificate", filepath.Base(path))
@@ -133,33 +133,29 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 			saltLength = pss.SaltLength
 		}
 	}
-	msg := map[string]any{
-		"type":   "sign",
-		"digest": append([]byte(nil), digest...),
-		"hash":   uint64(hash),
-	}
-	if padding != "" {
-		msg["padding"] = padding
-		msg["salt_length"] = saltLength
-	}
-	if err := pluginwire.WriteMessage(s.stdin, msg); err != nil {
+	if err := pluginwire.WriteMessage(s.stdin, pluginwire.TLSSignerSignMsg{
+		Type:       pluginwire.MsgTypeTLSSignerSign,
+		Digest:     append([]byte(nil), digest...),
+		Hash:       uint64(hash),
+		Padding:    padding,
+		SaltLength: saltLength,
+	}); err != nil {
 		s.shutdown()
 		return nil, fmt.Errorf("tls-signer %s: write sign request: %w", filepath.Base(s.path), err)
 	}
 
-	var reply map[string]any
+	var reply pluginwire.TLSSignerSignedMsg
 	if err := readTLSSignerMessage(s.dec, s.stdout, &reply); err != nil {
 		s.shutdown()
 		return nil, fmt.Errorf("tls-signer %s: sign reply: %w", filepath.Base(s.path), err)
 	}
-	if text, _ := reply["error"].(string); text != "" {
-		return nil, fmt.Errorf("tls-signer %s: %s", filepath.Base(s.path), text)
+	if reply.Error != "" {
+		return nil, fmt.Errorf("tls-signer %s: %s", filepath.Base(s.path), reply.Error)
 	}
-	sig := MsgBytes(reply["signature"])
-	if len(sig) == 0 {
+	if len(reply.Signature) == 0 {
 		return nil, fmt.Errorf("tls-signer %s: sign reply missing signature", filepath.Base(s.path))
 	}
-	return sig, nil
+	return reply.Signature, nil
 }
 
 func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, *exec.Cmd, error) {

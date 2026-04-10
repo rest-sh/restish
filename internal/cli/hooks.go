@@ -9,6 +9,7 @@ import (
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/request"
+	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 )
 
 // pluginsForHook returns all discovered plugins that declare the given hook.
@@ -80,7 +81,6 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 		}
 		params := rawParams
 		if !p.Manifest.NeedsAuthSecrets && len(secretKeys) > 0 {
-			// Build a copy with secret params removed.
 			redacted := make(map[string]string, len(rawParams))
 			for k, v := range rawParams {
 				if !secretKeys[k] {
@@ -89,44 +89,43 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 			}
 			params = redacted
 		}
-		headers := headerMap(req.Header)
-		in := map[string]any{
-			"type":    "auth",
-			"api":     apiName,
-			"profile": profileName,
-			"params":  params,
-			"request": map[string]any{
-				"method":  req.Method,
-				"uri":     req.URL.String(),
-				"headers": headers,
+		in := pluginwire.AuthHookInput{
+			Type:    "auth",
+			API:     apiName,
+			Profile: profileName,
+			Params:  params,
+			Request: pluginwire.HookRequest{
+				Method:  req.Method,
+				URI:     req.URL.String(),
+				Headers: headerMap(req.Header),
 			},
 		}
-		var out map[string]any
+		var out pluginwire.AuthHookOutput
 		if err := plugin.CallHook(p.Path, in, &out); err != nil {
 			return fmt.Errorf("auth plugin %s: %w", p.Manifest.Name, err)
 		}
-		applyRequestUpdate(req, out)
+		applyRequestUpdate(req, out.Request)
 	}
 	return nil
 }
 
 // runRequestMiddlewarePlugins invokes all "request-middleware" hook plugins.
-// The returned headers/method/uri from each plugin are applied to req.
+// The returned headers from each plugin are applied to req.
 func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
 	for _, p := range c.pluginsForHook("request-middleware") {
-		in := map[string]any{
-			"type": "request-middleware",
-			"request": map[string]any{
-				"method":  req.Method,
-				"uri":     req.URL.String(),
-				"headers": headerMap(req.Header),
+		in := pluginwire.RequestMiddlewareInput{
+			Type: "request-middleware",
+			Request: pluginwire.HookRequest{
+				Method:  req.Method,
+				URI:     req.URL.String(),
+				Headers: headerMap(req.Header),
 			},
 		}
-		var out map[string]any
+		var out pluginwire.RequestMiddlewareOutput
 		if err := plugin.CallHook(p.Path, in, &out); err != nil {
 			return fmt.Errorf("request-middleware plugin %s: %w", p.Manifest.Name, err)
 		}
-		applyRequestUpdate(req, out)
+		applyRequestUpdate(req, out.Request)
 	}
 	return nil
 }
@@ -143,53 +142,45 @@ type HookFollowRequest struct {
 // non-nil when the plugin wants Restish to issue a new request.
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsForHook("response-middleware") {
-		in := map[string]any{
-			"type": "response-middleware",
-			"request": map[string]any{
-				"method":  req.Method,
-				"uri":     req.URL.String(),
-				"headers": headerMap(req.Header),
+		in := pluginwire.ResponseMiddlewareInput{
+			Type: "response-middleware",
+			Request: pluginwire.HookRequest{
+				Method:  req.Method,
+				URI:     req.URL.String(),
+				Headers: headerMap(req.Header),
 			},
-			"response": map[string]any{
-				"status":  resp.Status,
-				"headers": resp.Headers,
-				"body":    resp.Body,
+			Response: pluginwire.HookResponse{
+				Status:  resp.Status,
+				Headers: resp.Headers,
+				Body:    resp.Body,
 			},
 		}
-		var out map[string]any
+		var out pluginwire.ResponseMiddlewareOutput
 		if err := plugin.CallHook(p.Path, in, &out); err != nil {
 			return false, nil, fmt.Errorf("response-middleware plugin %s: %w", p.Manifest.Name, err)
 		}
 
-		if d, ok := out["drop"].(bool); ok && d {
+		if out.Drop {
 			return true, nil, nil
 		}
 
-		if f, ok := out["follow"].(map[string]any); ok {
-			method, _ := f["method"].(string)
-			uri, _ := f["uri"].(string)
+		if out.Follow != nil {
+			method := out.Follow.Method
 			if method == "" {
 				method = "GET"
 			}
-			// Warn about keys that are not yet honoured so plugin authors know
-			// their follow payload was partially ignored.
-			for _, unsupported := range []string{"body", "headers", "query"} {
-				if _, has := f[unsupported]; has {
-					fmt.Fprintf(c.Stderr, "warning: response-middleware 'follow.%s' is not supported and was ignored\n", unsupported)
-				}
-			}
-			return false, &HookFollowRequest{Method: method, URI: uri}, nil
+			return false, &HookFollowRequest{Method: method, URI: out.Follow.URI}, nil
 		}
 
-		if r, ok := out["response"].(map[string]any); ok {
-			if body, hasBody := r["body"]; hasBody {
-				resp.Body = body
+		if out.Response != nil {
+			if out.Response.Body != nil {
+				resp.Body = out.Response.Body
 			}
-			if hdrs, ok := r["headers"].(map[string]any); ok {
+			if out.Response.Headers != nil {
 				if resp.Headers == nil {
 					resp.Headers = make(map[string]string)
 				}
-				for k, v := range hdrs {
+				for k, v := range out.Response.Headers {
 					switch vt := v.(type) {
 					case string:
 						resp.Headers[k] = vt
@@ -207,19 +198,14 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 	return false, nil, nil
 }
 
-// applyRequestUpdate merges the "request" section of a plugin reply into req.
-// Only the "headers" field is currently applied; method/uri changes are ignored
-// since the request has already been prepared for sending.
-func applyRequestUpdate(req *http.Request, out map[string]any) {
-	reqOut, ok := out["request"].(map[string]any)
-	if !ok {
+// applyRequestUpdate merges headers from a hook plugin reply into req.
+// Only headers are applied; method and URI changes are not supported because
+// the request has already been prepared for sending.
+func applyRequestUpdate(req *http.Request, update *pluginwire.HookRequestHeaderUpdate) {
+	if update == nil {
 		return
 	}
-	hdrs, ok := reqOut["headers"].(map[string]any)
-	if !ok {
-		return
-	}
-	for k, v := range hdrs {
+	for k, v := range update.Headers {
 		switch vt := v.(type) {
 		case []any:
 			req.Header.Del(k)
@@ -234,8 +220,8 @@ func applyRequestUpdate(req *http.Request, out map[string]any) {
 	}
 }
 
-// headerMap converts an http.Header (map[string][]string) to map[string][]string
-// as a plain Go map suitable for CBOR serialization.
+// headerMap converts an http.Header (map[string][]string) to a plain Go map
+// suitable for CBOR serialization.
 func headerMap(h http.Header) map[string][]string {
 	m := make(map[string][]string, len(h))
 	for k, vs := range h {

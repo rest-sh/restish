@@ -18,24 +18,12 @@ import (
 
 	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/output"
-	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/spf13/cobra"
 )
 
-type CommandDecl struct {
-	Name             string `cbor:"name" json:"name"`
-	Short            string `cbor:"short" json:"short"`
-	Long             string `cbor:"long" json:"long"`
-	PassthroughStdio bool   `cbor:"passthrough_stdio" json:"passthrough_stdio"`
-}
-
-type CommandsResponse struct {
-	Commands []CommandDecl `cbor:"commands" json:"commands"`
-}
-
-func loadCommandPluginCommands(path string) ([]CommandDecl, error) {
+func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -45,7 +33,9 @@ func loadCommandPluginCommands(path string) ([]CommandDecl, error) {
 		return nil, nil
 	}
 
-	var resp CommandsResponse
+	var resp struct {
+		Commands []pluginwire.CommandDecl `cbor:"commands"`
+	}
 	if err := pluginwire.DecMode.Unmarshal(out, &resp); err != nil {
 		return nil, fmt.Errorf("plugin %s: commands decode: %w", filepath.Base(path), err)
 	}
@@ -86,7 +76,7 @@ func (w *commandPluginWriter) WriteMessage(v any) error {
 	return pluginwire.WriteMessage(w.w, v)
 }
 
-func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl CommandDecl, args []string) error {
+func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
 	proc := exec.Command(pluginPath, append(terminalContextFlags(c), args...)...)
 	proc.Stderr = cmd.ErrOrStderr()
 
@@ -103,10 +93,10 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 	}
 
 	writer := &commandPluginWriter{w: stdinPipe}
-	initMsg := map[string]any{
-		"type":    "init",
-		"command": decl.Name,
-		"args":    args,
+	initMsg := pluginwire.InitMsg{
+		Type:    pluginwire.MsgTypeInit,
+		Command: decl.Name,
+		Args:    args,
 	}
 	if err := writer.WriteMessage(initMsg); err != nil {
 		_ = proc.Process.Kill()
@@ -125,8 +115,8 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 	var loopErr error
 	dec := pluginwire.NewDecoder(stdoutPipe)
 	for {
-		var msg map[string]any
-		if err := dec.ReadMessage(&msg); err != nil {
+		raw, err := dec.ReadRaw()
+		if err != nil {
 			if isEOFLike(err) {
 				loopErr = fmt.Errorf("command plugin %s: process died unexpectedly", filepath.Base(pluginPath))
 			} else {
@@ -135,7 +125,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl Comma
 			break
 		}
 
-		done, err := c.handleCommandPluginMessage(cmd, writer, msg)
+		done, err := c.handleCommandPluginMessage(cmd, writer, pluginwire.MessageType(raw), raw)
 		if err != nil {
 			loopErr = err
 			break
@@ -190,15 +180,15 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 		select {
 		case r := <-reads:
 			if len(r.data) > 0 {
-				if writeErr := writer.WriteMessage(map[string]any{
-					"type": "stdin-data",
-					"data": r.data,
+				if writeErr := writer.WriteMessage(pluginwire.StdinDataMsg{
+					Type: pluginwire.MsgTypeStdinData,
+					Data: r.data,
 				}); writeErr != nil {
 					return
 				}
 			}
 			if r.err == io.EOF {
-				_ = writer.WriteMessage(map[string]any{"type": "stdin-close"})
+				_ = writer.WriteMessage(pluginwire.StdinCloseMsg{Type: pluginwire.MsgTypeStdinClose})
 				return
 			}
 			if r.err != nil {
@@ -210,46 +200,66 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 	}
 }
 
-func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, msg map[string]any) (bool, error) {
-	msgType, _ := msg["type"].(string)
+func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, msgType string, raw []byte) (bool, error) {
 	switch msgType {
-	case "done":
-		code := msgInt(msg, "exit_code")
-		if code != 0 {
-			return true, &ExitCodeError{Code: code}
+	case pluginwire.MsgTypeDone:
+		var msg pluginwire.DoneMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if msg.ExitCode != 0 {
+			return true, &ExitCodeError{Code: msg.ExitCode}
 		}
 		return true, nil
-	case "http-request":
+	case pluginwire.MsgTypeHTTPRequest:
+		var msg pluginwire.HTTPRequestMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
-	case "api-spec":
+	case pluginwire.MsgTypeAPISpec:
+		var msg pluginwire.APISpecMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginAPISpec(writer, msg)
-	case "list-apis":
+	case pluginwire.MsgTypeListAPIs:
 		return false, c.handlePluginListAPIs(writer)
-	case "list-profiles":
+	case pluginwire.MsgTypeListProfiles:
+		var msg pluginwire.ListProfilesMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginListProfiles(writer, msg)
-	case "config-read":
+	case pluginwire.MsgTypeConfigRead:
+		var msg pluginwire.ConfigReadMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginConfigRead(writer, msg)
-	case "prompt":
+	case pluginwire.MsgTypePrompt:
+		var msg pluginwire.PromptMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginPrompt(writer, msg)
-	case "confirm":
+	case pluginwire.MsgTypeConfirm:
+		var msg pluginwire.ConfirmMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginConfirm(writer, msg)
-	case "response":
+	case pluginwire.MsgTypeResponse:
+		var msg pluginwire.ResponseMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
 		return false, c.handlePluginResponse(cmd, msg)
-	case "stdout-data":
-		if data := internalplugin.MsgBytes(msg["data"]); len(data) > 0 {
-			_, _ = c.Stdout.Write(data)
+	case pluginwire.MsgTypeStdoutData:
+		var msg pluginwire.StdoutDataMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if len(msg.Data) > 0 {
+			_, _ = c.Stdout.Write(msg.Data)
 		}
-	case "stderr-data":
-		if data := internalplugin.MsgBytes(msg["data"]); len(data) > 0 {
-			_, _ = cmd.ErrOrStderr().Write(data)
+	case pluginwire.MsgTypeStderrData:
+		var msg pluginwire.StderrDataMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if len(msg.Data) > 0 {
+			_, _ = cmd.ErrOrStderr().Write(msg.Data)
 		}
-	case "progress", "spinner", "log":
-		if text, _ := msg["text"].(string); text != "" {
-			fmt.Fprintln(cmd.ErrOrStderr(), text)
-		}
-	case "warn":
-		if text, _ := msg["text"].(string); text != "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", text)
+	case "progress", "spinner", "log", pluginwire.MsgTypeWarn:
+		var msg pluginwire.WarnMsg
+		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if msg.Text != "" {
+			if msgType == pluginwire.MsgTypeWarn {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", msg.Text)
+			} else {
+				fmt.Fprintln(cmd.ErrOrStderr(), msg.Text)
+			}
 		}
 	default:
 		if msgType != "" {
@@ -259,12 +269,11 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 	return false, nil
 }
 
-func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginWriter, msg map[string]any) error {
-	method, _ := msg["method"].(string)
+func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginWriter, msg pluginwire.HTTPRequestMsg) error {
+	method := msg.Method
 	if method == "" {
 		method = "GET"
 	}
-	rawURL, _ := msg["uri"].(string)
 
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
@@ -273,56 +282,54 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 
 	profileName := c.profileFromCmd(cmd)
 
-	if noCache, _ := msg["no_cache"].(bool); noCache {
+	if msg.NoCache {
 		opts.NoCache = true
 	}
-	if ttl := msgInt(msg, "cache_ttl"); ttl > 0 {
-		opts.Headers = append(opts.Headers, fmt.Sprintf("Cache-Control: max-age=%d", ttl))
+	if msg.CacheTTL > 0 {
+		opts.Headers = append(opts.Headers, fmt.Sprintf("Cache-Control: max-age=%d", msg.CacheTTL))
 	}
-
-	if headers, ok := msg["headers"].(map[string]any); ok {
-		for name, value := range headers {
-			if text, ok := value.(string); ok && text != "" {
-				opts.Headers = append(opts.Headers, name+": "+text)
-			}
+	for name, value := range msg.Headers {
+		if value != "" {
+			opts.Headers = append(opts.Headers, name+": "+value)
 		}
 	}
-
-	bodyVal := msg["body"]
-	if bodyVal != nil {
-		opts.ContentType, _ = msg["content_type"].(string)
+	if msg.Body != nil {
+		opts.ContentType = msg.ContentType
 	}
-
-	// no_paginate is accepted per protocol. Plugin http-requests are currently
-	// always single-shot; when auto-pagination is added for delegated requests,
-	// no_paginate:true will suppress it.
 
 	reqCtx := context.Background()
-	if timeoutSec := msgInt(msg, "timeout"); timeoutSec > 0 {
+	if msg.Timeout > 0 {
 		var cancel context.CancelFunc
-		reqCtx, cancel = context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+		reqCtx, cancel = context.WithTimeout(context.Background(), time.Duration(msg.Timeout)*time.Second)
 		defer cancel()
 	}
-	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, nil, false)
+
+	prepared, err := c.prepareRequest(msg.URI, profileName, opts, msg.Body, nil, false)
 	if err != nil {
-		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return writer.WriteMessage(reply)
+		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
+			Type:  pluginwire.MsgTypeHTTPResponse,
+			Error: err.Error(),
+		})
 	}
 
 	httpResp, err := c.sendPreparedRequest(reqCtx, method, prepared)
 	if err != nil {
-		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return writer.WriteMessage(reply)
+		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
+			Type:  pluginwire.MsgTypeHTTPResponse,
+			Error: err.Error(),
+		})
 	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
-		reply := map[string]any{"type": "http-response", "error": err.Error()}
-		return writer.WriteMessage(reply)
+		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
+			Type:  pluginwire.MsgTypeHTTPResponse,
+			Error: err.Error(),
+		})
 	}
 
 	body := resp.Body
-	if filterExpr, _ := msg["filter"].(string); filterExpr != "" {
+	if msg.Filter != "" {
 		doc := map[string]any{
 			"proto":   resp.Proto,
 			"status":  resp.Status,
@@ -330,110 +337,100 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 			"links":   resp.Links,
 			"body":    resp.Body,
 		}
-		filtered, ferr := filter.Apply(filterExpr, doc, filter.LangAuto)
+		filtered, ferr := filter.Apply(msg.Filter, doc, filter.LangAuto)
 		if ferr != nil {
-			reply := map[string]any{"type": "http-response", "error": ferr.Error()}
-			return writer.WriteMessage(reply)
+			return writer.WriteMessage(pluginwire.HTTPResponseMsg{
+				Type:  pluginwire.MsgTypeHTTPResponse,
+				Error: ferr.Error(),
+			})
 		}
 		body = filtered
 	}
 
-	reply := map[string]any{
-		"type":    "http-response",
-		"status":  resp.Status,
-		"headers": resp.Headers,
-		"body":    body,
-	}
-	return writer.WriteMessage(reply)
+	return writer.WriteMessage(pluginwire.HTTPResponseMsg{
+		Type:    pluginwire.MsgTypeHTTPResponse,
+		Status:  resp.Status,
+		Headers: resp.Headers,
+		Body:    body,
+	})
 }
 
-func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg map[string]any) error {
-	status := msgInt(msg, "status")
+func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg pluginwire.ResponseMsg) error {
+	status := msg.Status
 	if status == 0 {
 		status = 200
 	}
 	resp := &output.Response{
-		Proto:  "HTTP/1.1",
-		Status: status,
-		Body:   msg["body"],
-	}
-	if h, ok := msg["headers"].(map[string]any); ok {
-		resp.Headers = make(map[string]string, len(h))
-		for k, v := range h {
-			if s, ok := v.(string); ok {
-				resp.Headers[k] = s
-			}
-		}
+		Proto:   "HTTP/1.1",
+		Status:  status,
+		Headers: msg.Headers,
+		Body:    msg.Body,
 	}
 	return c.formatResponse(cmd, resp)
 }
 
-func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg map[string]any) error {
-	apiName, _ := msg["name"].(string)
-	if apiName == "" {
-		return writer.WriteMessage(map[string]any{
-			"type":  "api-spec-response",
-			"error": "missing api name",
+func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {
+	if msg.Name == "" {
+		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+			Type:  pluginwire.MsgTypeAPISpecResponse,
+			Error: "missing api name",
 		})
 	}
-	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[apiName] == nil {
-		return writer.WriteMessage(map[string]any{
-			"type":  "api-spec-response",
-			"name":  apiName,
-			"error": fmt.Sprintf("unknown API %q", apiName),
+	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[msg.Name] == nil {
+		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+			Type:  pluginwire.MsgTypeAPISpecResponse,
+			Name:  msg.Name,
+			Error: fmt.Sprintf("unknown API %q", msg.Name),
 		})
 	}
 
-	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, c.loaders)
+	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, c.loaders)
 	if err != nil {
-		return writer.WriteMessage(map[string]any{
-			"type":  "api-spec-response",
-			"name":  apiName,
-			"error": err.Error(),
+		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+			Type:  pluginwire.MsgTypeAPISpecResponse,
+			Name:  msg.Name,
+			Error: err.Error(),
 		})
 	}
 	if s == nil {
-		s, err = c.discoverSpec(context.Background(), apiName)
+		s, err = c.discoverSpec(context.Background(), msg.Name)
 		if err != nil {
-			return writer.WriteMessage(map[string]any{
-				"type":  "api-spec-response",
-				"name":  apiName,
-				"error": err.Error(),
+			return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+				Type:  pluginwire.MsgTypeAPISpecResponse,
+				Name:  msg.Name,
+				Error: err.Error(),
 			})
 		}
 	}
 	if s == nil || len(s.Raw) == 0 {
-		return writer.WriteMessage(map[string]any{
-			"type":  "api-spec-response",
-			"name":  apiName,
-			"error": fmt.Sprintf("no spec available for %q", apiName),
+		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+			Type:  pluginwire.MsgTypeAPISpecResponse,
+			Name:  msg.Name,
+			Error: fmt.Sprintf("no spec available for %q", msg.Name),
 		})
 	}
 
-	return writer.WriteMessage(map[string]any{
-		"type":         "api-spec-response",
-		"name":         apiName,
-		"content_type": s.ContentType,
-		"raw":          s.Raw,
+	return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+		Type:        pluginwire.MsgTypeAPISpecResponse,
+		Name:        msg.Name,
+		ContentType: s.ContentType,
+		Raw:         s.Raw,
 	})
 }
 
-func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg map[string]any) error {
-	message, _ := msg["message"].(string)
-	hidden, _ := msg["hidden"].(bool)
-	fmt.Fprint(c.Stderr, message)
+func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg pluginwire.PromptMsg) error {
+	fmt.Fprint(c.Stderr, msg.Message)
 
 	var value string
 	var readErr error
 
-	if hidden {
+	if msg.Hidden {
 		if f, ok := c.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 			var raw []byte
 			raw, readErr = term.ReadPassword(int(f.Fd()))
-			fmt.Fprintln(c.Stderr) // restore cursor to new line
+			fmt.Fprintln(c.Stderr)
 			value = string(raw)
 		} else {
-			// Non-TTY (pipe/test): read one line without special echo control.
 			scanner := bufio.NewScanner(c.Stdin)
 			if scanner.Scan() {
 				value = strings.TrimRight(scanner.Text(), "\r\n")
@@ -457,75 +454,68 @@ func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg map[string]any
 	}
 
 	if readErr != nil {
-		return writer.WriteMessage(map[string]any{
-			"type":  "prompt-response",
-			"error": readErr.Error(),
+		return writer.WriteMessage(pluginwire.PromptResponseMsg{
+			Type:  pluginwire.MsgTypePromptResponse,
+			Error: readErr.Error(),
 		})
 	}
-	return writer.WriteMessage(map[string]any{
-		"type":  "prompt-response",
-		"value": value,
+	return writer.WriteMessage(pluginwire.PromptResponseMsg{
+		Type:  pluginwire.MsgTypePromptResponse,
+		Value: value,
 	})
 }
 
-func (c *CLI) handlePluginConfirm(writer *commandPluginWriter, msg map[string]any) error {
-	message, _ := msg["message"].(string)
-	fmt.Fprint(c.Stderr, message)
+func (c *CLI) handlePluginConfirm(writer *commandPluginWriter, msg pluginwire.ConfirmMsg) error {
+	fmt.Fprint(c.Stderr, msg.Message)
 
 	scanner := bufio.NewScanner(c.Stdin)
 	var line string
 	if scanner.Scan() {
 		line = strings.TrimSpace(strings.ToLower(scanner.Text()))
 	} else if err := scanner.Err(); err != nil {
-		return writer.WriteMessage(map[string]any{
-			"type":  "confirm-response",
-			"error": err.Error(),
+		return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
+			Type:  pluginwire.MsgTypeConfirmResponse,
+			Error: err.Error(),
 		})
 	}
 	confirmed := line == "y" || line == "yes"
-	return writer.WriteMessage(map[string]any{
-		"type":  "confirm-response",
-		"value": confirmed,
+	return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
+		Type:  pluginwire.MsgTypeConfirmResponse,
+		Value: confirmed,
 	})
 }
 
-func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg map[string]any) error {
-	apiName, _ := msg["api"].(string)
-	profileName, _ := msg["profile"].(string)
-	pluginName, _ := msg["plugin"].(string)
+func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg pluginwire.ConfigReadMsg) error {
+	reply := pluginwire.ConfigReadResponseMsg{Type: pluginwire.MsgTypeConfigReadResponse}
 
-	reply := map[string]any{"type": "config-read-response"}
-
-	// Return plugin-specific config when requested.
-	if pluginName != "" && c.cfg != nil && c.cfg.Plugins != nil {
-		raw, ok := c.cfg.Plugins[pluginName]
-		if ok {
+	if msg.Plugin != "" && c.cfg != nil && c.cfg.Plugins != nil {
+		if raw, ok := c.cfg.Plugins[msg.Plugin]; ok {
 			var pluginCfg any
 			if err := json.Unmarshal(raw, &pluginCfg); err == nil {
-				reply["plugin_config"] = pluginCfg
+				reply.PluginConfig = pluginCfg
 			}
 		}
 	}
 
-	if c.cfg == nil || apiName == "" {
+	if c.cfg == nil || msg.API == "" {
 		return writer.WriteMessage(reply)
 	}
-	apiCfg := c.cfg.APIs[apiName]
+	apiCfg := c.cfg.APIs[msg.API]
 	if apiCfg == nil {
-		reply["error"] = fmt.Sprintf("unknown API %q", apiName)
+		reply.Error = fmt.Sprintf("unknown API %q", msg.API)
 		return writer.WriteMessage(reply)
 	}
 	baseURL := apiCfg.BaseURL
-	if profileName != "" {
-		if prof := apiCfg.Profiles[profileName]; prof != nil {
+	if msg.Profile != "" {
+		if prof := apiCfg.Profiles[msg.Profile]; prof != nil {
 			if prof.BaseURL != "" {
 				baseURL = prof.BaseURL
 			}
-			reply["headers"] = prof.Headers
-			reply["query"] = prof.Query
+			reply.Headers = prof.Headers
+			reply.Query = prof.Query
 		}
 	}
-	reply["base_url"] = baseURL
+	reply.BaseURL = baseURL
 	return writer.WriteMessage(reply)
 }
 
@@ -538,17 +528,16 @@ func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter) error {
 		}
 		sort.Strings(names)
 	}
-	return writer.WriteMessage(map[string]any{
-		"type": "list-apis-response",
-		"apis": names,
+	return writer.WriteMessage(pluginwire.ListAPIsResponseMsg{
+		Type: pluginwire.MsgTypeListAPIsResponse,
+		APIs: names,
 	})
 }
 
-func (c *CLI) handlePluginListProfiles(writer *commandPluginWriter, msg map[string]any) error {
-	apiName, _ := msg["api"].(string)
+func (c *CLI) handlePluginListProfiles(writer *commandPluginWriter, msg pluginwire.ListProfilesMsg) error {
 	var profileNames []string
-	if c.cfg != nil && apiName != "" {
-		if apiCfg := c.cfg.APIs[apiName]; apiCfg != nil {
+	if c.cfg != nil && msg.API != "" {
+		if apiCfg := c.cfg.APIs[msg.API]; apiCfg != nil {
 			profileNames = make([]string, 0, len(apiCfg.Profiles))
 			for name := range apiCfg.Profiles {
 				profileNames = append(profileNames, name)
@@ -556,29 +545,11 @@ func (c *CLI) handlePluginListProfiles(writer *commandPluginWriter, msg map[stri
 			sort.Strings(profileNames)
 		}
 	}
-	return writer.WriteMessage(map[string]any{
-		"type":     "list-profiles-response",
-		"api":      apiName,
-		"profiles": profileNames,
+	return writer.WriteMessage(pluginwire.ListProfilesResponseMsg{
+		Type:     pluginwire.MsgTypeListProfilesResponse,
+		API:      msg.API,
+		Profiles: profileNames,
 	})
-}
-
-func msgInt(msg map[string]any, key string) int {
-	v, ok := msg[key]
-	if !ok {
-		return 0
-	}
-	switch vt := v.(type) {
-	case int64:
-		return int(vt)
-	case uint64:
-		return int(vt)
-	case float64:
-		return int(vt)
-	case int:
-		return vt
-	}
-	return 0
 }
 
 func isEOFLike(err error) bool {
