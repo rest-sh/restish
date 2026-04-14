@@ -3,7 +3,7 @@
 //
 // Restish supports three plugin styles:
 //
-//   - hook plugins for one-shot auth, middleware, loader, and formatter hooks
+//   - hook plugins for auth, middleware, loader, and formatter hooks
 //   - command plugins for top-level workflow commands
 //   - TLS signer plugins for external mTLS signing
 //
@@ -50,8 +50,8 @@
 //
 // # Hook-plugin payload shapes
 //
-// Hook plugins receive one CBOR map and, except for formatter hooks, return
-// one CBOR reply map.
+// Most hook plugins receive one CBOR map and, except for formatter hooks,
+// return one CBOR reply map.
 //
 //   - auth:
 //     request contains api_name, profile_name, params, and request metadata
@@ -66,8 +66,12 @@
 //     request contains content_type and raw body bytes
 //     reply returns an OpenAPI document in body plus optional content_type
 //   - formatter:
-//     request contains format, color, and normalized response fields
-//     plugin writes final formatted bytes directly to stdout
+//     plugins receive a stream of formatter messages (`start`, `item`, `end`)
+//     on stdin and write final formatted bytes directly to stdout. For ordinary
+//     full-response renders the host usually sends `start` with the full
+//     normalized response body followed by `end`. For paginated or event-stream
+//     output the host sends `start`, then one or more `item` messages, then
+//     `end`.
 //
 // See docs/plugin-quickstart.md for the fastest practical path to a working
 // plugin, and docs/design/019-hook-plugins.md plus docs/design/020-command-plugins.md

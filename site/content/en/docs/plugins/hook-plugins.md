@@ -6,7 +6,8 @@ description: Learn what hook plugins can do and where they fit in the Restish re
 ---
 
 Hook plugins are short-lived extensions that receive a request payload and
-return a response payload.
+return a response payload. Formatter hooks are slightly different: they receive
+a short formatter session and write raw formatted bytes to stdout.
 
 Typical uses:
 
@@ -18,12 +19,19 @@ Typical uses:
 
 ## Lifecycle
 
-Hook plugins are designed for one-shot work:
+Most hook plugins are designed for one-shot work:
 
 1. Restish starts the plugin
 2. Restish writes one CBOR request message to stdin
 3. the plugin writes one reply or formatter output
 4. the plugin exits
+
+Formatter plugins follow the same overall shape, but stdin carries a short
+sequence of `formatter` messages:
+
+1. `event: "start"`
+2. zero or more `event: "item"`
+3. `event: "end"`
 
 ## When To Choose A Hook Plugin
 

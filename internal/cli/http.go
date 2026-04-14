@@ -244,15 +244,143 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return nil
 	}
 
-	// If the filter selected a sub-value (not the full response), wrap it in
-	// a minimal Response so formatters have something to work with.
-	var outResp *output.Response
-	if filterExpr == "@" {
-		outResp = resp
-	} else {
-		outResp = &output.Response{Body: filtered}
+	if filterExpr != "@" {
+		return c.renderValue(cmd, filtered)
 	}
 
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	if err != nil {
+		return err
+	}
+
+	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+}
+
+// renderValue writes a filtered/subselected value using the same formatter
+// selection rules as normal responses, but without HTTP status/header preamble.
+func (c *CLI) renderValue(cmd *cobra.Command, value any) error {
+	renderer, err := c.newValueRenderer(cmd, nil)
+	if err != nil {
+		return err
+	}
+	defer renderer.Close()
+	return renderer.Render(value)
+}
+
+type valueRenderer interface {
+	Render(value any) error
+	Close() error
+}
+
+type valueRendererFunc struct {
+	render func(value any) error
+}
+
+func (r valueRendererFunc) Render(value any) error {
+	return r.render(value)
+}
+
+func (r valueRendererFunc) Close() error {
+	return nil
+}
+
+type valueStreamRenderer struct {
+	stream output.ValueStream
+}
+
+func (r valueStreamRenderer) Render(value any) error {
+	return r.stream.WriteValue(value)
+}
+
+func (r valueStreamRenderer) Close() error {
+	return r.stream.Close()
+}
+
+func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (valueRenderer, error) {
+	if base == nil {
+		base = &output.Response{}
+	}
+
+	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+		return valueRendererFunc{render: func(any) error { return nil }}, nil
+	}
+
+	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
+	if rawMode {
+		return valueRendererFunc{render: c.writeRaw}, nil
+	}
+
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	tty := output.IsTerminal(c.Stdout)
+	color := output.ColorEnabled(c.Stdout)
+
+	// Body/sub-value rendering should stay machine-friendly by default on
+	// non-TTY, even though the default formatter there is `raw`.
+	if !tty && fmtName == "" {
+		return valueRendererFunc{render: func(value any) error {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			encoded = append(encoded, '\n')
+			_, err = c.Stdout.Write(encoded)
+			return err
+		}}, nil
+	}
+
+	// Readable output for sub-values omits the synthetic HTTP preamble and just
+	// pretty-prints the value.
+	if fmtName == "readable" || (fmtName == "" && tty) {
+		return valueRendererFunc{render: func(value any) error {
+			encoded, err := json.MarshalIndent(value, "", "  ")
+			if err != nil {
+				return err
+			}
+			encoded = append(encoded, '\n')
+			if color {
+				highlighted, err := output.HighlightWithLexer(output.ReadableLexer, encoded)
+				if err == nil {
+					_, err = c.Stdout.Write(highlighted)
+					return err
+				}
+			}
+			_, err = c.Stdout.Write(encoded)
+			return err
+		}}, nil
+	}
+
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	if err != nil {
+		return nil, err
+	}
+	if streamFormatter, ok := formatter.(output.ValueStreamFormatter); ok {
+		stream, err := streamFormatter.StartValueStream(c.Stdout, base, color)
+		if err != nil {
+			return nil, err
+		}
+		if stream != nil {
+			return valueStreamRenderer{stream: stream}, nil
+		}
+	}
+	if valueFormatter, ok := formatter.(output.ValueFormatter); ok {
+		return valueRendererFunc{render: func(value any) error {
+			return valueFormatter.FormatValue(c.Stdout, value, color)
+		}}, nil
+	}
+
+	return valueRendererFunc{render: func(value any) error {
+		resp := &output.Response{
+			Proto:   base.Proto,
+			Status:  base.Status,
+			Headers: base.Headers,
+			Links:   base.Links,
+			Body:    value,
+		}
+		return formatter.Format(c.Stdout, resp, color)
+	}}, nil
+}
+
+func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
 	fmts := c.formatters
 	if fmts == nil {
 		fmts = output.DefaultFormatters()
@@ -277,22 +405,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	formatter, ok := output.Select(fmts, fmtName, tty)
 	if !ok {
-		return fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
+		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
-
-	// For non-TTY filtered output, use JSON formatter (not raw bytes) since
-	// the filtered value is a Go value, not the original wire bytes.
-	if !tty && fmtName == "" && filterExpr != "@" {
-		encoded, err := json.Marshal(filtered)
-		if err != nil {
-			return err
-		}
-		encoded = append(encoded, '\n')
-		_, err = c.Stdout.Write(encoded)
-		return err
-	}
-
-	return formatter.Format(c.Stdout, outResp, output.ColorEnabled(c.Stdout))
+	return formatter, nil
 }
 
 // writeRaw writes value to stdout as plain text (via filter.RawOutput),

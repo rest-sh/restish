@@ -34,10 +34,20 @@ func streamingContentType(ct string) string {
 
 // handleSSE reads a text/event-stream response body, emitting each event's
 // data to stdout as it arrives. Filter and output flags are applied per event.
-func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
+func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) {
 	defer resp.Body.Close()
 
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
+	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := renderer.Close(); retErr == nil && err != nil {
+			retErr = err
+		}
+	}()
+
 	scanner := bufio.NewScanner(resp.Body)
 	// Increase the max token size to 1 MiB to accommodate large SSE payloads.
 	// The default 64 KiB limit causes silent data loss on large events.
@@ -53,7 +63,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
 			// Blank line terminates an event.
 			if len(dataLines) > 0 {
 				data := strings.Join(dataLines, "\n")
-				if err := c.formatStreamItem(cmd, data); err != nil {
+				if err := c.formatStreamItem(cmd, renderer, data); err != nil {
 					return err
 				}
 				count++
@@ -80,7 +90,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
 	// Flush a final event if the stream ended without a trailing blank line.
 	if len(dataLines) > 0 && (maxEvents <= 0 || count < maxEvents) {
 		data := strings.Join(dataLines, "\n")
-		if err := c.formatStreamItem(cmd, data); err != nil {
+		if err := c.formatStreamItem(cmd, renderer, data); err != nil {
 			return err
 		}
 	}
@@ -95,10 +105,20 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) error {
 
 // handleNDJSON reads a newline-delimited JSON response body, emitting each
 // line to stdout as it arrives. Filter and output flags are applied per line.
-func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
+func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr error) {
 	defer resp.Body.Close()
 
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
+	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := renderer.Close(); retErr == nil && err != nil {
+			retErr = err
+		}
+	}()
+
 	scanner := bufio.NewScanner(resp.Body)
 	// Increase the max token size to 1 MiB to accommodate large NDJSON lines.
 	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
@@ -109,7 +129,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
 		if line == "" {
 			continue
 		}
-		if err := c.formatStreamItem(cmd, line); err != nil {
+		if err := c.formatStreamItem(cmd, renderer, line); err != nil {
 			return err
 		}
 		count++
@@ -126,10 +146,9 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) error {
 
 // formatStreamItem parses data as JSON (if possible), applies the -f filter,
 // and writes the result to stdout.
-func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
+func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
 	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
 	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
-	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
 
 	// Try to parse as JSON; fall back to string.
 	var item any = data
@@ -154,36 +173,26 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, data string) error {
 		result = filtered
 	}
 
-	if rawMode {
-		return c.writeRaw(result)
-	}
-
 	tty := output.IsTerminal(c.Stdout)
-	color := output.ColorEnabled(c.Stdout)
 	if fmtName == "readable" || (fmtName == "" && tty) {
 		if !parsedJSON {
 			return c.writeRaw(result)
 		}
-		b, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return err
-		}
-		b = append(b, '\n')
-		if color {
-			highlighted, err := output.HighlightWithLexer(output.ReadableLexer, b)
-			if err == nil {
-				_, err = c.Stdout.Write(highlighted)
-				return err
-			}
-		}
-		_, err = c.Stdout.Write(b)
-		return err
 	}
 
-	b, err := json.Marshal(result)
-	if err != nil {
-		return err
+	return renderer.Render(result)
+}
+
+func streamBaseResponse(resp *http.Response) *output.Response {
+	headers := make(map[string]string, len(resp.Header))
+	for k, vals := range resp.Header {
+		if len(vals) > 0 {
+			headers[k] = vals[0]
+		}
 	}
-	fmt.Fprintf(c.Stdout, "%s\n", b)
-	return nil
+	return &output.Response{
+		Proto:   resp.Proto,
+		Status:  resp.StatusCode,
+		Headers: headers,
+	}
 }

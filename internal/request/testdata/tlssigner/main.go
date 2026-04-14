@@ -20,7 +20,7 @@ func main() {
 				"name":                "test-tls-signer",
 				"version":             "1.0.0",
 				"description":         "Test TLS signer plugin",
-				"restish_api_version": 1,
+				"restish_api_version": 2,
 				"hooks":               []string{"tls-signer"},
 			})
 			if err != nil {

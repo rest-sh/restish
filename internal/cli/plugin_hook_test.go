@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -266,6 +267,74 @@ func TestCSVFormatterPlugin(t *testing.T) {
 	}, "\n")
 	if got := out.String(); got != want {
 		t.Fatalf("csv output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestCSVFormatterPluginPagination(t *testing.T) {
+	installCSVPlugin(t)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		pages := map[string]struct {
+			body string
+			next string
+		}{
+			"":  {`[{"id":1,"name":"alpha"}]`, "https://api.example.com/items?page=2"},
+			"2": {`[{"id":2,"name":"beta"}]`, ""},
+		}
+		p := pages[r.URL.Query().Get("page")]
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if p.next != "" {
+			headers.Set("Link", `<`+p.next+`>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(p.body)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "csv"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"id,name",
+		"1,alpha",
+		"2,beta",
+		"",
+	}, "\n")
+	if got := out.String(); got != want {
+		t.Fatalf("csv paginated output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestCSVFormatterPluginNDJSONStream(t *testing.T) {
+	installCSVPlugin(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"id":1,"name":"alpha"}`)
+		fmt.Fprintln(w, `{"id":2,"name":"beta"}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL, "-o", "csv"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"id,name",
+		"1,alpha",
+		"2,beta",
+		"",
+	}, "\n")
+	if got := out.String(); got != want {
+		t.Fatalf("csv stream output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
 

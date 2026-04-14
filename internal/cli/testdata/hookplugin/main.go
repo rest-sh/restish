@@ -40,7 +40,7 @@ var manifest = plugin.Manifest{
 	Name:               "hookplugin",
 	Version:            "1.0.0",
 	Description:        "Test hook plugin",
-	RestishAPIVersion:  1,
+	RestishAPIVersion:  2,
 	Hooks:              []string{"auth", "request-middleware", "response-middleware", "formatter", "loader"},
 	FormatterNames:     []string{"hookformat"},
 	LoaderContentTypes: []string{"application/x-hook-api"},
@@ -51,8 +51,8 @@ func main() {
 		return
 	}
 
-	// Hook plugins receive exactly one message on stdin.
-	raw, err := plugin.NewDecoder(os.Stdin).ReadRaw()
+	dec := plugin.NewDecoder(os.Stdin)
+	raw, err := dec.ReadRaw()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "read:", err)
 		os.Exit(1)
@@ -115,7 +115,20 @@ func main() {
 		}
 
 	case "formatter":
-		fmt.Fprint(os.Stdout, "HOOK FORMATTED\n")
+		var first plugin.FormatterRequest
+		_ = plugin.DecMode.Unmarshal(raw, &first)
+		for {
+			if first.Event == "start" {
+				fmt.Fprint(os.Stdout, "HOOK FORMATTED\n")
+			}
+			if first.Event == "end" {
+				break
+			}
+			if err := dec.ReadMessage(&first); err != nil {
+				fmt.Fprintln(os.Stderr, "read:", err)
+				os.Exit(1)
+			}
+		}
 
 	case "loader":
 		out := map[string]any{

@@ -30,7 +30,7 @@ The manifest may be returned as CBOR or JSON.
   "name": "hello-format",
   "version": "0.1.0",
   "description": "Example formatter plugin",
-  "restish_api_version": 1,
+  "restish_api_version": 2,
   "hooks": ["formatter"],
   "formatter_names": ["hello"]
 }

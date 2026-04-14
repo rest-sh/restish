@@ -2,8 +2,8 @@ package cli_test
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -186,6 +186,33 @@ func TestSSEReadableOutputPlainTextStaysPlain(t *testing.T) {
 	got := out.String()
 	if got != "plain text event\n" {
 		t.Fatalf("expected plain text stream output, got %q", got)
+	}
+}
+
+func TestNDJSONYAMLOutputUsesFormatter(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"id":1}`)
+		fmt.Fprintln(w, `{"id":2}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "yaml"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{"id: 1", "id: 2"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, `{"id":1}`) || strings.Contains(got, `"id": 1`) {
+		t.Fatalf("expected stream output to use YAML formatting, got:\n%s", got)
 	}
 }
 

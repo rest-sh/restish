@@ -16,7 +16,7 @@ func main() {
 		Name:              "mcp",
 		Version:           "1.0.0",
 		Description:       "Expose registered APIs as MCP tools",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
 	}, []plugin.CommandDecl{
 		{

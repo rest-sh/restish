@@ -12,6 +12,26 @@ type Formatter interface {
 	Format(w io.Writer, resp *Response, color bool) error
 }
 
+// ValueFormatter renders a body/sub-value without implying that it is a full
+// HTTP response. This is used for filtered values, paginated item streams, and
+// event streams where status/header preambles would be misleading.
+type ValueFormatter interface {
+	FormatValue(w io.Writer, value any, color bool) error
+}
+
+// ValueStream receives a sequence of body/sub-values for a single logical
+// output session.
+type ValueStream interface {
+	WriteValue(value any) error
+	Close() error
+}
+
+// ValueStreamFormatter can hold formatter-specific state across a stream of
+// body/sub-values, such as writing one CSV header followed by many rows.
+type ValueStreamFormatter interface {
+	StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error)
+}
+
 // DefaultFormatters returns the built-in set of formatters.
 // The "table" entry here uses default (zero-value) column settings;
 // callers that need --rsh-columns / --rsh-sort-by should replace it.

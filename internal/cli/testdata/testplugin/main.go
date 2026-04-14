@@ -16,7 +16,7 @@ func main() {
 				"name":                "testplugin",
 				"version":             "1.0.0",
 				"description":         "Test plugin for unit tests",
-				"restish_api_version": 1,
+				"restish_api_version": 2,
 				"hooks":               []string{"command"},
 			}
 			data, err := cbor.Marshal(manifest)

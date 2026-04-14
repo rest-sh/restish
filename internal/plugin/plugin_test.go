@@ -125,7 +125,7 @@ func TestLoadManifest_MissingName(t *testing.T) {
 		t.Skip("shell script tests not supported on Windows")
 	}
 	dir := t.TempDir()
-	m := Manifest{RestishAPIVersion: 1} // no name
+	m := Manifest{RestishAPIVersion: 2} // no name
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	p := writeScript(t, dir, "restish-noname", script)
 

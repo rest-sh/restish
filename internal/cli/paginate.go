@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -48,8 +47,22 @@ func (c *CLI) runPagination(
 	pagCfg *config.PaginationConfig,
 	collect bool,
 	maxPages, maxItems int,
-) error {
+) (retErr error) {
 	var allItems []any
+	var renderer valueRenderer
+
+	if !collect {
+		var err error
+		renderer, err = c.newValueRenderer(cmd, firstResp)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := renderer.Close(); retErr == nil && err != nil {
+				retErr = err
+			}
+		}()
+	}
 
 	// Process first page.
 	items, filterErr := pageItems(firstResp.Body, pagCfg)
@@ -60,7 +73,7 @@ func (c *CLI) runPagination(
 	if collect {
 		allItems = append(allItems, items...)
 	} else {
-		if err := c.streamItems(items); err != nil {
+		if err := c.streamItems(renderer, items); err != nil {
 			return err
 		}
 	}
@@ -100,7 +113,7 @@ func (c *CLI) runPagination(
 		if collect {
 			allItems = append(allItems, items...)
 		} else {
-			if err := c.streamItems(items); err != nil {
+			if err := c.streamItems(renderer, items); err != nil {
 				return err
 			}
 		}
@@ -128,14 +141,12 @@ func (c *CLI) runPagination(
 	return nil
 }
 
-// streamItems JSON-encodes each item and writes it to stdout (one per line).
-func (c *CLI) streamItems(items []any) error {
+// streamItems renders each item using the shared body/sub-value output path.
+func (c *CLI) streamItems(renderer valueRenderer, items []any) error {
 	for _, item := range items {
-		b, err := json.Marshal(item)
-		if err != nil {
+		if err := renderer.Render(item); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.Stdout, "%s\n", b)
 	}
 	return nil
 }

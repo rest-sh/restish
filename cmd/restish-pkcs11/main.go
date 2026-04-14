@@ -19,7 +19,7 @@ func main() {
 		Name:              "pkcs11",
 		Version:           "1.0.0",
 		Description:       "TLS signer plugin for PKCS#11 devices like YubiKey",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"tls-signer"},
 	}, nil) {
 		return

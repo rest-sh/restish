@@ -21,7 +21,7 @@ import (
 // CurrentPluginAPIVersion is the highest plugin protocol version this build of
 // Restish understands. Plugins that declare a higher version may use protocol
 // features that this host cannot handle; a warning is emitted during discovery.
-const CurrentPluginAPIVersion = 1
+const CurrentPluginAPIVersion = 2
 
 // errorWriter receives plugin-discovery warnings. Defaults to os.Stderr;
 // tests may redirect it to suppress or capture output.

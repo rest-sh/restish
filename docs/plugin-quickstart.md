@@ -50,8 +50,8 @@ The helpers you will use most often are:
 
 ## Smallest Formatter Plugin
 
-Formatter plugins are a good first plugin because they are one-shot and do not
-need a reply envelope on stdout.
+Formatter plugins are a good first plugin because they only need to read
+formatter messages from stdin and write final bytes to stdout.
 
 ```go
 package main
@@ -63,20 +63,12 @@ import (
 	"github.com/danielgtaylor/restish/v2/plugin"
 )
 
-type formatterRequest struct {
-	Type     string `cbor:"type"`
-	Format   string `cbor:"format"`
-	Response struct {
-		Body any `cbor:"body"`
-	} `cbor:"response"`
-}
-
 func main() {
 	manifest := plugin.Manifest{
 		Name:              "hello-format",
 		Version:           "0.1.0",
 		Description:       "Example formatter plugin",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"formatter"},
 		FormatterNames:    []string{"hello"},
 	}
@@ -84,13 +76,28 @@ func main() {
 		return
 	}
 
-	var req formatterRequest
-	if err := plugin.ReadMessage(os.Stdin, &req); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	var req plugin.FormatterRequest
+	if err := dec.ReadMessage(&req); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+	for {
+		switch req.Event {
+		case "start":
+			if req.Response.Body != nil {
+				fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+			}
+		case "item":
+			fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+		case "end":
+			return
+		}
+		if err := dec.ReadMessage(&req); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 }
 ```
 
@@ -99,6 +106,17 @@ Build it as `restish-hello-format`, put it on `PATH`, then run:
 ```bash
 restish get https://httpbin.org/json -o hello
 ```
+
+The same `formatter` message type is used for ordinary responses, pagination,
+and event streams. The sequence is always:
+
+1. `event: "start"`
+2. zero or more `event: "item"`
+3. `event: "end"`
+
+For a normal non-streaming response, Restish usually includes the full body on
+the `start` message. The CSV plugin in `cmd/restish-csv/` is the reference
+implementation for a stateful formatter.
 
 ## Smallest Command Plugin
 
@@ -115,7 +133,7 @@ func main() {
 		Name:              "hello-cmd",
 		Version:           "0.1.0",
 		Description:       "Example command plugin",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
 	}
 	commands := []plugin.CommandDecl{
@@ -184,7 +202,9 @@ These are the best examples in the repo:
   `plugin.ReadMessage` for one-shot hook plugin reads; for command and
   TLS-signer plugins that loop over messages, create a `plugin.NewDecoder` once
   and call `ReadMessage` on it throughout.
-- Formatter plugins write final bytes to stdout directly after reading the
-  request; they do not send a CBOR reply.
+- Formatter plugins write final bytes to stdout directly; they do not send a
+  CBOR reply envelope.
+- Formatter plugins receive a sequence of `formatter` messages with
+  `start`/`item`/`end` events, not a single one-shot request.
 - If you start a subprocess or long-lived goroutine inside a plugin, make sure
   it exits cleanly when stdin closes.

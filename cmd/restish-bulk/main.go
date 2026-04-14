@@ -13,7 +13,7 @@ func main() {
 			Name:              "bulk",
 			Version:           "1.0.0",
 			Description:       "Git-like bulk resource management for API collections",
-			RestishAPIVersion: 1,
+			RestishAPIVersion: 2,
 			Hooks:             []string{"command"},
 		},
 		[]pluginwire.CommandDecl{

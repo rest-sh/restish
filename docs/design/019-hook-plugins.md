@@ -2,9 +2,13 @@
 
 ## Summary
 
-Hook plugins are short-lived subprocesses that handle a single extension point
-per invocation. Restish writes one CBOR data item to the plugin's stdin, reads
-either one CBOR reply or raw formatter output, and then the plugin exits.
+Hook plugins are usually short-lived subprocesses that handle a single
+extension point per invocation. Restish writes one CBOR data item to the
+plugin's stdin, reads either one CBOR reply or raw formatter output, and then
+the plugin exits.
+
+Formatter plugins are the one exception: they run as a short formatter session
+so they can maintain output state across paginated and event-stream renders.
 
 This model is used for:
 
@@ -25,12 +29,21 @@ need to own an entire command lifecycle. Typical examples include:
 - teaching Restish about a new API description content type
 - adding a new output format
 
-Those use cases should stay simple to implement and safe to reason about. They
-do not need a persistent session or multi-message protocol.
+Those use cases should stay simple to implement and safe to reason about. Most
+of them do not need a persistent session or multi-message protocol.
+
+Formatter plugins turned out to be the boundary case. One-shot formatter hooks
+work for ordinary responses, but they break down for outputs such as CSV when
+Restish is streaming items from pagination or NDJSON/SSE:
+
+- the formatter may need to emit a header once, then many records
+- the host should not have to buffer the entire stream just to satisfy a plugin
+- one-shot formatter invocations per item create inconsistent behavior between
+  collected and streamed output
 
 ## Design
 
-The hook-plugin contract is intentionally one-shot:
+The default hook-plugin contract is intentionally one-shot:
 
 1. Restish selects discovered plugins whose manifest declares a hook.
 2. It builds a hook-specific input message.
@@ -112,18 +125,40 @@ the system.
 Formatter plugins declare `formatter_names` in the manifest. Each declared name
 becomes available through `-o <name>`.
 
-Formatter hooks are slightly different from the other hook types: Restish still
-sends a CBOR data item on stdin, but stdout is treated as raw formatted bytes
-rather than a CBOR reply.
+Formatter hooks are slightly different from the other hook types because stdout
+is treated as raw formatted bytes rather than a CBOR reply.
 
-The input contains:
+### Formatter Hook Session
 
-- the requested format name
-- whether color is enabled
-- the normalized response fields
+Formatter plugins receive a stream of `formatter` messages on stdin. The host
+starts one plugin process, then sends:
 
-This lets formatter plugins integrate cleanly with the existing response
-normalization layer without forcing them to understand `*http.Response`.
+1. `formatter` with `event: "start"`
+2. zero or more `formatter` messages with `event: "item"`
+3. one final `formatter` message with `event: "end"`
+
+The `start` message carries response metadata (`proto`, `status`, `headers`,
+`links`) and may also include a full `body` for ordinary non-streaming
+responses.
+
+Each `item` message carries one body/sub-value to render. This is what lets the
+same formatter handle:
+
+- a normal one-shot body by reading `start.response.body`
+- paginated output by rendering each `item`
+- NDJSON/SSE output by rendering each `item`
+
+The plugin writes raw formatted bytes to stdout as values arrive and exits after
+the `end` message or EOF on stdin.
+
+This model is intentionally narrow:
+
+- only formatter hooks get the long-lived stream session
+- the host still owns pagination, filtering, and event parsing
+- plugins do not get to drive the HTTP loop or ask for additional pages
+
+The practical goal is to support stateful output modes such as CSV without
+forcing Restish to invent formatter-specific buffering behavior in the core.
 
 ## Alternatives Considered
 
@@ -136,6 +171,15 @@ loader, or auth hook to ship as a custom Restish build.
 
 That would expose too much of Restish's internal representation. Requiring
 loader plugins to hand back OpenAPI keeps the seam smaller and more stable.
+
+### Keep formatter hooks one-shot forever
+
+That keeps the protocol simpler, but it forces the host to choose between:
+
+- buffering entire paginated or streaming result sets before formatting, or
+- calling formatter plugins once per item and accepting inconsistent behavior
+
+Neither is a good fit for stateful formats such as CSV.
 
 ### Use raw JSON everywhere instead of CBOR
 
@@ -153,5 +197,5 @@ The current implementation is centered in:
 - `internal/cli/plugin_hook_test.go` for end-to-end examples of every hook type
 
 One detail worth preserving is that hook plugins are called from well-defined
-seams in the existing pipeline instead of becoming alternate pipelines. The
-goal is extension, not bypass.
+seams in the existing pipeline instead of becoming alternate pipelines. Even
+with streaming formatter sessions, the goal is extension, not bypass.

@@ -37,8 +37,8 @@ The helpers you will reach for most often are:
 
 ## Smallest Formatter Plugin
 
-Formatter plugins are a good first plugin because they are one-shot and do not
-need a reply envelope on stdout.
+Formatter plugins are a good first plugin because they only need to read
+formatter messages from stdin and write final bytes to stdout.
 
 ```go
 package main
@@ -50,20 +50,12 @@ import (
 	"github.com/danielgtaylor/restish/v2/plugin"
 )
 
-type formatterRequest struct {
-	Type     string `cbor:"type"`
-	Format   string `cbor:"format"`
-	Response struct {
-		Body any `cbor:"body"`
-	} `cbor:"response"`
-}
-
 func main() {
 	manifest := plugin.Manifest{
 		Name:              "hello-format",
 		Version:           "0.1.0",
 		Description:       "Example formatter plugin",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"formatter"},
 		FormatterNames:    []string{"hello"},
 	}
@@ -71,13 +63,28 @@ func main() {
 		return
 	}
 
-	var req formatterRequest
-	if err := plugin.ReadMessage(os.Stdin, &req); err != nil {
+	dec := plugin.NewDecoder(os.Stdin)
+	var req plugin.FormatterRequest
+	if err := dec.ReadMessage(&req); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+	for {
+		switch req.Event {
+		case "start":
+			if req.Response.Body != nil {
+				fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+			}
+		case "item":
+			fmt.Fprintf(os.Stdout, "hello: %#v\n", req.Response.Body)
+		case "end":
+			return
+		}
+		if err := dec.ReadMessage(&req); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 }
 ```
 
@@ -102,7 +109,7 @@ func main() {
 		Name:              "hello-cmd",
 		Version:           "0.1.0",
 		Description:       "Example command plugin",
-		RestishAPIVersion: 1,
+		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
 	}
 	commands := []plugin.CommandDecl{
@@ -162,7 +169,9 @@ before the reply comes back to your plugin.
   CBOR messages.
 - Command-plugin runtime messages are framed CBOR; use `plugin.ReadMessage` and
   `plugin.WriteMessage`.
-- Formatter plugins write final bytes to stdout directly after reading the
-  request; they do not send a CBOR reply envelope.
+- Formatter plugins write final bytes to stdout directly; they do not send a
+  CBOR reply envelope.
+- Formatter plugins receive a sequence of `formatter` messages with
+  `start`/`item`/`end` events, not a single one-shot request.
 - If you start a subprocess or long-lived goroutine inside a plugin, make sure
   it exits cleanly when stdin closes.

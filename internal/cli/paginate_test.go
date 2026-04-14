@@ -35,6 +35,30 @@ func useThreePageTransport(c *cli.CLI) {
 	})
 }
 
+func useThreePageObjectTransport(c *cli.CLI) {
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		pages := map[string]struct {
+			body string
+			next string
+		}{
+			"":  {`[{"id":1},{"id":2}]`, "https://api.example.com/items?page=2"},
+			"2": {`[{"id":3},{"id":4}]`, ""},
+		}
+		p := pages[r.URL.Query().Get("page")]
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if p.next != "" {
+			headers.Set("Link", `<`+p.next+`>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(p.body)),
+			Request:    r,
+		}, nil
+	})
+}
+
 // TestPaginationThreePages verifies that auto-pagination collects items from
 // all three pages when streaming.
 func TestPaginationThreePages(t *testing.T) {
@@ -121,6 +145,25 @@ func TestPaginationCollect(t *testing.T) {
 	got := strings.TrimSpace(out.String())
 	if got != "9" {
 		t.Errorf("expected length 9, got: %q", got)
+	}
+}
+
+func TestPaginationStreamingYAMLOutputUsesFormatter(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "yaml"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{"id: 1", "id: 2", "id: 3", "id: 4"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, `{"id":1}`) || strings.Contains(got, `"id": 1`) {
+		t.Fatalf("expected paginated stream output to use YAML formatting, got:\n%s", got)
 	}
 }
 

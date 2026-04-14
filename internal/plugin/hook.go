@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -39,12 +40,71 @@ func callHookRaw(path string, in any) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// CallFormatterHook spawns the plugin at path, writes in as a CBOR message to
-// stdin, and returns all bytes written to stdout as raw output.
-// This is used for formatter plugins whose output is the formatted data itself,
-// not a CBOR reply.
-func CallFormatterHook(path string, in any) ([]byte, error) {
-	return callHookRaw(path, in)
+// FormatterStream is a long-lived formatter plugin process that receives
+// sequential CBOR requests on stdin and writes formatted bytes directly to the
+// provided stdout writer.
+type FormatterStream struct {
+	path   string
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stderr bytes.Buffer
+}
+
+// StartFormatterStream starts a formatter plugin subprocess, wires its stdout
+// to w, sends the initial request, and returns a handle that can send
+// additional stream messages before Close waits for plugin exit.
+func StartFormatterStream(path string, w io.Writer, in any) (*FormatterStream, error) {
+	cmd := exec.Command(path)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("hook %s: stdin: %w", filepath.Base(path), err)
+	}
+
+	stream := &FormatterStream{
+		path:  path,
+		cmd:   cmd,
+		stdin: stdin,
+	}
+	cmd.Stdout = w
+	cmd.Stderr = &stream.stderr
+
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		return nil, fmt.Errorf("hook %s: start: %w", filepath.Base(path), err)
+	}
+
+	if err := pluginwire.WriteMessage(stdin, in); err != nil {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("hook %s: encode: %w", filepath.Base(path), err)
+	}
+
+	return stream, nil
+}
+
+// Send writes one additional CBOR message to the formatter plugin.
+func (s *FormatterStream) Send(in any) error {
+	if err := pluginwire.WriteMessage(s.stdin, in); err != nil {
+		return fmt.Errorf("hook %s: encode: %w", filepath.Base(s.path), err)
+	}
+	return nil
+}
+
+// Close closes plugin stdin and waits for it to exit.
+func (s *FormatterStream) Close() error {
+	if s.stdin != nil {
+		if err := s.stdin.Close(); err != nil {
+			return fmt.Errorf("hook %s: close stdin: %w", filepath.Base(s.path), err)
+		}
+		s.stdin = nil
+	}
+	if err := s.cmd.Wait(); err != nil {
+		if msg := strings.TrimSpace(s.stderr.String()); msg != "" {
+			return fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(s.path), err, msg)
+		}
+		return fmt.Errorf("hook %s: exec: %w", filepath.Base(s.path), err)
+	}
+	return nil
 }
 
 // CallHook spawns the plugin at path, writes in as a CBOR message to the

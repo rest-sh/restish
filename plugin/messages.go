@@ -172,6 +172,28 @@ type ConfirmResponseMsg struct {
 	Error string `cbor:"error,omitempty"`
 }
 
+// FormatterResponse is the normalized response shape forwarded to formatter
+// plugins. The host may include the full response body on "start" for a normal
+// one-shot render, or send body values incrementally on subsequent "item"
+// messages for paginated and event-stream output.
+type FormatterResponse struct {
+	Proto   string            `cbor:"proto,omitempty" json:"proto,omitempty"`
+	Status  int               `cbor:"status,omitempty" json:"status,omitempty"`
+	Headers map[string]string `cbor:"headers,omitempty" json:"headers,omitempty"`
+	Links   map[string]any    `cbor:"links,omitempty" json:"links,omitempty"`
+	Body    any               `cbor:"body,omitempty" json:"body,omitempty"`
+}
+
+// FormatterRequest is sent to formatter plugins. Type is always "formatter"
+// and Event is one of "start", "item", or "end".
+type FormatterRequest struct {
+	Type     string            `cbor:"type" json:"type"`
+	Format   string            `cbor:"format" json:"format"`
+	Color    bool              `cbor:"color,omitempty" json:"color,omitempty"`
+	Event    string            `cbor:"event" json:"event"`
+	Response FormatterResponse `cbor:"response" json:"response"`
+}
+
 // ResponseMsg asks the host to format and display a response using the
 // configured output formatter (same as a regular API response).
 type ResponseMsg struct {

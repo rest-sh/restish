@@ -11,8 +11,9 @@ frame wrapper.
 
 ## Hook Plugins
 
-Hook plugins are one-shot. Restish writes one request message and expects one
-reply, except for formatter plugins, which write raw formatted bytes to stdout.
+Most hook plugins are one-shot. Restish writes one request message and expects
+one reply, except for formatter plugins, which receive a short formatter
+session and write raw formatted bytes to stdout.
 
 ### Auth Hook
 
@@ -36,7 +37,17 @@ OpenAPI bytes or text.
 
 ### Formatter Hook
 
-Input includes the requested format name, color flag, and normalized response.
+Formatter plugins receive `formatter` messages with:
+
+- `format`
+- `color`
+- `event`: `start`, `item`, or `end`
+- normalized response metadata and/or body in `response`
+
+For ordinary non-streaming responses, Restish usually sends the full body on
+the `start` message and then `end`. For paginated or event-stream output,
+Restish sends `start`, one or more `item` messages, then `end`.
+
 Output is raw formatted bytes, not a CBOR reply envelope.
 
 ## Command Plugins

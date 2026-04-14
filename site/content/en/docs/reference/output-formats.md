@@ -123,6 +123,11 @@ restish https://api.rest.sh/example -f body.basics.profiles -r
 Formatter plugins can add new names to `-o <name>`. Those plugins receive the
 same normalized response document as built-in formatters.
 
+Plugin formatters receive a short formatter session. For ordinary responses,
+the full body usually arrives on the `start` message. For paginated or
+event-stream output, the formatter can stay alive across many `item` messages
+so formats like CSV can emit one header row followed by streamed records.
+
 See also:
 
 - [Output Guide](/docs/guides/output/)

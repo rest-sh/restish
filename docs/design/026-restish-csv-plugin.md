@@ -33,8 +33,13 @@ The plugin advertises:
 - `hooks: ["formatter"]`
 - `formatter_names: ["csv"]`
 
-When invoked as a formatter hook, it expects the normalized response body to be
-an array of objects. It then:
+The plugin participates in the formatter session protocol. For an ordinary
+non-streaming response, Restish sends a `start` message whose `response.body`
+holds the full value. For paginated and event-stream output, Restish sends
+`item` messages with one value at a time.
+
+Whenever `restish-csv` receives a value, it expects it to be an object or an
+array of objects. It then:
 
 1. scans every row object
 2. builds the union of all object keys
@@ -51,14 +56,35 @@ Cell encoding is intentionally simple:
 That keeps the plugin predictable without inventing a custom flattening scheme
 for nested data.
 
+### Session Behavior
+
+For paginated and event-stream output:
+
+1. Restish starts one plugin process.
+2. The plugin waits for `formatter` messages on stdin.
+3. The first object(s) it receives determine the CSV header.
+4. The plugin writes one header row, then one data row per streamed object.
+
+The streaming path is intentionally stricter than the one-shot path:
+
+- it accepts either one object or an array of objects per `item` message
+- once the header is written, later objects may not introduce new fields
+
+That tradeoff keeps the formatter genuinely stream-friendly. CSV requires a
+header before later rows can be emitted, so a plugin that wants true streaming
+must either freeze the schema early or buffer indefinitely. `restish-csv`
+chooses the former and errors on schema drift.
+
 ## Scope
 
-The example is intentionally narrow.
+The example is intentionally narrow and intentionally learnable.
 
 The plugin currently treats these inputs as errors:
 
-- a top-level body that is not an array
+- a value that is neither an object nor an array of objects
 - any array item that is not an object
+- in streaming mode, any later row that introduces fields not present when the
+  header was established
 
 That keeps the example focused on one happy path instead of trying to guess how
 scalar responses or mixed arrays should map onto tabular output.
@@ -70,6 +96,8 @@ scalar responses or mixed arrays should map onto tabular output.
 - Restish still owns HTTP, decoding, filtering, pagination, and normalization
 - the plugin receives a normalized response model rather than `*http.Response`
 - the plugin owns final bytes on stdout
+- the plugin can now hold just enough state to stay consistent across paginated
+  and event-stream output without forcing the host to buffer everything
 
 This is exactly the kind of output transformation that should be easy to move
 out of process without changing the core CLI pipeline.

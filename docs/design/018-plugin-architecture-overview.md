@@ -71,8 +71,8 @@ better tradeoff.
 
 The split is intentional:
 
-- hook plugins optimize for simple, isolated extensions with a single request
-  and a single reply
+- hook plugins optimize for simple, isolated extensions with a small bounded
+  message exchange
 - command plugins optimize for conversational workflows that may need multiple
   HTTP round-trips and progress reporting
 - TLS signer plugins optimize for keeping private-key operations outside the
@@ -86,8 +86,9 @@ behavioral contracts instead of one catch-all message schema.
 ### One generic bidirectional plugin protocol for everything
 
 This would reduce the number of plugin categories, but it would also make small
-extensions harder to write and reason about. Most auth, middleware, loader, and
-formatter cases fit a simple one-shot call much better.
+extensions harder to write and reason about. Most auth, middleware, and loader
+cases fit a simple one-shot call much better, while formatter hooks only need a
+very small session protocol.
 
 ### In-process dynamic plugins
 

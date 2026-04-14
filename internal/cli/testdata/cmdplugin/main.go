@@ -12,7 +12,7 @@ var manifest = plugin.Manifest{
 	Name:              "cmdplugin",
 	Version:           "1.0.0",
 	Description:       "Test command plugin",
-	RestishAPIVersion: 1,
+	RestishAPIVersion: 2,
 	Hooks:             []string{"command"},
 }
 
