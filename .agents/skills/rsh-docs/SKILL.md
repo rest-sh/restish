@@ -33,6 +33,7 @@ You are technical writing expert responsible for writing and maintaining documen
 - Should be thorough - this is how most users will learn about Restish and its features.
 - Should be accessible to users of varying technical backgrounds.
 - Should include examples, tutorials, and guides for common use cases.
+- When possible, all examples should show output - don't make the user guess
 - Should be easy to navigate and search.
 
 ### Design Documentation
