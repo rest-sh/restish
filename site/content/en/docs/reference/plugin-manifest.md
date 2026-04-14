@@ -1,0 +1,65 @@
+---
+title: Plugin Manifest
+linkTitle: Plugin Manifest
+weight: 42
+description: Reference for the manifest metadata Restish expects from plugins.
+---
+
+Every Restish plugin must expose a manifest. Restish fetches it by invoking the
+plugin with `--rsh-plugin-manifest`.
+
+The manifest may be returned as CBOR or JSON.
+
+## Required Fields
+
+- `name`: plugin name
+- `version`: plugin version
+- `description`: short human-readable summary
+- `restish_api_version`: plugin protocol version
+
+## Optional Fields
+
+- `hooks`: declared plugin hook types
+- `formatter_names`: output format names provided by a formatter plugin
+- `loader_content_types`: content types handled by a loader plugin
+
+## Example
+
+```json
+{
+  "name": "hello-format",
+  "version": "0.1.0",
+  "description": "Example formatter plugin",
+  "restish_api_version": 1,
+  "hooks": ["formatter"],
+  "formatter_names": ["hello"]
+}
+```
+
+## Hook Names
+
+Current hook names include:
+
+- `auth`
+- `request-middleware`
+- `response-middleware`
+- `loader`
+- `formatter`
+- `command`
+- `tls-signer`
+
+## Compatibility Rules
+
+`restish_api_version` tells Restish which plugin protocol version the plugin
+expects.
+
+- missing or invalid values are rejected
+- newer versions may still load with a warning
+- version mismatches are an important debugging clue when a plugin seems to be
+  discovered but not behaving correctly
+
+## Related Pages
+
+- [Plugin Reference](../plugins/)
+- [Plugin Message Reference](../plugin-messages/)
+- [Plugin Quickstart](/docs/plugins/quickstart/)

@@ -5,8 +5,6 @@ weight: 10
 description: Understand the core model behind generic requests, API commands, profiles, and normalized responses.
 ---
 
-# How Restish Works
-
 Restish combines two modes:
 
 - generic HTTP commands for immediate access
@@ -42,7 +40,7 @@ That is why the same flags and habits carry across so many parts of the CLI.
 Generic requests are best when you want to move fast:
 
 ```bash
-restish get https://api.example.com/items
+restish https://api.rest.sh/images
 ```
 
 API commands are better once Restish knows the API description:
@@ -95,5 +93,5 @@ That lets Restish grow without making every feature a core built-in behavior.
 - [Profiles](../profiles/)
 - [Plugins](../plugins/)
 
-Contributor-oriented design details live in
-[`docs/design/001-cli-architecture.md`](/Users/daniel/src/restish2/docs/design/001-cli-architecture.md).
+Contributor-oriented design details live in the
+[design records](/docs/contributing/design-records/).

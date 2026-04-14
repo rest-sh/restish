@@ -5,8 +5,6 @@ weight: 30
 description: See how Restish turns API descriptions into generated commands.
 ---
 
-# API Commands
-
 API commands are generated from API descriptions, usually OpenAPI documents.
 
 They let Restish expose operations as CLI subcommands instead of requiring
@@ -17,14 +15,14 @@ users to type every request manually.
 First, you register an API under a short name:
 
 ```bash
-restish api configure petstore https://api.example.com
+restish api configure example https://api.rest.sh
 ```
 
 After Restish discovers or loads a usable spec, that short name becomes a
 generated command group:
 
 ```bash
-restish petstore --help
+restish example --help
 ```
 
 ## How Operations Become CLI Commands
@@ -56,13 +54,13 @@ paths:
 can turn into a command like:
 
 ```bash
-restish petstore pet <pet-id>
+restish example get-image jpeg
 ```
 
 instead of a manual URL such as:
 
 ```bash
-restish get https://api.example.com/pets/123
+restish https://api.rest.sh/images/jpeg
 ```
 
 ## Why Generated Commands Feel Better
@@ -105,5 +103,4 @@ completion behavior depend on the network.
 
 ## Source Material
 
-- [`docs/design/006-spec-discovery-and-loading.md`](/Users/daniel/src/restish2/docs/design/006-spec-discovery-and-loading.md)
-- [`docs/design/007-api-command-generation.md`](/Users/daniel/src/restish2/docs/design/007-api-command-generation.md)
+- [Design Records](/docs/contributing/design-records/)

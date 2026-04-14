@@ -5,8 +5,6 @@ weight: 90
 description: Work with streaming responses such as SSE and NDJSON in Restish.
 ---
 
-# Streaming
-
 Restish supports streaming workflows, including event-based and line-oriented
 response streams.
 
@@ -26,13 +24,13 @@ pipeline instead of waiting for the whole response body.
 For SSE:
 
 ```bash
-restish get https://api.example.com/events
+restish https://api.example.com/events
 ```
 
 For NDJSON:
 
 ```bash
-restish get https://api.example.com/logs
+restish https://api.example.com/logs
 ```
 
 Each event or line is emitted as it arrives.
@@ -43,8 +41,8 @@ Filtering still works in streaming mode. Each event payload becomes `body` for
 the filter expression:
 
 ```bash
-restish get https://api.example.com/events -f '.body.type'
-restish get https://api.example.com/events -f '.body.user.id'
+restish https://api.example.com/events -f '.body.type'
+restish https://api.example.com/events -f '.body.user.id'
 ```
 
 This keeps streaming consistent with the rest of the CLI instead of inventing a
@@ -55,7 +53,7 @@ separate query model.
 Use `--rsh-max-events` to stop after a bounded number of items:
 
 ```bash
-restish get https://api.example.com/events --rsh-max-events 10
+restish https://api.example.com/events --rsh-max-events 10
 ```
 
 This works for both SSE and NDJSON streams.
@@ -66,7 +64,7 @@ Use `-r` or `--rsh-raw` when you want shell-friendly scalar output from a
 filtered stream:
 
 ```bash
-restish get https://api.example.com/events -f '.body.message' -r
+restish https://api.example.com/events -f '.body.message' -r
 ```
 
 That prints one result per event without JSON string quotes.
@@ -87,4 +85,4 @@ For SSE responses:
 
 Source material:
 
-- [`docs/design/012-streaming.md`](/Users/daniel/src/restish2/docs/design/012-streaming.md)
+- [Design Records](/docs/contributing/design-records/)

@@ -5,15 +5,13 @@ weight: 40
 description: Build structured request bodies in Restish using shorthand syntax and stdin.
 ---
 
-# Input and Shorthand
-
 Restish can turn CLI arguments into structured request bodies, which makes it
 much faster to work with JSON-like input from the terminal.
 
 ## Example
 
 ```bash
-restish post https://httpbin.org/anything name: restish tags[]: cli tags[]: http enabled: true
+restish post https://api.rest.sh name: restish tags[]: cli tags[]: http enabled: true
 ```
 
 That command builds a structured value and then lets the content layer decide
@@ -35,7 +33,7 @@ or piped structured data with quick command-line overrides.
 ## Simple Object Input
 
 ```bash
-restish post https://api.example.com/users name: Alice age: 30
+restish post https://api.rest.sh name: Alice age: 30
 ```
 
 Equivalent body:
@@ -50,7 +48,7 @@ Equivalent body:
 ## Nested Objects And Arrays
 
 ```bash
-restish post https://api.example.com/users \
+restish post https://api.rest.sh \
   user.address.city: NYC \
   user.address.country: USA \
   tags[]: red \
@@ -75,7 +73,7 @@ Equivalent body:
 
 ```bash
 echo '{"name":"Bob","age":25}' | \
-  restish post https://api.example.com/users name: Alice
+  restish post https://api.rest.sh name: Alice
 ```
 
 Equivalent body:
@@ -95,7 +93,7 @@ back to treating it as a raw string body when no shorthand args are present.
 That means simple pass-through workflows still work well:
 
 ```bash
-cat payload.txt | restish post https://api.example.com/raw
+cat payload.txt | restish post https://api.rest.sh
 ```
 
 ## File Input And Forms
@@ -125,4 +123,4 @@ Prefer files or piped input when:
 ## Learn More
 
 - [Requests](../requests/)
-- [`docs/design/008-shorthand-input.md`](/Users/daniel/src/restish2/docs/design/008-shorthand-input.md)
+- [Design Records](/docs/contributing/design-records/)

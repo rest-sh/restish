@@ -5,8 +5,6 @@ weight: 20
 description: Learn how profiles let Restish reuse auth, TLS, and other settings across requests.
 ---
 
-# Profiles
-
 Profiles are the main way to reuse request settings across APIs and
 environments. In Restish v2, profiles live under a specific API registration in
 `restish.json`, not as a global concept shared across unrelated APIs.
@@ -160,7 +158,7 @@ Profiles are the clean way to model common real-world situations:
 
 ## Learn More
 
-- [`docs/design/002-config-and-profiles.md`](/Users/daniel/src/restish2/docs/design/002-config-and-profiles.md)
+- [Design Records](/docs/contributing/design-records/)
 - [Authentication](../guides/authentication/)
 - [Connect to an API](../getting-started/connect-to-an-api/)
 - [Config Reference](../reference/config/)

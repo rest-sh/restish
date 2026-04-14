@@ -5,14 +5,45 @@ weight: 10
 description: Install Restish and verify that the CLI works on your machine.
 ---
 
-# Install Restish
+The recommended install path is Homebrew.
 
-Restish v2 packaging is still being finalized, so the most reliable path today
-is building from source.
+## Homebrew
+
+```bash
+brew install restish
+```
+
+That should install the `restish` binary onto your `PATH`.
+
+## Verify The Install
+
+Make sure the CLI starts cleanly:
+
+```bash
+restish --help
+```
+
+If you want a second quick check:
+
+```bash
+restish https://api.rest.sh/
+```
+
+You should see a successful response body on stdout.
+
+## Next Step
+
+Once the binary is runnable, go straight to [First Request](../first-request/).
+
+## Optional Shell Setup
+
+If you plan to use Restish interactively, follow [Shell Setup](../shell-setup/)
+next for `noglob`-style input handling and completion.
 
 ## Build From Source
 
-From the repo root:
+If you prefer to build from source or you are contributing, you can still build
+from the repo root:
 
 ```bash
 go build ./cmd/restish
@@ -28,7 +59,7 @@ go build ./cmd/restish-mcp
 go build ./cmd/restish-pkcs11
 ```
 
-## What You Need
+## What You Need For Source Builds
 
 Building from source assumes:
 
@@ -38,13 +69,10 @@ Building from source assumes:
 If you are contributing, this is also the best path because it keeps the docs,
 design records, and current code all in the same workspace.
 
-## Verify Your Install
-
-After building or installing, make sure the CLI starts cleanly:
+After a source build, verify with:
 
 ```bash
 restish --help
-restish version
 ```
 
 If the binary is not on your `PATH` yet, run it directly from the repo root:
@@ -55,25 +83,9 @@ If the binary is not on your `PATH` yet, run it directly from the repo root:
 
 You should see top-level help text and a successful exit.
 
-## Optional Next Setup
-
-Once the binary is runnable:
-
-1. follow [Shell Setup](../shell-setup/) if you use Restish interactively
-2. make a [First Request](../first-request/)
-
-## Packaging Direction
-
-The intended long-term install story is:
-
-- Homebrew for macOS and Linux users
-- direct binary downloads for supported platforms
-- an optional Go-based install path for users who prefer Go toolchains
-
-This page can be expanded with exact commands as release artifacts settle.
-
 ## Related Guides
 
-- [Shell Setup](../shell-setup/)
+- [Getting Started](../)
 - [First Request](../first-request/)
-- [Development Setup](../contributing/development-setup/)
+- [Shell Setup](../shell-setup/)
+- [Development Setup](/docs/contributing/development-setup/)

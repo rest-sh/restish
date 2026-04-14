@@ -5,8 +5,6 @@ weight: 80
 description: Learn how Restish handles retries, rate limits, and local HTTP caching.
 ---
 
-# Retries and Caching
-
 Restish includes retry behavior and local HTTP caching to make repeated API work
 faster and more resilient.
 
@@ -22,8 +20,8 @@ Retries are conservative by default:
 The default retry count is 2. Override it with `--rsh-retry`:
 
 ```bash
-restish get https://api.example.com/items --rsh-retry 5
-restish get https://api.example.com/items --rsh-retry 0
+restish https://api.example.com/items --rsh-retry 5
+restish https://api.example.com/items --rsh-retry 0
 ```
 
 Use `0` to disable retries entirely.
@@ -38,7 +36,7 @@ By default, cache use participates in the normal request path. To bypass the
 cache for one invocation:
 
 ```bash
-restish get https://api.example.com/items --rsh-no-cache
+restish https://api.example.com/items --rsh-no-cache
 ```
 
 That disables both cache reads and cache writes for that request.
@@ -93,4 +91,4 @@ Consider `--rsh-retry 0` when:
 
 Source material:
 
-- [`docs/design/013-caching-and-retries.md`](/Users/daniel/src/restish2/docs/design/013-caching-and-retries.md)
+- [Design Records](/docs/contributing/design-records/)

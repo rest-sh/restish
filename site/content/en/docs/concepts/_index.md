@@ -5,8 +5,6 @@ weight: 20
 description: Learn the mental model behind profiles, generated API commands, normalized responses, and plugins.
 ---
 
-# Core Concepts
-
 These pages explain how Restish is organized so the day-to-day guides make more
 sense.
 

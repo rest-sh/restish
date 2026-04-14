@@ -5,10 +5,11 @@ weight: 20
 description: Configure shell aliases, completion, and quoting behavior for Restish.
 ---
 
-# Shell Setup
-
 Restish works best when shell completion and quoting behavior are configured
 deliberately.
+
+You can skip this page for the first five minutes if you just want one
+successful request. Come back once you expect to use Restish regularly.
 
 ## Why This Matters
 
@@ -43,6 +44,8 @@ Today that writes one of these shell-specific lines:
 
 The command is idempotent, so running it again does not keep appending the same
 line repeatedly.
+
+If you use Restish interactively, this step pays off quickly.
 
 ## Restart Or Reload Your Shell
 
@@ -90,6 +93,17 @@ For interactive use, set up both:
 That combination gives you safer input handling plus tab completion for built-in
 and generated commands.
 
+## Short Version
+
+If you want the minimum useful setup:
+
+```bash
+restish setup zsh
+source ~/.zshrc
+```
+
+Then add shell completion once you are ready.
+
 ## Related Guides
 
 - [Install](../install/)
@@ -97,5 +111,5 @@ and generated commands.
 
 ## Source Material
 
-Based on the design record in
-[`docs/design/016-setup-and-completions.md`](/Users/daniel/src/restish2/docs/design/016-setup-and-completions.md).
+Based on the setup and completions design work summarized in the
+[design records](/docs/contributing/design-records/).

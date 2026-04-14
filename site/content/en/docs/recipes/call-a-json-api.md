@@ -5,12 +5,10 @@ weight: 10
 description: A quick recipe for calling a JSON API with Restish.
 ---
 
-# Call a JSON API
-
 Use a generic request when you just want to talk to an endpoint immediately.
 
 ```bash
-restish get https://httpbin.org/json
+restish https://api.rest.sh/
 ```
 
 If you need a header:
@@ -18,7 +16,7 @@ If you need a header:
 ```bash
 restish get \
   -H 'Accept: application/json' \
-  https://api.example.com/items
+  https://api.rest.sh/images
 ```
 
 If you need bearer auth repeatedly, put it in a profile instead of repeating
@@ -30,7 +28,7 @@ Example config:
 {
   "apis": {
     "myapi": {
-      "base_url": "https://api.example.com",
+      "base_url": "https://api.rest.sh",
       "profiles": {
         "default": {
           "headers": ["Accept: application/json"],
@@ -50,6 +48,6 @@ Example config:
 Then call the API with either style:
 
 ```bash
-restish get myapi/items
-restish myapi items list
+restish myapi/images
+restish myapi list-images
 ```

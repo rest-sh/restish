@@ -5,8 +5,6 @@ weight: 20
 description: Reference for the Restish configuration model and profile fields.
 ---
 
-# Config Reference
-
 Restish v2 stores persistent configuration in a single `restish.json` file.
 
 By default, that file lives in:
@@ -17,6 +15,8 @@ By default, that file lives in:
 
 Restish accepts JSON with comments via JSONC parsing, but it still validates the
 final shape strictly and rejects unknown fields.
+
+You can override the config directory with `RSH_CONFIG_DIR`.
 
 ## Top-Level Shape
 
@@ -65,7 +65,7 @@ Profiles live under an API, not globally.
 - `headers`: persistent `Name: Value` headers
 - `query`: persistent `key=value` query parameters
 - `tls_signer`: name of the TLS signer plugin to use
-- `tls_signer_params`: plugin-specific TLS signer parameters
+- `tls_signer_params`: string map of plugin-specific TLS signer parameters
 - `auth`: authentication config for the profile
 
 ### Auth Config Fields
@@ -86,6 +86,9 @@ Pagination config lives under an API and supports:
 Global cache settings currently support:
 
 - `max_size`: maximum cache size, such as `100MB`
+
+The HTTP response cache directory defaults to `~/.cache/restish/responses` and
+can be overridden with `RSH_CACHE_DIR`.
 
 ## `allowed_plugins`
 
@@ -148,6 +151,28 @@ Example:
 }
 ```
 
+## Related Environment Variables
+
+- `RSH_CONFIG_DIR`: override the config directory
+- `RSH_CACHE_DIR`: override the HTTP response cache directory
+- `RSH_PROFILE`: choose the default active profile
+
+## Editing Strategies
+
+Use the config file directly when you want to make broad edits:
+
+```bash
+restish api edit
+```
+
+Use commands when you want small targeted changes:
+
+```bash
+restish api configure github https://api.github.com
+restish api set github spec_url https://api.github.com/openapi.json
+restish api show github
+```
+
 ## Related Commands
 
 - `restish api configure <name> <url>`
@@ -158,4 +183,4 @@ Example:
 
 Primary source:
 
-- [`docs/design/002-config-and-profiles.md`](/Users/daniel/src/restish2/docs/design/002-config-and-profiles.md)
+- [`docs/design/002-config-and-profiles.md`](/docs/contributing/design-records/)

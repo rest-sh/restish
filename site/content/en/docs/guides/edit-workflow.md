@@ -5,8 +5,6 @@ weight: 100
 description: Fetch a resource, edit it locally, and submit changes back safely with Restish.
 ---
 
-# Edit Workflow
-
 Restish includes an edit workflow for resource-oriented APIs.
 
 The `edit` command turns the common fetch-edit-update cycle into one command:
@@ -89,4 +87,4 @@ requests.
 
 Source material:
 
-- [`docs/design/014-edit-workflow.md`](/Users/daniel/src/restish2/docs/design/014-edit-workflow.md)
+- [Design Records](/docs/contributing/design-records/)

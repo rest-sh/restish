@@ -5,8 +5,6 @@ weight: 70
 description: Follow collection pages and inspect hypermedia links in Restish.
 ---
 
-# Pagination and Links
-
 Restish can automatically parse and follow pagination links across several
 hypermedia formats.
 
@@ -34,7 +32,7 @@ instead of waiting for every page first.
 That makes large listings feel responsive:
 
 ```bash
-restish get https://api.example.com/items
+restish https://api.rest.sh/images
 ```
 
 ## Collect Before Filtering
@@ -43,7 +41,7 @@ Use `--rsh-collect` when you want all pages gathered into one logical response
 before filtering or formatting:
 
 ```bash
-restish get https://api.example.com/items --rsh-collect -f '.body | length'
+restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 ```
 
 This is especially useful for totals, aggregation, and whole-collection table
@@ -60,9 +58,9 @@ Restish exposes a few practical safety flags:
 Examples:
 
 ```bash
-restish get https://api.example.com/items --rsh-no-paginate
-restish get https://api.example.com/items --rsh-max-pages 3
-restish get https://api.example.com/items --rsh-max-items 250
+restish https://api.rest.sh/images --rsh-no-paginate
+restish https://api.rest.sh/images --rsh-max-pages 3
+restish https://api.rest.sh/images --rsh-max-items 250
 ```
 
 ## APIs With Nested Collections
@@ -95,8 +93,8 @@ commands and filters.
 Examples:
 
 ```bash
-restish get https://api.example.com/items -f links
-restish get https://api.example.com/items -f links.next -r
+restish https://api.rest.sh/images -f links
+restish https://api.rest.sh/images -f links.next -r
 ```
 
 ## When To Stream vs Collect
@@ -120,5 +118,4 @@ Collect when:
 
 Source material:
 
-- [`docs/design/011-pagination-and-hypermedia.md`](/Users/daniel/src/restish2/docs/design/011-pagination-and-hypermedia.md)
-- [`docs/design/015-links-command.md`](/Users/daniel/src/restish2/docs/design/015-links-command.md)
+- [Design Records](/docs/contributing/design-records/)

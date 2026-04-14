@@ -5,8 +5,6 @@ weight: 30
 description: Configure custom trust, client certificates, and advanced TLS behavior in Restish.
 ---
 
-# TLS
-
 Restish supports standard HTTPS verification, custom CA trust, mutual TLS, and
 advanced client-certificate workflows.
 
@@ -21,7 +19,7 @@ For internal PKI or private certificate authorities, point Restish at a PEM
 bundle:
 
 ```bash
-restish get --rsh-ca-cert ./corp-ca.pem https://api.example.com/items
+restish --rsh-ca-cert ./corp-ca.pem https://api.example.com/items
 ```
 
 This keeps verification enabled while extending the trust store for that
@@ -60,8 +58,8 @@ systems.
 If you need to restrict protocol negotiation:
 
 ```bash
-restish get --rsh-tls-min-version TLS1.2 https://api.example.com/items
-restish get --rsh-tls-min-version TLS1.3 https://api.example.com/items
+restish --rsh-tls-min-version TLS1.2 https://api.example.com/items
+restish --rsh-tls-min-version TLS1.3 https://api.example.com/items
 ```
 
 ## Temporary Insecure Mode
@@ -69,7 +67,7 @@ restish get --rsh-tls-min-version TLS1.3 https://api.example.com/items
 `--rsh-insecure` disables certificate verification:
 
 ```bash
-restish get --rsh-insecure https://api.example.com/items
+restish --rsh-insecure https://api.example.com/items
 ```
 
 Use this only for temporary debugging. Restish warns when verification is
@@ -95,5 +93,4 @@ context Restish itself would use.
 
 Source material:
 
-- [`docs/design/005-tls-and-cert-handling.md`](/Users/daniel/src/restish2/docs/design/005-tls-and-cert-handling.md)
-- [`docs/design/021-tls-signer-plugins.md`](/Users/daniel/src/restish2/docs/design/021-tls-signer-plugins.md)
+- [Design Records](/docs/contributing/design-records/)

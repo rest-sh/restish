@@ -5,8 +5,6 @@ weight: 60
 description: Extend Restish with hook plugins, command plugins, and TLS signer plugins.
 ---
 
-# Plugins
-
 Plugins are a first-class part of Restish v2. They let you add auth flows,
 middleware, formatters, custom commands, spec loaders, and advanced TLS
 integrations without forking the CLI.

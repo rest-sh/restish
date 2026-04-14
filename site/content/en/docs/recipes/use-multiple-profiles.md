@@ -5,8 +5,6 @@ weight: 20
 description: Switch between environments or credentials with Restish profiles.
 ---
 
-# Use Multiple Profiles
-
 Profiles are the clean way to move between dev, staging, and production
 environments without rewriting every command.
 

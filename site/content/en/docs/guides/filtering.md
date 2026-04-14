@@ -5,8 +5,6 @@ weight: 60
 description: Filter and project response data in Restish with shorthand queries and jq.
 ---
 
-# Filtering
-
 Restish supports response filtering so users can focus on the fields they care
 about without piping every response through another tool.
 
@@ -41,18 +39,55 @@ By default, filter mode is `auto`:
 ## Common Shorthand Filters
 
 ```bash
-restish get https://api.example.com/items -f body.items[0].name
-restish get https://api.example.com/items -f headers.Content-Type
-restish get https://api.example.com/items -f links.next
+restish https://api.rest.sh/example -f body.basics.profiles
+restish https://api.rest.sh/ -f headers.Content-Type
+restish https://api.rest.sh/images -f links.next
 ```
 
 Shorthand is best when you want direct access to a known field quickly.
 
+Example output:
+
+```json
+[
+  {
+    "network": "Github",
+    "url": "https://github.com/danielgtaylor"
+  },
+  {
+    "network": "Dev Blog",
+    "url": "https://dev.to/danielgtaylor"
+  },
+  {
+    "network": "LinkedIn",
+    "url": "https://www.linkedin.com/in/danielgtaylor"
+  }
+]
+```
+
+```text
+application/cbor
+```
+
+```text
+https://api.rest.sh/images?cursor=abc123
+```
+
 ## Common jq Filters
 
 ```bash
-restish get https://api.example.com/items -f '.body.items[] | select(.active) | .name'
-restish get https://api.example.com/items -f '.body.items | length'
+restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name'
+restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+```
+
+Example output:
+
+```text
+Dragonfly macro
+```
+
+```text
+5
 ```
 
 jq is the better choice when you need selection, transformation, or aggregation.
@@ -62,11 +97,21 @@ jq is the better choice when you need selection, transformation, or aggregation.
 For shell-friendly output, combine a filter with `--rsh-raw`:
 
 ```bash
-restish get https://api.example.com/items -f '.body.items[] | .name' --rsh-raw
+restish https://api.rest.sh/images -f '.body[] | .name' --rsh-raw
 ```
 
 That prints simple scalar results without JSON quoting and prints arrays of
 scalars one item per line.
+
+Example output:
+
+```text
+Dragonfly macro
+Origami under blacklight
+Andy Warhol mural in Miami
+Station in Prague
+Chihuly glass in boats
+```
 
 ## Choosing Between Shorthand And jq
 
@@ -98,8 +143,8 @@ than trying to preserve the original raw response bytes.
 ## Learn More
 
 - [Output](../output/)
-- [`docs/design/010-filtering-and-projection.md`](/Users/daniel/src/restish2/docs/design/010-filtering-and-projection.md)
+- [Design Records](/docs/contributing/design-records/)
 
 Source material:
 
-- [`docs/design/010-filtering-and-projection.md`](/Users/daniel/src/restish2/docs/design/010-filtering-and-projection.md)
+- [Design Records](/docs/contributing/design-records/)

@@ -39,6 +39,7 @@ enableGitInfo = true
     sidebar_menu_compact = false
     breadcrumb_disable = false
     sidebar_search_disable = false
+    showLightDarkModeMenu = true
     feedback = { enable = false }
 
   [params.links]
@@ -54,3 +55,21 @@ enableGitInfo = true
 [taxonomies]
   category = "categories"
   tag = "tags"
+
+[menu]
+  [[menu.main]]
+    name = "Getting Started"
+    url = "/docs/getting-started/install/"
+    weight = 20
+  [[menu.main]]
+    name = "Guides"
+    url = "/docs/guides/"
+    weight = 30
+  [[menu.main]]
+    name = "Plugins"
+    url = "/docs/plugins/"
+    weight = 40
+  [[menu.main]]
+    name = "GitHub"
+    url = "https://github.com/rest-sh/restish"
+    weight = 50

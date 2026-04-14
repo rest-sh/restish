@@ -5,8 +5,6 @@ weight: 70
 description: Contributor setup, architecture notes, and design records for Restish v2.
 ---
 
-# Contributing
-
 Contributor docs are separated from the end-user guides on purpose. Start here
 if you want to build Restish itself, work on the docs site, or understand the
 core architecture before changing behavior.
@@ -16,7 +14,7 @@ core architecture before changing behavior.
 - [Development Setup](./development-setup/) for the local toolchain and common
   commands.
 - [Design Records](./design-records/) for the subsystem-level architecture
-  documents in [`docs/design/`](/Users/daniel/src/restish2/docs/design/README.md).
+  documents in the repository's `docs/design/` directory.
 
 ## Good Next Steps
 

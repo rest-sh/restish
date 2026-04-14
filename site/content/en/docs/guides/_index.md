@@ -5,22 +5,24 @@ weight: 30
 description: Follow task-oriented guides for the core Restish workflows.
 ---
 
-# Guides
-
 Guides are the heart of the docs. They lead with examples and then explain the
 behavior behind them.
 
 ## Popular Guides
 
 - [Requests](./requests/) for the core workflow.
+- [API Setup and Discovery](./api-setup-and-discovery/) for turning API descriptions into generated commands.
 - [Authentication](./authentication/) for bearer tokens, OAuth, and profile
   setup.
 - [Input](./input/) and [Output](./output/) for shaping request bodies and
   response formatting.
 - [Pagination](./pagination/) and [Filtering](./filtering/) for extracting the
   data you actually want.
+- [Links and Hypermedia](./links-and-hypermedia/) for inspecting discovered links directly.
 - [Retries and Caching](./retries-and-caching/) when you need more resilient or
   repeatable API calls.
+- [Command Behavior](./command-behavior/) for exit codes, diagnostics, and shell-safe behavior.
+- [Images in the Terminal](./images-in-the-terminal/) for `image/*` responses.
 
 ## Use This Section For
 

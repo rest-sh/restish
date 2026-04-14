@@ -5,10 +5,11 @@ weight: 40
 description: Discover or register an API so Restish can generate commands from its description.
 ---
 
-# Connect to an API
-
 Restish becomes much more powerful when it can work from an API description,
 such as an OpenAPI document.
+
+This is the moment where Restish stops being only a generic HTTP client and
+starts behaving like an API-specific CLI.
 
 ## Two Main Paths
 
@@ -20,26 +21,29 @@ such as an OpenAPI document.
 The easiest durable workflow is to register a short API name:
 
 ```bash
-restish api configure petstore https://api.example.com
+restish api configure example https://api.rest.sh
 ```
 
-That creates or updates a config entry for `petstore` and attempts to discover
+That creates or updates a config entry for `example` and attempts to discover
 its spec immediately.
 
 If a spec is found, Restish can generate commands under the API name. If not,
 you can still use the registration and later force a spec refresh with:
 
 ```bash
-restish api sync petstore
+restish api sync example
 ```
 
 After that, check what Restish knows:
 
 ```bash
 restish api list
-restish api show petstore
-restish petstore --help
+restish api show example
+restish example --help
 ```
+
+If you see generated subcommands under `example`, you are ready to stop typing
+full URLs for common operations.
 
 ## Why Use API Commands
 
@@ -59,6 +63,9 @@ For a new API, the usual sequence is:
 3. Run a specific generated command, or fall back to generic requests against
    the saved API name.
 4. Use `restish api sync <name>` whenever the spec or server behavior changes.
+
+That flow is worth learning early because it is one of Restish's biggest
+advantages over lower-level HTTP tools.
 
 ## What Discovery Tries
 
@@ -89,9 +96,9 @@ If you already know exactly where the spec lives, make that explicit in config:
 ```json
 {
   "apis": {
-    "petstore": {
-      "base_url": "https://api.example.com",
-      "spec_url": "https://api.example.com/openapi.json"
+    "example": {
+      "base_url": "https://api.rest.sh",
+      "spec_url": "https://api.rest.sh/openapi.json"
     }
   }
 }
@@ -107,25 +114,39 @@ it has a cached spec for an API, it can rebuild the generated command tree from
 that local copy.
 
 That makes startup faster and keeps API-aware commands available even when you
-are offline.
+are offline. For the docs example API, the discovered spec is
+`https://api.rest.sh/openapi.json`.
 
 ## What Generated Commands Look Like
 
 Once an API is registered and its spec is available, operations from the spec
 show up as ordinary CLI commands under the API short name.
 
-For example, an OpenAPI operation might turn into something like:
+For the docs example API, generated commands look like:
 
 ```bash
-restish petstore pet <pet-id> --include owner
+restish example list-images
+restish example get-image jpeg
 ```
 
-instead of requiring you to hand-write the full URL and query parameters every
-time.
+You can also keep using URL-style requests against the same registered API:
+
+```bash
+restish example/images
+```
 
 Required path or query parameters usually become positional arguments, while
 optional parameters become flags. Request bodies still use the same shorthand
 and stdin input model as generic commands.
+
+## A Good Mental Model
+
+Think about Restish in two layers:
+
+- generic commands are for immediate ad hoc calls
+- API commands are for repeatable, discoverable daily use
+
+Most users end up using both.
 
 ## Useful Commands
 
@@ -139,10 +160,11 @@ and stdin input model as generic commands.
 ## Related Guides
 
 - [First Request](../first-request/)
+- [Shell Setup](../shell-setup/)
+- [Set Up Profiles](../set-up-profiles/)
 - [Requests](../guides/requests/)
 - [API Commands](../concepts/api-commands/)
 
 ## Source Material
 
-- [`docs/design/006-spec-discovery-and-loading.md`](/Users/daniel/src/restish2/docs/design/006-spec-discovery-and-loading.md)
-- [`docs/design/007-api-command-generation.md`](/Users/daniel/src/restish2/docs/design/007-api-command-generation.md)
+- [Design Records](/docs/contributing/design-records/)

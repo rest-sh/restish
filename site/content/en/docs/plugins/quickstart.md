@@ -5,8 +5,6 @@ weight: 10
 description: Build your first Restish plugin and choose the right plugin type.
 ---
 
-# Plugin Quickstart
-
 This guide is the shortest path from "I want to extend Restish" to a working
 plugin binary.
 
@@ -25,7 +23,7 @@ lifecycle.
 ## The Public Helper Package
 
 Plugin authors should build against the public
-[`plugin`](/Users/daniel/src/restish2/plugin/plugin.go) package.
+`plugin` package in the repository.
 
 The helpers you will reach for most often are:
 
@@ -86,7 +84,7 @@ func main() {
 Build it as `restish-hello-format`, put it on `PATH`, then run:
 
 ```bash
-restish get https://httpbin.org/json -o hello
+restish https://httpbin.org/json -o hello
 ```
 
 ## Smallest Command Plugin
@@ -152,16 +150,10 @@ before the reply comes back to your plugin.
 
 ## Good Reference Implementations
 
-- [`cmd/restish-csv/main.go`](/Users/daniel/src/restish2/cmd/restish-csv/main.go)
-  for a small formatter hook plugin
-- [`cmd/restish-mcp/main.go`](/Users/daniel/src/restish2/cmd/restish-mcp/main.go)
-  for a real command plugin
-- [`internal/cli/testdata/cmdplugin/main.go`](/Users/daniel/src/restish2/internal/cli/testdata/cmdplugin/main.go)
-  for a tiny command-plugin test fixture
-- [`docs/design/019-hook-plugins.md`](/Users/daniel/src/restish2/docs/design/019-hook-plugins.md)
-  for hook payload shapes
-- [`docs/design/020-command-plugins.md`](/Users/daniel/src/restish2/docs/design/020-command-plugins.md)
-  for command-plugin protocol details
+- `cmd/restish-csv/main.go` for a small formatter hook plugin
+- `cmd/restish-mcp/main.go` for a real command plugin
+- `internal/cli/testdata/cmdplugin/main.go` for a tiny command-plugin test fixture
+- [Design Records](/docs/contributing/design-records/) for hook payload shapes and command-plugin protocol details
 
 ## Common Pitfalls
 

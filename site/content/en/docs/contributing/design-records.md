@@ -5,13 +5,11 @@ weight: 20
 description: Contributor-oriented design records that explain the rationale behind Restish v2.
 ---
 
-# Design Records
-
 The public docs site is not a mirror of the design records, but the design
 records remain the best source of rationale and internal detail for
 contributors.
 
 Start with:
 
-- [`docs/design/README.md`](/Users/daniel/src/restish2/docs/design/README.md)
-- [`docs/site-plan.md`](/Users/daniel/src/restish2/docs/site-plan.md)
+- `docs/design/README.md`
+- `docs/site-plan.md`

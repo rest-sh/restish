@@ -6,18 +6,34 @@ menu:
     weight: 10
 ---
 
-# Restish Documentation
+Restish is a CLI for interacting with REST-ish HTTP APIs. These docs are
+organized around the way people actually adopt the tool:
 
-Restish is a CLI for interacting with REST-ish HTTP APIs. The v2 docs are being
-rebuilt as a static, search-friendly site organized around how people actually
-use the tool.
+1. make a request quickly
+2. connect Restish to a real API
+3. shape daily workflows with profiles, auth, filtering, pagination, and plugins
 
 ## Start Here
 
-- New to Restish: [Install](./getting-started/install/) and then follow
+- New to Restish:
+  [Install](./getting-started/install/) ->
+  [First Request](./getting-started/first-request/) ->
+  [Connect to an API](./getting-started/connect-to-an-api/)
+- Working across environments:
+  [Set Up Profiles](./getting-started/set-up-profiles/)
+- Building on top of Restish:
+  [Plugin Quickstart](./plugins/quickstart/)
+
+## Common Entry Points
+
+- If you already know HTTP and just want a better CLI, start with
   [First Request](./getting-started/first-request/).
-- Connecting to a described API: [Connect to an API](./getting-started/connect-to-an-api/).
-- Building on top of Restish: [Plugin Quickstart](./plugins/quickstart/).
+- If you already have an OpenAPI-described API, start with
+  [Connect to an API](./getting-started/connect-to-an-api/).
+- If you are trying to replace repeated headers, tokens, or staging URLs, start
+  with [Set Up Profiles](./getting-started/set-up-profiles/).
+- If you want the exact example API used across these docs, see
+  [Example API](./reference/example-api/).
 
 ## Sections
 
@@ -26,3 +42,13 @@ use the tool.
 - **Recipes** answer search-shaped questions.
 - **Reference** is factual and scannable.
 - **Plugins** is a first-class section, not an afterthought.
+
+## Suggested Reading Order
+
+For most users:
+
+1. [Install](./getting-started/install/)
+2. [First Request](./getting-started/first-request/)
+3. [Connect to an API](./getting-started/connect-to-an-api/)
+4. [Set Up Profiles](./getting-started/set-up-profiles/)
+5. [Requests Guide](./guides/requests/)

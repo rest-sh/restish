@@ -5,14 +5,20 @@ weight: 20
 description: Configure auth in Restish using profiles and API-aware settings.
 ---
 
-# Authentication
-
 Restish v2 supports profile-driven authentication so repeated requests do not
 require copying tokens and headers into every command.
 
 Auth is configured under a profile, not directly on every command. That keeps
 auth aligned with the same environment boundaries as base URLs, headers, and
 other request defaults.
+
+## Start With The Principle
+
+In Restish, auth is part of request setup, not a separate mode. That means:
+
+- you usually configure it once under a profile
+- the same request command can work across environments by switching profiles
+- auth participates in the normal request pipeline instead of living in an ad hoc wrapper script
 
 ## Built-In Auth Types
 
@@ -51,10 +57,16 @@ for extension without turning every auth system into a core feature.
 With that config, this command:
 
 ```bash
-restish get myapi/items
+restish myapi/items
 ```
 
 sends an `Authorization: Basic ...` header automatically.
+
+That is the simplest useful pattern:
+
+1. register an API
+2. add auth under the profile
+3. use ordinary Restish commands from there on
 
 ## Prompting For Secrets
 
@@ -78,6 +90,8 @@ That gives you a useful middle ground:
 - stable profile config in the file
 - sensitive values entered interactively when needed
 
+This is usually better than copying full auth headers into shell history.
+
 ## OAuth Notes
 
 For token-based flows, Restish treats auth as request-time behavior:
@@ -88,6 +102,45 @@ For token-based flows, Restish treats auth as request-time behavior:
 
 This keeps auth composable with the rest of the request pipeline instead of
 hiding it inside the transport layer.
+
+For users, the main effect is that OAuth-backed requests still feel like normal
+Restish commands once the profile is configured.
+
+## A Common Pattern
+
+It is common to keep multiple auth contexts under one API:
+
+```json
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "oauth-authorization-code"
+          }
+        },
+        "ci": {
+          "auth": {
+            "type": "oauth-client-credentials",
+            "params": {
+              "client_id": "ci-client"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Then switch with:
+
+```bash
+restish -p default get myapi/items
+restish -p ci get myapi/items
+```
 
 ## Inspect The Final Header
 
@@ -100,6 +153,12 @@ restish auth-header myapi
 That command uses the same auth resolution path as a real request, which makes
 it helpful for debugging config and shell integrations.
 
+It is especially useful when you are trying to answer:
+
+- which profile is active
+- whether Restish is prompting for a missing secret
+- whether an OAuth token is already cached
+
 ## Choosing Auth Per Environment
 
 Because auth lives under profiles, switching environments also switches auth
@@ -111,7 +170,17 @@ cleanly:
 
 Use `--rsh-profile` or `RSH_PROFILE` to choose the active profile.
 
+## When To Reach For Plugins
+
+If your auth system is not covered by the built-in handlers, use an auth plugin
+instead of trying to bolt custom header logic onto every command.
+
+That keeps authentication in the same request-time extension seam as the
+built-in auth types.
+
 ## Learn More
 
-- [`docs/design/004-authentication.md`](/Users/daniel/src/restish2/docs/design/004-authentication.md)
+- [Design Records](/docs/contributing/design-records/)
 - [Profiles](../concepts/profiles/)
+- [Set Up Profiles](/docs/getting-started/set-up-profiles/)
+- [Plugin Quickstart](/docs/plugins/quickstart/)

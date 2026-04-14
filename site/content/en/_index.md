@@ -5,42 +5,55 @@ linkTitle = "Docs"
 
 {{< blocks/cover title="Restish v2" image_anchor="top" color="dark" >}}
 <div class="mx-auto">
-  <p class="lead">A modern CLI for REST-ish HTTP APIs, with docs built for real workflows.</p>
-  <p>Install Restish, make a first successful request, connect to OpenAPI-described APIs, and extend the CLI with plugins.</p>
+  <p class="lead">A CLI for REST-ish HTTP APIs that starts as a better HTTP client and grows into an API-specific command line.</p>
+  <p>Use generic HTTP commands for one-off calls, then connect to OpenAPI-described APIs for generated commands, shell completion, profiles, filtering, pagination, and plugins.</p>
   <div class="restish-home-actions">
   <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs/getting-started/install/">
     Get Started
+  </a>
+  <a class="btn btn-lg btn-outline-light me-3 mb-4" href="/docs/getting-started/first-request/">
+    First Request
   </a>
   <a class="btn btn-lg btn-outline-light mb-4" href="/docs/plugins/quickstart/">
     Plugin Quickstart
   </a>
   </div>
-  <p class="restish-home-snippet"><code>restish get https://httpbin.org/json</code></p>
+  <p class="restish-home-snippet"><code>restish https://api.rest.sh/</code></p>
 </div>
 {{< /blocks/cover >}}
 
 {{< blocks/section color="white" >}}
-{{% blocks/feature icon="fa-solid fa-magnifying-glass" title="Searchable static docs" %}}
-Static HTML with stable URLs and header anchors works better for users and
-search engines than the old client-rendered site.
+<div class="row">
+{{% blocks/feature icon="fa-solid fa-bolt" title="Fast for one-off calls" %}}
+Make a request immediately with `get`, `post`, `put`, `patch`, and `delete`,
+without registering an API first.
 {{% /blocks/feature %}}
 
-{{% blocks/feature icon="fa-solid fa-list-check" title="Task-first structure" %}}
-Guides, recipes, reference, and plugin docs are separated so people can find
-the right level of detail quickly.
+{{% blocks/feature icon="fa-solid fa-diagram-project" title="Generated API commands" %}}
+Point Restish at an OpenAPI-described API and it can generate discoverable,
+shell-completed commands from the spec.
 {{% /blocks/feature %}}
 
-{{% blocks/feature icon="fa-solid fa-puzzle-piece" title="Plugin-first product story" %}}
-Plugins are a core part of Restish v2, and the docs treat them like a
-first-class capability instead of a buried appendix.
+{{% blocks/feature icon="fa-solid fa-wand-magic-sparkles" title="Built for daily workflows" %}}
+Profiles, auth, shorthand input, filtering, pagination, retries, caching, and
+plugins all fit one consistent request model.
 {{% /blocks/feature %}}
+</div>
 {{< /blocks/section >}}
 
 {{< blocks/section color="light" >}}
 <div class="restish-card-grid">
+  <a class="restish-card" href="/docs/getting-started/install/">
+    <h2>Install in One Command</h2>
+    <p>Install with Homebrew, verify the binary, and move directly into your first successful request.</p>
+  </a>
   <a class="restish-card" href="/docs/getting-started/first-request/">
     <h2>First Request in Minutes</h2>
-    <p>Install the CLI, configure your shell, and make a successful HTTP request without learning the whole product first.</p>
+    <p>Use a generic HTTP command first, learn the bare minimum, then layer in headers, bodies, and output control.</p>
+  </a>
+  <a class="restish-card" href="/docs/getting-started/connect-to-an-api/">
+    <h2>Turn an API Into a CLI</h2>
+    <p>Register an API, let Restish discover its OpenAPI document, and work from generated commands instead of full URLs.</p>
   </a>
   <a class="restish-card" href="/docs/guides/requests/">
     <h2>Daily Request Workflows</h2>
@@ -52,3 +65,19 @@ first-class capability instead of a buried appendix.
   </a>
 </div>
 {{< /blocks/section >}}
+
+{{% blocks/section color="white" %}}
+## Start Here
+
+1. [Install Restish](/docs/getting-started/install/)
+2. [Make your first request](/docs/getting-started/first-request/)
+3. [Set up your shell](/docs/getting-started/shell-setup/)
+4. [Connect to an API](/docs/getting-started/connect-to-an-api/)
+
+## Why People Use Restish
+
+- faster than hand-building every request with a lower-level HTTP client
+- better day-to-day ergonomics once an API description is available
+- one tool for ad hoc calls, repeatable profiles, and generated API commands
+- plugin hooks for auth, formatting, loaders, workflow commands, and TLS signing
+{{% /blocks/section %}}

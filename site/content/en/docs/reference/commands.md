@@ -5,8 +5,6 @@ weight: 10
 description: High-level reference for Restish command families, common workflows, and navigation.
 ---
 
-# Commands Reference
-
 Restish has two major command styles:
 
 - generic HTTP commands such as `get`, `post`, `put`, `patch`, and `delete`
@@ -19,8 +17,8 @@ Restish has two major command styles:
 Use these when you want to make a direct request quickly:
 
 ```bash
-restish get https://httpbin.org/json
-restish post https://httpbin.org/anything name=daniel active:=true
+restish https://api.rest.sh/
+restish post https://api.rest.sh name: daniel active: true
 ```
 
 These commands work without any API registration step.

@@ -5,8 +5,6 @@ weight: 40
 description: Short search-friendly solutions for common Restish tasks.
 ---
 
-# Recipes
-
 Recipes are short, search-shaped answers for specific jobs.
 
 ## Current Recipes
@@ -14,6 +12,10 @@ Recipes are short, search-shaped answers for specific jobs.
 - [Call a JSON API](./call-a-json-api/)
 - [Use Multiple Profiles](./use-multiple-profiles/)
 - [Filter Response Fields](./filter-response-fields/)
+- [Save a Response Unchanged](./save-a-response-unchanged/)
+- [Inspect Response Links](./inspect-response-links/)
+- [Stream Events and Select Fields](./stream-events-and-select-fields/)
+- [Use mTLS With a TLS Signer](./use-mtls-with-a-tls-signer/)
 
 ## When to Use Recipes
 

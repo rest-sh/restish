@@ -12,9 +12,16 @@
     <span class="navbar-brand__logo navbar-logo">
       {{- if ne .Site.Params.ui.navbar_logo false -}}
         <img
-          src="{{ "images/restish-logo.png" | relURL }}"
+          src="{{ "images/restish-logo-light.png" | relURL }}"
           alt="{{ .Site.Title }} logo"
-          class="restish-navbar-logo"
+          class="restish-navbar-logo restish-navbar-logo--light"
+          width="150"
+          height="40"
+        >
+        <img
+          src="{{ "images/restish-logo-dark.png" | relURL }}"
+          alt="{{ .Site.Title }} logo"
+          class="restish-navbar-logo restish-navbar-logo--dark"
           width="150"
           height="40"
         >

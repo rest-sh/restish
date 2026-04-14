@@ -5,8 +5,6 @@ weight: 40
 description: Understand the three plugin types in Restish and when to use each one.
 ---
 
-# Plugins
-
 Restish v2 supports three plugin shapes:
 
 - hook plugins for request-time extensions
@@ -107,4 +105,4 @@ Plugins extend specific seams where out-of-process behavior is the better fit.
 
 ## Source Material
 
-- [`docs/design/018-plugin-architecture-overview.md`](/Users/daniel/src/restish2/docs/design/018-plugin-architecture-overview.md)
+- [Design Records](/docs/contributing/design-records/)
