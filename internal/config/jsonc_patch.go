@@ -317,6 +317,9 @@ func closingLineStart(data []byte, pos int) int {
 }
 
 func isInlineObject(data []byte, obj *jsoncObject) bool {
+	if obj.rbrace <= obj.lbrace {
+		return true
+	}
 	return !bytes.Contains(data[obj.lbrace:obj.rbrace], []byte("\n"))
 }
 
