@@ -183,6 +183,35 @@ func TestJSONFormatter_NilBodyOutputsNull(t *testing.T) {
 	}
 }
 
+func TestNDJSONFormatter_OutputsOneValuePerLine(t *testing.T) {
+	resp := &output.Response{
+		Body: []any{
+			map[string]any{"id": 1},
+			map[string]any{"id": 2},
+		},
+	}
+
+	var buf bytes.Buffer
+	f := output.DefaultFormatters()["ndjson"]
+	if err := f.Format(&buf, resp, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d: %q", len(lines), buf.String())
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
 // --- ReadableFormatter ---
 
 func TestReadableFormatter_ContainsStatus(t *testing.T) {
@@ -249,6 +278,90 @@ func TestReadableFormatter_NilBodyNoBody(t *testing.T) {
 	// Should have status line but no body content after the blank line.
 	if !strings.Contains(buf.String(), "204") {
 		t.Errorf("expected 204 in readable output: %q", buf.String())
+	}
+}
+
+func TestReadableFormatter_FramedValueStreamRootArray(t *testing.T) {
+	var buf bytes.Buffer
+	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string]string{"Content-Type": "application/json"},
+	}, false, output.FramedValueTemplate{
+		ItemIndent:  "  ",
+		CloseIndent: "",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 1}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 2}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	got := buf.String()
+	parts := strings.SplitN(got, "\n\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected preamble separator in output:\n%s", got)
+	}
+	body := strings.TrimSpace(parts[1])
+	var parsed []map[string]int
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		t.Fatalf("expected framed readable stream to be valid JSON, got %q: %v", body, err)
+	}
+	if len(parsed) != 2 || parsed[0]["id"] != 1 || parsed[1]["id"] != 2 {
+		t.Fatalf("unexpected parsed body: %#v", parsed)
+	}
+}
+
+func TestReadableFormatter_FramedValueStreamWrappedObject(t *testing.T) {
+	var buf bytes.Buffer
+	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string]string{"Content-Type": "application/json"},
+	}, false, output.FramedValueTemplate{
+		Prefix:      "{\n  \"data\": ",
+		Suffix:      ",\n  \"meta\": {\n    \"source\": \"test\"\n  }\n}",
+		ItemIndent:  "    ",
+		CloseIndent: "  ",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 1}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 2}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	got := buf.String()
+	parts := strings.SplitN(got, "\n\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected preamble separator in output:\n%s", got)
+	}
+	body := strings.TrimSpace(parts[1])
+	var parsed struct {
+		Data []map[string]int  `json:"data"`
+		Meta map[string]string `json:"meta"`
+	}
+	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+		t.Fatalf("expected wrapped framed readable stream to be valid JSON, got %q: %v", body, err)
+	}
+	if len(parsed.Data) != 2 || parsed.Data[0]["id"] != 1 || parsed.Data[1]["id"] != 2 {
+		t.Fatalf("unexpected parsed data: %#v", parsed.Data)
+	}
+	if parsed.Meta["source"] != "test" {
+		t.Fatalf("unexpected meta: %#v", parsed.Meta)
 	}
 }
 

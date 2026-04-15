@@ -28,7 +28,7 @@ restish --rsh-server https://staging.example.com myapi users list
 
 ## Output And Filtering
 
-- `-o`, `--rsh-output-format`: choose a formatter such as `json`, `yaml`, or `table`
+- `-o`, `--rsh-output-format`: choose a formatter such as `json`, `ndjson`, `yaml`, or `table`
 - `-f`, `--rsh-filter`: filter the normalized response with shorthand or jq
 - `--rsh-filter-lang`: force `shorthand` or `jq`
 - `-r`, `--rsh-raw`: make filtered scalar output shell-friendly
@@ -42,6 +42,7 @@ Examples:
 
 ```bash
 restish https://api.example.com/items -f '.body.items[] | .name' -r
+restish https://api.example.com/items -o ndjson -f 'body.id'
 restish https://api.example.com/items -o table --rsh-columns id,name,status
 restish https://api.example.com/items -v
 ```
@@ -59,7 +60,8 @@ Examples:
 ```bash
 restish https://api.example.com/items --rsh-max-pages 3
 restish https://api.example.com/items --rsh-collect -f '.body | length'
-restish https://api.example.com/events --rsh-max-events 10
+restish https://api.example.com/items -o ndjson --rsh-max-items 100
+restish https://api.example.com/events --rsh-max-events 10 -o ndjson
 ```
 
 ## Resilience And Status Handling
@@ -101,7 +103,7 @@ restish \
 
 - bare URLs are treated as `GET`
 - TTY output defaults to `readable`
-- non-TTY output defaults to `raw`
+- non-TTY structured output defaults to JSON
 - `2xx` exits with `0`, `3xx` with `3`, `4xx` with `4`, and `5xx` with `5`
 
 See also:

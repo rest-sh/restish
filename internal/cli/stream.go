@@ -37,6 +37,10 @@ func streamingContentType(ct string) string {
 func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) {
 	defer resp.Body.Close()
 
+	if err := validateStreamingOutputMode(cmd); err != nil {
+		return err
+	}
+
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
 	if err != nil {
@@ -108,6 +112,10 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr error) {
 	defer resp.Body.Close()
 
+	if err := validateStreamingOutputMode(cmd); err != nil {
+		return err
+	}
+
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
 	if err != nil {
@@ -144,22 +152,12 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	return nil
 }
 
-// formatStreamItem parses data as JSON (if possible), applies the -f filter,
-// and writes the result to stdout.
-func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
+// renderStreamValue applies the active filter to one streamed item and renders
+// the result using the shared body/sub-value output path.
+func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item any, parsedJSON bool) error {
 	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
 	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
 
-	// Try to parse as JSON; fall back to string.
-	var item any = data
-	var parsed any
-	parsedJSON := false
-	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
-		item = parsed
-		parsedJSON = true
-	}
-
-	// Apply filter.
 	result := item
 	if filterExpr != "" {
 		doc := map[string]any{"body": item}
@@ -181,6 +179,29 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data 
 	}
 
 	return renderer.Render(result)
+}
+
+// formatStreamItem parses data as JSON (if possible), applies the -f filter,
+// and writes the result to stdout.
+func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
+	// Try to parse as JSON; fall back to string.
+	var item any = data
+	var parsed any
+	parsedJSON := false
+	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
+		item = parsed
+		parsedJSON = true
+	}
+
+	return c.renderStreamValue(cmd, renderer, item, parsedJSON)
+}
+
+func validateStreamingOutputMode(cmd *cobra.Command) error {
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	if fmtName == "json" {
+		return fmt.Errorf("output format %q requires a complete bounded result; use -o ndjson for streaming records", fmtName)
+	}
+	return nil
 }
 
 func streamBaseResponse(resp *http.Response) *output.Response {

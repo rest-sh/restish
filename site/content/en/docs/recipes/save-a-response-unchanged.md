@@ -11,7 +11,8 @@ Use raw output when you want the original response body bytes on disk.
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
-That works because non-TTY output defaults to `raw`.
+That works because the endpoint returns image bytes and Restish preserves the
+original wire payload in that case.
 
 If you want to make the intent explicit:
 

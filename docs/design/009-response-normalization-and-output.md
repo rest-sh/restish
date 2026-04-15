@@ -50,12 +50,22 @@ The formatting model is intentionally adaptive:
 - explicit `-o <format>` wins
 - TTY + `image/*` content type → `image` formatter (inline terminal rendering)
 - TTY default is `readable`
-- non-TTY default is `raw`
+- non-TTY defaults distinguish between original raw bytes and normalized data
 
-There is one important exception: when a non-TTY invocation filters down to a
-sub-value rather than the full response, Restish emits JSON for that filtered
-value instead of raw bytes, because the filtered result is no longer the
-original wire payload.
+Restish now separates output formats into two families:
+
+- **document formats** such as `json`, `yaml`, and `readable`
+- **record formats** such as `ndjson` and record-oriented formatter plugins
+
+Document formats must preserve their framing guarantees. In particular:
+
+- `-o json` always emits one valid JSON document
+- `-o yaml` always emits one valid YAML document
+- `-o readable` emits one coherent human-readable response view
+
+When stdout is not a TTY and Restish is writing normalized structured data,
+the default output is JSON rather than raw bytes. Explicit `-o raw` remains the
+escape hatch for original wire payloads.
 
 The readable formatter is designed to preserve useful HTTP context while keeping
 the body copyable as valid JSON. Non-interactive modes prioritize faithful data
@@ -101,7 +111,8 @@ From that same normalized response:
 
 - `-o readable` shows status, headers, and a pretty body
 - `-o json` emits just the decoded `body`
-- default non-TTY output emits the original raw bytes
+- `-o ndjson` emits one JSON value per line when the logical result is
+  record-shaped
 
 ## Alternatives Considered
 
@@ -128,8 +139,9 @@ The current implementation reflects this design directly:
   normalization pipeline
 - `internal/output/format.go` defines formatter selection and default behavior
 - `internal/output/readable_formatter.go` renders the interactive view
-- `internal/output/json_formatter.go` and `internal/output/raw_formatter.go`
-  cover the common machine-oriented paths
+- `internal/output/json_formatter.go`, `internal/output/ndjson_formatter.go`,
+  and `internal/output/raw_formatter.go` cover the common machine-oriented
+  paths
 - `internal/output/image_formatter.go` renders `image/*` responses inline on TTY
 - `internal/cli/http.go` applies filtering before selecting the formatter; it also
   performs content-type-aware dispatch for `image/*` before calling `Select()`

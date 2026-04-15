@@ -26,16 +26,28 @@ to the rest of the CLI.
 For GET requests, if Restish discovers a `next` link, it can continue fetching
 pages automatically.
 
-The default behavior is stream-oriented: items are written as they are found
-instead of waiting for every page first.
+The important rule is that explicit output formats keep their framing contract:
 
-That makes large listings feel responsive:
+- `json` stays one valid JSON document
+- `yaml` stays one valid YAML document
+- `readable` keeps the same array/object framing on a TTY while drawing it
+  incrementally
+- `ndjson` is the explicit record-by-record streaming format
+
+That means a simple redirected request already gives you one merged JSON
+document:
 
 ```bash
-restish https://api.rest.sh/images
+restish https://api.rest.sh/images > images.json
 ```
 
-## Collect Before Filtering
+And if you want one item per line instead:
+
+```bash
+restish https://api.rest.sh/images -o ndjson
+```
+
+## Collect Before Whole-Collection Filters
 
 Use `--rsh-collect` when you want all pages gathered into one logical response
 before filtering or formatting:
@@ -46,6 +58,13 @@ restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 
 This is especially useful for totals, aggregation, and whole-collection table
 output.
+
+Examples:
+
+```bash
+restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish https://api.rest.sh/images --rsh-collect -f '.body | map(.self)'
+```
 
 ## Pagination Limits
 
@@ -62,6 +81,10 @@ restish https://api.rest.sh/images --rsh-no-paginate
 restish https://api.rest.sh/images --rsh-max-pages 3
 restish https://api.rest.sh/images --rsh-max-items 250
 ```
+
+`--rsh-max-items` applies to both document and record output. For document
+formats it caps the collected logical result; for record output such as
+`ndjson` it caps how many records are emitted.
 
 ## APIs With Nested Collections
 
@@ -99,17 +122,29 @@ restish https://api.rest.sh/images -f links.next -r
 
 ## When To Stream vs Collect
 
-Stream when:
+Use record streaming when:
 
-- the result set may be large
+- you want one item at a time
+- you are piping items onward in order
 - you want first output quickly
-- you are piping items onward one at a time
+
+Example:
+
+```bash
+restish https://api.rest.sh/images -o ndjson -f 'body.self'
+```
 
 Collect when:
 
 - your filter needs the whole result set
 - you want to count or aggregate
 - you want one final formatted document
+
+Example:
+
+```bash
+restish https://api.rest.sh/images -f '.body | map(.self)' > image-paths.json
+```
 
 ## Related Guides
 

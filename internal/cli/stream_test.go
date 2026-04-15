@@ -216,6 +216,58 @@ func TestNDJSONYAMLOutputUsesFormatter(t *testing.T) {
 	}
 }
 
+func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"id":1}`)
+		fmt.Fprintln(w, `{"id":2}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := strings.TrimSpace(out.String())
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), got)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
+func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"id":1}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "json"})
+	if err == nil {
+		t.Fatal("expected error for -o json on a stream, got nil")
+	}
+	if !strings.Contains(err.Error(), "use -o ndjson") {
+		t.Fatalf("expected ndjson hint in error, got: %v", err)
+	}
+}
+
 func stripANSI(s string) string {
 	var out strings.Builder
 	i := 0

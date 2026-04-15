@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/danielgtaylor/restish/v2/internal/filter"
@@ -50,10 +52,13 @@ func (c *CLI) runPagination(
 ) (retErr error) {
 	var allItems []any
 	var renderer valueRenderer
+	streamItems, err := c.paginationStreamsItems(cmd, firstResp)
+	if err != nil {
+		return err
+	}
 
-	if !collect {
-		var err error
-		renderer, err = c.newValueRenderer(cmd, firstResp)
+	if !collect && streamItems {
+		renderer, err = c.newPaginatedValueRenderer(cmd, firstResp, pagCfg)
 		if err != nil {
 			return err
 		}
@@ -70,10 +75,10 @@ func (c *CLI) runPagination(
 		fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
 	}
 	items, done := applyItemLimits(items, allItems, maxItems)
-	if collect {
+	if collect || !streamItems {
 		allItems = append(allItems, items...)
 	} else {
-		if err := c.streamItems(renderer, items); err != nil {
+		if err := c.streamItems(cmd, renderer, items); err != nil {
 			return err
 		}
 	}
@@ -110,10 +115,10 @@ func (c *CLI) runPagination(
 			fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
 		}
 		items, done = applyItemLimits(items, allItems, maxItems)
-		if collect {
+		if collect || !streamItems {
 			allItems = append(allItems, items...)
 		} else {
-			if err := c.streamItems(renderer, items); err != nil {
+			if err := c.streamItems(cmd, renderer, items); err != nil {
 				return err
 			}
 		}
@@ -129,26 +134,201 @@ func (c *CLI) runPagination(
 		fmt.Fprintf(c.Stderr, "warning: reached --rsh-max-items limit (%d); stopping pagination\n", maxItems)
 	}
 
-	if collect {
-		// Format the full collection through the normal pipeline.
-		synthetic := &output.Response{
-			Proto:  firstResp.Proto,
-			Status: firstResp.Status,
-			Body:   allItems,
-		}
+	if collect || !streamItems {
+		synthetic := buildPaginatedResponse(firstResp, pagCfg, allItems)
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
 }
 
-// streamItems renders each item using the shared body/sub-value output path.
-func (c *CLI) streamItems(renderer valueRenderer, items []any) error {
+func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	tty := output.IsTerminal(c.Stdout)
+	if !tty || (fmtName != "" && fmtName != "readable") {
+		return c.newValueRenderer(cmd, base)
+	}
+
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	if err != nil {
+		return nil, err
+	}
+	framed, ok := formatter.(output.FramedValueStreamFormatter)
+	if !ok {
+		return c.newValueRenderer(cmd, base)
+	}
+
+	frame, ok := paginatedReadableFrame(base.Body, pagCfg)
+	if !ok {
+		return c.newValueRenderer(cmd, base)
+	}
+
+	stream, err := framed.StartFramedValueStream(c.Stdout, base, output.ColorEnabled(c.Stdout), frame)
+	if err != nil {
+		return nil, err
+	}
+	return valueStreamRenderer{stream: stream}, nil
+}
+
+func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) (bool, error) {
+	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+		return true, nil
+	}
+	if rawMode, _ := cmd.Flags().GetBool("rsh-raw"); rawMode {
+		return true, nil
+	}
+
+	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	tty := output.IsTerminal(c.Stdout)
+
+	// Default non-TTY pagination should preserve a single valid JSON document.
+	if !tty && fmtName == "" {
+		return false, nil
+	}
+	// JSON is always a document format and therefore never streams items.
+	if fmtName == "json" {
+		return false, nil
+	}
+	// Explicit readable only streams incrementally on an actual TTY.
+	if fmtName == "readable" && !tty {
+		return false, nil
+	}
+
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	if err != nil {
+		return false, err
+	}
+	_, ok := formatter.(output.ValueStreamFormatter)
+	return ok, nil
+}
+
+// streamItems renders each item using the shared streamed-item filter/render
+// path used by pagination and event streams.
+func (c *CLI) streamItems(cmd *cobra.Command, renderer valueRenderer, items []any) error {
 	for _, item := range items {
-		if err := renderer.Render(item); err != nil {
+		if err := c.renderStreamValue(cmd, renderer, item, true); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func buildPaginatedResponse(firstResp *output.Response, pagCfg *config.PaginationConfig, items []any) *output.Response {
+	return &output.Response{
+		Proto:   firstResp.Proto,
+		Status:  firstResp.Status,
+		Headers: firstResp.Headers,
+		Links:   firstResp.Links,
+		Body:    mergePaginatedBody(firstResp.Body, pagCfg, items),
+	}
+}
+
+const paginatedItemsPlaceholder = "__restish_paginated_items_placeholder__"
+
+func paginatedReadableFrame(firstBody any, pagCfg *config.PaginationConfig) (output.FramedValueTemplate, bool) {
+	templateBody, ok := paginatedFrameTemplateBody(firstBody, pagCfg)
+	if !ok {
+		return output.FramedValueTemplate{}, false
+	}
+
+	data, err := json.MarshalIndent(templateBody, "", "  ")
+	if err != nil {
+		return output.FramedValueTemplate{}, false
+	}
+
+	token := `"` + paginatedItemsPlaceholder + `"`
+	rendered := string(data)
+	idx := strings.Index(rendered, token)
+	if idx < 0 {
+		return output.FramedValueTemplate{}, false
+	}
+
+	lineStart := strings.LastIndex(rendered[:idx], "\n") + 1
+	closeIndent := leadingWhitespace(rendered[lineStart:idx])
+	return output.FramedValueTemplate{
+		Prefix:      rendered[:idx],
+		Suffix:      rendered[idx+len(token):],
+		ItemIndent:  closeIndent + "  ",
+		CloseIndent: closeIndent,
+	}, true
+}
+
+func paginatedFrameTemplateBody(firstBody any, pagCfg *config.PaginationConfig) (any, bool) {
+	if pagCfg == nil || pagCfg.ItemsPath == "" {
+		return paginatedItemsPlaceholder, true
+	}
+
+	clone, ok := cloneJSONValue(firstBody)
+	if !ok {
+		return nil, false
+	}
+	updated, ok := setSimplePath(clone, pagCfg.ItemsPath, paginatedItemsPlaceholder)
+	if !ok {
+		return nil, false
+	}
+	return updated, true
+}
+
+func leadingWhitespace(s string) string {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	return s[:i]
+}
+
+func mergePaginatedBody(firstBody any, pagCfg *config.PaginationConfig, items []any) any {
+	if pagCfg == nil || pagCfg.ItemsPath == "" {
+		return items
+	}
+
+	clone, ok := cloneJSONValue(firstBody)
+	if !ok {
+		return items
+	}
+
+	if updated, ok := setSimplePath(clone, pagCfg.ItemsPath, items); ok {
+		return updated
+	}
+	return items
+}
+
+func cloneJSONValue(value any) (any, bool) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	var clone any
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return nil, false
+	}
+	return clone, true
+}
+
+func setSimplePath(value any, path string, replacement any) (any, bool) {
+	trimmed := strings.TrimPrefix(path, ".")
+	if trimmed == "" {
+		return replacement, true
+	}
+	parts := strings.Split(trimmed, ".")
+	current, ok := value.(map[string]any)
+	if !ok {
+		return value, false
+	}
+	for i, part := range parts {
+		if part == "" || strings.ContainsAny(part, "[]{}()|=<>!@") {
+			return value, false
+		}
+		if i == len(parts)-1 {
+			current[part] = replacement
+			return value, true
+		}
+		next, ok := current[part].(map[string]any)
+		if !ok {
+			return value, false
+		}
+		current = next
+	}
+	return value, false
 }
 
 // pageItems extracts the items array from a page body using pagCfg.ItemsPath.

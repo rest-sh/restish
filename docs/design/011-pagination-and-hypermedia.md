@@ -40,11 +40,19 @@ Second, pagination uses that normalized link map plus optional per-API config.
 For GET requests, if a `next` link is present, Restish can continue fetching
 pages automatically.
 
-Two output modes matter here:
+Two output contracts matter here:
 
-- streaming mode writes each item as it is seen, one JSON value per line
-- collect mode gathers all items first, then sends the full collection through
-  the normal formatting and filtering pipeline
+- **document output** preserves one logical response shape across all pages
+- **record output** emits one item at a time for incremental processing
+
+Pagination may change execution strategy, but it should not silently change the
+meaning of an explicit output format. In particular:
+
+- `-o json` always produces one valid JSON document
+- `-o yaml` always produces one valid YAML document
+- `-o readable` keeps the same document framing on TTY, but may draw it
+  incrementally as pages arrive
+- `-o ndjson` is the explicit record format for one item per line
 
 Per-API pagination config can refine how page data is interpreted:
 
@@ -86,7 +94,8 @@ and allows:
 restish get https://api.example.com/items
 ```
 
-to stream items across all pages.
+to produce one merged logical result across all pages by default on non-TTY
+output, while `-o ndjson` streams records explicitly.
 
 For an API with nested collection data, config can guide pagination:
 
@@ -114,7 +123,7 @@ so a body like:
 
 is treated as a three-item page rather than a single object item.
 
-Collect mode lets pagination feed later filtering:
+Collection-oriented filtering still works through collect-style execution:
 
 ```bash
 restish get https://api.example.com/items --rsh-collect -f '.body | length'
@@ -135,8 +144,9 @@ normalized links layer plus small per-API overrides is more flexible.
 ### Always collect all pages before output
 
 This would make downstream formatting simpler, but it would increase memory use
-and delay first output for large collections. Streaming mode is important for
-large or long-running listings.
+and delay first output for large collections. Record-oriented pagination still
+matters for shell pipelines and exporter plugins, which is why Restish now has
+an explicit `ndjson` formatter and readable incremental rendering on TTYs.
 
 ## Notes
 
@@ -146,7 +156,7 @@ The current implementation reflects this design directly:
 - `internal/hypermedia/parsers.go` provides the built-in parsers
 - `internal/cli/paginate.go` drives auto-pagination and output behavior
 
-One detail worth preserving is that collect mode re-enters the normal response
-formatting pipeline with a synthetic response body, while streaming mode emits
-items incrementally. That split keeps pagination useful for both interactive
-inspection and large script-oriented traversals.
+One detail worth preserving is that pagination keeps the logical response shape
+when document formats are in use. A wrapped object with `items_path: data`
+should still render as an object whose `data` field is the merged collection,
+while explicit record formats such as `ndjson` may emit one item at a time.

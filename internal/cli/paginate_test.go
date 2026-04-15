@@ -59,8 +59,8 @@ func useThreePageObjectTransport(c *cli.CLI) {
 	})
 }
 
-// TestPaginationThreePages verifies that auto-pagination collects items from
-// all three pages when streaming.
+// TestPaginationThreePages verifies that automatic pagination merges all pages
+// into one valid JSON document by default on non-TTY stdout.
 func TestPaginationThreePages(t *testing.T) {
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
@@ -70,10 +70,13 @@ func TestPaginationThreePages(t *testing.T) {
 	}
 
 	got := out.String()
-	// Stream mode prints each item as JSON on its own line.
-	for _, n := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"} {
-		if !strings.Contains(got, n) {
-			t.Errorf("expected item %s in output, got:\n%s", n, got)
+	var values []int
+	if err := json.Unmarshal([]byte(got), &values); err != nil {
+		t.Fatalf("expected valid JSON array, got %q: %v", got, err)
+	}
+	for i, want := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9} {
+		if values[i] != want {
+			t.Fatalf("values[%d] = %d, want %d", i, values[i], want)
 		}
 	}
 }
@@ -164,6 +167,108 @@ func TestPaginationStreamingYAMLOutputUsesFormatter(t *testing.T) {
 	}
 	if strings.Contains(got, `{"id":1}`) || strings.Contains(got, `"id": 1`) {
 		t.Fatalf("expected paginated stream output to use YAML formatting, got:\n%s", got)
+	}
+}
+
+func TestPaginationNDJSONOutputStreamsRecords(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := strings.TrimSpace(out.String())
+	lines := strings.Split(got, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected 4 NDJSON lines, got %d:\n%s", len(lines), got)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
+func TestPaginationReadableOutputNonTTYUsesDocumentRendering(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "readable"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if strings.Count(got, "HTTP/1.1 200 OK") != 1 {
+		t.Fatalf("expected readable preamble once, got:\n%s", got)
+	}
+	for _, want := range []string{`"id": 1`, `"id": 2`, `"id": 3`, `"id": 4`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in readable output, got:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, "[\n") {
+		t.Fatalf("expected non-TTY readable output to render the collected array, got:\n%s", got)
+	}
+}
+
+func TestPaginationStreamingAppliesFilterPerItem(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", ".body | map(.id)"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	var values []int
+	if err := json.Unmarshal([]byte(got), &values); err != nil {
+		t.Fatalf("expected valid filtered JSON array, got %q: %v", got, err)
+	}
+	for i, want := range []int{1, 2, 3, 4} {
+		if values[i] != want {
+			t.Fatalf("values[%d] = %d, want %d", i, values[i], want)
+		}
+	}
+}
+
+func TestPaginationStreamingFilterUsesFormatter(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "yaml"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{"id: 1", "id: 2", "id: 3", "id: 4"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in output, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, `{"id":1}`) || strings.Contains(got, `"id": 1`) {
+		t.Fatalf("expected filtered paginated stream output to use YAML formatting, got:\n%s", got)
+	}
+}
+
+func TestPaginationJSONOutputIsValidJSON(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var values []map[string]int
+	if err := json.Unmarshal([]byte(out.String()), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 4 || values[0]["id"] != 1 || values[3]["id"] != 4 {
+		t.Fatalf("unexpected output: %#v", values)
 	}
 }
 

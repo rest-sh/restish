@@ -41,6 +41,10 @@ This keeps the stream path aligned with the rest of the CLI model: filters still
 work, `--rsh-raw` still affects display, and stdout still receives one logical
 result per emitted event.
 
+Because true streams may be unbounded, explicit document formats are not always
+meaningful. Restish therefore treats `-o json` as a bounded-document request
+and rejects it for streaming responses, pointing users to `-o ndjson` instead.
+
 There are a few design choices worth preserving:
 
 - SSE joins multiple `data:` lines into one event payload
@@ -83,7 +87,12 @@ For NDJSON:
 {"n":3}
 ```
 
-Restish again emits one result per line as the data arrives.
+Restish again emits one result per line as the data arrives. Users who want
+that behavior explicitly can choose:
+
+```bash
+restish get https://api.example.com/events -o ndjson
+```
 
 To stop after a bounded number of events:
 
@@ -97,6 +106,12 @@ restish get https://api.example.com/events --rsh-max-events 2
 
 This defeats the purpose of streaming and would behave poorly for open-ended or
 high-volume feeds.
+
+### Pretend document formats are stream-safe
+
+That would make `-o json` ambiguous or invalid for live streams. It is better
+for Restish to keep document formats strict and provide `ndjson` as the
+explicit record-oriented JSON format.
 
 ### Reuse the full response normalization path unchanged
 
@@ -116,7 +131,8 @@ The current implementation reflects this design directly:
   NDJSON incrementally
 - filters are applied per item using the same filter package as normal
   responses
-- output is written line-by-line for incremental consumption
+- output is written line-by-line for incremental consumption, with `ndjson` as
+  the explicit record-oriented JSON formatter
 
 One detail worth preserving is that stream filters operate on a document where
 the event payload is exposed as `body`. That lets the same jq-style and

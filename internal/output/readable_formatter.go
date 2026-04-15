@@ -47,6 +47,135 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	return highlight(w, ReadableLexer, data)
 }
 
+// StartValueStream writes the HTTP preamble once, then renders each streamed
+// item as a pretty-printed JSON block for fast human feedback on TTYs.
+func (f *ReadableFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
+	if base != nil && (base.Proto != "" || base.Status != 0 || len(base.Headers) > 0) {
+		if err := writeHTTPPreamble(w, base, color); err != nil {
+			return nil, err
+		}
+		if _, err := io.WriteString(w, "\n"); err != nil {
+			return nil, err
+		}
+	}
+	return &readableValueStream{w: w, color: color}, nil
+}
+
+// StartFramedValueStream writes the HTTP preamble once, then renders streamed
+// items into a larger JSON document shape described by frame.
+func (f *ReadableFormatter) StartFramedValueStream(w io.Writer, base *Response, color bool, frame FramedValueTemplate) (ValueStream, error) {
+	if base != nil && (base.Proto != "" || base.Status != 0 || len(base.Headers) > 0) {
+		if err := writeHTTPPreamble(w, base, color); err != nil {
+			return nil, err
+		}
+		if _, err := io.WriteString(w, "\n"); err != nil {
+			return nil, err
+		}
+	}
+	return &readableFramedValueStream{
+		w:     w,
+		color: color,
+		frame: frame,
+	}, nil
+}
+
+type readableValueStream struct {
+	w     io.Writer
+	color bool
+	first bool
+}
+
+func (s *readableValueStream) WriteValue(value any) error {
+	if s.first {
+		if _, err := io.WriteString(s.w, "\n"); err != nil {
+			return err
+		}
+	}
+	s.first = true
+
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("formatting body: %w", err)
+	}
+	data = append(data, '\n')
+	if s.color {
+		return highlight(s.w, ReadableLexer, data)
+	}
+	_, err = s.w.Write(data)
+	return err
+}
+
+func (s *readableValueStream) Close() error {
+	return nil
+}
+
+type readableFramedValueStream struct {
+	w         io.Writer
+	color     bool
+	frame     FramedValueTemplate
+	started   bool
+	wroteItem bool
+}
+
+func (s *readableFramedValueStream) WriteValue(value any) error {
+	if !s.started {
+		if _, err := io.WriteString(s.w, s.frame.Prefix+"["); err != nil {
+			return err
+		}
+		s.started = true
+	}
+
+	item, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return fmt.Errorf("formatting body: %w", err)
+	}
+
+	if s.wroteItem {
+		if _, err := io.WriteString(s.w, ",\n"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.WriteString(s.w, "\n"); err != nil {
+			return err
+		}
+	}
+	s.wroteItem = true
+
+	item = indentBlock(item, s.frame.ItemIndent)
+	if s.color {
+		return highlight(s.w, ReadableLexer, item)
+	}
+	_, err = s.w.Write(item)
+	return err
+}
+
+func (s *readableFramedValueStream) Close() error {
+	if !s.started {
+		if _, err := io.WriteString(s.w, s.frame.Prefix+"[]"+s.frame.Suffix+"\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if s.wroteItem {
+		if _, err := io.WriteString(s.w, "\n"+s.frame.CloseIndent+"]"+s.frame.Suffix+"\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	_, err := io.WriteString(s.w, "]"+s.frame.Suffix+"\n")
+	return err
+}
+
+func indentBlock(data []byte, indent string) []byte {
+	lines := strings.Split(string(data), "\n")
+	for i, line := range lines {
+		lines[i] = indent + line
+	}
+	return []byte(strings.Join(lines, "\n"))
+}
+
 func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
 	var preamble strings.Builder
 	fmt.Fprintf(&preamble, "%s %d %s\n", resp.Proto, resp.Status, http.StatusText(resp.Status))

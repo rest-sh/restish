@@ -32,12 +32,28 @@ type ValueStreamFormatter interface {
 	StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error)
 }
 
+// FramedValueTemplate describes how a streamed sequence of values should be
+// embedded into a larger JSON document shape.
+type FramedValueTemplate struct {
+	Prefix      string
+	Suffix      string
+	ItemIndent  string
+	CloseIndent string
+}
+
+// FramedValueStreamFormatter can render a sequence of body/sub-values into a
+// larger framed document shape such as a JSON array inside an object.
+type FramedValueStreamFormatter interface {
+	StartFramedValueStream(w io.Writer, base *Response, color bool, frame FramedValueTemplate) (ValueStream, error)
+}
+
 // DefaultFormatters returns the built-in set of formatters.
 // The "table" entry here uses default (zero-value) column settings;
 // callers that need --rsh-columns / --rsh-sort-by should replace it.
 func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
 		"json":     &JSONFormatter{},
+		"ndjson":   &NDJSONFormatter{},
 		"raw":      &RawFormatter{},
 		"readable": &ReadableFormatter{},
 		"table":    &TableFormatter{},

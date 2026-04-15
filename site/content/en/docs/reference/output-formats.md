@@ -8,12 +8,17 @@ description: Reference for built-in Restish output formats and formatting behavi
 Restish includes a small set of built-in output formats. They all render from
 the same normalized response model, but they optimize for different jobs.
 
+It helps to think about them in two families:
+
+- **document formats** such as `json`, `yaml`, and `readable`
+- **record formats** such as `ndjson` and stream-oriented plugins
+
 ## Default Selection
 
 If you do not pass `-o`:
 
 - a TTY defaults to `readable`
-- a non-TTY target defaults to `raw`
+- a non-TTY target defaults to JSON for normalized structured output
 - `image/*` responses on a TTY can switch to `image`
 
 Explicit `-o <format>` always wins.
@@ -28,6 +33,8 @@ Best for interactive terminal use.
 - pretty-prints structured bodies
 - uses color when the terminal supports it
 - keeps the body copyable as valid JSON
+- on paginated TTY output, keeps the same array/object framing while drawing it
+  incrementally as pages arrive
 
 ```bash
 restish https://api.rest.sh/images -o readable
@@ -39,7 +46,8 @@ Best when you need the original response bytes unchanged.
 
 - ideal for redirects to files or pipes
 - preserves binary payloads
-- default for non-TTY stdout
+- opt in explicitly when the original wire payload matters more than decoded
+  structured output
 
 ```bash
 restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
@@ -51,9 +59,23 @@ Encodes the decoded `body` value as formatted JSON.
 
 - does not include status or headers
 - useful after filtering or when you want a clean JSON document
+- always emits one valid JSON document
+- on paginated responses, automatically takes the document-oriented path
 
 ```bash
 restish https://api.rest.sh/images -o json
+```
+
+### `ndjson`
+
+Encodes one JSON value per line.
+
+- best for paginated item-by-item processing
+- best for live SSE / NDJSON stream consumption
+- a good fit for shell loops and downstream tools like `jq`
+
+```bash
+restish https://api.rest.sh/images -o ndjson -f 'body.self'
 ```
 
 ### `yaml`
@@ -116,6 +138,12 @@ For shell-friendly scalar output, add `-r`:
 
 ```bash
 restish https://api.rest.sh/example -f body.basics.profiles -r
+```
+
+For paginated or streaming record-by-record output, prefer `-o ndjson`:
+
+```bash
+restish https://api.rest.sh/images -o ndjson -f 'body.self'
 ```
 
 ## Plugin Formats

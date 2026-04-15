@@ -35,6 +35,12 @@ restish https://api.example.com/logs
 
 Each event or line is emitted as it arrives.
 
+For explicit machine-oriented record output, prefer `ndjson`:
+
+```bash
+restish https://api.example.com/events -o ndjson
+```
+
 ## Filter Each Event
 
 Filtering still works in streaming mode. Each event payload becomes `body` for
@@ -47,6 +53,12 @@ restish https://api.example.com/events -f '.body.user.id'
 
 This keeps streaming consistent with the rest of the CLI instead of inventing a
 separate query model.
+
+With `-o ndjson`, each filtered result is still one valid JSON value per line:
+
+```bash
+restish https://api.example.com/events -o ndjson -f '.body.user.id'
+```
 
 ## Limit The Stream
 
@@ -68,6 +80,20 @@ restish https://api.example.com/events -f '.body.message' -r
 ```
 
 That prints one result per event without JSON string quotes.
+
+## Document Formats On Live Streams
+
+True streams may be unbounded, so document formats such as `json` are not a
+good fit.
+
+Restish treats `-o json` as a bounded-document request and returns a clear
+error for live streams:
+
+```bash
+restish https://api.example.com/events -o json
+```
+
+Use `-o ndjson` when you want structured streaming JSON instead.
 
 ## How SSE Events Are Parsed
 

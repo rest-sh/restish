@@ -9,6 +9,7 @@ For SSE or NDJSON endpoints, stream the response and filter each event:
 
 ```bash
 restish https://api.example.com/events -f '.body.type' -r
+restish https://api.example.com/events -o ndjson -f '.body.user.id'
 restish https://api.example.com/logs -f '.body.user.id' -r
 ```
 
