@@ -4,6 +4,7 @@ package filter
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/itchyny/gojq"
@@ -25,6 +26,8 @@ const (
 // shorthand expressions. Any expression starting with one of these is sent
 // to shorthand; everything else goes to jq.
 var shorthandRoots = []string{"body", "headers", "links", "status", "proto", "@"}
+
+var jqCodeCache sync.Map
 
 // Apply runs expr against doc using the chosen language and returns the result.
 // doc should be a map[string]any with keys "body", "headers", "links",
@@ -64,13 +67,9 @@ func applyShorthand(expr string, doc map[string]any) (any, error) {
 }
 
 func applyJQ(expr string, doc map[string]any) (any, error) {
-	q, err := gojq.Parse(expr)
+	code, err := compiledJQ(expr)
 	if err != nil {
-		return nil, fmt.Errorf("jq parse: %w", err)
-	}
-	code, err := gojq.Compile(q)
-	if err != nil {
-		return nil, fmt.Errorf("jq compile: %w", err)
+		return nil, err
 	}
 
 	results := make([]any, 0, 256)
@@ -93,4 +92,21 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 		return results[0], nil
 	}
 	return results, nil
+}
+
+func compiledJQ(expr string) (*gojq.Code, error) {
+	if cached, ok := jqCodeCache.Load(expr); ok {
+		return cached.(*gojq.Code), nil
+	}
+
+	q, err := gojq.Parse(expr)
+	if err != nil {
+		return nil, fmt.Errorf("jq parse: %w", err)
+	}
+	code, err := gojq.Compile(q)
+	if err != nil {
+		return nil, fmt.Errorf("jq compile: %w", err)
+	}
+	actual, _ := jqCodeCache.LoadOrStore(expr, code)
+	return actual.(*gojq.Code), nil
 }
