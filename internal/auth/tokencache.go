@@ -30,8 +30,10 @@ func (t *CachedToken) IsExpired() bool {
 // TokenCache persists OAuth2 tokens as a flat JSON map at a given file path.
 // All operations are safe for concurrent use.
 type TokenCache struct {
-	path string
-	mu   sync.Mutex
+	path   string
+	mu     sync.Mutex
+	loaded bool
+	cache  map[string]CachedToken
 }
 
 // NewTokenCache returns a TokenCache that stores tokens at path.
@@ -79,9 +81,14 @@ func (c *TokenCache) Delete(key string) error {
 }
 
 func (c *TokenCache) load() (map[string]CachedToken, error) {
+	if c.loaded {
+		return c.cache, nil
+	}
 	data, err := os.ReadFile(c.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return map[string]CachedToken{}, nil
+		c.cache = map[string]CachedToken{}
+		c.loaded = true
+		return c.cache, nil
 	}
 	if err != nil {
 		return nil, err
@@ -90,7 +97,9 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	c.cache = m
+	c.loaded = true
+	return c.cache, nil
 }
 
 func (c *TokenCache) save(m map[string]CachedToken) error {
@@ -117,7 +126,12 @@ func (c *TokenCache) save(m map[string]CachedToken) error {
 		}
 		return cerr
 	}
-	return os.Rename(tmpName, c.path)
+	if err := os.Rename(tmpName, c.path); err != nil {
+		return err
+	}
+	c.cache = m
+	c.loaded = true
+	return nil
 }
 
 func secureCreateTemp(dir, prefix, suffix string, mode os.FileMode) (*os.File, error) {
