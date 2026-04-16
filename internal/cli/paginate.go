@@ -73,6 +73,9 @@ func (c *CLI) runPagination(
 	if filterErr != nil {
 		fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
 	}
+	if collect || !streamItems {
+		allItems = make([]any, 0, paginationItemCapacity(len(items), maxPages, maxItems))
+	}
 	items, done := applyItemLimits(items, allItems, maxItems)
 	if collect || !streamItems {
 		allItems = append(allItems, items...)
@@ -139,6 +142,20 @@ func (c *CLI) runPagination(
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
+}
+
+func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {
+	if maxItems > 0 && firstPageItems >= maxItems {
+		return maxItems
+	}
+	capacity := firstPageItems
+	if maxPages > 0 && firstPageItems > 0 {
+		capacity = firstPageItems * maxPages
+	}
+	if maxItems > 0 && (capacity == 0 || capacity > maxItems) {
+		return maxItems
+	}
+	return capacity
 }
 
 func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {

@@ -99,3 +99,26 @@ func TestPaginatedReadableFramePreservesWrapperObject(t *testing.T) {
 		t.Fatalf("CloseIndent = %q, want %q", frame.CloseIndent, "  ")
 	}
 }
+
+func TestPaginationItemCapacity(t *testing.T) {
+	tests := []struct {
+		name           string
+		firstPageItems int
+		maxPages       int
+		maxItems       int
+		want           int
+	}{
+		{name: "uses first page without limits", firstPageItems: 3, want: 3},
+		{name: "scales by max pages", firstPageItems: 3, maxPages: 4, want: 12},
+		{name: "caps by max items", firstPageItems: 3, maxPages: 4, maxItems: 5, want: 5},
+		{name: "returns max items when first page already exceeds it", firstPageItems: 10, maxItems: 5, want: 5},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := paginationItemCapacity(tc.firstPageItems, tc.maxPages, tc.maxItems); got != tc.want {
+				t.Fatalf("paginationItemCapacity() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
