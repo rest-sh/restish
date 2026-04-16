@@ -303,3 +303,40 @@ func TestBulkPluginWorkflow(t *testing.T) {
 		t.Fatalf("expected added file to be pushed, got %#v", srv.items[itemPath("d", "d1")].Body)
 	}
 }
+
+func TestBulkPullKeepsRemoteChangeWhenLocalEditsBlockWrite(t *testing.T) {
+	installBulkPlugin(t)
+	withWorkingDir(t)
+
+	srv := newBulkServer(t, []*bulkItem{
+		{User: "a", ID: "a1", Version: "a11", Body: map[string]any{"id": "a1"}, ETag: "a11"},
+		{User: "b", ID: "b1", Version: "b11", Body: map[string]any{"id": "b1"}, ETag: "b11"},
+	})
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+
+	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if err := os.WriteFile("a/items/a1.json", []byte("{\n  \"id\": \"a1\",\n  \"name\": \"local\"\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv.items[itemPath("a", "a1")].Version = "a12"
+	srv.items[itemPath("a", "a1")].Body = map[string]any{"id": "a1", "name": "remote"}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "bulk", "pull"}); err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "bulk", "status"}); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Remote changes") || !strings.Contains(got, "modified:  a/items/a1.json") {
+		t.Fatalf("expected remote modification to remain pending, got:\n%s", got)
+	}
+}

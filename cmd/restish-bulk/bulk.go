@@ -447,6 +447,7 @@ func (a *app) pull(m *Meta) error {
 		if err := f.write(body); err != nil {
 			return err
 		}
+		f.VersionLocal = f.VersionRemote
 	}
 	return m.save()
 }
@@ -677,7 +678,6 @@ func (a *app) fetchFile(f *File) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.VersionLocal = f.VersionRemote
 	if err := f.writeCached(body); err != nil {
 		return nil, err
 	}
