@@ -303,6 +303,52 @@ func TestPluginRemoveRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	sourceDir := t.TempDir()
+	source := filepath.Join(sourceDir, "restish-invalid")
+	if err := os.WriteFile(source, []byte("#!/bin/sh\necho not-a-manifest\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	err := c.Run([]string{"restish", "plugin", "install", source})
+	if err == nil {
+		t.Fatal("expected invalid plugin install to fail")
+	}
+
+	installed := filepath.Join(pluginsParent, "plugins", "restish-invalid")
+	if _, statErr := os.Stat(installed); !os.IsNotExist(statErr) {
+		t.Fatalf("expected invalid plugin binary to be removed, got: %v", statErr)
+	}
+}
+
+func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
+	skipNoPlugin(t)
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, out, errOut := newTestCLI()
+	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
+		t.Fatalf("plugin install: %v", err)
+	}
+	if !strings.Contains(out.String(), "Installed plugin") {
+		t.Fatalf("expected install output, got:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "trusted executables") {
+		t.Fatalf("expected trust warning, got:\n%s", errOut.String())
+	}
+}
+
 // TestPluginListShowsNameVersionHooks verifies that "plugin list" prints
 // the name, version, and hooks from the manifest.
 func TestPluginListShowsNameVersionHooks(t *testing.T) {

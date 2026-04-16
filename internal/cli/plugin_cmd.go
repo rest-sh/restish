@@ -98,7 +98,12 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 	}
 	// Make it executable.
 	_ = os.Chmod(dest, 0o755)
+	if _, err := plugin.LoadManifest(dest); err != nil {
+		_ = os.Remove(dest)
+		return fmt.Errorf("install: %w", err)
+	}
 
+	fmt.Fprintln(c.Stderr, "warning: installed plugins are trusted executables and may run arbitrary code on future restish invocations")
 	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", filepath.Base(source))
 	return nil
 }
