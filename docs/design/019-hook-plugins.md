@@ -53,7 +53,7 @@ The default hook-plugin contract is intentionally one-shot:
 6. The plugin exits.
 
 Most hooks use the generic request/reply helper in
-[`internal/plugin/hook.go`](/Users/daniel/src/restish2/internal/plugin/hook.go),
+[`internal/plugin/hook.go`](../../internal/plugin/hook.go),
 which enforces a 30 second timeout and requires exit status 0.
 
 ### Auth Hook

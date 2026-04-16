@@ -89,11 +89,11 @@ easier to reason about when it stands on its own.
 ## Notes
 
 The current implementation lives in
-[`internal/plugin/tls_signer.go`](/Users/daniel/src/restish2/internal/plugin/tls_signer.go),
+[`internal/plugin/tls_signer.go`](../../internal/plugin/tls_signer.go),
 with request integration in
-[`internal/cli/hooks.go`](/Users/daniel/src/restish2/internal/cli/hooks.go)
+[`internal/cli/hooks.go`](../../internal/cli/hooks.go)
 and profile-level coverage in
-[`internal/cli/tls_signer_test.go`](/Users/daniel/src/restish2/internal/cli/tls_signer_test.go).
+[`internal/cli/tls_signer_test.go`](../../internal/cli/tls_signer_test.go).
 
 One detail worth preserving is that TLS signer selection happens through the
 same profile-driven request options model as the rest of Restish's transport

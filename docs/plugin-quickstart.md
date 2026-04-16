@@ -34,7 +34,7 @@ same format as runtime messages: write one CBOR map to stdout and exit.
 ## The Public Helper Package
 
 Plugin authors in Go should build against the public
-[`plugin`](/Users/daniel/src/restish2/plugin/plugin.go) package.
+[`plugin`](../plugin/plugin.go) package.
 
 The helpers you will use most often are:
 
@@ -183,15 +183,15 @@ before the reply comes back to your plugin.
 
 These are the best examples in the repo:
 
-- [`cmd/restish-csv/main.go`](/Users/daniel/src/restish2/cmd/restish-csv/main.go)
+- [`cmd/restish-csv/main.go`](../cmd/restish-csv/main.go)
   for a small formatter hook plugin
-- [`cmd/restish-mcp/main.go`](/Users/daniel/src/restish2/cmd/restish-mcp/main.go)
+- [`cmd/restish-mcp/main.go`](../cmd/restish-mcp/main.go)
   for a real command plugin
-- [`internal/cli/testdata/cmdplugin/main.go`](/Users/daniel/src/restish2/internal/cli/testdata/cmdplugin/main.go)
+- [`internal/cli/testdata/cmdplugin/main.go`](../internal/cli/testdata/cmdplugin/main.go)
   for a tiny command-plugin test fixture
-- [`docs/design/019-hook-plugins.md`](/Users/daniel/src/restish2/docs/design/019-hook-plugins.md)
+- [`docs/design/019-hook-plugins.md`](./design/019-hook-plugins.md)
   for hook payload shapes
-- [`docs/design/020-command-plugins.md`](/Users/daniel/src/restish2/docs/design/020-command-plugins.md)
+- [`docs/design/020-command-plugins.md`](./design/020-command-plugins.md)
   for command-plugin protocol details
 
 ## Common Pitfalls

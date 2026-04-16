@@ -58,7 +58,7 @@ The transport between Restish and plugins uses plain CBOR messages over
 stdin/stdout. Each message is a single self-delimiting CBOR data item — no
 length prefix or other framing is added. This means any language with a CBOR
 library can implement a plugin without custom framing code. The public
-[`plugin`](/Users/daniel/src/restish2/plugin/plugin.go) package provides
+[`plugin`](../../plugin/plugin.go) package provides
 `WriteMessage` and `ReadMessage` helpers for Go plugin authors.
 
 One important boundary is that plugins are additive to, not replacements for,

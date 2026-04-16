@@ -12,7 +12,7 @@ few non-trivial decisions around rows, columns, and value encoding.
 ## Problem
 
 The generic formatter-hook design in
-[`019-hook-plugins.md`](/Users/daniel/src/restish2/docs/design/019-hook-plugins.md)
+[`019-hook-plugins.md`](./019-hook-plugins.md)
 explains the transport, but it helps to also have one concrete formatter plugin
 in the repository that answers practical questions:
 
@@ -130,8 +130,8 @@ about.
 ## Notes
 
 The implementation lives in
-[`cmd/restish-csv/main.go`](/Users/daniel/src/restish2/cmd/restish-csv/main.go),
+[`cmd/restish-csv/main.go`](../../cmd/restish-csv/main.go),
 with focused behavior tests in
-[`cmd/restish-csv/main_test.go`](/Users/daniel/src/restish2/cmd/restish-csv/main_test.go)
+[`cmd/restish-csv/main_test.go`](../../cmd/restish-csv/main_test.go)
 and CLI integration coverage in
-[`internal/cli/plugin_hook_test.go`](/Users/daniel/src/restish2/internal/cli/plugin_hook_test.go).
+[`internal/cli/plugin_hook_test.go`](../../internal/cli/plugin_hook_test.go).

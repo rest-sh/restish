@@ -164,10 +164,10 @@ plugins.
 ## Notes
 
 The implementation lives in
-[`cmd/restish-bulk/main.go`](/Users/daniel/src/restish2/cmd/restish-bulk/main.go),
-[`cmd/restish-bulk/client.go`](/Users/daniel/src/restish2/cmd/restish-bulk/client.go),
+[`cmd/restish-bulk/main.go`](../../cmd/restish-bulk/main.go),
+[`cmd/restish-bulk/client.go`](../../cmd/restish-bulk/client.go),
 and
-[`cmd/restish-bulk/bulk.go`](/Users/daniel/src/restish2/cmd/restish-bulk/bulk.go).
+[`cmd/restish-bulk/bulk.go`](../../cmd/restish-bulk/bulk.go).
 
 Integration coverage lives in
-[`internal/cli/bulk_plugin_test.go`](/Users/daniel/src/restish2/internal/cli/bulk_plugin_test.go).
+[`internal/cli/bulk_plugin_test.go`](../../internal/cli/bulk_plugin_test.go).

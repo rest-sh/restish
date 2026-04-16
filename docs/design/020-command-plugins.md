@@ -142,11 +142,11 @@ far more awkward than keeping one long-lived session.
 ## Notes
 
 The current implementation is centered in
-[`internal/cli/command_plugin.go`](/Users/daniel/src/restish2/internal/cli/command_plugin.go),
+[`internal/cli/command_plugin.go`](../../internal/cli/command_plugin.go),
 with end-to-end examples in
-[`internal/cli/testdata/cmdplugin/main.go`](/Users/daniel/src/restish2/internal/cli/testdata/cmdplugin/main.go)
+[`internal/cli/testdata/cmdplugin/main.go`](../../internal/cli/testdata/cmdplugin/main.go)
 and tests in
-[`internal/cli/command_plugin_test.go`](/Users/daniel/src/restish2/internal/cli/command_plugin_test.go).
+[`internal/cli/command_plugin_test.go`](../../internal/cli/command_plugin_test.go).
 
 One detail worth preserving is that command plugins add commands at root-command
 construction time, not through late dynamic dispatch. That keeps help output,

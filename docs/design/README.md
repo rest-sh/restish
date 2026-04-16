@@ -25,45 +25,45 @@ concepts introduced earlier in the sequence.
 
 **Foundations**
 
-- [000-restish-v1-baseline.md](/Users/daniel/src/restish2/docs/design/000-restish-v1-baseline.md) - Feature inventory of Restish v1, captured as the baseline that informed v2 design.
-- [001-cli-architecture.md](/Users/daniel/src/restish2/docs/design/001-cli-architecture.md) - Central `CLI` object, reduced global state, and registry-based composition.
-- [002-config-and-profiles.md](/Users/daniel/src/restish2/docs/design/002-config-and-profiles.md) - Single-file config model, API registrations, and profile layering.
-- [003-content-types-and-encodings.md](/Users/daniel/src/restish2/docs/design/003-content-types-and-encodings.md) - Registry-driven body encoding/decoding and compression handling.
+- [000-restish-v1-baseline.md](./000-restish-v1-baseline.md) - Feature inventory of Restish v1, captured as the baseline that informed v2 design.
+- [001-cli-architecture.md](./001-cli-architecture.md) - Central `CLI` object, reduced global state, and registry-based composition.
+- [002-config-and-profiles.md](./002-config-and-profiles.md) - Single-file config model, API registrations, and profile layering.
+- [003-content-types-and-encodings.md](./003-content-types-and-encodings.md) - Registry-driven body encoding/decoding and compression handling.
 
 **Request And API Model**
 
-- [004-authentication.md](/Users/daniel/src/restish2/docs/design/004-authentication.md) - Profile-driven auth handlers, prompting, token caching, and request injection.
-- [005-tls-and-cert-handling.md](/Users/daniel/src/restish2/docs/design/005-tls-and-cert-handling.md) - TLS configuration, mTLS options, custom CAs, and certificate inspection.
-- [006-spec-discovery-and-loading.md](/Users/daniel/src/restish2/docs/design/006-spec-discovery-and-loading.md) - How Restish finds, parses, and caches API specs.
-- [007-api-command-generation.md](/Users/daniel/src/restish2/docs/design/007-api-command-generation.md) - Config-backed API registration and OpenAPI-driven command generation.
-- [008-shorthand-input.md](/Users/daniel/src/restish2/docs/design/008-shorthand-input.md) - Building request bodies from CLI arguments and stdin using shorthand syntax.
+- [004-authentication.md](./004-authentication.md) - Profile-driven auth handlers, prompting, token caching, and request injection.
+- [005-tls-and-cert-handling.md](./005-tls-and-cert-handling.md) - TLS configuration, mTLS options, custom CAs, and certificate inspection.
+- [006-spec-discovery-and-loading.md](./006-spec-discovery-and-loading.md) - How Restish finds, parses, and caches API specs.
+- [007-api-command-generation.md](./007-api-command-generation.md) - Config-backed API registration and OpenAPI-driven command generation.
+- [008-shorthand-input.md](./008-shorthand-input.md) - Building request bodies from CLI arguments and stdin using shorthand syntax.
 
 **Response And Data Flow**
 
-- [009-response-normalization-and-output.md](/Users/daniel/src/restish2/docs/design/009-response-normalization-and-output.md) - The normalized response model and output behavior across TTY and non-TTY use.
-- [010-filtering-and-projection.md](/Users/daniel/src/restish2/docs/design/010-filtering-and-projection.md) - Response querying with shorthand and jq, including auto-detection and raw output.
-- [011-pagination-and-hypermedia.md](/Users/daniel/src/restish2/docs/design/011-pagination-and-hypermedia.md) - Link extraction, automatic pagination, and collection handling across pages.
-- [012-streaming.md](/Users/daniel/src/restish2/docs/design/012-streaming.md) - SSE and NDJSON streaming behavior, per-event filtering, and output rules.
-- [013-caching-and-retries.md](/Users/daniel/src/restish2/docs/design/013-caching-and-retries.md) - HTTP response caching, transport layering, and retry behavior.
-- [025-image-rendering.md](/Users/daniel/src/restish2/docs/design/025-image-rendering.md) - Terminal image rendering for image/* responses: Kitty, iTerm2, and half-block fallback.
+- [009-response-normalization-and-output.md](./009-response-normalization-and-output.md) - The normalized response model and output behavior across TTY and non-TTY use.
+- [010-filtering-and-projection.md](./010-filtering-and-projection.md) - Response querying with shorthand and jq, including auto-detection and raw output.
+- [011-pagination-and-hypermedia.md](./011-pagination-and-hypermedia.md) - Link extraction, automatic pagination, and collection handling across pages.
+- [012-streaming.md](./012-streaming.md) - SSE and NDJSON streaming behavior, per-event filtering, and output rules.
+- [013-caching-and-retries.md](./013-caching-and-retries.md) - HTTP response caching, transport layering, and retry behavior.
+- [025-image-rendering.md](./025-image-rendering.md) - Terminal image rendering for image/* responses: Kitty, iTerm2, and half-block fallback.
 
 **Workflows And UX**
 
-- [014-edit-workflow.md](/Users/daniel/src/restish2/docs/design/014-edit-workflow.md) - Fetch-edit-update flow, diff review, and patch support.
-- [015-links-command.md](/Users/daniel/src/restish2/docs/design/015-links-command.md) - Inspecting normalized hypermedia links directly from responses.
-- [016-setup-and-completions.md](/Users/daniel/src/restish2/docs/design/016-setup-and-completions.md) - Shell setup, noglob aliases, and completion behavior.
-- [017-cli-behavior-and-diagnostics.md](/Users/daniel/src/restish2/docs/design/017-cli-behavior-and-diagnostics.md) - Exit codes, silent mode, verbose output, and command-line behavior conventions.
+- [014-edit-workflow.md](./014-edit-workflow.md) - Fetch-edit-update flow, diff review, and patch support.
+- [015-links-command.md](./015-links-command.md) - Inspecting normalized hypermedia links directly from responses.
+- [016-setup-and-completions.md](./016-setup-and-completions.md) - Shell setup, noglob aliases, and completion behavior.
+- [017-cli-behavior-and-diagnostics.md](./017-cli-behavior-and-diagnostics.md) - Exit codes, silent mode, verbose output, and command-line behavior conventions.
 
 **Extensibility**
 
-- [../plugin-quickstart.md](/Users/daniel/src/restish2/docs/plugin-quickstart.md) - Fastest path to a working plugin, with small formatter and command-plugin examples.
-- [018-plugin-architecture-overview.md](/Users/daniel/src/restish2/docs/design/018-plugin-architecture-overview.md) - Discovery, manifests, plugin categories, and the relationship to the in-process registry model.
-- [019-hook-plugins.md](/Users/daniel/src/restish2/docs/design/019-hook-plugins.md) - Short-lived auth, middleware, loader, and formatter plugins.
-- [020-command-plugins.md](/Users/daniel/src/restish2/docs/design/020-command-plugins.md) - Long-lived workflow commands that delegate HTTP and formatting back to Restish.
-- [021-tls-signer-plugins.md](/Users/daniel/src/restish2/docs/design/021-tls-signer-plugins.md) - External mTLS signing for hardware-backed or otherwise non-exportable client keys.
-- [022-restish-pkcs11-plugin.md](/Users/daniel/src/restish2/docs/design/022-restish-pkcs11-plugin.md) - The concrete PKCS#11 TLS-signer plugin, including token selection, PIN sourcing, and crypto11 integration.
-- [023-restish-mcp-plugin.md](/Users/daniel/src/restish2/docs/design/023-restish-mcp-plugin.md) - The concrete MCP command plugin that exposes OpenAPI operations as MCP tools over stdio.
-- [024-restish-bulk-plugin.md](/Users/daniel/src/restish2/docs/design/024-restish-bulk-plugin.md) - The concrete bulk-management command plugin that revives the v1 checkout workflow out of process.
-- [026-restish-csv-plugin.md](/Users/daniel/src/restish2/docs/design/026-restish-csv-plugin.md) - The concrete formatter-hook plugin that turns array-shaped responses into CSV.
-- [027-comment-preserving-config-edits.md](/Users/daniel/src/restish2/docs/design/027-comment-preserving-config-edits.md) - Narrow JSONC-aware config patching for `api configure`, `api set`, and `api delete`.
-- [028-document-and-record-output.md](/Users/daniel/src/restish2/docs/design/028-document-and-record-output.md) - Output framing contracts for document vs record formats across pagination, streaming, filtering, and redirects.
+- [../plugin-quickstart.md](../plugin-quickstart.md) - Fastest path to a working plugin, with small formatter and command-plugin examples.
+- [018-plugin-architecture-overview.md](./018-plugin-architecture-overview.md) - Discovery, manifests, plugin categories, and the relationship to the in-process registry model.
+- [019-hook-plugins.md](./019-hook-plugins.md) - Short-lived auth, middleware, loader, and formatter plugins.
+- [020-command-plugins.md](./020-command-plugins.md) - Long-lived workflow commands that delegate HTTP and formatting back to Restish.
+- [021-tls-signer-plugins.md](./021-tls-signer-plugins.md) - External mTLS signing for hardware-backed or otherwise non-exportable client keys.
+- [022-restish-pkcs11-plugin.md](./022-restish-pkcs11-plugin.md) - The concrete PKCS#11 TLS-signer plugin, including token selection, PIN sourcing, and crypto11 integration.
+- [023-restish-mcp-plugin.md](./023-restish-mcp-plugin.md) - The concrete MCP command plugin that exposes OpenAPI operations as MCP tools over stdio.
+- [024-restish-bulk-plugin.md](./024-restish-bulk-plugin.md) - The concrete bulk-management command plugin that revives the v1 checkout workflow out of process.
+- [026-restish-csv-plugin.md](./026-restish-csv-plugin.md) - The concrete formatter-hook plugin that turns array-shaped responses into CSV.
+- [027-comment-preserving-config-edits.md](./027-comment-preserving-config-edits.md) - Narrow JSONC-aware config patching for `api configure`, `api set`, and `api delete`.
+- [028-document-and-record-output.md](./028-document-and-record-output.md) - Output framing contracts for document vs record formats across pagination, streaming, filtering, and redirects.

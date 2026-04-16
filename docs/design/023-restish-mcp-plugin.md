@@ -158,11 +158,11 @@ envelope inclusion.
 ## Notes
 
 The implementation lives in
-[`cmd/restish-mcp/main.go`](/Users/daniel/src/restish2/cmd/restish-mcp/main.go)
+[`cmd/restish-mcp/main.go`](../../cmd/restish-mcp/main.go)
 and
-[`cmd/restish-mcp/mcp.go`](/Users/daniel/src/restish2/cmd/restish-mcp/mcp.go),
+[`cmd/restish-mcp/mcp.go`](../../cmd/restish-mcp/mcp.go),
 with coverage in
-[`cmd/restish-mcp/mcp_test.go`](/Users/daniel/src/restish2/cmd/restish-mcp/mcp_test.go).
+[`cmd/restish-mcp/mcp_test.go`](../../cmd/restish-mcp/mcp_test.go).
 
 One detail worth preserving is that the plugin depends on `operationId` as the
 stable tool identifier. That keeps names predictable and aligns the MCP surface

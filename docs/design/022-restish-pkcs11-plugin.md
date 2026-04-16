@@ -136,13 +136,13 @@ executable.
 ## Notes
 
 The implementation lives in
-[`cmd/restish-pkcs11/main.go`](/Users/daniel/src/restish2/cmd/restish-pkcs11/main.go)
+[`cmd/restish-pkcs11/main.go`](../../cmd/restish-pkcs11/main.go)
 and
-[`cmd/restish-pkcs11/config.go`](/Users/daniel/src/restish2/cmd/restish-pkcs11/config.go),
+[`cmd/restish-pkcs11/config.go`](../../cmd/restish-pkcs11/config.go),
 with focused coverage in
-[`cmd/restish-pkcs11/config_test.go`](/Users/daniel/src/restish2/cmd/restish-pkcs11/config_test.go)
+[`cmd/restish-pkcs11/config_test.go`](../../cmd/restish-pkcs11/config_test.go)
 and
-[`cmd/restish-pkcs11/main_test.go`](/Users/daniel/src/restish2/cmd/restish-pkcs11/main_test.go).
+[`cmd/restish-pkcs11/main_test.go`](../../cmd/restish-pkcs11/main_test.go).
 
 One detail worth preserving is that the plugin narrows ambiguity aggressively.
 That makes it slightly stricter to configure, but much safer for hardware-backed
