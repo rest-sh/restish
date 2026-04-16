@@ -9,19 +9,13 @@ import (
 
 // IsTerminal reports whether w is a real terminal (TTY).
 func IsTerminal(w io.Writer) bool {
-	if f, ok := w.(*os.File); ok {
-		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
-	}
-	return false
+	return isFDTerminal(w)
 }
 
 // IsTerminalReader reports whether r is a real terminal (TTY).
 // Used to detect whether stdin is interactive.
 func IsTerminalReader(r io.Reader) bool {
-	if f, ok := r.(*os.File); ok {
-		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
-	}
-	return false
+	return isFDTerminal(r)
 }
 
 // ColorEnabled reports whether ANSI color output should be used for w.
@@ -37,4 +31,11 @@ func ColorEnabled(w io.Writer) bool {
 		return true
 	}
 	return IsTerminal(w)
+}
+
+func isFDTerminal(v any) bool {
+	if f, ok := v.(*os.File); ok {
+		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+	}
+	return false
 }

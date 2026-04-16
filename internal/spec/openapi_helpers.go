@@ -1,6 +1,10 @@
 package spec
 
-import v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+import (
+	"reflect"
+
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+)
 
 // MethodOp pairs an HTTP method name with its OpenAPI operation.
 type MethodOp struct {
@@ -28,13 +32,7 @@ func OpExtBool(op *v3.Operation, key string) bool {
 	if op.Extensions == nil {
 		return false
 	}
-	node := op.Extensions.GetOrZero(key)
-	if node == nil {
-		return false
-	}
-	var v bool
-	_ = node.Decode(&v)
-	return v
+	return extValue[bool](op.Extensions.GetOrZero(key))
 }
 
 // OpExtString reads a string OpenAPI extension from an operation.
@@ -42,13 +40,7 @@ func OpExtString(op *v3.Operation, key string) string {
 	if op.Extensions == nil {
 		return ""
 	}
-	node := op.Extensions.GetOrZero(key)
-	if node == nil {
-		return ""
-	}
-	var v string
-	_ = node.Decode(&v)
-	return v
+	return extValue[string](op.Extensions.GetOrZero(key))
 }
 
 // OpExtStrings reads a string-slice OpenAPI extension from an operation.
@@ -56,13 +48,7 @@ func OpExtStrings(op *v3.Operation, key string) []string {
 	if op.Extensions == nil {
 		return nil
 	}
-	node := op.Extensions.GetOrZero(key)
-	if node == nil {
-		return nil
-	}
-	var v []string
-	_ = node.Decode(&v)
-	return v
+	return extValue[[]string](op.Extensions.GetOrZero(key))
 }
 
 // ParamExtString reads a string OpenAPI extension from a parameter.
@@ -70,11 +56,23 @@ func ParamExtString(p *v3.Parameter, key string) string {
 	if p.Extensions == nil {
 		return ""
 	}
-	node := p.Extensions.GetOrZero(key)
+	return extValue[string](p.Extensions.GetOrZero(key))
+}
+
+type decodableNode interface {
+	Decode(any) error
+}
+
+func extValue[T any](node decodableNode) T {
+	var zero T
 	if node == nil {
-		return ""
+		return zero
 	}
-	var v string
-	_ = node.Decode(&v)
-	return v
+	valueOf := reflect.ValueOf(node)
+	if valueOf.Kind() == reflect.Pointer && valueOf.IsNil() {
+		return zero
+	}
+	var value T
+	_ = node.Decode(&value)
+	return value
 }

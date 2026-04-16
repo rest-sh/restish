@@ -325,122 +325,162 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 //	profiles.<name>.auth.params.<param>
 //	profiles.<name>.tls_signer
 func setAPIField(apiCfg *config.APIConfig, key, value string) error {
-	parts := strings.SplitN(key, ".", 3)
-	switch parts[0] {
-	case "base_url":
+	resolved, err := resolveAPIConfigKey("", key)
+	if err != nil {
+		return err
+	}
+
+	switch resolved.kind {
+	case apiKeyBaseURL:
 		apiCfg.BaseURL = value
-	case "spec_url":
+	case apiKeySpecURL:
 		apiCfg.SpecURL = value
-	case "operation_base":
+	case apiKeyOperationBase:
 		apiCfg.OperationBase = value
-	case "pagination":
-		if len(parts) < 2 {
-			return fmt.Errorf("invalid key %q: expected pagination.<field>", key)
-		}
+	case apiKeyPaginationItemsPath:
 		if apiCfg.Pagination == nil {
 			apiCfg.Pagination = &config.PaginationConfig{}
 		}
-		switch parts[1] {
-		case "items_path":
-			apiCfg.Pagination.ItemsPath = value
-		case "next_path":
-			apiCfg.Pagination.NextPath = value
-		default:
-			return fmt.Errorf("unsupported pagination field %q", parts[1])
+		apiCfg.Pagination.ItemsPath = value
+	case apiKeyPaginationNextPath:
+		if apiCfg.Pagination == nil {
+			apiCfg.Pagination = &config.PaginationConfig{}
 		}
-	case "profiles":
-		if len(parts) < 3 {
-			return fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
-		}
-		profileName := parts[1]
+		apiCfg.Pagination.NextPath = value
+	case apiKeyProfileBaseURL, apiKeyProfileTLSSigner, apiKeyProfileAuthType, apiKeyProfileAuthParam:
 		if apiCfg.Profiles == nil {
 			apiCfg.Profiles = make(map[string]*config.ProfileConfig)
 		}
-		if apiCfg.Profiles[profileName] == nil {
-			apiCfg.Profiles[profileName] = &config.ProfileConfig{}
+		if apiCfg.Profiles[resolved.profileName] == nil {
+			apiCfg.Profiles[resolved.profileName] = &config.ProfileConfig{}
 		}
-		prof := apiCfg.Profiles[profileName]
-		subParts := strings.SplitN(parts[2], ".", 3)
-		switch subParts[0] {
-		case "base_url":
+		prof := apiCfg.Profiles[resolved.profileName]
+		switch resolved.kind {
+		case apiKeyProfileBaseURL:
 			prof.BaseURL = value
-		case "tls_signer":
+		case apiKeyProfileTLSSigner:
 			prof.TLSSigner = value
-		case "auth":
-			if len(subParts) < 2 {
-				return fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
-			}
+		case apiKeyProfileAuthType:
 			if prof.Auth == nil {
 				prof.Auth = &config.AuthConfig{}
 			}
-			switch subParts[1] {
-			case "type":
-				prof.Auth.Type = value
-			case "params":
-				if len(subParts) < 3 {
-					return fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
-				}
-				if prof.Auth.Params == nil {
-					prof.Auth.Params = make(map[string]string)
-				}
-				prof.Auth.Params[subParts[2]] = value
-			default:
-				return fmt.Errorf("unsupported auth field %q", subParts[1])
+			prof.Auth.Type = value
+		case apiKeyProfileAuthParam:
+			if prof.Auth == nil {
+				prof.Auth = &config.AuthConfig{}
 			}
-		default:
-			return fmt.Errorf("unsupported profile field %q", parts[2])
+			if prof.Auth.Params == nil {
+				prof.Auth.Params = make(map[string]string)
+			}
+			prof.Auth.Params[resolved.paramName] = value
 		}
-	default:
-		return fmt.Errorf("unsupported field %q", key)
 	}
 	return nil
 }
 
 func apiConfigJSONPath(apiName, key string) ([]string, error) {
+	resolved, err := resolveAPIConfigKey(apiName, key)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.jsonPath, nil
+}
+
+type apiConfigKeyKind int
+
+const (
+	apiKeyBaseURL apiConfigKeyKind = iota + 1
+	apiKeySpecURL
+	apiKeyOperationBase
+	apiKeyPaginationItemsPath
+	apiKeyPaginationNextPath
+	apiKeyProfileBaseURL
+	apiKeyProfileTLSSigner
+	apiKeyProfileAuthType
+	apiKeyProfileAuthParam
+)
+
+type resolvedAPIConfigKey struct {
+	kind        apiConfigKeyKind
+	jsonPath    []string
+	profileName string
+	paramName   string
+}
+
+func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 	parts := strings.SplitN(key, ".", 3)
-	path := []string{"apis", apiName}
+	basePath := []string{"apis"}
+	if apiName != "" {
+		basePath = append(basePath, apiName)
+	}
+
 	switch parts[0] {
-	case "base_url", "spec_url", "operation_base":
-		return append(path, parts[0]), nil
+	case "base_url":
+		return resolvedAPIConfigKey{kind: apiKeyBaseURL, jsonPath: append(basePath, "base_url")}, nil
+	case "spec_url":
+		return resolvedAPIConfigKey{kind: apiKeySpecURL, jsonPath: append(basePath, "spec_url")}, nil
+	case "operation_base":
+		return resolvedAPIConfigKey{kind: apiKeyOperationBase, jsonPath: append(basePath, "operation_base")}, nil
 	case "pagination":
 		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid key %q: expected pagination.<field>", key)
+			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected pagination.<field>", key)
 		}
 		switch parts[1] {
-		case "items_path", "next_path":
-			return append(path, "pagination", parts[1]), nil
+		case "items_path":
+			return resolvedAPIConfigKey{kind: apiKeyPaginationItemsPath, jsonPath: append(basePath, "pagination", "items_path")}, nil
+		case "next_path":
+			return resolvedAPIConfigKey{kind: apiKeyPaginationNextPath, jsonPath: append(basePath, "pagination", "next_path")}, nil
 		default:
-			return nil, fmt.Errorf("unsupported pagination field %q", parts[1])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported pagination field %q", parts[1])
 		}
 	case "profiles":
 		if len(parts) < 3 {
-			return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
+			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
 		}
 		profileName := parts[1]
 		subParts := strings.SplitN(parts[2], ".", 3)
 		switch subParts[0] {
-		case "base_url", "tls_signer":
-			return append(path, "profiles", profileName, subParts[0]), nil
+		case "base_url":
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileBaseURL,
+				jsonPath:    append(basePath, "profiles", profileName, "base_url"),
+				profileName: profileName,
+			}, nil
+		case "tls_signer":
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileTLSSigner,
+				jsonPath:    append(basePath, "profiles", profileName, "tls_signer"),
+				profileName: profileName,
+			}, nil
 		case "auth":
 			if len(subParts) < 2 {
-				return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
+				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
 			}
 			switch subParts[1] {
 			case "type":
-				return append(path, "profiles", profileName, "auth", "type"), nil
+				return resolvedAPIConfigKey{
+					kind:        apiKeyProfileAuthType,
+					jsonPath:    append(basePath, "profiles", profileName, "auth", "type"),
+					profileName: profileName,
+				}, nil
 			case "params":
 				if len(subParts) < 3 {
-					return nil, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
+					return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
 				}
-				return append(path, "profiles", profileName, "auth", "params", subParts[2]), nil
+				return resolvedAPIConfigKey{
+					kind:        apiKeyProfileAuthParam,
+					jsonPath:    append(basePath, "profiles", profileName, "auth", "params", subParts[2]),
+					profileName: profileName,
+					paramName:   subParts[2],
+				}, nil
 			default:
-				return nil, fmt.Errorf("unsupported auth field %q", subParts[1])
+				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q", subParts[1])
 			}
 		default:
-			return nil, fmt.Errorf("unsupported profile field %q", parts[2])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q", parts[2])
 		}
 	default:
-		return nil, fmt.Errorf("unsupported field %q", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q", key)
 	}
 }
 
