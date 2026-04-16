@@ -151,9 +151,9 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 
 	// Load, update, and save the config.
 	cfgPath := c.configFilePath()
-	cfg, _ := config.Load(cfgPath)
-	if cfg == nil {
-		cfg = &config.Config{}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
 	}
 	if cfg.APIs == nil {
 		cfg.APIs = make(map[string]*config.APIConfig)

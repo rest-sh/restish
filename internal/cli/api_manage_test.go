@@ -290,6 +290,34 @@ func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureDoesNotOverwriteInvalidConfig(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	invalid := "{\n  \"apis\": {\n"
+	if err := os.WriteFile(cfgFile, []byte(invalid), 0o644); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	c.SpecCachePath = t.TempDir()
+
+	err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"})
+	if err == nil {
+		t.Fatal("expected api configure to fail for invalid config")
+	}
+	if !strings.Contains(err.Error(), "invalid config") {
+		t.Fatalf("expected invalid config error, got: %v", err)
+	}
+
+	data, readErr := os.ReadFile(cfgFile)
+	if readErr != nil {
+		t.Fatalf("read config: %v", readErr)
+	}
+	if string(data) != invalid {
+		t.Fatalf("expected invalid config to remain unchanged, got:\n%s", data)
+	}
+}
+
 func TestAPIDeletePreservesJSONCComments(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {
