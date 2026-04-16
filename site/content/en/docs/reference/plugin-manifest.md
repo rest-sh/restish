@@ -13,12 +13,12 @@ The manifest may be returned as CBOR or JSON.
 ## Required Fields
 
 - `name`: plugin name
-- `version`: plugin version
-- `description`: short human-readable summary
 - `restish_api_version`: plugin protocol version
 
 ## Optional Fields
 
+- `version`: plugin version string. Strongly recommended for discovery and debugging.
+- `description`: short human-readable summary. Strongly recommended for `plugin list`.
 - `hooks`: declared plugin hook types
 - `formatter_names`: output format names provided by a formatter plugin
 - `loader_content_types`: content types handled by a loader plugin
