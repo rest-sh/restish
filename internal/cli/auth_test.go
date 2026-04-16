@@ -134,3 +134,32 @@ func TestAuthHeaderCommandUnknownAPI(t *testing.T) {
 		t.Fatal("expected error for unknown API, got nil")
 	}
 }
+
+func TestUnknownAuthTypeListsSupportedValues(t *testing.T) {
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "mystery"
+						}
+					}
+				}
+			}
+		}
+	}`
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	err := c.Run([]string{"restish", "get", "myapi/items"})
+	if err == nil {
+		t.Fatal("expected unknown auth type error")
+	}
+	for _, want := range []string{"http-basic", "oauth-client-credentials", "oauth-authorization-code", "external-tool"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected supported auth type %q in error, got %v", want, err)
+		}
+	}
+}

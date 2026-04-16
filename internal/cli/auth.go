@@ -87,7 +87,7 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 	case "external-tool":
 		return &auth.ExternalTool{}, nil
 	default:
-		return nil, fmt.Errorf("unknown auth type %q", ac.Type)
+		return nil, fmt.Errorf("unknown auth type %q; supported: http-basic, oauth-client-credentials, oauth-authorization-code, external-tool", ac.Type)
 	}
 }
 
