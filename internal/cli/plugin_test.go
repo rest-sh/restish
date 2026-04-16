@@ -339,6 +339,9 @@ func TestPluginInvalidManifest(t *testing.T) {
 	if !strings.Contains(errOut.String(), "warning") {
 		t.Errorf("expected warning for bad plugin on stderr, got:\n%s", errOut.String())
 	}
+	if !strings.Contains(errOut.String(), "run with -v for details") {
+		t.Errorf("expected debug hint for bad plugin warning, got:\n%s", errOut.String())
+	}
 	// Bad plugin must not appear in stdout list.
 	if strings.Contains(out.String(), "restish-bad") {
 		t.Errorf("bad plugin should not appear in list:\n%s", out.String())
