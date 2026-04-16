@@ -1,6 +1,7 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -169,11 +170,24 @@ func (s *readableFramedValueStream) Close() error {
 }
 
 func indentBlock(data []byte, indent string) []byte {
-	lines := strings.Split(string(data), "\n")
-	for i, line := range lines {
-		lines[i] = indent + line
+	if len(data) == 0 {
+		return []byte(indent)
 	}
-	return []byte(strings.Join(lines, "\n"))
+	var out bytes.Buffer
+	out.Grow(len(data) + len(indent))
+	lineStart := 0
+	for i := 0; i <= len(data); i++ {
+		if i < len(data) && data[i] != '\n' {
+			continue
+		}
+		out.WriteString(indent)
+		out.Write(data[lineStart:i])
+		if i < len(data) {
+			out.WriteByte('\n')
+		}
+		lineStart = i + 1
+	}
+	return out.Bytes()
 }
 
 func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {

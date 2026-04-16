@@ -61,23 +61,30 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	}
 
 	writeSep := func(left, mid, right, horiz string) {
-		fmt.Fprint(w, left)
+		var row strings.Builder
+		row.WriteString(left)
 		for i, width := range widths {
-			fmt.Fprint(w, strings.Repeat(horiz, width+2))
+			row.WriteString(strings.Repeat(horiz, width+2))
 			if i < len(widths)-1 {
-				fmt.Fprint(w, mid)
+				row.WriteString(mid)
 			}
 		}
-		fmt.Fprintln(w, right)
+		row.WriteString(right)
+		row.WriteByte('\n')
+		_, _ = io.WriteString(w, row.String())
 	}
 
 	writeRow := func(cells []string) {
-		fmt.Fprint(w, "│")
+		var row strings.Builder
+		row.WriteString("│")
 		for i, cell := range cells {
 			padded := cell + strings.Repeat(" ", widths[i]-utf8.RuneCountInString(cell))
-			fmt.Fprintf(w, " %s │", padded)
+			row.WriteString(" ")
+			row.WriteString(padded)
+			row.WriteString(" │")
 		}
-		fmt.Fprintln(w)
+		row.WriteByte('\n')
+		_, _ = io.WriteString(w, row.String())
 	}
 
 	// Top border.
