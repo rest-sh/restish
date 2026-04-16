@@ -115,6 +115,28 @@ func TestAcceptHeader(t *testing.T) {
 	}
 }
 
+func TestAcceptHeaderCacheInvalidatesOnNewRegistration(t *testing.T) {
+	r := content.New()
+	r.AddContentType(&content.ContentType{
+		Name:      "json",
+		MIMETypes: []string{"application/json"},
+		Quality:   0.5,
+	})
+	if got := r.AcceptHeader(); got != "application/json;q=0.5" {
+		t.Fatalf("AcceptHeader() = %q, want %q", got, "application/json;q=0.5")
+	}
+
+	r.AddContentType(&content.ContentType{
+		Name:      "cbor",
+		MIMETypes: []string{"application/cbor"},
+		Quality:   0.9,
+	})
+	got := r.AcceptHeader()
+	if !strings.Contains(got, "application/cbor") || !strings.Contains(got, "application/json") {
+		t.Fatalf("expected both content types after cache invalidation, got %q", got)
+	}
+}
+
 func TestGzipDecompression(t *testing.T) {
 	// Build a gzip-compressed JSON payload.
 	var buf bytes.Buffer

@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/andybalholm/brotli"
 )
@@ -49,6 +50,12 @@ type Encoding struct {
 type Registry struct {
 	contentTypes []*ContentType
 	encodings    []*Encoding
+
+	headerMu             sync.Mutex
+	acceptHeader         string
+	acceptHeaderReady    bool
+	acceptEncodingHeader string
+	acceptEncodingReady  bool
 }
 
 // New returns a Registry with no registrations.
@@ -60,6 +67,10 @@ func New() *Registry {
 // for MIME-type matching when two entries share the same type.
 func (r *Registry) AddContentType(ct *ContentType) {
 	r.contentTypes = append(r.contentTypes, ct)
+	r.headerMu.Lock()
+	r.acceptHeader = ""
+	r.acceptHeaderReady = false
+	r.headerMu.Unlock()
 }
 
 // ContentTypes returns all registered content types in registration order.
@@ -70,6 +81,10 @@ func (r *Registry) ContentTypes() []*ContentType {
 // AddEncoding registers a compression encoding.
 func (r *Registry) AddEncoding(e *Encoding) {
 	r.encodings = append(r.encodings, e)
+	r.headerMu.Lock()
+	r.acceptEncodingHeader = ""
+	r.acceptEncodingReady = false
+	r.headerMu.Unlock()
 }
 
 // qualityEntry pairs a token name with its negotiation quality value.
@@ -98,23 +113,37 @@ func buildQualityHeader(entries []qualityEntry) string {
 // AcceptHeader returns a sorted Accept header value built from all registered
 // content types, ordered by quality descending.
 func (r *Registry) AcceptHeader() string {
+	r.headerMu.Lock()
+	defer r.headerMu.Unlock()
+	if r.acceptHeaderReady {
+		return r.acceptHeader
+	}
 	var entries []qualityEntry
 	for _, ct := range r.contentTypes {
 		for _, mt := range ct.MIMETypes {
 			entries = append(entries, qualityEntry{mt, ct.Quality})
 		}
 	}
-	return buildQualityHeader(entries)
+	r.acceptHeader = buildQualityHeader(entries)
+	r.acceptHeaderReady = true
+	return r.acceptHeader
 }
 
 // AcceptEncodingHeader returns a sorted Accept-Encoding header value built
 // from all registered encodings, ordered by quality descending.
 func (r *Registry) AcceptEncodingHeader() string {
+	r.headerMu.Lock()
+	defer r.headerMu.Unlock()
+	if r.acceptEncodingReady {
+		return r.acceptEncodingHeader
+	}
 	entries := make([]qualityEntry, len(r.encodings))
 	for i, e := range r.encodings {
 		entries[i] = qualityEntry{e.Name, e.Quality}
 	}
-	return buildQualityHeader(entries)
+	r.acceptEncodingHeader = buildQualityHeader(entries)
+	r.acceptEncodingReady = true
+	return r.acceptEncodingHeader
 }
 
 // Decode finds the best-matching registered content type for mimeType,
