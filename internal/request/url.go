@@ -37,6 +37,9 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid --rsh-server %q: %w", serverOverride, err)
 		}
+		if override.Scheme != "http" && override.Scheme != "https" {
+			return "", fmt.Errorf("invalid --rsh-server %q: scheme must be http or https", serverOverride)
+		}
 		u.Scheme = override.Scheme
 		u.Host = override.Host
 	}

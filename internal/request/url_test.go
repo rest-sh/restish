@@ -1,6 +1,7 @@
 package request_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/request"
@@ -73,5 +74,15 @@ func TestNormalize(t *testing.T) {
 				t.Errorf("Normalize(%q, %q)\n  got  %q\n  want %q", tc.raw, tc.override, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeRejectsNonHTTPSOverrideSchemes(t *testing.T) {
+	_, err := request.Normalize("https://api.example.com/items", "file:///tmp/evil")
+	if err == nil {
+		t.Fatal("expected invalid override scheme to fail")
+	}
+	if !strings.Contains(err.Error(), "http or https") {
+		t.Fatalf("expected scheme validation error, got %v", err)
 	}
 }
