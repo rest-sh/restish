@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -84,10 +83,7 @@ func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
 	if _, err := parseConfigBytes(path, patched); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("config: mkdir: %w", err)
-	}
-	return os.WriteFile(path, patched, 0o600)
+	return atomicWriteFile(path, patched, 0o600, 0o755)
 }
 
 func jsoncSetPath(data []byte, path []string, value any) ([]byte, error) {

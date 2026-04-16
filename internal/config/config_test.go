@@ -171,3 +171,30 @@ func TestDefaultPath_ContainsRestish(t *testing.T) {
 		t.Errorf("DefaultPath() = %q, expected it to end with 'restish.json'", got)
 	}
 }
+
+func TestSave_WritesAtomically(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restish.json")
+	if err := config.Save(path, &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(data), "api.example.com") {
+		t.Fatalf("expected written config, got:\n%s", string(data))
+	}
+
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), "restish.json.*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected temp files to be cleaned up, got: %v", matches)
+	}
+}

@@ -173,10 +173,7 @@ func Save(path string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("config: mkdir: %w", err)
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return atomicWriteFile(path, append(data, '\n'), 0o600, 0o755)
 }
 
 // Load reads and parses the JSONC config file at path.
@@ -221,6 +218,42 @@ func (e *ParseError) Error() string {
 }
 
 func (e *ParseError) Unwrap() error { return e.Err }
+
+func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return fmt.Errorf("config: mkdir: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("config: temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = os.Remove(tmpName)
+	}
+
+	if err := tmp.Chmod(fileMode); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("config: chmod temp file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("config: write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("config: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		cleanup()
+		return fmt.Errorf("config: rename temp file: %w", err)
+	}
+	return nil
+}
 
 // PluginConfig unmarshals the configuration stored under plugins[name] into v.
 // Returns nil without modifying v when no config exists for that plugin.
