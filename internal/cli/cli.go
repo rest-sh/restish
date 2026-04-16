@@ -219,7 +219,7 @@ func (c *CLI) Run(args []string) error {
 	// Discover hook plugins at startup; warn about broken plugins so users
 	// know their plugin is not active rather than silently ignoring it.
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), cfg.AllowedPlugins, func(path string, err error) {
-		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v; run with -v for details\n", filepath.Base(path), err)
+		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
 	}, c.pluginManifestCachePath())
 
 	// Register plugin-provided formatters and loaders.
