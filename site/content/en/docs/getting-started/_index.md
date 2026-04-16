@@ -33,6 +33,8 @@ If you want the shortest end-to-end path, follow
    commands and richer workflows.
 5. [Set Up Profiles](./set-up-profiles/) so repeated environments and auth stop
    leaking into every command.
+6. [Your First API Config](./your-first-config/) if you want the smallest
+   complete mental model before the full config reference.
 
 ## Outcome
 

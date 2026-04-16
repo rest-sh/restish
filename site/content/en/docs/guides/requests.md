@@ -61,6 +61,22 @@ restish \
 For one-off calls, this is often enough. Restish starts paying off more when
 you move repeated headers, auth, and environment details into profiles.
 
+Example output progression:
+
+```bash
+restish -H 'Accept: application/json' https://api.rest.sh/images -o json
+```
+
+```json
+[
+  {
+    "format": "jpeg",
+    "name": "Dragonfly macro",
+    "self": "/images/jpeg"
+  }
+]
+```
+
 ## Send Request Bodies
 
 For small structured payloads, shorthand is the fastest path:
@@ -198,6 +214,13 @@ Example:
 
 ```bash
 restish -v --rsh-ignore-status-code https://api.rest.sh/images
+```
+
+If the shell is getting in the way before the request even runs, fix setup
+first:
+
+```bash
+restish setup zsh
 ```
 
 ## A Good Progression

@@ -73,6 +73,12 @@ Request-middleware plugins run after Restish has prepared the outbound request.
 They are best used for header-level adjustments that still belong in the normal
 request pipeline.
 
+Typical use:
+
+- add a tracing header
+- normalize a custom header format
+- attach a request ID from local context
+
 ### Response Middleware
 
 Response-middleware plugins receive the normalized response and can:
@@ -92,15 +98,32 @@ Typical follow response:
 }
 ```
 
+Typical use:
+
+- follow a server-directed next step
+- strip or replace noisy fields before output
+- normalize a custom API envelope
+
 ### Loader
 
 Loader plugins convert non-built-in API description formats into an OpenAPI
 document that Restish can load normally.
 
+Typical use:
+
+- translate a custom service description format into OpenAPI
+- normalize a variant MIME type before the host spec loader runs
+
 ### Formatter
 
 Formatter plugins render output for `-o <name>`. They receive `start`, `item`,
 and `end` events and write raw bytes to stdout.
+
+Typical use:
+
+- CSV output
+- a domain-specific pretty printer
+- record-oriented output for paginated or streamed responses
 
 ## Minimal Go Example
 
@@ -156,5 +179,6 @@ func main() {
 - [Command Plugins](../command-plugins/)
 - [Plugin Manifest](../reference/plugin-manifest/)
 - [Plugin Message Reference](../reference/plugin-messages/)
+- [Built-In Example Plugins](../example-plugins/)
 - [Plugin Quickstart](/docs/plugins/quickstart/)
 - [Design Record 019](/docs/contributing/design-records/)

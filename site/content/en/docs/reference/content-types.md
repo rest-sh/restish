@@ -38,6 +38,13 @@ restish post -c yaml https://api.example.com/items name: Alice
 restish post -c form https://api.example.com/login username: alice password: secret
 ```
 
+Common cases:
+
+- `json` for most APIs
+- `yaml` when the API or workflow prefers YAML documents
+- `form` for URL-encoded login or token endpoints
+- `multipart` for form-style uploads
+
 ## Response Decoding
 
 Restish chooses a decoder by matching the response `Content-Type` header
@@ -55,6 +62,13 @@ That is why the same response can later be:
 aggressively reinterpret file-like values for form-style content types, because
 preserving literal values is usually the safer default.
 
+Examples:
+
+```bash
+restish post -c form https://api.example.com/login username: alice password: secret
+restish post -c multipart https://api.example.com/upload name: example
+```
+
 ## Compression Encodings
 
 The built-in registry also knows how to decompress these response encodings:
@@ -68,6 +82,9 @@ The built-in registry also knows how to decompress these response encodings:
 Loader plugins can extend Restish with additional API description content
 types. Formatter plugins can add new output names on top of the same decoded
 response model.
+
+For example, a formatter plugin can add `-o csv` without changing how the
+incoming response body was decoded.
 
 See:
 

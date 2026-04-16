@@ -188,6 +188,22 @@ Think about Restish in two layers:
 
 Most users end up using both.
 
+## When To Stay Generic vs Register An API
+
+Stay generic when:
+
+- you only need one or two calls
+- you are exploring an API before you trust its spec
+- the API does not have a useful description yet
+
+Register an API when:
+
+- you keep repeating the same base URL
+- the API has a usable OpenAPI document
+- you want discoverable generated commands
+- profiles, auth, and shell completion are becoming more important than raw
+  ad hoc speed
+
 ## Useful Commands
 
 - `restish api list`

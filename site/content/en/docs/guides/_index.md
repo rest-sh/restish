@@ -11,6 +11,7 @@ behavior behind them.
 ## Popular Guides
 
 - [Comparison](./comparison/) for deciding when Restish is a better fit than curl or HTTPie.
+- [Shell Completion and Setup](./completions/) for installed completion and generated command discovery.
 - [Requests](./requests/) for the core workflow.
 - [API Setup and Discovery](./api-setup-and-discovery/) for turning API descriptions into generated commands.
 - [OpenAPI and CLI Integration](./openapi-cli-integration/) for API authors who want a better Restish command experience.

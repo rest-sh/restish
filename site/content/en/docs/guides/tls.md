@@ -40,6 +40,9 @@ restish get \
 These options also fit naturally into profile-based workflows when you need
 repeatable configuration.
 
+Use file-based mTLS when you have ordinary PEM material on disk. Use a TLS
+signer plugin when the private key must stay outside the Restish process.
+
 ## TLS Signer Plugins
 
 When the private key must stay outside the Restish process, use a TLS signer
@@ -85,6 +88,13 @@ restish cert --warn-days 14 https://api.example.com
 
 This is useful for checking issuers, names, expiry windows, and the exact trust
 context Restish itself would use.
+
+## Common Failure Modes
+
+- server signed by a private CA you have not trusted yet
+- wrong client certificate or private key
+- using file-based mTLS when the key actually lives in hardware
+- minimum TLS version set higher than the server supports
 
 ## Related Guides
 

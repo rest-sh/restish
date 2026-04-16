@@ -69,6 +69,26 @@ Equivalent body:
 }
 ```
 
+## Strings, Nulls, And Empty Values
+
+Restish coerces common literal-looking values automatically:
+
+- `true` and `false`
+- `null`
+- numbers such as `123` and `1.5`
+
+Quote the value when you want the literal string instead:
+
+```bash
+restish post https://api.rest.sh enabled: "true" missing: "null"
+```
+
+Use `""` or a blank value for an empty string:
+
+```bash
+restish post https://api.rest.sh blank1: blank2: ""
+```
+
 ## Patch Piped Input
 
 ```bash
@@ -105,6 +125,16 @@ For form-style content types such as `multipart/form-data`, Restish does not
 eagerly interpret values like `@upload.txt` as shorthand file input. It keeps
 them literal so form submissions behave predictably.
 
+## Shell Quoting
+
+If your shell expands `[]` or `?` before Restish sees the input, either quote
+the arguments or install shell setup:
+
+```bash
+restish setup zsh
+restish post https://api.rest.sh 'tags[]: red' 'tags[]: blue'
+```
+
 ## When To Use Shorthand
 
 Shorthand is best when:
@@ -123,4 +153,6 @@ Prefer files or piped input when:
 ## Learn More
 
 - [Requests](../requests/)
+- [Shorthand Syntax](/docs/reference/shorthand/)
+- [Query Syntax](/docs/reference/query-syntax/)
 - [Design Records](/docs/contributing/design-records/)

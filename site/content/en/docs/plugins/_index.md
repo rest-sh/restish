@@ -14,6 +14,8 @@ user-facing workflows such as `restish bulk` and `restish mcp`.
 
 ## Start Here
 
+- [Install and Use Plugins](./install-and-use/) if you are operating existing
+  plugins rather than authoring one.
 - [Plugin Quickstart](./quickstart/) for the shortest path to a working plugin.
 - [Hook Plugins](./hook-plugins/) if you want one-shot request or response
   integration points.
@@ -21,6 +23,8 @@ user-facing workflows such as `restish bulk` and `restish mcp`.
   longer-lived conversation.
 - [TLS Signer Plugins](./tls-signer-plugins/) for hardware-backed or external
   mutual TLS signing.
+- [Built-In Example Plugins](./example-plugins/) for concrete plugin code that
+  ships in this repository.
 
 ## Choosing a Plugin Type
 

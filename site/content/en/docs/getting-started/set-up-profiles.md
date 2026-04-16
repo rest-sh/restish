@@ -29,7 +29,7 @@ about the request itself instead of the environment setup.
 
 ## Example
 
-```json
+```jsonc
 {
   "apis": {
     "billing": {
@@ -53,6 +53,11 @@ Then choose a profile with:
 restish -p debug get billing/images
 restish -p default get billing/images
 ```
+
+Example effect:
+
+- `default` sends `Accept: application/json`
+- `debug` sends `Accept: application/json` and `X-Debug: true`
 
 ## What Profiles Can Hold
 
@@ -103,6 +108,7 @@ automation.
 
 ## What To Read Next
 
+- [Your First API Config](../your-first-config/)
 - [Profiles Concept Guide](/docs/concepts/profiles/)
 - [Authentication Guide](/docs/guides/authentication/)
 - [Use Multiple Profiles Recipe](/docs/recipes/use-multiple-profiles/)

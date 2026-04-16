@@ -46,6 +46,13 @@ restish https://api.rest.sh/images -f links.next
 
 Shorthand is best when you want direct access to a known field quickly.
 
+More examples:
+
+```bash
+restish https://api.rest.sh/images -f body[0].name
+restish https://api.rest.sh/example -f body.volunteer[0].organization
+```
+
 Example output:
 
 ```json
@@ -92,6 +99,13 @@ Dragonfly macro
 
 jq is the better choice when you need selection, transformation, or aggregation.
 
+More examples:
+
+```bash
+restish https://api.rest.sh/images -f '.body | map(.format)'
+restish https://api.rest.sh/images --rsh-collect -f '.body | group_by(.format)'
+```
+
 ## Raw Output
 
 For shell-friendly output, combine a filter with `--rsh-raw`:
@@ -129,6 +143,12 @@ Use jq when:
 - you want to reshape arrays or objects
 - you are doing more than direct field access
 
+## Common Mistakes
+
+- forgetting the `body.` prefix when you mean the response body in shorthand
+- using `jq` aggregation without `--rsh-collect` on paginated endpoints
+- expecting filtered output to preserve the original raw response bytes
+
 ## Why Filtering Feels Consistent
 
 Because filtering happens after normalization:
@@ -143,6 +163,7 @@ than trying to preserve the original raw response bytes.
 ## Learn More
 
 - [Output](../output/)
+- [Query Syntax](/docs/reference/query-syntax/)
 - [Design Records](/docs/contributing/design-records/)
 
 Source material:

@@ -25,6 +25,17 @@ These commands are part of the main Restish binary:
 - `setup`: configure shell `noglob`-style behavior
 - `plugin`: inspect, install, remove, or debug plugins
 
+Dedicated references:
+
+- [Generic HTTP Commands](../reference/http-commands/)
+- [Edit Command](../reference/edit-command/)
+- [Links Command](../reference/links-command/)
+- [Cache Commands](../reference/cache-command/)
+- [Cert Command](../reference/cert-command/)
+- [Auth Header Command](../reference/auth-header-command/)
+- [Setup Command](../reference/setup-command/)
+- [Plugin Commands](../reference/plugin-command/)
+
 ## Generic HTTP Commands
 
 Use these when you want to make a direct request quickly:

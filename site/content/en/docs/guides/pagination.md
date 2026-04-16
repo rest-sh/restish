@@ -107,6 +107,11 @@ with API config:
 That tells Restish where to find the collection items and the next page URL in
 the response body.
 
+Wrapper-preserving effect:
+
+- document formats still keep the logical response shape
+- only the configured item collection is merged across pages
+
 ## Inspect Links Explicitly
 
 Pagination is built on the same normalized links model used elsewhere in the
@@ -118,6 +123,7 @@ Examples:
 ```bash
 restish https://api.rest.sh/images -f links
 restish https://api.rest.sh/images -f links.next -r
+restish links https://api.rest.sh/images next
 ```
 
 ## When To Stream vs Collect

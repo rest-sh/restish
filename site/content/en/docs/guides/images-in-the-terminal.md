@@ -23,6 +23,12 @@ Restish prefers native image display mechanisms when available, then falls back
 to a Unicode half-block renderer. When stdout is not a TTY, image output falls
 back to raw bytes.
 
+In practice that means:
+
+- supported terminals get higher-fidelity inline rendering
+- other terminals still get a readable fallback
+- redirected output stays useful for saving files
+
 ## Save The Original Image
 
 To preserve the response bytes exactly:

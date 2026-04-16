@@ -103,6 +103,16 @@ In practice:
 If you are unsure, start with the default. Add `-o` only once you know what job
 the output needs to do next.
 
+## Format Selection Cheat Sheet
+
+- `readable`: best interactive default on a terminal
+- `json`: one machine-friendly document
+- `yaml`: one human-readable document format
+- `ndjson`: one JSON value per line
+- `raw`: exact response bytes
+- `table`: arrays of similar objects
+- `image`: inline image display on supported terminals
+
 ## Readable Output
 
 The readable formatter is designed for humans. It keeps useful HTTP context

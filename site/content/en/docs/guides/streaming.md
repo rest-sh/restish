@@ -41,6 +41,11 @@ For explicit machine-oriented record output, prefer `ndjson`:
 restish https://api.example.com/events -o ndjson
 ```
 
+Think about stream handling in two categories:
+
+- bounded streams, where EOF arrives naturally
+- live streams, where the feed may continue indefinitely
+
 ## Filter Each Event
 
 Filtering still works in streaming mode. Each event payload becomes `body` for
@@ -94,6 +99,9 @@ restish https://api.example.com/events -o json
 ```
 
 Use `-o ndjson` when you want structured streaming JSON instead.
+
+That is the practical reason `json` and live streams do not mix well: one asks
+for a full document, while the other may never finish.
 
 ## How SSE Events Are Parsed
 

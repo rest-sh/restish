@@ -23,6 +23,13 @@ restish edit https://api.example.com/items/123
 Restish fetches the current representation, opens it in your editor, shows a
 diff, and asks for confirmation before sending the update.
 
+That makes it a safer replacement for the manual sequence of:
+
+1. GET the current resource
+2. save it locally
+3. edit it
+4. send it back with PATCH or PUT
+
 ## Choose The Edit Format
 
 The editable representation can be JSON or YAML:
@@ -44,6 +51,9 @@ restish edit https://api.example.com/items/123 name: Alice status: active
 ```
 
 This is the fastest path for small updates.
+
+Conceptually, this is best when you know the exact fields you want to change
+and do not need to review a full document in an editor.
 
 ## Dry Run And Confirmation
 
@@ -79,6 +89,9 @@ that metadata on update:
 
 That helps prevent accidental overwrites when the server supports conditional
 requests.
+
+This is one of the main reasons `edit` is safer than manually copy-pasting a
+stale representation back to the API.
 
 ## Related Guides
 
