@@ -27,6 +27,7 @@ Restish currently includes built-in support for:
 - basic auth
 - OAuth2 client credentials
 - OAuth2 authorization code
+- external-tool
 
 If you need something more specialized, the auth hook/plugin model leaves room
 for extension without turning every auth system into a core feature.
@@ -106,6 +107,44 @@ hiding it inside the transport layer.
 For users, the main effect is that OAuth-backed requests still feel like normal
 Restish commands once the profile is configured.
 
+## External Tool Example
+
+Use `external-tool` when authentication has to be delegated to an existing
+script, signer, or local credential helper.
+
+```json
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "external-tool",
+            "params": {
+              "commandline": "./scripts/sign-request.sh",
+              "omitbody": "true"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+At request time, Restish sends the outbound request to the tool as JSON on
+stdin. The tool can return updated headers, an updated URI, or both.
+
+This is useful when:
+
+- the auth system already exists as a script or local helper
+- credentials must stay outside the Restish config file
+- you need custom signing logic but do not need a full plugin
+
+The tool receives the full outbound request, including any headers already
+added earlier in request preparation. Treat it as trusted code.
+
 ## A Common Pattern
 
 It is common to keep multiple auth contexts under one API:
@@ -172,8 +211,9 @@ Use `--rsh-profile` or `RSH_PROFILE` to choose the active profile.
 
 ## When To Reach For Plugins
 
-If your auth system is not covered by the built-in handlers, use an auth plugin
-instead of trying to bolt custom header logic onto every command.
+If your auth system is not covered by the built-in handlers or `external-tool`,
+use an auth plugin instead of trying to bolt custom header logic onto every
+command.
 
 That keeps authentication in the same request-time extension seam as the
 built-in auth types.

@@ -156,6 +156,8 @@ Example:
 - `RSH_CONFIG_DIR`: override the config directory
 - `RSH_CACHE_DIR`: override the HTTP response cache directory
 - `RSH_PROFILE`: choose the default active profile
+- `RSH_TIMEOUT`: set the default request timeout in seconds
+- `RSH_RETRY`: set the default retry count for transient failures
 
 ## Editing Strategies
 
