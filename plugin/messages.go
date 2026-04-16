@@ -18,6 +18,9 @@ const (
 	MsgTypeStdoutData   = "stdout-data"
 	MsgTypeStderrData   = "stderr-data"
 	MsgTypeWarn         = "warn"
+	MsgTypeProgress     = "progress"
+	MsgTypeSpinner      = "spinner"
+	MsgTypeLog          = "log"
 
 	// Host → plugin responses.
 	MsgTypeHTTPResponse         = "http-response"
@@ -224,6 +227,24 @@ type StderrDataMsg struct {
 // WarnMsg prints a warning line (prefixed with "warning: ") on the host's
 // stderr.
 type WarnMsg struct {
+	Type string `cbor:"type"`
+	Text string `cbor:"text"`
+}
+
+// ProgressMsg prints an informational progress line on the host stderr.
+type ProgressMsg struct {
+	Type string `cbor:"type"`
+	Text string `cbor:"text"`
+}
+
+// SpinnerMsg requests spinner-style status text on the host stderr.
+type SpinnerMsg struct {
+	Type string `cbor:"type"`
+	Text string `cbor:"text"`
+}
+
+// LogMsg prints an informational log line on the host stderr.
+type LogMsg struct {
 	Type string `cbor:"type"`
 	Text string `cbor:"text"`
 }

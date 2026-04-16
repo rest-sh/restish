@@ -69,6 +69,11 @@ func (c *CommandClient) Warn(text string) error {
 	return c.WriteMessage(WarnMsg{Type: MsgTypeWarn, Text: text})
 }
 
+// Progress sends an informational progress message to the host.
+func (c *CommandClient) Progress(text string) error {
+	return c.WriteMessage(ProgressMsg{Type: MsgTypeProgress, Text: text})
+}
+
 // Done signals that the plugin has finished.  exitCode 0 means success; any
 // other value causes the host to exit with that code.
 func (c *CommandClient) Done(exitCode int) error {
