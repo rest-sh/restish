@@ -7,16 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/term"
-
 	"github.com/danielgtaylor/restish/v2/internal/filter"
 	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/danielgtaylor/restish/v2/internal/spec"
@@ -452,40 +448,7 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.AP
 }
 
 func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg pluginwire.PromptMsg) error {
-	fmt.Fprint(c.Stderr, msg.Message)
-
-	var value string
-	var readErr error
-
-	if msg.Hidden {
-		if f, ok := c.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-			var raw []byte
-			raw, readErr = term.ReadPassword(int(f.Fd()))
-			fmt.Fprintln(c.Stderr)
-			value = string(raw)
-		} else {
-			scanner := bufio.NewScanner(c.Stdin)
-			if scanner.Scan() {
-				value = strings.TrimRight(scanner.Text(), "\r\n")
-			} else {
-				readErr = scanner.Err()
-				if readErr == nil {
-					readErr = fmt.Errorf("unexpected EOF reading prompt")
-				}
-			}
-		}
-	} else {
-		scanner := bufio.NewScanner(c.Stdin)
-		if scanner.Scan() {
-			value = strings.TrimRight(scanner.Text(), "\r\n")
-		} else {
-			readErr = scanner.Err()
-			if readErr == nil {
-				readErr = fmt.Errorf("unexpected EOF reading prompt")
-			}
-		}
-	}
-
+	value, readErr := readPromptValue(msg.Message, c.Stdin, c.Stderr, msg.Hidden)
 	if readErr != nil {
 		return writer.WriteMessage(pluginwire.PromptResponseMsg{
 			Type:  pluginwire.MsgTypePromptResponse,

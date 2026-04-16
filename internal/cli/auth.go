@@ -1,16 +1,12 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/auth"
 	"github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // addAuthHeaderCommand registers the "auth-header" command on root.
@@ -154,27 +150,9 @@ func (c *CLI) tokenCachePath() string {
 // Uses PassReader when set (for tests); otherwise uses Stdin.
 // When the source is a real terminal the input is not echoed.
 func (c *CLI) promptSecret(prompt string) (string, error) {
-	fmt.Fprint(c.Stderr, prompt)
-
 	src := c.PassReader
 	if src == nil {
 		src = c.Stdin
 	}
-
-	// Real terminal: suppress echo.
-	if f, ok := src.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-		pass, err := term.ReadPassword(int(f.Fd()))
-		fmt.Fprintln(c.Stderr) // restore cursor to new line
-		return string(pass), err
-	}
-
-	// Non-TTY (tests, pipes): read one line.
-	scanner := bufio.NewScanner(src)
-	if scanner.Scan() {
-		return strings.TrimRight(scanner.Text(), "\r\n"), nil
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
-	}
-	return "", fmt.Errorf("unexpected EOF reading password")
+	return readPromptValue(prompt, src, c.Stderr, true)
 }
