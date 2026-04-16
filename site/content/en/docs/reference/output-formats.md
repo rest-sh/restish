@@ -13,6 +13,12 @@ It helps to think about them in two families:
 - **document formats** such as `json`, `yaml`, and `readable`
 - **record formats** such as `ndjson` and stream-oriented plugins
 
+That distinction matters because explicit format choice determines the framing
+contract:
+
+- document formats aim to produce one coherent result
+- record formats emit one item or event at a time
+
 ## Default Selection
 
 If you do not pass `-o`:
@@ -22,6 +28,9 @@ If you do not pass `-o`:
 - `image/*` responses on a TTY can switch to `image`
 
 Explicit `-o <format>` always wins.
+
+See [Output Defaults](../output-defaults/) for the TTY and redirect behavior in
+more detail.
 
 ## Built-In Formats
 
@@ -73,6 +82,7 @@ Encodes one JSON value per line.
 - best for paginated item-by-item processing
 - best for live SSE / NDJSON stream consumption
 - a good fit for shell loops and downstream tools like `jq`
+- the explicit JSON format for record-by-record output
 
 ```bash
 restish https://api.rest.sh/images -o ndjson -f 'body.self'
@@ -92,6 +102,7 @@ Renders an array of objects as a table.
 
 - use `--rsh-columns` to pick or order columns
 - use `--rsh-sort-by` to sort rows before rendering
+- best when the result is an array of similarly shaped objects
 
 ```bash
 restish https://api.rest.sh/images -o table --rsh-columns name,format,self
@@ -146,6 +157,21 @@ For paginated or streaming record-by-record output, prefer `-o ndjson`:
 restish https://api.rest.sh/images -o ndjson -f 'body.self'
 ```
 
+## Pagination And Streaming Contracts
+
+The practical rule is:
+
+- `-o json` means one valid JSON document
+- `-o yaml` means one valid YAML document
+- `-o readable` means one coherent terminal-oriented view
+- `-o ndjson` means one JSON value per line
+
+That is why `-o json` collects paginated structured output into one document,
+while `-o ndjson` is the explicit incremental format.
+
+For live streams, prefer `ndjson` when you want machine-readable item-by-item
+processing.
+
 ## Plugin Formats
 
 Formatter plugins can add new names to `-o <name>`. Those plugins receive the
@@ -159,5 +185,6 @@ so formats like CSV can emit one header row followed by streamed records.
 See also:
 
 - [Output Guide](/docs/guides/output/)
+- [Output Defaults](../output-defaults/)
 - [Plugin Manifest Reference](../plugin-manifest/)
 - [Plugin Message Reference](../plugin-messages/)

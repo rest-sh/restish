@@ -8,6 +8,12 @@ description: Build your first Restish plugin and choose the right plugin type.
 This guide is the shortest path from "I want to extend Restish" to a working
 plugin binary.
 
+If you are trying to use an existing plugin rather than write one, start with:
+
+- [Plugins Reference](/docs/reference/plugins/)
+- [Bulk Management](/docs/guides/bulk-management/)
+- [MCP](/docs/guides/mcp/)
+
 ## Choose a Plugin Type
 
 - Hook plugin: one request in, one reply out. Best for auth, request
@@ -19,6 +25,12 @@ plugin binary.
 
 Start with a hook plugin unless you already know you need a custom command
 lifecycle.
+
+In practice:
+
+- start with a formatter hook plugin if you want the fastest first success
+- choose a command plugin when the feature deserves its own top-level CLI
+- choose a TLS signer plugin only for advanced mTLS integration
 
 ## The Public Helper Package
 
@@ -155,12 +167,29 @@ before the reply comes back to your plugin.
 4. Use `restish plugin list` to confirm discovery.
 5. Use `restish plugin debug <name> ...` when you need to inspect CBOR traffic.
 
+If you are iterating on operator-facing behavior, also test the plugin through
+the real user command path instead of only through startup flags.
+
 ## Good Reference Implementations
 
 - `cmd/restish-csv/main.go` for a small formatter hook plugin
 - `cmd/restish-mcp/main.go` for a real command plugin
 - `internal/cli/testdata/cmdplugin/main.go` for a tiny command-plugin test fixture
 - [Design Records](/docs/contributing/design-records/) for hook payload shapes and command-plugin protocol details
+
+## Operator Path vs Author Path
+
+Two common confusions:
+
+- `restish plugin install ./restish-name` is for users and local testing
+- writing the plugin source code is a separate author workflow
+
+If you are documenting or shipping a plugin for operators, make sure you cover:
+
+- how the binary is installed or discovered
+- what top-level commands appear after install
+- which config keys or profiles the plugin uses
+- one full working example
 
 ## Common Pitfalls
 

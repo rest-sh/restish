@@ -89,6 +89,10 @@ That keeps plugin workflows aligned with the normal host behavior:
 - retries and caching
 - normalized response handling
 
+That is why user-facing command plugins such as `restish bulk` and
+`restish mcp` can feel like part of the main CLI instead of separate tools with
+their own auth and transport stacks.
+
 ## Minimal Go Example
 
 ```go
@@ -122,6 +126,17 @@ func main() {
 }
 ```
 
+## Real User Examples
+
+Command plugins are not only for authors. The current repository includes
+first-party command plugins that expose actual user workflows:
+
+- `restish bulk ...` for local bulk resource management
+- `restish mcp ...` for serving registered APIs over MCP
+
+Those are good reference points for deciding whether a feature should be a
+command plugin at all.
+
 ## Pitfalls
 
 - The host disables its own flag parsing for contributed commands. The plugin
@@ -132,6 +147,14 @@ func main() {
   or normalization behavior.
 - Use raw `stdout-data` and `stderr-data` only when the plugin truly owns the
   terminal output for that step.
+
+## When Not To Use A Command Plugin
+
+Prefer a hook plugin instead when:
+
+- one request and one reply are enough
+- you only need auth, middleware, loader, or formatter behavior
+- the feature does not need its own top-level command surface
 
 ## Related Pages
 

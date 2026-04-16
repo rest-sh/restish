@@ -20,7 +20,7 @@ You can override the config directory with `RSH_CONFIG_DIR`.
 
 ## Top-Level Shape
 
-```json
+```jsonc
 {
   "apis": {},
   "cache": {},
@@ -35,7 +35,7 @@ You can override the config directory with `RSH_CONFIG_DIR`.
 
 Example:
 
-```json
+```jsonc
 {
   "apis": {
     "github": {
@@ -55,6 +55,11 @@ Example:
 - `profiles`: map of profile name to profile config
 - `pagination`: optional pagination config
 
+Use `spec_url` when the API publishes one main spec document.
+
+Use `spec_files` when you want to merge several local or remote spec files in a
+fixed order.
+
 ## `profiles`
 
 Profiles live under an API, not globally.
@@ -71,7 +76,7 @@ Profiles live under an API, not globally.
 ### Auth Config Fields
 
 - `type`: auth mechanism name such as `http-basic`,
-  `oauth-client-credentials`, or `oauth-authorization-code`
+  `oauth-client-credentials`, `oauth-authorization-code`, or `external-tool`
 - `params`: string map of handler-specific parameters
 
 ## `pagination`
@@ -109,7 +114,7 @@ internal schema.
 
 Example:
 
-```json
+```jsonc
 {
   "plugins": {
     "bulk": {
@@ -156,7 +161,7 @@ Example:
 - `RSH_CONFIG_DIR`: override the config directory
 - `RSH_CACHE_DIR`: override the HTTP response cache directory
 - `RSH_PROFILE`: choose the default active profile
-- `RSH_TIMEOUT`: set the default request timeout in seconds
+- `RSH_TIMEOUT`: set the default request timeout
 - `RSH_RETRY`: set the default retry count for transient failures
 
 ## Editing Strategies
@@ -174,6 +179,9 @@ restish api configure github https://api.github.com
 restish api set github spec_url https://api.github.com/openapi.json
 restish api show github
 ```
+
+Use `api set` for narrow targeted edits. Use `api edit` when you need to
+restructure several fields at once.
 
 ## Related Commands
 
