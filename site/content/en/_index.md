@@ -11,6 +11,9 @@ linkTitle = "Docs"
   <a class="btn btn-lg btn-primary me-3 mb-4" href="/docs/getting-started/install/">
     Get Started
   </a>
+  <a class="btn btn-lg btn-outline-light me-3 mb-4" href="/docs/getting-started/quickstart/">
+    Quickstart
+  </a>
   <a class="btn btn-lg btn-outline-light me-3 mb-4" href="/docs/getting-started/first-request/">
     First Request
   </a>
@@ -45,7 +48,11 @@ plugins all fit one consistent request model.
 <div class="restish-card-grid">
   <a class="restish-card" href="/docs/getting-started/install/">
     <h2>Install in One Command</h2>
-    <p>Install with Homebrew, verify the binary, and move directly into your first successful request.</p>
+    <p>Install with Homebrew, mise, Nix, GitHub releases, or Go, then verify the binary in one minute.</p>
+  </a>
+  <a class="restish-card" href="/docs/getting-started/quickstart/">
+    <h2>Ten-Minute Quickstart</h2>
+    <p>Go from install to a generated API command, profile, and filtered output with one realistic flow.</p>
   </a>
   <a class="restish-card" href="/docs/getting-started/first-request/">
     <h2>First Request in Minutes</h2>
@@ -70,9 +77,10 @@ plugins all fit one consistent request model.
 ## Start Here
 
 1. [Install Restish](/docs/getting-started/install/)
-2. [Make your first request](/docs/getting-started/first-request/)
-3. [Set up your shell](/docs/getting-started/shell-setup/)
-4. [Connect to an API](/docs/getting-started/connect-to-an-api/)
+2. [Run the Quickstart](/docs/getting-started/quickstart/)
+3. [Make your first request](/docs/getting-started/first-request/)
+4. [Set up your shell](/docs/getting-started/shell-setup/)
+5. [Connect to an API](/docs/getting-started/connect-to-an-api/)
 
 ## Why People Use Restish
 
@@ -80,4 +88,15 @@ plugins all fit one consistent request model.
 - better day-to-day ergonomics once an API description is available
 - one tool for ad hoc calls, repeatable profiles, and generated API commands
 - plugin hooks for auth, formatting, loaders, workflow commands, and TLS signing
+
+## Choose a Path
+
+- New user:
+  [Quickstart](/docs/getting-started/quickstart/)
+- Daily API operator:
+  [Requests](/docs/guides/requests/)
+- API author:
+  [Connect to an API](/docs/getting-started/connect-to-an-api/)
+- Plugin author:
+  [Plugin Quickstart](/docs/plugins/quickstart/)
 {{% /blocks/section %}}

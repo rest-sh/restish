@@ -17,6 +17,20 @@ Generated API commands and shorthand expressions often include characters that
 shells want to interpret. Completion and a small amount of shell setup make the
 CLI much nicer to use day to day.
 
+Without setup, shells often try to interpret input that should have been passed
+through to Restish unchanged.
+
+Common examples:
+
+```bash
+restish https://api.rest.sh/images?format=jpeg
+restish post https://api.rest.sh tags[]: red tags[]: blue
+restish https://api.rest.sh/images -f 'body[0].self'
+```
+
+Those commands are normal Restish input, but `?`, `[]`, and similar characters
+are exactly the kind of syntax shells like to glob.
+
 ## Configure Shell Input Handling
 
 Restish provides a `setup` command that appends a shell-specific alias or
@@ -70,6 +84,17 @@ restish completion powershell
 
 Use those commands with your shell's normal completion installation workflow.
 
+Typical pattern:
+
+- Zsh: write the script to a directory in your `fpath`
+- Bash: source it from your shell startup files or install it into your
+  completion directory
+- Fish: write it into `~/.config/fish/completions/`
+- PowerShell: load it through your PowerShell profile
+
+If you installed Restish through Homebrew, you may also need to make sure your
+shell is loading Homebrew's completion directory.
+
 ## Why `noglob`-Style Setup Matters
 
 Completion and shell setup solve different problems:
@@ -93,6 +118,9 @@ For interactive use, set up both:
 That combination gives you safer input handling plus tab completion for built-in
 and generated commands.
 
+Generated API commands benefit the most because completion can show discovered
+operation names and, where available, enum-backed values from the API spec.
+
 ## Short Version
 
 If you want the minimum useful setup:
@@ -107,6 +135,7 @@ Then add shell completion once you are ready.
 ## Related Guides
 
 - [Install](../install/)
+- [Quickstart](../quickstart/)
 - [Connect to an API](../connect-to-an-api/)
 
 ## Source Material

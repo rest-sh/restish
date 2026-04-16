@@ -2,7 +2,7 @@
 title: Connect to an API
 linkTitle: Connect to an API
 weight: 40
-description: Discover or register an API so Restish can generate commands from its description.
+description: Register an API, discover its OpenAPI document, and switch from raw URLs to generated commands.
 ---
 
 Restish becomes much more powerful when it can work from an API description,
@@ -42,6 +42,23 @@ restish api show example
 restish example --help
 ```
 
+Example output:
+
+```text
+Configured APIs:
+  example
+```
+
+And the generated help should now show operations such as:
+
+```text
+Commands generated from the example API spec
+
+Available Commands:
+  get-image
+  list-images
+```
+
 If you see generated subcommands under `example`, you are ready to stop typing
 full URLs for common operations.
 
@@ -66,6 +83,25 @@ For a new API, the usual sequence is:
 
 That flow is worth learning early because it is one of Restish's biggest
 advantages over lower-level HTTP tools.
+
+## Before And After
+
+Before registration, you make direct URL-based requests:
+
+```bash
+restish https://api.rest.sh/images/jpeg
+```
+
+After registration, the same API becomes easier to discover and easier to
+remember:
+
+```bash
+restish example list-images
+restish example get-image jpeg
+```
+
+That is usually the point where Restish stops feeling like "a nicer curl" and
+starts feeling like "the CLI for this API".
 
 ## What Discovery Tries
 
@@ -93,7 +129,7 @@ Registration still helps even if discovery does not find a spec right away:
 
 If you already know exactly where the spec lives, make that explicit in config:
 
-```json
+```jsonc
 {
   "apis": {
     "example": {
@@ -135,6 +171,10 @@ You can also keep using URL-style requests against the same registered API:
 restish example/images
 ```
 
+That fallback is important. Registration is still useful even before the API
+description is perfect because the API short name can carry your base URL,
+profiles, auth, and other defaults.
+
 Required path or query parameters usually become positional arguments, while
 optional parameters become flags. Request bodies still use the same shorthand
 and stdin input model as generic commands.
@@ -159,6 +199,7 @@ Most users end up using both.
 
 ## Related Guides
 
+- [Quickstart](../quickstart/)
 - [First Request](../first-request/)
 - [Shell Setup](../shell-setup/)
 - [Set Up Profiles](../set-up-profiles/)
