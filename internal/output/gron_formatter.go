@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 )
 
 // GronFormatter renders the body as "gron" format: each leaf value on its own
@@ -33,7 +34,7 @@ func gronWalk(w io.Writer, path string, v any) {
 	case []any:
 		fmt.Fprintf(w, "%s = [];\n", path)
 		for i, item := range val {
-			gronWalk(w, fmt.Sprintf("%s[%d]", path, i), item)
+			gronWalk(w, path+"["+strconv.Itoa(i)+"]", item)
 		}
 	default:
 		b, _ := json.Marshal(v)
