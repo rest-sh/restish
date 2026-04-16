@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -205,7 +206,7 @@ func (c *CLI) baseHTTPTransport() http.RoundTripper {
 func (c *CLI) Run(args []string) error {
 	// On first run (no config file yet), suggest shell setup if on a supported
 	// shell so users discover the noglob alias before hitting the foot-gun.
-	if _, statErr := os.Stat(c.configFilePath()); os.IsNotExist(statErr) && output.IsTerminal(c.Stderr) {
+	if _, statErr := os.Stat(c.configFilePath()); errors.Is(statErr, os.ErrNotExist) && output.IsTerminal(c.Stderr) {
 		c.hintShellSetup()
 	}
 

@@ -5,6 +5,7 @@ package cache
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -162,7 +163,7 @@ type Info struct {
 // Info returns current cache statistics.
 func (c *DiskCache) Info() (*Info, error) {
 	entries, total, err := c.allFiles()
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	info := &Info{SizeBytes: total, EntryCount: len(entries)}
@@ -180,7 +181,7 @@ func (c *DiskCache) Clear(host string) error {
 	if host == "" {
 		entries, err := os.ReadDir(c.dir)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
 			return err
