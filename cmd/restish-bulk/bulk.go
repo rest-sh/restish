@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -388,8 +389,10 @@ func (a *app) pullIndex(m *Meta) error {
 	for _, entry := range entries {
 		u, _ := url.Parse(entry.URL)
 		resolved := baseURL.ResolveReference(u).String()
-		relPath := strings.TrimPrefix(resolved, m.Base) + ".json"
-		relPath = filepath.ToSlash(relPath)
+		relPath, err := bulkRelativePath(m.Base, resolved)
+		if err != nil {
+			return err
+		}
 		f := m.Files[relPath]
 		if f == nil {
 			f = &File{Path: relPath, URL: resolved}
@@ -909,6 +912,38 @@ func normalizedBaseURL(raw string) string {
 		return "http://localhost" + raw
 	}
 	return "https://" + raw
+}
+
+func bulkRelativePath(baseURL, resolvedURL string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid bulk base URL %q: %w", baseURL, err)
+	}
+	resolved, err := url.Parse(resolvedURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid bulk item URL %q: %w", resolvedURL, err)
+	}
+	if !strings.EqualFold(base.Scheme, resolved.Scheme) || !strings.EqualFold(base.Host, resolved.Host) {
+		return "", fmt.Errorf("bulk item %q is outside checkout base %q", resolvedURL, baseURL)
+	}
+
+	basePath := path.Clean("/" + strings.TrimPrefix(base.EscapedPath(), "/"))
+	resolvedPath := path.Clean("/" + strings.TrimPrefix(resolved.EscapedPath(), "/"))
+	basePrefix := strings.TrimSuffix(basePath, "/") + "/"
+	if basePath == "/" {
+		basePrefix = "/"
+	}
+	if resolvedPath != strings.TrimSuffix(basePrefix, "/") && !strings.HasPrefix(resolvedPath, basePrefix) {
+		return "", fmt.Errorf("bulk item %q escapes checkout base %q", resolvedURL, baseURL)
+	}
+
+	rel := strings.TrimPrefix(resolvedPath, basePrefix)
+	rel = strings.TrimPrefix(rel, "/")
+	cleaned := path.Clean(rel)
+	if cleaned == "." || strings.HasPrefix(cleaned, "../") || strings.HasPrefix(cleaned, "/") {
+		return "", fmt.Errorf("bulk item %q resolves to invalid path %q", resolvedURL, rel)
+	}
+	return filepath.ToSlash(cleaned) + ".json", nil
 }
 
 func isFalsey(v any) bool {
