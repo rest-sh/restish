@@ -57,7 +57,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	// The default 64 KiB limit causes silent data loss on large events.
 	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
 
-	var dataLines []string
+	var data strings.Builder
 	count := 0
 
 	for scanner.Scan() {
@@ -65,13 +65,12 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 
 		if line == "" {
 			// Blank line terminates an event.
-			if len(dataLines) > 0 {
-				data := strings.Join(dataLines, "\n")
-				if err := c.formatStreamItem(cmd, renderer, data); err != nil {
+			if data.Len() > 0 {
+				if err := c.formatStreamItem(cmd, renderer, data.String()); err != nil {
 					return err
 				}
 				count++
-				dataLines = dataLines[:0]
+				data.Reset()
 				if maxEvents > 0 && count >= maxEvents {
 					break
 				}
@@ -83,7 +82,10 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		value = strings.TrimPrefix(value, " ")
 		switch field {
 		case "data":
-			dataLines = append(dataLines, value)
+			if data.Len() > 0 {
+				data.WriteByte('\n')
+			}
+			data.WriteString(value)
 		case "retry":
 			// Reconnect delay hint; parsed but reconnect is not implemented.
 		case "id", "event":
@@ -92,9 +94,8 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	}
 
 	// Flush a final event if the stream ended without a trailing blank line.
-	if len(dataLines) > 0 && (maxEvents <= 0 || count < maxEvents) {
-		data := strings.Join(dataLines, "\n")
-		if err := c.formatStreamItem(cmd, renderer, data); err != nil {
+	if data.Len() > 0 && (maxEvents <= 0 || count < maxEvents) {
+		if err := c.formatStreamItem(cmd, renderer, data.String()); err != nil {
 			return err
 		}
 	}
