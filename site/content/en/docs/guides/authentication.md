@@ -107,6 +107,63 @@ hiding it inside the transport layer.
 For users, the main effect is that OAuth-backed requests still feel like normal
 Restish commands once the profile is configured.
 
+### OAuth Client Credentials Example
+
+```json
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "ci": {
+          "auth": {
+            "type": "oauth-client-credentials",
+            "params": {
+              "client_id": "ci-client",
+              "client_secret": "secret",
+              "token_url": "https://issuer.example.com/oauth/token",
+              "scopes": "items.read items.write"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### OAuth Authorization Code Example
+
+```json
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "oauth-authorization-code",
+            "params": {
+              "client_id": "desktop-app",
+              "authorize_url": "https://issuer.example.com/authorize",
+              "token_url": "https://issuer.example.com/oauth/token",
+              "scopes": "openid profile items.read"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Once configured, both still look like ordinary Restish requests:
+
+```bash
+restish -p ci myapi/items
+restish -p default myapi/items
+```
+
 ## External Tool Example
 
 Use `external-tool` when authentication has to be delegated to an existing
@@ -197,6 +254,12 @@ It is especially useful when you are trying to answer:
 - which profile is active
 - whether Restish is prompting for a missing secret
 - whether an OAuth token is already cached
+
+If you want to force a fresh token acquisition path, clear the cached token:
+
+```bash
+restish api clear-auth-cache myapi
+```
 
 ## Choosing Auth Per Environment
 

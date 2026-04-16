@@ -17,12 +17,18 @@ HTTP status families map to CLI exit codes:
 - `4xx -> 4`
 - `5xx -> 5`
 
+This is deliberate: HTTP status is part of the command contract, not just text
+printed to the terminal.
+
 ## Stdout vs Stderr
 
 Restish keeps normal command output on stdout and diagnostics on stderr.
 
 Stdout is for response bodies and machine-readable output. Stderr is for
 prompts, warnings, and verbose request and response logs.
+
+That separation is what makes filtered output, redirects, and shell pipelines
+work predictably.
 
 ## Verbose Mode
 
@@ -43,6 +49,9 @@ use:
 restish https://api.rest.sh/images --rsh-ignore-status-code
 ```
 
+Use this when the body matters more than the exit code, such as when you are
+capturing a structured error response for debugging.
+
 ## Silent Mode
 
 If you want only the exit code:
@@ -50,6 +59,9 @@ If you want only the exit code:
 ```bash
 restish https://api.rest.sh/images --rsh-silent
 ```
+
+This is useful in probes, CI checks, and wrapper scripts where only success or
+failure matters.
 
 ## Bare URL Shortcut
 
@@ -63,4 +75,5 @@ restish myapi/items
 ## Related Pages
 
 - [Global Flags Reference](/docs/reference/global-flags/)
+- [Output Defaults](/docs/reference/output-defaults/)
 - [Requests Guide](/docs/guides/requests/)

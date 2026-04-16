@@ -26,6 +26,7 @@ behavior behind them.
 - [Images in the Terminal](./images-in-the-terminal/) for `image/*` responses.
 - [Bulk Management](./bulk-management/) for Git-like local workflows over API collections.
 - [MCP](./mcp/) for serving registered APIs to an MCP client through Restish.
+- [Troubleshooting](./troubleshooting/) for discovery, shell, auth, cache, plugin, and TLS problems.
 
 ## Use This Section For
 

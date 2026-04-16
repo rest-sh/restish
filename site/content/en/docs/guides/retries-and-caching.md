@@ -26,11 +26,35 @@ restish https://api.example.com/items --rsh-retry 0
 
 Use `0` to disable retries entirely.
 
+## Timeouts
+
+Use `--rsh-timeout` when you want to bound how long one request can run:
+
+```bash
+restish https://api.example.com/items --rsh-timeout 15s
+restish https://api.example.com/items --rsh-timeout 500ms
+```
+
+This is useful when:
+
+- you are scripting against slow or unreliable services
+- you want CI checks to fail quickly
+- you are debugging retry and latency behavior
+
+Related shell default:
+
+```bash
+export RSH_TIMEOUT=15s
+```
+
 ## Cache Behavior
 
 Restish uses a disk-backed HTTP response cache. Cacheable responses can be
 reused across repeated requests, which makes routine API exploration and
 read-heavy workflows faster.
+
+By default, cached responses live under Restish's cache directory. You can
+override that location with `RSH_CACHE_DIR`.
 
 By default, cache use participates in the normal request path. To bypass the
 cache for one invocation:
@@ -88,6 +112,7 @@ Consider `--rsh-retry 0` when:
 
 - [Requests](../requests/)
 - [Pagination and Links](../pagination/)
+- [Environment Variables](/docs/reference/environment-variables/)
 
 Source material:
 

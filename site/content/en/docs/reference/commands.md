@@ -2,17 +2,30 @@
 title: Commands
 linkTitle: Commands
 weight: 10
-description: High-level reference for Restish command families, common workflows, and navigation.
+description: Reference index for Restish top-level commands, generated API commands, and plugin-backed command surfaces.
 ---
 
-Restish has two major command styles:
+Restish has three major command styles:
 
 - generic HTTP commands such as `get`, `post`, `put`, `patch`, and `delete`
 - API-aware commands that appear under a configured API name
+- plugin-backed commands such as `bulk` and `mcp`
 
-## Core Command Families
+## Top-Level Built-In Commands
 
-### Generic HTTP Commands
+These commands are part of the main Restish binary:
+
+- `get`, `post`, `put`, `patch`, `delete`: generic HTTP requests
+- `edit`: fetch-edit-update workflow for writable resources
+- `links`: fetch a resource and print normalized hypermedia links
+- `cert`: inspect a server TLS certificate chain
+- `auth-header`: print the resolved `Authorization` header for a configured API
+- `api`: manage API registrations and cached specs
+- `cache`: inspect or clear the HTTP response cache
+- `setup`: configure shell `noglob`-style behavior
+- `plugin`: inspect, install, remove, or debug plugins
+
+## Generic HTTP Commands
 
 Use these when you want to make a direct request quickly:
 
@@ -23,7 +36,7 @@ restish post https://api.rest.sh name: daniel active: true
 
 These commands work without any API registration step.
 
-### API Management Commands
+## API Management Commands
 
 Use `api` commands to register, inspect, and manage APIs described by OpenAPI
 or other supported loaders.
@@ -38,13 +51,36 @@ restish petstore --help
 
 After configuration, Restish generates subcommands under the API name.
 
-### Plugin Commands
+## Generated API Commands
+
+After an API is configured, its short name becomes a top-level command group:
+
+```bash
+restish api configure example https://api.rest.sh
+restish example --help
+restish example list-images
+```
+
+Generated commands are built from the cached API spec at startup, which keeps
+help and completion available without a live network lookup every time.
+
+## Plugin Commands
 
 Plugins can contribute new top-level command surfaces. For example, the MCP
-plugin adds `restish mcp ...`.
+plugin adds `restish mcp ...`, and the bulk plugin adds `restish bulk ...`.
 
 See the [plugin quickstart](/docs/plugins/quickstart/) and
 [plugin reference](/docs/reference/plugins/) for the extension model.
+
+## High-Value Commands To Learn Early
+
+- `restish https://api.rest.sh/`
+- `restish api configure example https://api.rest.sh`
+- `restish example --help`
+- `restish auth-header example`
+- `restish cache info`
+- `restish links https://api.rest.sh/images`
+- `restish edit https://api.rest.sh/types`
 
 ## Common Global Behavior
 

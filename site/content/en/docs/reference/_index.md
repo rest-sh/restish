@@ -13,11 +13,13 @@ questions quickly.
 - [Commands](./commands/) for the CLI surface area and command families.
 - [Example API](./example-api/) for the canonical `api.rest.sh` resources used in the docs.
 - [Global Flags](./global-flags/) for shared request, output, and TLS options.
+- [Environment Variables](./environment-variables/) for shell-level defaults and path overrides.
 - [API Management](./api-management/) for `restish api`, cache, cert, and auth helpers.
 - [Config](./config/) for config file structure and profile fields.
 - [Profiles](./profiles/) for per-environment overrides and profile selection.
 - [Shorthand Syntax](./shorthand/) for structured request-body input on the command line.
 - [Content Types](./content-types/) for request encoding and response decoding support.
+- [Output Defaults](./output-defaults/) for TTY-aware rendering and redirected output behavior.
 - [Output Formats](./output-formats/) for formatter behavior and use cases.
 - [Plugins](./plugins/) for plugin architecture and operator-facing commands.
 - [Plugin Manifest](./plugin-manifest/) for plugin metadata fields.

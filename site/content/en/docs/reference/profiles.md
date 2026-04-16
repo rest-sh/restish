@@ -15,6 +15,9 @@ They live under an API config and let you vary:
 - authentication
 - TLS signer selection
 
+They are the main way to model dev, staging, production, CI, and other
+environment boundaries without rewriting every request command.
+
 ## Where Profiles Live
 
 Profiles are defined under `apis.<name>.profiles`.
@@ -49,9 +52,31 @@ Overrides the API-level `base_url` when this profile is active.
 
 Persistent request headers in `Name: Value` format.
 
+Example:
+
+```json
+{
+  "headers": [
+    "Accept: application/json",
+    "X-Team: platform"
+  ]
+}
+```
+
 ### `query`
 
 Persistent `key=value` query parameters.
+
+Example:
+
+```json
+{
+  "query": [
+    "per_page=100",
+    "include=owner"
+  ]
+}
+```
 
 ### `auth`
 
@@ -75,6 +100,24 @@ Built-in auth types documented today:
 - `http-basic`
 - `oauth-client-credentials`
 - `oauth-authorization-code`
+- `external-tool`
+
+`external-tool` is useful when a local script or helper must compute request
+auth dynamically.
+
+Example:
+
+```json
+{
+  "auth": {
+    "type": "external-tool",
+    "params": {
+      "commandline": "./scripts/sign-request.sh",
+      "omitbody": "true"
+    }
+  }
+}
+```
 
 ### `tls_signer`
 
@@ -83,6 +126,18 @@ The name of a TLS signer plugin to use for mutual TLS.
 ### `tls_signer_params`
 
 A string map of plugin-specific configuration passed to the TLS signer plugin.
+
+Example:
+
+```json
+{
+  "tls_signer": "restish-pkcs11",
+  "tls_signer_params": {
+    "module": "/usr/local/lib/opensc-pkcs11.so",
+    "token_label": "YubiKey"
+  }
+}
+```
 
 ## Selecting a Profile
 

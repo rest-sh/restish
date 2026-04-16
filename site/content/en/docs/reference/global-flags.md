@@ -9,6 +9,8 @@ Most Restish commands share the same global flags. That is one reason the tool
 feels consistent whether you are making a generic request, calling a generated
 API command, or using a plugin-backed workflow.
 
+Command-line flags override environment variables and config-file defaults.
+
 ## Request Construction
 
 - `-H`, `--rsh-header`: add a request header in `Name: Value` format
@@ -17,6 +19,11 @@ API command, or using a plugin-backed workflow.
 - `-s`, `--rsh-server`: override the scheme and host for a request
 - `-p`, `--rsh-profile`: choose the active API profile
 - `--rsh-timeout`: set the request timeout, for example `30s`
+
+Related env vars:
+
+- `RSH_PROFILE`
+- `RSH_TIMEOUT`
 
 Examples:
 
@@ -38,6 +45,12 @@ restish --rsh-server https://staging.example.com myapi users list
 - `-S`, `--rsh-silent`: suppress output entirely
 - `-v`, `--rsh-verbose`: print request and response diagnostics to stderr
 
+Default behavior worth remembering:
+
+- TTY structured output defaults to `readable`
+- non-TTY structured output defaults to JSON
+- `--rsh-headers` is shorthand for `-f headers`
+
 Examples:
 
 ```bash
@@ -55,6 +68,8 @@ restish https://api.example.com/items -v
 - `--rsh-collect`: collect all pages before filtering and formatting
 - `--rsh-max-events`: cap SSE events or NDJSON lines processed
 
+These matter most for collection endpoints, SSE streams, and NDJSON streams.
+
 Examples:
 
 ```bash
@@ -70,6 +85,10 @@ restish https://api.example.com/events --rsh-max-events 10 -o ndjson
 - `--rsh-no-cache`: bypass cache reads and writes
 - `--rsh-ignore-status-code`: always exit `0` regardless of HTTP status
 - `--rsh-max-body-size`: cap response body size in MiB
+
+Related env vars:
+
+- `RSH_RETRY`
 
 Examples:
 
@@ -109,5 +128,7 @@ restish \
 See also:
 
 - [Commands](../commands/)
+- [Environment Variables](../environment-variables/)
+- [Output Defaults](../output-defaults/)
 - [Output Formats](../output-formats/)
 - [Command Behavior Guide](/docs/guides/command-behavior/)
