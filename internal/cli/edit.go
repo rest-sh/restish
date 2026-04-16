@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -318,7 +319,7 @@ func (c *CLI) confirmEdit() (bool, error) {
 	fmt.Fprint(c.Stderr, "Continue? [Y/n] ")
 	reader := bufio.NewReader(c.Stdin)
 	line, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("edit: read confirmation: %w", err)
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -190,7 +191,7 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 					return
 				}
 			}
-			if r.err == io.EOF {
+			if errors.Is(r.err, io.EOF) {
 				_ = writer.WriteMessage(pluginwire.StdinCloseMsg{Type: pluginwire.MsgTypeStdinClose})
 				return
 			}
@@ -588,7 +589,7 @@ func isEOFLike(err error) bool {
 	if err == nil {
 		return false
 	}
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return true
 	}
 	s := err.Error()
