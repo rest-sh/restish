@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -100,8 +102,8 @@ func (c *TokenCache) save(m map[string]CachedToken) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	// Atomic write: write to a temp file, set permissions, then rename.
-	tmp, err := os.CreateTemp(dir, "tokens-*.tmp")
+	// Atomic write: create a 0600 temp file in the target directory, then rename.
+	tmp, err := secureCreateTemp(dir, "tokens-", ".tmp", 0600)
 	if err != nil {
 		return err
 	}
@@ -115,9 +117,24 @@ func (c *TokenCache) save(m map[string]CachedToken) error {
 		}
 		return cerr
 	}
-	if err := os.Chmod(tmpName, 0600); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
 	return os.Rename(tmpName, c.path)
+}
+
+func secureCreateTemp(dir, prefix, suffix string, mode os.FileMode) (*os.File, error) {
+	for range 100 {
+		var buf [8]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return nil, err
+		}
+		name := filepath.Join(dir, fmt.Sprintf("%s%x%s", prefix, buf[:], suffix))
+		f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, mode)
+		if err == nil {
+			return f, nil
+		}
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		return nil, err
+	}
+	return nil, fmt.Errorf("creating secure temp file in %s: too many collisions", dir)
 }

@@ -82,6 +82,23 @@ func TestTokenCache_FilePermissions(t *testing.T) {
 	}
 }
 
+func TestTokenCache_DirPermissions(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested")
+	path := filepath.Join(dir, "tokens.json")
+	tc := NewTokenCache(path)
+	if err := tc.Set("k", CachedToken{AccessToken: "x"}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("expected dir permission 0700, got %04o", perm)
+	}
+}
+
 func TestCachedToken_IsExpired(t *testing.T) {
 	past := CachedToken{Expiry: time.Now().Add(-time.Hour)}
 	if !past.IsExpired() {
