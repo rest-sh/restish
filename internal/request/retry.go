@@ -110,14 +110,10 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 	if base > 30*time.Second {
 		base = 30 * time.Second
 	}
-	// Add ±25 % jitter. Guard against base < 2 to avoid rand.Int64N(0) panic.
+	// Equal jitter: base/2 + random[0, base). Guard against base < 2 to avoid
+	// rand.Int64N(0) panic.
 	if int64(base) < 2 {
 		return base
 	}
-	jitter := time.Duration(rand.Int64N(int64(base)/2)) - base/4
-	wait := base + jitter
-	if wait < 0 {
-		wait = 0
-	}
-	return wait
+	return base/2 + time.Duration(rand.Int64N(int64(base)))
 }
