@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -107,7 +106,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("api sync: invalidate cache: %w", err)
 	}
 
-	apiSpec, err := c.discoverSpec(context.Background(), apiName)
+	apiSpec, err := c.discoverSpec(requestContext(cmd), apiName)
 	if err != nil {
 		return fmt.Errorf("api sync: %w", err)
 	}
@@ -134,7 +133,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		Version:   Version,
 		Transport: c.baseHTTPTransport(),
 	}
-	apiSpec, _ := spec.Discover(context.Background(), discCfg, c.loaders)
+	apiSpec, _ := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 
 	// Build the API config entry.
 	apiCfg := &config.APIConfig{BaseURL: baseURL}

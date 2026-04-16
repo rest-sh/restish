@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,7 +51,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	}
 	rawURL = prepared.rawURL
 
-	httpResp, err := c.sendPreparedRequest(context.Background(), "GET", prepared)
+	httpResp, err := c.sendPreparedRequest(requestContext(cmd), "GET", prepared)
 	if err != nil {
 		return fmt.Errorf("network error for GET %s: %w", rawURL, err)
 	}
@@ -202,7 +201,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		updateOpts.Headers = append(updateOpts.Headers, "If-Unmodified-Since: "+lastModified)
 	}
 
-	updateResp, err := request.Do(context.Background(), updateMethod, rawURL, bytes.NewReader(encoded), updateOpts)
+	updateResp, err := request.Do(requestContext(cmd), updateMethod, rawURL, bytes.NewReader(encoded), updateOpts)
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", updateMethod, rawURL, err)
 	}

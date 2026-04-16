@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -38,7 +37,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 	uri = prepared.rawURL
 
-	httpResp, err := c.sendPreparedRequest(context.Background(), "GET", prepared)
+	httpResp, err := c.sendPreparedRequest(requestContext(cmd), "GET", prepared)
 	if err != nil {
 		return fmt.Errorf("network: %w", err)
 	}

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -112,7 +111,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	apiName = prepared.apiName
 	opts = prepared.opts
 
-	httpResp, err := c.sendPreparedRequest(context.Background(), method, prepared)
+	httpResp, err := c.sendPreparedRequest(requestContext(cmd), method, prepared)
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
 	}

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -86,6 +85,7 @@ func (c *CLI) runPagination(
 	nextURL := firstNextURL
 	page := 1
 	stderrIsTTY := output.IsTerminal(c.Stderr)
+	ctx := requestContext(cmd)
 
 	for !done && nextURL != "" {
 		// Safety: max pages check (page is 1-indexed, firstResp is page 1).
@@ -100,7 +100,7 @@ func (c *CLI) runPagination(
 			fmt.Fprintf(c.Stderr, "\rfetching page %d...", page)
 		}
 
-		httpResp, err := request.Do(context.Background(), "GET", nextURL, nil, opts)
+		httpResp, err := request.Do(ctx, "GET", nextURL, nil, opts)
 		if err != nil {
 			return fmt.Errorf("paginate page %d: %w", page, err)
 		}
