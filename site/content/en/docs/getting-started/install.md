@@ -55,6 +55,8 @@ onto your `PATH`.
 If you want the plugin binaries too, build them separately:
 
 ```bash
+go build ./cmd/restish-bulk
+go build ./cmd/restish-csv
 go build ./cmd/restish-mcp
 go build ./cmd/restish-pkcs11
 ```
