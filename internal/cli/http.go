@@ -235,7 +235,10 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	if filtered == nil && filterExpr != "@" && filterExpr != "body" && filterExpr != "headers" &&
-		!strings.HasPrefix(filterExpr, "body.") && !strings.HasPrefix(filterExpr, "headers.") {
+		filterExpr != "links" && filterExpr != "status" && filterExpr != "proto" &&
+		!strings.HasPrefix(filterExpr, "body.") && !strings.HasPrefix(filterExpr, "headers.") &&
+		!strings.HasPrefix(filterExpr, "links.") && !strings.HasPrefix(filterExpr, "status.") &&
+		!strings.HasPrefix(filterExpr, "proto.") {
 		fmt.Fprintf(c.Stderr, "hint: filter returned no results; to access response body fields use 'body.%s'\n", filterExpr)
 	}
 

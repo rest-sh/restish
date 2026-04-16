@@ -200,3 +200,14 @@ func TestFilterHeaders(t *testing.T) {
 		t.Errorf("expected headers in output, got: %s", out.String())
 	}
 }
+
+func TestFilterTopLevelRootsDoNotTriggerBodyHint(t *testing.T) {
+	c, _, errOut := newTestCLI()
+	useJSONResponse(c, 200, `{}`)
+	if err := c.Run([]string{"restish", "get", "-f", "links", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(errOut.String(), "filter returned no results") {
+		t.Fatalf("expected no body hint for top-level links filter, got: %q", errOut.String())
+	}
+}
