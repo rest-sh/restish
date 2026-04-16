@@ -14,16 +14,7 @@ import (
 
 // pluginsForHook returns all discovered plugins that declare the given hook.
 func (c *CLI) pluginsForHook(hook string) []plugin.Plugin {
-	var result []plugin.Plugin
-	for _, p := range c.plugins {
-		for _, h := range p.Manifest.Hooks {
-			if h == hook {
-				result = append(result, p)
-				break
-			}
-		}
-	}
-	return result
+	return c.pluginsByHook[hook]
 }
 
 func (c *CLI) pluginForHook(name, hook string) (plugin.Plugin, bool) {
@@ -33,6 +24,19 @@ func (c *CLI) pluginForHook(name, hook string) (plugin.Plugin, bool) {
 		}
 	}
 	return plugin.Plugin{}, false
+}
+
+func indexPluginsByHook(plugins []plugin.Plugin) map[string][]plugin.Plugin {
+	if len(plugins) == 0 {
+		return map[string][]plugin.Plugin{}
+	}
+	indexed := make(map[string][]plugin.Plugin)
+	for _, p := range plugins {
+		for _, hook := range p.Manifest.Hooks {
+			indexed[hook] = append(indexed[hook], p)
+		}
+	}
+	return indexed
 }
 
 func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {

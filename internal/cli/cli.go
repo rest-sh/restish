@@ -70,6 +70,7 @@ type CLI struct {
 	linkParsers        []hypermedia.Parser
 	formatters         map[string]output.Formatter
 	plugins            []internalplugin.Plugin
+	pluginsByHook      map[string][]internalplugin.Plugin
 	customAuthHandlers map[string]authpkg.Handler
 }
 
@@ -221,6 +222,7 @@ func (c *CLI) Run(args []string) error {
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), cfg.AllowedPlugins, func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
 	}, c.pluginManifestCachePath())
+	c.pluginsByHook = indexPluginsByHook(c.plugins)
 
 	// Register plugin-provided formatters and loaders.
 	for _, p := range c.plugins {
