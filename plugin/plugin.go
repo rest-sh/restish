@@ -5,11 +5,13 @@
 // or other framing is added. This means any CBOR library can read and write
 // plugin messages without implementing custom framing.
 //
-// Use WriteMessage to send a message. For reading, use NewDecoder and call
-// ReadMessage on the returned Decoder — this is necessary whenever multiple
-// messages will be read from the same reader (os.Stdin in command and
-// TLS-signer plugins). The standalone ReadMessage function is provided as a
-// convenience for true one-shot reads only (hook plugins).
+// Use WriteMessage to send a message. For reading, prefer the higher-level
+// helpers (Run and NewCommandClient) whenever they fit your plugin type.
+// When you need lower-level stream access, use NewDecoder and call ReadMessage
+// on the returned Decoder — this is necessary whenever multiple messages will
+// be read from the same reader (os.Stdin in command and TLS-signer plugins).
+// The standalone ReadMessage function is provided as a convenience for true
+// one-shot reads only (hook plugins).
 package plugin
 
 import (
@@ -59,6 +61,10 @@ type Decoder struct {
 }
 
 // NewDecoder returns a Decoder that reads from r.
+//
+// Reuse a single Decoder for the lifetime of the stream. Constructing a new
+// Decoder inside a read loop can discard bytes that were already buffered and
+// silently lose messages.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{dec: DecMode.NewDecoder(r)}
 }

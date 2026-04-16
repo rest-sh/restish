@@ -25,8 +25,10 @@
 // so no length prefix or other framing is needed. Any language with a CBOR
 // library can implement a plugin.
 //
-// Use WriteMessage and ReadMessage for runtime messages. WriteManifest and
-// WriteCommands are convenience wrappers for startup responses.
+// Use WriteMessage and ReadMessage for runtime messages. For command plugins,
+// prefer Run and CommandClient unless you need lower-level stream control.
+// WriteManifest and WriteCommands are convenience wrappers for startup
+// responses.
 //
 // For hook plugins that read a single message, ReadMessage(r, v) is sufficient.
 // Command and TLS-signer plugins receive multiple messages on the same stdin,
