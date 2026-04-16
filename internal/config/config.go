@@ -173,7 +173,7 @@ func Save(path string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
-	return atomicWriteFile(path, append(data, '\n'), 0o600, 0o755)
+	return atomicWriteFile(path, append(data, '\n'), 0o600, 0o700)
 }
 
 // Load reads and parses the JSONC config file at path.
@@ -223,6 +223,9 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
+	}
+	if err := os.Chmod(dir, dirMode); err != nil {
+		return fmt.Errorf("config: chmod dir: %w", err)
 	}
 
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")

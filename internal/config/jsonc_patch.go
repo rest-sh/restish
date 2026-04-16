@@ -83,7 +83,7 @@ func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
 	if _, err := parseConfigBytes(path, patched); err != nil {
 		return err
 	}
-	return atomicWriteFile(path, patched, 0o600, 0o755)
+	return atomicWriteFile(path, patched, 0o600, 0o700)
 }
 
 func jsoncSetPath(data []byte, path []string, value any) ([]byte, error) {

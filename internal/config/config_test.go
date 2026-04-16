@@ -198,3 +198,19 @@ func TestSave_WritesAtomically(t *testing.T) {
 		t.Fatalf("expected temp files to be cleaned up, got: %v", matches)
 	}
 }
+
+func TestSave_CreatesConfigDirWithSecurePermissions(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested")
+	path := filepath.Join(dir, "restish.json")
+	if err := config.Save(path, &config.Config{}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("expected config dir permission 0700, got %04o", perm)
+	}
+}

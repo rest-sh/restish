@@ -550,3 +550,26 @@ func TestDeleteAPIConfig_PreservesOtherCommentsOnDisk(t *testing.T) {
 		t.Fatalf("expected removed API to be gone:\n%s", out)
 	}
 }
+
+func TestSaveConfigValue_CreatesConfigDirWithSecurePermissions(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested")
+	path := filepath.Join(dir, "restish.json")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{"apis":{}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := SaveConfigValue(path, []string{"apis", "myapi"}, map[string]any{"base_url": "https://api.example.com"}); err != nil {
+		t.Fatalf("SaveConfigValue: %v", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("expected config dir permission 0700, got %04o", perm)
+	}
+}
