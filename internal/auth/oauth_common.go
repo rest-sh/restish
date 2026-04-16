@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -53,9 +54,10 @@ func DiscoverOIDC(ctx context.Context, client *http.Client, issuerURL string) (*
 }
 
 // validateOIDCEndpoints checks that every non-empty endpoint URL in cfg uses
-// the https scheme and shares the same hostname as issuerURL.  This prevents a
-// malicious OIDC server from redirecting token traffic to an attacker host.
-// Validation is skipped when issuerURL itself uses http:// (e.g. local dev).
+// the https scheme, shares the same hostname as issuerURL, and stays within
+// the issuer's path scope. This prevents a malicious OIDC server from
+// redirecting token traffic to another host or sibling tenant. Validation is
+// skipped when issuerURL itself uses http:// (e.g. local dev).
 func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 	issuer, err := url.Parse(issuerURL)
 	if err != nil {
@@ -79,8 +81,22 @@ func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 		if !strings.EqualFold(u.Hostname(), issuer.Hostname()) {
 			return fmt.Errorf("OIDC: endpoint hostname %q does not match issuer hostname %q", u.Hostname(), issuer.Hostname())
 		}
+		if !isPathWithinIssuerScope(issuer.Path, u.Path) {
+			return fmt.Errorf("OIDC: endpoint path %q is outside issuer path %q", u.Path, issuer.Path)
+		}
 	}
 	return nil
+}
+
+func isPathWithinIssuerScope(issuerPath, endpointPath string) bool {
+	issuerPath = path.Clean("/" + strings.TrimPrefix(issuerPath, "/"))
+	endpointPath = path.Clean("/" + strings.TrimPrefix(endpointPath, "/"))
+
+	if issuerPath == "/" {
+		return true
+	}
+	issuerPrefix := strings.TrimSuffix(issuerPath, "/") + "/"
+	return endpointPath == issuerPath || strings.HasPrefix(endpointPath, issuerPrefix)
 }
 
 // FetchToken posts formBody (URL-encoded) to tokenURL and returns a CachedToken.

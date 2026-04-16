@@ -50,6 +50,19 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 			tokenURL:  "https://auth.example.com/token",
 			wantError: false,
 		},
+		{
+			name:      "path-scoped issuer allows child endpoint paths",
+			issuer:    "https://auth.example.com/realms/demo",
+			authURL:   "https://auth.example.com/realms/demo/protocol/openid-connect/auth",
+			tokenURL:  "https://auth.example.com/realms/demo/protocol/openid-connect/token",
+			wantError: false,
+		},
+		{
+			name:      "path-scoped issuer rejects sibling tenant endpoint paths",
+			issuer:    "https://auth.example.com/realms/demo",
+			tokenURL:  "https://auth.example.com/realms/other/protocol/openid-connect/token",
+			wantError: true,
+		},
 	}
 
 	for _, tc := range cases {
