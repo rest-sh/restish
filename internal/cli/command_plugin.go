@@ -86,9 +86,12 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	}
 	stdoutPipe, err := proc.StdoutPipe()
 	if err != nil {
+		_ = stdinPipe.Close()
 		return fmt.Errorf("command plugin: stdout pipe: %w", err)
 	}
 	if err := proc.Start(); err != nil {
+		_ = stdinPipe.Close()
+		_ = stdoutPipe.Close()
 		return fmt.Errorf("command plugin: start: %w", err)
 	}
 
