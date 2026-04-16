@@ -25,6 +25,115 @@ You are technical writing expert responsible for writing and maintaining documen
 - Provide relevant context and explanations.
 - Offer quick wins and actionable next steps for users to get started or achieve common tasks.
 
+## Site-Specific Expectations
+
+- The docs site in `site/` is intentionally layered:
+  - getting-started pages for first success
+  - guides for workflows
+  - recipes for focused tasks
+  - reference pages for factual lookup
+  - plugin pages split between operators and authors
+  - contributing pages for maintainers
+- When user-facing behavior changes, check whether it affects more than one layer. Do not assume a single page update is enough.
+- Prefer example-first pages over orientation-only pages. Important guides should include copyable commands and representative output.
+- Add or preserve "Related Pages" links so users can move between guides, recipes, and reference.
+- Keep "Path" / breadcrumb-like cues on section landing pages and important long-journey pages when they help users understand where they are in the site.
+- Do not rely on design-record links as a substitute for user-facing explanation. Design records are supporting material, not the main docs path for normal users.
+
+## Page Shape Checklist
+
+- Start by making the page's purpose obvious in the opening paragraph.
+- Include at least one copyable command for operational pages.
+- Show representative output when practical.
+- Add "When to use this" when a page helps users choose between approaches.
+- End with "Related Pages" links so the page connects back into the rest of the site.
+- If a placeholder host remains intentionally, explain why when it may otherwise look inconsistent.
+
+## Page-Type Rules
+
+- Getting-started pages should optimize for first success and confidence.
+- Guides should teach workflows, tradeoffs, and decision points.
+- Recipes should solve one narrow task quickly.
+- Reference pages should answer exact factual questions fast.
+- Plugin docs should clearly distinguish operator usage from plugin authoring.
+
+## Example Guidance
+
+- Prefer `https://api.rest.sh` for live, runnable examples whenever it makes the docs more concrete.
+- Use the canonical example endpoints consistently:
+  - `https://api.rest.sh/` for first requests and header inspection
+  - `https://api.rest.sh/images` for pagination, links, filtering, table output, and NDJSON output
+  - `https://api.rest.sh/images/<format>` for image and raw download examples
+  - `https://api.rest.sh/example` for nested filtering examples
+  - `https://api.rest.sh/types` for shorthand, input, and edit-style examples
+  - `https://api.rest.sh/books` for bulk workflow examples
+- Show output when possible, especially on getting-started pages and operational guides.
+- Not every example should be live. Keep placeholders when:
+  - the example is about a user's real private host or issuer
+  - the workflow is destructive
+  - the public example API does not expose the needed behavior
+- When a placeholder remains intentionally, say why if there is any chance of confusion.
+- Keep command examples stylistically consistent within a page:
+  - prefer one host family where possible
+  - distinguish clearly between generic URL requests and API-aware commands
+  - avoid mixing placeholder and live examples without a reason
+  - keep command and output blocks paired when that makes the result easier to understand
+  - prefer JSONC for config examples when inline explanation makes the example clearer
+
+## Reference-Page Standard
+
+- Reference pages should usually include:
+  - command syntax or conceptual scope
+  - common forms
+  - important flags, subcommands, or fields
+  - expected behavior or output
+  - links to deeper workflow guides
+- Avoid leaving command reference pages as thin overviews when users need them for day-to-day lookup.
+
+## Cross-Linking Minimum
+
+- New guides should usually link to at least one relevant reference page.
+- New command/reference pages should link back to the main workflow guide.
+- When a new canonical example endpoint starts appearing across the docs, update `reference/example-api.md`.
+- If a page is thin by design, use related links to route users to the deeper material immediately.
+
+## Maintenance Workflow
+
+- Before larger doc changes, review:
+  - `docs/design/`
+  - `restish-src/docs/` when older docs may contain missing user-facing knowledge
+  - `site/content/en/docs/contributing/docs-maintenance.md`
+  - `TODO.md` if it is being used as the active docs backlog
+- When migrating or restoring docs from older material, track whether a topic was:
+  - intentionally retired
+  - already migrated
+  - still missing
+- If you identify a broad docs gap, capture it in `TODO.md` as a practical follow-up list.
+
+## Validation
+
+- Build the site after meaningful documentation changes:
+
+```bash
+hugo --source site --quiet
+```
+
+- Click through or otherwise verify any new links you add.
+- Confirm examples are internally consistent and match the current CLI behavior.
+- Prefer examples that can eventually be validated manually against `api.rest.sh` and, where practical, promoted into CI or golden-test coverage later.
+- For docs-heavy changes, also consider:
+  - grepping touched pages for leftover `api.example.com` examples that should be live
+  - grepping touched pages for leftover `Source material:` sections
+  - updating `TODO.md` if the work uncovers a broader docs gap or closes a backlog item
+
+## Writing Priorities For Restish
+
+- New users need a short path from install to first useful success.
+- Daily users need workflow guides with concrete examples for requests, auth, filtering, output, pagination, and troubleshooting.
+- Reference pages should behave like real reference, not thin overviews. Command pages should list important flags, typical forms, and related guides.
+- Plugin docs should clearly separate "I want to use a plugin" from "I want to build a plugin."
+- Design-record knowledge should be surfaced into user docs when it affects real behavior users need to understand.
+
 ## Document Types
 
 ### User Documentation
