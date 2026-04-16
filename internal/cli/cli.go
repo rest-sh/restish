@@ -31,39 +31,36 @@ type CLI struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
-	// ConfigPath overrides the default config file location. Used in tests
-	// to point at a temp file; leave empty to use the platform default.
+	// TESTING ONLY: ConfigPath overrides the default config file location.
+	// Leave empty to use the platform default.
 	ConfigPath string
 
-	// PassReader, if non-nil, is used as the source for secret prompts (e.g.
-	// password input). Falls back to Stdin when nil. Set in tests to provide
-	// a password without consuming the body stdin.
+	// TESTING ONLY: PassReader, if non-nil, is used as the source for secret
+	// prompts (e.g. password input). Falls back to Stdin when nil.
 	PassReader io.Reader
 
-	// TokenCachePath overrides the default token cache file location.
-	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	// TESTING ONLY: TokenCachePath overrides the default token cache file
+	// location. Leave empty to use the platform default.
 	TokenCachePath string
 
-	// CachePath overrides the default HTTP response cache directory.
-	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	// TESTING ONLY: CachePath overrides the default HTTP response cache
+	// directory. Leave empty to use the platform default.
 	CachePath string
 
-	// SpecCachePath overrides the default API spec cache directory.
-	// Used in tests to point at a temp dir; leave empty to use the platform default.
+	// TESTING ONLY: SpecCachePath overrides the default API spec cache
+	// directory. Leave empty to use the platform default.
 	SpecCachePath string
 
-	// HTTPTransport overrides the base HTTP transport used for outbound
-	// requests and spec discovery. Primarily used in tests to avoid real
-	// network listeners.
+	// TESTING ONLY: HTTPTransport overrides the base HTTP transport used for
+	// outbound requests and spec discovery.
 	HTTPTransport http.RoundTripper
 
-	// PluginManifestCachePath overrides the default plugin manifest cache file.
-	// Used in tests to prevent writing to ~/.config/restish; leave empty to
-	// use the platform default (~/.config/restish/plugin-manifest-cache.cbor).
+	// TESTING ONLY: PluginManifestCachePath overrides the default plugin
+	// manifest cache file. Leave empty to use the platform default.
 	PluginManifestCachePath string
 
-	// RetryBaseDelay overrides the 1 s default backoff base for retries.
-	// Set to a small value in tests to avoid slow retries.
+	// TESTING ONLY: RetryBaseDelay overrides the 1 s default backoff base for
+	// retries.
 	RetryBaseDelay time.Duration
 
 	cfg                *config.Config
