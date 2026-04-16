@@ -35,6 +35,15 @@ organized around the way people actually adopt the tool:
 - If you want the exact example API used across these docs, see
   [Example API](./reference/example-api/).
 
+## Common Tasks
+
+- [Authenticate to an API](./guides/authentication/)
+- [Filter response fields](./recipes/filter-response-fields/)
+- [Show only response headers](./recipes/show-only-response-headers/)
+- [Count items across all pages](./recipes/count-items-across-all-pages/)
+- [Inspect response links](./recipes/inspect-response-links/)
+- [Troubleshoot setup or request issues](./guides/troubleshooting/)
+
 ## Sections
 
 - **Getting Started** gets you successful quickly.

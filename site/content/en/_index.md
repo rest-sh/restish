@@ -66,6 +66,10 @@ plugins all fit one consistent request model.
     <h2>Daily Request Workflows</h2>
     <p>Learn generic verbs, API-aware commands, request bodies, filtering, pagination, retries, caching, and streaming.</p>
   </a>
+  <a class="restish-card" href="/docs/guides/comparison/">
+    <h2>Why Not Just curl?</h2>
+    <p>See where Restish fits compared with curl and HTTPie, and why generated API commands change the daily workflow.</p>
+  </a>
   <a class="restish-card" href="/docs/plugins/quickstart/">
     <h2>Build Plugins</h2>
     <p>Start with the smallest working plugin, then choose between hook, command, and TLS signer plugin types.</p>
@@ -88,6 +92,8 @@ plugins all fit one consistent request model.
 - better day-to-day ergonomics once an API description is available
 - one tool for ad hoc calls, repeatable profiles, and generated API commands
 - plugin hooks for auth, formatting, loaders, workflow commands, and TLS signing
+
+[Compare Restish with curl and HTTPie](/docs/guides/comparison/)
 
 ## Choose a Path
 

@@ -10,6 +10,7 @@ behavior behind them.
 
 ## Popular Guides
 
+- [Comparison](./comparison/) for deciding when Restish is a better fit than curl or HTTPie.
 - [Requests](./requests/) for the core workflow.
 - [API Setup and Discovery](./api-setup-and-discovery/) for turning API descriptions into generated commands.
 - [OpenAPI and CLI Integration](./openapi-cli-integration/) for API authors who want a better Restish command experience.
