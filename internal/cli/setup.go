@@ -62,7 +62,11 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if info, err := os.Stat(rcPath); err == nil && info.Mode().Perm()&0o077 != 0 {
+		fmt.Fprintf(c.Stderr, "warning: %s is more permissive than recommended; consider chmod 600 %s\n", rcPath, rcPath)
+	}
+
+	f, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("setup: cannot write %s: %w", rcPath, err)
 	}

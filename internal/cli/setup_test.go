@@ -45,6 +45,13 @@ func TestSetupWritesAlias(t *testing.T) {
 	if !strings.Contains(string(data), "noglob restish") {
 		t.Errorf("expected noglob alias in zshrc, got: %q", string(data))
 	}
+	info, err := os.Stat(rcPath)
+	if err != nil {
+		t.Fatalf("stat zshrc: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected .zshrc to be created with 0600, got %#o", got)
+	}
 	if !strings.Contains(out.String(), ".zshrc") {
 		t.Errorf("expected confirmation with rc path, got: %q", out.String())
 	}
@@ -82,5 +89,24 @@ func TestSetupUnsupportedShell(t *testing.T) {
 	err := c.Run([]string{"restish", "setup", "tcsh"})
 	if err == nil {
 		t.Fatal("expected error for unsupported shell")
+	}
+}
+
+func TestSetupWarnsForPermissiveExistingRCFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	rcPath := filepath.Join(home, ".bashrc")
+	if err := os.WriteFile(rcPath, []byte("# existing\n"), 0o644); err != nil {
+		t.Fatalf("write bashrc: %v", err)
+	}
+
+	c, _, errOut := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "setup", "bash"}); err != nil {
+		t.Fatalf("setup bash: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "chmod 600") {
+		t.Fatalf("expected permission warning, got %q", errOut.String())
 	}
 }
