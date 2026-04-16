@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -105,10 +106,13 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 // runPluginRemove deletes a plugin from the plugin directory.
 func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
+	if err := validatePluginName(name); err != nil {
+		return err
+	}
 	pluginDir := plugin.DefaultPluginDir()
 	path := filepath.Join(pluginDir, name)
 	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove: plugin %q not found in %s", name, pluginDir)
 		}
 		return fmt.Errorf("remove: %w", err)
@@ -199,6 +203,16 @@ func copyFile(src, dst string) error {
 
 	if _, err := io.Copy(out, in); err != nil {
 		return fmt.Errorf("copy to %s: %w", dst, err)
+	}
+	return nil
+}
+
+func validatePluginName(name string) error {
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("remove: invalid plugin name %q", name)
+	}
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") || filepath.Base(name) != name {
+		return fmt.Errorf("remove: invalid plugin name %q", name)
 	}
 	return nil
 }

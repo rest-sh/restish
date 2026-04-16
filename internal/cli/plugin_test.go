@@ -277,6 +277,32 @@ func TestPluginDiscoverInPluginDir(t *testing.T) {
 	}
 }
 
+func TestPluginRemoveRejectsTraversal(t *testing.T) {
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(pluginsParent, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	err := c.Run([]string{"restish", "plugin", "remove", "../victim"})
+	if err == nil {
+		t.Fatal("expected plugin remove to reject traversal")
+	}
+	if !strings.Contains(err.Error(), "invalid plugin name") {
+		t.Fatalf("expected invalid plugin name error, got: %v", err)
+	}
+	if _, statErr := os.Stat(victim); statErr != nil {
+		t.Fatalf("expected victim file to remain, got: %v", statErr)
+	}
+}
+
 // TestPluginListShowsNameVersionHooks verifies that "plugin list" prints
 // the name, version, and hooks from the manifest.
 func TestPluginListShowsNameVersionHooks(t *testing.T) {
