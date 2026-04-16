@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 
@@ -272,19 +271,11 @@ func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any
 
 // runAPIEdit opens the restish config file in $VISUAL or $EDITOR.
 func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
-	editor := os.Getenv("VISUAL")
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		return fmt.Errorf("no editor found; set $VISUAL or $EDITOR")
-	}
 	cfgPath := c.configFilePath()
-	parts, err := splitCommandLine(editor)
+	editorCmd, err := c.editorCommand(cfgPath)
 	if err != nil {
-		return fmt.Errorf("parsing editor command: %w", err)
+		return err
 	}
-	editorCmd := exec.Command(parts[0], append(parts[1:], cfgPath)...)
 	editorCmd.Stdin = os.Stdin
 	editorCmd.Stdout = os.Stdout
 	editorCmd.Stderr = os.Stderr
