@@ -204,56 +204,78 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 	switch msgType {
 	case pluginwire.MsgTypeDone:
 		var msg pluginwire.DoneMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return true, err
+		}
 		if msg.ExitCode != 0 {
 			return true, &ExitCodeError{Code: msg.ExitCode}
 		}
 		return true, nil
 	case pluginwire.MsgTypeHTTPRequest:
 		var msg pluginwire.HTTPRequestMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
 	case pluginwire.MsgTypeAPISpec:
 		var msg pluginwire.APISpecMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginAPISpec(writer, msg)
 	case pluginwire.MsgTypeListAPIs:
 		return false, c.handlePluginListAPIs(writer)
 	case pluginwire.MsgTypeListProfiles:
 		var msg pluginwire.ListProfilesMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginListProfiles(writer, msg)
 	case pluginwire.MsgTypeConfigRead:
 		var msg pluginwire.ConfigReadMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginConfigRead(writer, msg)
 	case pluginwire.MsgTypePrompt:
 		var msg pluginwire.PromptMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginPrompt(writer, msg)
 	case pluginwire.MsgTypeConfirm:
 		var msg pluginwire.ConfirmMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginConfirm(writer, msg)
 	case pluginwire.MsgTypeResponse:
 		var msg pluginwire.ResponseMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		return false, c.handlePluginResponse(cmd, msg)
 	case pluginwire.MsgTypeStdoutData:
 		var msg pluginwire.StdoutDataMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		if len(msg.Data) > 0 {
 			_, _ = c.Stdout.Write(msg.Data)
 		}
 	case pluginwire.MsgTypeStderrData:
 		var msg pluginwire.StderrDataMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		if len(msg.Data) > 0 {
 			_, _ = cmd.ErrOrStderr().Write(msg.Data)
 		}
 	case "progress", "spinner", "log", pluginwire.MsgTypeWarn:
 		var msg pluginwire.WarnMsg
-		_ = pluginwire.DecMode.Unmarshal(raw, &msg)
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
 		if msg.Text != "" {
 			if msgType == pluginwire.MsgTypeWarn {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", msg.Text)
@@ -267,6 +289,13 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		}
 	}
 	return false, nil
+}
+
+func decodeCommandPluginMessage(msgType string, raw []byte, dst any) error {
+	if err := pluginwire.DecMode.Unmarshal(raw, dst); err != nil {
+		return fmt.Errorf("command plugin: decode %s: %w", msgType, err)
+	}
+	return nil
 }
 
 func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginWriter, msg pluginwire.HTTPRequestMsg) error {
