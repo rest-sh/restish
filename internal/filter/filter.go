@@ -73,7 +73,7 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 		return nil, fmt.Errorf("jq compile: %w", err)
 	}
 
-	var results []any
+	results := make([]any, 0, 256)
 	iter := code.Run(doc)
 	for {
 		v, ok := iter.Next()
