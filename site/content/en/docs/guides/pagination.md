@@ -156,7 +156,5 @@ restish https://api.rest.sh/images -f '.body | map(.self)' > image-paths.json
 
 - [Filtering](../filtering/)
 - [Requests](../requests/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Links and Hypermedia](../links-and-hypermedia/)
+- [Links Command](/docs/reference/links-command/)

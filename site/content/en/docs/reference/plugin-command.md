@@ -23,7 +23,25 @@ restish plugin remove restish-my-plugin
 restish plugin debug restish-my-plugin
 ```
 
+## What Each Subcommand Does
+
+- `plugin list`: show discovered and installed plugins
+- `plugin install <source>`: add a plugin from a local path or supported source
+- `plugin remove <name>`: remove an installed plugin
+- `plugin debug <name> [args...]`: run a plugin in debug mode to inspect its behavior
+
+## Typical Workflow
+
+1. install or build the plugin
+2. run `restish plugin list` to confirm discovery
+3. use the plugin through its command surface or hook integration
+4. run `restish plugin debug ...` if discovery or runtime behavior looks wrong
+
+If you need to narrow which plugins can be loaded automatically, use the
+`allowed_plugins` config setting.
+
 ## Related Pages
 
 - [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Plugins Reference](../plugins/)
+- [Config](../config/)

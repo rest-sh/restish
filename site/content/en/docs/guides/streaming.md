@@ -116,7 +116,4 @@ For SSE responses:
 
 - [Filtering](../filtering/)
 - [Output](../output/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Output Formats](/docs/reference/output-formats/)

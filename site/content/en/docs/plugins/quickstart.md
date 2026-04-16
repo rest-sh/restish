@@ -8,6 +8,10 @@ description: Build your first Restish plugin and choose the right plugin type.
 This guide is the shortest path from "I want to extend Restish" to a working
 plugin binary.
 
+## Path
+
+`Documentation -> Plugins -> Quickstart`
+
 If you are trying to use an existing plugin rather than write one, start with:
 
 - [Plugins Reference](/docs/reference/plugins/)

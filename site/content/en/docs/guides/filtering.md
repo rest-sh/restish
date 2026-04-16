@@ -164,8 +164,5 @@ than trying to preserve the original raw response bytes.
 
 - [Output](../output/)
 - [Query Syntax](/docs/reference/query-syntax/)
-- [Design Records](/docs/contributing/design-records/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Shorthand Syntax](/docs/reference/shorthand/)
+- [Get One Field from Every Item](/docs/recipes/get-one-field-from-every-item/)

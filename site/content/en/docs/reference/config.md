@@ -191,6 +191,8 @@ restructure several fields at once.
 - `restish api edit`
 - `restish api list`
 
-Primary source:
+## Related Pages
 
-- [`docs/design/002-config-and-profiles.md`](/docs/contributing/design-records/)
+- [Your First API Config](/docs/getting-started/your-first-config/)
+- [Profiles](../profiles/)
+- [API Management](../api-management/)

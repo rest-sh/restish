@@ -28,8 +28,8 @@ Related env vars:
 Examples:
 
 ```bash
-restish -H 'Accept: application/json' https://api.example.com/items
-restish post -c yaml https://api.example.com/items name: Alice
+restish -H 'Accept: application/json' https://api.rest.sh/
+restish post -c yaml https://api.rest.sh/types string: hello
 restish --rsh-server https://staging.example.com myapi users list
 ```
 
@@ -54,10 +54,10 @@ Default behavior worth remembering:
 Examples:
 
 ```bash
-restish https://api.example.com/items -f '.body.items[] | .name' -r
-restish https://api.example.com/items -o ndjson -f 'body.id'
-restish https://api.example.com/items -o table --rsh-columns id,name,status
-restish https://api.example.com/items -v
+restish https://api.rest.sh/images -f '.body[] | .name' -r
+restish https://api.rest.sh/images -o ndjson -f 'body.self'
+restish https://api.rest.sh/images -o table --rsh-columns name,format,self
+restish https://api.rest.sh/images -v
 ```
 
 ## Pagination And Streaming
@@ -73,9 +73,9 @@ These matter most for collection endpoints, SSE streams, and NDJSON streams.
 Examples:
 
 ```bash
-restish https://api.example.com/items --rsh-max-pages 3
-restish https://api.example.com/items --rsh-collect -f '.body | length'
-restish https://api.example.com/items -o ndjson --rsh-max-items 100
+restish https://api.rest.sh/images --rsh-max-pages 3
+restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish https://api.rest.sh/images -o ndjson --rsh-max-items 100
 restish https://api.example.com/events --rsh-max-events 10 -o ndjson
 ```
 
@@ -93,9 +93,9 @@ Related env vars:
 Examples:
 
 ```bash
-restish https://api.example.com/items --rsh-retry 5
-restish https://api.example.com/items --rsh-no-cache
-restish https://api.example.com/items --rsh-ignore-status-code
+restish https://api.rest.sh/images --rsh-retry 5
+restish https://api.rest.sh/images --rsh-no-cache
+restish https://api.rest.sh/missing --rsh-ignore-status-code
 ```
 
 ## TLS And mTLS

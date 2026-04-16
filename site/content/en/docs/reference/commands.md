@@ -11,6 +11,10 @@ Restish has three major command styles:
 - API-aware commands that appear under a configured API name
 - plugin-backed commands such as `bulk` and `mcp`
 
+## Path
+
+`Documentation -> Reference -> Commands`
+
 ## Top-Level Built-In Commands
 
 These commands are part of the main Restish binary:
@@ -55,9 +59,9 @@ or other supported loaders.
 Common workflow:
 
 ```bash
-restish api configure petstore https://api.example.com/openapi.json
+restish api configure example https://api.rest.sh
 restish api list
-restish petstore --help
+restish example --help
 ```
 
 After configuration, Restish generates subcommands under the API name.

@@ -36,6 +36,17 @@ restish example get-image jpeg
 - `https://api.rest.sh/types` for shorthand, editing, and schema-oriented examples.
 - `https://api.rest.sh/books` for bulk checkout examples carried over from the older docs.
 
+## Where Each Endpoint Shows Up
+
+| Endpoint | Used In |
+| --- | --- |
+| `https://api.rest.sh/` | first request, header inspection, basic generic GET examples |
+| `https://api.rest.sh/images` | pagination, links, filtering, table output, NDJSON output |
+| `https://api.rest.sh/images/<format>` | raw downloads, image rendering, item lookup |
+| `https://api.rest.sh/example` | nested filtering and projection examples |
+| `https://api.rest.sh/types` | edit workflow, shorthand-oriented writable examples |
+| `https://api.rest.sh/books` | bulk-management examples |
+
 ## Why These Resources Show Up Repeatedly
 
 These endpoints cover the main workflows Restish is designed around:
@@ -53,3 +64,4 @@ These endpoints cover the main workflows Restish is designed around:
 - [Requests](/docs/guides/requests/)
 - [Filtering](/docs/guides/filtering/)
 - [Pagination and Links](/docs/guides/pagination/)
+- [Bulk Management](/docs/guides/bulk-management/)

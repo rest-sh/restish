@@ -20,8 +20,8 @@ Retries are conservative by default:
 The default retry count is 2. Override it with `--rsh-retry`:
 
 ```bash
-restish https://api.example.com/items --rsh-retry 5
-restish https://api.example.com/items --rsh-retry 0
+restish https://api.rest.sh/images --rsh-retry 5
+restish https://api.rest.sh/images --rsh-retry 0
 ```
 
 Use `0` to disable retries entirely.
@@ -31,8 +31,8 @@ Use `0` to disable retries entirely.
 Use `--rsh-timeout` when you want to bound how long one request can run:
 
 ```bash
-restish https://api.example.com/items --rsh-timeout 15s
-restish https://api.example.com/items --rsh-timeout 500ms
+restish https://api.rest.sh/images --rsh-timeout 15s
+restish https://api.rest.sh/images --rsh-timeout 500ms
 ```
 
 This is useful when:
@@ -60,7 +60,7 @@ By default, cache use participates in the normal request path. To bypass the
 cache for one invocation:
 
 ```bash
-restish https://api.example.com/items --rsh-no-cache
+restish https://api.rest.sh/images --rsh-no-cache
 ```
 
 That disables both cache reads and cache writes for that request.
@@ -113,7 +113,4 @@ Consider `--rsh-retry 0` when:
 - [Requests](../requests/)
 - [Pagination and Links](../pagination/)
 - [Environment Variables](/docs/reference/environment-variables/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Cache Command](/docs/reference/cache-command/)

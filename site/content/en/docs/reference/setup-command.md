@@ -22,6 +22,26 @@ restish setup fish
 - `bash`
 - `fish`
 
+## What It Changes
+
+`setup` prints shell-specific configuration that helps your shell stop
+interpreting Restish shorthand, brackets, and wildcard-like input before the
+CLI receives it.
+
+That matters most for:
+
+- shorthand patches such as `tags[0]: blue`
+- filter expressions containing brackets or punctuation
+- commands users would otherwise need to quote more aggressively
+
+## When To Re-Run It
+
+Run `setup` again when:
+
+- you switch shells
+- you set up Restish on another machine
+- your shell config was reset or replaced
+
 ## Related Pages
 
 - [Shell Setup](/docs/getting-started/shell-setup/)

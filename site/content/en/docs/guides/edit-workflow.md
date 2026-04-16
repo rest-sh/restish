@@ -17,7 +17,7 @@ The `edit` command turns the common fetch-edit-update cycle into one command:
 ## Basic Interactive Edit
 
 ```bash
-restish edit https://api.example.com/items/123
+restish edit https://api.rest.sh/types
 ```
 
 Restish fetches the current representation, opens it in your editor, shows a
@@ -35,8 +35,8 @@ That makes it a safer replacement for the manual sequence of:
 The editable representation can be JSON or YAML:
 
 ```bash
-restish edit --edit-format json https://api.example.com/items/123
-restish edit --edit-format yaml https://api.example.com/items/123
+restish edit --edit-format json https://api.rest.sh/types
+restish edit --edit-format yaml https://api.rest.sh/types
 ```
 
 JSON is the default.
@@ -47,7 +47,7 @@ If you already know the fields to change, pass shorthand patch args instead of
 opening an editor:
 
 ```bash
-restish edit https://api.example.com/items/123 name: Alice status: active
+restish edit https://api.rest.sh/types string: changed
 ```
 
 This is the fastest path for small updates.
@@ -60,13 +60,13 @@ and do not need to review a full document in an editor.
 Use `--dry-run` when you want to preview the diff without sending anything:
 
 ```bash
-restish edit --dry-run https://api.example.com/items/123 name: Alice
+restish edit --dry-run https://api.rest.sh/types string: changed
 ```
 
 Use `-y` or `--rsh-yes` to skip the confirmation prompt in automation:
 
 ```bash
-restish edit -y https://api.example.com/items/123 status: active
+restish edit -y https://api.rest.sh/types string: changed
 ```
 
 ## How Updates Are Sent
@@ -97,7 +97,4 @@ stale representation back to the API.
 
 - [Requests](../requests/)
 - [Input and Shorthand](../input/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Edit Command](/docs/reference/edit-command/)

@@ -7,6 +7,10 @@ description: Learn the core request workflow in Restish, from simple verbs to ri
 
 Restish supports both generic HTTP verbs and API-generated commands.
 
+## Path
+
+`Documentation -> Guides -> Requests`
+
 ## The Core Mental Model
 
 Almost every Restish request follows the same pattern:
@@ -240,3 +244,4 @@ For most users, the request workflow matures in this order:
 - [Set Up Profiles](/docs/getting-started/set-up-profiles/)
 - [TLS](../tls/)
 - [Pagination and Links](../pagination/)
+- [Generic HTTP Commands](/docs/reference/http-commands/)

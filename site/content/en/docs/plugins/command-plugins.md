@@ -8,6 +8,18 @@ description: Add new top-level Restish workflows with long-lived command plugins
 Command plugins add top-level commands such as `restish bulk` and keep running
 while they exchange messages with the host.
 
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant R as Restish
+  participant P as Command Plugin
+  U->>R: run plugin command
+  R->>P: init
+  P->>R: http-request / api-spec / progress
+  R->>P: http-response / api-spec-response
+  P->>R: done
+```
+
 Choose a command plugin when your feature needs:
 
 - a top-level command
@@ -159,6 +171,7 @@ Prefer a hook plugin instead when:
 ## Related Pages
 
 - [Hook Plugins](../hook-plugins/)
+- [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Plugin Manifest](../reference/plugin-manifest/)
 - [Plugin Message Reference](../reference/plugin-messages/)
 - [Plugin Quickstart](/docs/plugins/quickstart/)

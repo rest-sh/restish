@@ -8,6 +8,10 @@ description: Follow task-oriented guides for the core Restish workflows.
 Guides are the heart of the docs. They lead with examples and then explain the
 behavior behind them.
 
+## Path
+
+`Documentation -> Guides`
+
 ## Popular Guides
 
 - [Comparison](./comparison/) for deciding when Restish is a better fit than curl or HTTPie.

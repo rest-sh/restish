@@ -15,6 +15,15 @@ That setup unlocks:
 - shell completion
 - profile-aware requests without repeating full URLs
 
+```mermaid
+flowchart TD
+  A["Need an API spec"] --> B["Check cached spec"]
+  B --> C["Check explicit spec_url"]
+  C --> D["Probe Link headers on base URL"]
+  D --> E["Probe /openapi.json and /openapi.yaml"]
+  E --> F["Try base URL response body"]
+```
+
 ## Fastest Path
 
 Register an API:
@@ -92,3 +101,4 @@ add the spec location later.
 - [Connect to an API](/docs/getting-started/connect-to-an-api/)
 - [Commands Reference](/docs/reference/commands/)
 - [API Management Reference](/docs/reference/api-management/)
+- [Example API](/docs/reference/example-api/)

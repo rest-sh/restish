@@ -60,6 +60,7 @@ known set of plugin executables:
 
 ## Where To Go Next
 
+- [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Plugins Section](/docs/plugins/)
 - [Plugin Manifest Reference](../plugin-manifest/)
 - [Plugin Message Reference](../plugin-messages/)

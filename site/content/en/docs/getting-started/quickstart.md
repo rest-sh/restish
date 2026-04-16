@@ -8,6 +8,10 @@ description: Go from install to a generated API command and filtered output in a
 This page is the shortest realistic path from "I just installed Restish" to
 "I understand why I would keep using it".
 
+## Path
+
+`Documentation -> Getting Started -> Quickstart`
+
 The examples use the public docs API at `https://api.rest.sh`.
 
 ## 1. Install

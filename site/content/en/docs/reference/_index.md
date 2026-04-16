@@ -8,6 +8,10 @@ description: Factual, scannable reference pages for commands, config, output, an
 Reference pages are optimized for scanning, linking, and answering factual
 questions quickly.
 
+## Path
+
+`Documentation -> Reference`
+
 ## Main References
 
 - [Commands](./commands/) for the CLI surface area and command families.

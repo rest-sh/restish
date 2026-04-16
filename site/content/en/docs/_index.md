@@ -13,6 +13,10 @@ organized around the way people actually adopt the tool:
 2. connect Restish to a real API
 3. shape daily workflows with profiles, auth, filtering, pagination, and plugins
 
+## Path
+
+`Documentation -> Getting Started -> Guides -> Recipes -> Reference -> Plugins -> Contributing`
+
 ## Start Here
 
 - New to Restish:

@@ -12,7 +12,7 @@ This page is for API authors who want their API to feel good in Restish once a
 user runs:
 
 ```bash
-restish api configure myapi https://api.example.com
+restish api configure example https://api.rest.sh
 ```
 
 ## Start With Discoverability

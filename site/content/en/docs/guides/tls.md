@@ -100,7 +100,4 @@ context Restish itself would use.
 
 - [Authentication](../authentication/)
 - [TLS Signer Plugins](../plugins/tls-signer-plugins/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Cert Command](/docs/reference/cert-command/)

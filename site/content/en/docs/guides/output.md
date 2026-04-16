@@ -18,6 +18,15 @@ That gives the CLI a stable internal response shape with:
 That normalized model is the reason filtering, table output, pagination, and
 plugin formatters all work together instead of feeling like unrelated features.
 
+```mermaid
+flowchart LR
+  A["HTTP response"] --> B["Decode and normalize"]
+  B --> C["Optional filter"]
+  C --> D["Choose formatter"]
+  D --> E["Document output"]
+  D --> F["Record output"]
+```
+
 ## The Practical Rule
 
 Think about output in two modes:
@@ -269,6 +278,12 @@ restish -S https://api.rest.sh/
 
 This is useful in shell checks and CI probes.
 
+## Related Pages
+
+- [Output Formats](/docs/reference/output-formats/)
+- [Output Defaults](/docs/reference/output-defaults/)
+- [Filtering](/docs/guides/filtering/)
+
 ## A Useful Output Progression
 
 Most users end up using these formats in roughly this order:
@@ -286,7 +301,4 @@ Once you know that progression, output decisions get simpler.
 - [Streaming](../streaming/)
 - [Images in the Terminal](../images-in-the-terminal/)
 - [Output Formats](../reference/output-formats/)
-
-Source material:
-
-- [Design Records](/docs/contributing/design-records/)
+- [Pagination and Links](../pagination/)

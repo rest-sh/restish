@@ -9,6 +9,10 @@ Plugins are a first-class part of Restish v2. They let you add auth flows,
 middleware, formatters, custom commands, spec loaders, and advanced TLS
 integrations without forking the CLI.
 
+## Path
+
+`Documentation -> Plugins`
+
 Some plugins are primarily for plugin authors, while others expose
 user-facing workflows such as `restish bulk` and `restish mcp`.
 

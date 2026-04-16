@@ -60,6 +60,7 @@ expects.
 
 ## Related Pages
 
+- [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Plugin Reference](../plugins/)
 - [Plugin Message Reference](../plugin-messages/)
 - [Plugin Quickstart](/docs/plugins/quickstart/)

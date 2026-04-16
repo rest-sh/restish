@@ -54,7 +54,7 @@ With a lower-level HTTP client, repeated use often looks like:
 
 ```bash
 curl -H 'Authorization: Bearer ...' \
-  'https://api.example.com/items?per_page=100'
+  'https://api.rest.sh/images?per_page=100'
 ```
 
 With Restish before API setup:
@@ -62,14 +62,14 @@ With Restish before API setup:
 ```bash
 restish -H 'Authorization: Bearer ...' \
   -q per_page=100 \
-  https://api.example.com/items
+  https://api.rest.sh/images
 ```
 
 With Restish after API setup and profiles:
 
 ```bash
-restish api configure myapi https://api.example.com
-restish -p prod myapi list-items
+restish api configure example https://api.rest.sh
+restish example list-images
 ```
 
 That is the product shift Restish is designed around: repeated API work should

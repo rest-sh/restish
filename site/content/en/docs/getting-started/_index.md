@@ -12,6 +12,10 @@ successful request quickly, then show how Restish becomes more useful when you
 connect it to a real API and stop repeating the same headers, base URLs, and
 auth by hand.
 
+## Path
+
+`Documentation -> Getting Started`
+
 ## Ten-Minute Quickstart
 
 If you want the shortest end-to-end path, follow

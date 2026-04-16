@@ -33,8 +33,8 @@ restish api content-types
 Use `-c` or `--rsh-content-type` to choose how Restish encodes a request body.
 
 ```bash
-restish post -c json https://api.example.com/items name: Alice
-restish post -c yaml https://api.example.com/items name: Alice
+restish post -c json https://api.rest.sh/types string: hello
+restish post -c yaml https://api.rest.sh/types string: hello
 restish post -c form https://api.example.com/login username: alice password: secret
 ```
 
@@ -69,6 +69,10 @@ restish post -c form https://api.example.com/login username: alice password: sec
 restish post -c multipart https://api.example.com/upload name: example
 ```
 
+The JSON and YAML examples use the public example API. The form and multipart
+examples stay generic because they illustrate shapes more than a specific live
+endpoint.
+
 ## Compression Encodings
 
 The built-in registry also knows how to decompress these response encodings:
@@ -90,4 +94,5 @@ See:
 
 - [Input Guide](/docs/guides/input/)
 - [Output Guide](/docs/guides/output/)
+- [API Management](/docs/reference/api-management/)
 - [Plugin Manifest Reference](../plugin-manifest/)

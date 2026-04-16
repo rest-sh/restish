@@ -24,6 +24,10 @@ restish patch https://api.rest.sh/types string: changed
 restish delete https://api.example.com/items/123
 ```
 
+The first three commands are runnable against the example API. The `delete`
+example stays generic because the public example API does not expose a
+destructive delete target.
+
 ## Bare URL Shortcut
 
 A bare URL is treated as `GET`:

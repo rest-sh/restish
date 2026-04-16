@@ -9,12 +9,18 @@ Contributor docs are separated from the end-user guides on purpose. Start here
 if you want to build Restish itself, work on the docs site, or understand the
 core architecture before changing behavior.
 
+## Path
+
+`Documentation -> Contributing`
+
 ## Start Here
 
 - [Development Setup](./development-setup/) for the local toolchain and common
   commands.
 - [Design Records](./design-records/) for the subsystem-level architecture
   documents in the repository's `docs/design/` directory.
+- [Docs Maintenance](./docs-maintenance/) for doc checklists, validation, and
+  migration status.
 
 ## Good Next Steps
 
