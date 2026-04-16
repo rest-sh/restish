@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const maxPluginDebugCaptureBytes = 64 << 20
+
 // addPluginCommand registers the "plugin" subcommand tree on root.
 func (c *CLI) addPluginCommand(root *cobra.Command) {
 	pluginCmd := &cobra.Command{
@@ -150,8 +152,8 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 	pluginCmd.Stderr = c.Stderr
 
 	// Capture stdout for CBOR decoding while also passing it through.
-	var stdoutBuf bytes.Buffer
-	pluginCmd.Stdout = io.MultiWriter(c.Stdout, &stdoutBuf)
+	stdoutBuf := &cappedBuffer{limit: maxPluginDebugCaptureBytes}
+	pluginCmd.Stdout = io.MultiWriter(c.Stdout, stdoutBuf)
 
 	if err := pluginCmd.Run(); err != nil {
 		// Non-zero exit is reported but not fatal in debug mode.
@@ -170,6 +172,9 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 			b, _ := json.MarshalIndent(v, "", "  ")
 			fmt.Fprintf(c.Stderr, "[debug] decoded CBOR message:\n%s\n", b)
 		}
+	}
+	if stdoutBuf.Truncated() {
+		fmt.Fprintf(c.Stderr, "warning: plugin debug capture truncated after %d bytes\n", maxPluginDebugCaptureBytes)
 	}
 	return nil
 }
@@ -220,4 +225,37 @@ func validatePluginName(name string) error {
 		return fmt.Errorf("remove: invalid plugin name %q", name)
 	}
 	return nil
+}
+
+type cappedBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if b.limit < 0 {
+		return b.buf.Write(p)
+	}
+	remaining := b.limit - b.buf.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			_, _ = b.buf.Write(p[:remaining])
+			b.truncated = true
+			return len(p), nil
+		}
+		return b.buf.Write(p)
+	}
+	if len(p) > 0 {
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
+func (b *cappedBuffer) Bytes() []byte {
+	return b.buf.Bytes()
+}
+
+func (b *cappedBuffer) Truncated() bool {
+	return b.truncated
 }
