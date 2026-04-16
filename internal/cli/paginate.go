@@ -274,7 +274,7 @@ func paginatedFrameTemplateBody(firstBody any, pagCfg *config.PaginationConfig) 
 		return paginatedItemsPlaceholder, true
 	}
 
-	clone, ok := cloneJSONValue(firstBody)
+	clone, ok := cloneJSONPath(firstBody, pagCfg.ItemsPath)
 	if !ok {
 		return nil, false
 	}
@@ -298,7 +298,7 @@ func mergePaginatedBody(firstBody any, pagCfg *config.PaginationConfig, items []
 		return items
 	}
 
-	clone, ok := cloneJSONValue(firstBody)
+	clone, ok := cloneJSONPath(firstBody, pagCfg.ItemsPath)
 	if !ok {
 		return items
 	}
@@ -309,16 +309,44 @@ func mergePaginatedBody(firstBody any, pagCfg *config.PaginationConfig, items []
 	return items
 }
 
-func cloneJSONValue(value any) (any, bool) {
-	data, err := json.Marshal(value)
-	if err != nil {
+func cloneJSONPath(value any, targetPath string) (any, bool) {
+	trimmed := strings.TrimPrefix(targetPath, ".")
+	if trimmed == "" {
+		return value, true
+	}
+	parts := strings.Split(trimmed, ".")
+	root, ok := value.(map[string]any)
+	if !ok {
 		return nil, false
 	}
-	var clone any
-	if err := json.Unmarshal(data, &clone); err != nil {
-		return nil, false
+	for _, part := range parts {
+		if part == "" || strings.ContainsAny(part, "[]{}()|=<>!@") {
+			return nil, false
+		}
+	}
+
+	clone := cloneMap(root)
+	currentClone := clone
+	currentOriginal := root
+	for _, part := range parts[:len(parts)-1] {
+		nextOriginal, ok := currentOriginal[part].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		nextClone := cloneMap(nextOriginal)
+		currentClone[part] = nextClone
+		currentClone = nextClone
+		currentOriginal = nextOriginal
 	}
 	return clone, true
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func setSimplePath(value any, path string, replacement any) (any, bool) {
