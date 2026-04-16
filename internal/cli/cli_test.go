@@ -81,3 +81,16 @@ func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
 		t.Fatalf("expected response body in stdout, got %q", out.String())
 	}
 }
+
+func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
+	c, out, _ := newTestCLI()
+	if err := c.Run([]string{"restish", "--help"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out.String(), "--rsh-retry int   Maximum retry attempts for network errors and 5xx responses (-1 = use default of 2; 0 = disable)") {
+		t.Fatalf("help leaked sentinel retry value:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)") {
+		t.Fatalf("expected user-facing retry default in help, got:\n%s", out.String())
+	}
+}
