@@ -9,6 +9,9 @@ Plugins are a first-class part of Restish v2. They let you add auth flows,
 middleware, formatters, custom commands, spec loaders, and advanced TLS
 integrations without forking the CLI.
 
+Some plugins are primarily for plugin authors, while others expose
+user-facing workflows such as `restish bulk` and `restish mcp`.
+
 ## Start Here
 
 - [Plugin Quickstart](./quickstart/) for the shortest path to a working plugin.
@@ -25,3 +28,9 @@ integrations without forking the CLI.
 - Choose a command plugin for new product surfaces such as `restish mcp`.
 - Choose a TLS signer plugin only when the private key must stay outside the
   Restish process.
+
+## User-Facing Built-Ins
+
+- [Bulk Management](/docs/guides/bulk-management/) for API collections checked
+  out to disk.
+- [MCP](/docs/guides/mcp/) for exposing registered APIs as MCP tools.

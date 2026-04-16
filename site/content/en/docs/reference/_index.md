@@ -16,6 +16,7 @@ questions quickly.
 - [API Management](./api-management/) for `restish api`, cache, cert, and auth helpers.
 - [Config](./config/) for config file structure and profile fields.
 - [Profiles](./profiles/) for per-environment overrides and profile selection.
+- [Shorthand Syntax](./shorthand/) for structured request-body input on the command line.
 - [Content Types](./content-types/) for request encoding and response decoding support.
 - [Output Formats](./output-formats/) for formatter behavior and use cases.
 - [Plugins](./plugins/) for plugin architecture and operator-facing commands.

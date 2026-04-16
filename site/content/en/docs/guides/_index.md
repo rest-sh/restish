@@ -12,6 +12,7 @@ behavior behind them.
 
 - [Requests](./requests/) for the core workflow.
 - [API Setup and Discovery](./api-setup-and-discovery/) for turning API descriptions into generated commands.
+- [OpenAPI and CLI Integration](./openapi-cli-integration/) for API authors who want a better Restish command experience.
 - [Authentication](./authentication/) for bearer tokens, OAuth, and profile
   setup.
 - [Input](./input/) and [Output](./output/) for shaping request bodies and
@@ -23,6 +24,8 @@ behavior behind them.
   repeatable API calls.
 - [Command Behavior](./command-behavior/) for exit codes, diagnostics, and shell-safe behavior.
 - [Images in the Terminal](./images-in-the-terminal/) for `image/*` responses.
+- [Bulk Management](./bulk-management/) for Git-like local workflows over API collections.
+- [MCP](./mcp/) for serving registered APIs to an MCP client through Restish.
 
 ## Use This Section For
 
