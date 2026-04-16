@@ -27,7 +27,7 @@ Plugin authors should build against the public
 
 The helpers you will reach for most often are:
 
-- `plugin.WriteMessage` and `plugin.ReadMessage` for framed CBOR messages
+- `plugin.WriteMessage` and `plugin.ReadMessage` for self-delimiting CBOR messages
 - `plugin.WriteManifest` and `plugin.WriteCommands` for startup responses
 - `plugin.HandleStartupFlags` for `--rsh-plugin-manifest` and
   `--rsh-plugin-commands`
@@ -165,9 +165,9 @@ before the reply comes back to your plugin.
 ## Common Pitfalls
 
 - Plugin executables must be named `restish-<name>`.
-- Manifests and command declarations are unframed CBOR, not length-prefixed
-  CBOR messages.
-- Command-plugin runtime messages are framed CBOR; use `plugin.ReadMessage` and
+- Manifests, command declarations, and runtime messages are self-delimiting
+  CBOR data items, not length-prefixed frames.
+- Command-plugin runtime messages should use `plugin.ReadMessage` and
   `plugin.WriteMessage`.
 - Formatter plugins write final bytes to stdout directly; they do not send a
   CBOR reply envelope.
