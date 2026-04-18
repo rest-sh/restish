@@ -269,6 +269,34 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 	}
 }
 
+func TestDiscover_PrefersInstalledPluginOverPATHForSameIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	pathDir := t.TempDir()
+	pluginDir := t.TempDir()
+
+	writeScript(t, pathDir, "restish-dupe", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(Manifest{
+		Name:              "dupe",
+		Version:           "path",
+		RestishAPIVersion: CurrentPluginAPIVersion,
+	})))
+	writeScript(t, pluginDir, "restish-dupe", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(Manifest{
+		Name:              "dupe",
+		Version:           "installed",
+		RestishAPIVersion: CurrentPluginAPIVersion,
+	})))
+
+	t.Setenv("PATH", pathDir)
+	plugins := Discover(pluginDir, nil, nil, "")
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if plugins[0].Manifest.Version != "installed" {
+		t.Fatalf("expected installed plugin to win, got version %q from %s", plugins[0].Manifest.Version, plugins[0].Path)
+	}
+}
+
 func TestDiscover_EmptyPath_NoPlugins(t *testing.T) {
 	t.Setenv("PATH", "")
 	plugins := Discover("", nil, nil, "")

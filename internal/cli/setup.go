@@ -20,7 +20,6 @@ type shellSetup struct {
 var shellSetups = map[string]shellSetup{
 	"zsh":  {rcFile: ".zshrc", alias: `alias restish="noglob restish"`},
 	"bash": {rcFile: ".bashrc", alias: `alias restish="noglob restish"`},
-	"fish": {rcFile: ".config/fish/config.fish", alias: `abbr --add restish "noglob restish"`},
 }
 
 // addSetupCommand registers the "setup" subcommand on root.

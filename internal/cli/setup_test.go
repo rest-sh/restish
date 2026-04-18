@@ -92,6 +92,15 @@ func TestSetupUnsupportedShell(t *testing.T) {
 	}
 }
 
+func TestSetupFishUnsupported(t *testing.T) {
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "setup", "fish"})
+	if err == nil {
+		t.Fatal("expected error for fish setup")
+	}
+}
+
 func TestSetupWarnsForPermissiveExistingRCFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

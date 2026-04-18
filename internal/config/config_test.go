@@ -150,6 +150,18 @@ func TestLoad_UnknownField(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsTrailingTokens(t *testing.T) {
+	path := writeConfig(t, `{"apis": {}} true`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error for trailing tokens, got nil")
+	}
+	var parseErr *config.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("expected *config.ParseError, got %T: %v", err, err)
+	}
+}
+
 func TestDefaultPath_EnvOverride(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", dir)

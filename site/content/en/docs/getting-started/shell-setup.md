@@ -41,25 +41,27 @@ Supported shells:
 
 - `zsh`
 - `bash`
-- `fish`
 
 Examples:
 
 ```bash
 restish setup zsh
 restish setup bash
-restish setup fish
 ```
 
 Today that writes one of these shell-specific lines:
 
 - Zsh and Bash: `alias restish="noglob restish"`
-- Fish: `abbr --add restish "noglob restish"`
 
 The command is idempotent, so running it again does not keep appending the same
 line repeatedly.
 
 If you use Restish interactively, this step pays off quickly.
+
+Fish users should still install completion, but `restish setup fish` is not
+offered because Fish does not provide a compatible `noglob` alias equivalent.
+When needed, quote arguments containing glob characters such as `*`, `?`, or
+`[]` so Fish passes them through unchanged.
 
 ## Restart Or Reload Your Shell
 

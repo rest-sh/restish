@@ -59,16 +59,18 @@ type Plugin struct {
 	Manifest Manifest
 }
 
-// Discover finds all restish-* plugins on PATH and in pluginDir.
+// Discover finds all restish-* plugins in pluginDir and on PATH.
 // Errors loading individual plugin manifests are reported via errFn but do not
 // abort discovery. Pass nil for errFn to silently skip broken plugins.
 // When allowedPlugins is non-empty only executables whose base name appears in
 // the list are loaded; all others are silently skipped.
 // manifestCacheFile, when non-empty, enables a CBOR on-disk manifest cache
 // keyed by plugin path + mtime. This avoids subprocess spawns on every
-// invocation when the plugin binary has not changed.
+// invocation when the plugin binary has not changed. When duplicate plugin
+// identities are found, pluginDir takes precedence over PATH.
 func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error), manifestCacheFile string) []Plugin {
-	seen := map[string]bool{}
+	seenPaths := map[string]bool{}
+	seenNames := map[string]bool{}
 	var plugins []Plugin
 
 	allowed := make(map[string]bool, len(allowedPlugins))
@@ -99,13 +101,13 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 	}
 
 	add := func(path string) {
-		if seen[path] {
+		if seenPaths[path] {
 			return
 		}
 		if len(allowed) > 0 && !allowed[filepath.Base(path)] {
 			return
 		}
-		seen[path] = true
+		seenPaths[path] = true
 		m, err := resolveManifest(path)
 		if err != nil {
 			if errFn != nil {
@@ -113,7 +115,28 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 			}
 			return
 		}
+		if seenNames[m.Name] {
+			return
+		}
+		seenNames[m.Name] = true
 		plugins = append(plugins, Plugin{Path: path, Manifest: *m})
+	}
+
+	// Scan plugin dir first so explicitly installed plugins override PATH
+	// plugins with the same declared identity.
+	if pluginDir != "" {
+		entries, err := os.ReadDir(pluginDir)
+		if err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				full := filepath.Join(pluginDir, e.Name())
+				if isExecutable(full) {
+					add(full)
+				}
+			}
+		}
 	}
 
 	// Scan PATH.
@@ -140,22 +163,6 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 					continue
 				}
 				full := filepath.Join(dir, name)
-				if isExecutable(full) {
-					add(full)
-				}
-			}
-		}
-	}
-
-	// Scan plugin dir.
-	if pluginDir != "" {
-		entries, err := os.ReadDir(pluginDir)
-		if err == nil {
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				full := filepath.Join(pluginDir, e.Name())
 				if isExecutable(full) {
 					add(full)
 				}

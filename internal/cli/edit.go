@@ -276,36 +276,44 @@ func splitCommandLine(s string) ([]string, error) {
 	var cur strings.Builder
 	var quote rune
 	escaped := false
+	argStarted := false
 
 	flush := func() {
-		if cur.Len() > 0 {
+		if argStarted || cur.Len() > 0 {
 			parts = append(parts, cur.String())
 			cur.Reset()
+			argStarted = false
 		}
 	}
 
 	for _, r := range s {
 		switch {
 		case escaped:
+			argStarted = true
 			cur.WriteRune(r)
 			escaped = false
 		case r == '\\' && quote != '\'':
+			argStarted = true
 			escaped = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
 			} else {
+				argStarted = true
 				cur.WriteRune(r)
 			}
 		case r == '\'' || r == '"':
+			argStarted = true
 			quote = r
 		case r == ' ' || r == '\t':
 			flush()
 		default:
+			argStarted = true
 			cur.WriteRune(r)
 		}
 	}
 	if escaped {
+		argStarted = true
 		cur.WriteRune('\\')
 	}
 	if quote != 0 {

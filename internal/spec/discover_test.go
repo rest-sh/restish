@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -392,9 +393,9 @@ func TestDiscover_LinkHeader(t *testing.T) {
 
 func TestDiscover_Cache(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Cached","version":"1.0.0"},"paths":{}}`
-	var callCount int
+	var callCount atomic.Int64
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		callCount++
+		callCount.Add(1)
 		return httpResponse(200, "application/json", spec, nil), nil
 	})
 
@@ -416,7 +417,7 @@ func TestDiscover_Cache(t *testing.T) {
 	if result1 == nil {
 		t.Fatal("expected non-nil spec on first call")
 	}
-	countAfterFirst := callCount
+	countAfterFirst := callCount.Load()
 
 	// Second call: should read from cache, making zero additional network calls.
 	result2, err := Discover(context.Background(), cfg, DefaultLoaders())
@@ -427,8 +428,8 @@ func TestDiscover_Cache(t *testing.T) {
 		t.Fatal("expected non-nil spec on second call")
 	}
 
-	if callCount != countAfterFirst {
-		t.Errorf("second Discover made %d additional network calls, expected 0", callCount-countAfterFirst)
+	if got := callCount.Load(); got != countAfterFirst {
+		t.Errorf("second Discover made %d additional network calls, expected 0", got-countAfterFirst)
 	}
 }
 

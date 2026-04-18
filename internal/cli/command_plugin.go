@@ -6,6 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/danielgtaylor/restish/v2/internal/filter"
+	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/danielgtaylor/restish/v2/internal/spec"
+	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/spf13/cobra"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -13,11 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/danielgtaylor/restish/v2/internal/filter"
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	"github.com/danielgtaylor/restish/v2/internal/spec"
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
-	"github.com/spf13/cobra"
 )
 
 func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
@@ -26,7 +26,10 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 
 	cmd := exec.CommandContext(ctx, path, "--rsh-plugin-commands")
 	out, err := cmd.Output()
-	if err != nil || len(out) == 0 {
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), err)
+	}
+	if len(out) == 0 {
 		return nil, nil
 	}
 
@@ -42,7 +45,11 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 func (c *CLI) addCommandPlugins(root *cobra.Command) {
 	for _, p := range c.pluginsForHook("command") {
 		cmds, err := loadCommandPluginCommands(p.Path)
-		if err != nil || len(cmds) == 0 {
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(p.Path), err)
+			continue
+		}
+		if len(cmds) == 0 {
 			continue
 		}
 		for _, decl := range cmds {
@@ -73,7 +80,21 @@ func (w *commandPluginWriter) WriteMessage(v any) error {
 	return pluginwire.WriteMessage(w.w, v)
 }
 
+type synchronizedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *synchronizedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
+}
+
 func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
+	syncErr := &synchronizedWriter{w: cmd.ErrOrStderr()}
+	cmd.SetErr(syncErr)
+
 	proc := exec.Command(pluginPath, append(terminalContextFlags(c), args...)...)
 	proc.Stderr = cmd.ErrOrStderr()
 
@@ -91,6 +112,15 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		_ = stdoutPipe.Close()
 		return fmt.Errorf("command plugin: start: %w", err)
 	}
+	cleanupStartFailure := func(cause error) error {
+		_ = stdinPipe.Close()
+		_ = stdoutPipe.Close()
+		if proc.Process != nil {
+			_ = proc.Process.Kill()
+		}
+		_ = proc.Wait()
+		return cause
+	}
 
 	writer := &commandPluginWriter{w: stdinPipe}
 	initMsg := pluginwire.InitMsg{
@@ -99,8 +129,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		Args:    args,
 	}
 	if err := writer.WriteMessage(initMsg); err != nil {
-		_ = proc.Process.Kill()
-		return fmt.Errorf("command plugin: send init: %w", err)
+		return cleanupStartFailure(fmt.Errorf("command plugin: send init: %w", err))
 	}
 
 	// stopCh is closed when the command loop exits, signalling streamPluginStdin

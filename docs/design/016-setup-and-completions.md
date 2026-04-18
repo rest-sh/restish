@@ -36,13 +36,12 @@ tree.
 
 Setup is intentionally narrower. The `setup <shell>` command appends a shell
 snippet to the relevant rc file that configures `restish` to run under
-`noglob`-style behavior or the nearest shell-specific equivalent.
+`noglob`-style behavior where the shell has a correct equivalent.
 
 The built-in setup currently supports:
 
 - `zsh`
 - `bash`
-- `fish`
 
 Some design choices worth preserving:
 

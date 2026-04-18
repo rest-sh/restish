@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -200,6 +201,12 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(stripped))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
+		return nil, &ParseError{Path: path, Err: err}
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = fmt.Errorf("unexpected trailing content")
+		}
 		return nil, &ParseError{Path: path, Err: err}
 	}
 

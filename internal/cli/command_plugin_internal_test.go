@@ -2,6 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -33,5 +37,25 @@ func TestHandleCommandPluginMessageRejectsMalformedDone(t *testing.T) {
 	}
 	if !strings.Contains(gotErr.Error(), "decode done") {
 		t.Fatalf("expected decode error, got: %v", gotErr)
+	}
+}
+
+func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish-broken")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+
+	_, err := loadCommandPluginCommands(path)
+	if err == nil {
+		t.Fatal("expected command discovery error")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("plugin %s: command discovery", filepath.Base(path))) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
