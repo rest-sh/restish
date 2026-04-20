@@ -8,12 +8,14 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
+	"github.com/danielgtaylor/restish/v2/internal/config"
 )
 
 // requestRecorder is a small helper that captures the last HTTP request
@@ -107,6 +109,33 @@ func TestBareURL(t *testing.T) {
 	}
 	if got := rr.Last().Method; got != "GET" {
 		t.Errorf("expected GET for bare URL, got %q", got)
+	}
+}
+
+func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"testapi": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {},
+				},
+			},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "get", "--rsh-profile", "missing", "testapi/items"})
+	if err == nil {
+		t.Fatal("expected missing configured profile to error")
+	}
+	if !strings.Contains(err.Error(), `profile "missing" not found for API "testapi"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

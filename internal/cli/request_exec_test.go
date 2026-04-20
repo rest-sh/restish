@@ -167,3 +167,25 @@ func TestNormalizeHTTPResponseParsesLinks(t *testing.T) {
 		t.Fatalf("resp.Links[next] = %v, want %q", got, want)
 	}
 }
+
+func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {},
+				},
+			},
+		},
+	}
+
+	_, err := c.prepareRequest("svc/items", "missing", request.Options{}, nil, nil, false)
+	if err == nil {
+		t.Fatal("expected missing profile to return an error")
+	}
+	if !strings.Contains(err.Error(), `profile "missing" not found for API "svc"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

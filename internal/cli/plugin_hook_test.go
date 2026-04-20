@@ -122,6 +122,36 @@ func TestAuthHookPlugin(t *testing.T) {
 	}
 }
 
+func TestAuthHookPluginWithoutProfiles(t *testing.T) {
+	installHookPlugin(t)
+
+	var mu sync.Mutex
+	var capturedAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedAuth = r.Header.Get("Authorization")
+		mu.Unlock()
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{"apis":{"testapi":{"base_url":%q}}}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mu.Lock()
+	got := capturedAuth
+	mu.Unlock()
+
+	if got != "Bearer hook-token" {
+		t.Errorf("Authorization header: got %q, want %q", got, "Bearer hook-token")
+	}
+}
+
 // TestRequestMiddlewarePlugin verifies that a request-middleware hook plugin
 // adds a header to the outbound request.
 func TestRequestMiddlewarePlugin(t *testing.T) {

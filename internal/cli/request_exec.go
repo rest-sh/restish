@@ -32,8 +32,11 @@ func (c *CLI) prepareRequest(
 		opts.Headers = append(opts.Headers, extraHeaders...)
 	}
 
-	rawURL, apiName, opts := c.applyAPIProfile(rawURL, profileName, opts)
-	opts, err := c.resolveTLSSigner(opts)
+	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts)
+	if err != nil {
+		return nil, err
+	}
+	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {
 		return nil, err
 	}

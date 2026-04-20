@@ -495,9 +495,9 @@ func (c *CLI) isAPIShortName(arg string) bool {
 //
 // Returns (expandedURL, apiName, opts). apiName is empty when rawURL is not
 // an API short name.
-func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, string, request.Options) {
+func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, string, request.Options, error) {
 	if c.cfg == nil || len(c.cfg.APIs) == 0 {
-		return rawURL, "", opts
+		return rawURL, "", opts, nil
 	}
 
 	// Split "apiname/rest/of/path" → apiName="apiname", rest="rest/of/path"
@@ -527,12 +527,15 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 					}
 					opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
 				} else {
+					if apiCfg.Profiles != nil {
+						return rawURL, name, opts, fmt.Errorf("profile %q not found for API %q", profileName, name)
+					}
 					opts.OnRequest = c.authOnRequest(name, profileName, nil)
 				}
-				return rawURL, name, opts
+				return rawURL, name, opts, nil
 			}
 		}
-		return rawURL, "", opts
+		return rawURL, "", opts, nil
 	}
 
 	// Determine effective base URL and profile.
@@ -544,8 +547,11 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 			baseURL = prof.BaseURL
 		}
 	}
-	if prof == nil && profileName != "default" {
-		fmt.Fprintf(c.Stderr, "warning: profile %q not found for API %q; using API defaults\n", profileName, apiName)
+	if prof == nil {
+		if api.Profiles != nil {
+			return rawURL, apiName, opts, fmt.Errorf("profile %q not found for API %q", profileName, apiName)
+		}
+		opts.OnRequest = c.authOnRequest(apiName, profileName, nil)
 	}
 
 	// Build the expanded URL.
@@ -566,7 +572,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
 	}
 
-	return expanded, apiName, opts
+	return expanded, apiName, opts, nil
 }
 
 // mergeTLSSignerParams merges src entries into dst, not overwriting existing
