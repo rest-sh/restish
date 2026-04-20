@@ -100,6 +100,58 @@ func TestAPIConfigure(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	c.SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Link": []string{`<https://spec.example.com/openapi.json>; rel="service-desc"`}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://spec.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com", "--allow-cross-origin-spec"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	api, ok := written.APIs["myapi"]
+	if !ok {
+		t.Fatal("expected myapi in config")
+	}
+	if !api.AllowCrossOriginSpec {
+		t.Fatal("expected allow_cross_origin_spec to be persisted")
+	}
+}
+
 // TestAPIShow verifies that "api show" prints the API config as JSON.
 func TestAPIShow(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{

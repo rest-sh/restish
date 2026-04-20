@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/auth"
@@ -37,18 +38,22 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Args:  cobra.ExactArgs(1),
 		RunE:  c.runAPIDelete,
 	})
-	apiCmd.AddCommand(&cobra.Command{
+	syncCmd := &cobra.Command{
 		Use:   "sync <name>",
 		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
 		Args:  cobra.ExactArgs(1),
 		RunE:  c.runAPISync,
-	})
-	apiCmd.AddCommand(&cobra.Command{
+	}
+	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host for this sync run")
+	apiCmd.AddCommand(syncCmd)
+	configureCmd := &cobra.Command{
 		Use:   "configure <name> <url>",
 		Short: "Register an API and pre-populate config from its OpenAPI spec",
 		Args:  cobra.ExactArgs(2),
 		RunE:  c.runAPIConfigure,
-	})
+	}
+	configureCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
+	apiCmd.AddCommand(configureCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "show <name>",
 		Short: "Print the config for a registered API as JSON",
@@ -100,12 +105,24 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
+	apiCfg := c.cfg.APIs[apiName]
 
 	if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
 		return fmt.Errorf("api sync: invalidate cache: %w", err)
 	}
 
-	apiSpec, err := c.discoverSpec(requestContext(cmd), apiName)
+	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+	discCfg := spec.DiscoverConfig{
+		APIName:          apiName,
+		BaseURL:          apiCfg.BaseURL,
+		SpecURL:          apiCfg.SpecURL,
+		SpecFiles:        apiCfg.SpecFiles,
+		CacheDir:         c.specCacheDir(),
+		Version:          Version,
+		Transport:        c.baseHTTPTransport(),
+		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
+	}
+	apiSpec, err := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 	if err != nil {
 		return fmt.Errorf("api sync: %w", err)
 	}
@@ -123,19 +140,24 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	baseURL := args[1]
+	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 
 	// Run spec discovery with the supplied base URL (no existing config needed).
 	discCfg := spec.DiscoverConfig{
-		APIName:   apiName,
-		BaseURL:   baseURL,
-		CacheDir:  c.specCacheDir(),
-		Version:   Version,
-		Transport: c.baseHTTPTransport(),
+		APIName:          apiName,
+		BaseURL:          baseURL,
+		CacheDir:         c.specCacheDir(),
+		Version:          Version,
+		Transport:        c.baseHTTPTransport(),
+		AllowCrossOrigin: allowCrossOrigin,
 	}
 	apiSpec, _ := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 
 	// Build the API config entry.
-	apiCfg := &config.APIConfig{BaseURL: baseURL}
+	apiCfg := &config.APIConfig{
+		BaseURL:              baseURL,
+		AllowCrossOriginSpec: allowCrossOrigin,
+	}
 	if apiSpec != nil {
 		xcli, _ := spec.ReadXCLIConfig(apiSpec)
 		if xcli == nil && apiSpec.Document != nil {
@@ -283,7 +305,7 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 }
 
 // runAPISet updates a single config field for a named API using a dot-path key.
-// Supported keys: base_url, spec_url, operation_base,
+// Supported keys: base_url, spec_url, allow_cross_origin_spec, operation_base,
 // pagination.items_path, pagination.next_path,
 // profiles.<name>.base_url, profiles.<name>.auth.type,
 // profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer.
@@ -317,6 +339,7 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 //
 //	base_url
 //	spec_url
+//	allow_cross_origin_spec
 //	operation_base
 //	pagination.items_path
 //	pagination.next_path
@@ -335,6 +358,12 @@ func setAPIField(apiCfg *config.APIConfig, key, value string) error {
 		apiCfg.BaseURL = value
 	case apiKeySpecURL:
 		apiCfg.SpecURL = value
+	case apiKeyAllowCrossOriginSpec:
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("allow_cross_origin_spec must be a boolean: %w", err)
+		}
+		apiCfg.AllowCrossOriginSpec = b
 	case apiKeyOperationBase:
 		apiCfg.OperationBase = value
 	case apiKeyPaginationItemsPath:
@@ -391,6 +420,7 @@ type apiConfigKeyKind int
 const (
 	apiKeyBaseURL apiConfigKeyKind = iota + 1
 	apiKeySpecURL
+	apiKeyAllowCrossOriginSpec
 	apiKeyOperationBase
 	apiKeyPaginationItemsPath
 	apiKeyPaginationNextPath
@@ -419,6 +449,8 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 		return resolvedAPIConfigKey{kind: apiKeyBaseURL, jsonPath: append(basePath, "base_url")}, nil
 	case "spec_url":
 		return resolvedAPIConfigKey{kind: apiKeySpecURL, jsonPath: append(basePath, "spec_url")}, nil
+	case "allow_cross_origin_spec":
+		return resolvedAPIConfigKey{kind: apiKeyAllowCrossOriginSpec, jsonPath: append(basePath, "allow_cross_origin_spec")}, nil
 	case "operation_base":
 		return resolvedAPIConfigKey{kind: apiKeyOperationBase, jsonPath: append(basePath, "operation_base")}, nil
 	case "pagination":

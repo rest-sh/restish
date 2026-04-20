@@ -52,8 +52,8 @@ func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// TestSpecDiscoveryViaLinkHeader verifies that the discovery finds a spec URL
-// advertised in a Link: <url>; rel="service-desc" response header.
+// TestSpecDiscoveryViaLinkHeader verifies that same-host Link discovery works
+// without opt-in.
 func TestSpecDiscoveryViaLinkHeader(t *testing.T) {
 	var specHits atomic.Int32
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -62,11 +62,11 @@ func TestSpecDiscoveryViaLinkHeader(t *testing.T) {
 			return &http.Response{
 				StatusCode: 200,
 				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Link": []string{`<https://spec.example.com/openapi.json>; rel="service-desc"`}},
+				Header:     http.Header{"Link": []string{`<https://api.example.com/openapi.json>; rel="service-desc"`}},
 				Body:       io.NopCloser(strings.NewReader("")),
 				Request:    r,
 			}, nil
-		case "https://spec.example.com/openapi.json":
+		case "https://api.example.com/openapi.json":
 			specHits.Add(1)
 			return jsonResponse(200, minimalOpenAPI), nil
 		default:
@@ -98,6 +98,56 @@ func TestSpecDiscoveryViaLinkHeader(t *testing.T) {
 	}
 	if specHits.Load() == 0 {
 		t.Error("expected at least one hit to the spec server")
+	}
+}
+
+func TestSpecDiscoveryViaCrossOriginLinkRequiresOptIn(t *testing.T) {
+	var specHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Link": []string{`<https://spec.example.com/openapi.json>; rel="service-desc"`}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://spec.example.com/openapi.json":
+			specHits.Add(1)
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	cfg := spec.DiscoverConfig{
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		CacheDir:  t.TempDir(),
+		Version:   "test",
+		Transport: tr,
+	}
+	if _, err := spec.Discover(context.Background(), cfg, spec.DefaultLoaders()); err == nil {
+		t.Fatal("expected cross-origin link discovery to fail without opt-in")
+	}
+	if got := specHits.Load(); got != 0 {
+		t.Fatalf("expected no cross-origin fetch without opt-in, got %d", got)
+	}
+
+	cfg.AllowCrossOrigin = true
+	apiSpec, err := spec.Discover(context.Background(), cfg, spec.DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover with opt-in failed: %v", err)
+	}
+	if apiSpec == nil {
+		t.Fatal("expected spec, got nil")
 	}
 }
 

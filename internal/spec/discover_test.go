@@ -2,6 +2,7 @@ package spec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -175,6 +177,18 @@ func TestExtractSpecLinks_DescribedBy(t *testing.T) {
 	}
 	if links[0] != "https://cdn.example.com/spec.yaml" {
 		t.Errorf("got %q, want %q", links[0], "https://cdn.example.com/spec.yaml")
+	}
+}
+
+func TestExtractSpecLinks_CommaInURL(t *testing.T) {
+	h := http.Header{}
+	h.Set("Link", `<https://cdn.example.com/spec.yaml?labels=a,b>; rel=describedby`)
+	links := extractSpecLinks("https://api.example.com/", h)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %v", len(links), links)
+	}
+	if links[0] != "https://cdn.example.com/spec.yaml?labels=a,b" {
+		t.Errorf("got %q", links[0])
 	}
 }
 
@@ -388,6 +402,147 @@ func TestDiscover_LinkHeader(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil spec")
+	}
+}
+
+func TestDiscover_LinkHeaderCrossOriginRequiresOptIn(t *testing.T) {
+	spec := `{"openapi":"3.1.0","info":{"title":"Linked","version":"1.0.0"},"paths":{}}`
+	var crossOriginHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			headers := http.Header{}
+			headers.Set("Link", `<https://spec.example.com/spec.json>; rel="service-desc"`)
+			return httpResponse(200, "text/html", `<html>welcome</html>`, headers), nil
+		case "https://spec.example.com/spec.json":
+			crossOriginHits.Add(1)
+			return httpResponse(200, "application/json", spec, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "linked",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err == nil {
+		t.Fatal("expected discovery to fail without cross-origin opt-in")
+	}
+	if got := crossOriginHits.Load(); got != 0 {
+		t.Fatalf("expected no cross-origin fetch without opt-in, got %d", got)
+	}
+
+	cfg.AllowCrossOrigin = true
+	result, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover with opt-in: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil spec with cross-origin opt-in")
+	}
+	if got := crossOriginHits.Load(); got == 0 {
+		t.Fatal("expected cross-origin spec to be fetched with opt-in")
+	}
+}
+
+func TestDiscover_LinkHeaderCrossOriginRejectsLoopbackIP(t *testing.T) {
+	var loopbackHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			headers := http.Header{}
+			headers.Set("Link", `<http://127.0.0.1/openapi.json>; rel="service-desc"`)
+			return httpResponse(200, "text/html", `<html>welcome</html>`, headers), nil
+		case "http://127.0.0.1/openapi.json":
+			loopbackHits.Add(1)
+			return httpResponse(200, "application/json", `{"openapi":"3.1.0","info":{"title":"Bad","version":"1.0.0"},"paths":{}}`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cfg := DiscoverConfig{
+		APIName:          "linked",
+		BaseURL:          "https://api.example.com",
+		Transport:        tr,
+		AllowCrossOrigin: true,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err == nil {
+		t.Fatal("expected discovery to fail for loopback IP target")
+	}
+	if got := loopbackHits.Load(); got != 0 {
+		t.Fatalf("expected loopback target to be rejected before fetch, got %d requests", got)
+	}
+}
+
+func TestDiscover_LinkHeaderRejectsUnsupportedScheme(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			headers := http.Header{}
+			headers.Set("Link", `<file:///tmp/spec.json>; rel="service-desc"`)
+			return httpResponse(200, "text/html", `<html>welcome</html>`, headers), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "linked",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err == nil {
+		t.Fatal("expected discovery to fail when Link header uses unsupported scheme")
+	}
+}
+
+func TestDiscover_DefaultTimeoutAddsDeadline(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		deadline, ok := r.Context().Deadline()
+		if !ok {
+			t.Fatal("expected Discover to add a default deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining < 29*time.Second || remaining > 31*time.Second {
+			t.Fatalf("expected ~30s deadline, got %v", remaining)
+		}
+		return nil, context.DeadlineExceeded
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "timeout",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err == nil {
+		t.Fatal("expected discovery to fail")
+	}
+}
+
+func TestDiscover_UsesCallerDeadlineForHungServer(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "timeout",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := Discover(ctx, cfg, DefaultLoaders())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("expected caller deadline to stop discovery promptly, took %v", elapsed)
 	}
 }
 

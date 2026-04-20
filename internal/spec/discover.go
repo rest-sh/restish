@@ -4,16 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/peterhellberg/link"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -21,6 +22,8 @@ import (
 // OpenAPI specs are rarely larger than a few megabytes; this prevents an
 // untrusted server from exhausting memory during api configure / api sync.
 const maxSpecBytes = 50 * 1024 * 1024
+
+const defaultDiscoverTimeout = 30 * time.Second
 
 // DiscoverConfig holds parameters for spec discovery for a single API.
 type DiscoverConfig struct {
@@ -42,6 +45,9 @@ type DiscoverConfig struct {
 	Version string
 	// Transport is used for all HTTP fetches.  nil uses http.DefaultTransport.
 	Transport http.RoundTripper
+	// AllowCrossOrigin permits Link-header-discovered spec URLs on other hosts.
+	// When false, only same-host discovered links are followed.
+	AllowCrossOrigin bool
 }
 
 // Discover returns the APISpec for an API, using cache when available.
@@ -52,6 +58,12 @@ type DiscoverConfig struct {
 //  4. Well-known paths /openapi.json and /openapi.yaml
 //  5. BaseURL body itself
 func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultDiscoverTimeout)
+		defer cancel()
+	}
+
 	// 1. Cache check (synchronous, no network).
 	if cfg.CacheDir != "" {
 		if entry, ok := readCache(cfg.CacheDir, cfg.APIName, cfg.Version); ok {
@@ -156,7 +168,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	// Probe base URL: extract Link headers and try the body itself.
 	baseURL := cfg.BaseURL
 	launch(1, func() (string, []byte, time.Duration, error) {
-		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr)
+		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr, cfg.AllowCrossOrigin)
 		if err != nil {
 			return "", nil, 0, err
 		}
@@ -206,17 +218,20 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	if bestErr != nil {
 		return nil, 0, fmt.Errorf("spec discovery failed: %w", bestErr)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	return nil, 0, fmt.Errorf("no API spec found at %s", cfg.BaseURL)
 }
 
 // fetchBytes performs a GET and returns content-type, body, cache TTL, and error.
 func fetchBytes(ctx context.Context, rawURL string, tr http.RoundTripper) (string, []byte, time.Duration, error) {
-	ct, body, ttl, _, err := fetchWithLinks(ctx, rawURL, tr)
+	ct, body, ttl, _, err := fetchWithLinks(ctx, rawURL, tr, true)
 	return ct, body, ttl, err
 }
 
 // fetchWithLinks performs a GET and also returns parsed Link header spec URLs.
-func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper) (ct string, body []byte, ttl time.Duration, links []string, err error) {
+func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper, allowCrossOrigin bool) (ct string, body []byte, ttl time.Duration, links []string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", nil, 0, nil, err
@@ -245,7 +260,7 @@ func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper) (c
 	}
 
 	ttl = cacheTTL(resp)
-	links = extractSpecLinks(rawURL, resp.Header)
+	links = filterDiscoveredSpecLinks(rawURL, extractSpecLinks(rawURL, resp.Header), allowCrossOrigin)
 	return ct, body, ttl, links, nil
 }
 
@@ -271,30 +286,112 @@ func cacheTTL(resp *http.Response) time.Duration {
 	return 0
 }
 
-// linkRel matches a Link header entry and captures the URL and rel value.
-// RFC 8288 allows both quoted (rel="next") and unquoted (rel=next) forms.
-var linkRel = regexp.MustCompile(`<([^>]+)>[^<]*\brel=(?:"([^"]+)"|([^\s,;]+))`)
-
 // extractSpecLinks parses Link response headers and returns URLs whose rel is
 // "service-desc" or "describedby".
 func extractSpecLinks(baseURL string, h http.Header) []string {
 	var out []string
 	for _, header := range h["Link"] {
-		for _, match := range linkRel.FindAllStringSubmatch(header, -1) {
-			// match[2] = quoted rel value; match[3] = unquoted rel value.
-			rel := match[2]
-			if rel == "" {
-				rel = match[3]
-			}
-			if rel == "service-desc" || rel == "describedby" {
-				u := resolveRef(baseURL, match[1])
-				if u != "" {
-					out = append(out, u)
+		for _, entry := range splitLinkHeaderValues(header) {
+			for _, parsed := range link.Parse(protectLinkURICommas(entry)) {
+				uri := strings.ReplaceAll(parsed.URI, "%2C", ",")
+				for _, rel := range strings.Fields(parsed.Rel) {
+					if rel == "service-desc" || rel == "describedby" {
+						if u := resolveRef(baseURL, uri); u != "" {
+							out = append(out, u)
+						}
+						break
+					}
 				}
 			}
 		}
 	}
 	return out
+}
+
+func splitLinkHeaderValues(header string) []string {
+	var (
+		out      []string
+		start    int
+		inAngles bool
+		inQuotes bool
+	)
+
+	for i := 0; i < len(header); i++ {
+		switch header[i] {
+		case '<':
+			if !inQuotes {
+				inAngles = true
+			}
+		case '>':
+			if !inQuotes {
+				inAngles = false
+			}
+		case '"':
+			inQuotes = !inQuotes
+		case ',':
+			if !inAngles && !inQuotes {
+				part := strings.TrimSpace(header[start:i])
+				if part != "" {
+					out = append(out, part)
+				}
+				start = i + 1
+			}
+		}
+	}
+
+	if part := strings.TrimSpace(header[start:]); part != "" {
+		out = append(out, part)
+	}
+	return out
+}
+
+func protectLinkURICommas(entry string) string {
+	start := strings.IndexByte(entry, '<')
+	end := strings.IndexByte(entry, '>')
+	if start < 0 || end <= start {
+		return entry
+	}
+	protected := strings.ReplaceAll(entry[start+1:end], ",", "%2C")
+	return entry[:start+1] + protected + entry[end:]
+}
+
+func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin bool) []string {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil
+	}
+
+	var out []string
+	for _, raw := range links {
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			continue
+		}
+		if !allowCrossOrigin {
+			if !strings.EqualFold(u.Hostname(), base.Hostname()) {
+				continue
+			}
+		} else if isDisallowedCrossOriginIP(u.Hostname()) {
+			continue
+		}
+		out = append(out, u.String())
+	}
+	return out
+}
+
+func isDisallowedCrossOriginIP(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsPrivate() ||
+		ip.IsLoopback() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified()
 }
 
 // resolveRef resolves ref against base, returning the absolute URL string.

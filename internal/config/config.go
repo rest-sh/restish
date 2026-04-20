@@ -47,6 +47,10 @@ type APIConfig struct {
 	// SpecURL is the URL of the OpenAPI spec for this API (optional).
 	// Mutually exclusive with SpecFiles; SpecFiles takes precedence when both are set.
 	SpecURL string `json:"spec_url,omitempty"`
+	// AllowCrossOriginSpec permits discovery from Link-header spec URLs on
+	// hosts other than base_url. Private, loopback, link-local, and
+	// unspecified IP literal targets are still rejected.
+	AllowCrossOriginSpec bool `json:"allow_cross_origin_spec,omitempty"`
 	// SpecFiles is an ordered list of local file paths or URLs to load the API
 	// spec from. Multiple files are deep-merged in order (later entries win on
 	// conflict). When set, network spec discovery is skipped entirely.

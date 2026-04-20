@@ -185,13 +185,14 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 	}
 	api := c.cfg.APIs[apiName]
 	cfg := spec.DiscoverConfig{
-		APIName:   apiName,
-		BaseURL:   api.BaseURL,
-		SpecURL:   api.SpecURL,
-		SpecFiles: api.SpecFiles,
-		CacheDir:  c.specCacheDir(),
-		Version:   Version,
-		Transport: c.baseHTTPTransport(),
+		APIName:          apiName,
+		BaseURL:          api.BaseURL,
+		SpecURL:          api.SpecURL,
+		SpecFiles:        api.SpecFiles,
+		CacheDir:         c.specCacheDir(),
+		Version:          Version,
+		Transport:        c.baseHTTPTransport(),
+		AllowCrossOrigin: api.AllowCrossOriginSpec,
 	}
 	return spec.Discover(ctx, cfg, c.loaders)
 }
