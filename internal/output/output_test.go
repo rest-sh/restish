@@ -183,6 +183,22 @@ func TestJSONFormatter_NilBodyOutputsNull(t *testing.T) {
 	}
 }
 
+func TestJSONFormatter_DoesNotEscapeHTML(t *testing.T) {
+	resp := &output.Response{
+		Body: map[string]any{"url": "https://api.example.com?a=1&b=2"},
+	}
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["json"].Format(&buf, resp, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "&") {
+		t.Fatalf("expected ampersand to remain unescaped, got %q", buf.String())
+	}
+	if strings.Contains(buf.String(), `\u0026`) {
+		t.Fatalf("expected HTML escaping to be disabled, got %q", buf.String())
+	}
+}
+
 func TestNDJSONFormatter_OutputsOneValuePerLine(t *testing.T) {
 	resp := &output.Response{
 		Body: []any{
@@ -262,6 +278,27 @@ func TestReadableFormatter_BodyIsValidJSON(t *testing.T) {
 	var v any
 	if err := json.Unmarshal([]byte(bodyPart), &v); err != nil {
 		t.Errorf("body part of readable output is not valid JSON: %v\nbody: %s", err, bodyPart)
+	}
+}
+
+func TestReadableFormatter_PrintsPlainTextBody(t *testing.T) {
+	resp := &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string]string{"Content-Type": "text/plain"},
+		Body:    "hello & goodbye",
+		Raw:     []byte("hello & goodbye"),
+	}
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	parts := strings.SplitN(buf.String(), "\n\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected readable output separator, got %q", buf.String())
+	}
+	if strings.TrimSpace(parts[1]) != "hello & goodbye" {
+		t.Fatalf("expected plain text body, got %q", parts[1])
 	}
 }
 

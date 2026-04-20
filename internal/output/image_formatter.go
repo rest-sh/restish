@@ -42,9 +42,9 @@ func (f *ImageFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	if len(resp.Raw) == 0 {
 		return nil
 	}
-	// Non-TTY: behave like RawFormatter so piping/redirecting still works.
+	// Non-TTY: emit a placeholder rather than raw binary bytes.
 	if !color {
-		_, err := w.Write(resp.Raw)
+		_, err := fmt.Fprintf(w, "[image %s, %d bytes]\n", resp.Headers["Content-Type"], len(resp.Raw))
 		return err
 	}
 

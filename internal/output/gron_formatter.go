@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"unicode"
 )
 
 // GronFormatter renders the body as "gron" format: each leaf value on its own
@@ -31,8 +32,7 @@ func gronWalk(w io.Writer, path *[]byte, v any) {
 		sort.Strings(keys)
 		for _, k := range keys {
 			prevLen := len(*path)
-			*path = append(*path, '.')
-			*path = append(*path, k...)
+			*path = appendGronKey(*path, k)
 			gronWalk(w, path, val[k])
 			*path = (*path)[:prevLen]
 		}
@@ -47,7 +47,38 @@ func gronWalk(w io.Writer, path *[]byte, v any) {
 			*path = (*path)[:prevLen]
 		}
 	default:
-		b, _ := json.Marshal(v)
+		b, _ := marshalNoEscape(v)
 		fmt.Fprintf(w, "%s = %s;\n", *path, b)
 	}
+}
+
+func appendGronKey(path []byte, key string) []byte {
+	if isJSIdentifier(key) {
+		path = append(path, '.')
+		path = append(path, key...)
+		return path
+	}
+	encoded, _ := json.Marshal(key)
+	path = append(path, '[')
+	path = append(path, encoded...)
+	path = append(path, ']')
+	return path
+}
+
+func isJSIdentifier(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if r != '_' && r != '$' && !unicode.IsLetter(r) {
+				return false
+			}
+			continue
+		}
+		if r != '_' && r != '$' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }

@@ -103,3 +103,28 @@ func TestGronFormatter(t *testing.T) {
 		}
 	}
 }
+
+func TestGronFormatter_EscapesNonIdentifierKeys(t *testing.T) {
+	resp := &output.Response{
+		Status: 200,
+		Body: map[string]any{
+			"a.b":  "dot",
+			"1foo": "digit",
+			"a b":  "space",
+		},
+	}
+	var buf bytes.Buffer
+	if err := (&output.GronFormatter{}).Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	for _, want := range []string{
+		`json["a.b"] = "dot";`,
+		`json["1foo"] = "digit";`,
+		`json["a b"] = "space";`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in gron output, got:\n%s", want, got)
+		}
+	}
+}

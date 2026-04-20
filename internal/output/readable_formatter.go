@@ -2,12 +2,13 @@ package output
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -34,7 +35,14 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 		return (&ImageFormatter{}).Format(w, resp, color)
 	}
 
-	data, err := json.MarshalIndent(resp.Body, "", "  ")
+	if data, ok := printableBody(resp); ok {
+		if len(data) == 0 || data[len(data)-1] != '\n' {
+			data = append(data, '\n')
+		}
+		_, err := w.Write(data)
+		return err
+	}
+	data, err := marshalIndentNoEscape(resp.Body)
 	if err != nil {
 		return fmt.Errorf("formatting body: %w", err)
 	}
@@ -94,7 +102,7 @@ func (s *readableValueStream) WriteValue(value any) error {
 	}
 	s.first = true
 
-	data, err := json.MarshalIndent(value, "", "  ")
+	data, err := marshalIndentNoEscape(value)
 	if err != nil {
 		return fmt.Errorf("formatting body: %w", err)
 	}
@@ -126,7 +134,7 @@ func (s *readableFramedValueStream) WriteValue(value any) error {
 		s.started = true
 	}
 
-	item, err := json.MarshalIndent(value, "", "  ")
+	item, err := marshalIndentNoEscape(value)
 	if err != nil {
 		return fmt.Errorf("formatting body: %w", err)
 	}
@@ -239,4 +247,46 @@ func HighlightWithLexer(lexer chroma.Lexer, data []byte) ([]byte, error) {
 		return data, err
 	}
 	return []byte(buf.String()), nil
+}
+
+var displayRanges = []*unicode.RangeTable{
+	unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.White_Space,
+}
+
+func printableBody(resp *Response) ([]byte, bool) {
+	if resp == nil {
+		return nil, false
+	}
+	switch body := resp.Body.(type) {
+	case string:
+		if len(resp.Raw) > 0 && isPrintableText(resp.Raw) {
+			return resp.Raw, true
+		}
+		if isPrintableText([]byte(body)) {
+			return []byte(body), true
+		}
+	case []byte:
+		if isPrintableText(body) {
+			return body, true
+		}
+	}
+	return nil, false
+}
+
+func isPrintableText(data []byte) bool {
+	if len(data) >= 102400 || !utf8.Valid(data) {
+		return false
+	}
+	for i, r := range string(data) {
+		if i == 0 && r == '\uFEFF' {
+			continue
+		}
+		if i > 100 {
+			break
+		}
+		if !unicode.In(r, displayRanges...) {
+			return false
+		}
+	}
+	return true
 }
