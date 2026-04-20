@@ -143,7 +143,14 @@ func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]str
 	if cs := params["client_secret"]; cs != "" {
 		form.Set("client_secret", cs)
 	}
-	return FetchToken(ctx, h.HTTPClient, tokenURL, form.Encode())
+	token, err := FetchToken(ctx, h.HTTPClient, tokenURL, form.Encode())
+	if err != nil {
+		return CachedToken{}, err
+	}
+	if token.RefreshToken == "" {
+		token.RefreshToken = refreshToken
+	}
+	return token, nil
 }
 
 func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string]string, authorizeURL, tokenURL string) (CachedToken, error) {
@@ -178,16 +185,21 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	errCh := make(chan error, 1)
 
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/callback" {
+			http.NotFound(w, r)
+			return
+		}
+
 		q := r.URL.Query()
 		if q.Get("state") != state {
 			http.Error(w, "state mismatch", http.StatusBadRequest)
-			errCh <- fmt.Errorf("state mismatch in callback")
+			trySendErr(errCh, fmt.Errorf("state mismatch in callback"))
 			return
 		}
 		code := q.Get("code")
 		if code == "" {
 			http.Error(w, "missing code", http.StatusBadRequest)
-			errCh <- fmt.Errorf("no code in callback")
+			trySendErr(errCh, fmt.Errorf("no code in callback"))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
@@ -197,7 +209,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 
 	go func() {
 		if e := srv.Serve(ln); e != nil && e != http.ErrServerClosed {
-			errCh <- e
+			trySendErr(errCh, e)
 		}
 	}()
 	defer func() {
@@ -257,6 +269,13 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		form.Set("client_secret", cs)
 	}
 	return FetchToken(ctx, h.HTTPClient, tokenURL, form.Encode())
+}
+
+func trySendErr(errCh chan error, err error) {
+	select {
+	case errCh <- err:
+	default:
+	}
 }
 
 // generateCodeVerifier returns a random PKCE code verifier (32 random bytes,
