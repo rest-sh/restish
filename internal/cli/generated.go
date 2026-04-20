@@ -21,6 +21,16 @@ import (
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
 	model, err := s.V3Model()
 	if err != nil || model == nil || model.Model.Paths == nil {
+		source := apiCfg.SpecURL
+		if source == "" && len(apiCfg.SpecFiles) > 0 {
+			source = apiCfg.SpecFiles[0]
+		}
+		if source == "" {
+			source = apiCfg.BaseURL
+		}
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "warning: skipping generated commands for API %q from %s: %v\n", apiName, source, err)
+		}
 		return nil
 	}
 
@@ -256,6 +266,9 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runGeneratedOp(cmd, apiName, opPath, method, required, optional, args, operationBase)
 		},
+	}
+	if op.RequestBody == nil {
+		cmd.Args = cobra.ExactArgs(len(required))
 	}
 
 	for _, p := range optional {

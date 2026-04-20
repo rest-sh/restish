@@ -648,3 +648,22 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 		t.Fatalf("expected updated local spec to be reflected without sync: %v", err)
 	}
 }
+
+func TestGeneratedCommandWithoutBodyRejectsExtraArgs(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"abc"}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	err := c.Run([]string{"restish", "tapi", "get-item", "abc", "unexpected"})
+	if err == nil {
+		t.Fatal("expected extra positional arg for no-body operation to fail")
+	}
+	if !strings.Contains(err.Error(), "accepts 1 arg(s), received 2") {
+		t.Fatalf("expected ExactArgs error, got: %v", err)
+	}
+}
