@@ -347,3 +347,185 @@ func TestGeneratedCommandHelp(t *testing.T) {
 		t.Errorf("expected --format flag in help output, got:\n%s", got)
 	}
 }
+
+func TestGeneratedCommandMissingOperationIDFallsBackToMethodAndPath(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/widgets": {
+      "get": {
+        "summary": "List widgets",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-widgets"}); err != nil {
+		t.Fatalf("get-widgets failed: %v", err)
+	}
+}
+
+func TestGeneratedCommandUsesPathItemParameters(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/tenants/", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/tenants/{tenant}/items": {
+      "parameters": [
+        {
+          "name": "tenant",
+          "in": "path",
+          "required": true,
+          "schema": {"type": "string"},
+          "description": "Tenant name"
+        }
+      ],
+      "get": {
+        "operationId": "listTenantItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-tenant-items", "acme"}); err != nil {
+		t.Fatalf("list-tenant-items acme failed: %v", err)
+	}
+	if lastPath != "/tenants/acme/items" {
+		t.Fatalf("expected substituted path, got %q", lastPath)
+	}
+}
+
+func TestGeneratedCommandRequiredHeaderIsRequiredFlag(t *testing.T) {
+	var authHeader string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/secure", func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("X-Auth")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/secure": {
+      "get": {
+        "operationId": "getSecure",
+        "parameters": [
+          {
+            "name": "X-Auth",
+            "in": "header",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Auth token"
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c1 := env.newCLI()
+	if err := c1.Run([]string{"restish", "tapi", "get-secure"}); err == nil {
+		t.Fatal("expected missing required header flag to error")
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "get-secure", "--x-auth", "secret"}); err != nil {
+		t.Fatalf("get-secure with required header failed: %v", err)
+	}
+	if authHeader != "secret" {
+		t.Fatalf("expected X-Auth header to be sent, got %q", authHeader)
+	}
+}
+
+func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
+	var getHits, postHits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			getHits.Add(1)
+		case http.MethodPost:
+			postHits.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      },
+      "post": {
+        "operationId": "list-items",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("help failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "list-items-post") {
+		t.Fatalf("expected disambiguated command name in help, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "warning: command name collision") {
+		t.Fatalf("expected collision warning in output, got:\n%s", out.String())
+	}
+
+	c1 := env.newCLI()
+	if err := c1.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "list-items-post"}); err != nil {
+		t.Fatalf("list-items-post failed: %v", err)
+	}
+	if getHits.Load() != 1 || postHits.Load() != 1 {
+		t.Fatalf("expected both commands to remain callable, got GET=%d POST=%d", getHits.Load(), postHits.Load())
+	}
+}

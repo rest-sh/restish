@@ -37,16 +37,36 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 
 	// Collect unique tags so we can create command groups for help display.
 	tagsSeen := map[string]bool{}
+	commandNames := map[string]bool{}
 
 	for path, pathItem := range model.Model.Paths.PathItems.FromOldest() {
 		for _, mo := range spec.PathItemMethods(pathItem) {
-			if mo.Op == nil || mo.Op.OperationId == "" {
+			if mo.Op == nil {
 				continue
 			}
-			cmd := c.buildOperationCommand(apiName, path, mo.Method, mo.Op, apiCfg.OperationBase)
+			cmd, err := c.buildOperationCommand(apiName, path, mo.Method, pathItem.Parameters, mo.Op, apiCfg.OperationBase)
+			if err != nil {
+				fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", mo.Method, path, apiName, err)
+				continue
+			}
 			if cmd == nil {
 				continue
 			}
+			if commandNames[cmd.Name()] {
+				originalName := cmd.Name()
+				disambiguated := originalName + "-" + strings.ToLower(mo.Method)
+				if commandNames[disambiguated] {
+					suffix := 2
+					for commandNames[fmt.Sprintf("%s-%d", disambiguated, suffix)] {
+						suffix++
+					}
+					disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
+				}
+				fmt.Fprintf(c.Stderr, "warning: command name collision for API %q: %q; using %q for %s %s\n", apiName, originalName, disambiguated, mo.Method, path)
+				cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
+				cmd.Aliases = append(cmd.Aliases, originalName)
+			}
+			commandNames[cmd.Name()] = true
 			// Register first tag as the group ID.
 			if len(mo.Op.Tags) > 0 {
 				tag := mo.Op.Tags[0]
@@ -81,23 +101,27 @@ type paramInfo struct {
 // operationBase, when non-empty, replaces the apiName short-name prefix in
 // generated URLs so operations are served from a different host/path than
 // the API root.
-func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.Operation, operationBase string) *cobra.Command {
+func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams []*v3high.Parameter, op *v3high.Operation, operationBase string) (*cobra.Command, error) {
 	// x-cli-ignore: exclude this operation from the CLI entirely.
 	if spec.OpExtBool(op, "x-cli-ignore") {
-		return nil
+		return nil, nil
 	}
 
 	// Derive command name from operationId, with x-cli-name override.
 	cmdName := toKebabCase(op.OperationId)
+	if cmdName == "" {
+		cmdName = toKebabCase(method + "-" + strings.Trim(opPath, "/"))
+	}
 	if name := spec.OpExtString(op, "x-cli-name"); name != "" {
 		cmdName = name
 	}
 
 	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
 	pathParamOrder := extractPathParamNames(opPath)
+	params := mergeParameters(pathParams, op.Parameters)
 
 	allParams := make(map[string]*paramInfo)
-	for _, p := range op.Parameters {
+	for _, p := range params {
 		req := p.Required != nil && *p.Required
 		flagName := toKebabCase(p.Name)
 		if n := spec.ParamExtString(p, "x-cli-name"); n != "" {
@@ -130,11 +154,17 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 	// Required: path params (in path order) then required query params.
 	var required []*paramInfo
 	for _, name := range pathParamOrder {
-		if pi, ok := allParams[name]; ok {
-			required = append(required, pi)
+		pi, ok := allParams[name]
+		if !ok {
+			opID := op.OperationId
+			if opID == "" {
+				opID = method + " " + opPath
+			}
+			return nil, fmt.Errorf("operation %q references missing path parameter %q", opID, name)
 		}
+		required = append(required, pi)
 	}
-	for _, p := range op.Parameters {
+	for _, p := range params {
 		if p.In == "query" && p.Required != nil && *p.Required {
 			required = append(required, allParams[p.Name])
 		}
@@ -142,8 +172,12 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 
 	// Optional: non-required, non-path params.
 	var optional []*paramInfo
-	for _, p := range op.Parameters {
+	for _, p := range params {
 		if p.In == "path" {
+			continue
+		}
+		if p.In == "header" || p.In == "cookie" {
+			optional = append(optional, allParams[p.Name])
 			continue
 		}
 		if req := p.Required != nil && *p.Required; !req {
@@ -206,6 +240,9 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 
 	for _, p := range optional {
 		cmd.Flags().String(p.flagName, "", p.desc)
+		if p.required {
+			_ = cmd.MarkFlagRequired(p.flagName)
+		}
 		if len(p.enum) > 0 {
 			vals := p.enum
 			_ = cmd.RegisterFlagCompletionFunc(p.flagName, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -227,7 +264,7 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, op *v3high.O
 		}
 	}
 
-	return cmd
+	return cmd, nil
 }
 
 // runGeneratedOp is the RunE handler for generated operation commands.
@@ -302,6 +339,44 @@ func extractPathParamNames(path string) []string {
 		names = append(names, m[1])
 	}
 	return names
+}
+
+func mergeParameters(pathLevel, operationLevel []*v3high.Parameter) []*v3high.Parameter {
+	if len(pathLevel) == 0 {
+		return operationLevel
+	}
+	if len(operationLevel) == 0 {
+		return pathLevel
+	}
+
+	merged := make([]*v3high.Parameter, 0, len(pathLevel)+len(operationLevel))
+	indexes := make(map[string]int, len(pathLevel)+len(operationLevel))
+
+	add := func(p *v3high.Parameter) {
+		key := parameterKey(p)
+		if idx, ok := indexes[key]; ok {
+			merged[idx] = p
+			return
+		}
+		indexes[key] = len(merged)
+		merged = append(merged, p)
+	}
+
+	for _, p := range pathLevel {
+		add(p)
+	}
+	for _, p := range operationLevel {
+		add(p)
+	}
+
+	return merged
+}
+
+func parameterKey(p *v3high.Parameter) string {
+	if p == nil {
+		return ""
+	}
+	return p.In + "\x00" + p.Name
 }
 
 // toKebabCase converts a camelCase or PascalCase identifier to kebab-case.
