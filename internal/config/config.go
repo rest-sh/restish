@@ -231,6 +231,16 @@ func (e *ParseError) Error() string {
 func (e *ParseError) Unwrap() error { return e.Err }
 
 func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
+	lock, err := lockConfigFile(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	return atomicWriteFileLocked(path, data, fileMode, dirMode, lock)
+}
+
+func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, lock *fileLock) error {
+	_ = lock
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)

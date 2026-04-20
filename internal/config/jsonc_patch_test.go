@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -65,7 +66,7 @@ func TestJSONCSetPath_CreatesNestedObjects(t *testing.T) {
 	}
 }
 
-func TestJSONCSetPath_ReplacesScalarWithNestedObject(t *testing.T) {
+func TestJSONCSetPath_RejectsScalarWhenNestedObjectRequired(t *testing.T) {
 	input := []byte(`{
   "apis": {
     "myapi": {
@@ -78,17 +79,13 @@ func TestJSONCSetPath_ReplacesScalarWithNestedObject(t *testing.T) {
   }
 }`)
 
-	patched, err := jsoncSetPath(input, []string{"apis", "myapi", "profiles", "default", "auth", "params", "token"}, "secret")
-	if err != nil {
-		t.Fatalf("jsoncSetPath: %v", err)
+	_, err := jsoncSetPath(input, []string{"apis", "myapi", "profiles", "default", "auth", "params", "token"}, "secret")
+	if err == nil {
+		t.Fatal("expected jsoncSetPath to fail")
 	}
-
-	cfg, err := parseConfigBytes("test", patched)
-	if err != nil {
-		t.Fatalf("patched config should still parse: %v", err)
-	}
-	if token := cfg.APIs["myapi"].Profiles["default"].Auth.Params["token"]; token != "secret" {
-		t.Fatalf("token = %q, want secret", token)
+	want := `cannot set nested path "auth.params.token": value at "auth" is not an object (got string)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -571,5 +568,60 @@ func TestSaveConfigValue_CreatesConfigDirWithSecurePermissions(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0o700 {
 		t.Fatalf("expected config dir permission 0700, got %04o", perm)
+	}
+}
+
+func TestSaveConfigValue_ConcurrentWritesPreserveBothEdits(t *testing.T) {
+	path := writeJSONCConfig(t, `{"apis":{}}`)
+
+	start := make(chan struct{})
+	errCh := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, tc := range []struct {
+		objectPath []string
+		value      string
+	}{
+		{objectPath: []string{"apis", "foo", "base_url"}, value: "https://foo.example.com"},
+		{objectPath: []string{"apis", "bar", "base_url"}, value: "https://bar.example.com"},
+	} {
+		wg.Add(1)
+		go func(objectPath []string, value string) {
+			defer wg.Done()
+			<-start
+			errCh <- SaveConfigValue(path, objectPath, value)
+		}(tc.objectPath, tc.value)
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("SaveConfigValue: %v", err)
+		}
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.APIs["foo"].BaseURL; got != "https://foo.example.com" {
+		t.Fatalf("foo base_url = %q", got)
+	}
+	if got := cfg.APIs["bar"].BaseURL; got != "https://bar.example.com" {
+		t.Fatalf("bar base_url = %q", got)
+	}
+}
+
+func TestSaveConfigValue_RejectsNestedPathThroughArray(t *testing.T) {
+	path := writeJSONCConfig(t, `{"apis":{"foo":{"profiles":[]}}}`)
+
+	err := SaveConfigValue(path, []string{"apis", "foo", "profiles", "default", "auth", "type"}, "bearer")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	want := `cannot set nested path "profiles.default.auth.type": value at "profiles" is not an object (got array)`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

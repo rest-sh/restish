@@ -68,6 +68,12 @@ func SaveConfigValue(path string, objectPath []string, value any) error {
 }
 
 func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
+	lock, err := lockConfigFile(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -83,7 +89,7 @@ func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
 	if _, err := parseConfigBytes(path, patched); err != nil {
 		return err
 	}
-	return atomicWriteFile(path, patched, 0o600, 0o700)
+	return atomicWriteFileLocked(path, patched, 0o600, 0o700, lock)
 }
 
 func jsoncSetPath(data []byte, path []string, value any) ([]byte, error) {
@@ -128,11 +134,12 @@ func setObjectPath(data []byte, obj *jsoncObject, path []string, value any, inde
 	}
 
 	if member.value.kind != valueObject {
-		raw, err := buildNestedObject(path[1:], value, memberIndent(data, obj, member, indentUnit), indentUnit)
-		if err != nil {
-			return nil, err
-		}
-		return replaceSpan(data, member.value.start, member.value.end, raw), nil
+		return nil, fmt.Errorf(
+			"cannot set nested path %q: value at %q is not an object (got %s)",
+			strings.Join(path, "."),
+			path[0],
+			member.value.kind,
+		)
 	}
 
 	child, err := parseObjectAt(data, member.value.start)
@@ -140,6 +147,23 @@ func setObjectPath(data []byte, obj *jsoncObject, path []string, value any, inde
 		return nil, err
 	}
 	return setObjectPath(data, child, path[1:], value, indentUnit)
+}
+
+func (k valueKind) String() string {
+	switch k {
+	case valueObject:
+		return "object"
+	case valueArray:
+		return "array"
+	case valueString:
+		return "string"
+	case valueNumber:
+		return "number"
+	case valueLiteral:
+		return "literal"
+	default:
+		return "unknown"
+	}
 }
 
 func deleteObjectPath(data []byte, obj *jsoncObject, path []string) ([]byte, error) {
