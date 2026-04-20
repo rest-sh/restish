@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/andybalholm/brotli"
 )
@@ -24,6 +26,9 @@ type ContentType struct {
 	// MIMETypes lists all MIME types this entry handles (e.g. "application/json").
 	// A trailing "/*" is treated as a wildcard prefix match.
 	MIMETypes []string
+	// Suffixes lists structured syntax suffixes handled by this entry, such as
+	// "+json" or "+cbor".
+	Suffixes []string
 	// Quality is the Accept header q-value (0–1). Higher = preferred.
 	Quality float32
 	// Marshal encodes v into bytes.
@@ -56,6 +61,12 @@ type Registry struct {
 	acceptHeaderReady    bool
 	acceptEncodingHeader string
 	acceptEncodingReady  bool
+}
+
+// DisplayRanges includes all viewable Unicode characters along with white
+// space.
+var DisplayRanges = []*unicode.RangeTable{
+	unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.White_Space,
 }
 
 // New returns a Registry with no registrations.
@@ -149,11 +160,14 @@ func (r *Registry) AcceptEncodingHeader() string {
 // Decode finds the best-matching registered content type for mimeType,
 // unmarshals data, and normalizes all map keys to strings so the result
 // is always safe to pass to encoding/json. Returns the raw bytes as a
-// string if no match is found.
+// string or []byte if no match is found.
 func (r *Registry) Decode(mimeType string, data []byte) (any, error) {
 	ct := r.find(mimeType)
 	if ct == nil {
-		return string(data), nil
+		if b, ok := Printable(data); ok {
+			return string(b), nil
+		}
+		return data, nil
 	}
 	v, err := ct.Unmarshal(data)
 	if err != nil {
@@ -260,20 +274,67 @@ func (r *Registry) find(mimeType string) *ContentType {
 	if base == "" {
 		base = mimeType
 	}
-	var matched *ContentType
+
+	var exactMatch *ContentType
 	for _, ct := range r.contentTypes {
 		for _, mt := range ct.MIMETypes {
 			if strings.HasSuffix(mt, "/*") {
-				prefix := strings.TrimSuffix(mt, "*")
-				if strings.HasPrefix(base, prefix) {
-					matched = ct
-				}
-			} else if strings.EqualFold(mt, base) {
-				matched = ct
+				continue
+			}
+			if strings.EqualFold(mt, base) {
+				exactMatch = ct
 			}
 		}
 	}
-	return matched
+	if exactMatch != nil {
+		return exactMatch
+	}
+
+	var wildcardMatch *ContentType
+	for _, ct := range r.contentTypes {
+		for _, mt := range ct.MIMETypes {
+			if !strings.HasSuffix(mt, "/*") {
+				continue
+			}
+			prefix := strings.TrimSuffix(mt, "*")
+			if strings.HasPrefix(base, prefix) {
+				wildcardMatch = ct
+			}
+		}
+	}
+	if wildcardMatch != nil {
+		return wildcardMatch
+	}
+
+	var suffixMatch *ContentType
+	for _, ct := range r.contentTypes {
+		for _, suffix := range ct.Suffixes {
+			if strings.HasSuffix(base, suffix) {
+				suffixMatch = ct
+			}
+		}
+	}
+	return suffixMatch
+}
+
+// Printable returns body when it is likely safe and useful to display as text.
+func Printable(body []byte) ([]byte, bool) {
+	if len(body) >= 102400 || !utf8.Valid(body) {
+		return nil, false
+	}
+
+	for i, r := range string(body) {
+		if i == 0 && r == '\uFEFF' {
+			continue
+		}
+		if i > 100 {
+			break
+		}
+		if !unicode.In(r, DisplayRanges...) {
+			return nil, false
+		}
+	}
+	return body, true
 }
 
 // defaultBrotliDecompress wraps r with a brotli reader.

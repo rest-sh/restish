@@ -26,6 +26,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "json",
 		MIMETypes: []string{"application/json"},
+		Suffixes:  []string{"+json"},
 		Quality:   0.5,
 		Marshal: func(v any) ([]byte, error) {
 			return json.Marshal(v)
@@ -42,6 +43,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "yaml",
 		MIMETypes: []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"},
+		Suffixes:  []string{"+yaml"},
 		Quality:   0.5,
 		Marshal: func(v any) ([]byte, error) {
 			return yaml.Marshal(v)
@@ -58,6 +60,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "cbor",
 		MIMETypes: []string{"application/cbor"},
+		Suffixes:  []string{"+cbor"},
 		Quality:   0.9,
 		Marshal: func(v any) ([]byte, error) {
 			return cbor.Marshal(v)
@@ -74,6 +77,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "msgpack",
 		MIMETypes: []string{"application/msgpack", "application/x-msgpack", "application/vnd.msgpack"},
+		Suffixes:  []string{"+msgpack"},
 		Quality:   0.8,
 		Marshal: func(v any) ([]byte, error) {
 			return msgpack.Marshal(v)
@@ -90,6 +94,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "ion",
 		MIMETypes: []string{"application/ion", "text/ion"},
+		Suffixes:  []string{"+ion"},
 		Quality:   0.8,
 		Marshal: func(v any) ([]byte, error) {
 			return ion.MarshalText(v)
