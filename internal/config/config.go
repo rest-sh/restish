@@ -38,6 +38,10 @@ type Config struct {
 	//     "bulk": { "concurrency": 4, "retry": true }
 	//   }
 	Plugins map[string]json.RawMessage `json:"plugins,omitempty"`
+
+	// Migration describes a one-time v1 -> v2 config migration that happened
+	// while loading this config. It is not persisted back into restish.json.
+	Migration *MigrationInfo `json:"-"`
 }
 
 // APIConfig holds per-API configuration.
@@ -187,7 +191,10 @@ func Save(path string, cfg *Config) error {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &Config{}, nil
+		if filepath.Clean(path) != filepath.Clean(DefaultPath()) {
+			return &Config{}, nil
+		}
+		return loadOrMigrate(path)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)

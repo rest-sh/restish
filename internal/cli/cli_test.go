@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +29,10 @@ func newTestCLI() (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 	c.RetryBaseDelay = time.Millisecond
+	dir, err := os.MkdirTemp("", "restish-cli-test-*")
+	if err == nil {
+		c.ConfigPath = filepath.Join(dir, "restish.json")
+	}
 	return c, &stdout, &stderr
 }
 
@@ -92,5 +99,38 @@ func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)") {
 		t.Fatalf("expected user-facing retry default in help, got:\n%s", out.String())
+	}
+}
+
+func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	}
+
+	legacyDir := filepath.Join(home, ".config", "restish")
+	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
+		t.Fatalf("mkdir legacy dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "apis.json"), []byte(`{
+  "example": {
+    "base": "https://api.example.com"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write apis.json: %v", err)
+	}
+
+	c, _, errOut := newTestCLI()
+	c.ConfigPath = filepath.Join(legacyDir, "restish.json")
+	if err := c.Run([]string{"restish", "--help"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got := errOut.String()
+	want := "Migrated config from v1 at " + legacyDir + "; kept backup at " + legacyDir + ".bak.v1"
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected migration notice %q, got:\n%s", want, got)
 	}
 }

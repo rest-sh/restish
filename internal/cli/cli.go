@@ -221,6 +221,9 @@ func (c *CLI) Run(args []string) error {
 		return err
 	}
 	c.cfg = cfg
+	if cfg.Migration != nil {
+		fmt.Fprintf(c.Stderr, "Migrated config from v1 at %s; kept backup at %s\n", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
+	}
 
 	// Discover hook plugins at startup; warn about broken plugins so users
 	// know their plugin is not active rather than silently ignoring it.

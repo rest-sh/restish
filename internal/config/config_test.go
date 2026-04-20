@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -19,6 +20,25 @@ func writeConfig(t *testing.T, content string) string {
 		t.Fatalf("writeConfig: %v", err)
 	}
 	return path
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func setLegacyConfigEnv(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	}
 }
 
 func TestLoad_Empty(t *testing.T) {
@@ -224,5 +244,192 @@ func TestSave_CreatesConfigDirWithSecurePermissions(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0o700 {
 		t.Fatalf("expected config dir permission 0700, got %04o", perm)
+	}
+}
+
+func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, "Library", "Application Support", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  // API comments should survive the migration snapshot.
+  "$schema": "https://rest.sh/schemas/apis.json",
+  "example": {
+    "base": "https://api.example.com",
+    "operation_base": "/v1",
+    "spec_files": ["spec.yaml"],
+    "tls": {
+      "pkcs11": {
+        "path": "/usr/local/lib/pkcs11.so",
+        "label": "device-cert"
+      }
+    },
+    "profiles": {
+      "default": {
+        "headers": {
+          "Accept": "application/json"
+        },
+        "query": {
+          "verbose": "true"
+        },
+        "auth": {
+          "name": "oauth-authorization-code",
+          "params": {
+            "client_id": "abc"
+          }
+        }
+      }
+    }
+  }
+}`)
+	writeFile(t, filepath.Join(legacyDir, "config.json"), `{
+  // v1 global config is preserved as a comment snapshot.
+  "rsh-profile": "prod"
+}`)
+
+	t.Setenv("RSH_CONFIG_DIR", filepath.Join(home, ".config", "restish"))
+	path := config.DefaultPath()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Migration == nil {
+		t.Fatal("expected migration info")
+	}
+	if cfg.Migration.SourcePath != legacyDir {
+		t.Fatalf("SourcePath = %q, want %q", cfg.Migration.SourcePath, legacyDir)
+	}
+	if cfg.Migration.BackupPath != legacyDir+".bak.v1" {
+		t.Fatalf("BackupPath = %q, want %q", cfg.Migration.BackupPath, legacyDir+".bak.v1")
+	}
+
+	api := cfg.APIs["example"]
+	if api == nil {
+		t.Fatal("expected migrated API config")
+	}
+	if api.BaseURL != "https://api.example.com" {
+		t.Fatalf("BaseURL = %q", api.BaseURL)
+	}
+	if api.OperationBase != "/v1" {
+		t.Fatalf("OperationBase = %q", api.OperationBase)
+	}
+	if len(api.SpecFiles) != 1 || api.SpecFiles[0] != "spec.yaml" {
+		t.Fatalf("SpecFiles = %v", api.SpecFiles)
+	}
+	prof := api.Profiles["default"]
+	if prof == nil {
+		t.Fatal("expected default profile")
+	}
+	if len(prof.Headers) != 1 || prof.Headers[0] != "Accept: application/json" {
+		t.Fatalf("Headers = %v", prof.Headers)
+	}
+	if len(prof.Query) != 1 || prof.Query[0] != "verbose=true" {
+		t.Fatalf("Query = %v", prof.Query)
+	}
+	if prof.Auth == nil || prof.Auth.Type != "oauth-authorization-code" || prof.Auth.Params["client_id"] != "abc" {
+		t.Fatalf("Auth = %+v", prof.Auth)
+	}
+	if prof.TLSSigner != "pkcs11" {
+		t.Fatalf("TLSSigner = %q", prof.TLSSigner)
+	}
+	if prof.TLSSignerParams["path"] != "/usr/local/lib/pkcs11.so" || prof.TLSSignerParams["label"] != "device-cert" {
+		t.Fatalf("TLSSignerParams = %+v", prof.TLSSignerParams)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migrated config: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"// Migrated from Restish v1.",
+		"// API comments should survive the migration snapshot.",
+		"// v1 global config is preserved as a comment snapshot.",
+		"\"base_url\": \"https://api.example.com\"",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("migrated config missing %q:\n%s", want, text)
+		}
+	}
+
+	for _, backupPath := range []string{
+		filepath.Join(legacyDir+".bak.v1", "apis.json"),
+		filepath.Join(legacyDir+".bak.v1", "config.json"),
+	} {
+		if _, err := os.Stat(backupPath); err != nil {
+			t.Fatalf("expected backup file %s: %v", backupPath, err)
+		}
+	}
+}
+
+func TestLoad_MigratesLegacyLinuxConfig(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "demo": {
+    "base": "https://demo.example.com",
+    "profiles": {
+      "prod": {
+        "headers": {
+          "Authorization": "Bearer token"
+        }
+      }
+    }
+  }
+}`)
+
+	t.Setenv("RSH_CONFIG_DIR", legacyDir)
+	path := config.DefaultPath()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.APIs["demo"] == nil {
+		t.Fatal("expected migrated demo API")
+	}
+	if got := cfg.APIs["demo"].Profiles["prod"].Headers[0]; got != "Authorization: Bearer token" {
+		t.Fatalf("migrated header = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1", "apis.json")); err != nil {
+		t.Fatalf("expected apis.json backup: %v", err)
+	}
+}
+
+func TestLoad_ExistingV2ConfigWinsOverLegacyMigration(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "legacy": {
+    "base": "https://legacy.example.com"
+  }
+}`)
+
+	t.Setenv("RSH_CONFIG_DIR", legacyDir)
+	path := config.DefaultPath()
+	writeFile(t, path, `{
+  "apis": {
+    "current": {
+      "base_url": "https://current.example.com"
+    }
+  }
+}`)
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Migration != nil {
+		t.Fatalf("expected no migration, got %+v", cfg.Migration)
+	}
+	if cfg.APIs["current"] == nil {
+		t.Fatal("expected existing v2 config to load")
+	}
+	if cfg.APIs["legacy"] != nil {
+		t.Fatal("did not expect legacy data to overwrite v2 config")
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1", "apis.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no backup when restish.json already exists, got %v", err)
 	}
 }
