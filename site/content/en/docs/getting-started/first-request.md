@@ -8,6 +8,9 @@ description: Make your first successful request with Restish and understand what
 The fastest way to learn Restish is to use a generic HTTP request before moving
 on to API-specific commands.
 
+If you are already using Restish v1, skim [Upgrade From v1](../upgrade-from-v1/)
+first so the config-file and plugin changes do not surprise you.
+
 ## Make A Request
 
 ```bash
@@ -130,6 +133,7 @@ After these three examples, you already know the core Restish loop:
 ## What To Try Next
 
 - [Quickstart](../quickstart/) for the full ten-minute path
+- [Upgrade From v1](../upgrade-from-v1/) if you are moving an existing setup
 - [Shell Setup](../shell-setup/) for completions and safer shell input
 - [Connect to an API](../connect-to-an-api/) for generated commands
 - [Requests](../guides/requests/) for the broader workflow guide

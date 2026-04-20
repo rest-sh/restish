@@ -20,6 +20,9 @@ linkTitle = "Docs"
   <a class="btn btn-lg btn-outline-light mb-4" href="/docs/plugins/quickstart/">
     Plugin Quickstart
   </a>
+  <a class="btn btn-lg btn-outline-light mb-4" href="/docs/getting-started/upgrade-from-v1/">
+    Upgrade From v1
+  </a>
   </div>
   <p class="restish-home-snippet"><code>restish https://api.rest.sh/</code></p>
 </div>
@@ -58,6 +61,10 @@ plugins all fit one consistent request model.
     <h2>First Request in Minutes</h2>
     <p>Use a generic HTTP command first, learn the bare minimum, then layer in headers, bodies, and output control.</p>
   </a>
+  <a class="restish-card" href="/docs/getting-started/upgrade-from-v1/">
+    <h2>Upgrade From v1</h2>
+    <p>See the config migration path, deliberate behavior changes, fixed regressions, and the main command mapping in one place.</p>
+  </a>
   <a class="restish-card" href="/docs/getting-started/connect-to-an-api/">
     <h2>Turn an API Into a CLI</h2>
     <p>Register an API, let Restish discover its OpenAPI document, and work from generated commands instead of full URLs.</p>
@@ -85,6 +92,7 @@ plugins all fit one consistent request model.
 3. [Make your first request](/docs/getting-started/first-request/)
 4. [Set up your shell](/docs/getting-started/shell-setup/)
 5. [Connect to an API](/docs/getting-started/connect-to-an-api/)
+6. [Upgrade from v1](/docs/getting-started/upgrade-from-v1/)
 
 ## Why People Use Restish
 
@@ -105,4 +113,6 @@ plugins all fit one consistent request model.
   [Connect to an API](/docs/getting-started/connect-to-an-api/)
 - Plugin author:
   [Plugin Quickstart](/docs/plugins/quickstart/)
+- Existing v1 user:
+  [Upgrade From v1](/docs/getting-started/upgrade-from-v1/)
 {{% /blocks/section %}}

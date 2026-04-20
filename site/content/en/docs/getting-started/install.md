@@ -91,6 +91,10 @@ If you see a formatted response like that, the install is working.
 
 Once the binary is runnable, go straight to [First Request](../first-request/).
 
+If you are coming from an older Restish install, read
+[Upgrade From v1](../upgrade-from-v1/) before you start editing config files by
+hand.
+
 ## Optional Shell Setup
 
 If you plan to use Restish interactively, follow [Shell Setup](../shell-setup/)
@@ -154,5 +158,6 @@ You should see top-level help text and a successful exit.
 - [Getting Started](../)
 - [Quickstart](../quickstart/)
 - [First Request](../first-request/)
+- [Upgrade From v1](../upgrade-from-v1/)
 - [Shell Setup](../shell-setup/)
 - [Development Setup](/docs/contributing/development-setup/)
