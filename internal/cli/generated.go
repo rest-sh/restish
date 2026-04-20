@@ -38,15 +38,23 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 	// Collect unique tags so we can create command groups for help display.
 	tagsSeen := map[string]bool{}
 	commandNames := map[string]bool{}
+	basePath, err := generatedBasePath(apiCfg.BaseURL, apiCfg.OperationBase, model.Model.Servers)
+	if err != nil {
+		fmt.Fprintf(c.Stderr, "warning: unable to derive generated base path for API %q: %v\n", apiName, err)
+	}
 
 	for path, pathItem := range model.Model.Paths.PathItems.FromOldest() {
+		if spec.PathItemExtBool(pathItem, "x-cli-ignore") {
+			continue
+		}
+		generatedPath := joinOperationPath(basePath, path)
 		for _, mo := range spec.PathItemMethods(pathItem) {
 			if mo.Op == nil {
 				continue
 			}
-			cmd, err := c.buildOperationCommand(apiName, path, mo.Method, pathItem.Parameters, mo.Op, apiCfg.OperationBase)
+			cmd, err := c.buildOperationCommand(apiName, generatedPath, mo.Method, pathItem.Parameters, mo.Op, apiCfg.OperationBase)
 			if err != nil {
-				fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", mo.Method, path, apiName, err)
+				fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", mo.Method, generatedPath, apiName, err)
 				continue
 			}
 			if cmd == nil {
@@ -78,6 +86,9 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 					})
 				}
 				cmd.GroupID = tag
+			}
+			if spec.PathItemExtBool(pathItem, "x-cli-hidden") {
+				cmd.Hidden = true
 			}
 			apiCmd.AddCommand(cmd)
 		}
@@ -122,6 +133,9 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 
 	allParams := make(map[string]*paramInfo)
 	for _, p := range params {
+		if spec.ParamExtBool(p, "x-cli-ignore") {
+			continue
+		}
 		req := p.Required != nil && *p.Required
 		flagName := toKebabCase(p.Name)
 		if n := spec.ParamExtString(p, "x-cli-name"); n != "" {
@@ -166,7 +180,9 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 	}
 	for _, p := range params {
 		if p.In == "query" && p.Required != nil && *p.Required {
-			required = append(required, allParams[p.Name])
+			if pi := allParams[p.Name]; pi != nil {
+				required = append(required, pi)
+			}
 		}
 	}
 
@@ -177,11 +193,15 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 			continue
 		}
 		if p.In == "header" || p.In == "cookie" {
-			optional = append(optional, allParams[p.Name])
+			if pi := allParams[p.Name]; pi != nil {
+				optional = append(optional, pi)
+			}
 			continue
 		}
 		if req := p.Required != nil && *p.Required; !req {
-			optional = append(optional, allParams[p.Name])
+			if pi := allParams[p.Name]; pi != nil {
+				optional = append(optional, pi)
+			}
 		}
 	}
 
@@ -242,6 +262,9 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 		cmd.Flags().String(p.flagName, "", p.desc)
 		if p.required {
 			_ = cmd.MarkFlagRequired(p.flagName)
+		}
+		if spec.ParamExtBool(paramsByName(params, p.in, p.name), "x-cli-hidden") {
+			_ = cmd.Flags().MarkHidden(p.flagName)
 		}
 		if len(p.enum) > 0 {
 			vals := p.enum
@@ -377,6 +400,83 @@ func parameterKey(p *v3high.Parameter) string {
 		return ""
 	}
 	return p.In + "\x00" + p.Name
+}
+
+func paramsByName(params []*v3high.Parameter, in, name string) *v3high.Parameter {
+	for _, p := range params {
+		if p != nil && p.In == in && p.Name == name {
+			return p
+		}
+	}
+	return nil
+}
+
+func generatedBasePath(baseURL, operationBase string, servers []*v3high.Server) (string, error) {
+	if operationBase != "" {
+		return "", nil
+	}
+	if len(servers) == 0 {
+		return "", nil
+	}
+
+	location, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	prefix := fmt.Sprintf("%s://%s", location.Scheme, location.Host)
+
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		if strings.HasPrefix(server.URL, "/") {
+			return strings.TrimSuffix(server.URL, "/"), nil
+		}
+
+		endpoints := []string{server.URL}
+		if server.Variables != nil {
+			for key, value := range server.Variables.FromOldest() {
+				placeholder := fmt.Sprintf("{%s}", key)
+				if value == nil {
+					continue
+				}
+				if len(value.Enum) == 0 {
+					for i := range endpoints {
+						endpoints[i] = strings.ReplaceAll(endpoints[i], placeholder, value.Default)
+					}
+					continue
+				}
+
+				next := make([]string, 0, len(endpoints)*len(value.Enum))
+				for _, enumVal := range value.Enum {
+					for _, endpoint := range endpoints {
+						next = append(next, strings.ReplaceAll(endpoint, placeholder, enumVal))
+					}
+				}
+				endpoints = next
+			}
+		}
+
+		for _, endpoint := range endpoints {
+			if !strings.HasPrefix(endpoint, prefix) {
+				continue
+			}
+			parsed, err := url.Parse(endpoint)
+			if err != nil {
+				return "", err
+			}
+			return strings.TrimSuffix(parsed.Path, "/"), nil
+		}
+	}
+
+	return strings.TrimSuffix(location.Path, "/"), nil
+}
+
+func joinOperationPath(basePath, opPath string) string {
+	if basePath == "" || basePath == "/" {
+		return opPath
+	}
+	return strings.TrimRight(basePath, "/") + opPath
 }
 
 // toKebabCase converts a camelCase or PascalCase identifier to kebab-case.

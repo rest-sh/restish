@@ -231,3 +231,114 @@ func TestExtensionXCLINameOnParam(t *testing.T) {
 	}
 	_ = gotQuery
 }
+
+func TestExtensionXCLIPathLevelIgnore(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Ext API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/admin": {
+      "x-cli-ignore": true,
+      "get": {
+        "operationId": "listAdmin",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-admin"}); err == nil {
+		t.Fatal("expected path-level x-cli-ignore to suppress generated command")
+	}
+}
+
+func TestExtensionXCLIPathLevelHidden(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Ext API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/admin": {
+      "x-cli-hidden": true,
+      "get": {
+        "operationId": "listAdmin",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c1, out := env.newCaptureCLI()
+	_ = c1.Run([]string{"restish", "tapi", "--help"})
+	if strings.Contains(out.String(), "list-admin") {
+		t.Fatalf("expected hidden command to be omitted from help, got:\n%s", out.String())
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "list-admin"}); err != nil {
+		t.Fatalf("expected hidden command to remain callable: %v", err)
+	}
+}
+
+func TestExtensionXCLIParamIgnoreRemovesFlag(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Ext API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "schema": {"type": "string"},
+            "x-cli-ignore": true
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	_ = c.Run([]string{"restish", "tapi", "get-item", "--help"})
+	if strings.Contains(out.String(), "debug") {
+		t.Fatalf("expected ignored parameter to be absent from help, got:\n%s", out.String())
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "get-item", "42", "--debug", "true"}); err == nil {
+		t.Fatal("expected ignored parameter flag to be unavailable")
+	}
+}

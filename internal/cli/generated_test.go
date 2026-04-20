@@ -529,3 +529,38 @@ func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
 		t.Fatalf("expected both commands to remain callable, got GET=%d POST=%d", getHits.Load(), postHits.Load())
 	}
 }
+
+func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/items", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": "/v1"}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	if lastPath != "/v1/items" {
+		t.Fatalf("expected servers base path to be applied, got %q", lastPath)
+	}
+}

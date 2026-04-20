@@ -51,12 +51,37 @@ func OpExtStrings(op *v3.Operation, key string) []string {
 	return extValue[[]string](op.Extensions.GetOrZero(key))
 }
 
+// PathItemExtBool reads a boolean OpenAPI extension from a path item.
+func PathItemExtBool(item *v3.PathItem, key string) bool {
+	if item == nil {
+		return false
+	}
+	if item.Extensions == nil {
+		return false
+	}
+	return extValue[bool](item.Extensions.GetOrZero(key))
+}
+
 // ParamExtString reads a string OpenAPI extension from a parameter.
 func ParamExtString(p *v3.Parameter, key string) string {
+	if p == nil {
+		return ""
+	}
 	if p.Extensions == nil {
 		return ""
 	}
 	return extValue[string](p.Extensions.GetOrZero(key))
+}
+
+// ParamExtBool reads a boolean OpenAPI extension from a parameter.
+func ParamExtBool(p *v3.Parameter, key string) bool {
+	if p == nil {
+		return false
+	}
+	if p.Extensions == nil {
+		return false
+	}
+	return extValue[bool](p.Extensions.GetOrZero(key))
 }
 
 type decodableNode interface {
