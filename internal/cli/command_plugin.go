@@ -489,7 +489,7 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.AP
 		})
 	}
 
-	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, c.loaders)
+	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, nil, c.loaders)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 			Type:  pluginwire.MsgTypeAPISpecResponse,

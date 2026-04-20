@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -78,7 +80,7 @@ func TestLoadFromCache(t *testing.T) {
 	}
 	writeCache(dir, "testapi", entry)
 
-	spec, err := LoadFromCache(dir, "testapi", "v2", DefaultLoaders())
+	spec, err := LoadFromCache(dir, "testapi", "v2", nil, DefaultLoaders())
 	if err != nil {
 		t.Fatalf("LoadFromCache: %v", err)
 	}
@@ -88,12 +90,42 @@ func TestLoadFromCache(t *testing.T) {
 }
 
 func TestLoadFromCache_Miss(t *testing.T) {
-	spec, err := LoadFromCache(t.TempDir(), "nonexistent", "v2", DefaultLoaders())
+	spec, err := LoadFromCache(t.TempDir(), "nonexistent", "v2", nil, DefaultLoaders())
 	if err != nil {
 		t.Fatalf("LoadFromCache: %v", err)
 	}
 	if spec != nil {
 		t.Error("expected nil spec for cache miss")
+	}
+}
+
+func TestLoadFromCache_LocalSpecFileNewerThanCache(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "spec.yaml")
+	if err := os.WriteFile(specPath, []byte(testSpecRaw), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:     "v2",
+		FetchedAt:   time.Now().Add(-time.Hour),
+		ExpiresAt:   time.Now().Add(time.Hour),
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+	if err := os.Chtimes(specPath, time.Now(), time.Now()); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	spec, err := LoadFromCache(dir, "testapi", "v2", []string{specPath}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("LoadFromCache: %v", err)
+	}
+	if spec != nil {
+		t.Fatal("expected stale local spec file to invalidate cache")
 	}
 }
 

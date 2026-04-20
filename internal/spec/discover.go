@@ -48,6 +48,8 @@ type DiscoverConfig struct {
 	// AllowCrossOrigin permits Link-header-discovered spec URLs on other hosts.
 	// When false, only same-host discovered links are followed.
 	AllowCrossOrigin bool
+	// ForceRefresh bypasses any cached entry and rebuilds it from the source.
+	ForceRefresh bool
 }
 
 // Discover returns the APISpec for an API, using cache when available.
@@ -65,14 +67,18 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 	}
 
 	// 1. Cache check (synchronous, no network).
-	if cfg.CacheDir != "" {
+	if cfg.CacheDir != "" && !cfg.ForceRefresh {
 		if entry, ok := readCache(cfg.CacheDir, cfg.APIName, cfg.Version); ok {
+			if specFilesChangedSince(cfg.SpecFiles, entry.FetchedAt) {
+				goto loadFresh
+			}
 			if spec, err := load(entry.ContentType, entry.Raw, loaders); err == nil && spec != nil {
 				return spec, nil
 			}
 		}
 	}
 
+loadFresh:
 	// 2. Explicit spec files (local paths or URLs) bypass all network probing.
 	if len(cfg.SpecFiles) > 0 {
 		spec, err := loadSpecFiles(ctx, cfg, loaders)
@@ -117,6 +123,22 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 	}
 
 	return spec, nil
+}
+
+func specFilesChangedSince(specFiles []string, fetchedAt time.Time) bool {
+	if fetchedAt.IsZero() {
+		return false
+	}
+	for _, src := range specFiles {
+		if !isLocalPath(src) {
+			continue
+		}
+		info, err := os.Stat(strings.TrimPrefix(src, "file://"))
+		if err != nil || info.ModTime().After(fetchedAt) {
+			return true
+		}
+	}
+	return false
 }
 
 // discoverFromNetwork runs parallel probes and returns the first valid spec.

@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -562,5 +564,87 @@ func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
 	}
 	if lastPath != "/v1/items" {
 		t.Fatalf("expected servers base path to be applied, got %q", lastPath)
+	}
+}
+
+func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	specPath := filepath.Join(t.TempDir(), "openapi.json")
+	writeSpec := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(specPath, []byte(body), 0o644); err != nil {
+			t.Fatalf("write spec: %v", err)
+		}
+		now := time.Now()
+		if err := os.Chtimes(specPath, now, now); err != nil {
+			t.Fatalf("chtimes: %v", err)
+		}
+	}
+	writeSpec(fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL))
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL, SpecFiles: []string{specPath}},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	c1 := cli.New()
+	c1.Stdin = strings.NewReader("")
+	c1.Stdout = io.Discard
+	c1.Stderr = io.Discard
+	c1.ConfigPath = cfgFile
+	c1.SpecCachePath = cacheDir
+	if err := c1.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	writeSpec(fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/widgets": {
+      "get": {
+        "operationId": "getWidgets",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL))
+
+	c2 := cli.New()
+	c2.Stdin = strings.NewReader("")
+	c2.Stdout = io.Discard
+	c2.Stderr = io.Discard
+	c2.ConfigPath = cfgFile
+	c2.SpecCachePath = cacheDir
+	if err := c2.Run([]string{"restish", "tapi", "get-widgets"}); err != nil {
+		t.Fatalf("expected updated local spec to be reflected without sync: %v", err)
 	}
 }

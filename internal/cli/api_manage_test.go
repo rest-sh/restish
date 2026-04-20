@@ -152,6 +152,72 @@ func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureForceRefreshesCachedSpec(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	c.SpecCachePath = t.TempDir()
+
+	currentHeader := "Accept: application/json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "headers": [%q]
+      }
+    }
+  },
+  "paths": {}
+}`, currentHeader))),
+				Request: r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("first api configure: %v", err)
+	}
+
+	currentHeader = "Accept: application/vnd.api+json"
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("second api configure: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].Profiles["default"].Headers[0]; got != currentHeader {
+		t.Fatalf("expected refreshed x-cli-config header %q, got %q", currentHeader, got)
+	}
+}
+
 // TestAPIShow verifies that "api show" prints the API config as JSON.
 func TestAPIShow(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{

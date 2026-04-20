@@ -150,6 +150,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: allowCrossOrigin,
+		ForceRefresh:     true,
 	}
 	apiSpec, _ := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 

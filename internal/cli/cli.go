@@ -255,7 +255,13 @@ func (c *CLI) Run(args []string) error {
 	// to prime the cache for an API.)
 	for _, apiName := range c.generatedAPINames(args, cfg) {
 		apiCfg := cfg.APIs[apiName]
-		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, c.loaders)
+		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+		if err != nil {
+			continue
+		}
+		if s == nil && spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
+			s, err = c.discoverSpec(context.Background(), apiName)
+		}
 		if err != nil || s == nil {
 			continue
 		}
