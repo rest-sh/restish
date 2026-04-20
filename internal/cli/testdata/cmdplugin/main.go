@@ -22,6 +22,7 @@ var commands = []plugin.CommandDecl{
 	{Name: "pipe", Short: "Echo stdin via passthrough stdio", PassthroughStdio: true},
 	{Name: "fail", Short: "Exit with code 1"},
 	{Name: "die", Short: "Crash unexpectedly"},
+	{Name: "hangdone", Short: "Send done and keep running"},
 }
 
 func main() {
@@ -102,6 +103,10 @@ func main() {
 
 	case "die":
 		os.Exit(1)
+
+	case "hangdone":
+		_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone})
+		select {}
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", initMsg.Command)

@@ -12,6 +12,7 @@ import (
 	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/spf13/cobra"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -142,6 +143,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	}
 
 	var loopErr error
+	doneReceived := false
 	dec := pluginwire.NewDecoder(stdoutPipe)
 	for {
 		raw, err := dec.ReadRaw()
@@ -160,14 +162,47 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 			break
 		}
 		if done {
+			doneReceived = pluginwire.MessageType(raw) == pluginwire.MsgTypeDone
 			break
 		}
 	}
 
 	close(stopCh)
 	_ = stdinPipe.Close()
-	_ = proc.Wait()
+	waitErr := waitCommandPluginExit(proc, commandPluginShutdownGrace())
+	if loopErr == nil && waitErr != nil && !doneReceived {
+		loopErr = fmt.Errorf("command plugin %s: wait: %w", filepath.Base(pluginPath), waitErr)
+	}
 	return loopErr
+}
+
+func waitCommandPluginExit(proc *exec.Cmd, grace time.Duration) error {
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- proc.Wait()
+	}()
+
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+
+	select {
+	case err := <-waitCh:
+		return err
+	case <-timer.C:
+		if proc.Process != nil {
+			_ = proc.Process.Kill()
+		}
+		return <-waitCh
+	}
+}
+
+func commandPluginShutdownGrace() time.Duration {
+	if value := strings.TrimSpace(os.Getenv("RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE")); value != "" {
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 5 * time.Second
 }
 
 // streamPluginStdin forwards c.Stdin to the command plugin as "stdin-data"
@@ -184,6 +219,12 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 		err  error
 	}
 	reads := make(chan chunk, 4)
+	if stdin, ok := c.Stdin.(*os.File); ok && stdin != os.Stdin {
+		go func() {
+			<-done
+			_ = stdin.Close()
+		}()
+	}
 
 	go func() {
 		buf := make([]byte, 32*1024)
@@ -365,8 +406,9 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 	prepared, err := c.prepareRequest(msg.URI, profileName, opts, msg.Body, nil, false)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
-			Type:  pluginwire.MsgTypeHTTPResponse,
-			Error: err.Error(),
+			Type:      pluginwire.MsgTypeHTTPResponse,
+			RequestID: msg.RequestID,
+			Error:     err.Error(),
 		})
 	}
 	defer c.closePreparedTransport(prepared)
@@ -374,16 +416,18 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 	httpResp, err := c.sendPreparedRequest(reqCtx, method, prepared)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
-			Type:  pluginwire.MsgTypeHTTPResponse,
-			Error: err.Error(),
+			Type:      pluginwire.MsgTypeHTTPResponse,
+			RequestID: msg.RequestID,
+			Error:     err.Error(),
 		})
 	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
-			Type:  pluginwire.MsgTypeHTTPResponse,
-			Error: err.Error(),
+			Type:      pluginwire.MsgTypeHTTPResponse,
+			RequestID: msg.RequestID,
+			Error:     err.Error(),
 		})
 	}
 
@@ -399,18 +443,20 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		filtered, ferr := filter.Apply(msg.Filter, doc, filter.LangAuto)
 		if ferr != nil {
 			return writer.WriteMessage(pluginwire.HTTPResponseMsg{
-				Type:  pluginwire.MsgTypeHTTPResponse,
-				Error: ferr.Error(),
+				Type:      pluginwire.MsgTypeHTTPResponse,
+				RequestID: msg.RequestID,
+				Error:     ferr.Error(),
 			})
 		}
 		body = filtered
 	}
 
 	return writer.WriteMessage(pluginwire.HTTPResponseMsg{
-		Type:    pluginwire.MsgTypeHTTPResponse,
-		Status:  resp.Status,
-		Headers: resp.Headers,
-		Body:    body,
+		Type:      pluginwire.MsgTypeHTTPResponse,
+		RequestID: msg.RequestID,
+		Status:    resp.Status,
+		Headers:   resp.Headers,
+		Body:      body,
 	})
 }
 

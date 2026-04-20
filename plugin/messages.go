@@ -53,6 +53,7 @@ type InitMsg struct {
 // plugin and reply with an HTTPResponseMsg.
 type HTTPRequestMsg struct {
 	Type        string            `cbor:"type"`
+	RequestID   string            `cbor:"request_id,omitempty"`
 	Method      string            `cbor:"method,omitempty"`
 	URI         string            `cbor:"uri"`
 	Headers     map[string]string `cbor:"headers,omitempty"`
@@ -72,10 +73,11 @@ type HTTPRequestMsg struct {
 
 // HTTPResponseMsg is the host reply to an HTTPRequestMsg.
 type HTTPResponseMsg struct {
-	Type    string            `cbor:"type"`
-	Status  int               `cbor:"status"`
-	Headers map[string]string `cbor:"headers,omitempty"`
-	Body    any               `cbor:"body"`
+	Type      string            `cbor:"type"`
+	RequestID string            `cbor:"request_id,omitempty"`
+	Status    int               `cbor:"status"`
+	Headers   map[string]string `cbor:"headers,omitempty"`
+	Body      any               `cbor:"body"`
 	// Error is set when the HTTP request itself failed.
 	Error string `cbor:"error,omitempty"`
 }

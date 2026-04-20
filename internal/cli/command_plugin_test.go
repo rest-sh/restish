@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,11 +11,18 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type captureWriter struct {
 	mu sync.Mutex
 	b  strings.Builder
+}
+
+type unreadableReader struct{}
+
+func (unreadableReader) Read([]byte) (int, error) {
+	return 0, errors.New("stdin should not be read")
 }
 
 func (w *captureWriter) Write(p []byte) (int, error) {
@@ -160,5 +168,32 @@ func TestCommandPluginPassthroughStdio(t *testing.T) {
 	}
 	if got := errOut.String(); got != "ERR:hello\n" {
 		t.Fatalf("unexpected stderr passthrough: %q", got)
+	}
+}
+
+func TestCommandPluginDoneHangKilledAfterGrace(t *testing.T) {
+	installCmdPlugin(t)
+	t.Setenv("RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE", "100ms")
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+
+	start := time.Now()
+	if err := c.Run([]string{"restish", "hangdone"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("expected hung plugin to be killed promptly, took %v", elapsed)
+	}
+}
+
+func TestCommandPluginWithoutPassthroughDoesNotConsumeStdin(t *testing.T) {
+	installCmdPlugin(t)
+
+	c, _, _ := newTestCLI()
+	c.Stdin = unreadableReader{}
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "greet"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

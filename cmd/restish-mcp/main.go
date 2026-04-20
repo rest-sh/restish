@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/pb33f/libopenapi"
@@ -75,6 +77,9 @@ type pluginClient struct {
 	stdinPipeW   *io.PipeWriter
 	stdinReader  io.Reader
 	httpRespCh   chan plugin.HTTPResponseMsg
+	nextHTTPID   uint64
+	pendingMu    sync.Mutex
+	pendingHTTP  map[string]chan plugin.HTTPResponseMsg
 	pendingStdin bytes.Buffer
 	stdinClosed  bool
 	writeMu      sync.Mutex
@@ -88,10 +93,13 @@ func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 		stdinPipeW:  pw,
 		stdinReader: pr,
 		httpRespCh:  make(chan plugin.HTTPResponseMsg, 1),
+		pendingHTTP: map[string]chan plugin.HTTPResponseMsg{},
 	}
 }
 
 func (c *pluginClient) readLoop() {
+	defer close(c.httpRespCh)
+	defer c.closePendingHTTP()
 	defer c.stdinPipeW.Close()
 	if c.pendingStdin.Len() > 0 {
 		if _, err := io.Copy(c.stdinPipeW, &c.pendingStdin); err != nil {
@@ -119,17 +127,30 @@ func (c *pluginClient) readLoop() {
 		case plugin.MsgTypeHTTPResponse:
 			var msg plugin.HTTPResponseMsg
 			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil {
-				c.httpRespCh <- msg
+				if msg.RequestID != "" {
+					if c.sendPendingHTTP(msg.RequestID, msg) {
+						continue
+					}
+				}
+				select {
+				case c.httpRespCh <- msg:
+				default:
+				}
 			}
 		}
 	}
 }
 
 func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
+	requestID := strconv.FormatUint(atomic.AddUint64(&c.nextHTTPID, 1), 10)
+	replyCh := c.registerPendingHTTP(requestID)
+	defer c.unregisterPendingHTTP(requestID)
+
 	msg := plugin.HTTPRequestMsg{
-		Type:   plugin.MsgTypeHTTPRequest,
-		Method: req.Method,
-		URI:    req.URI,
+		Type:      plugin.MsgTypeHTTPRequest,
+		RequestID: requestID,
+		Method:    req.Method,
+		URI:       req.URI,
 	}
 	if len(req.Headers) > 0 {
 		msg.Headers = req.Headers
@@ -143,7 +164,14 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 	if err := c.writeMessage(msg); err != nil {
 		return nil, err
 	}
-	reply, ok := <-c.httpRespCh
+	var (
+		reply plugin.HTTPResponseMsg
+		ok    bool
+	)
+	select {
+	case reply, ok = <-replyCh:
+	case reply, ok = <-c.httpRespCh:
+	}
 	if !ok {
 		return nil, io.EOF
 	}
@@ -223,4 +251,41 @@ func (w *stdoutWriter) Write(p []byte) (int, error) {
 
 func (c *pluginClient) newStdoutWriter() io.Writer {
 	return &stdoutWriter{client: c}
+}
+
+func (c *pluginClient) registerPendingHTTP(requestID string) chan plugin.HTTPResponseMsg {
+	replyCh := make(chan plugin.HTTPResponseMsg, 1)
+	c.pendingMu.Lock()
+	c.pendingHTTP[requestID] = replyCh
+	c.pendingMu.Unlock()
+	return replyCh
+}
+
+func (c *pluginClient) unregisterPendingHTTP(requestID string) {
+	c.pendingMu.Lock()
+	delete(c.pendingHTTP, requestID)
+	c.pendingMu.Unlock()
+}
+
+func (c *pluginClient) sendPendingHTTP(requestID string, msg plugin.HTTPResponseMsg) bool {
+	c.pendingMu.Lock()
+	replyCh := c.pendingHTTP[requestID]
+	c.pendingMu.Unlock()
+	if replyCh == nil {
+		return false
+	}
+	select {
+	case replyCh <- msg:
+	default:
+	}
+	return true
+}
+
+func (c *pluginClient) closePendingHTTP() {
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	for requestID, replyCh := range c.pendingHTTP {
+		close(replyCh)
+		delete(c.pendingHTTP, requestID)
+	}
 }
