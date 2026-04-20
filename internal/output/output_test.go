@@ -448,15 +448,15 @@ func TestSelect_TTYDefaultsToReadable(t *testing.T) {
 	}
 }
 
-func TestSelect_NonTTYDefaultsToRaw(t *testing.T) {
+func TestSelect_NonTTYDefaultsToJSON(t *testing.T) {
 	fmts := output.DefaultFormatters()
 	f, ok := output.Select(fmts, "", false)
 	if !ok {
 		t.Fatal("Select returned !ok")
 	}
-	_, isRaw := f.(*output.RawFormatter)
-	if !isRaw {
-		t.Errorf("expected RawFormatter for non-TTY, got %T", f)
+	_, isJSON := f.(*output.JSONFormatter)
+	if !isJSON {
+		t.Errorf("expected JSONFormatter for non-TTY, got %T", f)
 	}
 }
 

@@ -196,6 +196,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	headersOnly, _ := cmd.Flags().GetBool("rsh-headers")
 	tty := output.IsTerminal(c.Stdout)
 
+	if headersOnly && filterExpr != "" {
+		fmt.Fprintln(c.Stderr, `warning: --rsh-headers overrides -f; using "headers"`)
+	}
 	if headersOnly {
 		filterExpr = "headers"
 	}
@@ -235,11 +238,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return err
 	}
 
-	if filtered == nil && filterExpr != "@" && filterExpr != "body" && filterExpr != "headers" &&
-		filterExpr != "links" && filterExpr != "status" && filterExpr != "proto" &&
-		!strings.HasPrefix(filterExpr, "body.") && !strings.HasPrefix(filterExpr, "headers.") &&
-		!strings.HasPrefix(filterExpr, "links.") && !strings.HasPrefix(filterExpr, "status.") &&
-		!strings.HasPrefix(filterExpr, "proto.") {
+	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
 		fmt.Fprintf(c.Stderr, "hint: filter returned no results; to access response body fields use 'body.%s'\n", filterExpr)
 	}
 
@@ -251,7 +250,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return c.renderValue(cmd, filtered)
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	formatter, err := c.selectFormatter(cmd, fmtName, tty, filterExpr)
 	if err != nil {
 		return err
 	}
@@ -352,7 +351,7 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 		}}, nil
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	formatter, err := c.selectFormatter(cmd, fmtName, tty, "")
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +382,7 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 	}}, nil
 }
 
-func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
+func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool, filterExpr string) (output.Formatter, error) {
 	fmts := c.formatters
 	if fmts == nil {
 		fmts = output.DefaultFormatters()
@@ -406,7 +405,15 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 		fmts = copied
 	}
 
-	formatter, ok := output.Select(fmts, fmtName, tty)
+	var (
+		formatter output.Formatter
+		ok        bool
+	)
+	if fmtName == "" {
+		formatter, ok = output.SelectDefault(fmts, tty, filterExpr)
+	} else {
+		formatter, ok = output.Select(fmts, fmtName, tty)
+	}
 	if !ok {
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
@@ -423,6 +430,23 @@ func (c *CLI) writeRaw(value any) error {
 	}
 	_, err := io.WriteString(c.Stdout, s)
 	return err
+}
+
+func shouldSuggestBodyPrefix(filterExpr string) bool {
+	filterExpr = strings.TrimSpace(filterExpr)
+	if filterExpr == "" || strings.HasPrefix(filterExpr, "@") {
+		return false
+	}
+	roots := []string{"body", "headers", "links", "status", "proto"}
+	for _, root := range roots {
+		if filterExpr == root ||
+			strings.HasPrefix(filterExpr, root+".") ||
+			strings.HasPrefix(filterExpr, root+"[") ||
+			strings.HasPrefix(filterExpr, "."+root) {
+			return false
+		}
+	}
+	return true
 }
 
 // logVerbose prints request and response summary lines to stderr.

@@ -165,7 +165,7 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 		return c.newValueRenderer(cmd, base)
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	formatter, err := c.selectFormatter(cmd, fmtName, tty, "")
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) 
 		return false, nil
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	formatter, err := c.selectFormatter(cmd, fmtName, tty, "")
 	if err != nil {
 		return false, err
 	}

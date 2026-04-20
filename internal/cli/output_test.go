@@ -211,3 +211,40 @@ func TestFilterTopLevelRootsDoNotTriggerBodyHint(t *testing.T) {
 		t.Fatalf("expected no body hint for top-level links filter, got: %q", errOut.String())
 	}
 }
+
+func TestFilterArraySyntaxDoesNotTriggerBodyHint(t *testing.T) {
+	c, _, errOut := newTestCLI()
+	useJSONResponse(c, 200, `{"items":[{"name":"Alice"}]}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body[0]", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(errOut.String(), "filter returned no results") {
+		t.Fatalf("expected no body hint for body[0], got: %q", errOut.String())
+	}
+}
+
+func TestHeadersFlagWarnsWhenOverridingFilter(t *testing.T) {
+	c, _, errOut := newTestCLI()
+	useJSONResponse(c, 200, `{}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", "--rsh-headers", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "--rsh-headers overrides -f") {
+		t.Fatalf("expected override warning, got: %q", errOut.String())
+	}
+}
+
+func TestFilterAtNonTTYUsesJSONFormatter(t *testing.T) {
+	c, out, _ := newTestCLI()
+	useJSONResponse(c, 200, `{"name":"Alice"}`)
+	if err := c.Run([]string{"restish", "get", "-f", "@", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("expected JSON output for -f @ on non-TTY, got %q: %v", out.String(), err)
+	}
+	if decoded["name"] != "Alice" {
+		t.Fatalf("unexpected JSON body: %#v", decoded)
+	}
+}
