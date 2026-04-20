@@ -232,6 +232,49 @@ func TestTLSSignerErrorResponse(t *testing.T) {
 	}
 }
 
+func TestTLSSignerErrorIncludesStderr(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	caPEM, caKeyPEM, caCert := selfSignedCert(t, "Test CA")
+	serverCertPEM, serverKeyPEM := signedCert(t, caCert, caKeyPEM, "localhost", []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
+	clientCertPEM, clientKeyPEM := signedCert(t, caCert, caKeyPEM, "client", []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.pem")
+	clientCertPath := filepath.Join(dir, "client.pem")
+	clientKeyPath := filepath.Join(dir, "client.key")
+	for path, data := range map[string][]byte{
+		caPath:         caPEM,
+		clientCertPath: clientCertPEM,
+		clientKeyPath:  clientKeyPEM,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
+	if err != nil {
+		t.Fatalf("server key pair: %v", err)
+	}
+	clientCAPool := x509.NewCertPool()
+	clientCAPool.AppendCertsFromPEM(caPEM)
+	server := tlsServer(t, serverCert, clientCAPool)
+
+	t.Setenv("RSH_TLS_SIGNER_MODE", "stderr-error")
+
+	_, err = request.Do(context.Background(), "GET", server.URL, nil, request.Options{
+		CACertPath:    caPath,
+		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": clientCertPath,
+			"key_path":  clientKeyPath,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "pin incorrect") {
+		t.Fatalf("expected stderr text in error, got %v", err)
+	}
+}
+
 func TestTLSSignerDeath(t *testing.T) {
 	pluginPath := buildTLSSignerPlugin(t)
 	caPEM, caKeyPEM, caCert := selfSignedCert(t, "Test CA")
@@ -272,6 +315,44 @@ func TestTLSSignerDeath(t *testing.T) {
 	})
 	if err == nil || (!strings.Contains(err.Error(), "tls-signer") && !strings.Contains(err.Error(), "EOF")) {
 		t.Fatalf("expected plugin death error, got %v", err)
+	}
+}
+
+func TestTLSSignerTransportCloseShutsDownPlugin(t *testing.T) {
+	pluginPath := buildTLSSignerPlugin(t)
+	certPEM, keyPEM, _ := selfSignedCert(t, "client")
+
+	dir := t.TempDir()
+	clientCertPath := filepath.Join(dir, "client.pem")
+	clientKeyPath := filepath.Join(dir, "client.key")
+	shutdownFile := filepath.Join(dir, "shutdown.txt")
+	for path, data := range map[string][]byte{
+		clientCertPath: certPEM,
+		clientKeyPath:  keyPEM,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	t.Setenv("RSH_TLS_SIGNER_SHUTDOWN_FILE", shutdownFile)
+
+	transport := request.BuildTransport(request.Options{
+		TLSSignerPath: pluginPath,
+		TLSSignerParams: map[string]string{
+			"cert_path": clientCertPath,
+			"key_path":  clientKeyPath,
+		},
+	})
+	closer, ok := transport.(interface{ Close() error })
+	if !ok {
+		t.Fatalf("expected transport to be closable, got %T", transport)
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatalf("transport.Close: %v", err)
+	}
+	if _, err := os.Stat(shutdownFile); err != nil {
+		t.Fatalf("expected shutdown marker file: %v", err)
 	}
 }
 

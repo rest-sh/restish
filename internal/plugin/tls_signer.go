@@ -10,6 +10,7 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -101,14 +102,41 @@ type PluginSigner struct {
 // shutdown kills the plugin process and releases its resources.
 // It must be called with mu held. Subsequent calls are no-ops.
 func (s *PluginSigner) shutdown() {
+	_ = s.closeLocked(false)
+}
+
+// Close gracefully shuts down the signer subprocess.
+func (s *PluginSigner) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeLocked(true)
+}
+
+func (s *PluginSigner) closeLocked(graceful bool) error {
 	if s.dead {
-		return
+		return nil
 	}
 	s.dead = true
+	if graceful {
+		_ = pluginwire.WriteMessage(s.stdin, pluginwire.TLSSignerShutdownMsg{Type: pluginwire.MsgTypeTLSSignerShutdown})
+	}
 	_ = s.stdin.Close()
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- s.proc.Wait()
+	}()
+
+	var waitErr error
+	select {
+	case waitErr = <-waitCh:
+	case <-time.After(5 * time.Second):
+		_ = s.proc.Process.Kill()
+		waitErr = <-waitCh
+	}
+
 	_ = s.stdout.Close()
-	_ = s.proc.Process.Kill()
-	_ = s.proc.Wait()
+	return waitErr
 }
 
 func (s *PluginSigner) Public() crypto.PublicKey {
@@ -141,21 +169,31 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 		SaltLength: saltLength,
 	}); err != nil {
 		s.shutdown()
-		return nil, fmt.Errorf("tls-signer %s: write sign request: %w", filepath.Base(s.path), err)
+		return nil, s.signError(fmt.Sprintf("write sign request: %v", err))
 	}
 
 	var reply pluginwire.TLSSignerSignedMsg
 	if err := readTLSSignerMessage(s.dec, s.stdout, &reply); err != nil {
 		s.shutdown()
-		return nil, fmt.Errorf("tls-signer %s: sign reply: %w", filepath.Base(s.path), err)
+		return nil, s.signError(fmt.Sprintf("sign reply: %v", err))
 	}
 	if reply.Error != "" {
-		return nil, fmt.Errorf("tls-signer %s: %s", filepath.Base(s.path), reply.Error)
+		return nil, s.signError(reply.Error)
 	}
 	if len(reply.Signature) == 0 {
 		return nil, fmt.Errorf("tls-signer %s: sign reply missing signature", filepath.Base(s.path))
 	}
 	return reply.Signature, nil
+}
+
+func (s *PluginSigner) signError(detail string) error {
+	msg := fmt.Sprintf("tls-signer %s: %s", filepath.Base(s.path), detail)
+	if s.stderr != nil {
+		if stderr := strings.TrimSpace(s.stderr.String()); stderr != "" {
+			msg += "\nstderr: " + stderr
+		}
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, *exec.Cmd, error) {

@@ -36,8 +36,9 @@ const (
 	MsgTypeStdinClose = "stdin-close"
 
 	// TLS signer plugin protocol.
-	MsgTypeTLSSignerSign  = "sign"  // host → plugin: sign request
-	MsgTypeTLSSignerReady = "ready" // plugin → host: ready with certificate
+	MsgTypeTLSSignerSign     = "sign"     // host → plugin: sign request
+	MsgTypeTLSSignerReady    = "ready"    // plugin → host: ready with certificate
+	MsgTypeTLSSignerShutdown = "shutdown" // host → plugin: graceful shutdown request
 )
 
 // InitMsg is the first message sent from the host to the plugin after startup.
@@ -294,6 +295,11 @@ type TLSSignerSignMsg struct {
 type TLSSignerSignedMsg struct {
 	Signature []byte `cbor:"signature,omitempty"`
 	Error     string `cbor:"error,omitempty"`
+}
+
+// TLSSignerShutdownMsg asks the plugin to release resources and exit.
+type TLSSignerShutdownMsg struct {
+	Type string `cbor:"type"`
 }
 
 // ─── Hook plugin protocol ─────────────────────────────────────────────────────

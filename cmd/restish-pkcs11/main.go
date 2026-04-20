@@ -61,24 +61,30 @@ func main() {
 	}
 
 	for {
-		var msg plugin.TLSSignerSignMsg
+		var msg map[string]any
 		if err := dec.ReadMessage(&msg); err != nil {
 			fail(err)
 		}
-		if msg.Type != plugin.MsgTypeTLSSignerSign {
+		switch msg["type"] {
+		case plugin.MsgTypeTLSSignerShutdown:
+			return
+		case plugin.MsgTypeTLSSignerSign:
+			digest := plugin.MsgBytes(msg["digest"])
+			if len(digest) == 0 {
+				_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: "missing digest"})
+				continue
+			}
+			hash := crypto.Hash(plugin.MsgInt(msg["hash"]))
+			padding, _ := msg["padding"].(string)
+			sig, err := signer.Sign(rand.Reader, digest, buildSignerOpts(hash, padding, plugin.MsgInt(msg["salt_length"])))
+			if err != nil {
+				_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: err.Error()})
+				continue
+			}
+			_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Signature: sig})
+		default:
 			continue
 		}
-		if len(msg.Digest) == 0 {
-			_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: "missing digest"})
-			continue
-		}
-		hash := crypto.Hash(msg.Hash)
-		sig, err := signer.Sign(rand.Reader, msg.Digest, buildSignerOpts(hash, msg.Padding, msg.SaltLength))
-		if err != nil {
-			_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Error: err.Error()})
-			continue
-		}
-		_ = plugin.WriteMessage(os.Stdout, plugin.TLSSignerSignedMsg{Signature: sig})
 	}
 }
 

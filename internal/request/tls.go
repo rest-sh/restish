@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -26,30 +27,41 @@ func TLSVersionFromString(v string) (uint16, error) {
 
 // TLSConfigFromOptions builds a TLS config for the given request options.
 func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
+	cfg, _, err := TLSConfigWithCleanupFromOptions(opts)
+	return cfg, err
+}
+
+// TLSConfigWithCleanupFromOptions builds a TLS config and returns an optional
+// cleanup for plugin-backed client certificate resources.
+func TLSConfigWithCleanupFromOptions(opts Options) (*tls.Config, io.Closer, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: opts.Insecure, //nolint:gosec
 		MinVersion:         opts.TLSMinVersion,
 	}
 
 	if opts.TLSSignerPath != "" && (opts.ClientCertPath != "" || opts.ClientKeyPath != "") {
-		return nil, fmt.Errorf("tls signer cannot be used together with client certificate/key files")
+		return nil, nil, fmt.Errorf("tls signer cannot be used together with client certificate/key files")
 	}
 
 	if opts.ClientCertPath != "" || opts.ClientKeyPath != "" {
 		if opts.ClientCertPath == "" || opts.ClientKeyPath == "" {
-			return nil, fmt.Errorf("both client certificate and key are required for mTLS")
+			return nil, nil, fmt.Errorf("both client certificate and key are required for mTLS")
 		}
 		cert, err := tls.LoadX509KeyPair(opts.ClientCertPath, opts.ClientKeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("loading client certificate: %w", err)
+			return nil, nil, fmt.Errorf("loading client certificate: %w", err)
 		}
 		cfg.Certificates = []tls.Certificate{cert}
 	}
 
+	var cleanup io.Closer
 	if opts.TLSSignerPath != "" {
 		cert, err := internalplugin.TLSCertificateFromPlugin(opts.TLSSignerPath, opts.TLSSignerParams)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if closer, ok := cert.PrivateKey.(io.Closer); ok {
+			cleanup = closer
 		}
 		cfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return cert, nil
@@ -59,19 +71,28 @@ func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
 	if opts.CACertPath != "" {
 		pool, err := bestEffortSystemCertPool()
 		if err != nil {
-			return nil, err
+			if cleanup != nil {
+				_ = cleanup.Close()
+			}
+			return nil, nil, err
 		}
 		data, err := os.ReadFile(opts.CACertPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading CA certificate: %w", err)
+			if cleanup != nil {
+				_ = cleanup.Close()
+			}
+			return nil, nil, fmt.Errorf("reading CA certificate: %w", err)
 		}
 		if !pool.AppendCertsFromPEM(data) {
-			return nil, fmt.Errorf("parsing CA certificate %q", opts.CACertPath)
+			if cleanup != nil {
+				_ = cleanup.Close()
+			}
+			return nil, nil, fmt.Errorf("parsing CA certificate %q", opts.CACertPath)
 		}
 		cfg.RootCAs = pool
 	}
 
-	return cfg, nil
+	return cfg, cleanup, nil
 }
 
 func bestEffortSystemCertPool() (*x509.CertPool, error) {

@@ -12,6 +12,38 @@ import (
 	"github.com/gregjones/httpcache"
 )
 
+type closeableTransport struct {
+	inner    http.RoundTripper
+	closeFns []func() error
+}
+
+func (t *closeableTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.inner.RoundTrip(req)
+}
+
+func (t *closeableTransport) Close() error {
+	var firstErr error
+	for i := len(t.closeFns) - 1; i >= 0; i-- {
+		if err := t.closeFns[i](); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+type closeAfterBody struct {
+	io.ReadCloser
+	closeFn func() error
+}
+
+func (c *closeAfterBody) Close() error {
+	err := c.ReadCloser.Close()
+	if closeErr := c.closeFn(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
 // Options controls per-request behavior derived from CLI flags.
 type Options struct {
 	// BaseTransport, when non-nil, is the underlying transport to wrap with
@@ -124,15 +156,31 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	}
 
 	transport := opts.Transport
+	builtTransport := false
 	if transport == nil {
 		transport = BuildTransport(opts)
+		builtTransport = true
 	}
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   opts.Timeout,
 	}
 
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		if builtTransport {
+			if closer, ok := transport.(interface{ Close() error }); ok {
+				_ = closer.Close()
+			}
+		}
+		return nil, err
+	}
+	if builtTransport {
+		if closer, ok := transport.(interface{ Close() error }); ok && resp.Body != nil {
+			resp.Body = &closeAfterBody{ReadCloser: resp.Body, closeFn: closer.Close}
+		}
+	}
+	return resp, nil
 }
 
 // newTransport returns an HTTP transport based on http.DefaultTransport.
@@ -142,14 +190,14 @@ func newTransport(opts Options) (http.RoundTripper, error) {
 	if opts.BaseTransport != nil {
 		if tr, ok := opts.BaseTransport.(*http.Transport); ok {
 			cloned := tr.Clone()
-			cfg, err := TLSConfigFromOptions(opts)
+			cfg, cleanup, err := TLSConfigWithCleanupFromOptions(opts)
 			if err != nil {
 				return nil, err
 			}
 			if cfg.InsecureSkipVerify || cfg.MinVersion != 0 || len(cfg.Certificates) > 0 || cfg.RootCAs != nil {
 				cloned.TLSClientConfig = cfg
 			}
-			return cloned, nil
+			return wrapTransportWithCleanup(cloned, cleanup), nil
 		}
 		if hasTLSOptions(opts) {
 			return nil, fmt.Errorf("custom base transport does not support TLS option overrides")
@@ -158,14 +206,14 @@ func newTransport(opts Options) (http.RoundTripper, error) {
 	}
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	cfg, err := TLSConfigFromOptions(opts)
+	cfg, cleanup, err := TLSConfigWithCleanupFromOptions(opts)
 	if err != nil {
 		return nil, err
 	}
 	if cfg.InsecureSkipVerify || cfg.MinVersion != 0 || len(cfg.Certificates) > 0 || cfg.RootCAs != nil {
 		tr.TLSClientConfig = cfg
 	}
-	return tr, nil
+	return wrapTransportWithCleanup(tr, cleanup), nil
 }
 
 func hasTLSOptions(opts Options) bool {
@@ -213,11 +261,40 @@ func BuildTransport(opts Options) http.RoundTripper {
 	}
 	ct := httpcache.NewTransport(dc)
 	ct.Transport = inner
-	return ct
+	return wrapTransportWithCloseFns(ct, transportCleanup(inner)...)
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func wrapTransportWithCleanup(rt http.RoundTripper, cleanup io.Closer) http.RoundTripper {
+	closeFns := transportCleanup(rt)
+	if cleanup != nil {
+		closeFns = append(closeFns, cleanup.Close)
+	}
+	return wrapTransportWithCloseFns(rt, closeFns...)
+}
+
+func wrapTransportWithCloseFns(rt http.RoundTripper, closeFns ...func() error) http.RoundTripper {
+	if len(closeFns) == 0 {
+		return rt
+	}
+	return &closeableTransport{inner: rt, closeFns: closeFns}
+}
+
+func transportCleanup(rt http.RoundTripper) []func() error {
+	var closeFns []func() error
+	if closer, ok := rt.(interface{ Close() error }); ok {
+		closeFns = append(closeFns, closer.Close)
+	}
+	if idleCloser, ok := rt.(interface{ CloseIdleConnections() }); ok {
+		closeFns = append(closeFns, func() error {
+			idleCloser.CloseIdleConnections()
+			return nil
+		})
+	}
+	return closeFns
 }

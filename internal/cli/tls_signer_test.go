@@ -49,6 +49,7 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 	caPath := filepath.Join(certDir, "ca.pem")
 	clientCertPath := filepath.Join(certDir, "client.pem")
 	clientKeyPath := filepath.Join(certDir, "client.key")
+	shutdownFile := filepath.Join(certDir, "shutdown.txt")
 	for path, data := range map[string][]byte{
 		caPath:         caPEM,
 		clientCertPath: clientCertPEM,
@@ -59,6 +60,7 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 		}
 	}
 	t.Setenv("RSH_TLS_SIGNER_MODE", "")
+	t.Setenv("RSH_TLS_SIGNER_SHUTDOWN_FILE", shutdownFile)
 
 	serverCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
 	if err != nil {
@@ -107,6 +109,9 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 	}
 	if got := out.String(); got == "" || got == "null\n" {
 		t.Fatalf("expected response output, got %q", got)
+	}
+	if _, err := os.Stat(shutdownFile); err != nil {
+		t.Fatalf("expected tls signer shutdown marker, got %v", err)
 	}
 }
 

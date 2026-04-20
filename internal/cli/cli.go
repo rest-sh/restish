@@ -72,6 +72,7 @@ type CLI struct {
 	plugins            []internalplugin.Plugin
 	pluginsByHook      map[string][]internalplugin.Plugin
 	customAuthHandlers map[string]authpkg.Handler
+	requestClosers     []io.Closer
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -206,6 +207,9 @@ func (c *CLI) baseHTTPTransport() http.RoundTripper {
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).
 func (c *CLI) Run(args []string) error {
+	c.requestClosers = nil
+	defer c.closeRequestClosers()
+
 	// On first run (no config file yet), suggest shell setup if on a supported
 	// shell so users discover the noglob alias before hitting the foot-gun.
 	if _, statErr := os.Stat(c.configFilePath()); errors.Is(statErr, os.ErrNotExist) && output.IsTerminal(c.Stderr) {
@@ -264,6 +268,20 @@ func (c *CLI) Run(args []string) error {
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
 	return root.Execute()
+}
+
+func (c *CLI) registerRequestCloser(closer io.Closer) {
+	if closer == nil {
+		return
+	}
+	c.requestClosers = append(c.requestClosers, closer)
+}
+
+func (c *CLI) closeRequestClosers() {
+	for i := len(c.requestClosers) - 1; i >= 0; i-- {
+		_ = c.requestClosers[i].Close()
+	}
+	c.requestClosers = nil
 }
 
 // generatedAPINames returns the APIs whose generated commands should be

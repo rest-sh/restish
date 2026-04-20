@@ -47,9 +47,12 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cfg, err := request.TLSConfigFromOptions(opts)
+	cfg, cleanup, err := request.TLSConfigWithCleanupFromOptions(opts)
 	if err != nil {
 		return err
+	}
+	if cleanup != nil {
+		defer cleanup.Close()
 	}
 	if cfg.ServerName == "" {
 		cfg.ServerName = u.Hostname()

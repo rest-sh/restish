@@ -92,6 +92,12 @@ func main() {
 		if err := dec.ReadMessage(&msg); err != nil {
 			os.Exit(1)
 		}
+		if msg["type"] == plugin.MsgTypeTLSSignerShutdown {
+			if shutdownFile := os.Getenv("RSH_TLS_SIGNER_SHUTDOWN_FILE"); shutdownFile != "" {
+				_ = os.WriteFile(shutdownFile, []byte("shutdown"), 0o644)
+			}
+			return
+		}
 		if msg["type"] != "sign" {
 			continue
 		}
@@ -100,6 +106,11 @@ func main() {
 		}
 		if mode == "error" {
 			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": "device removed"})
+			continue
+		}
+		if mode == "stderr-error" {
+			fmt.Fprintln(os.Stderr, "pin incorrect")
+			_ = plugin.WriteMessage(os.Stdout, map[string]any{"error": "sign failed"})
 			continue
 		}
 		digest := msgBytes(msg["digest"])

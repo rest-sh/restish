@@ -79,6 +79,19 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
+func (rt retryTransport) Close() error {
+	if closer, ok := rt.inner.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+func (rt retryTransport) CloseIdleConnections() {
+	if closer, ok := rt.inner.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 // waitDuration returns the duration to wait before the next attempt.
 // It honours the Retry-After response header when present (capped at 60s);
 // otherwise it computes exponential backoff with ±25 % jitter.

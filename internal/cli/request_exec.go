@@ -57,6 +57,9 @@ func (c *CLI) prepareRequest(
 	// Build the transport once so follow-up requests can reuse the same
 	// connection pool via the returned opts value.
 	opts.Transport = request.BuildTransport(opts)
+	if closer, ok := opts.Transport.(io.Closer); ok {
+		c.registerRequestCloser(closer)
+	}
 
 	// Chain request-middleware plugins after auth.
 	origOnReq := opts.OnRequest
@@ -122,6 +125,15 @@ func (c *CLI) requestBodyReader(contentType string, bodyValue any, headers *[]st
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {
 	return request.Do(ctx, method, prepared.rawURL, prepared.body, prepared.opts)
+}
+
+func (c *CLI) closePreparedTransport(prepared *preparedRequest) {
+	if prepared == nil || prepared.opts.Transport == nil {
+		return
+	}
+	if closer, ok := prepared.opts.Transport.(io.Closer); ok {
+		_ = closer.Close()
+	}
 }
 
 func (c *CLI) normalizeHTTPResponse(httpResp *http.Response, maxBodyBytes int64) (*output.Response, error) {

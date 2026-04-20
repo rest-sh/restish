@@ -369,6 +369,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 			Error: err.Error(),
 		})
 	}
+	defer c.closePreparedTransport(prepared)
 
 	httpResp, err := c.sendPreparedRequest(reqCtx, method, prepared)
 	if err != nil {

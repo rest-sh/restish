@@ -32,6 +32,7 @@ func (c *CLI) FetchResponse(ctx context.Context, method, rawURL, profileName str
 	if err != nil {
 		return nil, err
 	}
+	defer c.closePreparedTransport(prepared)
 
 	httpResp, err := c.sendPreparedRequest(ctx, method, prepared)
 	if err != nil {

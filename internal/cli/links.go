@@ -35,6 +35,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	defer c.closePreparedTransport(prepared)
 	uri = prepared.rawURL
 
 	httpResp, err := c.sendPreparedRequest(requestContext(cmd), "GET", prepared)

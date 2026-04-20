@@ -107,6 +107,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	if err != nil {
 		return err
 	}
+	defer c.closePreparedTransport(prepared)
 	rawURL = prepared.rawURL
 	apiName = prepared.apiName
 	opts = prepared.opts
