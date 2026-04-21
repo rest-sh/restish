@@ -20,12 +20,14 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Use:   "api",
 		Short: "Manage registered API configurations",
 	}
-	apiCmd.AddCommand(&cobra.Command{
+	clearAuthCmd := &cobra.Command{
 		Use:   "clear-auth-cache <name>",
 		Short: "Delete the cached OAuth2 token for a named API",
 		Args:  cobra.ExactArgs(1),
 		RunE:  c.runClearAuthCache,
-	})
+	}
+	clearAuthCmd.Flags().Bool("all", false, "Delete cached auth tokens for every profile of the named API")
+	apiCmd.AddCommand(clearAuthCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all configured APIs",
@@ -89,9 +91,17 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 	}
 
 	profileName := c.profileFromCmd(cmd)
+	allProfiles, _ := cmd.Flags().GetBool("all")
 
-	key := apiName + ":" + profileName
 	tc := auth.NewTokenCache(c.tokenCachePath())
+	if allProfiles {
+		if err := tc.DeletePrefix(apiName + ":"); err != nil {
+			return fmt.Errorf("clear-auth-cache: %w", err)
+		}
+		fmt.Fprintf(c.Stdout, "Cleared auth cache for %q (all profiles)\n", apiName)
+		return nil
+	}
+	key := apiName + ":" + profileName
 	if err := tc.Delete(key); err != nil {
 		return fmt.Errorf("clear-auth-cache: %w", err)
 	}
@@ -278,7 +288,7 @@ func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any
 		if prof == nil || prof.Auth == nil {
 			continue
 		}
-		handler, err := c.authHandlerFor(prof.Auth)
+		handler, err := c.authHandlerFor(prof.Auth, authHandlerOptions{})
 		if err != nil {
 			continue
 		}

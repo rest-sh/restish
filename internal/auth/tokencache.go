@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	configpkg "github.com/danielgtaylor/restish/v2/internal/config"
 )
 
 // CachedToken holds a cached OAuth2 access token and optional refresh token.
@@ -30,10 +33,11 @@ func (t *CachedToken) IsExpired() bool {
 // TokenCache persists OAuth2 tokens as a flat JSON map at a given file path.
 // All operations are safe for concurrent use.
 type TokenCache struct {
-	path   string
-	mu     sync.Mutex
-	loaded bool
-	cache  map[string]CachedToken
+	path    string
+	mu      sync.Mutex
+	loaded  bool
+	cache   map[string]CachedToken
+	modTime time.Time
 }
 
 // NewTokenCache returns a TokenCache that stores tokens at path.
@@ -60,34 +64,76 @@ func (c *TokenCache) Get(key string) (*CachedToken, error) {
 func (c *TokenCache) Set(key string, token CachedToken) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	m, err := c.load()
+	lock, err := configpkg.LockSiblingFile(c.path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	m, err := c.loadLocked()
 	if err != nil {
 		return err
 	}
 	m[key] = token
-	return c.save(m)
+	return c.saveLocked(m)
 }
 
 // Delete removes the entry for key. Returns nil when key is absent.
 func (c *TokenCache) Delete(key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	m, err := c.load()
+	lock, err := configpkg.LockSiblingFile(c.path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	m, err := c.loadLocked()
 	if err != nil {
 		return err
 	}
 	delete(m, key)
-	return c.save(m)
+	return c.saveLocked(m)
+}
+
+// DeletePrefix removes every cached token whose key begins with prefix.
+func (c *TokenCache) DeletePrefix(prefix string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	lock, err := configpkg.LockSiblingFile(c.path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	m, err := c.loadLocked()
+	if err != nil {
+		return err
+	}
+	for key := range m {
+		if strings.HasPrefix(key, prefix) {
+			delete(m, key)
+		}
+	}
+	return c.saveLocked(m)
 }
 
 func (c *TokenCache) load() (map[string]CachedToken, error) {
 	if c.loaded {
-		return c.cache, nil
+		info, err := os.Stat(c.path)
+		if err == nil && info.ModTime().Equal(c.modTime) {
+			return c.cache, nil
+		}
+		if errors.Is(err, os.ErrNotExist) && c.modTime.IsZero() {
+			return c.cache, nil
+		}
 	}
+	return c.loadLocked()
+}
+
+func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 	data, err := os.ReadFile(c.path)
 	if errors.Is(err, os.ErrNotExist) {
 		c.cache = map[string]CachedToken{}
 		c.loaded = true
+		c.modTime = time.Time{}
 		return c.cache, nil
 	}
 	if err != nil {
@@ -97,12 +143,16 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
+	info, statErr := os.Stat(c.path)
+	if statErr == nil {
+		c.modTime = info.ModTime()
+	}
 	c.cache = m
 	c.loaded = true
 	return c.cache, nil
 }
 
-func (c *TokenCache) save(m map[string]CachedToken) error {
+func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -128,6 +178,10 @@ func (c *TokenCache) save(m map[string]CachedToken) error {
 	}
 	if err := os.Rename(tmpName, c.path); err != nil {
 		return err
+	}
+	info, statErr := os.Stat(c.path)
+	if statErr == nil {
+		c.modTime = info.ModTime()
 	}
 	c.cache = m
 	c.loaded = true

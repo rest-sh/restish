@@ -246,6 +246,13 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.
 	return atomicWriteFileLocked(path, data, fileMode, dirMode, lock)
 }
 
+// LockSiblingFile acquires the sibling advisory lock used for config-style
+// read-modify-write operations on path. Call Close on the returned closer to
+// release the lock.
+func LockSiblingFile(path string) (io.Closer, error) {
+	return lockConfigFile(path)
+}
+
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, lock *fileLock) error {
 	_ = lock
 	dir := filepath.Dir(path)

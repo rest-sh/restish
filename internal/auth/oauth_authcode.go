@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,7 @@ const authTimeout = 5 * time.Minute
 // token is used (if available), otherwise a new browser flow is started.
 type AuthorizationCode struct {
 	// Cache stores fetched tokens.
-	Cache *TokenCache
+	Cache TokenStore
 	// HTTPClient is used for token requests. Defaults to http.DefaultClient when nil.
 	HTTPClient *http.Client
 	// OpenBrowser is called with the authorization URL. When nil the default
@@ -33,12 +34,20 @@ type AuthorizationCode struct {
 	OpenBrowser func(url string) error
 	// Stderr receives status messages during the browser flow.
 	Stderr io.Writer
+	// Prompt is used to read a pasted authorization code for headless fallback.
+	Prompt func(prompt string) (string, error)
+	// CanPrompt reports whether manual code entry is safe for this invocation.
+	CanPrompt bool
+	// NoBrowser skips automatic browser launch and immediately falls back to
+	// printing the auth URL for manual use.
+	NoBrowser bool
 }
 
 func (h *AuthorizationCode) Parameters() []Param {
 	return []Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret (optional for public clients)", Required: false, Secret: true},
+		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
 		{Name: "authorize_url", Description: "OAuth2 authorization endpoint URL", Required: false},
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when authorize_url/token_url are absent)", Required: false},
@@ -48,7 +57,7 @@ func (h *AuthorizationCode) Parameters() []Param {
 }
 
 func (h *AuthorizationCode) OnRequest(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params)
+	token, err := h.resolveToken(req.Context(), params, false)
 	if err != nil {
 		return err
 	}
@@ -56,14 +65,25 @@ func (h *AuthorizationCode) OnRequest(req *http.Request, params map[string]strin
 	return nil
 }
 
-func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]string) (string, error) {
+func (h *AuthorizationCode) OnRequestForce(req *http.Request, params map[string]string) error {
+	token, err := h.resolveToken(req.Context(), params, true)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
+func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]string, force bool) (string, error) {
 	cacheKey := params["_cache_key"]
+	var cached *CachedToken
 
 	// Try cache first.
 	if h.Cache != nil && cacheKey != "" {
-		cached, err := h.Cache.Get(cacheKey)
-		if err == nil && cached != nil {
-			if !cached.IsExpired() {
+		cachedToken, err := h.Cache.Get(cacheKey)
+		if err == nil && cachedToken != nil {
+			cached = cachedToken
+			if !force && !cached.IsExpired() {
 				return cached.AccessToken, nil
 			}
 			// Expired but has a refresh token — try to refresh.
@@ -79,7 +99,13 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 					}
 					return refreshed.AccessToken, nil
 				}
-				// Refresh failed — fall through to browser flow.
+				if h.Stderr != nil {
+					fmt.Fprintf(h.Stderr, "OAuth refresh failed: %v\n", err)
+				}
+				if !isTokenEndpointErrorCode(err, "invalid_grant") {
+					return "", err
+				}
+				// Refresh token rejected — fall through to interactive auth.
 			}
 		}
 	}
@@ -100,6 +126,41 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 	}
 	return ct.AccessToken, nil
 }
+
+func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
+	h2 := &AuthorizationCode{
+		Cache:       h.Cache,
+		HTTPClient:  h.HTTPClient,
+		OpenBrowser: h.OpenBrowser,
+		Stderr:      h.Stderr,
+		Prompt:      h.Prompt,
+		CanPrompt:   h.CanPrompt,
+		NoBrowser:   h.NoBrowser,
+	}
+	if ac.TokenStore != nil {
+		h2.Cache = ac.TokenStore
+	}
+	if ac.HTTPClient != nil {
+		h2.HTTPClient = ac.HTTPClient
+	}
+	if ac.Stderr != nil {
+		h2.Stderr = ac.Stderr
+	}
+	if ac.Prompter != nil {
+		h2.Prompt = ac.Prompter.Prompt
+		h2.CanPrompt = true
+	}
+	params := cloneAuthParams(ac.Params)
+	if key := authCacheKey(ac); key != "" {
+		params["_cache_key"] = key
+	}
+	if ac.Force {
+		return h2.OnRequestForce(req, params)
+	}
+	return h2.OnRequest(req, params)
+}
+
+func (h *AuthorizationCode) SupportsForce() bool { return true }
 
 func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
 	if u := params["token_url"]; u != "" {
@@ -140,10 +201,7 @@ func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]str
 		"refresh_token": {refreshToken},
 		"client_id":     {params["client_id"]},
 	}
-	if cs := params["client_secret"]; cs != "" {
-		form.Set("client_secret", cs)
-	}
-	token, err := FetchToken(ctx, h.HTTPClient, tokenURL, form.Encode())
+	token, err := FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
 	if err != nil {
 		return CachedToken{}, err
 	}
@@ -230,18 +288,50 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	if scopes := params["scopes"]; scopes != "" {
 		q.Set("scope", scopes)
 	}
+	for key, value := range extraOAuthParams(params, map[string]bool{
+		"_cache_key":    true,
+		"authorize_url": true,
+		"issuer_url":    true,
+		"redirect_port": true,
+		"token_url":     true,
+	}) {
+		if q.Get(key) == "" {
+			q.Set(key, value)
+		}
+	}
 	fullAuthorizeURL := authorizeURL + "?" + q.Encode()
 
 	// Notify user and open browser.
 	if h.Stderr != nil {
 		fmt.Fprintf(h.Stderr, "Opening browser for authentication:\n  %s\n", fullAuthorizeURL)
 	}
-	opener := h.OpenBrowser
-	if opener == nil {
-		opener = DefaultOpenBrowser
+
+	var openErr error
+	if !h.NoBrowser {
+		opener := h.OpenBrowser
+		if opener == nil {
+			opener = DefaultOpenBrowser
+		}
+		if err := opener(fullAuthorizeURL); err != nil {
+			openErr = err
+			if h.Stderr != nil {
+				fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open the URL above manually.\n", err)
+			}
+		}
+	} else if h.Stderr != nil {
+		fmt.Fprintln(h.Stderr, "Browser launch disabled; open the URL above manually.")
 	}
-	if err := opener(fullAuthorizeURL); err != nil && h.Stderr != nil {
-		fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open the URL above manually.\n", err)
+
+	manualCodeCh := make(chan string, 1)
+	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
+		go func() {
+			code, err := h.Prompt("Paste the authorization code: ")
+			if err != nil {
+				trySendErr(errCh, err)
+				return
+			}
+			manualCodeCh <- strings.TrimSpace(code)
+		}()
 	}
 
 	// Wait for callback.
@@ -251,6 +341,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	var code string
 	select {
 	case code = <-codeCh:
+	case code = <-manualCodeCh:
 	case err = <-errCh:
 		return CachedToken{}, fmt.Errorf("callback error: %w", err)
 	case <-ctx2.Done():
@@ -265,10 +356,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		"client_id":     {params["client_id"]},
 		"code_verifier": {verifier},
 	}
-	if cs := params["client_secret"]; cs != "" {
-		form.Set("client_secret", cs)
-	}
-	return FetchToken(ctx, h.HTTPClient, tokenURL, form.Encode())
+	return FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
 }
 
 func trySendErr(errCh chan error, err error) {
@@ -311,7 +399,6 @@ func DefaultOpenBrowser(rawURL string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	go cmd.Wait() //nolint:errcheck
 	return nil
 }
 

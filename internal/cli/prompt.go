@@ -21,12 +21,16 @@ func readPromptValue(prompt string, src io.Reader, stderr io.Writer, hidden bool
 		}
 	}
 
-	scanner := bufio.NewScanner(src)
-	if scanner.Scan() {
-		return strings.TrimRight(scanner.Text(), "\r\n"), nil
+	reader := bufio.NewReader(src)
+	value, err := reader.ReadString('\n')
+	if err == nil {
+		return strings.TrimRight(value, "\r\n"), nil
 	}
-	if err := scanner.Err(); err != nil {
+	if err != io.EOF {
 		return "", err
+	}
+	if value != "" {
+		return strings.TrimRight(value, "\r\n"), nil
 	}
 	if hidden {
 		return "", fmt.Errorf("unexpected EOF reading password")

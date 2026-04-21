@@ -94,6 +94,10 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Resolve API short names and merge persistent profile settings.
 	profileName := c.profileFromCmd(cmd)
+	authOpts, err := c.authHandlerOptionsFromCmd(cmd)
+	if err != nil {
+		return err
+	}
 	var apiName string
 
 	// Build request body from shorthand args and/or piped stdin.
@@ -103,7 +107,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return fmt.Errorf("building request body: %w", err)
 	}
 
-	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth)
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts)
 	if err != nil {
 		return err
 	}
@@ -495,7 +499,7 @@ func (c *CLI) isAPIShortName(arg string) bool {
 //
 // Returns (expandedURL, apiName, opts). apiName is empty when rawURL is not
 // an API short name.
-func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) (string, string, request.Options, error) {
+func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, authOpts authHandlerOptions) (string, string, request.Options, error) {
 	if c.cfg == nil || len(c.cfg.APIs) == 0 {
 		return rawURL, "", opts, nil
 	}
@@ -521,7 +525,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 				if prof != nil {
 					opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
 					opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-					opts.OnRequest = c.authOnRequest(name, profileName, prof)
+					callbacks := c.authOnRequest(name, profileName, prof, authOpts)
+					opts.OnRequest = callbacks.OnRequest
+					opts.OnUnauthorized = callbacks.OnUnauthorized
 					if opts.TLSSignerName == "" {
 						opts.TLSSignerName = prof.TLSSigner
 					}
@@ -530,7 +536,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 					if apiCfg.Profiles != nil {
 						return rawURL, name, opts, fmt.Errorf("profile %q not found for API %q", profileName, name)
 					}
-					opts.OnRequest = c.authOnRequest(name, profileName, nil)
+					callbacks := c.authOnRequest(name, profileName, nil, authOpts)
+					opts.OnRequest = callbacks.OnRequest
+					opts.OnUnauthorized = callbacks.OnUnauthorized
 				}
 				return rawURL, name, opts, nil
 			}
@@ -551,7 +559,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 		if api.Profiles != nil {
 			return rawURL, apiName, opts, fmt.Errorf("profile %q not found for API %q", profileName, apiName)
 		}
-		opts.OnRequest = c.authOnRequest(apiName, profileName, nil)
+		callbacks := c.authOnRequest(apiName, profileName, nil, authOpts)
+		opts.OnRequest = callbacks.OnRequest
+		opts.OnUnauthorized = callbacks.OnUnauthorized
 	}
 
 	// Build the expanded URL.
@@ -565,7 +575,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options) 
 	if prof != nil {
 		opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
 		opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-		opts.OnRequest = c.authOnRequest(apiName, profileName, prof)
+		callbacks := c.authOnRequest(apiName, profileName, prof, authOpts)
+		opts.OnRequest = callbacks.OnRequest
+		opts.OnUnauthorized = callbacks.OnUnauthorized
 		if opts.TLSSignerName == "" {
 			opts.TLSSignerName = prof.TLSSigner
 		}

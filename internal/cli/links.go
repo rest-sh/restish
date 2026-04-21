@@ -31,7 +31,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	profileName := c.profileFromCmd(cmd)
-	prepared, err := c.prepareRequest(uri, profileName, opts, nil, nil, false)
+	prepared, err := c.prepareRequest(uri, profileName, opts, nil, nil, false, authHandlerOptions{})
 	if err != nil {
 		return err
 	}

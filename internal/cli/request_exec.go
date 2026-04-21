@@ -18,6 +18,7 @@ type preparedRequest struct {
 	apiName string
 	opts    request.Options
 	body    io.Reader
+	bodyRaw []byte
 }
 
 func (c *CLI) prepareRequest(
@@ -26,13 +27,14 @@ func (c *CLI) prepareRequest(
 	bodyValue any,
 	extraHeaders []string,
 	noAuth bool,
+	authOpts authHandlerOptions,
 ) (*preparedRequest, error) {
 	opts = cloneRequestOptions(opts)
 	if len(extraHeaders) > 0 {
 		opts.Headers = append(opts.Headers, extraHeaders...)
 	}
 
-	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts)
+	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts, authOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -79,12 +81,21 @@ func (c *CLI) prepareRequest(
 	if err != nil {
 		return nil, fmt.Errorf("encoding request body: %w", err)
 	}
+	var bodyRaw []byte
+	if body != nil {
+		bodyRaw, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("reading prepared body: %w", err)
+		}
+		body = bytes.NewReader(bodyRaw)
+	}
 
 	return &preparedRequest{
 		rawURL:  rawURL,
 		apiName: apiName,
 		opts:    opts,
 		body:    body,
+		bodyRaw: bodyRaw,
 	}, nil
 }
 
@@ -127,7 +138,23 @@ func (c *CLI) requestBodyReader(contentType string, bodyValue any, headers *[]st
 }
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {
-	return request.Do(ctx, method, prepared.rawURL, prepared.body, prepared.opts)
+	bodyReader := func() io.Reader {
+		if len(prepared.bodyRaw) == 0 {
+			return nil
+		}
+		return bytes.NewReader(prepared.bodyRaw)
+	}
+	resp, err := request.Do(ctx, method, prepared.rawURL, bodyReader(), prepared.opts)
+	if err != nil || resp == nil || resp.StatusCode != http.StatusUnauthorized || prepared.opts.OnUnauthorized == nil {
+		return resp, err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	retryOpts := cloneRequestOptions(prepared.opts)
+	retryOpts.Transport = prepared.opts.Transport
+	retryOpts.OnRequest = retryOpts.OnUnauthorized
+	return request.Do(ctx, method, prepared.rawURL, bodyReader(), retryOpts)
 }
 
 func (c *CLI) closePreparedTransport(prepared *preparedRequest) {

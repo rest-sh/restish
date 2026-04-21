@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -40,4 +41,12 @@ func (h *HTTPBasic) OnRequest(req *http.Request, params map[string]string) error
 	token := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 	req.Header.Set("Authorization", "Basic "+token)
 	return nil
+}
+
+func (h *HTTPBasic) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+	prompter := h.Prompter
+	if prompter == nil && ac.Prompter != nil {
+		prompter = ac.Prompter.PromptSecret
+	}
+	return (&HTTPBasic{Prompter: prompter}).OnRequest(req, ac.Params)
 }

@@ -176,3 +176,65 @@ func TestClientCredentials_SendsExpectedFormFields(t *testing.T) {
 		t.Fatalf("unexpected form values: %#v", got)
 	}
 }
+
+func TestClientCredentials_AuthMethodClientSecretBasic(t *testing.T) {
+	var got url.Values
+	var authz string
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		authz = r.Header.Get("Authorization")
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		got = r.Form
+		return testResponse(200, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":3600}`), nil
+	})
+
+	h := &ClientCredentials{HTTPClient: client}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	params := map[string]string{
+		"client_id":     "id1",
+		"client_secret": "sec1",
+		"token_url":     "https://auth.example.com/token",
+		"auth_method":   "client_secret_basic",
+	}
+	if err := h.OnRequest(req, params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authz == "" {
+		t.Fatal("expected Authorization header on token request")
+	}
+	if got.Get("client_secret") != "" {
+		t.Fatalf("client_secret should not be in form for basic auth: %#v", got)
+	}
+	if got.Get("client_id") != "id1" {
+		t.Fatalf("client_id = %q", got.Get("client_id"))
+	}
+}
+
+func TestClientCredentials_PassesThroughExtraTokenParams(t *testing.T) {
+	var got url.Values
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm: %v", err)
+		}
+		got = r.Form
+		return testResponse(200, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":3600}`), nil
+	})
+
+	h := &ClientCredentials{HTTPClient: client}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	params := map[string]string{
+		"client_id":     "id1",
+		"client_secret": "sec1",
+		"token_url":     "https://auth.example.com/token",
+		"audience":      "https://api.example.com/",
+		"resource":      "urn:example",
+		"organization":  "acme",
+	}
+	if err := h.OnRequest(req, params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Get("audience") != "https://api.example.com/" || got.Get("resource") != "urn:example" || got.Get("organization") != "acme" {
+		t.Fatalf("unexpected passthrough form values: %#v", got)
+	}
+}

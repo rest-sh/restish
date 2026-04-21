@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,7 +32,9 @@ import (
 //
 // An empty or absent stdout response is a no-op (tool declined to mutate).
 // Compatible with the v1 external-tool auth wire format.
-type ExternalTool struct{}
+type ExternalTool struct {
+	Stderr io.Writer
+}
 
 func (a *ExternalTool) Parameters() []Param {
 	return []Param{
@@ -92,6 +95,7 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 	// Using StdinPipe + manual write before Start would deadlock for payloads
 	// larger than the OS pipe buffer (~64 KB).
 	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Stderr = a.Stderr
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -124,4 +128,12 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 		}
 	}
 	return nil
+}
+
+func (a *ExternalTool) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+	stderr := a.Stderr
+	if stderr == nil {
+		stderr = ac.Stderr
+	}
+	return (&ExternalTool{Stderr: stderr}).OnRequest(req, ac.Params)
 }

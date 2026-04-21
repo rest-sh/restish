@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -18,6 +19,10 @@ func (testAuthHandler) Parameters() []authpkg.Param { return nil }
 func (testAuthHandler) OnRequest(req *http.Request, params map[string]string) error {
 	req.Header.Set("Authorization", "Bearer "+params["token"])
 	return nil
+}
+
+func (h testAuthHandler) Authenticate(_ context.Context, req *http.Request, ac authpkg.AuthContext) error {
+	return h.OnRequest(req, ac.Params)
 }
 
 func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
@@ -47,6 +52,7 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 		map[string]any{"name": "Alice"},
 		[]string{"X-Extra: 2"},
 		false,
+		authHandlerOptions{},
 	)
 	if err != nil {
 		t.Fatalf("prepareRequest() error = %v", err)
@@ -112,7 +118,7 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 		},
 	}
 
-	prepared, err := c.prepareRequest("svc/items", "default", request.Options{}, nil, nil, true)
+	prepared, err := c.prepareRequest("svc/items", "default", request.Options{}, nil, nil, true, authHandlerOptions{})
 	if err != nil {
 		t.Fatalf("prepareRequest() error = %v", err)
 	}
@@ -181,7 +187,7 @@ func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := c.prepareRequest("svc/items", "missing", request.Options{}, nil, nil, false)
+	_, err := c.prepareRequest("svc/items", "missing", request.Options{}, nil, nil, false, authHandlerOptions{})
 	if err == nil {
 		t.Fatal("expected missing profile to return an error")
 	}

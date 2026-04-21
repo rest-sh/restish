@@ -157,7 +157,7 @@ func TestUnknownAuthTypeListsSupportedValues(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unknown auth type error")
 	}
-	for _, want := range []string{"http-basic", "oauth-client-credentials", "oauth-authorization-code", "external-tool"} {
+	for _, want := range []string{"http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code", "external-tool"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected supported auth type %q in error, got %v", want, err)
 		}

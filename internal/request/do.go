@@ -86,6 +86,9 @@ type Options struct {
 	// params have been applied, immediately before the request is sent.
 	// Auth handlers use this hook to inject credentials.
 	OnRequest func(*http.Request) error
+	// OnUnauthorized, when non-nil, is used by callers that want to retry once
+	// after a 401 with freshly acquired credentials.
+	OnUnauthorized func(*http.Request) error
 	// CacheDir, if non-empty, enables RFC 7234 response caching in that
 	// directory.  NoCache overrides this and skips the cache entirely.
 	CacheDir string

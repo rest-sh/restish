@@ -117,7 +117,7 @@ func (c *CLI) AddEncoding(e *content.Encoding) {
 // AddAuthHandler registers a custom auth handler under the given type name.
 // The name is used in the profile's auth.type config field.
 // Built-in names (http-basic, oauth-client-credentials,
-// oauth-authorization-code, external-tool) can be overridden.
+// oauth-authorization-code, oauth-device-code, external-tool) can be overridden.
 // Call this before CLI.Run.
 //
 // Use the github.com/danielgtaylor/restish/v2/auth package for the Handler

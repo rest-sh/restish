@@ -1,13 +1,30 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/danielgtaylor/restish/v2/internal/auth"
 	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/danielgtaylor/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
+
+type authHandlerOptions struct {
+	NoBrowser bool
+}
+
+type authCallbacks struct {
+	OnRequest      func(*http.Request) error
+	OnUnauthorized func(*http.Request) error
+}
+
+type cliPrompter struct{ cli *CLI }
+
+func (p cliPrompter) Prompt(prompt string) (string, error)       { return p.cli.promptCode(prompt) }
+func (p cliPrompter) PromptSecret(prompt string) (string, error) { return p.cli.promptSecret(prompt) }
 
 // addAuthHeaderCommand registers the "auth-header" command on root.
 func (c *CLI) addAuthHeaderCommand(root *cobra.Command) {
@@ -38,14 +55,18 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
 	}
 
-	handler, err := c.authHandlerFor(prof.Auth)
+	authOpts, err := c.authHandlerOptionsFromCmd(cmd)
+	if err != nil {
+		return err
+	}
+	handler, err := c.authHandlerFor(prof.Auth, authOpts)
 	if err != nil {
 		return err
 	}
 
-	params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
+	params := c.buildAuthParams(prof.Auth.Params)
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	if err := handler.OnRequest(req, params); err != nil {
+	if err := handler.Authenticate(context.Background(), req, c.authContext(apiName, profileName, params, false)); err != nil {
 		return fmt.Errorf("building auth header: %w", err)
 	}
 
@@ -60,7 +81,18 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 // authHandlerFor returns the Handler for the given AuthConfig.
 // Custom handlers registered via CLI.AddAuthHandler take precedence over
 // built-in handlers.
-func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
+func (c *CLI) authHandlerOptionsFromCmd(cmd *cobra.Command) (authHandlerOptions, error) {
+	if cmd == nil {
+		return authHandlerOptions{}, nil
+	}
+	noBrowser, err := cmd.Flags().GetBool("rsh-no-browser")
+	if err != nil {
+		return authHandlerOptions{}, err
+	}
+	return authHandlerOptions{NoBrowser: noBrowser}, nil
+}
+
+func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (auth.Handler, error) {
 	if c.customAuthHandlers != nil {
 		if h, ok := c.customAuthHandlers[ac.Type]; ok {
 			return h, nil
@@ -79,26 +111,35 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig) (auth.Handler, error) {
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 			Stderr:     c.Stderr,
+			Prompt:     c.promptCode,
+			CanPrompt:  c.canPromptCode(),
+			NoBrowser:  opts.NoBrowser,
+		}, nil
+	case "oauth-device-code":
+		return &auth.DeviceCode{
+			Cache:      auth.NewTokenCache(c.tokenCachePath()),
+			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
+			Stderr:     c.Stderr,
 		}, nil
 	case "external-tool":
-		return &auth.ExternalTool{}, nil
+		return &auth.ExternalTool{Stderr: c.Stderr}, nil
 	default:
-		return nil, fmt.Errorf("unknown auth type %q; supported: http-basic, oauth-client-credentials, oauth-authorization-code, external-tool", ac.Type)
+		return nil, fmt.Errorf("unknown auth type %q; supported: http-basic, oauth-client-credentials, oauth-authorization-code, oauth-device-code, external-tool", ac.Type)
 	}
 }
 
-// authOnRequest returns an OnRequest hook for the given profile's auth config,
-// or nil when no auth is configured.
-// apiName and profileName are injected into params as "_cache_key".
-func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileConfig) func(*http.Request) error {
+// authOnRequest returns auth callbacks for the given profile's auth config,
+// or zero values when no auth is configured.
+func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileConfig, opts authHandlerOptions) authCallbacks {
 	// Determine whether built-in auth is configured.
-	var builtinOnReq func(*http.Request) error
+	var callbacks authCallbacks
 	if prof != nil && prof.Auth != nil {
-		handler, err := c.authHandlerFor(prof.Auth)
+		handler, err := c.authHandlerFor(prof.Auth, opts)
 		if err != nil {
-			return func(*http.Request) error { return err }
+			callbacks.OnRequest = func(*http.Request) error { return err }
+			return callbacks
 		}
-		params := c.buildAuthParams(apiName, profileName, prof.Auth.Params)
+		params := c.buildAuthParams(prof.Auth.Params)
 		rawParams := prof.Auth.Params
 		secretKeys := make(map[string]bool)
 		for _, p := range handler.Parameters() {
@@ -106,36 +147,58 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 				secretKeys[p.Name] = true
 			}
 		}
-		builtinOnReq = func(req *http.Request) error {
-			if err := handler.OnRequest(req, params); err != nil {
+		callbacks.OnRequest = func(req *http.Request) error {
+			if err := handler.Authenticate(req.Context(), req, c.authContext(apiName, profileName, params, false)); err != nil {
 				return err
 			}
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
+		}
+		if forceable, ok := handler.(auth.ForceCapable); ok && forceable.SupportsForce() {
+			callbacks.OnUnauthorized = func(req *http.Request) error {
+				if err := handler.Authenticate(req.Context(), req, c.authContext(apiName, profileName, params, true)); err != nil {
+					return err
+				}
+				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
+			}
 		}
 	}
 
 	// Auth hook plugins run even when no built-in auth is configured.
 	hookPlugins := c.pluginsForHook("auth")
-	if builtinOnReq == nil && len(hookPlugins) == 0 {
-		return nil
+	if callbacks.OnRequest == nil && len(hookPlugins) == 0 {
+		return callbacks
 	}
-	if builtinOnReq != nil {
-		return builtinOnReq
+	if callbacks.OnRequest != nil {
+		return callbacks
 	}
 	// No built-in auth but hook plugins exist.
-	return func(req *http.Request) error {
+	callbacks.OnRequest = func(req *http.Request) error {
 		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
+	return callbacks
 }
 
-// buildAuthParams returns a copy of rawParams with "_cache_key" injected.
-func (c *CLI) buildAuthParams(apiName, profileName string, rawParams map[string]string) map[string]string {
-	params := make(map[string]string, len(rawParams)+1)
+// buildAuthParams returns a copy of the user-supplied auth params.
+func (c *CLI) buildAuthParams(rawParams map[string]string) map[string]string {
+	params := make(map[string]string, len(rawParams))
 	for k, v := range rawParams {
 		params[k] = v
 	}
-	params["_cache_key"] = apiName + ":" + profileName
 	return params
+}
+
+func (c *CLI) authContext(apiName, profileName string, params map[string]string, force bool) auth.AuthContext {
+	return auth.AuthContext{
+		APIName:     apiName,
+		ProfileName: profileName,
+		Params:      params,
+		TokenStore:  auth.NewTokenCache(c.tokenCachePath()),
+		Prompter:    cliPrompter{cli: c},
+		Stderr:      c.Stderr,
+		HTTPClient:  &http.Client{Transport: c.baseHTTPTransport()},
+		Logger:      log.New(c.Stderr, "", 0),
+		Force:       force,
+	}
 }
 
 // tokenCachePath returns the effective path for the token cache file.
@@ -155,4 +218,19 @@ func (c *CLI) promptSecret(prompt string) (string, error) {
 		src = c.Stdin
 	}
 	return readPromptValue(prompt, src, c.Stderr, true)
+}
+
+func (c *CLI) promptCode(prompt string) (string, error) {
+	src := c.PassReader
+	if src == nil {
+		src = c.Stdin
+	}
+	return readPromptValue(prompt, src, c.Stderr, false)
+}
+
+func (c *CLI) canPromptCode() bool {
+	if c.PassReader != nil {
+		return true
+	}
+	return output.IsTerminalReader(c.Stdin)
 }

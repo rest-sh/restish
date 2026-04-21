@@ -3,6 +3,7 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -111,5 +112,59 @@ func TestCachedToken_IsExpired(t *testing.T) {
 	zero := CachedToken{}
 	if zero.IsExpired() {
 		t.Error("token with zero Expiry should not be IsExpired")
+	}
+}
+
+func TestTokenCache_ConcurrentSetPreservesBothEntries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.json")
+	tc1 := NewTokenCache(path)
+	tc2 := NewTokenCache(path)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := tc1.Set("api:default", CachedToken{AccessToken: "tok1"}); err != nil {
+			t.Errorf("tc1.Set: %v", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if err := tc2.Set("api:prod", CachedToken{AccessToken: "tok2"}); err != nil {
+			t.Errorf("tc2.Set: %v", err)
+		}
+	}()
+	wg.Wait()
+
+	tc3 := NewTokenCache(path)
+	for key := range map[string]string{"api:default": "tok1", "api:prod": "tok2"} {
+		got, err := tc3.Get(key)
+		if err != nil {
+			t.Fatalf("Get(%q): %v", key, err)
+		}
+		if got == nil {
+			t.Fatalf("expected token for %q", key)
+		}
+	}
+}
+
+func TestTokenCache_ReloadsOnExternalChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.json")
+	tc := NewTokenCache(path)
+	if err := tc.Set("key", CachedToken{AccessToken: "old"}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(path, []byte(`{"key":{"access_token":"new"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := tc.Get("key")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got == nil || got.AccessToken != "new" {
+		t.Fatalf("expected reloaded token, got %+v", got)
 	}
 }

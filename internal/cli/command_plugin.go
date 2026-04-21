@@ -403,7 +403,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		defer cancel()
 	}
 
-	prepared, err := c.prepareRequest(msg.URI, profileName, opts, msg.Body, nil, false)
+	prepared, err := c.prepareRequest(msg.URI, profileName, opts, msg.Body, nil, false, authHandlerOptions{})
 	if err != nil {
 		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
 			Type:      pluginwire.MsgTypeHTTPResponse,

@@ -1,6 +1,9 @@
 package auth
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateOIDCEndpoints(t *testing.T) {
 	cases := []struct {
@@ -80,4 +83,33 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseTokenEndpointErrorRedactsSecrets(t *testing.T) {
+	err := parseTokenEndpointError(400, []byte(`{
+		"error":"invalid_client",
+		"client_secret":"top-secret",
+		"refresh_token":"refresh-secret",
+		"details":{"access_token":"abc"}
+	}`))
+	var tokenErr *tokenEndpointError
+	if !strings.Contains(err.Error(), "invalid_client") {
+		t.Fatalf("expected error code in message, got %v", err)
+	}
+	if !errorAsToken(err, &tokenErr) {
+		t.Fatalf("expected token endpoint error, got %T", err)
+	}
+	for _, secret := range []string{"top-secret", "refresh-secret", "abc"} {
+		if strings.Contains(tokenErr.Body, secret) {
+			t.Fatalf("expected body redaction, got %q", tokenErr.Body)
+		}
+	}
+}
+
+func errorAsToken(err error, target **tokenEndpointError) bool {
+	te, ok := err.(*tokenEndpointError)
+	if ok {
+		*target = te
+	}
+	return ok
 }

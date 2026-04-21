@@ -80,6 +80,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
+	pf.Bool("rsh-no-browser", false, "Disable automatic browser launch for interactive auth flows")
 	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)")
 	pf.Int("rsh-max-events", 0, "Maximum number of SSE events or NDJSON lines to process (0 = unlimited)")
 	pf.Bool("rsh-no-paginate", false, "Disable automatic pagination (return only the first page)")
