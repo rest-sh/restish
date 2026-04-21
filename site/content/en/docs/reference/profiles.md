@@ -139,6 +139,47 @@ Example:
 }
 ```
 
+## `operation_base`
+
+`operation_base` is an API-level field (not inside a profile) that redirects
+the URL prefix used when building requests from generated OpenAPI operations.
+
+By default, Restish builds operation URLs from `base_url` plus the path in
+the OpenAPI spec. Use `operation_base` when the spec's `servers` block differs
+from the actual host, or when operations live on a different URL root than the
+API itself.
+
+Example:
+
+```json
+{
+  "apis": {
+    "billing": {
+      "base_url": "https://billing.example.com",
+      "operation_base": "https://billing.example.com/v1",
+      "profiles": {}
+    }
+  }
+}
+```
+
+With `operation_base` set, each OpenAPI path (e.g. `/invoices`) is appended to
+`operation_base` rather than `base_url`.
+
+Set `operation_base` via `restish api set`:
+
+```bash
+restish api set billing operation_base: "https://billing.example.com/v1"
+```
+
+Remove it with:
+
+```bash
+restish api set billing 'operation_base: undefined'
+```
+
+See also: [API Management Reference](../api-management/).
+
 ## Selecting a Profile
 
 Choose a profile for one invocation:

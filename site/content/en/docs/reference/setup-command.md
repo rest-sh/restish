@@ -28,6 +28,14 @@ restish setup fish
 interpreting Restish shorthand, brackets, and wildcard-like input before the
 CLI receives it.
 
+For `zsh` and `bash`, the alias wraps the command with `noglob` so the shell
+does not expand glob characters before Restish sees them.
+
+For `fish`, the alias wraps the command in a function that calls
+`command restish $argv`. Fish has different globbing semantics from
+POSIX shells and does not support `noglob`. If fish expands a glob pattern in
+your arguments before restish sees it, quote the argument explicitly.
+
 That matters most for:
 
 - shorthand patches such as `tags[0]: blue`

@@ -61,16 +61,18 @@ command name and raw plugin args.
 
 ### Messages A Plugin Can Send
 
-- `http-request`
-- `api-spec`
-- `response`
-- `stdout-data`
-- `stderr-data`
-- `progress`
-- `spinner`
-- `log`
-- `warn`
-- `done`
+- `http-request`: ask Restish to perform an HTTP request on the plugin's behalf
+- `api-spec`: request the OpenAPI spec for a registered API
+- `response`: (reserved for future use)
+- `stdout-data`: raw bytes to emit to the CLI stdout
+- `stderr-data`: raw bytes to emit to the CLI stderr
+- `progress`: increment a progress bar; fields: `total` (int), `increment` (int), `message` (string)
+- `spinner`: show or update a spinner; fields: `message` (string)
+- `log`: emit an informational log line; fields: `message` (string)
+- `warn`: emit a warning line; fields: `message` (string)
+- `prompt`: ask the user for text input; fields: `message` (string). Restish replies with `prompt-response` containing `value` (string).
+- `confirm`: ask the user a yes/no question; fields: `message` (string). Restish replies with `confirm-response` containing `value` (bool).
+- `done`: signal that the command is complete; fields: `exit_code` (int, optional)
 
 ### Messages Restish Sends Back
 

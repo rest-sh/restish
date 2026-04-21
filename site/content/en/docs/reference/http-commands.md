@@ -12,6 +12,8 @@ Restish includes these generic HTTP verbs:
 - `put`
 - `patch`
 - `delete`
+- `head`
+- `options`
 
 These work without API registration.
 
@@ -22,11 +24,13 @@ restish get https://api.rest.sh/
 restish post https://api.rest.sh name: Alice
 restish patch https://api.rest.sh/types string: changed
 restish delete https://api.example.com/items/123
+restish head https://api.rest.sh/
+restish options https://api.rest.sh/
 ```
 
-The first three commands are runnable against the example API. The `delete`
-example stays generic because the public example API does not expose a
-destructive delete target.
+The `get`, `post`, and `patch` examples are runnable against the example API.
+The `delete`, `head`, and `options` examples stay generic or may return
+limited data depending on the server.
 
 ## Bare URL Shortcut
 
