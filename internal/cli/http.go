@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -129,7 +130,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Verbose logging to stderr.
 	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp)
+		c.logVerbose(httpResp, verbose)
 	}
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
@@ -470,7 +471,9 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 // logVerbose prints request and response summary lines to stderr.
 // Sensitive request headers (Authorization, Cookie, Set-Cookie,
 // Proxy-Authorization) are redacted to avoid leaking credentials.
-func (c *CLI) logVerbose(resp *http.Response) {
+// At verbose >= 2 it also dumps TLS version, cipher suite, and peer
+// certificate chain (subject, issuer, expiry).
+func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 	req := resp.Request
 	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, redactedRequestURL(req.URL))
 	for k, vs := range req.Header {
@@ -489,6 +492,29 @@ func (c *CLI) logVerbose(resp *http.Response) {
 		}
 	}
 	fmt.Fprintln(c.Stderr, "<")
+
+	if verbose >= 2 && resp.TLS != nil {
+		tlsVersionName := map[uint16]string{
+			tls.VersionTLS10: "TLS 1.0",
+			tls.VersionTLS11: "TLS 1.1",
+			tls.VersionTLS12: "TLS 1.2",
+			tls.VersionTLS13: "TLS 1.3",
+		}
+		ver, ok := tlsVersionName[resp.TLS.Version]
+		if !ok {
+			ver = fmt.Sprintf("TLS 0x%04x", resp.TLS.Version)
+		}
+		fmt.Fprintf(c.Stderr, "* TLS: %s %s\n", ver, tls.CipherSuiteName(resp.TLS.CipherSuite))
+		for i, cert := range resp.TLS.PeerCertificates {
+			label := "Leaf"
+			if i > 0 {
+				label = fmt.Sprintf("Chain %d", i)
+			}
+			fmt.Fprintf(c.Stderr, "* %s Subject: %s\n", label, cert.Subject)
+			fmt.Fprintf(c.Stderr, "* %s Issuer: %s\n", label, cert.Issuer)
+			fmt.Fprintf(c.Stderr, "* %s Expiry: %s (%s)\n", label, cert.NotAfter.Format(time.RFC3339), relativeExpiry(cert.NotAfter))
+		}
+	}
 }
 
 func redactedRequestURL(u *url.URL) string {

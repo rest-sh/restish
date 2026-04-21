@@ -60,7 +60,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp)
+		c.logVerbose(httpResp, verbose)
 	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
@@ -209,7 +209,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("network error for %s %s: %w", updateMethod, rawURL, err)
 	}
 	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && updateResp.Request != nil {
-		c.logVerbose(updateResp)
+		c.logVerbose(updateResp, verbose)
 	}
 
 	normalized, err := output.Normalize(updateResp, c.content, maxBodyBytes(cmd))

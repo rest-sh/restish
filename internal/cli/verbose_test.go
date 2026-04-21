@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"strings"
@@ -91,5 +92,68 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "api_key=%3Credacted%3E") || !strings.Contains(stderr, "token=%3Credacted%3E") {
 		t.Fatalf("expected redacted query params in verbose output, got:\n%s", stderr)
+	}
+}
+
+// TestVerboseTLSDetailsAtLevel2 verifies that -vv (verbose >= 2) prints TLS
+// version, cipher suite, and peer certificate information to stderr.
+func TestVerboseTLSDetailsAtLevel2(t *testing.T) {
+	c, _, errOut := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Request:    r,
+			TLS: &tls.ConnectionState{
+				Version:     tls.VersionTLS13,
+				CipherSuite: tls.TLS_AES_256_GCM_SHA384,
+			},
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-vv", "https://api.example.com"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	stderr := errOut.String()
+	if !strings.Contains(stderr, "TLS 1.3") {
+		t.Errorf("expected TLS version in -vv stderr, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "TLS_AES_256_GCM_SHA384") {
+		t.Errorf("expected cipher suite in -vv stderr, got:\n%s", stderr)
+	}
+}
+
+// TestVerboseTLSDetailsNotAtLevel1 verifies that -v (verbose == 1) does NOT
+// print TLS details, keeping the output concise.
+func TestVerboseTLSDetailsNotAtLevel1(t *testing.T) {
+	c, _, errOut := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Request:    r,
+			TLS: &tls.ConnectionState{
+				Version:     tls.VersionTLS13,
+				CipherSuite: tls.TLS_AES_256_GCM_SHA384,
+			},
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	stderr := errOut.String()
+	if strings.Contains(stderr, "TLS 1.3") {
+		t.Errorf("unexpected TLS details at -v level:\n%s", stderr)
 	}
 }
