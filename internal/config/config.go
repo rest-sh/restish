@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/tidwall/jsonc"
 )
@@ -114,54 +113,32 @@ type CacheConfig struct {
 
 // configDir returns the effective config directory, honoring the
 // RSH_CONFIG_DIR environment variable override.
+// Deprecated: use Paths.Config() instead.
 func configDir() string {
-	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return dir
-	}
-	return defaultDir()
+	return NewPaths().Config()
 }
 
 // DefaultPath returns the path to the default config file, honoring
-// the RSH_CONFIG_DIR environment variable override.
+// the RSH_CONFIG_DIR and XDG environment variable overrides.
 func DefaultPath() string {
-	return filepath.Join(configDir(), "restish.json")
+	return NewPaths().ConfigFile()
 }
 
 // DefaultTokenCachePath returns the path to the token cache file.
 func DefaultTokenCachePath() string {
-	return filepath.Join(configDir(), "tokens.json")
+	return NewPaths().TokenCache()
 }
 
 // DefaultSpecCacheDir returns the directory for cached API spec CBOR files.
 // Spec cache files live at <dir>/<apiname>.cbor.
 func DefaultSpecCacheDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "restish")
+	return NewPaths().SpecCache()
 }
 
 // DefaultCacheDir returns the directory for cached HTTP responses,
-// honoring the RSH_CACHE_DIR environment variable override.
+// honoring the RSH_CACHE_DIR and XDG environment variable overrides.
 func DefaultCacheDir() string {
-	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
-		return dir
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", "restish", "responses")
-}
-
-// defaultDir returns the platform-appropriate config directory.
-// macOS and Linux use ~/.config/restish (XDG convention).
-// Windows uses %APPDATA%\restish.
-func defaultDir() string {
-	if runtime.GOOS == "windows" {
-		if dir := os.Getenv("APPDATA"); dir != "" {
-			return filepath.Join(dir, "restish")
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "restish")
-	}
-	return ".restish"
+	return NewPaths().Cache()
 }
 
 // HasComments reports whether the config file at path contains JSONC comments.
