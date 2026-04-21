@@ -151,6 +151,7 @@ restish api edit
 
 ## Related Pages
 
+- [Changelog](../changelog/)
 - [Install](../install/)
 - [First Request](../first-request/)
 - [Your First API Config](../your-first-config/)
