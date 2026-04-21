@@ -111,7 +111,7 @@ their own auth and transport stacks.
 package main
 
 import (
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 func main() {

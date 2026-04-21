@@ -52,7 +52,7 @@ This is a good fallback when you do not want to use a package manager.
 If you already have a Go toolchain and just want the CLI:
 
 ```bash
-go install github.com/rest-sh/restish@latest
+go install github.com/rest-sh/restish/v2/cmd/restish@latest
 ```
 
 This is convenient for contributors and Go-heavy environments.
