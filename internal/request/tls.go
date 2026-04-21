@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
+	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 )
 
 // TLSVersionFromString maps CLI values like TLS1.2 and TLS1.3 to crypto/tls constants.

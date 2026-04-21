@@ -3,7 +3,7 @@ package filter_test
 import (
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/filter"
+	"github.com/rest-sh/restish/v2/internal/filter"
 )
 
 // testDoc builds a representative normalised response map.

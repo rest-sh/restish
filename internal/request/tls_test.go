@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 var (

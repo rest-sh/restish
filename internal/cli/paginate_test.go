@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/cli"
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 func useThreePageTransport(c *cli.CLI) {

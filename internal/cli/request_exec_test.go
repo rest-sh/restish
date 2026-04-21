@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	authpkg "github.com/danielgtaylor/restish/v2/auth"
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/request"
+	authpkg "github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 type testAuthHandler struct{}

@@ -3,7 +3,7 @@ package spec
 import (
 	"fmt"
 
-	"github.com/danielgtaylor/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/pb33f/libopenapi"
 )
 

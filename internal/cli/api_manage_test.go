@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/config"
 )
 
 // specWithXCLIConfig returns an OpenAPI spec with x-cli-config pre-populating

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ThalesIgnite/crypto11"
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 	"golang.org/x/term"
 )
 

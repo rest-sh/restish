@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/danielgtaylor/restish/v2/internal/plugin"
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/internal/plugin"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 // PluginFormatter is an output.Formatter backed by a hook plugin. The plugin

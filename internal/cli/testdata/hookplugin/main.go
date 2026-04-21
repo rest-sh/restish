@@ -18,7 +18,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 // minimalOpenAPI is a minimal OpenAPI 3.0 spec returned by the loader hook.

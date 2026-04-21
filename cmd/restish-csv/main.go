@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 func main() {

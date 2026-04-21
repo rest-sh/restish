@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 func TestNormalize(t *testing.T) {

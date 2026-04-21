@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/filter"
+	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/spf13/cobra"
 )
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 func main() {

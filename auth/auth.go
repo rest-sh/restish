@@ -12,7 +12,7 @@
 //	cli.AddAuthHandler("aws-sigv4", &MySigV4{})
 package auth
 
-import internalauth "github.com/danielgtaylor/restish/v2/internal/auth"
+import internalauth "github.com/rest-sh/restish/v2/internal/auth"
 
 // Param describes a single configuration parameter required by an auth Handler.
 // Secret parameters are redacted in output and excluded from plugin dispatch

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/output"
 )
 
 // makePNG creates a minimal valid PNG with the given dimensions and fills it

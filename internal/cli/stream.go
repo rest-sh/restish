@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/danielgtaylor/restish/v2/internal/filter"
-	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/filter"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
 

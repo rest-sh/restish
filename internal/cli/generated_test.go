@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danielgtaylor/restish/v2/internal/cli"
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/spec"
+	"github.com/rest-sh/restish/v2/internal/cli"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 // specWithOperations returns an OpenAPI 3.1 spec JSON string.

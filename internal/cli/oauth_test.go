@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danielgtaylor/restish/v2/internal/auth"
+	"github.com/rest-sh/restish/v2/internal/auth"
 )
 
 func oauthTokenResponse(r *http.Request, accessToken string) *http.Response {

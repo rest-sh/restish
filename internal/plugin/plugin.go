@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	configpkg "github.com/danielgtaylor/restish/v2/internal/config"
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	configpkg "github.com/rest-sh/restish/v2/internal/config"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/fxamacker/cbor/v2"
 )
 

@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/danielgtaylor/restish/v2/internal/auth"
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/auth"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
 

@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danielgtaylor/restish/v2/internal/cli"
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 func TestCertCommandShowsIssuerAndSubject(t *testing.T) {

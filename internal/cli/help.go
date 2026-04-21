@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

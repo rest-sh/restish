@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 // FetchResponse executes a single HTTP request and returns the normalized

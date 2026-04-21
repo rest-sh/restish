@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/config"
 )
 
 func TestGeneratedAPINames_FastPath(t *testing.T) {

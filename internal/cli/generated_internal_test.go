@@ -11,8 +11,8 @@ import (
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/index"
 
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/spec"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 type failingDocument struct {

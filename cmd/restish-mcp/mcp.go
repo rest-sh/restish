@@ -17,7 +17,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 
-	"github.com/danielgtaylor/restish/v2/internal/spec"
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 const DefaultMaxResultBytes = 16 * 1024

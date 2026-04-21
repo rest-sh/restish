@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 // TLSCertificateFromPlugin starts a tls-signer plugin, waits for its ready

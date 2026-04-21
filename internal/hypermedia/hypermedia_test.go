@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
 )
 
 func mustURL(s string) *url.URL {

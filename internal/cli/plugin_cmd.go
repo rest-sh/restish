@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	"github.com/danielgtaylor/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/spf13/cobra"
 )
 

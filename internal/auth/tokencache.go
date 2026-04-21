@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	configpkg "github.com/danielgtaylor/restish/v2/internal/config"
+	configpkg "github.com/rest-sh/restish/v2/internal/config"
 )
 
 // CachedToken holds a cached OAuth2 access token and optional refresh token.

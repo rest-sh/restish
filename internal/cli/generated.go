@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/spec"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 // buildAPICommand constructs a Cobra command group for a registered API and

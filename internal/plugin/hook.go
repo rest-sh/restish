@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 // HookTimeout returns the effective timeout for hookName from the manifest,

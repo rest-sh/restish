@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"time"
 
-	authpkg "github.com/danielgtaylor/restish/v2/auth"
-	"github.com/danielgtaylor/restish/v2/internal/config"
-	"github.com/danielgtaylor/restish/v2/internal/content"
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
-	"github.com/danielgtaylor/restish/v2/internal/spec"
+	authpkg "github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/content"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
+	"github.com/rest-sh/restish/v2/internal/output"
+	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -119,7 +119,7 @@ func (c *CLI) AddEncoding(e *content.Encoding) {
 // oauth-authorization-code, oauth-device-code, external-tool) can be overridden.
 // Call this before CLI.Run.
 //
-// Use the github.com/danielgtaylor/restish/v2/auth package for the Handler
+// Use the github.com/rest-sh/restish/v2/auth package for the Handler
 // and Param types when implementing custom auth.
 func (c *CLI) AddAuthHandler(name string, handler authpkg.Handler) {
 	if c.customAuthHandlers == nil {

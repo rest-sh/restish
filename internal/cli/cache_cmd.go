@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/danielgtaylor/restish/v2/internal/cache"
+	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/spf13/cobra"
 )
 

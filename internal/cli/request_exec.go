@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/danielgtaylor/restish/v2/internal/hypermedia"
-	"github.com/danielgtaylor/restish/v2/internal/output"
-	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 type preparedRequest struct {

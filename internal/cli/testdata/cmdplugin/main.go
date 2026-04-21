@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 var manifest = plugin.Manifest{

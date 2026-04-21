@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/config"
 )
 
 func TestParseByteSize(t *testing.T) {

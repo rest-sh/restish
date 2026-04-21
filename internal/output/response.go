@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/danielgtaylor/restish/v2/internal/content"
+	"github.com/rest-sh/restish/v2/internal/content"
 )
 
 // DefaultMaxBodyBytes is the default cap on response body reads (100 MiB).

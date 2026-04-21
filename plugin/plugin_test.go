@@ -8,7 +8,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 // TestWriteReadRoundTrip verifies that WriteMessage → ReadMessage recovers

@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	internalplugin "github.com/danielgtaylor/restish/v2/internal/plugin"
+	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 )
 
 func TestIndexPluginsByHook(t *testing.T) {
