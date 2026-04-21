@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/output"
@@ -93,4 +94,62 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Int("rsh-max-pages", 25, "Maximum number of pages to fetch (0 = unlimited)")
 	pf.Int("rsh-max-items", 0, "Maximum number of items to collect across all pages (0 = unlimited)")
 	pf.Int("rsh-max-body-size", 0, fmt.Sprintf("Maximum response body size in MiB (0 = default %d MiB)", output.DefaultMaxBodyBytes/(1024*1024)))
+
+	c.registerFlagCompletions(root)
+}
+
+// registerFlagCompletions installs shell-completion functions for the global
+// persistent flags that benefit from dynamic or well-known value suggestions.
+func (c *CLI) registerFlagCompletions(root *cobra.Command) {
+	// -o / --rsh-output-format: static list from registered formatters.
+	_ = root.RegisterFlagCompletionFunc("rsh-output-format", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		fmts := c.formatters
+		if fmts == nil {
+			fmts = output.DefaultFormatters()
+		}
+		names := make([]string, 0, len(fmts))
+		for name := range fmts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// -p / --rsh-profile: dynamic list from all API profiles in config.
+	_ = root.RegisterFlagCompletionFunc("rsh-profile", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if c.cfg == nil {
+			return []string{"default"}, cobra.ShellCompDirectiveNoFileComp
+		}
+		seen := map[string]struct{}{"default": {}}
+		for _, api := range c.cfg.APIs {
+			for name := range api.Profiles {
+				seen[name] = struct{}{}
+			}
+		}
+		names := make([]string, 0, len(seen))
+		for name := range seen {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// -c / --rsh-content-type: dynamic list from registered content types.
+	_ = root.RegisterFlagCompletionFunc("rsh-content-type", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if c.content == nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		var names []string
+		for _, ct := range c.content.ContentTypes() {
+			if ct.Name != "" {
+				names = append(names, ct.Name)
+			}
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// --rsh-filter-lang: static list of supported filter languages.
+	_ = root.RegisterFlagCompletionFunc("rsh-filter-lang", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"shorthand", "jq"}, cobra.ShellCompDirectiveNoFileComp
+	})
 }
