@@ -23,8 +23,12 @@ type authCallbacks struct {
 
 type cliPrompter struct{ cli *CLI }
 
-func (p cliPrompter) Prompt(prompt string) (string, error)       { return p.cli.promptCode(prompt) }
-func (p cliPrompter) PromptSecret(prompt string) (string, error) { return p.cli.promptSecret(prompt) }
+func (p cliPrompter) Prompt(prompt string) (string, error) {
+	return p.cli.Prompt(context.Background(), prompt)
+}
+func (p cliPrompter) PromptSecret(prompt string) (string, error) {
+	return p.cli.Secret(context.Background(), prompt)
+}
 
 // addAuthHeaderCommand registers the "auth-header" command on root.
 func (c *CLI) addAuthHeaderCommand(root *cobra.Command) {
@@ -97,7 +101,9 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	}
 	switch ac.Type {
 	case "http-basic":
-		return &auth.HTTPBasic{Prompter: c.promptSecret}, nil
+		return &auth.HTTPBasic{Prompter: func(prompt string) (string, error) {
+			return c.Secret(context.Background(), prompt)
+		}}, nil
 	case "oauth-client-credentials":
 		return &auth.ClientCredentials{
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
@@ -108,7 +114,9 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 			Stderr:     c.Stderr,
-			Prompt:     c.promptCode,
+			Prompt: func(prompt string) (string, error) {
+				return c.Prompt(context.Background(), prompt)
+			},
 			CanPrompt:  c.canPromptCode(),
 			NoBrowser:  opts.NoBrowser,
 		}, nil
@@ -204,25 +212,6 @@ func (c *CLI) tokenCachePath() string {
 		return c.hooks.TokenCachePath
 	}
 	return c.paths().TokenCache()
-}
-
-// promptSecret writes prompt to Stderr then reads a secret.
-// Uses PassReader when set (for tests); otherwise uses Stdin.
-// When the source is a real terminal the input is not echoed.
-func (c *CLI) promptSecret(prompt string) (string, error) {
-	src := c.hooks.PassReader
-	if src == nil {
-		src = c.Stdin
-	}
-	return readPromptValue(prompt, src, c.Stderr, true)
-}
-
-func (c *CLI) promptCode(prompt string) (string, error) {
-	src := c.hooks.PassReader
-	if src == nil {
-		src = c.Stdin
-	}
-	return readPromptValue(prompt, src, c.Stderr, false)
 }
 
 func (c *CLI) canPromptCode() bool {

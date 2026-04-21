@@ -1,12 +1,9 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"reflect"
@@ -21,7 +18,6 @@ import (
 	"github.com/hexops/gotextdiff/span"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
-	"golang.org/x/term"
 )
 
 func (c *CLI) addEditCommand(root *cobra.Command) {
@@ -165,7 +161,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 
 	skipPrompt, _ := cmd.Flags().GetBool("rsh-yes")
 	if !skipPrompt {
-		ok, err := c.confirmEdit()
+		ok, err := c.Confirm(cmd.Context(), "Continue? [Y/n] ")
 		if err != nil {
 			return err
 		}
@@ -325,28 +321,6 @@ func splitCommandLine(s string) ([]string, error) {
 	return parts, nil
 }
 
-func (c *CLI) confirmEdit() (bool, error) {
-	fmt.Fprint(c.Stderr, "Continue? [Y/n] ")
-	reader := bufio.NewReader(c.Stdin)
-	line, err := reader.ReadString('\n')
-	if errors.Is(err, io.EOF) {
-		// Piped or closed stdin: treat as "no" (safe default to avoid accidental
-		// destructive operations when stdin is not a TTY).
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("edit: read confirmation: %w", err)
-	}
-	answer := strings.TrimSpace(strings.ToLower(line))
-	// Empty input (pressing Enter) is "yes" only on an interactive TTY.
-	if answer == "" {
-		if f, ok := c.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-			return true, nil
-		}
-		return false, nil
-	}
-	return answer == "y" || answer == "yes", nil
-}
 
 func supportsMergePatch(headers map[string]string) bool {
 	if value := headers["Accept-Patch"]; strings.Contains(strings.ToLower(value), "application/merge-patch+json") {

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -312,13 +311,13 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
-		return false, c.handlePluginPrompt(writer, msg)
+		return false, c.handlePluginPrompt(cmd.Context(), writer, msg)
 	case pluginwire.MsgTypeConfirm:
 		var msg pluginwire.ConfirmMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
-		return false, c.handlePluginConfirm(writer, msg)
+		return false, c.handlePluginConfirm(cmd.Context(), writer, msg)
 	case pluginwire.MsgTypeResponse:
 		var msg pluginwire.ResponseMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
@@ -523,8 +522,14 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.AP
 	})
 }
 
-func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg pluginwire.PromptMsg) error {
-	value, readErr := readPromptValue(msg.Message, c.Stdin, c.Stderr, msg.Hidden)
+func (c *CLI) handlePluginPrompt(ctx context.Context, writer *commandPluginWriter, msg pluginwire.PromptMsg) error {
+	var value string
+	var readErr error
+	if msg.Hidden {
+		value, readErr = c.Secret(ctx, msg.Message)
+	} else {
+		value, readErr = c.Prompt(ctx, msg.Message)
+	}
 	if readErr != nil {
 		return writer.WriteMessage(pluginwire.PromptResponseMsg{
 			Type:  pluginwire.MsgTypePromptResponse,
@@ -537,20 +542,14 @@ func (c *CLI) handlePluginPrompt(writer *commandPluginWriter, msg pluginwire.Pro
 	})
 }
 
-func (c *CLI) handlePluginConfirm(writer *commandPluginWriter, msg pluginwire.ConfirmMsg) error {
-	fmt.Fprint(c.Stderr, msg.Message)
-
-	scanner := bufio.NewScanner(c.Stdin)
-	var line string
-	if scanner.Scan() {
-		line = strings.TrimSpace(strings.ToLower(scanner.Text()))
-	} else if err := scanner.Err(); err != nil {
+func (c *CLI) handlePluginConfirm(ctx context.Context, writer *commandPluginWriter, msg pluginwire.ConfirmMsg) error {
+	confirmed, err := c.Confirm(ctx, msg.Message)
+	if err != nil {
 		return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
 			Type:  pluginwire.MsgTypeConfirmResponse,
 			Error: err.Error(),
 		})
 	}
-	confirmed := line == "y" || line == "yes"
 	return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
 		Type:  pluginwire.MsgTypeConfirmResponse,
 		Value: confirmed,

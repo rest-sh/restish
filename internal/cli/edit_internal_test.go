@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"reflect"
 	"strings"
@@ -49,15 +50,15 @@ func TestSplitCommandLinePreservesEmptyQuotedArgs(t *testing.T) {
 	}
 }
 
-// TestConfirmEditEOFReturnsFalse verifies that piped or closed stdin treats
+// TestConfirmEOFReturnsFalse verifies that piped or closed stdin treats
 // an EOF (or empty input) as "no", preventing accidental destructive confirms.
-func TestConfirmEditEOFReturnsFalse(t *testing.T) {
+func TestConfirmEOFReturnsFalse(t *testing.T) {
 	c := &CLI{
 		Stdin:  io.NopCloser(strings.NewReader("")),
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
-	ok, err := c.confirmEdit()
+	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,15 +67,15 @@ func TestConfirmEditEOFReturnsFalse(t *testing.T) {
 	}
 }
 
-// TestConfirmEditYesInputReturnsTrue verifies that "y\n" on non-TTY stdin
+// TestConfirmYesInputReturnsTrue verifies that "y\n" on non-TTY stdin
 // still returns true.
-func TestConfirmEditYesInputReturnsTrue(t *testing.T) {
+func TestConfirmYesInputReturnsTrue(t *testing.T) {
 	c := &CLI{
 		Stdin:  strings.NewReader("y\n"),
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
-	ok, err := c.confirmEdit()
+	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,14 +84,14 @@ func TestConfirmEditYesInputReturnsTrue(t *testing.T) {
 	}
 }
 
-// TestConfirmEditNoInputReturnsFalse verifies that "n\n" input returns false.
-func TestConfirmEditNoInputReturnsFalse(t *testing.T) {
+// TestConfirmNoInputReturnsFalse verifies that "n\n" input returns false.
+func TestConfirmNoInputReturnsFalse(t *testing.T) {
 	c := &CLI{
 		Stdin:  strings.NewReader("n\n"),
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
-	ok, err := c.confirmEdit()
+	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
