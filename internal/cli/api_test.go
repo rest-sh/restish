@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -268,5 +270,38 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected 'from-flag' in X-Token values, got %v", vals)
+	}
+}
+
+// TestAPIEditUsesCliStdout verifies that runAPIEdit wires the editor subprocess
+// to c.Stdout rather than os.Stdout, so embedders that redirect c.Stdout capture
+// any output the editor produces.
+func TestAPIEditUsesCliStdout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("editor test uses a POSIX shell script")
+	}
+
+	dir := t.TempDir()
+
+	// A fake editor that writes a sentinel line to stdout.
+	scriptPath := filepath.Join(dir, "editor.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\necho 'editor-stdout'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISUAL", scriptPath)
+	t.Setenv("EDITOR", "")
+
+	c, out, _ := newTestCLI()
+	cfgPath := filepath.Join(dir, "restish.json")
+	if err := os.WriteFile(cfgPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.ConfigPath = cfgPath
+
+	if err := c.Run([]string{"restish", "api", "edit"}); err != nil {
+		t.Fatalf("api edit: %v", err)
+	}
+	if !strings.Contains(out.String(), "editor-stdout") {
+		t.Errorf("expected editor stdout in c.Stdout, got: %q", out.String())
 	}
 }

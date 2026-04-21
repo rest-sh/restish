@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -356,9 +355,9 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
+	editorCmd.Stdin = c.Stdin
+	editorCmd.Stdout = c.Stdout
+	editorCmd.Stderr = c.Stderr
 	return editorCmd.Run()
 }
 
