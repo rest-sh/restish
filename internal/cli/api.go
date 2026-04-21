@@ -48,6 +48,12 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host for this sync run")
 	apiCmd.AddCommand(syncCmd)
+	apiCmd.AddCommand(&cobra.Command{
+		Use:   "add <name> <url> [path:value ...]",
+		Short: "Register a new API quickly; optional shorthand expressions set nested fields",
+		Args:  cobra.MinimumNArgs(2),
+		RunE:  c.runAPIAdd,
+	})
 	configureCmd := &cobra.Command{
 		Use:   "configure <name> <url>",
 		Short: "Register an API and pre-populate config from its OpenAPI spec",
@@ -69,9 +75,9 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runAPIEdit,
 	})
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "set <name> <key> <value>",
-		Short: "Set a config field for a registered API by dot-path key",
-		Args:  cobra.ExactArgs(3),
+		Use:   "set <name> <key> <value> | <name> <path:value>",
+		Short: "Set API config using key/value or shorthand path:value syntax",
+		Args:  cobra.RangeArgs(2, 3),
 		RunE:  c.runAPISet,
 	})
 	apiCmd.AddCommand(&cobra.Command{
@@ -141,6 +147,51 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stdout, "Synced spec for %q.\n", apiName)
 	} else {
 		fmt.Fprintf(c.Stdout, "No spec found for %q.\n", apiName)
+	}
+	return nil
+}
+
+func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
+	apiName := args[0]
+	baseURL := args[1]
+
+	if c.cfg == nil {
+		return fmt.Errorf("config not loaded")
+	}
+	if c.cfg.APIs == nil {
+		c.cfg.APIs = map[string]*config.APIConfig{}
+	}
+	if _, exists := c.cfg.APIs[apiName]; exists {
+		return fmt.Errorf("API %q already exists", apiName)
+	}
+
+	cfgPath := c.configFilePath()
+	apiCfg := &config.APIConfig{BaseURL: baseURL}
+	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
+		return err
+	}
+
+	for _, expr := range args[2:] {
+		key, raw, err := parseShorthandAssignment(expr)
+		if err != nil {
+			return err
+		}
+		value, err := parseConfigCLIValue(raw)
+		if err != nil {
+			return err
+		}
+		jsonPath, err := apiConfigJSONPath(apiName, key)
+		if err != nil {
+			return err
+		}
+		if err := config.SaveConfigValue(cfgPath, jsonPath, value); err != nil {
+			return err
+		}
+	}
+
+	reloaded, err := config.Load(cfgPath)
+	if err == nil {
+		c.cfg = reloaded
 	}
 	return nil
 }
@@ -322,27 +373,69 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 // profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	key := args[1]
-	value := args[2]
 
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
 
-	apiCfg := c.cfg.APIs[apiName]
-	if err := setAPIField(apiCfg, key, value); err != nil {
+	key, value, err := parseAPISetArgs(args[1:])
+	if err != nil {
 		return err
 	}
 
 	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		jsonPath, err := apiConfigJSONPath(apiName, key)
-		if err != nil {
-			return err
-		}
-		return config.SaveConfigValue(cfgPath, jsonPath, value)
+	jsonPath, err := apiConfigJSONPath(apiName, key)
+	if err != nil {
+		return err
 	}
-	return config.Save(cfgPath, c.cfg)
+	if err := config.SaveConfigValue(cfgPath, jsonPath, value); err != nil {
+		return err
+	}
+	reloaded, err := config.Load(cfgPath)
+	if err == nil {
+		c.cfg = reloaded
+	}
+	return nil
+}
+
+func parseAPISetArgs(args []string) (string, any, error) {
+	if len(args) == 2 {
+		v, err := parseConfigCLIValue(args[1])
+		return args[0], v, err
+	}
+	if len(args) == 1 {
+		key, raw, err := parseShorthandAssignment(args[0])
+		if err != nil {
+			return "", nil, err
+		}
+		v, err := parseConfigCLIValue(raw)
+		return key, v, err
+	}
+	return "", nil, fmt.Errorf("expected <key> <value> or <path:value>")
+}
+
+func parseShorthandAssignment(expr string) (string, string, error) {
+	key, raw, ok := strings.Cut(expr, ":")
+	if !ok {
+		return "", "", fmt.Errorf("invalid shorthand %q: expected path:value", expr)
+	}
+	key = strings.TrimSpace(key)
+	raw = strings.TrimSpace(raw)
+	if key == "" {
+		return "", "", fmt.Errorf("invalid shorthand %q: empty path", expr)
+	}
+	if raw == "" {
+		return "", "", fmt.Errorf("invalid shorthand %q: empty value", expr)
+	}
+	return key, raw, nil
+}
+
+func parseConfigCLIValue(raw string) (any, error) {
+	var v any
+	if err := json.Unmarshal([]byte(raw), &v); err == nil {
+		return v, nil
+	}
+	return raw, nil
 }
 
 // setAPIField updates a single field of apiCfg identified by a dot-path key.

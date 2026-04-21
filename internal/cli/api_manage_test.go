@@ -346,6 +346,51 @@ func TestAPISetCreatesNestedJSONCPath(t *testing.T) {
 	}
 }
 
+func TestAPISetShorthandExpression(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://old.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `allow_cross_origin_spec: true`}); err != nil {
+		t.Fatalf("api set shorthand: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if !written.APIs["myapi"].AllowCrossOriginSpec {
+		t.Fatalf("expected allow_cross_origin_spec to be true")
+	}
+}
+
+func TestAPIAddWithShorthand(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "add", "myapi", "https://api.example.com", `profiles.default.auth.type: "http-basic"`}); err != nil {
+		t.Fatalf("api add shorthand: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url after add: got %q", got)
+	}
+	if got := written.APIs["myapi"].Profiles["default"].Auth.Type; got != "http-basic" {
+		t.Fatalf("auth.type after add: got %q", got)
+	}
+}
+
 func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   // Existing APIs
