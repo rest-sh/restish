@@ -11,7 +11,7 @@ import (
 // TestLinksCommandLinkHeader verifies that "links" extracts Link header relations.
 func TestLinksCommandLinkHeader(t *testing.T) {
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: 200,
@@ -43,7 +43,7 @@ func TestLinksCommandLinkHeader(t *testing.T) {
 // TestLinksCommandHAL verifies that "links" parses HAL _links.
 func TestLinksCommandHAL(t *testing.T) {
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: 200,
@@ -69,7 +69,7 @@ func TestLinksCommandHAL(t *testing.T) {
 // TestLinksCommandFilterRel verifies that [rel...] args filter the output.
 func TestLinksCommandFilterRel(t *testing.T) {
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: 200,

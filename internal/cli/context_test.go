@@ -26,7 +26,7 @@ func TestCommandContextCancelsPaginationRequests(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	reqCount := 0
-	c.HTTPTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	c.Hooks().HTTPTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		reqCount++
 		switch reqCount {
 		case 1:
@@ -65,7 +65,7 @@ func TestCommandContextCancelsAPISyncDiscovery(t *testing.T) {
 	c := New()
 	c.Stdout = &bytes.Buffer{}
 	c.Stderr = &bytes.Buffer{}
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().SpecCachePath = t.TempDir()
 	c.cfg = &config.Config{
 		APIs: map[string]*config.APIConfig{
 			"example": {BaseURL: "https://api.example.com"},
@@ -74,7 +74,7 @@ func TestCommandContextCancelsAPISyncDiscovery(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	c.HTTPTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	c.Hooks().HTTPTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})

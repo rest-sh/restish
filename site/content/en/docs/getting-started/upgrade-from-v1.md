@@ -83,19 +83,19 @@ If you hit one of those in an older v2 build, upgrade before debugging further.
 
 Use this as the fast lookup table when muscle memory collides with v2.
 
-| v1 | v2 | Notes |
-| --- | --- | --- |
-| `apis.json` | `restish.json` | API config now lives under top-level `apis` |
-| `config.json` | `restish.json` | v2 uses one config file |
-| `restish api edit` | `restish api edit` | Same command, now opens `restish.json` |
-| `restish api configure <name>` | `restish api configure <name> <url>` | v2 expects the base URL explicitly |
-| n/a | `restish api add <name> <url> 'path:value'` | fast one-shot registration with shorthand expressions |
-| n/a | `restish api set <name> 'path:value'` | shorthand updates support set/append/delete |
-| `auth.name` | `auth.type` | Profile auth config field renamed |
-| profile `base` | profile `base_url` | API/profile base field renamed |
-| API `base` | API `base_url` | API base field renamed |
-| `-p`, `--rsh-profile` | `-p`, `--rsh-profile` | Same flag, but invalid profile names now error |
-| v1 plugin binaries | v2 plugin binaries | Rebuild or replace plugins for the v2 protocol |
+| v1                             | v2                                          | Notes                                                 |
+| ------------------------------ | ------------------------------------------- | ----------------------------------------------------- |
+| `apis.json`                    | `restish.json`                              | API config now lives under top-level `apis`           |
+| `config.json`                  | `restish.json`                              | v2 uses one config file                               |
+| `restish api edit`             | `restish api edit`                          | Same command, now opens `restish.json`                |
+| `restish api configure <name>` | `restish api configure <name> <url>`        | v2 expects the base URL explicitly                    |
+| n/a                            | `restish api add <name> <url> 'path:value'` | fast one-shot registration with shorthand expressions |
+| n/a                            | `restish api set <name> 'path:value'`       | shorthand updates support set/append/delete           |
+| `auth.name`                    | `auth.type`                                 | Profile auth config field renamed                     |
+| profile `base`                 | profile `base_url`                          | API/profile base field renamed                        |
+| API `base`                     | API `base_url`                              | API base field renamed                                |
+| `-p`, `--rsh-profile`          | `-p`, `--rsh-profile`                       | Same flag, but invalid profile names now error        |
+| v1 plugin binaries             | v2 plugin binaries                          | Rebuild or replace plugins for the v2 protocol        |
 
 ## Plugin Changes
 

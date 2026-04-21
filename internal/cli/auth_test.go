@@ -32,7 +32,7 @@ func TestBasicAuthHeader(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -70,9 +70,9 @@ func TestBasicAuthPasswordPrompt(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	// Provide the password via PassReader (keeps Stdin free for body reads).
-	c.PassReader = strings.NewReader("hunter2\n")
+	c.Hooks().PassReader = strings.NewReader("hunter2\n")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -109,7 +109,7 @@ func TestAuthHeaderCommand(t *testing.T) {
 		}
 	}`
 	c, out, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "auth-header", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,7 +127,7 @@ func TestAuthHeaderCommand(t *testing.T) {
 func TestAuthHeaderCommandUnknownAPI(t *testing.T) {
 	cfg := `{"apis": {}}`
 	c, _, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	err := c.Run([]string{"restish", "auth-header", "noapi"})
 	if err == nil {
@@ -151,7 +151,7 @@ func TestUnknownAuthTypeListsSupportedValues(t *testing.T) {
 		}
 	}`
 	c, _, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	err := c.Run([]string{"restish", "get", "myapi/items"})
 	if err == nil {

@@ -103,7 +103,7 @@ func TestProfileTLSSignerPlugin(t *testing.T) {
 	}
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = cfgPath
+	c.Hooks().ConfigPath = cfgPath
 	if err := c.Run([]string{"restish", "get", "--rsh-ca-cert", caPath, "myapi"}); err != nil {
 		t.Fatalf("restish get: %v", err)
 	}

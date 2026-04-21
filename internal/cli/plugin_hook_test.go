@@ -107,7 +107,7 @@ func TestAuthHookPlugin(t *testing.T) {
 
 	cfg := fmt.Sprintf(`{"apis":{"testapi":{"base_url":%q,"profiles":{"default":{}}}}}`, srv.URL)
 	c, _, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,7 +137,7 @@ func TestAuthHookPluginWithoutProfiles(t *testing.T) {
 
 	cfg := fmt.Sprintf(`{"apis":{"testapi":{"base_url":%q}}}`, srv.URL)
 	c, _, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -168,7 +168,7 @@ func TestRequestMiddlewarePlugin(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestResponseMiddlewarePluginModify(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestResponseMiddlewarePluginDrop(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 	// First server: the initial request target.
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestFormatterPlugin(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", "-o", "hookformat", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	// No -o flag: default output should NOT contain plugin text.
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -284,7 +284,7 @@ func TestCSVFormatterPlugin(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `[{"id":1,"name":"alpha"},{"id":2,"name":"beta","active":true}]`)
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", "-o", "csv", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestCSVFormatterPluginPagination(t *testing.T) {
 	installCSVPlugin(t)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		pages := map[string]struct {
 			body string
@@ -352,7 +352,7 @@ func TestCSVFormatterPluginNDJSONStream(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL, "-o", "csv"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

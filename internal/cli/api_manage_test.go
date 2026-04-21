@@ -37,8 +37,8 @@ func TestAPIConfigure(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://api.example.com":
@@ -104,8 +104,8 @@ func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://api.example.com":
@@ -155,8 +155,8 @@ func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 func TestAPIConfigureForceRefreshesCachedSpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
 
 	currentHeader := "Accept: application/json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -229,7 +229,7 @@ func TestAPIShow(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o644)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 
 	if err := c.Run([]string{"restish", "api", "show", "myapi"}); err != nil {
 		t.Fatalf("api show: %v", err)
@@ -258,7 +258,7 @@ func TestAPISet(t *testing.T) {
 
 	// Set a new base_url.
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"}); err != nil {
 		t.Fatalf("api set: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestAPISetPreservesJSONCComments(t *testing.T) {
 }`)
 
 	c, _, errOut := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"}); err != nil {
 		t.Fatalf("api set: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestAPISetCreatesNestedJSONCPath(t *testing.T) {
 }`)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", "profiles.default.auth.params.token", "secret"}); err != nil {
 		t.Fatalf("api set nested: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestAPISetShorthandExpression(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", `allow_cross_origin_spec: true`}); err != nil {
 		t.Fatalf("api set shorthand: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestAPISetMultipleShorthandExpressions(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", `allow_cross_origin_spec: true`, `pagination.items_path: "items"`}); err != nil {
 		t.Fatalf("api set multi shorthand: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestAPISetShorthandAppendHeaders(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.headers[]: "Authorization: Bearer abc"`}); err != nil {
 		t.Fatalf("api set append headers: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestAPISetShorthandDeleteKey(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "set", "myapi", `operation_base: undefined`}); err != nil {
 		t.Fatalf("api set delete key: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestAPISetRejectsUnknownAuthType(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.auth.type: "oauth-typo"`})
 	if err == nil {
 		t.Fatal("expected auth.type validation error")
@@ -475,7 +475,7 @@ func TestAPISetRejectsUnknownTLSSigner(t *testing.T) {
 	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.tls_signer: "not-a-plugin"`})
 	if err == nil {
 		t.Fatal("expected tls_signer validation error")
@@ -496,7 +496,7 @@ func TestAPISetMixedShorthandPreservesComments(t *testing.T) {
 }`)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{
 		"restish", "api", "set", "myapi",
 		`profiles.default.headers[]: "X-Test: 1"`,
@@ -520,7 +520,7 @@ func TestAPIAddWithShorthand(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "add", "myapi", "https://api.example.com", `profiles.default.auth.type: "http-basic"`}); err != nil {
 		t.Fatalf("api add shorthand: %v", err)
 	}
@@ -548,8 +548,8 @@ func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 }`)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://api.example.com":
@@ -607,8 +607,8 @@ func TestAPIConfigureDoesNotOverwriteInvalidConfig(t *testing.T) {
 	}
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
 
 	err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"})
 	if err == nil {
@@ -642,7 +642,7 @@ func TestAPIDeletePreservesJSONCComments(t *testing.T) {
 }`)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	if err := c.Run([]string{"restish", "api", "delete", "remove"}); err != nil {
 		t.Fatalf("api delete: %v", err)
 	}
@@ -694,7 +694,7 @@ func TestAPISyncReportsSuccess(t *testing.T) {
 // TestAPIContentTypes verifies that "api content-types" lists the built-in types.
 func TestAPIContentTypes(t *testing.T) {
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	if err := c.Run([]string{"restish", "api", "content-types"}); err != nil {
 		t.Fatalf("api content-types: %v", err)

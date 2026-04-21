@@ -143,7 +143,7 @@ func TestRunPaginationHonorsContextCancellation(t *testing.T) {
 	c.addGlobalFlags(cmd)
 	cmd.SetContext(ctx)
 
-	c.HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
 	})

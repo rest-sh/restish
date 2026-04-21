@@ -47,7 +47,7 @@ func (rr *requestRecorder) Last() *http.Request {
 }
 
 func useTransport(c *cli.CLI, fn roundTripperFunc) {
-	c.HTTPTransport = fn
+	c.Hooks().HTTPTransport = fn
 }
 
 func jsonResponse(status int, body string) *http.Response {
@@ -129,7 +129,7 @@ func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
 	}
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = cfgFile
+	c.Hooks().ConfigPath = cfgFile
 	err := c.Run([]string{"restish", "get", "--rsh-profile", "missing", "testapi/items"})
 	if err == nil {
 		t.Fatal("expected missing configured profile to error")

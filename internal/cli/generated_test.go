@@ -144,9 +144,9 @@ func (e *generatedEnv) newCLI() *cli.CLI {
 	c.Stdin = strings.NewReader("")
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
-	c.ConfigPath = e.cfgFile
-	c.SpecCachePath = e.cacheDir
-	c.RetryBaseDelay = 0
+	c.Hooks().ConfigPath = e.cfgFile
+	c.Hooks().SpecCachePath = e.cacheDir
+	c.Hooks().RetryBaseDelay = 0
 	return c
 }
 
@@ -227,9 +227,9 @@ func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
 		c.Stdin = strings.NewReader("")
 		c.Stdout = io.Discard
 		c.Stderr = io.Discard
-		c.ConfigPath = cfgFile
-		c.SpecCachePath = cacheDir
-		c.RetryBaseDelay = 0
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		c.Hooks().RetryBaseDelay = 0
 		if err := c.Run([]string{"restish", "api", "sync", name}); err != nil {
 			t.Fatalf("api sync %s: %v", name, err)
 		}
@@ -239,9 +239,9 @@ func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
 	c.Stdin = strings.NewReader("")
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = cacheDir
-	c.RetryBaseDelay = 0
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.Hooks().RetryBaseDelay = 0
 	loader := &countingLoader{}
 	c.AddLoader(loader)
 
@@ -617,8 +617,8 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	c1.Stdin = strings.NewReader("")
 	c1.Stdout = io.Discard
 	c1.Stderr = io.Discard
-	c1.ConfigPath = cfgFile
-	c1.SpecCachePath = cacheDir
+	c1.Hooks().ConfigPath = cfgFile
+	c1.Hooks().SpecCachePath = cacheDir
 	if err := c1.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
 		t.Fatalf("api sync: %v", err)
 	}
@@ -642,8 +642,8 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	c2.Stdin = strings.NewReader("")
 	c2.Stdout = io.Discard
 	c2.Stderr = io.Discard
-	c2.ConfigPath = cfgFile
-	c2.SpecCachePath = cacheDir
+	c2.Hooks().ConfigPath = cfgFile
+	c2.Hooks().SpecCachePath = cacheDir
 	if err := c2.Run([]string{"restish", "tapi", "get-widgets"}); err != nil {
 		t.Fatalf("expected updated local spec to be reflected without sync: %v", err)
 	}

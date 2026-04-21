@@ -24,8 +24,8 @@ import (
 // cacheDir returns the effective HTTP response cache directory, checking the
 // CachePath override (used in tests), then RSH_CACHE_DIR, then the default.
 func (c *CLI) cacheDir() string {
-	if c.CachePath != "" {
-		return c.CachePath
+	if c.hooks.CachePath != "" {
+		return c.hooks.CachePath
 	}
 	return c.paths().Cache()
 }
@@ -782,7 +782,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		CacheMaxBytes:        c.cacheMaxBytes(),
 		NoCache:              noCache,
 		Retry:                retry,
-		RetryBaseDelay:       c.RetryBaseDelay,
+		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		Logger:               c.Stderr,
 	}, nil
 }

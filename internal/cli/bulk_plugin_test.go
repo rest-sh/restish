@@ -170,7 +170,7 @@ func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 	installBulkPlugin(t)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("help: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestBulkPluginWorkflow(t *testing.T) {
 	})
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
 		t.Fatalf("init: %v", err)
@@ -314,7 +314,7 @@ func TestBulkPullKeepsRemoteChangeWhenLocalEditsBlockWrite(t *testing.T) {
 	})
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
 		t.Fatalf("init: %v", err)

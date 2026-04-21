@@ -27,6 +27,27 @@ import (
 // Version is the current build version, set at build time via -ldflags.
 var Version = "2.0.0-dev"
 
+// testHooks holds test-only overrides for CLI internals. The zero value is
+// safe: every field is treated as "not set" when empty/nil.
+type testHooks struct {
+	// ConfigPath overrides the default config file location.
+	ConfigPath string
+	// PassReader, if non-nil, is used as the source for secret prompts.
+	PassReader io.Reader
+	// TokenCachePath overrides the default token cache file location.
+	TokenCachePath string
+	// CachePath overrides the default HTTP response cache directory.
+	CachePath string
+	// SpecCachePath overrides the default API spec cache directory.
+	SpecCachePath string
+	// HTTPTransport overrides the base HTTP transport used for outbound requests.
+	HTTPTransport http.RoundTripper
+	// PluginManifestCachePath overrides the default plugin manifest cache file.
+	PluginManifestCachePath string
+	// RetryBaseDelay overrides the 1 s default backoff base for retries.
+	RetryBaseDelay time.Duration
+}
+
 // CLI holds all state for a Restish instance. Using a struct instead of
 // package-level globals makes it safe to instantiate multiple independent
 // instances and trivially testable with in-memory I/O.
@@ -35,37 +56,7 @@ type CLI struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
-	// TESTING ONLY: ConfigPath overrides the default config file location.
-	// Leave empty to use the platform default.
-	ConfigPath string
-
-	// TESTING ONLY: PassReader, if non-nil, is used as the source for secret
-	// prompts (e.g. password input). Falls back to Stdin when nil.
-	PassReader io.Reader
-
-	// TESTING ONLY: TokenCachePath overrides the default token cache file
-	// location. Leave empty to use the platform default.
-	TokenCachePath string
-
-	// TESTING ONLY: CachePath overrides the default HTTP response cache
-	// directory. Leave empty to use the platform default.
-	CachePath string
-
-	// TESTING ONLY: SpecCachePath overrides the default API spec cache
-	// directory. Leave empty to use the platform default.
-	SpecCachePath string
-
-	// TESTING ONLY: HTTPTransport overrides the base HTTP transport used for
-	// outbound requests and spec discovery.
-	HTTPTransport http.RoundTripper
-
-	// TESTING ONLY: PluginManifestCachePath overrides the default plugin
-	// manifest cache file. Leave empty to use the platform default.
-	PluginManifestCachePath string
-
-	// TESTING ONLY: RetryBaseDelay overrides the 1 s default backoff base for
-	// retries.
-	RetryBaseDelay time.Duration
+	hooks testHooks
 
 	// Paths holds computed config/cache locations. Tests may replace this with
 	// a custom instance.
@@ -152,8 +143,8 @@ func (c *CLI) Config() *config.Config {
 
 // configFilePath returns the effective config file path.
 func (c *CLI) configFilePath() string {
-	if c.ConfigPath != "" {
-		return c.ConfigPath
+	if c.hooks.ConfigPath != "" {
+		return c.hooks.ConfigPath
 	}
 	return c.paths().ConfigFile()
 }
@@ -173,16 +164,16 @@ func (c *CLI) profileFromCmd(cmd *cobra.Command) string {
 
 // specCacheDir returns the effective directory for API spec CBOR files.
 func (c *CLI) specCacheDir() string {
-	if c.SpecCachePath != "" {
-		return c.SpecCachePath
+	if c.hooks.SpecCachePath != "" {
+		return c.hooks.SpecCachePath
 	}
 	return c.paths().SpecCache()
 }
 
 // pluginManifestCachePath returns the effective plugin manifest cache file path.
 func (c *CLI) pluginManifestCachePath() string {
-	if c.PluginManifestCachePath != "" {
-		return c.PluginManifestCachePath
+	if c.hooks.PluginManifestCachePath != "" {
+		return c.hooks.PluginManifestCachePath
 	}
 	return c.paths().PluginManifestCache()
 }
@@ -214,8 +205,8 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 }
 
 func (c *CLI) baseHTTPTransport() http.RoundTripper {
-	if c.HTTPTransport != nil {
-		return c.HTTPTransport
+	if c.hooks.HTTPTransport != nil {
+		return c.hooks.HTTPTransport
 	}
 	return http.DefaultTransport
 }

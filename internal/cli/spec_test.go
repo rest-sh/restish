@@ -41,9 +41,9 @@ func newSpecTestCLI(t *testing.T, apiName, baseURL string) *cli.CLI {
 
 	c := cli.New()
 	c.Stdin = strings.NewReader("")
-	c.ConfigPath = cfgFile
-	c.SpecCachePath = t.TempDir()
-	c.RetryBaseDelay = 0 // no retry delays in spec tests
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().RetryBaseDelay = 0 // no retry delays in spec tests
 	return c
 }
 

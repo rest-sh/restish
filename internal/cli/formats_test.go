@@ -28,7 +28,7 @@ func TestSilentMode(t *testing.T) {
 	srv := arrayServer(t)
 
 	c, out, errOut := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "--rsh-silent"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestTableFormat(t *testing.T) {
 	srv := arrayServer(t)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "-o", "table"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestTableFormatColumns(t *testing.T) {
 	srv := arrayServer(t)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/items", "-o", "table", "--rsh-columns", "name,status"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGronFormat(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/obj", "-o", "gron"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestAddFormatter(t *testing.T) {
 	srv := arrayServer(t)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	// Register a custom formatter that just writes a sentinel string.
 	c.AddFormatter("custom", &sentinelFormatter{sentinel: "CUSTOM_OUTPUT"})

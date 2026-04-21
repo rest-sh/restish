@@ -70,8 +70,8 @@ func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,8 +127,8 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 
 	// First request.
 	c1, _, _ := newTestCLI()
-	c1.ConfigPath = writeAPIConfig(t, cfg)
-	c1.TokenCachePath = cacheFile
+	c1.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c1.Hooks().TokenCachePath = cacheFile
 	useTransport(c1, transport)
 	if err := c1.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("first request: %v", err)
@@ -136,8 +136,8 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 
 	// Second request (new CLI instance, same cache file).
 	c2, _, _ := newTestCLI()
-	c2.ConfigPath = c1.ConfigPath
-	c2.TokenCachePath = cacheFile
+	c2.Hooks().ConfigPath = c1.Hooks().ConfigPath
+	c2.Hooks().TokenCachePath = cacheFile
 	useTransport(c2, transport)
 	if err := c2.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("second request: %v", err)
@@ -200,8 +200,8 @@ func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -265,8 +265,8 @@ func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 		Expiry:      time.Now().Add(-time.Hour),
 	})
 
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = cacheFile
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = cacheFile
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -288,8 +288,8 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 
 	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
 	c, out, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = cacheFile
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = cacheFile
 
 	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -317,8 +317,8 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 
 	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
 	c, out, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = cacheFile
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = cacheFile
 
 	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "--all", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -345,8 +345,8 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 func TestClearAuthCache_UnknownAPI(t *testing.T) {
 	cfg := `{"apis": {}}`
 	c, _, _ := newTestCLI()
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
 	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "noapi"}); err == nil {
 		t.Fatal("expected error for unknown API, got nil")
@@ -393,9 +393,9 @@ func TestOAuthAuthorizationCode_NoBrowserManualCodeFallback(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
-	c.PassReader = strings.NewReader("manual-code\n")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().PassReader = strings.NewReader("manual-code\n")
 
 	if err := c.Run([]string{"restish", "--rsh-no-browser", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -457,8 +457,8 @@ func TestOAuthDeviceCodeFlow(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -519,8 +519,8 @@ func TestOAuthClientCredentials_401RetryForcesFreshToken(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
-	c.TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)

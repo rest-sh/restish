@@ -203,8 +203,8 @@ func (c *CLI) authContext(apiName, profileName string, params map[string]string,
 
 // tokenCachePath returns the effective path for the token cache file.
 func (c *CLI) tokenCachePath() string {
-	if c.TokenCachePath != "" {
-		return c.TokenCachePath
+	if c.hooks.TokenCachePath != "" {
+		return c.hooks.TokenCachePath
 	}
 	return c.paths().TokenCache()
 }
@@ -213,7 +213,7 @@ func (c *CLI) tokenCachePath() string {
 // Uses PassReader when set (for tests); otherwise uses Stdin.
 // When the source is a real terminal the input is not echoed.
 func (c *CLI) promptSecret(prompt string) (string, error) {
-	src := c.PassReader
+	src := c.hooks.PassReader
 	if src == nil {
 		src = c.Stdin
 	}
@@ -221,7 +221,7 @@ func (c *CLI) promptSecret(prompt string) (string, error) {
 }
 
 func (c *CLI) promptCode(prompt string) (string, error) {
-	src := c.PassReader
+	src := c.hooks.PassReader
 	if src == nil {
 		src = c.Stdin
 	}
@@ -229,7 +229,7 @@ func (c *CLI) promptCode(prompt string) (string, error) {
 }
 
 func (c *CLI) canPromptCode() bool {
-	if c.PassReader != nil {
+	if c.hooks.PassReader != nil {
 		return true
 	}
 	return output.IsTerminalReader(c.Stdin)

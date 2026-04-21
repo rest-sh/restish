@@ -12,7 +12,7 @@ import (
 )
 
 func useJSONResponse(c *cli.CLI, status int, body string) {
-	c.HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: status,
 			Proto:      "HTTP/1.1",

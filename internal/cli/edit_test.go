@@ -58,7 +58,7 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestEditCommandSendsIfMatch(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestEditCommandFallsBackToIfUnmodifiedSince(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestEditCommandDryRunShowsDiffWithoutSending(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "edit", "--dry-run", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestEditCommandYesSkipsPrompt(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	c.Stdin = strings.NewReader("n\n")
 	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -225,7 +225,7 @@ func TestEditCommandUsesPatchWhenAdvertised(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -275,7 +275,7 @@ func TestEditCommandSupportsNonInteractivePatchArgs(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{
 		"restish", "edit", "-y", srv.URL,
 		"string:", "changed,", "tags[]:", "another",

@@ -30,7 +30,7 @@ func TestSSEThreeEvents(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestNDJSONThreeLines(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/stream"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestSSEMaxEvents(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-events", "2"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestSSEWithFilter(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	// Select only the "type" field from each structured SSE event.
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.data.type"}); err != nil {
 		t.Fatalf("get: %v", err)
@@ -152,7 +152,7 @@ func TestSSEReadableOutputWithColor(t *testing.T) {
 	c, _, _ := newTestCLI()
 	var out bytes.Buffer
 	c.Stdout = &out
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	t.Setenv("COLOR", "1")
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
 		t.Fatalf("get: %v", err)
@@ -178,7 +178,7 @@ func TestSSEReadableOutputPlainTextStaysPlain(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestNDJSONYAMLOutputUsesFormatter(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "yaml"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "ndjson"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "json"})
 	if err == nil {
 		t.Fatal("expected error for -o json on a stream, got nil")
@@ -278,7 +278,7 @@ func TestSSENamedEventExposesMetadataToFilters(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.event"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestSSELargeEventExceedsScannerLimit(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestSSEMalformedLinesDoNotAbortStream(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}

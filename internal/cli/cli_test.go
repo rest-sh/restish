@@ -29,10 +29,10 @@ func newTestCLI() (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	c.Stdin = strings.NewReader("")
 	c.Stdout = &stdout
 	c.Stderr = &stderr
-	c.RetryBaseDelay = time.Millisecond
+	c.Hooks().RetryBaseDelay = time.Millisecond
 	dir, err := os.MkdirTemp("", "restish-cli-test-*")
 	if err == nil {
-		c.ConfigPath = filepath.Join(dir, "restish.json")
+		c.Hooks().ConfigPath = filepath.Join(dir, "restish.json")
 	}
 	return c, &stdout, &stderr
 }
@@ -69,7 +69,7 @@ func TestUnknownCommand(t *testing.T) {
 
 func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
 	c, out, _ := newTestCLI()
-	c.HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if got, want := r.URL.String(), "https://api.example.com/items"; got != want {
 			t.Fatalf("URL = %q, want %q", got, want)
 		}
@@ -126,7 +126,7 @@ func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 	}
 
 	c, _, errOut := newTestCLI()
-	c.ConfigPath = legacyConfigPath
+	c.Hooks().ConfigPath = legacyConfigPath
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

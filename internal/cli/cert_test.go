@@ -25,7 +25,7 @@ func TestCertCommandShowsIssuerAndSubject(t *testing.T) {
 	server, caPath := newTLSServerWithChain(t, time.Now().Add(30*24*time.Hour), false)
 	defer server.Close()
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "cert", "--rsh-ca-cert", caPath, server.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestCertCommandShowsMultipleCertificates(t *testing.T) {
 	defer server.Close()
 
 	c, out, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "cert", "--rsh-ca-cert", caPath, server.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCertWarnDaysExpiresSoon(t *testing.T) {
 	defer server.Close()
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "cert", "--rsh-ca-cert", caPath, "--warn-days", "2", server.URL})
 	var exitErr *cli.ExitCodeError
 	if err == nil || !errors.As(err, &exitErr) || exitErr.Code != 1 {
@@ -71,7 +71,7 @@ func TestCertWarnDaysValidLonger(t *testing.T) {
 	defer server.Close()
 
 	c, _, _ := newTestCLI()
-	c.ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "cert", "--rsh-ca-cert", caPath, "--warn-days", "2", server.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

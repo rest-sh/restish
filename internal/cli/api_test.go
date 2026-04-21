@@ -31,7 +31,7 @@ func TestAPIShortNameExpansion(t *testing.T) {
 	})
 
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -52,7 +52,7 @@ func TestAPIShortNameNoPath(t *testing.T) {
 	})
 
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -74,7 +74,7 @@ func TestUnknownAPINameFallback(t *testing.T) {
 
 	// Config has "myapi" but we request "otherapi/items"; fallback treats it as URL.
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	// Use a real URL so the fallback actually resolves somewhere.
 	if err := c.Run([]string{"restish", "get", "https://fallback.example.com/items"}); err != nil {
@@ -107,7 +107,7 @@ func TestProfilePersistentHeader(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -139,7 +139,7 @@ func TestProfilePersistentQuery(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -172,7 +172,7 @@ func TestProfileOverrideWithFlag(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "-p", "staging", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -212,7 +212,7 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	t.Setenv("RSH_PROFILE", "dev")
 
 	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
@@ -250,7 +250,7 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 			}
 		}
 	}`
-	c.ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	// Flag-supplied header should appear in the request (both values are sent
 	// via Add; the test just verifies the flag value is present).
@@ -296,7 +296,7 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c.ConfigPath = cfgPath
+	c.Hooks().ConfigPath = cfgPath
 
 	if err := c.Run([]string{"restish", "api", "edit"}); err != nil {
 		t.Fatalf("api edit: %v", err)
