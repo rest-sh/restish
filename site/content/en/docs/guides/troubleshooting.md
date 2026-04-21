@@ -153,6 +153,115 @@ Work through this in order:
 
 Use `--rsh-insecure` only as a temporary debugging step.
 
+## Two Operations Produce the Same Command Name
+
+Symptoms:
+
+- `restish myapi --help` shows a command name that collides with another operation
+- one operation's help shows the wrong description
+
+Cause:
+
+Two operations share the same `operationId`, or their names generate the same
+kebab-case command slug.
+
+Fix:
+
+Use `x-cli-name` on one or both operations to assign distinct names:
+
+```yaml
+paths:
+  /items:
+    get:
+      operationId: listItems
+      x-cli-name: list-all-items
+  /items/active:
+    get:
+      operationId: listItems   # duplicate
+      x-cli-name: list-active-items
+```
+
+## Enum Values Do Not Appear in Shell Completion
+
+Symptoms:
+
+- tab-completing a flag shows no values even though the OpenAPI spec defines an enum
+
+Common causes:
+
+- the spec uses `type: array` with `items.enum` instead of a top-level `enum`
+- the parameter schema is nested under `$ref` and not fully resolved
+- the enum is on a request body field, not a query or path parameter
+
+Fix:
+
+Check that the parameter schema has a direct `enum` array at the top level.
+Run `restish api sync myapi` to refresh the cached spec after updating it.
+
+## Corporate HTTP Proxy
+
+If your network requires an HTTP proxy, set the standard environment variables
+before running Restish:
+
+```bash
+export HTTPS_PROXY=https://proxy.corp.example.com:8080
+export HTTP_PROXY=http://proxy.corp.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,.corp.example.com
+```
+
+Restish uses Go's standard `net/http` transport, which respects these variables
+automatically. If your proxy requires mTLS or a custom CA, combine the proxy
+env var with `--rsh-ca-cert`.
+
+## A New Operation I Added Does Not Show Up
+
+Symptoms:
+
+- you updated an OpenAPI spec that Restish caches
+- the new operation's command is missing from `restish myapi --help`
+
+Fix:
+
+```bash
+restish api sync myapi
+```
+
+Restish builds generated commands from the cached spec at startup. `api sync`
+re-fetches and re-caches the spec so the new operation appears on the next run.
+
+## Spec Changes Do Not Take Effect After a Local Edit
+
+If you are using `spec_files` to load a local spec file and your edits are not
+showing up:
+
+```bash
+restish api sync myapi
+```
+
+The same cache applies to local file specs. Sync forces a reload and cache
+refresh.
+
+## Config Migrated from v1 — Where Did My APIs Go?
+
+Restish v2 reads config from a new path (`restish.json` in
+`$RSH_CONFIG_DIR` or the platform default config directory). It does not
+automatically migrate v1 config on first run.
+
+To locate your v1 config:
+
+```bash
+cat ~/.restish/apis.json 2>/dev/null || echo "not found"
+```
+
+Migration steps:
+
+1. export each API name and base URL from the v1 config
+2. run `restish api configure <name> <base_url>` for each
+3. re-run `restish api sync <name>` if the spec is not auto-discovered
+
+See the [Upgrade from v1](/docs/getting-started/upgrade-from-v1/) guide for a
+complete list of breaking changes.
+
 ## Related Pages
 
 - [Shell Setup](/docs/getting-started/shell-setup/)
