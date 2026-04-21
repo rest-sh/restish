@@ -189,30 +189,64 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(stripped))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, &ParseError{Path: path, Err: err}
+		line, col := extractJSONErrorPosition(err, stripped)
+		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
 	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = fmt.Errorf("unexpected trailing content")
 		}
-		return nil, &ParseError{Path: path, Err: err}
+		line, col := extractJSONErrorPosition(err, stripped)
+		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
 
 	return &cfg, nil
 }
 
+// extractJSONErrorPosition attempts to extract line:column from a JSON decode error.
+// Returns (0, 0) if the position cannot be determined.
+func extractJSONErrorPosition(err error, data []byte) (int, int) {
+	// json.SyntaxError has Offset field in Go 1.11+
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		line, col := byteOffsetToLineColumn(data, syntaxErr.Offset)
+		return line, col
+	}
+	return 0, 0
+}
+
 // ParseError is returned when the config file contains invalid JSON or
-// an unrecognized field.
+// an unrecognized field. It includes line:column position when available.
 type ParseError struct {
-	Path string
-	Err  error
+	Path   string
+	Err    error
+	Line   int
+	Column int
 }
 
 func (e *ParseError) Error() string {
+	if e.Line > 0 {
+		return fmt.Sprintf("config: invalid config %s:%d:%d: %v", e.Path, e.Line, e.Column, e.Err)
+	}
 	return fmt.Sprintf("config: invalid config %s\n  %v", e.Path, e.Err)
 }
 
 func (e *ParseError) Unwrap() error { return e.Err }
+
+// byteOffsetToLineColumn translates a byte offset in data to a 1-indexed line:column.
+func byteOffsetToLineColumn(data []byte, offset int64) (line int, col int) {
+	line = 1
+	col = 1
+	for i := 0; i < int(offset) && i < len(data); i++ {
+		if data[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return
+}
 
 func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
 	lock, err := lockConfigFile(path)
@@ -233,11 +267,20 @@ func LockSiblingFile(path string) (io.Closer, error) {
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, lock *fileLock) error {
 	_ = lock
 	dir := filepath.Dir(path)
+	
+	// Check if directory exists before creating
+	_, err := os.Stat(dir)
+	dirExists := err == nil
+	
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
 	}
-	if err := os.Chmod(dir, dirMode); err != nil {
-		return fmt.Errorf("config: chmod dir: %w", err)
+	
+	// Only chmod if we just created the directory
+	if !dirExists {
+		if err := os.Chmod(dir, dirMode); err != nil {
+			return fmt.Errorf("config: chmod dir: %w", err)
+		}
 	}
 
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
@@ -259,6 +302,12 @@ func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMo
 		cleanup()
 		return fmt.Errorf("config: write temp file: %w", err)
 	}
+	// Sync temp file to ensure durability before close
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("config: sync temp file: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("config: close temp file: %w", err)
@@ -267,6 +316,14 @@ func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMo
 		cleanup()
 		return fmt.Errorf("config: rename temp file: %w", err)
 	}
+	
+	// Sync parent directory after rename to ensure durability on all filesystems
+	dirFile, err := os.Open(dir)
+	if err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+	
 	return nil
 }
 
