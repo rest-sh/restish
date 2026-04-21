@@ -2,11 +2,49 @@ package output_test
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/output"
 )
+
+var (
+	fmtPluginBuildOnce sync.Once
+	fmtPluginBin       string
+	fmtPluginBuildErr  error
+)
+
+func buildFmtPlugin(t *testing.T) string {
+	t.Helper()
+	fmtPluginBuildOnce.Do(func() {
+		bin := filepath.Join(os.TempDir(), "restish-test-fmt-output-tests")
+		if runtime.GOOS == "windows" {
+			bin += ".exe"
+		}
+		_, thisFile, _, _ := runtime.Caller(0)
+		dir := filepath.Dir(thisFile)
+		cmd := exec.Command("go", "build", "-o", bin, "./testdata/fmtplugin")
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			fmtPluginBuildErr = fmt.Errorf("build fmt plugin: %w\n%s", err, out)
+			return
+		}
+		fmtPluginBin = bin
+	})
+	if fmtPluginBuildErr != nil {
+		t.Fatal(fmtPluginBuildErr)
+	}
+	if fmtPluginBin == "" {
+		t.Fatal("fmt plugin binary not set after build")
+	}
+	return fmtPluginBin
+}
 
 func tableResp() *output.Response {
 	return &output.Response{
@@ -244,5 +282,35 @@ func TestReadableValueStreamCloseWithoutWrites(t *testing.T) {
 	}
 	if err := stream.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+// TestPluginFormatterFormatValueRoundTrip verifies that FormatValue sends the
+// correct start/item/end event sequence to the formatter plugin and that the
+// plugin's stdout is forwarded to the writer.
+func TestPluginFormatterFormatValueRoundTrip(t *testing.T) {
+	pluginPath := buildFmtPlugin(t)
+	f := &output.PluginFormatter{PluginPath: pluginPath, FormatName: "testfmt"}
+
+	var buf bytes.Buffer
+	value := map[string]any{"hello": "world"}
+	if err := f.FormatValue(&buf, value, false); err != nil {
+		t.Fatalf("FormatValue: %v", err)
+	}
+
+	got := buf.String()
+	// The test plugin outputs "<event>:<body_json>\n" for each message.
+	// FormatValue sends start (empty body), item (with value), end.
+	if !strings.Contains(got, "start:") {
+		t.Errorf("expected start event in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, `item:`) {
+		t.Errorf("expected item event in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, `"hello"`) {
+		t.Errorf("expected body field in item output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "end:") {
+		t.Errorf("expected end event in output, got:\n%s", got)
 	}
 }
