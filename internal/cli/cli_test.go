@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/cli"
+	"github.com/danielgtaylor/restish/v2/internal/config"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -105,12 +106,14 @@ func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", home)
 		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	}
 
-	legacyDir := filepath.Join(home, ".config", "restish")
+	legacyConfigPath := config.DefaultPath()
+	legacyDir := filepath.Dir(legacyConfigPath)
 	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
 		t.Fatalf("mkdir legacy dir: %v", err)
 	}
@@ -123,7 +126,7 @@ func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 	}
 
 	c, _, errOut := newTestCLI()
-	c.ConfigPath = filepath.Join(legacyDir, "restish.json")
+	c.ConfigPath = legacyConfigPath
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

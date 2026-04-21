@@ -56,8 +56,8 @@ func TestCommandContextCancelsPaginationRequests(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation, got %v", err)
 	}
-	if reqCount != 2 {
-		t.Fatalf("expected pagination to attempt a second request, got %d requests", reqCount)
+	if reqCount != 1 {
+		t.Fatalf("expected pagination to stop before a second request when context is canceled, got %d requests", reqCount)
 	}
 }
 

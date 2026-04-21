@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 	"strings"
@@ -167,7 +168,7 @@ func TestRunPaginationHonorsContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected pagination to stop on context cancellation")
 	}
-	if err != context.Canceled {
-		t.Fatalf("err = %v, want %v", err, context.Canceled)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want errors.Is(..., %v)", err, context.Canceled)
 	}
 }
