@@ -171,10 +171,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	}
 	if apiSpec != nil {
 		xcli, _ := spec.ReadXCLIConfig(apiSpec)
-		if xcli == nil && apiSpec.Document != nil {
+		if xcli == nil {
 			// No x-cli-config extension — try to derive auth from the spec's
 			// declared security schemes.
-			xcli = spec.FallbackXCLIConfig(apiSpec.Document)
+			xcli = spec.FallbackXCLIConfig(apiSpec)
 		}
 		if xcli != nil {
 			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))

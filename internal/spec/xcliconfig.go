@@ -3,7 +3,6 @@ package spec
 import (
 	"strings"
 
-	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"go.yaml.in/yaml/v3"
 )
@@ -58,8 +57,11 @@ func ReadXCLIConfig(s *APISpec) (*XCLIConfig, error) {
 // scheme in components/securitySchemes is used.
 //
 // Returns nil when no supported auth scheme can be derived.
-func FallbackXCLIConfig(doc libopenapi.Document) *XCLIConfig {
-	model, err := doc.BuildV3Model()
+func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
+	if s == nil {
+		return nil
+	}
+	model, err := s.V3Model()
 	if err != nil || model == nil || model.Model.Components == nil ||
 		model.Model.Components.SecuritySchemes == nil {
 		return nil
