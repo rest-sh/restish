@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/filter"
@@ -15,6 +16,9 @@ func newFilterTestCommand(t *testing.T, raw bool) *cobra.Command {
 	if err := cmd.Flags().Set("rsh-raw", map[bool]string{true: "true", false: "false"}[raw]); err != nil {
 		t.Fatalf("set rsh-raw: %v", err)
 	}
+	// Simulate PersistentPreRunE: parse flags and store GlobalFlags on context.
+	gf := parseGlobalFlags(cmd)
+	cmd.SetContext(withGlobalFlags(context.Background(), gf))
 	return cmd
 }
 

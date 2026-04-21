@@ -59,8 +59,8 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("network error for GET %s: %w", rawURL, err)
 	}
 
-	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp, verbose)
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
+		c.logVerbose(httpResp, v)
 	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
@@ -208,8 +208,8 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", updateMethod, rawURL, err)
 	}
-	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && updateResp.Request != nil {
-		c.logVerbose(updateResp, verbose)
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && updateResp.Request != nil {
+		c.logVerbose(updateResp, v)
 	}
 
 	normalized, err := output.Normalize(updateResp, c.content, maxBodyBytes(cmd))
@@ -220,7 +220,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ignoreStatus, _ := cmd.Flags().GetBool("rsh-ignore-status-code")
+	ignoreStatus := globalFlagsFromContext(requestContext(cmd)).IgnoreStatus
 	if !ignoreStatus {
 		if code := output.StatusToExitCode(normalized.Status); code != 0 {
 			return &ExitCodeError{Code: code}

@@ -85,10 +85,7 @@ func (c *CLI) authHandlerOptionsFromCmd(cmd *cobra.Command) (authHandlerOptions,
 	if cmd == nil {
 		return authHandlerOptions{}, nil
 	}
-	noBrowser, err := cmd.Flags().GetBool("rsh-no-browser")
-	if err != nil {
-		return authHandlerOptions{}, err
-	}
+	noBrowser := globalFlagsFromContext(requestContext(cmd)).NoBrowser
 	return authHandlerOptions{NoBrowser: noBrowser}, nil
 }
 

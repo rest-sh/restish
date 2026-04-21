@@ -24,7 +24,7 @@ func (c *CLI) tryPaginate(
 	opts request.Options,
 	pagCfg *config.PaginationConfig,
 ) (bool, error) {
-	noPaginate, _ := cmd.Flags().GetBool("rsh-no-paginate")
+	noPaginate := globalFlagsFromContext(requestContext(cmd)).NoPaginate
 	if noPaginate {
 		return false, nil
 	}
@@ -34,9 +34,10 @@ func (c *CLI) tryPaginate(
 		return false, nil
 	}
 
-	collect, _ := cmd.Flags().GetBool("rsh-collect")
-	maxPages, _ := cmd.Flags().GetInt("rsh-max-pages")
-	maxItems, _ := cmd.Flags().GetInt("rsh-max-items")
+	gfPag := globalFlagsFromContext(requestContext(cmd))
+	collect := gfPag.Collect
+	maxPages := gfPag.MaxPages
+	maxItems := gfPag.MaxItems
 
 	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems)
 }
@@ -199,7 +200,7 @@ func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {
 }
 
 func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	fmtName := globalFlagsFromContext(requestContext(cmd)).OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 	if !tty || (fmtName != "" && fmtName != "readable") {
 		return c.newValueRenderer(cmd, base)
@@ -227,14 +228,15 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 }
 
 func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) (bool, error) {
-	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Silent {
 		return true, nil
 	}
-	if rawMode, _ := cmd.Flags().GetBool("rsh-raw"); rawMode {
+	if gf.Raw {
 		return true, nil
 	}
 
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	fmtName := gf.OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 
 	// Default non-TTY pagination should preserve a single valid JSON document.

@@ -43,8 +43,9 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		return err
 	}
 
-	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
-	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
+	gfSSE := globalFlagsFromContext(requestContext(cmd))
+	maxEvents := gfSSE.MaxEvents
+	filterExpr := gfSSE.Filter
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
 	if err != nil {
 		return err
@@ -170,7 +171,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		return err
 	}
 
-	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
+	maxEvents := globalFlagsFromContext(requestContext(cmd)).MaxEvents
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
 	if err != nil {
 		return err
@@ -209,8 +210,9 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 // renderStreamValue applies the active filter to one streamed item and renders
 // the result using the shared body/sub-value output path.
 func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item any, parsedJSON bool) error {
-	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	gf := globalFlagsFromContext(requestContext(cmd))
+	filterExpr := gf.Filter
+	fmtName := gf.OutputFormat
 
 	result := item
 	if filterExpr != "" {
@@ -236,7 +238,7 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 }
 
 func validateStreamingOutputMode(cmd *cobra.Command) error {
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	fmtName := globalFlagsFromContext(requestContext(cmd)).OutputFormat
 	if fmtName == "json" {
 		return fmt.Errorf("output format %q requires a complete bounded result; use -o ndjson for streaming records", fmtName)
 	}

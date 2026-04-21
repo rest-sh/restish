@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,11 +32,11 @@ func (c *CLI) cacheDir() string {
 // maxBodyBytes returns the response body size cap derived from the
 // --rsh-max-body-size flag (MiB). Zero or negative means use the default.
 func maxBodyBytes(cmd *cobra.Command) int64 {
-	mib, _ := cmd.Flags().GetInt("rsh-max-body-size")
-	if mib <= 0 {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.MaxBodySize <= 0 {
 		return output.DefaultMaxBodyBytes
 	}
-	return int64(mib) * 1024 * 1024
+	return int64(gf.MaxBodySize) * 1024 * 1024
 }
 
 // addHTTPCommands registers the generic HTTP verb commands on root.
@@ -129,8 +128,8 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	}
 
 	// Verbose logging to stderr.
-	if verbose, _ := cmd.Flags().GetCount("rsh-verbose"); verbose >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp, verbose)
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
+		c.logVerbose(httpResp, v)
 	}
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
@@ -182,7 +181,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return err
 	}
 
-	ignoreStatus, _ := cmd.Flags().GetBool("rsh-ignore-status-code")
+	ignoreStatus := globalFlagsFromContext(requestContext(cmd)).IgnoreStatus
 	if !ignoreStatus {
 		if code := output.StatusToExitCode(resp.Status); code != 0 {
 			return &ExitCodeError{Code: code}
@@ -205,14 +204,15 @@ func followCrossesFirstPartyHost(firstPartyHost, followURI string) bool {
 // formatResponse applies any filter then selects and runs the formatter.
 func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	// Silent mode: suppress all output.
-	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Silent {
 		return nil
 	}
 
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
-	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
-	filterLang, _ := cmd.Flags().GetString("rsh-filter-lang")
-	headersOnly, _ := cmd.Flags().GetBool("rsh-headers")
+	fmtName := gf.OutputFormat
+	filterExpr := gf.Filter
+	filterLang := gf.FilterLang
+	headersOnly := gf.HeadersShorthand
 	tty := output.IsTerminal(c.Stdout)
 
 	if headersOnly && filterExpr != "" {
@@ -322,16 +322,17 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 		base = &output.Response{}
 	}
 
-	if silent, _ := cmd.Flags().GetBool("rsh-silent"); silent {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Silent {
 		return valueRendererFunc{render: func(any) error { return nil }}, nil
 	}
 
-	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
+	rawMode := gf.Raw
 	if rawMode {
 		return valueRendererFunc{render: c.writeRaw}, nil
 	}
 
-	fmtName, _ := cmd.Flags().GetString("rsh-output-format")
+	fmtName := gf.OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 	color := output.ColorEnabled(c.Stdout)
 
@@ -410,8 +411,9 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool, filt
 	// For the table format, configure it from flags before selecting.
 	// Copy the map first so we don't mutate the shared c.formatters.
 	if fmtName == "table" {
-		cols, _ := cmd.Flags().GetString("rsh-columns")
-		sortBy, _ := cmd.Flags().GetString("rsh-sort-by")
+		gfTable := globalFlagsFromContext(requestContext(cmd))
+		cols := gfTable.Columns
+		sortBy := gfTable.SortBy
 		tf := &output.TableFormatter{SortBy: sortBy}
 		if cols != "" {
 			tf.Columns = strings.Split(cols, ",")
@@ -711,76 +713,57 @@ func parseKVStrings(values []string) (map[string]string, error) {
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.
 func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
-	headers, _ := cmd.Flags().GetStringArray("rsh-header")
-	query, _ := cmd.Flags().GetStringArray("rsh-query")
-	server, _ := cmd.Flags().GetString("rsh-server")
-	insecure, _ := cmd.Flags().GetBool("rsh-insecure")
-	if insecure {
+	gf := globalFlagsFromContext(requestContext(cmd))
+
+	if gf.Insecure {
 		fmt.Fprintln(c.Stderr, "warning: TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
 	}
-	clientCert, _ := cmd.Flags().GetString("rsh-client-cert")
-	clientKey, _ := cmd.Flags().GetString("rsh-client-key")
-	tlsSigner, _ := cmd.Flags().GetString("rsh-tls-signer")
-	tlsSignerParamsRaw, _ := cmd.Flags().GetStringArray("rsh-tls-signer-param")
-	caCert, _ := cmd.Flags().GetString("rsh-ca-cert")
-	noCache, _ := cmd.Flags().GetBool("rsh-no-cache")
-	tlsMinVersionStr, _ := cmd.Flags().GetString("rsh-tls-min-version")
-	tlsMinVersion, err := request.TLSVersionFromString(tlsMinVersionStr)
+
+	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
 	if err != nil {
 		return request.Options{}, err
 	}
 
-	// --rsh-timeout, falling back to RSH_TIMEOUT env var.
-	timeoutStr, _ := cmd.Flags().GetString("rsh-timeout")
-	if timeoutStr == "" {
-		timeoutStr = os.Getenv("RSH_TIMEOUT")
-	}
+	// --rsh-timeout default is 2 when not set by user (flag sentinel = -1).
 	var timeout time.Duration
-	if timeoutStr != "" {
+	if gf.Timeout != "" {
 		var parseErr error
-		timeout, parseErr = time.ParseDuration(timeoutStr)
+		timeout, parseErr = time.ParseDuration(gf.Timeout)
 		if parseErr != nil {
-			return request.Options{}, fmt.Errorf("invalid timeout %q: %w", timeoutStr, parseErr)
+			return request.Options{}, fmt.Errorf("invalid timeout %q: %w", gf.Timeout, parseErr)
 		}
 	}
 
-	// --rsh-retry, falling back to RSH_RETRY env var; default is 2 when
-	// neither is set.  The flag default is -1 (sentinel = "not set by user").
+	// --rsh-retry default is 2 when not set by user (flag sentinel = -1).
 	retry := 2
-	if envVal := os.Getenv("RSH_RETRY"); envVal != "" {
-		if n, err := strconv.Atoi(envVal); err == nil {
-			retry = n
-		}
-	}
-	if flagVal, _ := cmd.Flags().GetInt("rsh-retry"); flagVal >= 0 {
-		retry = flagVal
+	if gf.Retry >= 0 {
+		retry = gf.Retry
 	}
 
-	contentType, _ := cmd.Flags().GetString("rsh-content-type")
-	tlsSignerParams, err := parseKVStrings(tlsSignerParamsRaw)
+	tlsSignerParams, err := parseKVStrings(gf.TLSSignerParams)
 	if err != nil {
 		return request.Options{}, fmt.Errorf("invalid tls signer param: %w", err)
 	}
 
 	return request.Options{
-		Headers:              headers,
-		Query:                query,
-		Server:               server,
-		Insecure:             insecure,
-		ClientCertPath:       clientCert,
-		ClientKeyPath:        clientKey,
-		TLSSignerName:        tlsSigner,
+		Headers:              gf.Headers,
+		Query:                gf.Query,
+		Server:               gf.Server,
+		Insecure:             gf.Insecure,
+		ClientCertPath:       gf.ClientCert,
+		ClientKeyPath:        gf.ClientKey,
+		TLSSignerName:        gf.TLSSigner,
 		TLSSignerParams:      tlsSignerParams,
-		CACertPath:           caCert,
+		CACertPath:           gf.CACert,
 		TLSMinVersion:        tlsMinVersion,
 		Timeout:              timeout,
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
-		ContentType:          contentType,
+		ContentType:          gf.ContentType,
 		Transport:            c.baseHTTPTransport(),
 		CacheDir:             c.cacheDir(),
 		CacheMaxBytes:        c.cacheMaxBytes(),
-		NoCache:              noCache,
+		NoCache:              gf.NoCache,
 		Retry:                retry,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		Logger:               c.Stderr,

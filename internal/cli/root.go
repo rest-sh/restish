@@ -24,6 +24,11 @@ commands for registered APIs via OpenAPI 3.`,
 		// unrecognised args before our RunE can inspect them (which we need for
 		// bare-URL dispatch: "restish https://api.example.com").
 		Args: cobra.ArbitraryArgs,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			gf := parseGlobalFlags(cmd)
+			cmd.SetContext(withGlobalFlags(cmd.Context(), gf))
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()

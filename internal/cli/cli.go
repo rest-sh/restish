@@ -150,16 +150,14 @@ func (c *CLI) configFilePath() string {
 }
 
 // profileFromCmd returns the active profile name from the --rsh-profile flag,
-// falling back to the RSH_PROFILE environment variable, then "default".
+// falling back to the RSH_PROFILE environment variable (handled in
+// parseGlobalFlags), then "default".
 func (c *CLI) profileFromCmd(cmd *cobra.Command) string {
-	name, _ := cmd.Flags().GetString("rsh-profile")
-	if name == "" {
-		name = os.Getenv("RSH_PROFILE")
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Profile != "" {
+		return gf.Profile
 	}
-	if name == "" {
-		return "default"
-	}
-	return name
+	return "default"
 }
 
 // specCacheDir returns the effective directory for API spec CBOR files.

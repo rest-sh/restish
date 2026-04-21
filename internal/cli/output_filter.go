@@ -10,7 +10,7 @@ import (
 // filterOutput applies the active CLI filter expression to doc and, when
 // --rsh-raw is set, writes the filtered value directly to stdout.
 func (c *CLI) filterOutput(cmd *cobra.Command, filterExpr string, doc map[string]any, lang filter.Lang) (any, bool, error) {
-	rawMode, _ := cmd.Flags().GetBool("rsh-raw")
+	rawMode := globalFlagsFromContext(requestContext(cmd)).Raw
 
 	filtered, err := filter.Apply(filterExpr, doc, lang)
 	if err != nil {
