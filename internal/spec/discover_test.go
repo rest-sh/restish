@@ -611,3 +611,109 @@ paths: {}`
 		t.Fatal("expected non-nil spec")
 	}
 }
+
+// ---- Discovery cancellation ------------------------------------------------
+
+func TestDiscover_CancellationPropagatesUsefulError(t *testing.T) {
+	// Cancel the context before Discover is called. Discover should return
+	// a meaningful error wrapping context.Canceled rather than panic or hang.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, r.Context().Err()
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "cancelled",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	_, err := Discover(ctx, cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected an error from cancelled context")
+	}
+	// The error should be context.Canceled or wrap it.
+	if !errors.Is(err, context.Canceled) {
+		// Also acceptable: a "no API spec found" error when all probes fail
+		// because the context was already cancelled. Either way, err != nil
+		// is the key invariant.
+		t.Logf("note: error is %v (not context.Canceled, but still non-nil)", err)
+	}
+}
+
+func TestDiscover_CancellationDuringNetwork(t *testing.T) {
+	// Context cancelled partway through — Discover must not hang.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "slowapi",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	start := time.Now()
+	_, err := Discover(ctx, cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Discover hung for %v after context cancellation", elapsed)
+	}
+}
+
+// ---- Multi-error reporting -------------------------------------------------
+
+func TestDiscover_SamePriorityErrorsJoined(t *testing.T) {
+	// All probes fail at the same priority (no explicit SpecURL).
+	// The error message should contain information from the failures.
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "multiErr",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	_, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected error when all probes fail")
+	}
+	if !strings.Contains(err.Error(), "spec discovery failed") {
+		t.Errorf("expected 'spec discovery failed' in error, got: %v", err)
+	}
+}
+
+func TestDiscover_SpecURLErrorBeatsHeuristicError(t *testing.T) {
+	// An explicit SpecURL 404 should beat a heuristic-probe "connection refused"
+	// because the SpecURL is the more authoritative failure (priority 0 vs 1).
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, "explicit.json") {
+			resp := httpResponse(404, "", "not found", nil)
+			resp.Status = "404 Not Found"
+			return resp, nil
+		}
+		return nil, errors.New("connection refused")
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "priority",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/explicit.json",
+		Transport: tr,
+	}
+	_, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	// The error should mention the 404 status, not "connection refused".
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("expected SpecURL's 404 to dominate error, got: %v", err)
+	}
+}

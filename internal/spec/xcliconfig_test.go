@@ -2,18 +2,17 @@ package spec
 
 import (
 	"testing"
-
-	"github.com/pb33f/libopenapi"
 )
 
-// loadDoc is a test helper that parses a raw OpenAPI document.
-func loadDoc(t *testing.T, raw string) libopenapi.Document {
+// loadDoc is a test helper that parses a raw OpenAPI document into an APISpec.
+func loadDoc(t *testing.T, raw string) *APISpec {
 	t.Helper()
-	doc, err := libopenapi.NewDocument([]byte(raw))
+	l := OpenAPILoader{}
+	s, err := l.Load([]byte(raw))
 	if err != nil {
 		t.Fatalf("loadDoc: %v", err)
 	}
-	return doc
+	return s
 }
 
 // ---- ReadXCLIConfig --------------------------------------------------------
@@ -82,7 +81,7 @@ components:
       type: http
       scheme: basic`
 	doc := loadDoc(t, raw)
-	model, err := doc.BuildV3Model()
+	model, err := doc.V3Model()
 	if err != nil || model == nil {
 		t.Fatalf("BuildV3Model: %v", err)
 	}
@@ -122,7 +121,7 @@ components:
           tokenUrl: https://auth.example.com/oauth/token
           scopes: {}`
 	doc := loadDoc(t, raw)
-	model, err := doc.BuildV3Model()
+	model, err := doc.V3Model()
 	if err != nil || model == nil {
 		t.Fatalf("BuildV3Model: %v", err)
 	}
@@ -155,7 +154,7 @@ components:
           tokenUrl: https://auth.example.com/oauth/token
           scopes: {}`
 	doc := loadDoc(t, raw)
-	model, err := doc.BuildV3Model()
+	model, err := doc.V3Model()
 	if err != nil || model == nil {
 		t.Fatalf("BuildV3Model: %v", err)
 	}
@@ -186,7 +185,7 @@ components:
       in: header
       name: X-API-Key`
 	doc := loadDoc(t, raw)
-	model, err := doc.BuildV3Model()
+	model, err := doc.V3Model()
 	if err != nil || model == nil {
 		t.Fatalf("BuildV3Model: %v", err)
 	}
@@ -213,7 +212,7 @@ components:
       type: http
       scheme: basic`
 	doc := loadDoc(t, raw)
-	model, _ := doc.BuildV3Model()
+	model, _ := doc.V3Model()
 	scheme := model.Model.Components.SecuritySchemes.GetOrZero("basic")
 	auth := SchemeToXCLIAuth(scheme, map[string]string{"username": "alice"})
 	if auth.Params["username"] != "alice" {
@@ -307,8 +306,7 @@ components:
     basic:
       type: http
       scheme: basic`
-	doc := loadDoc(t, raw)
-	spec := &APISpec{Raw: []byte(raw), Document: doc}
+	spec := loadDoc(t, raw)
 
 	xcli := &XCLIConfig{
 		Profiles: map[string]*XCLIProfile{
@@ -356,8 +354,7 @@ components:
     basic:
       type: http
       scheme: basic`
-	doc := loadDoc(t, raw)
-	spec := &APISpec{Raw: []byte(raw), Document: doc}
+	spec := loadDoc(t, raw)
 
 	explicit := &XCLIAuth{Type: "bearer", Params: map[string]string{"token": ""}}
 	xcli := &XCLIConfig{
