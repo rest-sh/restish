@@ -27,7 +27,6 @@ type APISpec struct {
 	// Raw is the original spec bytes (JSON or YAML).
 	Raw []byte
 	// Document is the libopenapi parsed representation.
-	// Nil when loaded from cache before re-parsing.
 	Document libopenapi.Document
 
 	// modelOnce guards lazy construction of the V3 model.

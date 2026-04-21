@@ -2,8 +2,10 @@ package spec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -222,23 +224,27 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	}()
 
 	// Collect errors, preferring lower-priority values (0 = SpecURL is most
-	// authoritative). This ensures a 401 from an explicit SpecURL beats a 404
-	// from a well-known-path probe, regardless of goroutine arrival order.
-	bestErrPriority := int(^uint(0) >> 1) // max int
-	var bestErr error
+	// authoritative). Same-priority errors are joined so all causes are visible.
+	bestErrPriority := math.MaxInt
+	var bestErrs []error
 	for r := range ch {
 		if r.spec != nil {
 			cancel() // stop remaining probes
 			return r.spec, r.ttl, nil
 		}
-		if r.err != nil && r.priority <= bestErrPriority {
-			bestErrPriority = r.priority
-			bestErr = r.err
+		if r.err != nil {
+			switch {
+			case r.priority < bestErrPriority:
+				bestErrPriority = r.priority
+				bestErrs = []error{r.err}
+			case r.priority == bestErrPriority:
+				bestErrs = append(bestErrs, r.err)
+			}
 		}
 	}
 
-	if bestErr != nil {
-		return nil, 0, fmt.Errorf("spec discovery failed: %w", bestErr)
+	if len(bestErrs) > 0 {
+		return nil, 0, fmt.Errorf("spec discovery failed: %w", errors.Join(bestErrs...))
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err
