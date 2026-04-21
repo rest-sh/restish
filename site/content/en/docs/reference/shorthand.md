@@ -2,165 +2,251 @@
 title: Shorthand Syntax
 linkTitle: Shorthand Syntax
 weight: 30
-description: Reference for Restish shorthand input syntax, coercion rules, arrays, file loading, and patch-style updates.
+description: Dense reference for all Restish shorthand input syntax — type coercion, arrays, objects, comments, base64, move, unset, and API configuration use cases.
 ---
 
-Restish shorthand is the structured input language used for request bodies and,
-in some contexts, patch-style updates on top of stdin.
+Restish shorthand is the structured input language used for request bodies,
+`restish api add` / `restish api set` config patches, and filter query paths.
 
-Use it when you want to build a small JSON-like structure directly on the
-command line instead of creating a separate file first.
+This page is the complete reference. For an orientation with worked examples
+see [Input and Shorthand](/docs/guides/input/).
 
-## Core Examples
+The underlying library is documented at
+https://github.com/danielgtaylor/shorthand.
 
-Simple object:
+---
 
-```bash
-restish post https://api.rest.sh name: Alice active: true
+## Syntax Overview
+
+Each argument is a `key: value` pair. Multiple pairs produce an object. A bare
+value with no key is treated as the entire expression. Keys use `.` for nesting
+and `[n]` for array indexing.
+
+```
+key: value
+parent.child: value
+array[]: item
+array[0]: first
 ```
 
-Nested object:
+Multiple arguments are joined with a space before parsing, so these are
+equivalent:
 
 ```bash
-restish post https://api.rest.sh user.name: Alice user.role: admin
+restish post https://api.rest.sh name: Alice age: 30
+restish post https://api.rest.sh 'name: Alice age: 30'
 ```
 
-Array append:
-
-```bash
-restish post https://api.rest.sh tags[]: red tags[]: blue
-```
-
-Patch existing stdin:
-
-```bash
-echo '{"name":"Alice","role":"user"}' | \
-  restish post https://api.rest.sh role: admin
-```
+---
 
 ## Type Coercion
 
-Unquoted values are coerced when they look like one of the built-in literal
-types.
+Unquoted values are coerced to the most specific matching type:
 
-Examples:
+| Input | Type | Notes |
+|-------|------|-------|
+| `true` / `false` | boolean | case-sensitive |
+| `null` | null | |
+| `123` | integer | |
+| `1.5` | float | |
+| `2024-01-01T12:00:00Z` | string | passed through; not a Go time.Time |
+| anything else | string | |
 
-- `true` -> boolean
-- `false` -> boolean
-- `null` -> null
-- `123` -> number
-- `1.5` -> number
-- `2024-01-01T12:00:00Z` -> timestamp-like value
-
-Use quotes when you want the literal string instead:
-
-```bash
-restish post https://api.rest.sh value: "true" count: "123"
-```
-
-The empty string can be written either as a blank value or as `""`:
+Quote with `"..."` to force a string regardless of value:
 
 ```bash
-restish post https://api.rest.sh blank1: blank2: ""
+restish post https://api.rest.sh enabled: "true" count: "123"
 ```
 
-## Object Construction
-
-Use `.` to create nested objects:
-
-```bash
-restish post https://api.rest.sh user.address.city: Honolulu
-```
-
-Equivalent body:
-
-```json
-{
-  "user": {
-    "address": {
-      "city": "Honolulu"
-    }
-  }
-}
-```
+---
 
 ## Arrays
 
 Append with `[]`:
 
 ```bash
-restish post https://api.rest.sh tags[]: red tags[]: blue
+tags[]: red tags[]: blue
+# → {"tags": ["red", "blue"]}
 ```
 
-Set a specific index with `[n]`:
+Set by index with `[n]`:
 
 ```bash
-restish post https://api.rest.sh tags[0]: red tags[1]: blue
+tags[0]: red tags[1]: blue
+# → {"tags": ["red", "blue"]}
 ```
 
-Nested arrays and objects can be mixed freely:
+Mixing append and indexed is allowed; indexed positions set in order.
+
+Nested objects inside arrays:
 
 ```bash
-restish post https://api.rest.sh users[0].name: Alice users[1].name: Bob
+users[0].name: Alice users[0].role: admin
+# → {"users": [{"name": "Alice", "role": "admin"}]}
 ```
 
-## File Loading
+---
 
-Use `@file` to load content from a file.
+## Unset / Delete A Key — `undefined`
+
+Set a key to the special literal `undefined` to remove it from the output when
+patching an existing document.
 
 ```bash
-restish post https://api.rest.sh spec: @openapi.json
+echo '{"name":"Alice","role":"user"}' | \
+  restish post https://api.rest.sh role: undefined
+# body sent: {"name": "Alice"}
 ```
 
-For structured files, Restish can load the file as structured data. For plain
-text or raw data, the content becomes the value.
-
-This is useful when one field is large but the rest of the body still benefits
-from shorthand.
-
-## Stdin Interaction
-
-The main stdin rules are:
-
-- no shorthand args and TTY stdin means no request body
-- stdin alone is parsed as structured input when possible
-- shorthand args alone build the body
-- stdin plus shorthand args treats stdin as the base document and applies the
-  shorthand values as a patch
-
-That last rule is one of the most useful productivity features in Restish.
-
-## Shell Quoting Advice
-
-Many shells treat `?`, `[]`, and `*` specially. If your shell is doing glob
-expansion before Restish sees the input:
-
-- quote the argument
-- or run `restish setup <shell>` for `noglob`-style protection
-
-Example:
+This is the main way to delete a field during a piped patch or an
+`api set` config edit:
 
 ```bash
-restish post https://api.rest.sh 'tags[]: red' 'tags[]: blue'
+restish api set myapi 'operation_base: undefined'
 ```
 
-## When To Use Shorthand vs Files
+---
 
-Use shorthand when:
+## Move A Key — `^`
 
-- the body is small
-- the shape is easy to read inline
-- you are exploring quickly
-- you want to patch structured stdin
+Prefix a value with `^` to move a value from another key path rather than
+providing a literal value.
 
-Use files or stdin when:
+```bash
+echo '{"old":"value"}' | \
+  restish post https://api.rest.sh new: ^old
+# body sent: {"new": "value"}
+```
 
-- the document is large
-- exact formatting matters
-- another tool already produces the payload
+The source key is removed from the document after the move.
+
+---
+
+## Comments — `//`
+
+Lines starting with `//` are treated as comments and ignored. This is useful
+when shorthand appears in a config file or is generated programmatically.
+
+```
+// set the display name
+name: Alice
+// override the role
+role: admin
+```
+
+Comments are stripped before parsing; they cannot appear inline at the end of
+a value line.
+
+---
+
+## Base64 File Load — `%`
+
+Prefix a file path with `%` to load the file and encode its contents as a
+base64 string value.
+
+```bash
+restish post https://api.rest.sh icon: %./logo.png
+# → {"icon": "<base64-encoded PNG bytes>"}
+```
+
+The standard `@` prefix loads a file and inlines its content as structured
+data (parsed JSON/YAML) or as a raw string. Use `%` when you need the binary
+content base64-encoded instead.
+
+---
+
+## File Load — `@`
+
+Prefix a value with `@` to load the file at that path and use its content as
+the value.
+
+```bash
+restish post https://api.rest.sh config: @config.json
+```
+
+For structured files (`.json`, `.yaml`, `.cbor`, etc.), the content is parsed
+and inlined as a structured value. For unrecognized types, the content becomes
+a string.
+
+---
+
+## The `j` Helper — Inline Raw JSON
+
+Prefix a value with `j` immediately followed by a JSON literal to inline it
+verbatim without the usual coercion rules.
+
+```bash
+restish post https://api.rest.sh meta: j{"extra":true}
+# → {"meta": {"extra": true}}
+```
+
+This is useful when you need a literal JSON object or array as a field value
+inside a larger shorthand expression, without creating a separate file.
+
+---
+
+## Patch Mode
+
+When shorthand arguments are combined with stdin, stdin provides the base
+document and the shorthand arguments are applied as a patch over it.
+
+```bash
+cat existing.json | restish post https://api.rest.sh role: admin
+```
+
+Only the keys mentioned in the patch are changed. All other keys pass through
+unchanged from the base document. Use `undefined` to delete keys.
+
+---
+
+## Using Shorthand In `api add` And `api set`
+
+The `api add` and `api set` commands accept shorthand to configure profile
+fields, headers, and other settings without editing the JSON file directly.
+
+Add an API with a bearer token header:
+
+```bash
+restish api add myapi https://api.example.com \
+  'profiles.default.headers.Authorization: "Bearer abc123"'
+```
+
+Set a persistent header on an existing API:
+
+```bash
+restish api set myapi 'profiles.default.headers.X-Team: platform'
+```
+
+Remove a field:
+
+```bash
+restish api set myapi 'operation_base: undefined'
+```
+
+The same `undefined` and `^` semantics apply in this context.
+
+---
+
+## Filter Query Paths
+
+Shorthand dot-path syntax is also the default query language for `--rsh-filter`
+when the expression starts with one of the recognized roots (`body`, `headers`,
+`links`, `status`, `proto`). For example:
+
+```bash
+restish get https://api.rest.sh/ --rsh-filter body.images[0].url
+```
+
+Expressions that do not start with a recognized root are passed to jq instead.
+See [Query Syntax](/docs/reference/query-syntax/) for full details on both
+languages.
+
+---
 
 ## Related Pages
 
-- [Input and Shorthand](/docs/guides/input/)
+- [Input and Shorthand](/docs/guides/input/) — orientation and worked examples
+- [Query Syntax](/docs/reference/query-syntax/) — shorthand and jq filter paths
+- [API Management](/docs/reference/api-management/) — `api add` and `api set`
 - [Requests](/docs/guides/requests/)
-- [First Request](/docs/getting-started/first-request/)
+- [Shorthand library README](https://github.com/danielgtaylor/shorthand)
