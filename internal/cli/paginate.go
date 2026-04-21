@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -51,6 +52,13 @@ func (c *CLI) runPagination(
 	collect bool,
 	maxPages, maxItems int,
 ) (retErr error) {
+	ctx := requestContext(cmd)
+	if !output.IsTerminal(c.Stdout) {
+		origStdout := c.Stdout
+		c.Stdout = contextWriter{ctx: ctx, writer: origStdout}
+		defer func() { c.Stdout = origStdout }()
+	}
+
 	var allItems []any
 	var renderer valueRenderer
 	streamItems, err := c.paginationStreamsItems(cmd, firstResp)
@@ -69,7 +77,6 @@ func (c *CLI) runPagination(
 			}
 		}()
 	}
-	ctx := requestContext(cmd)
 
 	// Process first page.
 	items, filterErr := pageItems(firstResp.Body, pagCfg)
@@ -156,6 +163,25 @@ func (c *CLI) runPagination(
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
+}
+
+type contextWriter struct {
+	ctx    context.Context
+	writer io.Writer
+}
+
+func (w contextWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := w.writer.Write(p)
+	if err != nil {
+		return n, err
+	}
+	if err := w.ctx.Err(); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {

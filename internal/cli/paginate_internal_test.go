@@ -1,12 +1,23 @@
 package cli
 
 import (
+	"context"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
+	"github.com/danielgtaylor/restish/v2/internal/output"
+	"github.com/danielgtaylor/restish/v2/internal/request"
+	"github.com/spf13/cobra"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestMergePaginatedBodyPreservesWrapperObject(t *testing.T) {
 	firstBody := map[string]any{
@@ -120,5 +131,43 @@ func TestPaginationItemCapacity(t *testing.T) {
 				t.Fatalf("paginationItemCapacity() = %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRunPaginationHonorsContextCancellation(t *testing.T) {
+	c := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cmd := &cobra.Command{}
+	c.addGlobalFlags(cmd)
+	cmd.SetContext(ctx)
+
+	c.HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+
+	firstReq, err := http.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	firstResp := &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  http.StatusOK,
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Links:   map[string]any{"next": "https://api.example.com/items?page=2"},
+		Body:    []any{float64(1)},
+	}
+	_ = firstReq
+	go cancel()
+
+	err = c.runPagination(cmd, firstResp, firstReq.URL.String(), "https://api.example.com/items?page=2", request.Options{
+		Transport: request.BuildTransport(request.Options{Transport: c.baseHTTPTransport()}),
+	}, nil, false, 25, 0)
+	if err == nil {
+		t.Fatal("expected pagination to stop on context cancellation")
+	}
+	if err != context.Canceled {
+		t.Fatalf("err = %v, want %v", err, context.Canceled)
 	}
 }
