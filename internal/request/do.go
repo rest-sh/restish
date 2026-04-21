@@ -93,6 +93,9 @@ type Options struct {
 	NoCache bool
 	// CacheNamespace partitions cache entries for one API/profile tuple.
 	CacheNamespace string
+	// CacheMaxBytes is the maximum size of the HTTP response cache in bytes.
+	// If zero, defaults to cache.DefaultMaxBytes.
+	CacheMaxBytes int64
 	// Retry is the maximum number of retry attempts for network errors and
 	// 5xx responses.  Zero disables retries.
 	Retry int
@@ -315,7 +318,11 @@ func BuildTransport(opts Options) http.RoundTripper {
 	if opts.NoCache || opts.CacheDir == "" {
 		return inner
 	}
-	dc, err := cache.New(opts.CacheDir, cache.DefaultMaxBytes, opts.CacheNamespace)
+	maxBytes := opts.CacheMaxBytes
+	if maxBytes == 0 {
+		maxBytes = cache.DefaultMaxBytes
+	}
+	dc, err := cache.New(opts.CacheDir, maxBytes, opts.CacheNamespace)
 	if err != nil {
 		// Cache unavailable; fall back without caching.
 		return inner

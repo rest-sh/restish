@@ -718,9 +718,69 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		ContentType:          contentType,
 		Transport:            c.baseHTTPTransport(),
 		CacheDir:             c.cacheDir(),
+		CacheMaxBytes:        c.cacheMaxBytes(),
 		NoCache:              noCache,
 		Retry:                retry,
 		RetryBaseDelay:       c.RetryBaseDelay,
 		Logger:               c.Stderr,
 	}, nil
+}
+
+func (c *CLI) cacheMaxBytes() int64 {
+	if c == nil || c.cfg == nil {
+		return 0
+	}
+	return cacheSizeStringToBytes(c.cfg.Cache.MaxSize)
+}
+
+func cacheSizeStringToBytes(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	parsed, err := parseByteSize(s)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
+
+// parseByteSize parses strings like "100MB", "64MiB", "1024", and returns bytes.
+func parseByteSize(s string) (int64, error) {
+	v := strings.TrimSpace(strings.ToUpper(s))
+	if v == "" {
+		return 0, fmt.Errorf("empty size")
+	}
+
+	mult := int64(1)
+	switch {
+	case strings.HasSuffix(v, "GIB"):
+		mult = 1024 * 1024 * 1024
+		v = strings.TrimSuffix(v, "GIB")
+	case strings.HasSuffix(v, "MIB"):
+		mult = 1024 * 1024
+		v = strings.TrimSuffix(v, "MIB")
+	case strings.HasSuffix(v, "KIB"):
+		mult = 1024
+		v = strings.TrimSuffix(v, "KIB")
+	case strings.HasSuffix(v, "GB"):
+		mult = 1000 * 1000 * 1000
+		v = strings.TrimSuffix(v, "GB")
+	case strings.HasSuffix(v, "MB"):
+		mult = 1000 * 1000
+		v = strings.TrimSuffix(v, "MB")
+	case strings.HasSuffix(v, "KB"):
+		mult = 1000
+		v = strings.TrimSuffix(v, "KB")
+	case strings.HasSuffix(v, "B"):
+		v = strings.TrimSuffix(v, "B")
+	}
+
+	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("size must be >= 0")
+	}
+	return n * mult, nil
 }
