@@ -111,12 +111,16 @@ Removes a configured API.
 
 ```bash
 restish api clear-auth-cache <name>
+restish api clear-auth-cache --all <name>
 ```
 
 Deletes cached OAuth tokens for a named API.
 
 Use this when an OAuth flow changed, a token was revoked, or you want to force
 the next request back through the full token acquisition path.
+
+Use `--all` when you want to clear every cached token for that API across all
+profiles instead of only the active profile.
 
 ### `api content-types`
 

@@ -27,6 +27,7 @@ Restish currently includes built-in support for:
 - basic auth
 - OAuth2 client credentials
 - OAuth2 authorization code
+- OAuth2 device code
 - external-tool
 
 If you need something more specialized, the auth hook/plugin model leaves room
@@ -121,8 +122,10 @@ Restish commands once the profile is configured.
             "params": {
               "client_id": "ci-client",
               "client_secret": "secret",
+              "auth_method": "client_secret_basic",
               "token_url": "https://issuer.example.com/oauth/token",
-              "scopes": "items.read items.write"
+              "scopes": "items.read items.write",
+              "audience": "https://api.example.com/"
             }
           }
         }
@@ -147,7 +150,8 @@ Restish commands once the profile is configured.
               "client_id": "desktop-app",
               "authorize_url": "https://issuer.example.com/authorize",
               "token_url": "https://issuer.example.com/oauth/token",
-              "scopes": "openid profile items.read"
+              "scopes": "openid profile items.read",
+              "organization": "acme"
             }
           }
         }
@@ -163,6 +167,72 @@ Once configured, both still look like ordinary Restish requests:
 restish -p ci myapi/items
 restish -p default myapi/items
 ```
+
+### OAuth Auth Method And Extra Endpoint Params
+
+OAuth token requests default to `client_secret_post`. If your IdP requires HTTP
+Basic client authentication instead, set:
+
+```json
+{
+  "type": "oauth-client-credentials",
+  "params": {
+    "client_id": "ci-client",
+    "client_secret": "secret",
+    "auth_method": "client_secret_basic"
+  }
+}
+```
+
+Any additional auth params not consumed directly by Restish are forwarded to
+the OAuth endpoints. This is useful for IdP-specific fields such as:
+
+- `audience`
+- `resource`
+- `organization`
+
+### OAuth Device Code Example
+
+Use device code when the machine running Restish cannot complete a browser
+callback flow locally.
+
+```json
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "remote": {
+          "auth": {
+            "type": "oauth-device-code",
+            "params": {
+              "client_id": "device-client",
+              "device_authorization_url": "https://issuer.example.com/oauth/device",
+              "token_url": "https://issuer.example.com/oauth/token",
+              "scopes": "openid profile items.read"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+At request time, Restish prints the verification URL and user code, then polls
+the token endpoint until login completes.
+
+### Headless Authorization Code Fallback
+
+If you still prefer authorization code flow on a remote machine, disable
+automatic browser launch and paste the code manually:
+
+```bash
+restish --rsh-no-browser -p default myapi/items
+```
+
+When a TTY is attached, Restish prints the authorization URL and prompts for
+the pasted code instead of trying to open a local browser.
 
 ## External Tool Example
 
@@ -259,6 +329,7 @@ If you want to force a fresh token acquisition path, clear the cached token:
 
 ```bash
 restish api clear-auth-cache myapi
+restish api clear-auth-cache --all myapi
 ```
 
 ## Choosing Auth Per Environment
