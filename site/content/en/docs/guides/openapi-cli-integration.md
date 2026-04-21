@@ -64,6 +64,7 @@ Restish recognizes these OpenAPI extensions:
 - `x-cli-hidden`
 - `x-cli-ignore`
 - `x-cli-config`
+- `x-mcp-ignore`
 
 ## `x-cli-name`
 
@@ -124,6 +125,25 @@ paths:
   /legacy:
     x-cli-ignore: true
 ```
+
+## `x-mcp-ignore`
+
+Use this to hide an operation from `restish mcp` without hiding it from the
+regular CLI:
+
+```yaml
+paths:
+  /internal/debug:
+    get:
+      operationId: debugInternal
+      x-mcp-ignore: true
+```
+
+This is useful when an operation is valid for direct CLI use but is not safe or
+useful to expose as an AI tool.
+
+Use `x-cli-ignore` when you want the operation excluded from both the CLI and
+MCP tools.
 
 ## `x-cli-config`
 

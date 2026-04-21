@@ -93,6 +93,25 @@ Avoid it when:
 - you need custom tool semantics unrelated to API operations
 - you want raw HTTP behavior instead of Restish's normalized request pipeline
 
+## Hiding Operations From MCP
+
+Use the `x-mcp-ignore` extension to exclude specific operations from the MCP
+tool surface without hiding them from the regular CLI:
+
+```yaml
+paths:
+  /internal/debug:
+    get:
+      operationId: debugInternal
+      x-mcp-ignore: true
+```
+
+Operations marked with `x-mcp-ignore: true` are skipped when building MCP
+tools but remain available as normal generated CLI commands.
+
+Use `x-cli-ignore: true` when you want to hide the operation from both the
+CLI and MCP tools entirely.
+
 ## Related Pages
 
 - [Connect to an API](/docs/getting-started/connect-to-an-api/)

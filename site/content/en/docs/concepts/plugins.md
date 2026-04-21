@@ -18,13 +18,19 @@ dedicated top-level section instead of hiding them inside contributor material.
 
 Restish discovers plugins as executables named `restish-<name>`.
 
-It looks in:
+Discovery order:
 
-1. executables on `PATH`
+1. executables on `PATH` (checked first)
 2. the configured plugin directory, usually `~/.config/restish/plugins/`
 
-That makes plugins easy to ship as standalone binaries instead of requiring a
-custom Restish build.
+PATH is checked first, so a plugin installed system-wide can shadow a locally
+installed copy. That makes plugins easy to ship as standalone binaries without
+requiring a custom Restish build.
+
+When `allowed_plugins` is configured in `restish.json`, only plugins whose
+base name appears in the allowlist are loaded — regardless of whether they
+were found on PATH or in the plugin directory. This is the operator-controlled
+trust boundary for plugin execution.
 
 ## Hook Plugins
 
