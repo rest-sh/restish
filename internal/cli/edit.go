@@ -21,6 +21,7 @@ import (
 	"github.com/hexops/gotextdiff/span"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
+	"golang.org/x/term"
 )
 
 func (c *CLI) addEditCommand(root *cobra.Command) {
@@ -328,11 +329,23 @@ func (c *CLI) confirmEdit() (bool, error) {
 	fmt.Fprint(c.Stderr, "Continue? [Y/n] ")
 	reader := bufio.NewReader(c.Stdin)
 	line, err := reader.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) {
+		// Piped or closed stdin: treat as "no" (safe default to avoid accidental
+		// destructive operations when stdin is not a TTY).
+		return false, nil
+	}
+	if err != nil {
 		return false, fmt.Errorf("edit: read confirmation: %w", err)
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))
-	return answer == "" || answer == "y" || answer == "yes", nil
+	// Empty input (pressing Enter) is "yes" only on an interactive TTY.
+	if answer == "" {
+		if f, ok := c.Stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+			return true, nil
+		}
+		return false, nil
+	}
+	return answer == "y" || answer == "yes", nil
 }
 
 func supportsMergePatch(headers map[string]string) bool {
