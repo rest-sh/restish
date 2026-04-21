@@ -186,8 +186,8 @@ func makeJSONSafe(v any) any {
 	}
 	switch val.Kind() {
 	case reflect.Slice:
-		if _, ok := v.([]byte); ok {
-			return v // keep byte slices intact (base64 in JSON)
+		if _, ok := val.Interface().([]byte); ok {
+			return val.Interface() // keep byte slices intact (base64 in JSON)
 		}
 		out := make([]any, val.Len())
 		for i := range out {

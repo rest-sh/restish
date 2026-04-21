@@ -10,6 +10,9 @@ import (
 //   - []any of scalars → one value per line, strings unquoted
 //   - anything else → fmt.Sprintf %v
 func RawOutput(v any) string {
+	if v == nil {
+		return ""
+	}
 	switch val := v.(type) {
 	case string:
 		return val

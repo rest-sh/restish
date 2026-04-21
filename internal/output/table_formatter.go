@@ -128,20 +128,37 @@ func toRows(body any) ([]map[string]any, bool) {
 	return rows, true
 }
 
-// extractColumns returns all keys seen in rows, in sorted order.
+// extractColumns returns all keys seen in rows, preserving first-row key
+// order and appending any additional keys from later rows in sorted order.
 func extractColumns(rows []map[string]any) []string {
+	if len(rows) == 0 {
+		return nil
+	}
 	seen := map[string]bool{}
-	for _, row := range rows {
-		for k := range row {
+	var cols []string
+
+	// Preserve first-row key order (Go map iteration is random, so we use the
+	// fact that any additional key from a later row is truly "extra").
+	for k := range rows[0] {
+		if !seen[k] {
 			seen[k] = true
+			cols = append(cols, k)
 		}
 	}
-	cols := make([]string, 0, len(seen))
-	for k := range seen {
-		cols = append(cols, k)
+	sort.Strings(cols) // stabilise first-row order alphabetically
+
+	// Collect extra keys from subsequent rows.
+	var extra []string
+	for _, row := range rows[1:] {
+		for k := range row {
+			if !seen[k] {
+				seen[k] = true
+				extra = append(extra, k)
+			}
+		}
 	}
-	sort.Strings(cols)
-	return cols
+	sort.Strings(extra)
+	return append(cols, extra...)
 }
 
 // cellString converts a cell value to a display string.

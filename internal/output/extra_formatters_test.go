@@ -128,3 +128,121 @@ func TestGronFormatter_EscapesNonIdentifierKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestTableFormatterSortBy verifies that SortBy sorts rows by the named column.
+func TestTableFormatterSortBy(t *testing.T) {
+	resp := &output.Response{
+		Status: 200,
+		Body: []any{
+			map[string]any{"name": "Zara"},
+			map[string]any{"name": "Alice"},
+			map[string]any{"name": "Mia"},
+		},
+	}
+	var buf bytes.Buffer
+	f := &output.TableFormatter{SortBy: "name"}
+	if err := f.Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	alicePos := strings.Index(got, "Alice")
+	miaPos := strings.Index(got, "Mia")
+	zaraPos := strings.Index(got, "Zara")
+	if alicePos == -1 || miaPos == -1 || zaraPos == -1 {
+		t.Fatalf("missing names in output:\n%s", got)
+	}
+	if !(alicePos < miaPos && miaPos < zaraPos) {
+		t.Errorf("expected Alice < Mia < Zara after SortBy, positions: %d %d %d\n%s", alicePos, miaPos, zaraPos, got)
+	}
+}
+
+// TestTableFormatterTruncation verifies that long cell values are truncated.
+func TestTableFormatterTruncation(t *testing.T) {
+	longValue := strings.Repeat("x", 50)
+	resp := &output.Response{
+		Status: 200,
+		Body:   []any{map[string]any{"value": longValue}},
+	}
+	var buf bytes.Buffer
+	if err := (&output.TableFormatter{}).Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, longValue) {
+		t.Error("expected long value to be truncated, but found full value in output")
+	}
+	if !strings.Contains(got, "…") {
+		t.Error("expected truncation indicator '…' in output")
+	}
+}
+
+// TestTableFormatterMixedTypeRows verifies that rows with non-object items fall
+// back to JSON output.
+func TestTableFormatterMixedTypeRows(t *testing.T) {
+	resp := &output.Response{
+		Status: 200,
+		Body:   []any{map[string]any{"id": 1}, "not an object"},
+	}
+	var buf bytes.Buffer
+	if err := (&output.TableFormatter{}).Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	// Should fall back to JSON (array contains non-object item).
+	got := buf.String()
+	if strings.Contains(got, "┌") {
+		t.Error("expected JSON fallback for mixed-type rows, got a table")
+	}
+}
+
+// TestTableFormatterCJKWidth verifies that CJK characters are counted by rune,
+// not byte (they would exceed truncation width if bytes were counted).
+func TestTableFormatterCJKWidth(t *testing.T) {
+	// 38 CJK runes — fits within the 40-rune limit.
+	cjkValue := strings.Repeat("中", 38)
+	resp := &output.Response{
+		Status: 200,
+		Body:   []any{map[string]any{"text": cjkValue}},
+	}
+	var buf bytes.Buffer
+	if err := (&output.TableFormatter{}).Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	// Should not be truncated (38 runes < 40).
+	if strings.Contains(got, "…") {
+		t.Error("expected 38-rune CJK value to fit without truncation")
+	}
+}
+
+// TestReadableValueStreamEmptyBase verifies that a nil base does not crash.
+func TestReadableValueStreamEmptyBase(t *testing.T) {
+	var buf bytes.Buffer
+	f := &output.ReadableFormatter{}
+	stream, err := f.StartValueStream(&buf, nil, false)
+	if err != nil {
+		t.Fatalf("StartValueStream(nil base): %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"key": "value"}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if !strings.Contains(buf.String(), "key") {
+		t.Errorf("expected output to contain 'key', got:\n%s", buf.String())
+	}
+}
+
+// TestReadableValueStreamCloseWithoutWrites verifies that Close on an
+// untouched stream does not crash.
+func TestReadableValueStreamCloseWithoutWrites(t *testing.T) {
+	var buf bytes.Buffer
+	f := &output.ReadableFormatter{}
+	stream, err := f.StartValueStream(&buf, nil, false)
+	if err != nil {
+		t.Fatalf("StartValueStream: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}

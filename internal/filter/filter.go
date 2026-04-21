@@ -27,7 +27,14 @@ const (
 // to shorthand; everything else goes to jq.
 var shorthandRoots = []string{"body", "headers", "links", "status", "proto", "@"}
 
-var jqCodeCache sync.Map
+// jqCacheMaxSize caps the number of compiled jq programs kept in the global
+// cache so long-running embedders don't grow unboundedly.
+const jqCacheMaxSize = 1024
+
+var (
+	jqCacheMu sync.Mutex
+	jqCache   = make(map[string]*gojq.Code, jqCacheMaxSize)
+)
 
 // Apply runs expr against doc using the chosen language and returns the result.
 // doc should be a map[string]any with keys "body", "headers", "links",
@@ -72,7 +79,7 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 		return nil, err
 	}
 
-	results := make([]any, 0, 256)
+	results := make([]any, 0, 1)
 	iter := code.Run(doc)
 	for {
 		v, ok := iter.Next()
@@ -95,9 +102,16 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 }
 
 func compiledJQ(expr string) (*gojq.Code, error) {
-	if cached, ok := jqCodeCache.Load(expr); ok {
-		return cached.(*gojq.Code), nil
+	jqCacheMu.Lock()
+	if code, ok := jqCache[expr]; ok {
+		jqCacheMu.Unlock()
+		return code, nil
 	}
+	// Evict entire cache when the cap is reached; simple but avoids unbounded growth.
+	if len(jqCache) >= jqCacheMaxSize {
+		jqCache = make(map[string]*gojq.Code, jqCacheMaxSize)
+	}
+	jqCacheMu.Unlock()
 
 	q, err := gojq.Parse(expr)
 	if err != nil {
@@ -107,6 +121,13 @@ func compiledJQ(expr string) (*gojq.Code, error) {
 	if err != nil {
 		return nil, fmt.Errorf("jq compile: %w", err)
 	}
-	actual, _ := jqCodeCache.LoadOrStore(expr, code)
-	return actual.(*gojq.Code), nil
+
+	jqCacheMu.Lock()
+	if existing, ok := jqCache[expr]; ok {
+		jqCacheMu.Unlock()
+		return existing, nil
+	}
+	jqCache[expr] = code
+	jqCacheMu.Unlock()
+	return code, nil
 }

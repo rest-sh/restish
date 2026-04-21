@@ -299,3 +299,74 @@ func TestMultipartEncodingIncludesFile(t *testing.T) {
 		t.Fatalf("file name: got %q", filenames["file"])
 	}
 }
+
+// jsonRoundTrip is a test helper that serialises v to JSON and back, so
+// that test assertions can compare normalised representations instead of
+// direct struct equality (which fails across CBOR/msgpack integer widths).
+func jsonRoundTrip(t *testing.T, v any) any {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("jsonRoundTrip marshal: %v", err)
+	}
+	var out any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("jsonRoundTrip unmarshal: %v", err)
+	}
+	return out
+}
+
+// TestCBORRoundTripJSONNormalized verifies CBOR round-trip using JSON
+// normalisation so integer-width differences don't cause failures.
+func TestCBORRoundTripJSONNormalized(t *testing.T) {
+	in := map[string]any{"count": float64(42), "active": true, "label": "hello"}
+	out := roundTrip(t, "application/cbor", in)
+	got, _ := json.Marshal(jsonRoundTrip(t, out))
+	want, _ := json.Marshal(jsonRoundTrip(t, in))
+	if string(got) != string(want) {
+		t.Errorf("CBOR round-trip mismatch:\n got  %s\n want %s", got, want)
+	}
+}
+
+// TestCBORByteString verifies that CBOR byte strings survive the round-trip
+// and are represented as []byte (base64 via JSON) rather than corrupted strings.
+func TestCBORByteString(t *testing.T) {
+	payload := []byte{0x00, 0x01, 0x02, 0xfe, 0xff}
+	in := map[string]any{"data": payload}
+	out := roundTrip(t, "application/cbor", in)
+	m, ok := out.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T", out)
+	}
+	switch v := m["data"].(type) {
+	case []byte:
+		if string(v) != string(payload) {
+			t.Errorf("byte value mismatch: got %v, want %v", v, payload)
+		}
+	default:
+		// If it comes back as base64 string (after JSON encode), decode and check.
+		s, ok := m["data"].(string)
+		if !ok {
+			t.Fatalf("expected []byte or string, got %T", m["data"])
+		}
+		decoded, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			t.Fatalf("base64 decode: %v", err)
+		}
+		if string(decoded) != string(payload) {
+			t.Errorf("decoded mismatch: got %v, want %v", decoded, payload)
+		}
+	}
+}
+
+// TestMsgpackRoundTripJSONNormalized verifies msgpack round-trip with JSON
+// normalisation.
+func TestMsgpackRoundTripJSONNormalized(t *testing.T) {
+	in := map[string]any{"n": float64(7), "flag": false}
+	out := roundTrip(t, "application/msgpack", in)
+	got, _ := json.Marshal(jsonRoundTrip(t, out))
+	want, _ := json.Marshal(jsonRoundTrip(t, in))
+	if string(got) != string(want) {
+		t.Errorf("msgpack round-trip mismatch:\n got  %s\n want %s", got, want)
+	}
+}
