@@ -51,6 +51,8 @@ func DefaultLoaders() []Loader {
 
 // load tries each loader (highest priority first) and returns the first match.
 // Returns nil, nil if no loader recognises the content.
+// Loaders that set ContentType or Raw in the returned spec retain their values;
+// the caller-supplied contentType and body are only used as fallbacks.
 func load(contentType string, body []byte, loaders []Loader) (*APISpec, error) {
 	best := pickLoader(contentType, body, loaders)
 	if best == nil {
@@ -60,8 +62,12 @@ func load(contentType string, body []byte, loaders []Loader) (*APISpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	spec.ContentType = contentType
-	spec.Raw = body
+	if spec.ContentType == "" {
+		spec.ContentType = contentType
+	}
+	if len(spec.Raw) == 0 {
+		spec.Raw = body
+	}
 	return spec, nil
 }
 

@@ -28,6 +28,8 @@ func (l PluginLoader) Detect(contentType string, _ []byte) bool {
 }
 
 // Load calls the plugin and parses the returned OpenAPI spec.
+// The returned APISpec has ContentType and Raw set from the plugin's response,
+// allowing the plugin to produce a normalized form different from the input.
 func (l PluginLoader) Load(body []byte) (*APISpec, error) {
 	in := map[string]any{
 		"type": "loader",
