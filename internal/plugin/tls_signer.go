@@ -95,8 +95,9 @@ type PluginSigner struct {
 	proc   *exec.Cmd
 	pub    crypto.PublicKey
 
-	mu   sync.Mutex
-	dead bool // set to true after any fatal error; guarded by mu
+	mu          sync.Mutex
+	dead        bool   // set to true after any fatal error; guarded by mu
+	stderrSnap  string // snapshot of stderr taken after proc.Wait() completes; guarded by mu
 }
 
 // shutdown kills the plugin process and releases its resources.
@@ -133,6 +134,11 @@ func (s *PluginSigner) closeLocked(graceful bool) error {
 	case <-time.After(5 * time.Second):
 		_ = s.proc.Process.Kill()
 		waitErr = <-waitCh
+	}
+	// proc.Wait() guarantees all I/O copy goroutines (including stderr) have
+	// completed, so it is safe to snapshot stderr here without a data race.
+	if s.stderr != nil {
+		s.stderrSnap = strings.TrimSpace(s.stderr.String())
 	}
 
 	_ = s.stdout.Close()
@@ -178,6 +184,7 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 		return nil, s.signError(fmt.Sprintf("sign reply: %v", err))
 	}
 	if reply.Error != "" {
+		s.shutdown()
 		return nil, s.signError(reply.Error)
 	}
 	if len(reply.Signature) == 0 {
@@ -188,10 +195,8 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 
 func (s *PluginSigner) signError(detail string) error {
 	msg := fmt.Sprintf("tls-signer %s: %s", filepath.Base(s.path), detail)
-	if s.stderr != nil {
-		if stderr := strings.TrimSpace(s.stderr.String()); stderr != "" {
-			msg += "\nstderr: " + stderr
-		}
+	if s.stderrSnap != "" {
+		msg += "\nstderr: " + s.stderrSnap
 	}
 	return fmt.Errorf("%s", msg)
 }
