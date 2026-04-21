@@ -6,56 +6,212 @@ Restish v2 can build request bodies from positional CLI arguments using
 shorthand syntax, optionally merging those arguments with structured input read
 from stdin.
 
-This gives the CLI a compact way to express request payloads without forcing
-users to write full JSON for common cases.
+Shorthand is a body-construction language, not a wire format. Its output is a
+logical value that later flows through the content-type registry for final
+serialization.
 
-## Problem
+## Goals
 
-Typing JSON directly in a shell is noisy and error-prone, especially for common
-API interactions where the body is small and mostly object-shaped.
+- make small structured request bodies fast to type
+- support nested objects and arrays without forcing users to write full JSON
+- compose cleanly with stdin-provided documents
+- provide patch-like refinement of piped input
+- keep the shorthand language reusable across other structured-input surfaces
 
-At the same time, Restish still needs to work well with piped input and with
-structured formats coming from other tools. The request body design therefore
-needed to:
+## Non-Goals
 
-- keep small ad hoc payloads fast to type
-- support nested object construction from the command line
-- preserve compatibility with piped structured input
-- allow stdin data to be refined or patched by command-line arguments
-- leave final encoding to the content-type layer rather than baking it into the
-  parser
+- replacing JSON or YAML as full document authoring formats
+- coupling shorthand semantics to one transport media type
+- forcing users to learn different mini-languages for bodies, config edits, and
+  simple path selection where one shared language can work
 
-## Design
+## Design Position
 
-Restish treats shorthand as a body-construction language, not a wire format.
+Shorthand exists at the **value construction** layer of the request pipeline.
 
-The input stage produces a Go value representing the request body. That value is
-then handed to the content registry, which is responsible for encoding it into
-JSON, YAML, or another configured media type.
+That means:
 
-The main rules are:
+1. Restish decides whether there is a body and where the base value comes from.
+2. Shorthand constructs or patches a logical Go value.
+3. The content registry serializes that value as JSON, YAML, form data, or
+   another selected media type.
 
-1. no args and TTY stdin means no body
-2. stdin alone is parsed as structured input when possible
-3. args alone are joined back into a single shorthand expression and parsed
-4. stdin plus args treats stdin as the base document and applies args as a
+This separation is important. It keeps shorthand focused on document shape
+instead of transport encoding details.
+
+## Body Source Resolution
+
+Request body construction follows this decision order:
+
+1. no positional body args and TTY stdin -> no body
+2. stdin only -> parse stdin as the base body
+3. shorthand args only -> parse shorthand as the full body
+4. stdin plus shorthand args -> parse stdin as the base body, then apply the
    shorthand patch
 
-That patching behavior is a key part of the design. It lets users combine
-generated or piped structured data with quick command-line overrides without
-building an entirely new document from scratch.
+This patching behavior is one of the defining Restish workflows. It lets users
+generate or fetch a document elsewhere, then refine it at the command line
+without rebuilding it from scratch.
 
-One important constraint is that file-reference shorthand is content-type aware.
-For form-style submissions, Restish keeps values like `@upload.txt` literal
-instead of eagerly interpreting them as shorthand file input.
+## Base Input From Stdin
 
-The shorthand syntax is mainly used to construct nested object and array values
-compactly from shell arguments. Typical forms include:
+When stdin provides the base body, Restish should:
+
+- treat structured input as structured data when it can be decoded
+- preserve plain text as plain text when structured decoding does not apply
+- allow shorthand patching only when the base value can be represented as a
+  mutable structured value
+
+If stdin is binary and the selected content-type path does not support a safe
+structured patch workflow, Restish should not pretend shorthand patching is
+possible.
+
+## Shorthand Parsing Model
+
+Shorthand arguments arrive from the shell already split. Restish reconstructs
+the expression by joining the already-split args with spaces and then feeds that
+expression into the shorthand parser.
+
+That design preserves shell ergonomics while keeping the parser itself as the
+single source of truth for the resulting value.
+
+## Core Constructs
+
+Typical forms include:
 
 - `name: Alice`
 - `user.address.city: NYC`
-- `tags[]: red, tags[]: blue`
+- `tags[]: red`
+- `tags[0]: first`
 - `enabled: true`
+
+These expressions construct nested objects and arrays using a compact path-like
+syntax.
+
+## Type Coercion
+
+Unquoted scalar values are coerced by the shorthand parser into a logical type
+such as:
+
+- string
+- integer
+- float
+- boolean
+- null
+
+Quoting forces string semantics where needed. Restish should preserve the parser
+library's type-coercion contract rather than reinterpreting those values later
+in the CLI layer.
+
+## Array And Object Semantics
+
+Shorthand must support:
+
+- object field assignment
+- array append via `[]`
+- array index assignment via `[n]`
+- nested object creation under arrays
+
+When shorthand patches an existing base document, array and object behavior
+should follow the shorthand library's normal structural rules rather than a
+separate Restish-specific patch dialect.
+
+## Patch Semantics
+
+When stdin and shorthand args are both present, stdin is the base document and
+shorthand applies as a structural patch.
+
+That means:
+
+- fields named in shorthand are added or replaced
+- unspecified fields remain from the base document
+- patch directives such as delete or move operate relative to the base document
+
+This is intentionally closer to "document refinement" than to raw text
+substitution.
+
+## Special Forms
+
+The shorthand language includes several special forms that matter to Restish's
+overall design.
+
+### `undefined`
+
+`undefined` removes a field from the resulting document when patching an
+existing structure.
+
+This is the main deletion primitive for:
+
+- request-body patching
+- config-edit shortcuts that reuse shorthand semantics
+
+### `^`
+
+The move operator reassigns a value from one path to another and removes the
+source path.
+
+This is useful for structural reshaping of a piped base document without
+dropping into jq.
+
+### `@`
+
+File reference loads a file and uses its content as the value. For structured
+files, the value may be parsed and inlined as a structured value.
+
+### `%`
+
+Base64 file load reads file bytes and inserts a base64-encoded string value.
+This is the right tool for embedding binary content into JSON-like bodies.
+
+### `j`
+
+The JSON-literal helper allows an inline JSON object or array to be inserted as
+an exact structured value inside a larger shorthand expression.
+
+### `//`
+
+Comments are ignored by the parser. This matters when shorthand is embedded in
+files or generated workflows rather than typed only as one shell command.
+
+## Content-Type Interaction
+
+Shorthand is content-type aware in one important way: not every request-body
+mode should reinterpret `@something` or other special values the same way.
+
+For form-style submissions, Restish may need to preserve literal values rather
+than eagerly converting them as shorthand file references. The body-construction
+layer therefore owns the decision of when shorthand special forms are active and
+when a content-type mode should keep values literal.
+
+This is particularly important for:
+
+- `application/x-www-form-urlencoded`
+- `multipart/form-data`
+
+## Reuse Outside Request Bodies
+
+Shorthand is not only for request bodies.
+
+The same language or a deliberately compatible subset is reused for:
+
+- config patch surfaces such as `api set`
+- simple path-oriented filtering and projection
+
+This reuse is intentional because it lowers the number of distinct mini-languages
+users need to carry around. The same mental model for "nested paths and
+structural updates" should work across several Restish workflows.
+
+## Error Handling
+
+Shorthand parse errors should be surfaced as local CLI errors, not deferred into
+later encoding or request execution where the user loses context.
+
+Errors should identify:
+
+- the failing expression
+- structural issues such as invalid array syntax where possible
+- whether the failure happened while parsing a full shorthand body or while
+  patching a base document
 
 ## Examples
 
@@ -65,7 +221,7 @@ Simple object body:
 restish post https://api.example.com/users name: Alice age: 30
 ```
 
-which builds a structured value equivalent to:
+which builds a logical value equivalent to:
 
 ```json
 {
@@ -98,7 +254,7 @@ Piped input patched by shorthand args:
 echo '{"name":"Bob","age":25}' | restish post https://api.example.com/users name: Alice
 ```
 
-which produces a body equivalent to:
+which produces:
 
 ```json
 {
@@ -107,37 +263,30 @@ which produces a body equivalent to:
 }
 ```
 
+Delete and move during patching:
+
+```bash
+echo '{"old":"value","role":"user"}' | \
+  restish post https://api.example.com/users new: ^old role: undefined
+```
+
 ## Alternatives Considered
 
-### Require full JSON or YAML bodies
+### Require Full JSON Or YAML Bodies
 
-This is explicit, but too verbose for the kind of quick exploratory and
-iterative API usage Restish is designed to support.
+Explicit, but too verbose for exploratory CLI usage.
 
-### Treat shorthand as a transport-specific encoding
+### Treat Shorthand As A Transport Encoding
 
-That would blur the boundary between body construction and content encoding. It
-is cleaner to produce a structured value first, then let the content layer
-decide how to serialize it.
+Rejected because it would blur body construction and wire encoding.
 
-### Ignore stdin once shorthand args are present
+### Ignore Stdin Once Shorthand Args Are Present
 
-This would simplify implementation, but it would make command-line patching of
-piped data much less useful. Supporting a base document plus patch preserves a
-nice compositional workflow.
+Simpler, but it would remove one of Restish's nicest composition patterns.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/input/body.go` defines the body-construction rules for args and
-  stdin
-- `internal/cli/http.go` calls body construction before delegating final
-  encoding to the content registry
-- `internal/input/body_test.go` covers nested shorthand, stdin passthrough, and
-  stdin-plus-args patching behavior
-
-One detail worth preserving is that shorthand parsing reconstructs the shell
-expression by joining already-split CLI args with spaces. That keeps the command
-line ergonomic while still using the shorthand parser as the source of truth for
-the resulting structured value.
+- Design 003 defines how the resulting logical value is encoded.
+- Design 007 relies on shorthand for generated-command request bodies.
+- Design 010 reuses compatible shorthand path semantics for simple filtering.
+- Design 014 uses shorthand patching inside the edit workflow.

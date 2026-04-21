@@ -263,6 +263,85 @@ The host should keep owning:
 
 Plugins should stay renderers, not alternate execution pipelines.
 
+## Planner Algorithm
+
+The output planner should make these decisions in order:
+
+1. classify the underlying response as:
+   - bounded non-paginated
+   - bounded paginated
+   - unbounded stream
+2. resolve the selected format family:
+   - explicit document format
+   - explicit record format
+   - adaptive default based on TTY and whether output is still raw
+3. classify the filter as:
+   - none
+   - per-record
+   - whole-collection
+4. decide whether the logical result must preserve a wrapper object via
+   pagination config such as `items_path`
+5. choose execution strategy:
+   - direct bounded document render
+   - collected paginated document render
+   - incremental record render
+   - readable incremental human mode
+   - fail because the requested format cannot be satisfied safely
+
+This planning step should happen before bytes are written to stdout. Once output
+starts, Restish should not silently discover it chose the wrong framing mode.
+
+## Execution Strategies
+
+### Bounded Document Render
+
+Use when:
+
+- the response is bounded
+- no pagination collection merge is needed
+- the selected format is document-oriented
+
+### Collected Paginated Document Render
+
+Use when:
+
+- the response is paginated and bounded
+- the selected format is document-oriented, or
+- the filter requires whole-collection semantics
+
+### Incremental Record Render
+
+Use when:
+
+- the selected format is record-oriented
+- the filter can run per record
+- the response is either paginated or streamed
+
+### Readable Incremental Human Mode
+
+Use when:
+
+- the selected format is `readable`
+- low latency is valuable
+- the result is paginated or streamed
+
+This is still a document-oriented human contract, but it is implemented with a
+record-oriented internal execution strategy.
+
+## Failure Cases
+
+The planner should fail clearly when the user asks for a contract Restish
+cannot satisfy safely.
+
+Examples:
+
+- `-o json` on a clearly unbounded live stream
+- a whole-collection jq transform combined with forced incremental-only output
+- a formatter plugin that supports only record rendering when the selected mode
+  requires a full document
+
+Clear failure is better than silently emitting invalid or misleading output.
+
 ## Behavior Matrix
 
 ### Paginated Bounded Response

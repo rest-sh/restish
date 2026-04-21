@@ -6,29 +6,26 @@ Restish v2 applies filtering after response normalization and before
 formatting. Users can query the normalized response with either shorthand path
 syntax or jq syntax, and Restish can usually infer which language they meant.
 
-## Problem
+Filtering is not just a rendering flourish. It is part of the data-flow model
+that determines what value downstream output logic is working with.
 
-Once Restish has a normalized response, users often want only part of it:
-
-- just the body
-- just a header
-- a nested field
-- a transformed or filtered list
-
-The challenge is that different users want different levels of power. A simple
-path expression is easier to learn and faster to type, while jq is much more
-expressive for complex transformations.
-
-The filtering design therefore needed to:
+## Goals
 
 - expose the full normalized response, not just the body
 - keep common cases lightweight
-- preserve access to a more powerful query language when needed
-- work predictably in both interactive and script-oriented modes
+- preserve a powerful query language for complex transforms
+- work predictably with pagination, streaming, and redirected output
+- keep filtering semantics separate from formatting semantics
 
-## Design
+## Non-Goals
 
-Filtering operates on a stable response document with these roots:
+- inventing a third general-purpose query language
+- filtering raw transport objects directly
+- silently changing filter evaluation mode in ways users cannot reason about
+
+## Filter Input Model
+
+Filtering operates on a stable normalized document with these roots:
 
 - `proto`
 - `status`
@@ -37,43 +34,164 @@ Filtering operates on a stable response document with these roots:
 - `body`
 - `@` for the full document
 
+This means filters can reach:
+
+- decoded body fields
+- protocol metadata
+- headers
+- discovered hypermedia links
+
+without forcing users to switch to a different API for each concern.
+
+## Supported Languages
+
 Restish supports two filter languages:
 
-- shorthand path syntax for direct field access and simple selection
-- jq for richer transformations and predicates
+- shorthand path syntax for direct field access and lightweight projection
+- jq for richer transformations, predicates, aggregation, and selection
 
-The default behavior is `auto`: if the expression begins with one of the known
-normalized response roots, Restish treats it as shorthand; otherwise it treats
-it as jq.
+This split is deliberate:
 
-That gives users a convenient path for common queries like `body.name` or
-`headers.Content-Type` without giving up jq for more advanced cases.
+- shorthand keeps common access patterns fast to type
+- jq keeps the ceiling high for complex workflows
 
-There are a few design choices worth preserving:
+## Language Detection
 
-- filtering happens after normalization, so filters never depend on raw
-  transport objects
-- the default filter is context-sensitive: interactive output tends to start
-  from the full response, while non-interactive output tends to start from the
-  body
-- `--rsh-raw` is a presentation shortcut layered on top of filtering, not a
-  separate query language
+The default filter mode is `auto`.
 
-`--rsh-raw` is intentionally narrow. It removes quotes from string results and
-prints arrays of scalars one item per line, which makes common shell scripting
-cases easier without inventing another general-purpose formatting mode.
+In auto mode:
 
-Shorthand is intended for path-style queries over the normalized response
-document. Typical expressions look like:
+- if the expression begins with a recognized normalized-response root, treat it
+  as shorthand
+- otherwise treat it as jq
+
+Typical shorthand expressions:
 
 - `body.name`
 - `body.items[0]`
 - `headers.Content-Type`
 - `links.next`
 
-jq remains available for transformations and selections that go beyond direct
-path access. The reference syntax is documented at
-[jqlang.org/manual](https://jqlang.org/manual/).
+Typical jq expressions:
+
+- `.body.items[] | select(.active)`
+- `.body.items | length`
+- `.body | map(.id)`
+
+Explicit `--rsh-filter-lang` should always override auto-detection.
+
+## Filter Execution Phase
+
+Filtering happens after normalization and after the logical response shape is
+known, but before formatter selection is finalized for the resulting value.
+
+That means:
+
+- normal bounded responses filter one normalized document
+- paginated responses may filter either per-record or per-logical-collection
+  depending on plan
+- streams filter one event/item at a time unless the selected mode requires a
+  bounded collection
+
+This ties filtering directly into the output planner described in design 028.
+
+## Per-Record Versus Whole-Collection Filters
+
+Filters fall into two broad classes:
+
+- **per-record filters** such as `body.id` or `.body.items[] | .name`
+- **whole-collection filters** such as `.body | map(.id)`, `length`,
+  `group_by(...)`, or `sort_by(...)`
+
+The output planner must classify which kind of filter is being used because
+that determines whether:
+
+- the response can stream through incrementally
+- pagination can emit records one by one
+- the CLI must collect the full logical result first
+
+If a filter cannot safely run incrementally, Restish should collect
+automatically or fail clearly.
+
+## Shorthand Semantics
+
+Shorthand filtering is intended for path-style projection over the normalized
+response document. It should stay simple and predictable:
+
+- direct root selection
+- nested object traversal
+- array indexing
+- lightweight projection helpers compatible with the shorthand library's model
+
+Shorthand is not meant to become a partial jq clone.
+
+## jq Semantics
+
+jq remains the escape hatch for:
+
+- selection and predicates
+- reshaping
+- aggregation
+- sorting and grouping
+- computed values
+
+Restish should treat jq as an embedded query engine, not as something to
+reinterpret in CLI-specific ways beyond the normalized input model and raw
+output options.
+
+## Planning Conflicts
+
+Some options interact in ways users should not have to guess about.
+
+Examples:
+
+- `--rsh-headers` asks for header-oriented output
+- `--rsh-filter` asks for a selected sub-value
+- `--rsh-raw` asks for a string/scalar-oriented presentation shortcut
+
+When options conflict, Restish should either:
+
+- define a clear precedence and document it, or
+- reject the combination with a clear error or warning
+
+Silent discarding of user intent is not acceptable.
+
+## `--rsh-raw`
+
+`--rsh-raw` is intentionally narrow. It is not a third filter language and not
+the same as `-o raw`.
+
+`--rsh-raw` is a presentation shortcut layered on top of filtering. It is meant
+for shell-friendly display of filter results by:
+
+- removing JSON quotes from scalar strings
+- printing arrays of scalars one item per line
+
+It should not try to invent a broad alternate formatting system.
+
+## Output Consequences
+
+Once filtering selects a sub-value, Restish is no longer working with the
+original raw response payload. That changes default output behavior for
+non-TTY/stdout-redirected cases:
+
+- if the result is a transformed value, default to JSON
+- do not try to preserve raw bytes that no longer correspond to the selected
+  result
+
+This is a key interaction between filtering and design 009/028.
+
+## Performance And Caching
+
+jq compilation may be cached for efficiency, but that cache should be bounded
+and scoped in a way that does not create unbounded memory growth for long-lived
+embedders.
+
+The cache is an implementation detail. The design requirement is:
+
+- repeated use of the same jq expression should not require recompilation every
+  time
+- long-lived processes should not leak memory via unbounded expression caches
 
 ## Examples
 
@@ -113,7 +231,7 @@ restish get https://api.example.com/items -f '.body.items[] | select(.active) | 
 restish get https://api.example.com/items -f '.body.items | length'
 ```
 
-Example raw output:
+Example raw presentation of filtered values:
 
 ```bash
 restish get https://api.example.com/items -f '.body.items[] | .name' --rsh-raw
@@ -128,34 +246,21 @@ beta
 
 ## Alternatives Considered
 
-### Support only jq
+### Support Only jq
 
-This would be powerful, but it would raise the floor for common tasks. Restish
-benefits from having a lightweight query path for simple inspection and
-projection.
+Too high-friction for common inspection tasks.
 
-### Support only shorthand paths
+### Support Only Shorthand Paths
 
-This would be easier to explain, but it would cap the usefulness of filtering
-too early. jq is worth keeping for transformations that go beyond field access.
+Too limiting for real transformation work.
 
-### Filter only the body by default
+### Filter Only The Body By Default
 
-That works for many API responses, but it hides useful protocol context. The
-normalized response model is valuable precisely because filters can reach
-headers, links, and status when needed.
+Would throw away a core advantage of Restish's normalized response model.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/filter/filter.go` resolves the filter language and applies either
-  shorthand or jq
-- `internal/filter/raw.go` implements the focused `--rsh-raw` display behavior
-- `internal/cli/http.go` builds the normalized filter document and applies the
-  filter before selecting a formatter
-
-One subtle but important behavior is that filtering a sub-value changes what
-non-TTY default output means. Once Restish is no longer working with the
-original full response payload, it emits JSON for the filtered value rather than
-trying to preserve raw bytes that no longer correspond to the selected result.
+- Design 009 defines the normalized response document filters operate on.
+- Design 011 and 012 affect whether filtering can run per page/event or needs
+  collection semantics.
+- Design 028 defines the planner that combines filter class with output family.
