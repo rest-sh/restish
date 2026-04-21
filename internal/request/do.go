@@ -58,7 +58,7 @@ type Options struct {
 	Server string
 	// Insecure disables TLS certificate verification.
 	Insecure bool
-	// Timeout is the request timeout. Zero means no timeout.
+	// Timeout bounds the time to receive response headers. Zero means no timeout.
 	Timeout time.Duration
 	// ClientCertPath is the PEM client certificate path for mTLS.
 	ClientCertPath string
@@ -101,6 +101,8 @@ type Options struct {
 	// RetryBaseDelay is the base delay for the first retry backoff interval.
 	// Defaults to 1 s when zero.
 	RetryBaseDelay time.Duration
+	// Logger receives retry progress warnings on stderr-style output.
+	Logger io.Writer
 	// Transport, if non-nil, is reused for every request instead of building
 	// a new one from the TLS/cache/retry options. Callers that make multiple
 	// requests with the same options (e.g. pagination) should pre-build a
@@ -117,7 +119,18 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	requestCtx := ctx
+	var cancelRequest context.CancelCauseFunc
+	if opts.Timeout > 0 {
+		requestCtx, cancelRequest = context.WithCancelCause(ctx)
+		defer func() {
+			if err != nil && cancelRequest != nil {
+				cancelRequest(context.Canceled)
+			}
+		}()
+	}
+
+	req, err := http.NewRequestWithContext(requestCtx, method, u, body)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
@@ -166,10 +179,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	}
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   opts.Timeout,
 	}
 
-	resp, err := client.Do(req)
+	resp, err := doWithHeaderTimeout(client, req, opts.Timeout, cancelRequest)
 	if err != nil {
 		if builtTransport {
 			if closer, ok := transport.(interface{ Close() error }); ok {
@@ -184,6 +196,54 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 	}
 	return resp, nil
+}
+
+type doResult struct {
+	resp *http.Response
+	err  error
+}
+
+func doWithHeaderTimeout(client *http.Client, req *http.Request, timeout time.Duration, cancel context.CancelCauseFunc) (*http.Response, error) {
+	if timeout <= 0 {
+		return client.Do(req)
+	}
+
+	resultCh := make(chan doResult, 1)
+	go func() {
+		resp, err := client.Do(req)
+		resultCh <- doResult{resp: resp, err: err}
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case result := <-resultCh:
+		return result.resp, result.err
+	case <-req.Context().Done():
+		if cancel != nil {
+			cancel(context.Cause(req.Context()))
+		}
+		result := <-resultCh
+		if result.err == nil {
+			if result.resp != nil && result.resp.Body != nil {
+				_ = result.resp.Body.Close()
+			}
+			return nil, req.Context().Err()
+		}
+		return nil, result.err
+	case <-timer.C:
+		if cancel != nil {
+			cancel(context.DeadlineExceeded)
+		}
+		result := <-resultCh
+		if result.err == nil {
+			if result.resp != nil && result.resp.Body != nil {
+				_ = result.resp.Body.Close()
+			}
+		}
+		return nil, context.DeadlineExceeded
+	}
 }
 
 // newTransport returns an HTTP transport based on http.DefaultTransport.
@@ -251,7 +311,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 		if delay == 0 {
 			delay = time.Second
 		}
-		inner = retryTransport{inner: base, maxRetry: opts.Retry, baseDelay: delay}
+		inner = retryTransport{inner: base, maxRetry: opts.Retry, baseDelay: delay, logger: opts.Logger}
 	}
 
 	if opts.NoCache || opts.CacheDir == "" {

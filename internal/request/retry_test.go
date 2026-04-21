@@ -1,7 +1,12 @@
 package request
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,5 +33,79 @@ func TestWaitDurationHonorsRetryAfterBeforeJitter(t *testing.T) {
 	resp := &http.Response{Header: http.Header{"Retry-After": []string{"5"}}}
 	if wait := rt.waitDuration(resp, 3); wait != 5*time.Second {
 		t.Fatalf("waitDuration = %v, want %v", wait, 5*time.Second)
+	}
+}
+
+func TestRetryTransportRetries429AndLogsProgress(t *testing.T) {
+	var log bytes.Buffer
+	attempts := 0
+	rt := retryTransport{
+		baseDelay: time.Millisecond,
+		maxRetry:  1,
+		logger:    &log,
+		inner: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return &http.Response{
+					StatusCode: http.StatusTooManyRequests,
+					Header:     http.Header{"Retry-After": []string{"0"}},
+					Body:       io.NopCloser(strings.NewReader("retry")),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("ok")),
+			}, nil
+		}),
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+	defer resp.Body.Close()
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if !strings.Contains(log.String(), "warning: retry 1/1") {
+		t.Fatalf("expected retry log, got %q", log.String())
+	}
+}
+
+func TestRetryTransportReturnsLatestErrorWithoutStaleResponse(t *testing.T) {
+	rt := retryTransport{
+		baseDelay: time.Millisecond,
+		maxRetry:  1,
+		inner: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Header.Get("X-Attempt") == "" {
+				req.Header.Set("X-Attempt", "1")
+				return &http.Response{
+					StatusCode: http.StatusBadGateway,
+					Header:     http.Header{},
+					Body:       io.NopCloser(strings.NewReader("bad gateway")),
+				}, nil
+			}
+			return nil, errors.New("dial failed")
+		}),
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	resp, err := rt.RoundTrip(req)
+	if err == nil || err.Error() != "dial failed" {
+		t.Fatalf("err = %v, want dial failed", err)
+	}
+	if resp != nil {
+		t.Fatalf("resp = %#v, want nil", resp)
 	}
 }

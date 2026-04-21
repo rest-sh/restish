@@ -1,6 +1,7 @@
 package request
 
 import (
+	"fmt"
 	"io"
 	"math/rand/v2"
 	"net/http"
@@ -15,6 +16,7 @@ type retryTransport struct {
 	inner     http.RoundTripper
 	maxRetry  int
 	baseDelay time.Duration
+	logger    io.Writer
 }
 
 func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -25,13 +27,16 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	for attempt := 0; attempt <= rt.maxRetry; attempt++ {
 		if attempt > 0 {
+			lastResp, lastErr := resp, err
+			resp, err = nil, nil
 			// Can only retry if we can recreate the body.
 			if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
 				// Body is not replayable; return whatever we have.
-				return resp, err
+				return lastResp, lastErr
 			}
 
-			wait := rt.waitDuration(resp, attempt)
+			wait := rt.waitDuration(lastResp, attempt)
+			rt.logRetry(attempt, wait)
 			select {
 			case <-req.Context().Done():
 				return nil, req.Context().Err()
@@ -56,7 +61,7 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			continue
 		}
 
-		if resp.StatusCode >= 500 {
+		if shouldRetryStatus(resp.StatusCode) {
 			if attempt < rt.maxRetry {
 				// Only drain and retry if we can recreate the body (or there is none).
 				// If GetBody is nil the body is not replayable; return now with body intact.
@@ -77,6 +82,17 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return resp, err
+}
+
+func shouldRetryStatus(status int) bool {
+	return status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests
+}
+
+func (rt retryTransport) logRetry(attempt int, wait time.Duration) {
+	if rt.logger == nil {
+		return
+	}
+	fmt.Fprintf(rt.logger, "warning: retry %d/%d in %s\n", attempt, rt.maxRetry, wait.Round(time.Millisecond))
 }
 
 func (rt retryTransport) Close() error {

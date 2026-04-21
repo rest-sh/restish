@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/restish/v2/internal/request"
 )
@@ -142,4 +143,69 @@ func TestDo_Post_WithBody(t *testing.T) {
 	if gotBody != `{"name":"test"}` {
 		t.Errorf("unexpected body: %q", gotBody)
 	}
+}
+
+func TestDo_HeaderTimeout(t *testing.T) {
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		Timeout: 20 * time.Millisecond,
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if err != context.DeadlineExceeded {
+		t.Fatalf("err = %v, want %v", err, context.DeadlineExceeded)
+	}
+}
+
+func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bodyRead := make(chan struct{})
+	resp, err := request.Do(ctx, "GET", "https://api.example.com/items", nil, request.Options{
+		Timeout: 20 * time.Millisecond,
+		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{},
+				Body: io.NopCloser(readerFunc(func(p []byte) (int, error) {
+					select {
+					case <-time.After(50 * time.Millisecond):
+						copy(p, "hello")
+						close(bodyRead)
+						return 5, io.EOF
+					case <-r.Context().Done():
+						return 0, r.Context().Err()
+					}
+				})),
+			}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("body = %q, want %q", data, "hello")
+	}
+	select {
+	case <-bodyRead:
+	default:
+		t.Fatal("expected delayed body read to complete")
+	}
+}
+
+type readerFunc func([]byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) {
+	return f(p)
 }

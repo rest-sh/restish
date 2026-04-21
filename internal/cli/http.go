@@ -692,5 +692,6 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		NoCache:              noCache,
 		Retry:                retry,
 		RetryBaseDelay:       c.RetryBaseDelay,
+		Logger:               c.Stderr,
 	}, nil
 }
