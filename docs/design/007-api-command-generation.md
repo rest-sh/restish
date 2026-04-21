@@ -2,61 +2,195 @@
 
 ## Summary
 
-Restish v2 treats registered APIs as first-class CLI surfaces. Users configure
-an API once, Restish discovers or loads its spec, and operations from that spec
-become ordinary commands with generated help, arguments, and flags.
+Restish v2 turns registered APIs into first-class CLI surfaces. A configured API
+becomes a command group, and operations from its API description become normal
+Cobra commands with predictable names, arguments, flags, and help output.
 
-## Problem
+The key design point is that generated commands should feel native while still
+being traceable back to the source API description.
 
-A major part of Restish's value is that it should feel better than a generic
-HTTP client once an API is known. Users should not need to memorize full URLs,
-operation-specific parameters, or the shape of every request by hand.
+## Goals
 
-At the same time, the generated CLI cannot be so magical that it becomes
-unpredictable or impossible to debug. The generated command model needed to be:
+- let users work with APIs by name instead of memorizing raw URLs
+- preserve a close mapping from spec to CLI behavior
+- generate commands deterministically from cached or local specs
+- support CLI-shaping extensions without turning generation into ad-hoc code
+- keep generated commands compatible with the core request pipeline
 
-- config-backed rather than hidden in local state
-- predictable from the source OpenAPI document
-- close enough to ordinary Cobra commands that help text and completions remain
-  understandable
-- flexible enough to honor API-specific CLI hints
+## Non-Goals
 
-## Design
+- perfect code generation for every OpenAPI edge case
+- making the CLI mirror every spec quirk literally when that hurts usability
+- requiring ahead-of-time build steps
 
-The chosen model has three layers.
+## Command Generation Inputs
 
-First, APIs are registered in `restish.json` under short names. A registration
-provides the base URL and may provide an explicit spec URL plus per-profile
-overrides like headers, query parameters, auth, and pagination settings.
+Generation depends on:
 
-Second, Restish resolves an API name to both a request target and a spec
-identity. The short name becomes part of the command tree, while the
-configuration remains the source of truth for base URL and profile behavior.
+- API registration from config
+- canonical loaded API description from design 006
+- profile and pagination metadata from config
+- CLI-specific extensions such as `x-cli-*`
 
-Third, operations from the API's OpenAPI document are turned into Cobra
-commands. This lets generated operations behave like built-in commands instead
-of a separate subsystem.
+The generator should consume a stable operation model rather than reaching
+deeply into parser-library internals wherever possible.
 
-Some specific choices are worth preserving:
+## Command Tree Shape
 
-- generated commands are grouped under the API short name
-- command names come from `operationId`, converted to kebab-case by default
-- OpenAPI extensions such as `x-cli-name`, `x-cli-description`,
-  `x-cli-aliases`, `x-cli-hidden`, and `x-cli-ignore` can shape the generated
-  CLI
-- required path and query parameters become positional arguments
-- optional parameters become flags
-- request bodies remain compatible with the same shorthand input model used by
-  generic HTTP commands
+Each registered API contributes one top-level command group named after the API
+short name:
 
-The overall intent is that generated commands should feel native, not like a
-thin codegen artifact pasted on top of the CLI.
+```text
+restish <api> <operation> ...
+```
+
+Under that group, each included operation becomes a child command.
+
+Built-in commands still take precedence over API short names. The generator does
+not get to shadow core commands such as `api`, `cache`, or `setup`.
+
+## Operation Inclusion
+
+An operation is eligible for generation when:
+
+- it is not explicitly ignored
+- the spec parsed successfully
+- all required path variables can be mapped to declared parameters
+
+If an operation cannot be generated safely, Restish should surface a clear
+diagnostic rather than silently dropping it.
+
+## Naming
+
+### Default Name
+
+The preferred source of the command name is:
+
+1. `x-cli-name`
+2. `operationId`
+3. fallback derived from HTTP method plus path
+
+The fallback is important for compatibility. Operations without `operationId`
+must still produce commands.
+
+### Fallback Naming Rule
+
+When no explicit name is provided, Restish should derive a stable kebab-case
+name from the method and path, for example:
+
+- `GET /users/{id}` -> `get-users-id`
+- `POST /v1/invoices` -> `post-v1-invoices`
+
+The exact normalization may evolve, but it must be deterministic and collision
+aware.
+
+### Aliases
+
+Generated commands may have aliases from:
+
+- `x-cli-aliases`
+- compatibility aliases retained from v1 where useful
+
+Alias collisions should be diagnosed rather than silently overwriting another
+command.
+
+## Hiding And Ignoring
+
+CLI-shaping extensions should apply consistently across:
+
+- operations
+- paths
+- parameters where applicable
+
+That means `x-cli-ignore` and `x-cli-hidden` are not operation-only concepts in
+the design, even if the current implementation still needs to catch up.
+
+## Parameter Mapping
+
+Parameters come from multiple OpenAPI scopes:
+
+- path-item parameters
+- operation-level parameters
+
+The generator must merge these scopes according to OpenAPI rules before building
+the command interface.
+
+### Positional Arguments
+
+Required path parameters are positional arguments in path order.
+
+### Flags
+
+Query, header, and cookie parameters become flags unless there is a documented
+reason to make them positional.
+
+Required non-path parameters should still be represented as required flags,
+rather than silently becoming optional.
+
+### Missing Path Parameters
+
+If the path template references `{petId}` but the operation does not declare a
+matching path parameter after scope merge, generation should fail for that
+operation with a diagnostic. Leaving the literal template token in the URL is
+not acceptable.
+
+## Request Body Mapping
+
+If the operation supports a request body, the generated command uses the same
+body-construction model as the generic HTTP commands:
+
+- shorthand positional assignments
+- stdin merge or replacement
+- content-type-aware encoding
+
+Generated commands should not invent a separate body grammar.
+
+## Server Resolution
+
+The operation URL is not just `api base URL + path`. The design must account
+for OpenAPI `servers` definitions at:
+
+- document level
+- path level
+- operation level
+
+The generator or request planner must honor those server blocks and merge them
+with API registration rules such as `operation_base` or profile base URL
+overrides.
+
+## Help And Discoverability
+
+Generated commands should feel like ordinary Cobra commands:
+
+- summary and description come from the spec or CLI extensions
+- examples may be surfaced when available
+- required args and flags are visible in help
+- shell completion works for generated commands too
+
+This is why generated commands are registered into the normal root tree instead
+of living behind a special sub-interpreter.
+
+## Name-Collision Policy
+
+Collisions can happen between:
+
+- two generated operations
+- generated commands and built-ins
+- generated commands and plugin commands
+
+The design rule is:
+
+- built-ins win over everything else
+- duplicate generated names are reported
+- skipped commands should produce warnings or errors during generation
+
+Silent shadowing is not acceptable.
 
 ## Example
 
-Given this API registration:
+Given:
 
-```json
+```jsonc
 {
   "apis": {
     "petstore": {
@@ -66,11 +200,17 @@ Given this API registration:
 }
 ```
 
-and this OpenAPI operation:
+and:
 
 ```yaml
 paths:
   /pets/{petId}:
+    parameters:
+      - name: tenant
+        in: header
+        required: true
+        schema:
+          type: string
     get:
       operationId: getPet
       summary: Get a pet
@@ -87,49 +227,54 @@ paths:
       x-cli-name: pet
 ```
 
-Restish generates a command that behaves roughly like:
+Restish should generate a command roughly shaped like:
 
 ```bash
-restish petstore pet <pet-id> --include owner
+restish petstore pet <pet-id> --tenant acme --include owner
 ```
 
-which resolves to a request like:
+which resolves through the normal request pipeline to:
 
 ```text
 GET https://api.example.com/pets/<pet-id>?include=owner
+tenant: acme
 ```
+
+## Startup Versus Execution
+
+Generated command registration at startup uses cached or local spec data only.
+Live network fetching belongs to explicit management commands, not routine root
+tree construction.
+
+## Compatibility
+
+Because generated commands are one of the most visible v1-to-v2 behaviors, the
+generator should actively restore low-cost v1 compatibility where it does not
+conflict with safety or architecture, including:
+
+- fallback naming without `operationId`
+- useful aliases
+- honoring `servers[]`
+- preserving required-parameter semantics
 
 ## Alternatives Considered
 
-### Keep everything as generic HTTP commands
+### Generic HTTP Commands Only
 
-This is simpler internally, but it gives up one of Restish's biggest strengths:
-turning API descriptions into a usable command-line interface.
+Too weak; it gives up a major product advantage.
 
-### Generate static code ahead of time
+### Ahead-Of-Time Code Generation
 
-That would work for some APIs, but it adds an extra build step and makes the
-user experience heavier. Restish is meant to adapt from local configuration and
-cached specs, not require a compile phase for normal use.
+Too heavy for the normal operator workflow.
 
-### Treat generated operations as a separate mode
+### Separate Generated-Command Mode
 
-We could have made generated operations behave differently from built-in Cobra
-commands, but that would make help, completions, and discoverability less
-consistent. Folding them into the normal command tree keeps the UX simpler.
+Would make help, completion, and discovery less coherent.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design in a few places:
-
-- `internal/config/config.go` defines the config-backed API registration model
-- `internal/cli/generated.go` builds API command groups and per-operation Cobra
-  commands from OpenAPI data
-- `internal/cli/http.go` resolves API short names and profile settings before
-  issuing requests
-
-One implementation detail that evolved from the early proposal is when command
-generation happens. The original v2 notes discussed lazy stub commands that
-would load specs on demand. The current implementation instead registers
-generated commands from cached specs at startup and avoids network discovery
-during command tree construction.
+- Design 006 defines the source spec/loading model.
+- Design 008 defines request-body shorthand used by generated commands.
+- Design 017 defines command resolution and completion expectations.
+- Design 029 defines how generated commands enter the shared request pipeline.
+- Design 031 defines compatibility expectations for user-visible naming changes.

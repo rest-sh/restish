@@ -47,6 +47,20 @@ proxy then:
 This gives Restish the certificate material needed to authenticate the client
 without ever requiring access to the underlying private key.
 
+## Lifecycle And Ownership
+
+The signer process lifetime must be bounded by host-owned resources.
+
+The design intent is:
+
+- one signer session per transport or other clearly owned lifetime
+- explicit close on request/transport teardown
+- context-aware cancellation
+- bounded wait before force kill if the signer will not exit
+
+Starting a fresh signer for every transport build without later cleanup is not
+an acceptable steady-state design.
+
 ## Why It Is Separate
 
 TLS signer plugins could have been folded into the general command-plugin
@@ -67,6 +81,9 @@ clear error and lets the TLS handshake fail cleanly.
 
 That failure path is important: external signers are optional infrastructure,
 not something Restish should silently fall back from.
+
+Plugin stderr should be surfaced when it materially helps explain signer
+failures such as wrong PIN, unavailable slot, or token-session errors.
 
 ## Alternatives Considered
 

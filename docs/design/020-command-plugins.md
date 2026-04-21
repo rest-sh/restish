@@ -45,6 +45,11 @@ launching the plugin. That lets the plugin receive raw arguments such as
 `bulk init --url-template=...` and implement its own subcommand tree, flags,
 and `--help` behavior without forcing the host to understand every plugin's UX.
 
+Command-name collisions must be handled explicitly. If a plugin tries to add a
+command that would shadow a built-in or another plugin command, Restish should
+skip it with a warning or fail startup, but never silently shadow the existing
+command.
+
 When the user runs one of those commands, Restish starts the plugin and sends
 an initial message:
 
@@ -59,6 +64,10 @@ an initial message:
 From there, the plugin and Restish exchange CBOR data items until the plugin
 sends `done` or dies.
 
+The host owns session lifetime. "Sent `done`" is not enough by itself if the
+process refuses to exit; the host must still close stdin and use a bounded wait
+before killing the process.
+
 ### Messages From Plugin To Restish
 
 The current implementation handles these message types:
@@ -71,6 +80,9 @@ The current implementation handles these message types:
 - `warn` to print a warning-prefixed message
 - `done` to terminate with an exit code
 
+Prompt/confirm style interactions are also valid protocol concepts when a
+plugin needs host-owned prompting behavior.
+
 ### Messages From Restish To Plugin
 
 Restish currently sends:
@@ -79,6 +91,10 @@ Restish currently sends:
 - `http-response` after handling an `http-request`
 - `api-spec-response` after handling an `api-spec`
 - `stdin-data` and `stdin-close` when `passthrough_stdio` is enabled
+
+For long-lived request/response pairs, the protocol should support correlation
+identifiers so stale replies cannot be mistaken for the wrong request if
+cancellation or concurrency is introduced later.
 
 ### Delegated HTTP
 
@@ -109,6 +125,10 @@ Command plugins have two output modes:
 This lets a workflow choose between "behave like a normal Restish command" and
 "own the terminal output myself" on a message-by-message basis.
 
+Plugins that opt into passthrough stdio must still coexist with the host's
+session rules. The host must avoid leaking stdin readers that steal later shell
+keystrokes after plugin exit.
+
 ### Terminal Context
 
 Restish also passes simple terminal context flags on plugin startup:
@@ -119,6 +139,33 @@ Restish also passes simple terminal context flags on plugin startup:
 
 That gives plugins enough signal to adapt interactive behavior without coupling
 them tightly to the terminal implementation.
+
+## Session Termination Rules
+
+The host ends a command-plugin session when:
+
+- the plugin sends `done`
+- the plugin exits
+- the host context is canceled
+- a protocol error occurs
+
+Termination should include:
+
+- closing stdin to the plugin
+- bounded wait for clean exit
+- force kill if needed
+- surfacing non-zero exit after `done` when it indicates a late crash
+
+## Error Model
+
+Protocol errors should identify:
+
+- plugin name
+- message type
+- decode or semantic failure
+
+The host should prefer typed protocol errors over generic "unexpected reply"
+messages where possible.
 
 ## Alternatives Considered
 

@@ -52,9 +52,33 @@ The default hook-plugin contract is intentionally one-shot:
 5. It reads one result from stdout.
 6. The plugin exits.
 
-Most hooks use the generic request/reply helper in
-[`internal/plugin/hook.go`](../../internal/plugin/hook.go),
-which enforces a 30 second timeout and requires exit status 0.
+Most hooks use a bounded request/reply helper with these design constraints:
+
+- one typed request message in
+- one typed reply message out
+- bounded wait with a configurable timeout
+- plugin stderr surfaced on failure when helpful
+- non-zero exit is an error
+
+The current implementation uses a generic helper with a default timeout. The
+design now requires that timeout to be configurable by hook type and overridable
+where a workflow genuinely needs more time.
+
+## Typed Messages, Not Loose Unions
+
+Each hook message type should have its own request and response schema. A single
+"decode everything into one broad struct" approach is easy initially but makes
+future protocol evolution fragile.
+
+The design preference is:
+
+- auth request/response types
+- request middleware request/response types
+- response middleware request/response types
+- loader request/response types
+- formatter session message types
+
+That keeps unknown-field handling and future evolution much safer.
 
 ### Auth Hook
 
@@ -79,6 +103,9 @@ applies header changes, even if a plugin also returns method or URI fields.
 
 That is an intentional practical boundary: middleware runs after Restish has
 already prepared the request object and transport options.
+
+If a future middleware contract needs broader request mutation, that should be a
+new explicit hook capability rather than an undocumented side effect.
 
 ### Response Middleware Hook
 
@@ -120,6 +147,10 @@ returns an OpenAPI document, and Restish parses that through the normal
 OpenAPI-loading path. That keeps generated commands aligned with the rest of
 the system.
 
+This is an intentionally narrow trust boundary. Loader plugins transform one
+document format into the host's canonical API-description path; they do not
+directly define commands.
+
 ### Formatter Hook
 
 Formatter plugins declare `formatter_names` in the manifest. Each declared name
@@ -159,6 +190,38 @@ This model is intentionally narrow:
 
 The practical goal is to support stateful output modes such as CSV without
 forcing Restish to invent formatter-specific buffering behavior in the core.
+
+## Failure And Timeout Model
+
+Hook failures should be explicit.
+
+If a hook:
+
+- times out
+- exits non-zero
+- returns malformed data
+- writes an invalid response
+
+then Restish should surface a hook-specific error with plugin identity.
+
+Whether the command continues depends on the hook category:
+
+- auth and loader failures are usually fatal
+- response middleware may choose to fail the request rather than emit
+  inconsistent output
+- formatter failures are fatal once output has started
+
+## Relationship To Output Planning
+
+Formatter hooks are renderers, not planners. The host still decides:
+
+- document versus record semantics
+- pagination behavior
+- filter evaluation strategy
+- stream parsing
+
+This keeps plugins focused and prevents each formatter from needing to
+re-implement the core data-flow model.
 
 ## Alternatives Considered
 

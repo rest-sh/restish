@@ -2,88 +2,208 @@
 
 ## Summary
 
-Restish v2 discovers API specs by trying a small ordered set of sources, then
-hands the fetched content to registered loaders. Successful results are cached
-on disk so generated API commands can be rebuilt without paying the network
-cost every time.
+Restish v2 discovers API descriptions through a bounded, security-aware probe
+process, parses them through registered loaders, and caches the raw documents on
+disk for later command generation.
 
-## Problem
+This is one of the most important architectural seams in Restish because it
+connects:
 
-Restish needs API descriptions in order to generate commands and expose richer
-API-aware behavior, but real APIs do not all publish specs in the same place or
-with the same headers.
+- user-configured API registrations
+- network discovery
+- plugin-provided loaders
+- generated command surfaces
 
-The discovery system needed to balance a few goals:
+## Goals
 
-- work with explicit configuration when the user already knows the spec URL
-- find specs automatically when the API advertises them conventionally
-- stay fast enough for routine CLI use
-- allow additional spec formats in the future without redesigning discovery
-- avoid forcing the command tree to depend on live network access
+- work well when the user provides an explicit spec URL or file
+- make conventional OpenAPI publication easy to discover automatically
+- keep CLI startup offline-safe by using cached results
+- allow more spec formats in the future
+- defend against SSRF and hung discovery probes
 
-## Design
+## Non-Goals
 
-The design splits the problem into discovery, loading, and caching.
+- requiring live network access just to build the command tree
+- tying the rest of the CLI permanently to one OpenAPI parsing library
+- treating discovery as "best effort" with silent failure
 
-Discovery answers "where should we try to fetch a spec from?" The current
-ordered strategy is:
+## Three Stages
 
-1. cached spec for the registered API name
-2. explicit `spec_url` from config
-3. Link headers discovered from a GET on the API base URL
-4. well-known paths such as `/openapi.json` and `/openapi.yaml`
-5. the base URL response body itself
+The design has three explicit stages:
 
-Network probes run in parallel and the first successfully parsed spec wins.
-This keeps the common case responsive while still checking several conventional
-locations.
+1. discovery
+2. loading
+3. caching
 
-Loading answers "does this content look like a format Restish understands, and
-can it be parsed into an internal API spec?" That work is delegated to
-registered loaders selected by detection plus priority. Built-in v2 behavior
-starts with an OpenAPI loader, but the model is intentionally extensible.
+They should stay conceptually separate even if some helpers combine them in the
+implementation.
 
-Caching answers "can we reuse a previously fetched spec safely?" Restish stores
-the raw fetched document and content type in a CBOR cache keyed by API name. A
-cache entry is considered valid only when:
+## Discovery
 
-- it has not expired
-- it matches the running Restish version
+Discovery answers: "Where should Restish look for a spec?"
 
-On cache hits, Restish re-parses the raw cached document through the loader
-pipeline instead of trusting a previously serialized in-memory representation.
-That keeps the cache format simple and lets parser behavior evolve with the
-binary.
+The ordered strategy is:
+
+1. local cache for the API registration
+2. explicit `spec_files`
+3. explicit `spec_url`
+4. advertised spec links discovered from the API base URL
+5. well-known OpenAPI paths
+6. body of the base URL response when the response itself appears to be a spec
+
+The exact probe list may evolve, but explicit operator intent should always win
+over heuristics.
+
+## Discovery Safety Rules
+
+Discovery touches untrusted remote content and can induce more network traffic,
+so it must obey design 030.
+
+The design requirements are:
+
+- default timeout for every discovery request
+- same-origin discovery by default
+- explicit opt-in before following cross-origin discovery links
+- reject private-range or loopback follow targets by default unless the original
+  configured API is itself in that trust class
+- only `http` and `https` are valid remote schemes
+- size limits before full-body parse attempts
+- all requests derive from the command context
+
+Spec discovery is not a place for indefinite waits or unconstrained redirects.
+
+## Probe Execution
+
+Probes may run in parallel for latency, but the selection rules must remain
+deterministic and debuggable.
+
+Good parallelism:
+
+- checking several well-known paths concurrently
+- trying several same-priority discovery sources concurrently
+
+What must remain deterministic:
+
+- explicit config sources beat heuristics
+- error reporting is not order-dependent
+- cancellation stops all outstanding probes
+
+If multiple probes succeed, precedence should be based on source class and
+loader confidence, not whichever goroutine happened to finish first.
+
+## Loading
+
+Loading answers: "What format is this document, and can Restish convert it into
+the canonical internal API model?"
+
+The loader contract should conceptually be:
+
+- accept raw bytes plus content-type and origin metadata
+- detect whether the loader understands the document
+- return a canonical API description or a canonical OpenAPI document that the
+  core can continue processing
+
+The long-term design direction is to decouple command generation from
+parser-library-specific types. The rest of the product should consume a stable
+operation model rather than whichever concrete parser the loader happened to
+use.
+
+## Loader Selection
+
+Loaders are registered in priority order. Sources include:
+
+- built-in loaders
+- plugin-provided loaders
+
+Selection rules should be explicit:
+
+- content-type hints may narrow candidates
+- detection may inspect bytes
+- the winning loader should be the highest-confidence/highest-priority loader
+  that accepts the document
+
+Plugin loaders should not need to emulate the core parser's internal types.
+
+## Caching
+
+Restish caches raw spec documents, not parsed internal structures.
+
+The cache entry should include at least:
+
+- fetched raw bytes
+- content type
+- source URL or origin metadata
+- fetch time
+- Restish version or cache schema version
+
+Caching raw documents keeps the cache stable while letting parsing logic evolve
+with the binary.
+
+## Cache Validity
+
+A cache entry is valid when:
+
+- it is within TTL or otherwise still acceptable for the command
+- it matches the expected cache/schema version
+- it is not older than an explicitly configured local source file
+
+Local `spec_files` must win over stale cached network content. If the user
+edited a local file, Restish should not continue serving a cached older
+interpretation for a day.
+
+## Cache Use By Command Generation
+
+Generated command registration at startup should use cached or local spec data
+only. It must not trigger live network discovery.
+
+If a cached spec cannot be parsed anymore:
+
+- the API should not silently disappear
+- Restish should surface a clear warning or error identifying the API and cause
+
+## `api configure` And `api sync`
+
+Commands that explicitly manage API registrations may bypass or invalidate cache
+more aggressively than routine startup.
+
+Examples:
+
+- `api configure` should not blindly trust stale cached `x-cli-config`
+- `api sync` should refresh from the authoritative source
+
+Those commands exist specifically to reconcile config with the current server
+state, so using a stale cache without telling the user defeats their purpose.
+
+## Error Reporting
+
+Discovery failures should preserve context:
+
+- what source was tried
+- whether it was blocked for safety
+- whether the fetch timed out
+- whether parsing failed
+
+When several probes fail, Restish should combine or prioritize errors in a way
+that is stable and useful rather than depending on goroutine completion order.
 
 ## Alternatives Considered
 
-### Require explicit spec URLs for all APIs
+### Require Explicit Spec URLs For All APIs
 
-This is simple, but it gives up too much convenience. Restish should be able to
-meet APIs halfway when they publish a spec in a conventional location.
+Simpler, but too inconvenient for a tool whose value includes API awareness.
 
-### Always fetch the network on startup
+### Always Fetch The Network On Startup
 
-That would make generated commands more dynamic, but it would also slow startup,
-make offline use worse, and make the command tree depend on network conditions.
+Rejected because startup must remain offline-safe and predictable.
 
-### Cache parsed internal structures instead of raw spec documents
+### Cache Parsed Command Models
 
-That might save parse time, but it creates tighter coupling between cache data
-and internal implementation details. Caching raw documents is more stable and
-easier to reason about.
+Faster in some cases, but much more brittle across parser and binary changes.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation maps closely to this design:
-
-- `internal/spec/discover.go` implements discovery order, parallel probes, and
-  cache TTL handling
-- `internal/spec/spec.go` defines the loader abstraction and selection rules
-- `internal/spec/openapi.go` provides the built-in OpenAPI loader
-- `internal/spec/cache.go` stores cached specs as CBOR entries keyed by API
-  name
-
-One detail worth preserving is that cache validity is tied to the Restish
-version. That makes it safe to change parsing behavior or internal assumptions
-without trying to maintain compatibility with stale cached interpretations.
+- Design 007 consumes the canonical operation model produced here.
+- Design 018 and 019 define plugin loader behavior.
+- Design 029 defines how config and discovery interact during command execution.
+- Design 030 defines the remote-input safety rules for discovery.

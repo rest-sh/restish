@@ -1,0 +1,241 @@
+# Security Model And Trust Boundaries
+
+## Summary
+
+Restish is a local operator tool that reads untrusted network data, executes
+trusted local plugins, stores credentials, and can be pointed at arbitrary
+hosts. The design therefore needs explicit trust boundaries rather than a vague
+"it's a CLI" assumption.
+
+This document defines the safety rules that apply across the rest of the design
+set.
+
+## Threat Model
+
+Restish is designed to defend against:
+
+- malicious or buggy remote APIs
+- malicious or surprising OpenAPI discovery endpoints
+- accidental credential leakage through logs or output defaults
+- stale or corrupted on-disk state
+- subprocess leaks and hung plugins degrading the operator's environment
+
+Restish is not designed to defend against:
+
+- a malicious local user who can already read the operator's files
+- a malicious plugin binary that the operator explicitly installed and allowed
+- a fully compromised operating system
+
+That distinction matters because plugins are an extension surface, not a
+sandboxed execution environment.
+
+## Trust Zones
+
+The design assumes four trust zones:
+
+### 1. Core Restish Process
+
+Trusted application code running in the current process. It is responsible for
+enforcing policy, propagating context, redacting logs, and deciding what
+extension points plugins may use.
+
+### 2. Local Configuration And Caches
+
+Semi-trusted local data under the operator's control:
+
+- `restish.json`
+- token cache
+- response cache
+- spec cache
+- plugin manifests
+
+These files may be corrupted or stale, so they require validation and locking,
+but they are not treated like hostile network input once successfully parsed.
+
+### 3. Local Plugins
+
+Locally installed executable code. Plugins are trusted code with limited
+protocol-level authority, not untrusted content.
+
+Restish should constrain what plugins can ask the host to do through protocol
+contracts, but once a user installs a plugin, that plugin effectively has the
+same local-user trust level as any other executable on the machine.
+
+### 4. Remote Network Content
+
+Untrusted data from:
+
+- HTTP responses
+- discovered specs
+- OAuth metadata documents
+- remote images and binary payloads
+
+This zone gets the strictest validation and the narrowest defaults.
+
+## Core Security Principles
+
+### Secure By Default
+
+Unsafe behavior must require an explicit user choice. Examples:
+
+- TLS verification stays on unless `--rsh-insecure` is set
+- cross-origin or private-address spec discovery is off by default
+- credentials are redacted from logs
+- document output should not silently dump binary data to a TTY
+
+### No Silent Downgrade
+
+When safety or correctness checks fail, Restish should error or warn clearly.
+It should not silently fall back to looser behavior such as:
+
+- using the wrong profile
+- ignoring a spec build failure and pretending the API has no commands
+- dropping back from refresh-token failure to a browser flow without context
+
+### Narrow Trust Transfer
+
+When data crosses a trust boundary, the representation should be narrow and
+validated. Examples:
+
+- plugin protocols use typed messages rather than raw shell snippets
+- loaders return canonical OpenAPI content, not internal command trees
+- response middleware can request specific follow-up actions, not arbitrary host
+  behavior
+
+### Least Necessary Exposure
+
+Restish should only expose sensitive data where it is required:
+
+- stdout carries requested command output, not debug logs
+- stderr diagnostics redact sensitive headers and query parameters
+- plugin requests receive only the fields needed for their hook type
+- cache files use restrictive permissions
+
+## Spec Discovery Safety
+
+Spec discovery is one of the most important remote-input attack surfaces because
+it lets an API cause Restish to make more network requests.
+
+The design requirements are:
+
+- default allowlist of `http` and `https` only
+- same-origin discovery by default
+- explicit opt-in before following cross-origin links
+- reject loopback, link-local, and RFC1918/private ranges by default during
+  discovery hops unless the original configured base URL is itself in that
+  trust class
+- bounded request timeout for every discovery probe
+- response size limits before parsing
+- cancellation through the CLI context
+
+These rules apply both to `Link`-header discovery and well-known-path probes.
+
+## Sensitive Data Handling
+
+Sensitive data includes at least:
+
+- `Authorization`
+- `Proxy-Authorization`
+- `Cookie`
+- `Set-Cookie`
+- bearer tokens and API keys in query parameters
+- OAuth client secrets
+- refresh tokens
+- PINs and passphrases
+
+The design rules are:
+
+- never print these values verbatim in verbose logs
+- never include them verbatim in synthesized error messages from remote systems
+- cap logged remote error body length
+- preserve them in-memory only as long as required for the current operation
+
+When a remote IdP returns a JSON error document, Restish should parse and
+redact known token fields before surfacing the error.
+
+## Output Safety
+
+TTY output should not surprise users with raw binary. The output planner must
+distinguish:
+
+- structured documents
+- printable text
+- binary payloads
+- image payloads with explicit TTY renderers
+
+If Restish cannot safely render binary to a TTY, it should use a placeholder or
+require `-o raw`.
+
+## Plugin Safety
+
+Plugins are trusted local executables, but the host still owns several safety
+responsibilities:
+
+- manifest version compatibility checks
+- duplicate-name detection
+- bounded waits and subprocess cleanup
+- clear stderr surfacing on plugin failures
+- preventing plugin categories from using protocols they did not declare
+
+Restish should not claim plugin sandboxing. The safety story is instead:
+
+- discovery is explicit
+- allowlists can restrict which plugins are loaded
+- protocols are small and typed
+- subprocess lifetime is bounded by host context and cleanup rules
+
+## Persistence Safety
+
+Files that store credentials or state must be protected against corruption and
+concurrent writes.
+
+That means:
+
+- restrictive file permissions
+- write-to-temp then fsync then rename
+- cross-process file locking for config and token writes
+- line-ending and comment preservation where possible
+- versioned cache entries
+
+When data cannot be preserved safely, Restish should refuse the mutation rather
+than writing a best-effort corrupted structure.
+
+## Cancellation And Resource Leaks
+
+Hanging subprocesses and ignored cancellation are operational security issues as
+well as UX issues. Long-lived leaked processes can:
+
+- hold hardware token sessions open
+- keep reading from TTY stdin
+- pin network connections
+- mask command completion
+
+All long-lived operations therefore need:
+
+- context-driven cancellation
+- bounded waits
+- close or kill fallback
+
+## Compatibility Versus Safety
+
+When v1 compatibility and safety conflict, safety wins unless there is a strong
+operator workflow reason otherwise.
+
+Examples:
+
+- restoring `+json` media-type support is both compatible and safe
+- restoring silent profile fallback is compatible with legacy behavior but not
+  safe, so it should not return
+
+## Review Checklist
+
+Any new subsystem or plugin surface should answer these questions:
+
+1. What trust zone does the input come from?
+2. What validation happens before the data is used?
+3. What context and timeout bounds the work?
+4. What sensitive data could leak through logs or errors?
+5. What resources must be closed on success, failure, or cancellation?
+6. Does the failure mode silently downgrade security or correctness?
+
+If a design cannot answer those questions, it is not ready.

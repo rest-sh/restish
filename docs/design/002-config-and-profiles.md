@@ -2,75 +2,141 @@
 
 ## Summary
 
-Restish v2 uses a single `restish.json` file as the main source of persistent
-user configuration. That file holds registered APIs, optional profiles for each
-API, and a small set of global settings.
+Restish v2 uses a typed JSONC configuration model centered on one primary user
+config file, `restish.json`. That file stores global settings, registered APIs,
+profiles, and request-affecting defaults.
 
-Profiles are the main mechanism for expressing per-environment differences such
-as base URLs, persistent headers, query parameters, auth configuration, and TLS
-signer settings.
+Profiles are Restish's main "environment" abstraction. They let one API
+registration express per-environment differences without duplicating the entire
+API definition.
 
-## Problem
+This document defines both the data model and the persistence guarantees around
+it.
 
-Restish needs persistent configuration, but the configuration model has to stay
-easy to understand from the command line.
+## Goals
 
-The main pressures on the design were:
+- one obvious place for users to inspect and edit configuration
+- strict validation so typos fail early
+- comments and formatting preserved when Restish edits the file
+- deterministic layering between config, environment, and CLI flags
+- safe writes under concurrent processes
+- a real migration path from v1 locations and filenames
 
-- users should have one obvious place to look for configuration
-- API-specific behavior should be explicit and inspectable
-- switching between environments should not require duplicating an entire API
-  definition
-- command-line flags should still be able to override persistent defaults for a
-  single invocation
-- the config format should be strict enough to catch mistakes but friendly
-  enough to annotate
+## Non-Goals
 
-## Design
+- supporting arbitrary config sources or many file formats
+- creating a fully general environment-inheritance system shared across APIs
+- silently accepting malformed or unknown fields for flexibility
 
-The chosen model is a single JSONC-backed config file, normally named
-`restish.json`.
+## Persistent Layout
 
-Within that file, the most important top-level key is `apis`. Each API is
-registered under a short name and can define:
+The primary persistent surfaces are:
+
+- config file: `restish.json`
+- token cache
+- spec cache
+- response cache
+- plugin directory
+
+Design 001 defines that the `CLI` runtime owns the resolved paths. This
+document defines what those paths are for.
+
+## Path Resolution
+
+Restish should resolve config and cache locations in a platform-correct way:
+
+- XDG locations on Linux and other Unix-like systems where applicable
+- native config locations on macOS and Windows where appropriate
+- explicit overrides when tests or embedders supply custom paths
+
+The design intent is consistency. Config, token cache, spec cache, and response
+cache should all come from one coherent path-resolution strategy rather than
+several unrelated helper functions.
+
+## Primary Config Shape
+
+The primary top-level keys are:
+
+- `apis`
+- global output or behavior defaults as the product grows
+
+Each entry under `apis` is keyed by a short API name and contains the stable
+registration for that API:
 
 - `base_url`
 - `spec_url`
-- `profiles`
-- pagination settings
+- `spec_files`
+- pagination configuration
+- profile map
+- other API-wide metadata such as operation-base or plugin allowlists
 
-Profiles live under an API rather than at the global level. That keeps the
-configuration aligned with how Restish is used: a profile is meaningful in the
-context of a specific API, not as a universal environment abstraction shared by
-all APIs.
+The exact field list may evolve, but the structural rule should remain:
 
-Each profile can override or add request-affecting settings such as:
+- API-level keys describe the API as a whole
+- profile-level keys describe environment-specific request behavior
+
+## Profile Model
+
+Profiles live under each API, not globally.
+
+This is deliberate because a profile name such as `prod`, `staging`, or
+`enterprise` only makes sense relative to one API registration.
+
+Profiles may set or override:
 
 - `base_url`
 - persistent headers
 - persistent query parameters
 - auth configuration
-- TLS signer configuration and parameters
+- TLS signer selection and parameters
+- other request-affecting defaults added in future designs
 
-The active profile defaults to `default`, with `RSH_PROFILE` and
-`--rsh-profile` selecting a different one.
+The default selected profile name is `default` unless the user specifies
+another profile through env vars or flags.
 
-When Restish resolves a request through a registered API, configuration is
-applied in layers:
+## Layering And Precedence
 
-1. API registration establishes the base identity of the target.
-2. The selected profile overrides API-level defaults such as `base_url`.
-3. Persistent profile headers and query parameters are prepended to request
-   options.
-4. Command-line flags still win for that invocation because they are applied
-   later.
+When Restish resolves a request through a registered API, precedence is:
 
-That precedence rule is important. Profiles provide durable defaults, but they
-do not trap users into them.
+1. built-in defaults
+2. API registration defaults
+3. selected profile values
+4. environment-derived overrides
+5. explicit CLI flags and command arguments
 
-The file format is intentionally strict. Restish strips JSONC comments first,
-then decodes into typed Go structs with unknown fields rejected. This keeps the
-file human-editable while still catching typos early.
+Two rules matter here:
+
+- profiles provide durable defaults, not hard locks
+- invalid explicit selection should error rather than silently falling back
+
+That means a misspelled `--rsh-profile` should be treated as a real error.
+
+## Header And Query Semantics
+
+Persistent headers and query parameters are merged in a way that still lets the
+user override them per invocation.
+
+The desired behavior is:
+
+- config contributes defaults
+- command flags contribute explicit invocation values
+- explicit invocation values win
+
+The implementation detail may be prepend/append plus later overwrite, but the
+user-visible contract is override-friendly layering.
+
+## Strict Validation
+
+The config format is intentionally strict:
+
+- JSONC comments are allowed in source text
+- after comment stripping or CST parsing, data is decoded into typed structs
+- unknown fields are rejected
+- invalid enums or malformed values should fail early with location-aware
+  diagnostics
+
+Strictness is a feature here. It keeps config drift from becoming runtime
+mystery behavior.
 
 ## Example
 
@@ -102,49 +168,92 @@ file human-editable while still catching typos early.
 }
 ```
 
-For a call like:
+For:
 
 ```bash
 restish --rsh-profile enterprise get github/repos/octo/example -q per_page=50
 ```
 
-the effective request uses:
+the effective request should use:
 
 - the `enterprise` profile's `base_url`
 - the profile's persistent headers
-- the command-line `-q per_page=50` value instead of the profile default
+- the CLI-supplied `per_page=50` value
+
+## Write Guarantees
+
+Config writes are safety-sensitive because the file is user-authored and often
+manually curated.
+
+The design requires:
+
+- cross-process file locking during mutation
+- temp-file write, fsync, then rename
+- preserving existing line endings where possible
+- preserving comments and nearby formatting when commands edit object paths
+- refusing writes that would corrupt structure or silently change unrelated
+  content
+
+Design 027 covers the patching behavior in more detail.
+
+## Migration From v1
+
+Restish v2 needs an explicit migration path from known v1 config locations and
+filenames.
+
+Migration expectations:
+
+- detect legacy locations on supported platforms
+- migrate or import on first use when safe
+- preserve API registrations, profiles, and auth config
+- preserve comments when practical
+- emit a clear hint when automatic migration is not possible
+
+Users should not experience "my APIs disappeared" simply because the config path
+changed between major versions.
+
+## Credentials
+
+Today, some auth material may still live in the main config file. That is
+acceptable for an initial implementation, but the long-term design direction is
+to separate credentials from ordinary config more cleanly, either through:
+
+- a dedicated credentials file with restrictive permissions, or
+- OS keyring integration
+
+That refactor is compatible with this design as long as profile auth references
+remain stable from the operator's point of view.
+
+## Concurrency And Multi-Process Use
+
+Restish should assume users may run multiple instances concurrently:
+
+- two shells editing config
+- one command refreshing tokens while another reads them
+- automation plus interactive sessions
+
+That means in-memory mutexes are not sufficient for persistence safety.
+Cross-process locking is part of the design, not an optimization.
 
 ## Alternatives Considered
 
-### Separate files for APIs and global config
+### Separate Files For APIs And Global Config
 
-This can work, but it makes discovery worse. One file is easier to explain,
-easier to inspect, and easier to manage in both documentation and tooling.
+Possible, but it makes discovery and editing harder for most users.
 
-### Global profiles shared across all APIs
+### Global Profiles Shared Across All APIs
 
-That sounds reusable, but in practice it weakens the connection between a
-profile and the API-specific settings it actually controls. Nesting profiles
-under APIs makes intent clearer.
+This weakens the connection between profile names and the API-specific behavior
+they control.
 
-### Unstructured or loosely validated config
+### Loose Schema With Best-Effort Field Preservation
 
-This would make experimentation easier in the short term, but it tends to shift
-mistakes into runtime behavior. Restish benefits from rejecting invalid config
-early and explicitly.
+This improves short-term flexibility but hurts confidence and debuggability.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/config/config.go` defines the single-file typed config model and
-  JSONC parsing behavior
-- `internal/config/jsonc_patch.go` preserves comments for targeted object-path
-  edits made by config-management commands
-- `internal/cli/http.go` applies API and profile settings to outgoing requests
-- `internal/cli/api.go` exposes management commands like `api configure`,
-  `api show`, `api set`, and `api edit`
-
-One useful detail to preserve is that profile headers and query parameters are
-prepended rather than appended when building request options. That allows
-command-line values to override persistent defaults cleanly for one-off calls.
+- Design 004 consumes profile auth configuration.
+- Design 006 consumes spec-related config.
+- Design 017 defines how env vars and flags override config.
+- Design 027 defines comment-preserving edit behavior.
+- Design 031 defines migration expectations from v1.

@@ -24,10 +24,16 @@ The biggest UX issues were:
 
 ## Design
 
-Restish uses a small JSONC-aware patcher in `internal/config` rather than a
-general-purpose JSONC AST library.
+Restish uses a comment-preserving structural edit path for config mutations.
+The exact implementation may be:
 
-The patcher:
+- a narrowly scoped patcher, or
+- a CST-preserving library such as `hujson`
+
+The important thing is the behavior contract, not which parsing library
+provides it.
+
+The editor must:
 
 - parses the existing file as JSONC while tracking byte ranges for object
   members and values
@@ -55,6 +61,28 @@ Those limits are acceptable because current config commands only need object
 operations. Keeping the patcher narrow avoids introducing a larger dependency
 or a slower full-fidelity syntax tree.
 
+Two additional guarantees are now part of the design:
+
+- line endings should be preserved when editing existing files
+- edits must not coerce existing non-object values into objects silently just to
+  satisfy a nested set operation
+
+If an edit would require destructive shape repair, Restish should fail with a
+clear error instead.
+
+## Concurrency
+
+Comment preservation is not enough by itself. Config edits must also be safe
+under concurrent processes.
+
+That means:
+
+- cross-process file locking around read-modify-write
+- reloading from disk while the lock is held
+- atomic replace with fsync-before-rename discipline
+
+Without that, a perfect patcher can still lose user edits.
+
 ## Notes
 
 The command behavior is now:
@@ -66,3 +94,6 @@ The command behavior is now:
 
 The normal `Load` path remains the source of truth for validation and unknown
 field rejection.
+
+If the current bespoke patcher continues to accumulate correctness edge cases,
+switching to a better CST-preserving implementation is an acceptable v2 change.

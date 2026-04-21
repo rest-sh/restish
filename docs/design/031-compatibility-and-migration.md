@@ -1,0 +1,176 @@
+# Compatibility And Migration
+
+## Summary
+
+Restish v2 is a redesign, but it is still a successor to v1 rather than a brand
+new product. That means the project needs an explicit compatibility and
+migration stance.
+
+This document defines:
+
+- which kinds of v1 behavior should be preserved
+- which breaks are intentional
+- how configuration and operator workflows migrate
+- how to judge whether v2 is ready to release
+
+## Compatibility Philosophy
+
+The goal is not byte-for-byte behavioral identity with v1. The goal is:
+
+- preserve user intent where possible
+- preserve muscle memory for common workflows
+- restore accidental regressions before release
+- document intentional breaks clearly when the new design is better
+
+The project should treat "pre-release" as a chance to fix compatibility gaps,
+not as permission to leave them undocumented.
+
+## Compatibility Tiers
+
+### Tier 1: Must Preserve Or Restore
+
+These are high-value behaviors that should match v1 unless a new design record
+explicitly says otherwise:
+
+- suffixed structured content types such as `application/problem+json`
+- generated-command fallback naming when `operationId` is absent
+- correct handling of path-level parameters and `servers[]`
+- HTML-unescaped JSON output
+- printable-text rendering for text bodies
+- query/header/profile ergonomics users already depend on
+- headless-friendly auth paths for remote or SSH usage
+- v1-style aliases where they materially reduce migration pain
+
+### Tier 2: May Change With Documentation
+
+These can change if the new design is better and the migration is documented:
+
+- plugin architecture and plugin packaging
+- config file layout
+- setup/completion commands
+- output defaults where v1 had ambiguous behavior
+- auth handler internals and storage details
+
+### Tier 3: Internal Freedom
+
+These can change freely as long as public behavior stays stable:
+
+- package layout
+- internal type names
+- cache serialization details
+- loader implementation strategy
+
+## Intentional v2 Changes
+
+The current design set intentionally changes v1 in at least these areas:
+
+- central `CLI` runtime instead of wider global state
+- out-of-process plugin architecture instead of only built-ins/in-process hooks
+- stronger separation between document and record output
+- JSONC-backed typed config model
+- more explicit pipeline planning for pagination and streaming
+
+Those are acceptable breaks, but they require migration documentation and
+operator guidance.
+
+## Migration Surfaces
+
+### Configuration Files
+
+Restish must support a migration path from v1 config locations and filenames.
+
+The design expectation is:
+
+- detect known legacy locations on startup or first write
+- offer automatic migration when safe
+- preserve comments where possible
+- emit a clear hint when migration cannot be automatic
+
+Migration should not be macOS-only, Linux-only, or implicit based on whichever
+path happened to work on the developer's machine.
+
+### API Registrations
+
+Migrated API registrations should preserve:
+
+- short names
+- base URLs
+- spec URLs or files
+- profile names
+- auth settings
+- pagination settings
+
+If v2 cannot preserve a field, the migration path must report that explicitly.
+
+### Command Names And Aliases
+
+Generated commands should preserve stable names where possible and provide
+aliases for common v1 spellings when the new canonical naming changed only for
+implementation reasons.
+
+### Auth Workflows
+
+Users upgrading from v1 should not lose access to common environments such as:
+
+- browser-capable local machines
+- SSH sessions
+- CI/service-account flows
+
+If a v1 auth flow is intentionally removed, the replacement path must be
+documented before release.
+
+## Release-Readiness Checklist
+
+Before v2 release, the design expects explicit sign-off on:
+
+1. configuration migration works on supported platforms
+2. v1 accidental regressions have been fixed or consciously retired
+3. the docs site has a migration guide, not just scattered notes
+4. module/install instructions point at the canonical v2 module path
+5. core commands present in v1 and v2 are all documented
+6. plugin differences from v1 are explained to both operators and authors
+
+## Documentation Requirements
+
+The user-facing docs should include a dedicated migration guide with:
+
+- where config moved
+- how profiles map
+- renamed or removed commands
+- changed defaults
+- plugin model changes
+- known non-goals and removals
+
+Design records alone are not sufficient for this. The migration guide belongs
+in the site docs as well.
+
+## Regression Classification
+
+When reviewing a v2 behavior difference, classify it as one of:
+
+- intentional improvement
+- acceptable break needing documentation
+- accidental regression that must be fixed
+- unclear; requires product decision
+
+That classification should appear in design review or issue discussion so the
+project does not normalize accidental regressions as "just different now."
+
+## Decision Rule
+
+If a v1 behavior was:
+
+- widely visible to users
+- low-cost to preserve
+- not in tension with safety or architecture
+
+then v2 should usually preserve or restore it.
+
+If a v1 behavior was:
+
+- confusing
+- unsafe
+- tightly coupled to architecture being removed
+
+then v2 may break it, but the break should be explicit in both design docs and
+user-facing migration material.

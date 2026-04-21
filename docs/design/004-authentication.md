@@ -2,75 +2,68 @@
 
 ## Summary
 
-Restish v2 treats authentication as profile-driven request mutation. Each API
-profile can declare an auth type plus parameters, and Restish resolves that
-configuration into a handler that modifies outgoing requests immediately before
-they are sent.
+Restish v2 treats authentication as profile-driven request preparation. Each API
+profile may declare an auth configuration, and the request pipeline resolves
+that configuration into a typed auth handler immediately before the request is
+sent.
 
-## Problem
+Auth is therefore:
 
-Authentication needs to be persistent enough for real API use, but still easy
-to understand from the command line and configuration file.
+- part of request planning, not transport magic
+- selected by API and profile context
+- cached and refreshed through explicit token-storage rules
+- extensible through plugins without giving up built-in common flows
 
-The design needed to support:
+## Goals
 
-- simple built-in mechanisms like HTTP Basic
-- token-based OAuth flows with caching
-- per-profile auth differences for the same API
-- interactive prompting for secrets when they are not stored
-- future extension points without hard-coding every auth system into the core
+- simple built-in support for common schemes
+- OAuth flows that work for local, headless, and service-account scenarios
+- safe token caching and refresh semantics
+- prompting when secrets are intentionally omitted from config
+- typed handler context rather than stringly typed request mutation
 
-## Design
+## Non-Goals
 
-The core model is:
+- supporting every auth standard in the core binary
+- hiding auth behavior so completely that users cannot inspect or debug it
+- forcing all auth through external commands or plugins
 
-- auth is configured under an API profile
-- the profile declares a `type` and `params`
-- Restish resolves that into an auth handler
-- the handler mutates the outbound request in an `OnRequest` hook
+## Placement In The Pipeline
 
-This keeps auth aligned with the same profile layering model used for base
-URLs, headers, and query defaults.
+Authentication is a request-stage concern. By the time the HTTP client sends the
+request, auth resolution has already happened.
 
-Built-in auth currently includes:
+That means auth sees:
 
-- `http-basic`
-- `oauth-client-credentials`
-- `oauth-authorization-code`
+- selected API
+- selected profile
+- auth parameters
+- current request method, URL, and headers
+- prompting and logging facilities
+- token store
+- cancellation context
 
-The request pipeline treats auth as a request-stage concern rather than a
-transport concern. By the time the HTTP request is sent, the auth handler has
-already added whatever credentials are needed.
+This placement is important because it lets auth cooperate with:
 
-There are a few specific choices worth preserving:
+- profile selection
+- per-request overrides
+- `auth-header`
+- retries and one-shot 401 recovery
 
-- profile selection determines the auth context
-- token-oriented auth caches tokens using an `api:profile` cache key
-- prompting is supported when secrets are omitted from config
-- `auth-header <api>` reuses the same auth resolution path and prints the final
-  `Authorization` header value for inspection or shell use
+without teaching the transport layer about individual auth schemes.
 
-The OAuth model also includes OIDC discovery support so an issuer URL can be
-resolved into concrete authorization and token endpoints.
+## Auth Configuration Model
 
-## Examples
+Auth lives under an API profile:
 
-Basic auth in config:
-
-```json
+```jsonc
 {
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "auth": {
-            "type": "http-basic",
-            "params": {
-              "username": "alice",
-              "password": "s3cr3t"
-            }
-          }
+  "profiles": {
+    "default": {
+      "auth": {
+        "type": "oauth-authorization-code",
+        "params": {
+          "issuer": "https://issuer.example.com"
         }
       }
     }
@@ -78,64 +71,219 @@ Basic auth in config:
 }
 ```
 
-which causes:
+The core pieces are:
 
-```bash
-restish get myapi/items
-```
+- `type`
+- `params`
 
-to send an `Authorization: Basic ...` header.
+`type` selects the handler implementation. `params` supplies handler-specific
+configuration.
 
-If the password is omitted:
+Unknown auth types are errors unless a matching auth plugin is available.
 
-```json
-{
-  "type": "http-basic",
-  "params": {
-    "username": "alice"
-  }
-}
-```
+## Built-In Auth Types
 
-Restish prompts for the secret at request time instead of requiring it to live
-in the config file.
+The built-in set should include:
 
-The same resolution path is used by:
+- `http-basic`
+- `oauth-client-credentials`
+- `oauth-authorization-code`
+- device-code flow when available as part of the OAuth family
 
-```bash
-restish auth-header myapi
-```
+The design explicitly leaves room for:
 
-which prints the computed `Authorization` header value.
+- auth plugins
+- external-tool-backed handlers
+- additional OAuth grant helpers
+
+## Handler Contract
+
+The long-term handler contract should be richer than "mutate request from a map
+of strings." A handler should conceptually receive:
+
+- `context.Context`
+- outbound request
+- typed auth configuration
+- token store
+- prompter
+- logger
+- execution mode such as "normal request", "`auth-header` inspection", or
+  "force refresh on retry"
+
+And it should return:
+
+- request mutations to apply
+- token-store updates if applicable
+- optional retry/refresh hints
+
+This is a design direction adopted from the review. The current implementation
+may still use a narrower interface internally, but new auth work should move
+toward the typed model.
+
+## Prompting Rules
+
+Prompting is allowed when secrets are omitted intentionally from config.
+
+Prompting must:
+
+- prefer `/dev/tty` or equivalent terminal access when stdin is not interactive
+- honor defaults when the design says a default exists
+- treat EOF carefully rather than silently accepting destructive behavior
+- use the runtime-owned prompter rather than ad-hoc scanners
+
+This keeps auth usable in both interactive shells and scripted contexts where
+stdin may already be consumed by piped data.
+
+## Token Storage
+
+Token-bearing auth flows use a persistent token cache keyed by at least:
+
+- API identity
+- profile name
+- any additional cache partition key required by the auth config
+
+The token store must provide:
+
+- atomic writes
+- restrictive permissions
+- cross-process locking
+- reload behavior for long-running processes
+
+Refresh semantics matter:
+
+- if a refresh response omits `refresh_token`, Restish preserves the existing
+  refresh token
+- transient refresh failures should be surfaced clearly
+- automatic fallback from refresh failure to a browser flow should only happen
+  when the failure mode justifies it
+
+## OAuth Design
+
+OAuth support in Restish should be modeled as one family with shared helpers
+instead of several mostly independent implementations.
+
+Common responsibilities include:
+
+- OIDC discovery
+- token endpoint communication
+- auth-method selection
+- token parsing and redaction
+- refresh behavior
+- cache integration
+
+### OIDC Discovery
+
+If the profile provides an issuer URL, Restish may resolve it through OIDC
+discovery to obtain:
+
+- authorization endpoint
+- token endpoint
+- device endpoint when available
+
+Discovery must honor the security rules in design 030.
+
+### Token Endpoint Authentication
+
+OAuth clients should support at least:
+
+- `client_secret_post`
+- `client_secret_basic`
+
+The auth method must be configurable because different providers require
+different token-endpoint auth behavior.
+
+### Authorization Code Flow
+
+Authorization code flow should support both:
+
+- local-browser callback on localhost
+- headless/manual fallback or device-code alternative for SSH/remote use
+
+The localhost callback server must:
+
+- validate path and state
+- ignore irrelevant requests like `/favicon.ico`
+- shut down cleanly on success, timeout, or cancellation
+
+### Client Credentials Flow
+
+Client credentials flow should support provider-specific extra parameters such
+as `audience`, `resource`, or `organization`. Restish should forward unknown
+endpoint parameters rather than silently dropping them.
+
+### Device Code Or Headless Alternative
+
+Remote and SSH users need a browserless path. Restish should provide either:
+
+- device code flow where supported, or
+- an explicit manual-code fallback
+
+before v2 release.
+
+## 401 Retry Semantics
+
+Token-bearing handlers may need a one-shot recovery path when a token was
+technically unexpired but rejected by the server.
+
+The design allows:
+
+- invalidate cached credential
+- force one refresh or re-auth attempt
+- retry the request once
+
+Anything beyond one controlled retry should be left to the normal retry design,
+not embedded in auth handlers.
+
+## `auth-header` Command
+
+`restish auth-header <api>` reuses the same auth resolution path as real
+requests but stops after producing the final auth header value.
+
+This is important because it gives operators and scripts a supported way to
+inspect what Restish would send without duplicating auth logic elsewhere.
+
+## Security Rules
+
+Auth behavior must follow design 030:
+
+- redact secrets in logs
+- do not print raw remote token bodies in errors
+- keep secrets out of stdout unless the command explicitly asks for them
+- prefer restrictive file permissions for caches
+
+## Plugin Integration
+
+Auth plugins are valid for schemes that do not belong in the core binary.
+
+The plugin boundary should stay narrow:
+
+- Restish owns request planning
+- plugin returns request mutations or auth material
+- token storage and prompting stay host-coordinated unless the plugin owns them
+  by explicit contract
+
+Auth plugins extend the system; they should not replace the entire auth model.
 
 ## Alternatives Considered
 
-### Store auth outside profiles
+### Store Auth Outside Profiles
 
-This would weaken the connection between environment selection and auth
-selection. Profiles are the right place because auth almost always varies with
-the same environment boundaries as base URLs and persistent headers.
+Rejected because auth usually varies with the same environment boundary as base
+URLs and headers.
 
-### Treat auth as only static headers in config
+### Treat Auth As Static Headers Only
 
-That works for some APIs, but it is not expressive enough for OAuth flows,
-prompted secrets, or token refresh behavior.
+Too weak for OAuth, prompting, refresh, and inspection tools.
 
-### Push all auth into plugins or external commands
+### Push All Auth Into Plugins
 
-That would keep the core smaller, but it would make common auth setups too
-heavyweight. Built-in support for the most common mechanisms is worth it.
+Too heavyweight for common API usage.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/cli/auth.go` resolves profile auth config into request hooks
-- `internal/auth/auth.go` defines the shared auth handler abstraction
-- `internal/auth/basic.go` implements HTTP Basic authentication
-- `internal/auth/oauth_common.go` provides shared OAuth and OIDC token helpers
-
-One detail worth preserving is that auth is applied through the request hook
-layer, not by teaching the HTTP transport about individual auth schemes. That
-keeps request construction composable and makes auth behavior easier to inspect
-and test.
+- Design 002 defines where auth config lives.
+- Design 017 defines prompting and diagnostics rules.
+- Design 029 defines where auth sits in the request pipeline.
+- Design 030 defines secret-handling and OIDC discovery safety rules.
+- Design 031 defines compatibility expectations such as restoring headless
+  flows.
