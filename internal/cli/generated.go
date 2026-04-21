@@ -8,7 +8,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/spf13/cobra"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -19,8 +18,8 @@ import (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
-	model, err := s.V3Model()
-	if err != nil || model == nil || model.Model.Paths == nil {
+	ops, err := s.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+	if err != nil {
 		source := apiCfg.SpecURL
 		if source == "" && len(apiCfg.SpecFiles) > 0 {
 			source = apiCfg.SpecFiles[0]
@@ -28,9 +27,11 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 		if source == "" {
 			source = apiCfg.BaseURL
 		}
-		if err != nil {
-			fmt.Fprintf(c.Stderr, "warning: skipping generated commands for API %q from %s: %v\n", apiName, source, err)
-		}
+		fmt.Fprintf(c.Stderr, "warning: skipping generated commands for API %q from %s: %v\n", apiName, source, err)
+		return nil
+	}
+	// ops == nil means no V3 model or no paths section — nothing to generate.
+	if ops == nil {
 		return nil
 	}
 
@@ -45,63 +46,42 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 		},
 	}
 
-	// Collect unique tags so we can create command groups for help display.
 	tagsSeen := map[string]bool{}
 	commandNames := map[string]bool{}
-	basePath, err := generatedBasePath(apiCfg.BaseURL, apiCfg.OperationBase, model.Model.Servers)
-	if err != nil {
-		fmt.Fprintf(c.Stderr, "warning: unable to derive generated base path for API %q: %v\n", apiName, err)
-	}
 
-	for path, pathItem := range model.Model.Paths.PathItems.FromOldest() {
-		if spec.PathItemExtBool(pathItem, "x-cli-ignore") {
+	for _, op := range ops {
+		cmd, err := c.buildOperationCommand(apiName, op, apiCfg.OperationBase)
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", op.Method, op.Path, apiName, err)
 			continue
 		}
-		generatedPath := joinOperationPath(basePath, path)
-		for _, mo := range spec.PathItemMethods(pathItem) {
-			if mo.Op == nil {
-				continue
-			}
-			cmd, err := c.buildOperationCommand(apiName, generatedPath, mo.Method, pathItem.Parameters, mo.Op, apiCfg.OperationBase)
-			if err != nil {
-				fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", mo.Method, generatedPath, apiName, err)
-				continue
-			}
-			if cmd == nil {
-				continue
-			}
-			if commandNames[cmd.Name()] {
-				originalName := cmd.Name()
-				disambiguated := originalName + "-" + strings.ToLower(mo.Method)
-				if commandNames[disambiguated] {
-					suffix := 2
-					for commandNames[fmt.Sprintf("%s-%d", disambiguated, suffix)] {
-						suffix++
-					}
-					disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
-				}
-				fmt.Fprintf(c.Stderr, "warning: command name collision for API %q: %q; using %q for %s %s\n", apiName, originalName, disambiguated, mo.Method, path)
-				cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
-				cmd.Aliases = append(cmd.Aliases, originalName)
-			}
-			commandNames[cmd.Name()] = true
-			// Register first tag as the group ID.
-			if len(mo.Op.Tags) > 0 {
-				tag := mo.Op.Tags[0]
-				if !tagsSeen[tag] {
-					tagsSeen[tag] = true
-					apiCmd.AddGroup(&cobra.Group{
-						ID:    tag,
-						Title: tag,
-					})
-				}
-				cmd.GroupID = tag
-			}
-			if spec.PathItemExtBool(pathItem, "x-cli-hidden") {
-				cmd.Hidden = true
-			}
-			apiCmd.AddCommand(cmd)
+		if cmd == nil {
+			continue
 		}
+		if commandNames[cmd.Name()] {
+			originalName := cmd.Name()
+			disambiguated := originalName + "-" + strings.ToLower(op.Method)
+			if commandNames[disambiguated] {
+				suffix := 2
+				for commandNames[fmt.Sprintf("%s-%d", disambiguated, suffix)] {
+					suffix++
+				}
+				disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
+			}
+			fmt.Fprintf(c.Stderr, "warning: command name collision for API %q: %q; using %q for %s %s\n", apiName, originalName, disambiguated, op.Method, op.Path)
+			cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
+			cmd.Aliases = append(cmd.Aliases, originalName)
+		}
+		commandNames[cmd.Name()] = true
+		if len(op.Tags) > 0 {
+			tag := op.Tags[0]
+			if !tagsSeen[tag] {
+				tagsSeen[tag] = true
+				apiCmd.AddGroup(&cobra.Group{ID: tag, Title: tag})
+			}
+			cmd.GroupID = tag
+		}
+		apiCmd.AddCommand(cmd)
 	}
 
 	return apiCmd
@@ -113,6 +93,7 @@ type paramInfo struct {
 	flagName string // kebab-case flag name
 	in       string // "path", "query", "header", "cookie"
 	required bool
+	hidden   bool
 	desc     string
 	enum     []string // allowed values from OpenAPI schema enum, if present
 }
@@ -122,56 +103,40 @@ type paramInfo struct {
 // operationBase, when non-empty, replaces the apiName short-name prefix in
 // generated URLs so operations are served from a different host/path than
 // the API root.
-func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams []*v3high.Parameter, op *v3high.Operation, operationBase string) (*cobra.Command, error) {
-	// x-cli-ignore: exclude this operation from the CLI entirely.
-	if spec.OpExtBool(op, "x-cli-ignore") {
-		return nil, nil
-	}
-
+func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operationBase string) (*cobra.Command, error) {
 	// Derive command name from operationId, with x-cli-name override.
-	cmdName := toKebabCase(op.OperationId)
+	cmdName := toKebabCase(op.ID)
 	if cmdName == "" {
-		cmdName = toKebabCase(method + "-" + strings.Trim(opPath, "/"))
+		cmdName = toKebabCase(op.Method + "-" + strings.Trim(op.Path, "/"))
 	}
-	if name := spec.OpExtString(op, "x-cli-name"); name != "" {
-		cmdName = name
+	if op.XCLI.Name != "" {
+		cmdName = op.XCLI.Name
 	}
 
 	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
-	pathParamOrder := extractPathParamNames(opPath)
-	params := mergeParameters(pathParams, op.Parameters)
+	pathParamOrder := extractPathParamNames(op.Path)
 
 	allParams := make(map[string]*paramInfo)
-	for _, p := range params {
-		if spec.ParamExtBool(p, "x-cli-ignore") {
+	for _, p := range op.Parameters {
+		if p.XCLI.Ignore {
 			continue
 		}
-		req := p.Required != nil && *p.Required
 		flagName := toKebabCase(p.Name)
-		if n := spec.ParamExtString(p, "x-cli-name"); n != "" {
-			flagName = n
+		if p.XCLI.Name != "" {
+			flagName = p.XCLI.Name
 		}
-		desc := p.Description
-		if d := spec.ParamExtString(p, "x-cli-description"); d != "" {
-			desc = d
-		}
-		var enumVals []string
-		if p.Schema != nil {
-			if schema := p.Schema.Schema(); schema != nil {
-				for _, node := range schema.Enum {
-					if node != nil {
-						enumVals = append(enumVals, node.Value)
-					}
-				}
-			}
+		desc := p.Desc
+		if p.XCLI.Description != "" {
+			desc = p.XCLI.Description
 		}
 		allParams[p.Name] = &paramInfo{
 			name:     p.Name,
 			flagName: flagName,
 			in:       p.In,
-			required: req,
+			required: p.Required,
+			hidden:   p.XCLI.Hidden,
 			desc:     desc,
-			enum:     enumVals,
+			enum:     p.Enum,
 		}
 	}
 
@@ -180,16 +145,16 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 	for _, name := range pathParamOrder {
 		pi, ok := allParams[name]
 		if !ok {
-			opID := op.OperationId
+			opID := op.ID
 			if opID == "" {
-				opID = method + " " + opPath
+				opID = op.Method + " " + op.Path
 			}
 			return nil, fmt.Errorf("operation %q references missing path parameter %q", opID, name)
 		}
 		required = append(required, pi)
 	}
-	for _, p := range params {
-		if p.In == "query" && p.Required != nil && *p.Required {
+	for _, p := range op.Parameters {
+		if p.In == "query" && p.Required {
 			if pi := allParams[p.Name]; pi != nil {
 				required = append(required, pi)
 			}
@@ -198,7 +163,7 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 
 	// Optional: non-required, non-path params.
 	var optional []*paramInfo
-	for _, p := range params {
+	for _, p := range op.Parameters {
 		if p.In == "path" {
 			continue
 		}
@@ -208,7 +173,7 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 			}
 			continue
 		}
-		if req := p.Required != nil && *p.Required; !req {
+		if !p.Required {
 			if pi := allParams[p.Name]; pi != nil {
 				optional = append(optional, pi)
 			}
@@ -220,22 +185,22 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 	for _, p := range required {
 		use += " <" + p.flagName + ">"
 	}
-	if op.RequestBody != nil {
+	if op.HasBody {
 		use += " [body...]"
 	}
 
 	// Short and long descriptions, with x-cli-description override.
 	short := op.Summary
-	if desc := spec.OpExtString(op, "x-cli-description"); desc != "" {
-		short = desc
+	if op.XCLI.Description != "" {
+		short = op.XCLI.Description
 	}
 	if short == "" {
-		short = fmt.Sprintf("%s %s", method, opPath)
+		short = fmt.Sprintf("%s %s", op.Method, op.Path)
 	}
 
 	long := op.Description
-	if desc := spec.OpExtString(op, "x-cli-description"); desc != "" {
-		long = desc
+	if op.XCLI.Description != "" {
+		long = op.XCLI.Description
 	}
 	if len(required) > 0 {
 		var argDocs strings.Builder
@@ -251,23 +216,19 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 		long += argDocs.String()
 	}
 
-	deprecated := op.Deprecated != nil && *op.Deprecated
-	hidden := spec.OpExtBool(op, "x-cli-hidden")
-	aliases := spec.OpExtStrings(op, "x-cli-aliases")
-
 	cmd := &cobra.Command{
 		Use:        use,
 		Short:      short,
 		Long:       long,
-		Aliases:    aliases,
+		Aliases:    op.XCLI.Aliases,
 		Args:       cobra.MinimumNArgs(len(required)),
-		Hidden:     hidden,
-		Deprecated: deprecatedNotice(deprecated),
+		Hidden:     op.XCLI.Hidden,
+		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runGeneratedOp(cmd, apiName, opPath, method, required, optional, args, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, required, optional, args, operationBase)
 		},
 	}
-	if op.RequestBody == nil {
+	if !op.HasBody {
 		cmd.Args = cobra.ExactArgs(len(required))
 	}
 
@@ -276,7 +237,7 @@ func (c *CLI) buildOperationCommand(apiName, opPath, method string, pathParams [
 		if p.required {
 			_ = cmd.MarkFlagRequired(p.flagName)
 		}
-		if spec.ParamExtBool(paramsByName(params, p.in, p.name), "x-cli-hidden") {
+		if p.hidden {
 			_ = cmd.Flags().MarkHidden(p.flagName)
 		}
 		if len(p.enum) > 0 {
@@ -375,121 +336,6 @@ func extractPathParamNames(path string) []string {
 		names = append(names, m[1])
 	}
 	return names
-}
-
-func mergeParameters(pathLevel, operationLevel []*v3high.Parameter) []*v3high.Parameter {
-	if len(pathLevel) == 0 {
-		return operationLevel
-	}
-	if len(operationLevel) == 0 {
-		return pathLevel
-	}
-
-	merged := make([]*v3high.Parameter, 0, len(pathLevel)+len(operationLevel))
-	indexes := make(map[string]int, len(pathLevel)+len(operationLevel))
-
-	add := func(p *v3high.Parameter) {
-		key := parameterKey(p)
-		if idx, ok := indexes[key]; ok {
-			merged[idx] = p
-			return
-		}
-		indexes[key] = len(merged)
-		merged = append(merged, p)
-	}
-
-	for _, p := range pathLevel {
-		add(p)
-	}
-	for _, p := range operationLevel {
-		add(p)
-	}
-
-	return merged
-}
-
-func parameterKey(p *v3high.Parameter) string {
-	if p == nil {
-		return ""
-	}
-	return p.In + "\x00" + p.Name
-}
-
-func paramsByName(params []*v3high.Parameter, in, name string) *v3high.Parameter {
-	for _, p := range params {
-		if p != nil && p.In == in && p.Name == name {
-			return p
-		}
-	}
-	return nil
-}
-
-func generatedBasePath(baseURL, operationBase string, servers []*v3high.Server) (string, error) {
-	if operationBase != "" {
-		return "", nil
-	}
-	if len(servers) == 0 {
-		return "", nil
-	}
-
-	location, err := url.Parse(baseURL)
-	if err != nil {
-		return "", err
-	}
-	prefix := fmt.Sprintf("%s://%s", location.Scheme, location.Host)
-
-	for _, server := range servers {
-		if server == nil {
-			continue
-		}
-		if strings.HasPrefix(server.URL, "/") {
-			return strings.TrimSuffix(server.URL, "/"), nil
-		}
-
-		endpoints := []string{server.URL}
-		if server.Variables != nil {
-			for key, value := range server.Variables.FromOldest() {
-				placeholder := fmt.Sprintf("{%s}", key)
-				if value == nil {
-					continue
-				}
-				if len(value.Enum) == 0 {
-					for i := range endpoints {
-						endpoints[i] = strings.ReplaceAll(endpoints[i], placeholder, value.Default)
-					}
-					continue
-				}
-
-				next := make([]string, 0, len(endpoints)*len(value.Enum))
-				for _, enumVal := range value.Enum {
-					for _, endpoint := range endpoints {
-						next = append(next, strings.ReplaceAll(endpoint, placeholder, enumVal))
-					}
-				}
-				endpoints = next
-			}
-		}
-
-		for _, endpoint := range endpoints {
-			if !strings.HasPrefix(endpoint, prefix) {
-				continue
-			}
-			parsed, err := url.Parse(endpoint)
-			if err != nil {
-				return "", err
-			}
-			return strings.TrimSuffix(parsed.Path, "/"), nil
-		}
-	}
-
-	return strings.TrimSuffix(location.Path, "/"), nil
-}
-
-func joinOperationPath(basePath, opPath string) string {
-	if basePath == "" || basePath == "/" {
-		return opPath
-	}
-	return strings.TrimRight(basePath, "/") + opPath
 }
 
 // toKebabCase converts a camelCase or PascalCase identifier to kebab-case.

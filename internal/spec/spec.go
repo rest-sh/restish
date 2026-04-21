@@ -30,9 +30,19 @@ type APISpec struct {
 	Document libopenapi.Document
 
 	// modelOnce guards lazy construction of the V3 model.
-	modelOnce  sync.Once
+	modelOnce   sync.Once
 	modelResult *libopenapi.DocumentModel[v3.Document]
-	modelErr   error
+	modelErr    error
+
+	// opsCacheMu guards the operations cache.
+	opsCacheMu sync.Mutex
+	opsCache   map[opsKey]opsEntry
+}
+
+type opsKey struct{ baseURL, operationBase string }
+type opsEntry struct {
+	ops []Operation
+	err error
 }
 
 // V3Model returns the built V3 document model, memoizing the result so that

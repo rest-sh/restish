@@ -230,3 +230,104 @@ func TestAPISpec_V3ModelMemoized(t *testing.T) {
 		t.Error("expected V3Model to return the same pointer on second call")
 	}
 }
+
+func TestAPISpec_OperationsMemoized(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200": {}`
+	l := OpenAPILoader{}
+	s, err := l.Load([]byte(raw))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops1, err1 := s.Operations("https://api.example.com", "")
+	ops2, err2 := s.Operations("https://api.example.com", "")
+	if err1 != nil || err2 != nil {
+		t.Fatalf("Operations errors: %v / %v", err1, err2)
+	}
+	if len(ops1) != 1 || len(ops2) != 1 {
+		t.Fatalf("expected 1 op each, got %d / %d", len(ops1), len(ops2))
+	}
+	// Same underlying slice pointer confirms memoization.
+	if &ops1[0] != &ops2[0] {
+		t.Error("expected Operations to return the same slice on second call")
+	}
+}
+
+func TestAPISpec_Operations_NeutralTypes(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      summary: Get item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Item ID
+        - name: filter
+          in: query
+          x-cli-name: f
+          x-cli-hidden: true
+          schema:
+            enum: [a, b, c]
+      responses:
+        "200": {}`
+	l := OpenAPILoader{}
+	s, err := l.Load([]byte(raw))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := s.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 op, got %d", len(ops))
+	}
+	op := ops[0]
+	if op.ID != "getItem" {
+		t.Errorf("ID: got %q, want %q", op.ID, "getItem")
+	}
+	if op.Method != "GET" {
+		t.Errorf("Method: got %q, want %q", op.Method, "GET")
+	}
+	if op.Path != "/v1/items/{id}" {
+		t.Errorf("Path: got %q, want %q", op.Path, "/v1/items/{id}")
+	}
+	if op.Summary != "Get item" {
+		t.Errorf("Summary: got %q", op.Summary)
+	}
+	if len(op.Parameters) != 2 {
+		t.Fatalf("expected 2 params, got %d", len(op.Parameters))
+	}
+
+	idParam := op.Parameters[0]
+	if idParam.Name != "id" || idParam.In != "path" || !idParam.Required {
+		t.Errorf("id param: %+v", idParam)
+	}
+
+	filterParam := op.Parameters[1]
+	if filterParam.XCLI.Name != "f" {
+		t.Errorf("filter x-cli-name: got %q, want %q", filterParam.XCLI.Name, "f")
+	}
+	if !filterParam.XCLI.Hidden {
+		t.Error("filter param should be hidden")
+	}
+	if len(filterParam.Enum) != 3 {
+		t.Errorf("filter enum: got %v", filterParam.Enum)
+	}
+}
