@@ -23,14 +23,14 @@ These work without API registration.
 restish get https://api.rest.sh/
 restish post https://api.rest.sh name: Alice
 restish patch https://api.rest.sh/types string: changed
-restish delete https://api.example.com/items/123
+restish delete https://your-api.example.com/items/123
 restish head https://api.rest.sh/
 restish options https://api.rest.sh/
 ```
 
-The `get`, `post`, and `patch` examples are runnable against the example API.
-The `delete`, `head`, and `options` examples stay generic or may return
-limited data depending on the server.
+The `get`, `post`, `patch`, `head`, and `options` examples are runnable
+against the example API. The `delete` example uses a placeholder because
+the public example API does not expose a destructive delete target.
 
 ## Bare URL Shortcut
 

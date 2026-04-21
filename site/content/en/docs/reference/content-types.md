@@ -35,7 +35,7 @@ Use `-c` or `--rsh-content-type` to choose how Restish encodes a request body.
 ```bash
 restish post -c json https://api.rest.sh/types string: hello
 restish post -c yaml https://api.rest.sh/types string: hello
-restish post -c form https://api.example.com/login username: alice password: secret
+restish post -c form https://auth.example.com/login username: alice password: secret
 ```
 
 Common cases:
@@ -62,16 +62,16 @@ That is why the same response can later be:
 aggressively reinterpret file-like values for form-style content types, because
 preserving literal values is usually the safer default.
 
+> **Note:** Form and multipart examples use placeholder URLs because login
+> forms and file upload endpoints are not exposed by the public example API.
+> Replace the host with your actual target.
+
 Examples:
 
 ```bash
-restish post -c form https://api.example.com/login username: alice password: secret
-restish post -c multipart https://api.example.com/upload name: example
+restish post -c form https://auth.example.com/login username: alice password: secret
+restish post -c multipart https://upload.example.com/files name: example
 ```
-
-The JSON and YAML examples use the public example API. The form and multipart
-examples stay generic because they illustrate shapes more than a specific live
-endpoint.
 
 ## Accept Header And Quality Ordering
 

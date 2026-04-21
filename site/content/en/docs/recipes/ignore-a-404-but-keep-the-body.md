@@ -9,7 +9,7 @@ Use `--rsh-ignore-status-code` when you want the response body but do not want
 the command to fail because of the HTTP status:
 
 ```bash
-restish https://api.example.com/missing --rsh-ignore-status-code
+restish https://api.rest.sh/missing --rsh-ignore-status-code
 ```
 
 This is especially useful when:

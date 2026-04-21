@@ -45,10 +45,10 @@ An operation like:
 
 ```yaml
 paths:
-  /pets/{petId}:
+  /images/{format}:
     get:
-      operationId: getPet
-      x-cli-name: pet
+      operationId: getImage
+      x-cli-name: get-image
 ```
 
 can turn into a command like:

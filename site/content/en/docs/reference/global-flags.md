@@ -76,7 +76,7 @@ Examples:
 restish https://api.rest.sh/images --rsh-max-pages 3
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 restish https://api.rest.sh/images -o ndjson --rsh-max-items 100
-restish https://api.example.com/events --rsh-max-events 10 -o ndjson
+restish https://your-api.example.com/events --rsh-max-events 10 -o ndjson
 ```
 
 ## Resilience And Status Handling
@@ -115,7 +115,7 @@ restish \
   --rsh-ca-cert ./corp-ca.pem \
   --rsh-client-cert ./client.pem \
   --rsh-client-key ./client.key \
-  https://api.example.com/items
+  https://internal.example.com/items
 ```
 
 ## Default Behavior Worth Remembering

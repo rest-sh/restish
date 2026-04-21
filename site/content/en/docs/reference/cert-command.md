@@ -11,13 +11,14 @@ context Restish would use for requests.
 ## Examples
 
 ```bash
-restish cert https://api.example.com
-restish cert --rsh-ca-cert ./corp-ca.pem https://api.example.com
-restish cert --warn-days 14 https://api.example.com
+restish cert https://api.rest.sh
+restish cert --rsh-ca-cert ./corp-ca.pem https://internal.example.com
+restish cert --warn-days 14 https://api.rest.sh
 ```
 
-Use placeholder hosts here because certificate inspection is usually about your
-real target service and trust context rather than the public example API.
+The first and third examples run against the public example API. The custom-CA
+example uses a placeholder host because it requires your own CA bundle and
+private infrastructure.
 
 ## Important Flags
 

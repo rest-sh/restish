@@ -19,8 +19,12 @@ For internal PKI or private certificate authorities, point Restish at a PEM
 bundle:
 
 ```bash
-restish --rsh-ca-cert ./corp-ca.pem https://api.example.com/items
+restish --rsh-ca-cert ./corp-ca.pem https://internal.example.com/items
 ```
+
+> **Note:** Custom CA and mTLS examples use placeholder URLs because they
+> require your own certificate infrastructure. Replace `internal.example.com`
+> with your actual API host and provide your own PEM material.
 
 This keeps verification enabled while extending the trust store for that
 request.
@@ -34,7 +38,7 @@ restish get \
   --rsh-client-cert ./client.pem \
   --rsh-client-key ./client.key \
   --rsh-ca-cert ./ca.pem \
-  https://api.example.com/items
+  https://internal.example.com/items
 ```
 
 These options also fit naturally into profile-based workflows when you need
@@ -61,8 +65,8 @@ systems.
 If you need to restrict protocol negotiation:
 
 ```bash
-restish --rsh-tls-min-version TLS1.2 https://api.example.com/items
-restish --rsh-tls-min-version TLS1.3 https://api.example.com/items
+restish --rsh-tls-min-version TLS1.2 https://internal.example.com/items
+restish --rsh-tls-min-version TLS1.3 https://internal.example.com/items
 ```
 
 ## Temporary Insecure Mode
@@ -70,7 +74,7 @@ restish --rsh-tls-min-version TLS1.3 https://api.example.com/items
 `--rsh-insecure` disables certificate verification:
 
 ```bash
-restish --rsh-insecure https://api.example.com/items
+restish --rsh-insecure https://internal.example.com/items
 ```
 
 Use this only for temporary debugging. Restish warns when verification is
@@ -81,9 +85,9 @@ disabled because the connection is no longer meaningfully authenticated.
 Use the `cert` command to inspect the presented certificate chain:
 
 ```bash
-restish cert https://api.example.com
-restish cert --rsh-ca-cert ./corp-ca.pem https://api.example.com
-restish cert --warn-days 14 https://api.example.com
+restish cert https://internal.example.com
+restish cert --rsh-ca-cert ./corp-ca.pem https://internal.example.com
+restish cert --warn-days 14 https://internal.example.com
 ```
 
 This is useful for checking issuers, names, expiry windows, and the exact trust

@@ -21,16 +21,20 @@ pipeline instead of waiting for the whole response body.
 
 ## Basic Usage
 
+> **Note:** Streaming examples use placeholder URLs because live SSE and NDJSON
+> endpoints have not yet been added to `api.rest.sh`. Replace the URLs below
+> with a real streaming endpoint when testing.
+
 For SSE:
 
 ```bash
-restish https://api.example.com/events
+restish https://your-api.example.com/events
 ```
 
 For NDJSON:
 
 ```bash
-restish https://api.example.com/logs
+restish https://your-api.example.com/logs
 ```
 
 Each event or line is emitted as it arrives.
@@ -38,7 +42,7 @@ Each event or line is emitted as it arrives.
 For explicit machine-oriented record output, prefer `ndjson`:
 
 ```bash
-restish https://api.example.com/events -o ndjson
+restish https://your-api.example.com/events -o ndjson
 ```
 
 Think about stream handling in two categories:
@@ -52,8 +56,8 @@ Filtering still works in streaming mode. Each event payload becomes `body` for
 the filter expression:
 
 ```bash
-restish https://api.example.com/events -f '.body.type'
-restish https://api.example.com/events -f '.body.user.id'
+restish https://your-api.example.com/events -f '.body.type'
+restish https://your-api.example.com/events -f '.body.user.id'
 ```
 
 This keeps streaming consistent with the rest of the CLI instead of inventing a
@@ -62,7 +66,7 @@ separate query model.
 With `-o ndjson`, each filtered result is still one valid JSON value per line:
 
 ```bash
-restish https://api.example.com/events -o ndjson -f '.body.user.id'
+restish https://your-api.example.com/events -o ndjson -f '.body.user.id'
 ```
 
 ## Limit The Stream
@@ -70,7 +74,7 @@ restish https://api.example.com/events -o ndjson -f '.body.user.id'
 Use `--rsh-max-events` to stop after a bounded number of items:
 
 ```bash
-restish https://api.example.com/events --rsh-max-events 10
+restish https://your-api.example.com/events --rsh-max-events 10
 ```
 
 This works for both SSE and NDJSON streams.
@@ -81,7 +85,7 @@ Use `-r` or `--rsh-raw` when you want shell-friendly scalar output from a
 filtered stream:
 
 ```bash
-restish https://api.example.com/events -f '.body.message' -r
+restish https://your-api.example.com/events -f '.body.message' -r
 ```
 
 That prints one result per event without JSON string quotes.
@@ -95,7 +99,7 @@ Restish treats `-o json` as a bounded-document request and returns a clear
 error for live streams:
 
 ```bash
-restish https://api.example.com/events -o json
+restish https://your-api.example.com/events -o json
 ```
 
 Use `-o ndjson` when you want structured streaming JSON instead.
