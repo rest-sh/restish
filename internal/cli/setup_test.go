@@ -33,7 +33,7 @@ func TestSetupWritesAlias(t *testing.T) {
 
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "setup", "zsh"}); err != nil {
+	if err := c.Run([]string{"restish", "setup", "zsh", "--yes"}); err != nil {
 		t.Fatalf("setup zsh: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestSetupIdempotent(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		c, _, _ := newTestCLI()
 		c.ConfigPath = t.TempDir() + "/restish.json"
-		if err := c.Run([]string{"restish", "setup", "bash"}); err != nil {
+		if err := c.Run([]string{"restish", "setup", "bash", "--yes"}); err != nil {
 			t.Fatalf("run %d: setup bash: %v", i, err)
 		}
 	}
@@ -92,12 +92,19 @@ func TestSetupUnsupportedShell(t *testing.T) {
 	}
 }
 
-func TestSetupFishUnsupported(t *testing.T) {
+func TestSetupFishSupported(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
 	c, _, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "setup", "fish"})
-	if err == nil {
-		t.Fatal("expected error for fish setup")
+	err := c.Run([]string{"restish", "setup", "fish", "--yes"})
+	if err != nil {
+		t.Fatalf("expected fish setup to succeed, got: %v", err)
+	}
+	rcPath := filepath.Join(home, ".config", "fish", "config.fish")
+	if _, statErr := os.Stat(rcPath); statErr != nil {
+		t.Fatalf("expected fish config to be written: %v", statErr)
 	}
 }
 
@@ -112,10 +119,29 @@ func TestSetupWarnsForPermissiveExistingRCFile(t *testing.T) {
 
 	c, _, errOut := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "setup", "bash"}); err != nil {
+	if err := c.Run([]string{"restish", "setup", "bash", "--yes"}); err != nil {
 		t.Fatalf("setup bash: %v", err)
 	}
 	if !strings.Contains(errOut.String(), "chmod 600") {
 		t.Fatalf("expected permission warning, got %q", errOut.String())
+	}
+}
+
+func TestSetupDryRunDoesNotWrite(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "setup", "bash", "--dry-run"}); err != nil {
+		t.Fatalf("setup bash dry-run: %v", err)
+	}
+
+	rcPath := filepath.Join(home, ".bashrc")
+	if _, err := os.Stat(rcPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no file written in dry-run mode")
+	}
+	if !strings.Contains(out.String(), "Would update") {
+		t.Fatalf("expected dry-run output, got: %q", out.String())
 	}
 }

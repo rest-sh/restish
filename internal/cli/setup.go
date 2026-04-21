@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ type shellSetup struct {
 var shellSetups = map[string]shellSetup{
 	"zsh":  {rcFile: ".zshrc", alias: `alias restish="noglob restish"`},
 	"bash": {rcFile: ".bashrc", alias: `alias restish="noglob restish"`},
+	"fish": {rcFile: filepath.Join(".config", "fish", "config.fish"), alias: `function restish; command restish $argv; end`},
 }
 
 // addSetupCommand registers the "setup" subcommand on root.
@@ -28,14 +30,17 @@ func (c *CLI) addSetupCommand(root *cobra.Command) {
 	for k := range shellSetups {
 		shells = append(shells, k)
 	}
-	root.AddCommand(&cobra.Command{
+	setupCmd := &cobra.Command{
 		Use:       "setup <shell>",
 		Short:     "Configure your shell for restish (writes a noglob alias)",
 		Long:      fmt.Sprintf("Appends a noglob alias for restish to your shell rc file.\nSupported shells: %s", strings.Join(shells, ", ")),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: shells,
 		RunE:      c.runSetup,
-	})
+	}
+	setupCmd.Flags().Bool("dry-run", false, "Show what would be written without modifying files")
+	setupCmd.Flags().BoolP("yes", "y", false, "Apply changes without confirmation prompt")
+	root.AddCommand(setupCmd)
 }
 
 // runSetup appends a noglob alias to the appropriate shell rc file.
@@ -53,6 +58,8 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 
 	rcPath := filepath.Join(home, setup.rcFile)
 	line := "\n" + setup.alias + "\n"
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	autoYes, _ := cmd.Flags().GetBool("yes")
 
 	// Check if the alias is already present to avoid duplicates.
 	existing, _ := os.ReadFile(rcPath)
@@ -61,22 +68,70 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	if dryRun {
+		fmt.Fprintf(c.Stdout, "Would update %s with:\n%s\n", rcPath, setup.alias)
+		return nil
+	}
+
+	if !autoYes {
+		fmt.Fprintf(c.Stdout, "Update %s? [y/N]: ", rcPath)
+		reader := bufio.NewReader(c.Stdin)
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(c.Stdout, "Cancelled.")
+			return nil
+		}
+	}
+
 	if info, err := os.Stat(rcPath); err == nil && info.Mode().Perm()&0o077 != 0 {
 		fmt.Fprintf(c.Stderr, "warning: %s is more permissive than recommended; consider chmod 600 %s\n", rcPath, rcPath)
 	}
 
-	f, err := os.OpenFile(rcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("setup: cannot write %s: %w", rcPath, err)
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(line); err != nil {
+	updated := string(existing) + line
+	if err := atomicWriteTextFile(rcPath, []byte(updated), 0o600, 0o700); err != nil {
 		return fmt.Errorf("setup: write %s: %w", rcPath, err)
 	}
 
 	fmt.Fprintf(c.Stdout, "Configured %s: appended alias to %s\n", shell, rcPath)
 	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
+	return nil
+}
+
+func atomicWriteTextFile(path string, data []byte, fileMode, dirMode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpName) }
+	if err := tmp.Chmod(fileMode); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		cleanup()
+		return err
+	}
 	return nil
 }
 
