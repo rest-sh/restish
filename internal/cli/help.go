@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/danielgtaylor/restish/v2/internal/output"
@@ -14,24 +15,34 @@ import (
 // default help renderer. On non-TTY stdout the original help function is used
 // unchanged so that piped help output stays plain text.
 //
-// The substitution is temporary (deferred restore) so that command objects,
-// which are reused across invocations, are never left with rendered ANSI in
-// their Long field.
+// A mutex protects the temporary cmd.Long substitution so that concurrent
+// help calls from different goroutines do not race on the shared cobra.Command.
 func (c *CLI) setupMarkdownHelp(root *cobra.Command) {
 	if !output.IsTerminal(c.Stdout) {
 		return
 	}
 
+	var mu sync.Mutex
 	original := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		if cmd.Long != "" {
-			if rendered, err := renderMarkdown(cmd.Long, c); err == nil {
-				orig := cmd.Long
-				cmd.Long = rendered
-				defer func() { cmd.Long = orig }()
-			}
+		if cmd.Long == "" {
+			original(cmd, args)
+			return
 		}
+		rendered, err := renderMarkdown(cmd.Long, c)
+		if err != nil {
+			original(cmd, args)
+			return
+		}
+		// Swap cmd.Long with the rendered version for Cobra's template pipeline,
+		// then restore it synchronously (no defer) so the window is as small as
+		// possible and protected by a mutex for concurrent safety.
+		mu.Lock()
+		orig := cmd.Long
+		cmd.Long = rendered
 		original(cmd, args)
+		cmd.Long = orig
+		mu.Unlock()
 	})
 }
 
