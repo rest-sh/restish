@@ -46,10 +46,6 @@ func (c *closeAfterBody) Close() error {
 
 // Options controls per-request behavior derived from CLI flags.
 type Options struct {
-	// BaseTransport, when non-nil, is the underlying transport to wrap with
-	// TLS/cache/retry behavior. This is primarily useful in tests that want to
-	// avoid real network listeners.
-	BaseTransport http.RoundTripper
 	// Headers is a list of "Name: Value" header strings to add to the request.
 	Headers []string
 	// Query is a list of "key=value" query parameter strings to append.
@@ -95,6 +91,8 @@ type Options struct {
 	// NoCache, when true, bypasses the response cache for this request
 	// (no read, no write).
 	NoCache bool
+	// CacheNamespace partitions cache entries for one API/profile tuple.
+	CacheNamespace string
 	// Retry is the maximum number of retry attempts for network errors and
 	// 5xx responses.  Zero disables retries.
 	Retry int
@@ -103,11 +101,11 @@ type Options struct {
 	RetryBaseDelay time.Duration
 	// Logger receives retry progress warnings on stderr-style output.
 	Logger io.Writer
-	// Transport, if non-nil, is reused for every request instead of building
-	// a new one from the TLS/cache/retry options. Callers that make multiple
-	// requests with the same options (e.g. pagination) should pre-build a
-	// transport via BuildTransport and set it here so that the underlying
-	// http.Transport's connection pool is reused across requests.
+	// Transport, when passed to BuildTransport, is the underlying transport to
+	// wrap with TLS/cache/retry behavior. When passed to Do, it is treated as a
+	// fully built transport and reused as-is. Callers that make multiple
+	// requests with the same options (e.g. pagination) should pre-build one via
+	// BuildTransport and set it here so connection pools are reused.
 	Transport http.RoundTripper
 }
 
@@ -250,8 +248,8 @@ func doWithHeaderTimeout(client *http.Client, req *http.Request, timeout time.Du
 // Cloning from the default preserves proxy settings (HTTP_PROXY, HTTPS_PROXY,
 // NO_PROXY) and other production-appropriate defaults.
 func newTransport(opts Options) (http.RoundTripper, error) {
-	if opts.BaseTransport != nil {
-		if tr, ok := opts.BaseTransport.(*http.Transport); ok {
+	if opts.Transport != nil {
+		if tr, ok := opts.Transport.(*http.Transport); ok {
 			cloned := tr.Clone()
 			cfg, cleanup, err := TLSConfigWithCleanupFromOptions(opts)
 			if err != nil {
@@ -265,7 +263,7 @@ func newTransport(opts Options) (http.RoundTripper, error) {
 		if hasTLSOptions(opts) {
 			return nil, fmt.Errorf("custom base transport does not support TLS option overrides")
 		}
-		return opts.BaseTransport, nil
+		return opts.Transport, nil
 	}
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -317,7 +315,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 	if opts.NoCache || opts.CacheDir == "" {
 		return inner
 	}
-	dc, err := cache.New(opts.CacheDir, cache.DefaultMaxBytes)
+	dc, err := cache.New(opts.CacheDir, cache.DefaultMaxBytes, opts.CacheNamespace)
 	if err != nil {
 		// Cache unavailable; fall back without caching.
 		return inner

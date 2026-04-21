@@ -26,7 +26,7 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := c.cacheDir()
-			dc, err := cache.New(dir, cache.DefaultMaxBytes)
+			dc, err := cache.New(dir, cache.DefaultMaxBytes, "")
 			if err != nil {
 				return err
 			}
@@ -52,7 +52,7 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := c.cacheDir()
-			dc, err := cache.New(dir, cache.DefaultMaxBytes)
+			dc, err := cache.New(dir, cache.DefaultMaxBytes, "")
 			if err != nil {
 				return err
 			}

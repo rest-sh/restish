@@ -3,7 +3,9 @@ package cli
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -42,6 +44,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	}
 
 	maxEvents, _ := cmd.Flags().GetInt("rsh-max-events")
+	filterExpr, _ := cmd.Flags().GetString("rsh-filter")
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
 	if err != nil {
 		return err
@@ -52,60 +55,110 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		}
 	}()
 
-	scanner := bufio.NewScanner(resp.Body)
-	// Increase the max token size to 1 MiB to accommodate large SSE payloads.
-	// The default 64 KiB limit causes silent data loss on large events.
-	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
-
+	reader := bufio.NewReader(resp.Body)
+	var eventName string
+	var eventID string
+	var retryMs int
 	var data strings.Builder
 	count := 0
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	flush := func() error {
+		if data.Len() == 0 && eventName == "" && eventID == "" && retryMs == 0 {
+			return nil
+		}
+		parsed, parsedJSON := parseJSONOrString(data.String())
+		item := parsed
+		itemParsedJSON := parsedJSON
+		if filterExpr != "" || eventName != "" || eventID != "" || retryMs != 0 {
+			event := map[string]any{"data": parsed}
+			if eventName != "" {
+				event["event"] = eventName
+			}
+			if eventID != "" {
+				event["id"] = eventID
+			}
+			if retryMs != 0 {
+				event["retry"] = retryMs
+			}
+			item = event
+			itemParsedJSON = true
+		}
+		if err := c.renderStreamValue(cmd, renderer, item, itemParsedJSON); err != nil {
+			return err
+		}
+		count++
+		eventName = ""
+		eventID = ""
+		retryMs = 0
+		data.Reset()
+		return nil
+	}
+
+	for {
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			fmt.Fprintf(c.Stderr, "warning: SSE stream error: %v\n", readErr)
+			return nil
+		}
+		line = strings.TrimRight(line, "\r\n")
 
 		if line == "" {
 			// Blank line terminates an event.
-			if data.Len() > 0 {
-				if err := c.formatStreamItem(cmd, renderer, data.String()); err != nil {
-					return err
-				}
-				count++
-				data.Reset()
-				if maxEvents > 0 && count >= maxEvents {
-					break
-				}
+			if err := flush(); err != nil {
+				return err
+			}
+			if maxEvents > 0 && count >= maxEvents {
+				break
+			}
+			if errors.Is(readErr, io.EOF) {
+				break
 			}
 			continue
 		}
 
-		field, value, _ := strings.Cut(line, ":")
-		value = strings.TrimPrefix(value, " ")
+		field, value, hasColon := strings.Cut(line, ":")
+		if hasColon {
+			value = strings.TrimPrefix(value, " ")
+		}
 		switch field {
 		case "data":
 			if data.Len() > 0 {
 				data.WriteByte('\n')
 			}
 			data.WriteString(value)
+		case "event":
+			eventName = value
+		case "id":
+			eventID = value
 		case "retry":
-			// Reconnect delay hint; parsed but reconnect is not implemented.
-		case "id", "event":
-			// Ignored for now.
+			var retry int
+			if _, err := fmt.Sscanf(value, "%d", &retry); err == nil {
+				retryMs = retry
+			}
+		}
+
+		if errors.Is(readErr, io.EOF) {
+			if err := flush(); err != nil {
+				return err
+			}
+			break
 		}
 	}
 
-	// Flush a final event if the stream ended without a trailing blank line.
-	if data.Len() > 0 && (maxEvents <= 0 || count < maxEvents) {
-		if err := c.formatStreamItem(cmd, renderer, data.String()); err != nil {
-			return err
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		// Surface unexpected I/O errors on stderr so users can distinguish a
-		// network interruption from a clean end-of-stream.
-		fmt.Fprintf(c.Stderr, "warning: SSE stream error: %v\n", err)
-	}
 	return nil
+}
+
+func parseJSONOrString(data string) (any, bool) {
+	var parsed any
+	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
+		return parsed, true
+	}
+	return data, false
+}
+
+func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
+	item, parsedJSON := parseJSONOrString(data)
+	return c.renderStreamValue(cmd, renderer, item, parsedJSON)
 }
 
 // handleNDJSON reads a newline-delimited JSON response body, emitting each
@@ -180,21 +233,6 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	}
 
 	return renderer.Render(result)
-}
-
-// formatStreamItem parses data as JSON (if possible), applies the -f filter,
-// and writes the result to stdout.
-func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
-	// Try to parse as JSON; fall back to string.
-	var item any = data
-	var parsed any
-	parsedJSON := false
-	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
-		item = parsed
-		parsedJSON = true
-	}
-
-	return c.renderStreamValue(cmd, renderer, item, parsedJSON)
 }
 
 func validateStreamingOutputMode(cmd *cobra.Command) error {

@@ -24,6 +24,7 @@ const DefaultMaxBytes = 100 * 1024 * 1024
 // and Clear for the "restish cache" subcommands.
 type DiskCache struct {
 	dir          string
+	namespace    string
 	maxBytes     int64
 	sizeEstimate int64      // atomic: running byte-count estimate; may drift upward
 	evictMu      sync.Mutex // only one eviction goroutine at a time
@@ -31,11 +32,14 @@ type DiskCache struct {
 
 // New returns a DiskCache rooted at dir with the given size cap.
 // dir is created if it does not exist.
-func New(dir string, maxBytes int64) (*DiskCache, error) {
+func New(dir string, maxBytes int64, namespace string) (*DiskCache, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("cache: create dir %s: %w", dir, err)
 	}
-	return &DiskCache{dir: dir, maxBytes: maxBytes}, nil
+	if namespace == "" {
+		namespace = "_"
+	}
+	return &DiskCache{dir: dir, namespace: namespace, maxBytes: maxBytes}, nil
 }
 
 // filePath derives the cache file path for a given URL key.
@@ -47,7 +51,7 @@ func (c *DiskCache) filePath(key string) string {
 		host = u.Host
 	}
 	h := sha256.Sum256([]byte(key))
-	return filepath.Join(c.dir, host, fmt.Sprintf("%x.cache", h))
+	return filepath.Join(c.dir, host, c.namespace, fmt.Sprintf("%x.cache", h))
 }
 
 // Get returns the cached bytes for key, if present, and updates the file's
@@ -70,7 +74,16 @@ func (c *DiskCache) Set(key string, data []byte) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
-	_ = os.WriteFile(p, data, 0o600)
+	var previousSize int64
+	if info, err := os.Stat(p); err == nil {
+		previousSize = info.Size()
+	}
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		return
+	}
+	if previousSize > 0 {
+		atomic.AddInt64(&c.sizeEstimate, -previousSize)
+	}
 	atomic.AddInt64(&c.sizeEstimate, int64(len(data)))
 	c.evictIfNeeded()
 }
@@ -191,5 +204,12 @@ func (c *DiskCache) Clear(host string) error {
 		}
 		return nil
 	}
-	return os.RemoveAll(filepath.Join(c.dir, host))
+	target := filepath.Join(c.dir, host)
+	if _, err := os.Stat(target); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("no cached entries for host %q", host)
+		}
+		return err
+	}
+	return os.RemoveAll(target)
 }

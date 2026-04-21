@@ -27,7 +27,7 @@ func response(status int, body string) *http.Response {
 
 func TestDo_BasicGet(t *testing.T) {
 	resp, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			if r.Method != "GET" {
 				t.Errorf("expected GET, got %s", r.Method)
 			}
@@ -51,7 +51,7 @@ func TestDo_BasicGet(t *testing.T) {
 func TestDo_Headers(t *testing.T) {
 	var gotHeader string
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			gotHeader = r.Header.Get("X-Custom")
 			return response(200, ""), nil
 		}),
@@ -68,7 +68,7 @@ func TestDo_Headers(t *testing.T) {
 func TestDo_HeaderWithColonInValue(t *testing.T) {
 	var gotHeader string
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			gotHeader = r.Header.Get("Authorization")
 			return response(200, ""), nil
 		}),
@@ -84,7 +84,7 @@ func TestDo_HeaderWithColonInValue(t *testing.T) {
 
 func TestDo_InvalidHeader(t *testing.T) {
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			return response(200, ""), nil
 		}),
 		Headers: []string{"no-colon-at-all"},
@@ -97,7 +97,7 @@ func TestDo_InvalidHeader(t *testing.T) {
 func TestDo_Query(t *testing.T) {
 	var gotQuery string
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			gotQuery = r.URL.Query().Get("page")
 			return response(200, ""), nil
 		}),
@@ -113,7 +113,7 @@ func TestDo_Query(t *testing.T) {
 
 func TestDo_InvalidQueryParam(t *testing.T) {
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			return response(200, ""), nil
 		}),
 		Query: []string{"no-equals-sign"},
@@ -126,7 +126,7 @@ func TestDo_InvalidQueryParam(t *testing.T) {
 func TestDo_Post_WithBody(t *testing.T) {
 	var gotBody string
 	resp, err := request.Do(context.Background(), "POST", "https://api.example.com/items", strings.NewReader(`{"name":"test"}`), request.Options{
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			b, _ := io.ReadAll(r.Body)
 			gotBody = string(b)
 			return response(201, ""), nil
@@ -148,7 +148,7 @@ func TestDo_Post_WithBody(t *testing.T) {
 func TestDo_HeaderTimeout(t *testing.T) {
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
 		Timeout: 20 * time.Millisecond,
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			<-r.Context().Done()
 			return nil, r.Context().Err()
 		}),
@@ -168,7 +168,7 @@ func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
 	bodyRead := make(chan struct{})
 	resp, err := request.Do(ctx, "GET", "https://api.example.com/items", nil, request.Options{
 		Timeout: 20 * time.Millisecond,
-		BaseTransport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: 200,
 				Header:     http.Header{},

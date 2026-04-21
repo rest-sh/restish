@@ -49,10 +49,8 @@ func (c *CLI) prepareRequest(
 		opts.OnRequest = nil
 		filtered := opts.Headers[:0]
 		for _, h := range opts.Headers {
-			lower := strings.ToLower(h)
-			if !strings.HasPrefix(lower, "authorization:") &&
-				!strings.HasPrefix(lower, "cookie:") &&
-				!strings.HasPrefix(lower, "proxy-authorization:") {
+			name, _, _ := strings.Cut(h, ":")
+			if !isSensitiveHeader(name) {
 				filtered = append(filtered, h)
 			}
 		}

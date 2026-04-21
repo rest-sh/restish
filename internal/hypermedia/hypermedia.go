@@ -54,12 +54,18 @@ func DefaultParsers() []Parser {
 // resolve resolves ref against base, returning an absolute URI string.
 // Returns ref unchanged if it is already absolute or base is nil.
 func resolve(base *url.URL, ref string) string {
-	if base == nil || ref == "" {
-		return ref
+	if ref == "" {
+		return ""
 	}
 	u, err := url.Parse(ref)
 	if err != nil {
-		return ref
+		return ""
 	}
-	return base.ResolveReference(u).String()
+	if base != nil {
+		u = base.ResolveReference(u)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.String()
 }

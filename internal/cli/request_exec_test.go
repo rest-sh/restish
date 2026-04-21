@@ -195,3 +195,49 @@ func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestFollowCrossesFirstPartyHost(t *testing.T) {
+	if !followCrossesFirstPartyHost("api.example.com", "https://redirect.example.com/follow") {
+		t.Fatal("expected different host to be treated as cross-host")
+	}
+	if followCrossesFirstPartyHost("api.example.com", "https://api.example.com/follow") {
+		t.Fatal("expected same host to stay first-party")
+	}
+	if !followCrossesFirstPartyHost("origin.example.com", "https://redirect.example.com/follow") {
+		t.Fatal("expected follow host comparison to use the original first-party host")
+	}
+}
+
+func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"short": {
+				OperationBase: "https://api.example.com/v1",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {Headers: []string{"X-API: short"}},
+				},
+			},
+			"long": {
+				OperationBase: "https://api.example.com/v1/admin",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {Headers: []string{"X-API: long"}},
+				},
+			},
+		},
+	}
+
+	rawURL, apiName, opts, err := c.applyAPIProfile("https://api.example.com/v1/admin/users", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
+	}
+	if rawURL != "https://api.example.com/v1/admin/users" {
+		t.Fatalf("rawURL = %q", rawURL)
+	}
+	if apiName != "long" {
+		t.Fatalf("apiName = %q, want %q", apiName, "long")
+	}
+	if got := strings.Join(opts.Headers, "\n"); !strings.Contains(got, "X-API: long") {
+		t.Fatalf("expected longest-prefix headers, got %q", got)
+	}
+}

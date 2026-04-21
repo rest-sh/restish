@@ -7,7 +7,7 @@ import (
 
 func TestNew_CreatesDir(t *testing.T) {
 	dir := t.TempDir() + "/sub/cache"
-	c, err := New(dir, DefaultMaxBytes)
+	c, err := New(dir, DefaultMaxBytes, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -17,7 +17,7 @@ func TestNew_CreatesDir(t *testing.T) {
 }
 
 func TestGetSet(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 
 	key := "https://api.example.com/items"
 	data := []byte("response-body")
@@ -38,7 +38,7 @@ func TestGetSet(t *testing.T) {
 }
 
 func TestGet_UpdatesMtime(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	key := "https://api.example.com/v1"
 	c.Set(key, []byte("data"))
 
@@ -51,7 +51,7 @@ func TestGet_UpdatesMtime(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	key := "https://api.example.com/things"
 	c.Set(key, []byte("val"))
 
@@ -63,13 +63,13 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDelete_Nonexistent(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	// Should not panic or error.
 	c.Delete("https://api.example.com/nonexistent")
 }
 
 func TestInfo_Empty(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	info, err := c.Info()
 	if err != nil {
 		t.Fatalf("Info: %v", err)
@@ -86,7 +86,7 @@ func TestInfo_Empty(t *testing.T) {
 }
 
 func TestInfo_WithEntries(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	c.Set("https://api.example.com/a", []byte("hello"))
 	c.Set("https://api.example.com/b", []byte("world!"))
 
@@ -106,7 +106,7 @@ func TestInfo_WithEntries(t *testing.T) {
 }
 
 func TestClear_All(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	c.Set("https://api.example.com/x", []byte("a"))
 	c.Set("https://other.example.com/y", []byte("b"))
 
@@ -121,7 +121,7 @@ func TestClear_All(t *testing.T) {
 }
 
 func TestClear_ByHost(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	c.Set("https://api.example.com/x", []byte("a"))
 	c.Set("https://other.example.com/y", []byte("b"))
 
@@ -141,7 +141,7 @@ func TestClear_ByHost(t *testing.T) {
 }
 
 func TestClear_EmptyCache(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	// Should not error on an empty (but existing) cache.
 	if err := c.Clear(""); err != nil {
 		t.Fatalf("Clear on empty cache: %v", err)
@@ -151,7 +151,7 @@ func TestClear_EmptyCache(t *testing.T) {
 func TestEviction_LRU(t *testing.T) {
 	dir := t.TempDir()
 	// Cap at 20 bytes; each entry is ~5 bytes, so after 5 entries eviction fires.
-	c, _ := New(dir, 20)
+	c, _ := New(dir, 20, "")
 
 	keys := []string{
 		"https://api.example.com/a",
@@ -176,7 +176,7 @@ func TestEviction_LRU(t *testing.T) {
 }
 
 func TestFilePath_NoURL(t *testing.T) {
-	c, _ := New(t.TempDir(), DefaultMaxBytes)
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	// Non-URL key should still work (host defaults to "_").
 	c.Set("not-a-url", []byte("data"))
 	got, ok := c.Get("not-a-url")
@@ -185,5 +185,42 @@ func TestFilePath_NoURL(t *testing.T) {
 	}
 	if string(got) != "data" {
 		t.Errorf("got %q, want %q", got, "data")
+	}
+}
+
+func TestSetOverwriteDoesNotDoubleCountSize(t *testing.T) {
+	c, _ := New(t.TempDir(), 10, "")
+	key := "https://api.example.com/items"
+	for i := 0; i < 4; i++ {
+		c.Set(key, []byte("1234"))
+	}
+	c.WaitEvict()
+
+	if _, ok := c.Get(key); !ok {
+		t.Fatal("expected overwritten entry to remain cached")
+	}
+}
+
+func TestNamespaceIsolatesProfiles(t *testing.T) {
+	dir := t.TempDir()
+	anon, _ := New(dir, DefaultMaxBytes, "myapi:default")
+	authed, _ := New(dir, DefaultMaxBytes, "myapi:admin")
+	key := "https://api.example.com/items"
+
+	anon.Set(key, []byte("anon"))
+	authed.Set(key, []byte("authed"))
+
+	if got, ok := anon.Get(key); !ok || string(got) != "anon" {
+		t.Fatalf("default namespace got %q, hit=%v", got, ok)
+	}
+	if got, ok := authed.Get(key); !ok || string(got) != "authed" {
+		t.Fatalf("admin namespace got %q, hit=%v", got, ok)
+	}
+}
+
+func TestClearUnknownHostReturnsError(t *testing.T) {
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
+	if err := c.Clear("missing.example.com"); err == nil {
+		t.Fatal("expected clear error for unknown host")
 	}
 }

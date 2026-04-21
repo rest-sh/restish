@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -72,7 +73,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
-	return c.runHTTPInternal(cmd, method, args, false, nil, false)
+	return c.runHTTPInternal(cmd, method, args, false, nil, false, "")
 }
 
 // runHTTPInternal is the implementation of runHTTP. followMode=true is used for
@@ -83,7 +84,7 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 // the cobra.Command itself since command objects are reused across invocations.
 // noAuth strips authentication when following a redirect to a different host,
 // preventing credentialed SSRF via a compromised response-middleware plugin.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool) error {
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -115,6 +116,11 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	rawURL = prepared.rawURL
 	apiName = prepared.apiName
 	opts = prepared.opts
+	if firstPartyHost == "" {
+		if u, parseErr := url.Parse(prepared.rawURL); parseErr == nil {
+			firstPartyHost = u.Hostname()
+		}
+	}
 
 	httpResp, err := c.sendPreparedRequest(requestContext(cmd), method, prepared)
 	if err != nil {
@@ -152,14 +158,11 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 			return nil
 		}
 		if followReq != nil {
-			crossHost := false
-			if followU, parseErr := url.Parse(followReq.URI); parseErr == nil {
-				crossHost = !strings.EqualFold(followU.Hostname(), httpResp.Request.URL.Hostname())
-			}
+			crossHost := followCrossesFirstPartyHost(firstPartyHost, followReq.URI)
 			if crossHost {
 				fmt.Fprintf(c.Stderr, "warning: response-middleware follow to different host %q — stripping credentials\n", followReq.URI)
 			}
-			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost)
+			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost)
 		}
 	}
 
@@ -185,6 +188,17 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		}
 	}
 	return nil
+}
+
+func followCrossesFirstPartyHost(firstPartyHost, followURI string) bool {
+	if firstPartyHost == "" {
+		return false
+	}
+	followU, err := url.Parse(followURI)
+	if err != nil {
+		return false
+	}
+	return !strings.EqualFold(followU.Hostname(), firstPartyHost)
 }
 
 // formatResponse applies any filter then selects and runs the formatter.
@@ -512,36 +526,48 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 		// Check if any registered API's operation_base is a prefix of rawURL,
 		// and if so apply that API's profile for auth/headers without rewriting
 		// the URL (it is already correct).
+		type candidate struct {
+			name   string
+			apiCfg *config.APIConfig
+			base   string
+		}
+		var candidates []candidate
 		for name, apiCfg := range c.cfg.APIs {
 			if apiCfg.OperationBase == "" {
 				continue
 			}
 			base := strings.TrimRight(apiCfg.OperationBase, "/")
 			if strings.HasPrefix(rawURL, base) {
-				var prof *config.ProfileConfig
-				if apiCfg.Profiles != nil {
-					prof = apiCfg.Profiles[profileName]
-				}
-				if prof != nil {
-					opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
-					opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-					callbacks := c.authOnRequest(name, profileName, prof, authOpts)
-					opts.OnRequest = callbacks.OnRequest
-					opts.OnUnauthorized = callbacks.OnUnauthorized
-					if opts.TLSSignerName == "" {
-						opts.TLSSignerName = prof.TLSSigner
-					}
-					opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
-				} else {
-					if apiCfg.Profiles != nil {
-						return rawURL, name, opts, fmt.Errorf("profile %q not found for API %q", profileName, name)
-					}
-					callbacks := c.authOnRequest(name, profileName, nil, authOpts)
-					opts.OnRequest = callbacks.OnRequest
-					opts.OnUnauthorized = callbacks.OnUnauthorized
-				}
-				return rawURL, name, opts, nil
+				candidates = append(candidates, candidate{name: name, apiCfg: apiCfg, base: base})
 			}
+		}
+		sort.Slice(candidates, func(i, j int) bool {
+			return len(candidates[i].base) > len(candidates[j].base)
+		})
+		for _, match := range candidates {
+			var prof *config.ProfileConfig
+			if match.apiCfg.Profiles != nil {
+				prof = match.apiCfg.Profiles[profileName]
+			}
+			if prof != nil {
+				opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
+				opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
+				callbacks := c.authOnRequest(match.name, profileName, prof, authOpts)
+				opts.OnRequest = callbacks.OnRequest
+				opts.OnUnauthorized = callbacks.OnUnauthorized
+				if opts.TLSSignerName == "" {
+					opts.TLSSignerName = prof.TLSSigner
+				}
+				opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
+			} else {
+				if match.apiCfg.Profiles != nil {
+					return rawURL, match.name, opts, fmt.Errorf("profile %q not found for API %q", profileName, match.name)
+				}
+				callbacks := c.authOnRequest(match.name, profileName, nil, authOpts)
+				opts.OnRequest = callbacks.OnRequest
+				opts.OnUnauthorized = callbacks.OnUnauthorized
+			}
+			return rawURL, match.name, opts, nil
 		}
 		return rawURL, "", opts, nil
 	}
@@ -582,6 +608,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 			opts.TLSSignerName = prof.TLSSigner
 		}
 		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
+	}
+	if apiName != "" {
+		opts.CacheNamespace = apiName + ":" + profileName
 	}
 
 	return expanded, apiName, opts, nil
@@ -673,7 +702,6 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	}
 
 	return request.Options{
-		BaseTransport:        c.baseHTTPTransport(),
 		Headers:              headers,
 		Query:                query,
 		Server:               server,
@@ -688,6 +716,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
 		ContentType:          contentType,
+		Transport:            c.baseHTTPTransport(),
 		CacheDir:             c.cacheDir(),
 		NoCache:              noCache,
 		Retry:                retry,

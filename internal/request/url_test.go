@@ -25,6 +25,16 @@ func TestNormalize(t *testing.T) {
 			want: "https://api.example.com/items",
 		},
 		{
+			name: "localhost defaults to http",
+			raw:  "localhost:8080/items",
+			want: "http://localhost:8080/items",
+		},
+		{
+			name: "loopback defaults to http",
+			raw:  "127.0.0.1:8080/items",
+			want: "http://127.0.0.1:8080/items",
+		},
+		{
 			name: "bare port with path",
 			raw:  ":8080/path",
 			want: "http://localhost:8080/path",

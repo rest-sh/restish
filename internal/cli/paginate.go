@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -36,13 +37,14 @@ func (c *CLI) tryPaginate(
 	maxPages, _ := cmd.Flags().GetInt("rsh-max-pages")
 	maxItems, _ := cmd.Flags().GetInt("rsh-max-items")
 
-	return true, c.runPagination(cmd, firstResp, nextURL, opts, pagCfg, collect, maxPages, maxItems)
+	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems)
 }
 
 // runPagination drives the pagination loop starting from firstResp.
 func (c *CLI) runPagination(
 	cmd *cobra.Command,
 	firstResp *output.Response,
+	firstURL string,
 	firstNextURL string,
 	opts request.Options,
 	pagCfg *config.PaginationConfig,
@@ -67,6 +69,7 @@ func (c *CLI) runPagination(
 			}
 		}()
 	}
+	ctx := requestContext(cmd)
 
 	// Process first page.
 	items, filterErr := pageItems(firstResp.Body, pagCfg)
@@ -80,27 +83,35 @@ func (c *CLI) runPagination(
 	if collect || !streamItems {
 		allItems = append(allItems, items...)
 	} else {
-		if err := c.streamItems(cmd, renderer, items); err != nil {
+		if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
 			return err
 		}
 	}
 
 	nextURL := firstNextURL
 	page := 1
+	visited := map[string]int{firstURL: 1}
 	stderrIsTTY := output.IsTerminal(c.Stderr)
-	ctx := requestContext(cmd)
 
 	for !done && nextURL != "" {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// Safety: max pages check (page is 1-indexed, firstResp is page 1).
 		if maxPages > 0 && page >= maxPages {
 			fmt.Fprintf(c.Stderr, "warning: reached --rsh-max-pages limit (%d); stopping pagination\n", maxPages)
 			break
 		}
+		if seenPage, ok := visited[nextURL]; ok {
+			fmt.Fprintf(c.Stderr, "warning: pagination cycle detected at page %d URL %q; stopping\n", seenPage, nextURL)
+			break
+		}
 		page++
+		visited[nextURL] = page
 
 		// Progress feedback on TTY stderr.
 		if stderrIsTTY {
-			fmt.Fprintf(c.Stderr, "\rfetching page %d...", page)
+			fmt.Fprintf(c.Stderr, "\rfetching page %d...\x1b[K", page)
 		}
 
 		httpResp, err := request.Do(ctx, "GET", nextURL, nil, opts)
@@ -121,7 +132,7 @@ func (c *CLI) runPagination(
 		if collect || !streamItems {
 			allItems = append(allItems, items...)
 		} else {
-			if err := c.streamItems(cmd, renderer, items); err != nil {
+			if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
 				return err
 			}
 		}
@@ -130,7 +141,7 @@ func (c *CLI) runPagination(
 
 	// Erase progress line on TTY.
 	if stderrIsTTY {
-		fmt.Fprintf(c.Stderr, "\r")
+		fmt.Fprintf(c.Stderr, "\r\x1b[K")
 	}
 
 	if done && maxItems > 0 {
@@ -139,6 +150,9 @@ func (c *CLI) runPagination(
 
 	if collect || !streamItems {
 		synthetic := buildPaginatedResponse(firstResp, pagCfg, allItems)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
@@ -220,8 +234,11 @@ func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) 
 
 // streamItems renders each item using the shared streamed-item filter/render
 // path used by pagination and event streams.
-func (c *CLI) streamItems(cmd *cobra.Command, renderer valueRenderer, items []any) error {
+func (c *CLI) streamItems(ctx context.Context, cmd *cobra.Command, renderer valueRenderer, items []any) error {
 	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := c.renderStreamValue(cmd, renderer, item, true); err != nil {
 			return err
 		}
@@ -390,11 +407,16 @@ func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 			if arr, ok := result.([]any); ok {
 				return arr, nil
 			}
-			if result != nil {
-				return []any{result}, nil
+			if result == nil {
+				return nil, fmt.Errorf("items_path %q returned no items", pagCfg.ItemsPath)
 			}
+			if result != nil {
+				return []any{result}, fmt.Errorf("items_path %q returned %T instead of an array", pagCfg.ItemsPath, result)
+			}
+		} else {
+			return nil, fmt.Errorf("items_path %q requires an object response body", pagCfg.ItemsPath)
 		}
-		return nil, nil
+		return nil, fmt.Errorf("items_path %q returned no items", pagCfg.ItemsPath)
 	}
 	if arr, ok := body.([]any); ok {
 		return arr, nil

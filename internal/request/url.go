@@ -24,7 +24,19 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 
 	// No scheme present: prepend https://
 	if !strings.Contains(rawURL, "://") {
-		rawURL = "https://" + rawURL
+		defaultScheme := "https://"
+		hostPort := rawURL
+		if slash := strings.IndexByte(hostPort, '/'); slash >= 0 {
+			hostPort = hostPort[:slash]
+		}
+		host := hostPort
+		if cut := strings.IndexByte(host, ':'); cut >= 0 {
+			host = host[:cut]
+		}
+		if host == "localhost" || strings.HasPrefix(host, "127.") {
+			defaultScheme = "http://"
+		}
+		rawURL = defaultScheme + rawURL
 	}
 
 	u, err := url.Parse(rawURL)

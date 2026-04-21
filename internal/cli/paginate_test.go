@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -269,6 +270,73 @@ func TestPaginationJSONOutputIsValidJSON(t *testing.T) {
 	}
 	if len(values) != 4 || values[0]["id"] != 1 || values[3]["id"] != 4 {
 		t.Fatalf("unexpected output: %#v", values)
+	}
+}
+
+func TestPaginationCycleDetection(t *testing.T) {
+	c, out, errOut := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+			"Link":         []string{`<https://api.example.com/items>; rel="next"`},
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[1,2,3]`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "cycle detected") {
+		t.Fatalf("expected cycle warning, got %q", errOut.String())
+	}
+	if !strings.Contains(out.String(), "1") {
+		t.Fatalf("expected first page output, got %q", out.String())
+	}
+}
+
+func TestPaginationItemsPathScalarWarns(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url": "https://api.example.com",
+				"pagination": map[string]any{
+					"items_path": "data",
+				},
+			},
+		},
+	})
+	c, out, errOut := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := os.WriteFile(c.ConfigPath, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if r.URL.Query().Get("page") == "" {
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`{"data":1}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "items_path") {
+		t.Fatalf("expected items_path warning, got %q", errOut.String())
+	}
+	if !strings.Contains(out.String(), `"data"`) {
+		t.Fatalf("expected wrapped document output, got %q", out.String())
 	}
 }
 

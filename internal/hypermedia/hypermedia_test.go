@@ -141,10 +141,23 @@ func TestJSONAPIParserRequiresDataKey(t *testing.T) {
 	}
 }
 
+func TestJSONAPIParserAcceptsErrorsDocument(t *testing.T) {
+	body := map[string]any{
+		"errors": []any{map[string]any{"title": "bad"}},
+		"links":  map[string]any{"self": "/items"},
+	}
+	p := hypermedia.JSONAPIParser{}
+	links := p.ParseLinks(base, nil, body)
+	if len(links) != 1 || links[0].URI != "https://api.example.com/items" {
+		t.Fatalf("unexpected links: %#v", links)
+	}
+}
+
 // ─── Siren tests ──────────────────────────────────────────────────────────────
 
 func TestSirenParser(t *testing.T) {
 	body := map[string]any{
+		"class": []any{"collection"},
 		"links": []any{
 			map[string]any{"rel": []any{"self"}, "href": "/items"},
 			map[string]any{"rel": []any{"next"}, "href": "/items?page=2"},
@@ -161,6 +174,29 @@ func TestSirenParser(t *testing.T) {
 	}
 	if got["next"] != "https://api.example.com/items?page=2" {
 		t.Errorf("next: got %q", got["next"])
+	}
+}
+
+func TestSirenParserRequiresClassOrEntities(t *testing.T) {
+	body := map[string]any{
+		"links": []any{
+			map[string]any{"rel": []any{"self"}, "href": "/items"},
+		},
+	}
+	p := hypermedia.SirenParser{}
+	if links := p.ParseLinks(base, nil, body); links != nil {
+		t.Fatalf("expected nil without class/entities, got %#v", links)
+	}
+}
+
+func TestResolveRejectsMalformedURL(t *testing.T) {
+	links := hypermedia.Parse(base, nil, map[string]any{
+		"_links": map[string]any{
+			"next": map[string]any{"href": "://bad"},
+		},
+	}, hypermedia.DefaultParsers())
+	if links != nil {
+		t.Fatalf("expected malformed link to be dropped, got %#v", links)
 	}
 }
 

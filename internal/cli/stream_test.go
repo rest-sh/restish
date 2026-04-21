@@ -121,8 +121,8 @@ func TestSSEWithFilter(t *testing.T) {
 
 	c, out, _ := newTestCLI()
 	c.ConfigPath = t.TempDir() + "/restish.json"
-	// Select only the "type" field from each event.
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.type"}); err != nil {
+	// Select only the "type" field from each structured SSE event.
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.data.type"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -265,6 +265,65 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "use -o ndjson") {
 		t.Fatalf("expected ndjson hint in error, got: %v", err)
+	}
+}
+
+func TestSSENamedEventExposesMetadataToFilters(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: update\nid: 42\ndata: {\"n\":1}\n\n")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.event"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(out.String(), "update") {
+		t.Fatalf("expected named event metadata, got %q", out.String())
+	}
+}
+
+func TestSSELargeEventExceedsScannerLimit(t *testing.T) {
+	largePayload := strings.Repeat("x", 2*1024*1024)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %q\n\n", largePayload)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(out.String(), largePayload[:1024]) {
+		t.Fatalf("expected large SSE payload in output")
+	}
+}
+
+func TestSSEMalformedLinesDoNotAbortStream(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "not-a-field\n")
+		fmt.Fprint(w, "data: {\"n\":1}\n\n")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI()
+	c.ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(out.String(), `"n":1`) {
+		t.Fatalf("expected event after malformed line, got %q", out.String())
 	}
 }
 

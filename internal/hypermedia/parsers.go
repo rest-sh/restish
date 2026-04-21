@@ -102,7 +102,7 @@ func (TSJParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Link {
 // ─── JSON:API ─────────────────────────────────────────────────────────────────
 
 // JSONAPIParser extracts links from the top-level `links` object.
-// Requires the response to also have a `data` key to avoid false positives.
+// Requires either a `jsonapi` object or one of the JSON:API document members.
 type JSONAPIParser struct{}
 
 func (JSONAPIParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Link {
@@ -110,9 +110,12 @@ func (JSONAPIParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Lin
 	if !ok {
 		return nil
 	}
-	// Require `data` key to identify JSON:API (avoid matching Siren/other).
-	if _, hasData := m["data"]; !hasData {
-		return nil
+	if _, hasJSONAPI := m["jsonapi"]; !hasJSONAPI {
+		_, hasData := m["data"]
+		_, hasErrors := m["errors"]
+		if !hasData && !hasErrors {
+			return nil
+		}
 	}
 	linksRaw, ok := m["links"]
 	if !ok {
@@ -148,6 +151,11 @@ func (SirenParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Link 
 	m, ok := body.(map[string]any)
 	if !ok {
 		return nil
+	}
+	if _, hasClass := m["class"]; !hasClass {
+		if _, hasEntities := m["entities"]; !hasEntities {
+			return nil
+		}
 	}
 	linksRaw, ok := m["links"]
 	if !ok {
