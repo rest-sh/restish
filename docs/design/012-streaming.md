@@ -30,6 +30,11 @@ Restish currently recognizes two stream shapes:
 When a response is identified as streaming, Restish bypasses the normal
 full-body normalization path and instead processes one event or line at a time.
 
+Streaming classification happens after headers arrive. This matters because
+streaming requests must not depend on whole-request `http.Client.Timeout`; they
+need timeout behavior that allows long-lived bodies once headers have been
+received.
+
 For each stream item:
 
 1. parse the item as JSON when possible
@@ -45,6 +50,9 @@ Because true streams may be unbounded, explicit document formats are not always
 meaningful. Restish therefore treats `-o json` as a bounded-document request
 and rejects it for streaming responses, pointing users to `-o ndjson` instead.
 
+Readable output remains valid for streams, but it is an incremental human view,
+not one coherent machine document.
+
 There are a few design choices worth preserving:
 
 - SSE joins multiple `data:` lines into one event payload
@@ -52,6 +60,7 @@ There are a few design choices worth preserving:
 - `--rsh-max-events` provides a simple safety limit for both SSE and NDJSON
 - stream reads treat end-of-stream and many scanner errors as normal completion
   rather than fatal failures
+- context cancellation should interrupt stream reads promptly
 
 ## Examples
 

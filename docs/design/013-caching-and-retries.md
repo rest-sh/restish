@@ -38,10 +38,14 @@ The response cache is a disk-backed, size-bounded cache with LRU-style eviction.
 Entries are grouped under per-host directories so cache management can operate
 on one API host or the entire cache tree.
 
+The size bound is part of the public design, not just an implementation detail.
+If a size-related config value exists, it should affect actual eviction policy.
+
 Retry behavior is intentionally conservative:
 
 - network errors are retried
 - `5xx` responses are retried
+- `408` and `429` are retry candidates when policy allows
 - `4xx` responses are returned immediately
 - request bodies are only retried when they can be recreated safely
 - backoff uses exponential delay with jitter
@@ -50,6 +54,12 @@ Retry behavior is intentionally conservative:
 This keeps retries focused on failures that are likely to succeed on a later
 attempt while avoiding silent replay of requests that cannot be reproduced
 correctly.
+
+## Retry State Hygiene
+
+Retries must not accidentally return stale response objects from earlier
+attempts when a later retry decision fails. Each retry attempt should treat its
+response/error pair as attempt-local state.
 
 ## Examples
 

@@ -9,33 +9,35 @@ encodings describe how to transparently decompress compressed responses.
 This keeps body handling extensible without scattering format-specific logic
 throughout the CLI pipeline.
 
-## Problem
+## Goals
 
-Restish needs to send and receive more than just JSON. It also needs to deal
-with HTTP content negotiation and compressed responses in a way that stays
-predictable for both interactive use and scripting.
-
-The design needed to:
-
-- support multiple structured body formats
-- negotiate useful `Accept` and `Accept-Encoding` headers automatically
+- support multiple structured body formats for both requests and responses
+- generate predictable `Accept` and `Accept-Encoding` headers
 - decode responses into a stable internal value model
-- preserve the separation between body construction and wire encoding
-- leave room for additional formats later
+- preserve raw bytes when decoding is not appropriate
+- keep body serialization separate from wire-level content encoding
 
-## Design
+## Non-Goals
+
+- assuming JSON is the only structured format worth negotiating
+- coercing unknown binary payloads into lossy text
+- treating content negotiation as an opaque implementation detail users cannot
+  reason about
+
+## Two Registries
 
 The core model is two registries:
 
 - content types for marshaling and unmarshaling body values
 - encodings for transparent response decompression
 
-A content type entry defines:
+A content-type entry defines:
 
 - a short CLI-facing name like `json` or `yaml`
 - one or more MIME types
 - a quality value for `Accept` header generation
-- marshal and unmarshal behavior
+- marshal behavior
+- unmarshal behavior
 
 An encoding entry defines:
 
@@ -43,14 +45,23 @@ An encoding entry defines:
 - a quality value for `Accept-Encoding`
 - a decompressor
 
-This allows Restish to treat the request and response pipeline generically:
+## Request/Response Flow
 
-- request bodies are built as Go values first
-- the selected content type encodes those values onto the wire
-- response bodies are decompressed first if needed
-- the selected content type decodes the bytes back into a Go value
+The pipeline is:
 
-The built-in registry currently includes:
+1. build a logical request body value
+2. serialize it using the selected content type
+3. send it with the negotiated or explicit `Content-Type`
+4. decompress the response if `Content-Encoding` applies
+5. decode the response using the selected or detected content type
+6. normalize the decoded value for filtering and formatting
+
+Keeping decompression separate from content decoding is important because those
+are different concerns with different registries and fallback rules.
+
+## Built-In Content Types
+
+The built-in registry currently includes at least:
 
 - `json`
 - `yaml`
@@ -60,34 +71,96 @@ The built-in registry currently includes:
 - `multipart`
 - `text`
 
-and built-in encodings:
+Built-in encodings include:
 
 - `br`
 - `gzip`
 - `deflate`
 
-Some design choices worth preserving:
+## Media-Type Matching Rules
 
-- unknown response content types fall back to plain string data
-- decoded values are normalized into JSON-safe structures so downstream
-  formatting and filtering stay stable
-- multipart can return a concrete runtime `Content-Type` with a boundary rather
-  than pretending all content types are static strings
-- wildcard MIME types like `text/*` are supported for low-priority fallback
+Media-type matching must handle:
 
-## Examples
+- exact MIME types
+- wildcard fallbacks such as `text/*`
+- structured suffixes such as `+json`, `+yaml`, and `+cbor`
 
-The generated `Accept` header conceptually prefers richer machine formats first:
+Structured suffix support is essential for common API responses such as:
+
+- `application/problem+json`
+- `application/hal+json`
+- `application/vnd.api+json`
+- `application/ld+json`
+
+These are part of normal API usage, not rare edge cases.
+
+## Unknown Content Types
+
+When Restish does not recognize a response content type, it must preserve the
+payload safely.
+
+The design rule is:
+
+- printable text-like unknown payloads may be surfaced as text
+- otherwise unknown payloads remain raw bytes
+
+Unknown binary must not be coerced to a Go `string`, because that corrupts the
+payload and creates misleading later output.
+
+## Normalization Rules
+
+Decoded structured values are normalized into JSON-safe structures so
+downstream filtering and formatting stay stable across different wire formats.
+
+The normalized representation should preserve:
+
+- object and array shape
+- numeric values as faithfully as practical
+- raw bytes where structured decoding did not apply
+
+Normalization is for interoperability, not for hiding the difference between
+text, structured values, and raw binary.
+
+## Accept Negotiation
+
+Restish should generate a useful `Accept` header based on registered content
+types and their quality values.
+
+That ordering is user-visible and can affect what servers return. If CBOR is
+preferred over JSON, users may observe CBOR responses from APIs that support
+both.
+
+The generated header conceptually looks like:
 
 ```text
 application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, application/yaml;q=0.5, text/*;q=0.2
 ```
 
-and `Accept-Encoding` similarly advertises supported compression:
+Quality ordering should be stable and deliberate.
+
+## Accept-Encoding Negotiation
+
+`Accept-Encoding` is generated from the encoding registry and should only
+advertise encodings Restish can actually decode.
+
+Example:
 
 ```text
 br, gzip, deflate
 ```
+
+## Multipart And Dynamic Content Types
+
+Some request encoders need to compute the real wire content type at runtime.
+`multipart/form-data` is the main example because the boundary is generated per
+request.
+
+This is why the design distinguishes:
+
+- logical content-type family
+- concrete wire `Content-Type` value
+
+## Examples
 
 A call like:
 
@@ -103,8 +176,7 @@ builds a structured body value first:
 }
 ```
 
-and then encodes it as YAML before sending it with an appropriate
-`Content-Type`.
+and then encodes it as YAML before sending it with the correct `Content-Type`.
 
 A compressed JSON response like:
 
@@ -125,35 +197,22 @@ multipart/form-data; boundary=----restish123
 
 ## Alternatives Considered
 
-### Hard-code JSON everywhere
+### Hard-Code JSON Everywhere
 
-This would simplify early implementation, but it would cut off too many of the
-wire formats Restish is designed to interoperate with.
+Too limiting for a tool intended to interoperate with real APIs.
 
-### Mix encoding and content-type handling together
+### Mix Encoding And Content-Type Handling Together
 
-Compression and body serialization are related at the transport layer, but they
-solve different problems. Keeping separate registries makes the model clearer.
+Compression and body serialization are related on the wire but are distinct
+design concerns.
 
-### Return decoder-native map types unchanged
+### Return Decoder-Native Map Types Unchanged
 
-Some formats decode into map types that do not serialize cleanly to JSON. It is
-better to normalize decoded data once than to force every downstream consumer to
-handle format-specific map behavior.
+Too much downstream complexity for filters and formatters.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/content/registry.go` defines the registry model and negotiation
-  behavior
-- `internal/content/defaults.go` registers the built-in content types and
-  encodings
-- `internal/output/response.go` uses the content registry when normalizing
-  responses
-- `internal/cli/http.go` uses the content registry when encoding request bodies
-
-One detail worth preserving is the distinction between `Marshal` and
-`MarshalContentType`. That allows formats like multipart to compute the real
-wire content type dynamically instead of squeezing everything into a static MIME
-string model.
+- Design 008 relies on this model for request-body encoding.
+- Design 009 relies on this model for response normalization.
+- Design 012 relies on this model for stream item decoding where applicable.
+- Design 030 relies on this model not to corrupt binary payloads.

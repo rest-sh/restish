@@ -36,6 +36,14 @@ The normalized response includes:
 - decoded body value
 - original raw body bytes
 
+The normalized model should preserve the distinction between:
+
+- structured decoded values
+- printable text
+- raw binary payloads
+
+That distinction is essential for correct output defaults.
+
 That shape is important because different output modes need different views of
 the same response. For example:
 
@@ -51,6 +59,10 @@ The formatting model is intentionally adaptive:
 - TTY + `image/*` content type → `image` formatter (inline terminal rendering)
 - TTY default is `readable`
 - non-TTY defaults distinguish between original raw bytes and normalized data
+
+Explicit conflicting modes should be surfaced clearly. If one option asks for
+headers-only output and another asks for filtered body projection, the user
+should not have to guess which one silently won.
 
 Restish now separates output formats into two families:
 
@@ -70,6 +82,28 @@ escape hatch for original wire payloads.
 The readable formatter is designed to preserve useful HTTP context while keeping
 the body copyable as valid JSON. Non-interactive modes prioritize faithful data
 transfer and scriptability over presentation.
+
+## Raw Versus Normalized Data
+
+The normalized response carries both decoded `Body` and original `Raw` bytes.
+That dual representation is what lets Restish support:
+
+- friendly reformatted output
+- exact byte-preserving output
+- filtering over structured data
+
+without forcing a choice too early in the pipeline.
+
+## Text And Binary Handling
+
+Output behavior must not corrupt data:
+
+- printable text bodies should render as text in human-oriented formats
+- unknown binary should remain bytes, not coerced strings
+- JSON formatters should emit stable JSON without unnecessary HTML escaping
+
+Binary-to-string coercion is a design bug because it damages fidelity and later
+formatting behavior.
 
 ## Example
 

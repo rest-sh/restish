@@ -40,6 +40,14 @@ Second, pagination uses that normalized link map plus optional per-API config.
 For GET requests, if a `next` link is present, Restish can continue fetching
 pages automatically.
 
+Pagination is bounded by safety rules:
+
+- context cancellation must be checked between pages
+- cycles must be detected by visited-URL tracking
+- `--rsh-max-pages` and `--rsh-max-items` are hard stops
+
+Automatic pagination should never become an accidental infinite loop.
+
 Two output contracts matter here:
 
 - **document output** preserves one logical response shape across all pages
@@ -58,6 +66,10 @@ Per-API pagination config can refine how page data is interpreted:
 
 - `items_path` extracts the collection from a nested body field
 - `next_path` can extract a next-page URL from the body
+
+If `items_path` is configured, document-oriented pagination should preserve the
+wrapper object and only merge the collection field, not flatten the entire
+response into an array by accident.
 
 The overall intent is:
 
