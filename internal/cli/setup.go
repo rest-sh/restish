@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+var setupRuntimeGOOS = runtime.GOOS
 
 // shellSetup describes how to configure a shell for restish.
 type shellSetup struct {
@@ -56,7 +60,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("setup: cannot determine home directory: %w", err)
 	}
 
-	rcPath := filepath.Join(home, setup.rcFile)
+	rcPath := setupRCPath(shell, home, setup)
 	line := "\n" + setup.alias + "\n"
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	autoYes, _ := cmd.Flags().GetBool("yes")
@@ -96,6 +100,14 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(c.Stdout, "Configured %s: appended alias to %s\n", shell, rcPath)
 	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
 	return nil
+}
+
+func setupRCPath(shell, home string, setup shellSetup) string {
+	// macOS bash reads .bash_profile by default for login shells.
+	if shell == "bash" && setupRuntimeGOOS == "darwin" {
+		return filepath.Join(home, ".bash_profile")
+	}
+	return filepath.Join(home, setup.rcFile)
 }
 
 func atomicWriteTextFile(path string, data []byte, fileMode, dirMode os.FileMode) error {
@@ -139,13 +151,37 @@ func atomicWriteTextFile(path string, data []byte, fileMode, dirMode os.FileMode
 // current shell is a supported one.  Called only when the config file is
 // absent (true first run) and stderr is a TTY.
 func (c *CLI) hintShellSetup() {
-	shellPath := os.Getenv("SHELL")
-	if shellPath == "" {
+	shell, source := detectRunningShell()
+	if shell == "" {
 		return
 	}
-	shell := strings.ToLower(filepath.Base(shellPath))
 	if _, ok := shellSetups[shell]; !ok {
 		return
 	}
+	if source == "$SHELL" {
+		fmt.Fprintf(c.Stderr, "tip: run `restish setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)\n", shell)
+		return
+	}
 	fmt.Fprintf(c.Stderr, "tip: run `restish setup %s` to configure your shell (prevents glob expansion issues)\n", shell)
+}
+
+func detectRunningShell() (string, string) {
+	if setupRuntimeGOOS == "darwin" || setupRuntimeGOOS == "linux" {
+		ppid := os.Getppid()
+		if ppid > 1 {
+			out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", ppid), "-o", "comm=").Output()
+			if err == nil {
+				name := strings.ToLower(filepath.Base(strings.TrimSpace(string(out))))
+				if name != "" {
+					return name, "ppid"
+				}
+			}
+		}
+	}
+
+	shellPath := os.Getenv("SHELL")
+	if shellPath == "" {
+		return "", ""
+	}
+	return strings.ToLower(filepath.Base(shellPath)), "$SHELL"
 }

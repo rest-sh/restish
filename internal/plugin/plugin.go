@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	configpkg "github.com/danielgtaylor/restish/v2/internal/config"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -235,18 +236,7 @@ func DefaultPluginDir() string {
 // cache file. Stored next to the config file to be automatically cleaned up
 // when users wipe their config directory.
 func DefaultManifestCachePath() string {
-	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "plugin-manifest-cache.cbor")
-	}
-	if runtime.GOOS == "windows" {
-		if dir := os.Getenv("APPDATA"); dir != "" {
-			return filepath.Join(dir, "restish", "plugin-manifest-cache.cbor")
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "restish", "plugin-manifest-cache.cbor")
-	}
-	return filepath.Join(".restish", "plugin-manifest-cache.cbor")
+	return configpkg.NewPaths().PluginManifestCache()
 }
 
 // isExecutable reports whether path is a regular executable file.

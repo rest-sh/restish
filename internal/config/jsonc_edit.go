@@ -9,6 +9,14 @@ import (
 	"github.com/tailscale/hujson"
 )
 
+// ConfigPatchOperation describes one config edit operation.
+// If Delete is true, Value is ignored and Path is removed.
+type ConfigPatchOperation struct {
+	Path   []string
+	Value  any
+	Delete bool
+}
+
 // SaveAPIConfig updates a single API entry in the JSONC config file while
 // preserving surrounding comments and formatting when possible.
 func SaveAPIConfig(path, apiName string, apiCfg *APIConfig) error {
@@ -30,6 +38,31 @@ func DeleteAPIConfig(path, apiName string) error {
 func SaveConfigValue(path string, objectPath []string, value any) error {
 	return patchConfig(path, func(data []byte) ([]byte, error) {
 		return jsoncSetPath(data, objectPath, value)
+	})
+}
+
+// SaveConfigValues applies multiple config edits atomically under one file lock,
+// preserving JSONC comments and formatting where possible.
+func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	return patchConfig(path, func(data []byte) ([]byte, error) {
+		var err error
+		for _, op := range ops {
+			if len(op.Path) == 0 {
+				continue
+			}
+			if op.Delete {
+				data, err = jsoncDeletePath(data, op.Path)
+			} else {
+				data, err = jsoncSetPath(data, op.Path, op.Value)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		return data, nil
 	})
 }
 

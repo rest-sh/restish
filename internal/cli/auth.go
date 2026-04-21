@@ -206,7 +206,7 @@ func (c *CLI) tokenCachePath() string {
 	if c.TokenCachePath != "" {
 		return c.TokenCachePath
 	}
-	return config.DefaultTokenCachePath()
+	return c.paths().TokenCache()
 }
 
 // promptSecret writes prompt to Stderr then reads a secret.

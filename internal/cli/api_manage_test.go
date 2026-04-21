@@ -397,6 +397,125 @@ func TestAPISetMultipleShorthandExpressions(t *testing.T) {
 	}
 }
 
+func TestAPISetShorthandAppendHeaders(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.headers[]: "Authorization: Bearer abc"`}); err != nil {
+		t.Fatalf("api set append headers: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].Profiles["default"].Headers; len(got) != 1 || got[0] != "Authorization: Bearer abc" {
+		t.Fatalf("unexpected headers after append: %#v", got)
+	}
+}
+
+func TestAPISetShorthandDeleteKey(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com", OperationBase: "/v1"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `operation_base: undefined`}); err != nil {
+		t.Fatalf("api set delete key: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].OperationBase; got != "" {
+		t.Fatalf("expected operation_base to be deleted, got %q", got)
+	}
+}
+
+func TestAPISetRejectsUnknownAuthType(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.auth.type: "oauth-typo"`})
+	if err == nil {
+		t.Fatal("expected auth.type validation error")
+	}
+	if !strings.Contains(err.Error(), "invalid auth.type") {
+		t.Fatalf("expected invalid auth.type error, got: %v", err)
+	}
+}
+
+func TestAPISetRejectsUnknownTLSSigner(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.tls_signer: "not-a-plugin"`})
+	if err == nil {
+		t.Fatal("expected tls_signer validation error")
+	}
+	if !strings.Contains(err.Error(), "not a registered tls-signer plugin") {
+		t.Fatalf("expected tls_signer validation error, got: %v", err)
+	}
+}
+
+func TestAPISetMixedShorthandPreservesComments(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  // API registrations
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com" // important note
+    }
+  }
+}`)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{
+		"restish", "api", "set", "myapi",
+		`profiles.default.headers[]: "X-Test: 1"`,
+		`allow_cross_origin_spec: true`,
+		`operation_base: undefined`,
+	}); err != nil {
+		t.Fatalf("api set mixed shorthand: %v", err)
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// API registrations") || !strings.Contains(got, "// important note") {
+		t.Fatalf("expected comments preserved, got:\n%s", got)
+	}
+}
+
 func TestAPIAddWithShorthand(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 

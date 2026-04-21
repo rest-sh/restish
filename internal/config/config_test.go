@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/danielgtaylor/restish/v2/internal/config"
@@ -250,6 +251,64 @@ func TestSave_CreatesConfigDirWithSecurePermissions(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0o700 {
 		t.Fatalf("expected config dir permission 0700, got %04o", perm)
+	}
+}
+
+func TestSave_ConcurrentWritesLeaveValidConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restish.json")
+	if err := config.Save(path, &config.Config{}); err != nil {
+		t.Fatalf("initial Save: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			cfg := &config.Config{
+				APIs: map[string]*config.APIConfig{
+					"myapi": {BaseURL: "https://api.example.com"},
+				},
+			}
+			if i%2 == 0 {
+				cfg.Cache.MaxSize = "2MB"
+			}
+			_ = config.Save(path, cfg)
+		}(i)
+	}
+	wg.Wait()
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load after concurrent writes: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("expected non-nil config after concurrent writes")
+	}
+}
+
+func TestSave_IgnoresStaleCrashTempFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restish.json")
+	if err := config.Save(path, &config.Config{}); err != nil {
+		t.Fatalf("initial Save: %v", err)
+	}
+
+	staleTmp := path + ".stale.tmp"
+	if err := os.WriteFile(staleTmp, []byte(`{"apis": {`), 0o600); err != nil {
+		t.Fatalf("write stale tmp: %v", err)
+	}
+
+	want := &config.Config{APIs: map[string]*config.APIConfig{"myapi": {BaseURL: "https://api.example.com"}}}
+	if err := config.Save(path, want); err != nil {
+		t.Fatalf("Save with stale tmp present: %v", err)
+	}
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load after save: %v", err)
+	}
+	if loaded.APIs["myapi"] == nil || loaded.APIs["myapi"].BaseURL != "https://api.example.com" {
+		t.Fatalf("unexpected loaded config after stale tmp save: %#v", loaded)
 	}
 }
 

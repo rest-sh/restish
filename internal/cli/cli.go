@@ -65,6 +65,10 @@ type CLI struct {
 	// retries.
 	RetryBaseDelay time.Duration
 
+	// Paths holds computed config/cache locations. Tests may replace this with
+	// a custom instance.
+	Paths *config.Paths
+
 	cfg                *config.Config
 	content            *content.Registry
 	loaders            []spec.Loader
@@ -82,6 +86,7 @@ func New() *CLI {
 		Stdin:       os.Stdin,
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
+		Paths:       config.NewPaths(),
 		content:     content.Default(),
 		loaders:     spec.DefaultLoaders(),
 		linkParsers: hypermedia.DefaultParsers(),
@@ -148,7 +153,7 @@ func (c *CLI) configFilePath() string {
 	if c.ConfigPath != "" {
 		return c.ConfigPath
 	}
-	return config.DefaultPath()
+	return c.paths().ConfigFile()
 }
 
 // profileFromCmd returns the active profile name from the --rsh-profile flag,
@@ -169,7 +174,7 @@ func (c *CLI) specCacheDir() string {
 	if c.SpecCachePath != "" {
 		return c.SpecCachePath
 	}
-	return config.DefaultSpecCacheDir()
+	return c.paths().SpecCache()
 }
 
 // pluginManifestCachePath returns the effective plugin manifest cache file path.
@@ -177,7 +182,14 @@ func (c *CLI) pluginManifestCachePath() string {
 	if c.PluginManifestCachePath != "" {
 		return c.PluginManifestCachePath
 	}
-	return internalplugin.DefaultManifestCachePath()
+	return c.paths().PluginManifestCache()
+}
+
+func (c *CLI) paths() *config.Paths {
+	if c.Paths != nil {
+		return c.Paths
+	}
+	return config.NewPaths()
 }
 
 // discoverSpec runs spec discovery for the named API using the registered loaders.

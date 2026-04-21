@@ -70,6 +70,7 @@ profiles are actually persisted.
 
 ```bash
 restish api set <name> <key> <value>
+restish api set <name> '<path:value>' ['<path:value>' ...]
 ```
 
 Makes a narrow config edit using a dot-path key instead of opening the whole
@@ -80,10 +81,38 @@ Typical uses:
 ```bash
 restish api set github spec_url https://api.github.com/openapi.json
 restish api set github base_url https://github.example.com/api/v3
+restish api set github 'profiles.default.auth.type: "oauth-client-credentials"'
+restish api set github 'profiles.default.headers[]: "Authorization: Bearer abc"'
+restish api set github 'operation_base: undefined'
 ```
 
-This is best for single-field updates. If you are making several changes,
+Expression semantics:
+
+- `a.b.c: value`: scalar assignment
+- `list[]: value`: append to an array
+- `key: undefined`: delete a key
+
+You can pass multiple expressions in one command; Restish validates and applies
+them together.
+
+This is best for targeted updates. If you are making broad structural changes,
 `api edit` is usually easier.
+
+### `api add`
+
+```bash
+restish api add <name> <url>
+restish api add <name> <url> '<path:value>' ['<path:value>' ...]
+```
+
+Registers a new API quickly and optionally applies shorthand expressions at
+creation time.
+
+```bash
+restish api add github https://api.github.com \
+	'profiles.default.auth.type: "oauth-authorization-code"' \
+	'profiles.default.query[]: "per_page=100"'
+```
 
 ### `api edit`
 

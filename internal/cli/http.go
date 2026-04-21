@@ -26,7 +26,7 @@ func (c *CLI) cacheDir() string {
 	if c.CachePath != "" {
 		return c.CachePath
 	}
-	return config.DefaultCacheDir()
+	return c.paths().Cache()
 }
 
 // maxBodyBytes returns the response body size cap derived from the
@@ -472,7 +472,7 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 // Proxy-Authorization) are redacted to avoid leaking credentials.
 func (c *CLI) logVerbose(resp *http.Response) {
 	req := resp.Request
-	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, req.URL)
+	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, redactedRequestURL(req.URL))
 	for k, vs := range req.Header {
 		for _, v := range vs {
 			if isSensitiveHeader(k) {
@@ -489,6 +489,41 @@ func (c *CLI) logVerbose(resp *http.Response) {
 		}
 	}
 	fmt.Fprintln(c.Stderr, "<")
+}
+
+func redactedRequestURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	copyURL := *u
+	q := copyURL.Query()
+	for key := range q {
+		if isSensitiveQueryParam(key) {
+			q.Set(key, "<redacted>")
+		}
+	}
+	copyURL.RawQuery = q.Encode()
+	return copyURL.String()
+}
+
+func isSensitiveQueryParam(name string) bool {
+	name = strings.ToLower(name)
+	sensitive := []string{
+		"access_token",
+		"refresh_token",
+		"token",
+		"api_key",
+		"apikey",
+		"client_secret",
+		"password",
+		"secret",
+	}
+	for _, key := range sensitive {
+		if name == key {
+			return true
+		}
+	}
+	return false
 }
 
 // isSensitiveHeader reports whether a header name carries credentials and

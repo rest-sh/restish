@@ -3,6 +3,7 @@ package cli_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -71,10 +72,14 @@ func TestSetupIdempotent(t *testing.T) {
 		}
 	}
 
-	rcPath := filepath.Join(home, ".bashrc")
+	rcName := ".bashrc"
+	if runtime.GOOS == "darwin" {
+		rcName = ".bash_profile"
+	}
+	rcPath := filepath.Join(home, rcName)
 	data, err := os.ReadFile(rcPath)
 	if err != nil {
-		t.Fatalf("read bashrc: %v", err)
+		t.Fatalf("read %s: %v", rcName, err)
 	}
 	count := strings.Count(string(data), "noglob restish")
 	if count != 1 {
@@ -112,9 +117,13 @@ func TestSetupWarnsForPermissiveExistingRCFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	rcPath := filepath.Join(home, ".bashrc")
+	rcName := ".bashrc"
+	if runtime.GOOS == "darwin" {
+		rcName = ".bash_profile"
+	}
+	rcPath := filepath.Join(home, rcName)
 	if err := os.WriteFile(rcPath, []byte("# existing\n"), 0o644); err != nil {
-		t.Fatalf("write bashrc: %v", err)
+		t.Fatalf("write %s: %v", rcName, err)
 	}
 
 	c, _, errOut := newTestCLI()
@@ -145,3 +154,4 @@ func TestSetupDryRunDoesNotWrite(t *testing.T) {
 		t.Fatalf("expected dry-run output, got: %q", out.String())
 	}
 }
+

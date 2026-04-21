@@ -165,34 +165,30 @@ func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API %q already exists", apiName)
 	}
 
-	cfgPath := c.configFilePath()
-	apiCfg := &config.APIConfig{BaseURL: baseURL}
-	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
+	work, err := cloneConfig(c.cfg)
+	if err != nil {
 		return err
 	}
-
-	for _, expr := range args[2:] {
-		key, raw, err := parseShorthandAssignment(expr)
-		if err != nil {
-			return err
-		}
-		value, err := parseConfigCLIValue(raw)
-		if err != nil {
-			return err
-		}
-		jsonPath, err := apiConfigJSONPath(apiName, key)
-		if err != nil {
-			return err
-		}
-		if err := config.SaveConfigValue(cfgPath, jsonPath, value); err != nil {
-			return err
-		}
+	if work.APIs == nil {
+		work.APIs = map[string]*config.APIConfig{}
 	}
+	work.APIs[apiName] = &config.APIConfig{BaseURL: baseURL}
 
-	reloaded, err := config.Load(cfgPath)
-	if err == nil {
-		c.cfg = reloaded
+	exprs, err := parseAPISetExpressions(args[2:])
+	if err != nil {
+		return err
 	}
+	ops, err := c.buildAPIPatchOperations(work, apiName, exprs)
+	if err != nil {
+		return err
+	}
+	ops = append([]config.ConfigPatchOperation{{Path: []string{"apis", apiName}, Value: work.APIs[apiName]}}, ops...)
+
+	cfgPath := c.configFilePath()
+	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
+		return err
+	}
+	c.cfg = work
 	return nil
 }
 
@@ -378,72 +374,98 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
 
-	cfgPath := c.configFilePath()
 	exprs, err := parseAPISetExpressions(args[1:])
 	if err != nil {
 		return err
 	}
-	for _, expr := range exprs {
-		jsonPath, pathErr := apiConfigJSONPath(apiName, expr.key)
-		if pathErr != nil {
-			return pathErr
-		}
-		if err := config.SaveConfigValue(cfgPath, jsonPath, expr.value); err != nil {
-			return err
-		}
+	work, err := cloneConfig(c.cfg)
+	if err != nil {
+		return err
 	}
-	reloaded, err := config.Load(cfgPath)
-	if err == nil {
-		c.cfg = reloaded
+	ops, err := c.buildAPIPatchOperations(work, apiName, exprs)
+	if err != nil {
+		return err
 	}
+
+	cfgPath := c.configFilePath()
+	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
+		return err
+	}
+	c.cfg = work
 	return nil
 }
 
 type setExpression struct {
-	key   string
-	value any
+	key    string
+	value  any
+	append bool
+	delete bool
 }
 
 func parseAPISetExpressions(args []string) ([]setExpression, error) {
 	if len(args) == 0 {
-		return nil, fmt.Errorf("expected <key> <value> or one or more <path:value> expressions")
+		return nil, nil
 	}
 	if len(args) == 2 && !strings.Contains(args[0], ":") {
 		v, err := parseConfigCLIValue(args[1])
 		if err != nil {
 			return nil, err
 		}
-		return []setExpression{{key: args[0], value: v}}, nil
+		expr := setExpression{key: args[0], value: v}
+		if strings.TrimSpace(args[1]) == "undefined" {
+			expr.delete = true
+			expr.value = nil
+		}
+		return []setExpression{expr}, nil
 	}
 	out := make([]setExpression, 0, len(args))
 	for _, arg := range args {
-		key, raw, err := parseShorthandAssignment(arg)
+		key, raw, appendOp, err := parseShorthandAssignment(arg)
 		if err != nil {
 			return nil, err
+		}
+		expr := setExpression{key: key, append: appendOp}
+		if strings.TrimSpace(raw) == "undefined" {
+			if appendOp {
+				return nil, fmt.Errorf("invalid shorthand %q: append expressions cannot use undefined", arg)
+			}
+			expr.delete = true
+			out = append(out, expr)
+			continue
 		}
 		v, err := parseConfigCLIValue(raw)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, setExpression{key: key, value: v})
+		expr.value = v
+		out = append(out, expr)
 	}
 	return out, nil
 }
 
-func parseShorthandAssignment(expr string) (string, string, error) {
+func parseShorthandAssignment(expr string) (string, string, bool, error) {
 	key, raw, ok := strings.Cut(expr, ":")
 	if !ok {
-		return "", "", fmt.Errorf("invalid shorthand %q: expected path:value", expr)
+		return "", "", false, fmt.Errorf("invalid shorthand %q: expected path:value", expr)
 	}
 	key = strings.TrimSpace(key)
 	raw = strings.TrimSpace(raw)
 	if key == "" {
-		return "", "", fmt.Errorf("invalid shorthand %q: empty path", expr)
+		return "", "", false, fmt.Errorf("invalid shorthand %q: empty path", expr)
 	}
 	if raw == "" {
-		return "", "", fmt.Errorf("invalid shorthand %q: empty value", expr)
+		return "", "", false, fmt.Errorf("invalid shorthand %q: empty value", expr)
 	}
-	return key, raw, nil
+	appendOp := false
+	if strings.HasSuffix(key, "[]") {
+		appendOp = true
+		key = strings.TrimSuffix(key, "[]")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return "", "", false, fmt.Errorf("invalid shorthand %q: empty path", expr)
+		}
+	}
+	return key, raw, appendOp, nil
 }
 
 func parseConfigCLIValue(raw string) (any, error) {
@@ -545,6 +567,8 @@ const (
 	apiKeyPaginationItemsPath
 	apiKeyPaginationNextPath
 	apiKeyProfileBaseURL
+	apiKeyProfileHeaders
+	apiKeyProfileQuery
 	apiKeyProfileTLSSigner
 	apiKeyProfileAuthType
 	apiKeyProfileAuthParam
@@ -598,6 +622,18 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 				jsonPath:    append(basePath, "profiles", profileName, "base_url"),
 				profileName: profileName,
 			}, nil
+		case "headers":
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileHeaders,
+				jsonPath:    append(basePath, "profiles", profileName, "headers"),
+				profileName: profileName,
+			}, nil
+		case "query":
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileQuery,
+				jsonPath:    append(basePath, "profiles", profileName, "query"),
+				profileName: profileName,
+			}, nil
 		case "tls_signer":
 			return resolvedAPIConfigKey{
 				kind:        apiKeyProfileTLSSigner,
@@ -633,6 +669,324 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 		}
 	default:
 		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q", key)
+	}
+}
+
+func cloneConfig(src *config.Config) (*config.Config, error) {
+	if src == nil {
+		return &config.Config{}, nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+	var dst config.Config
+	if err := json.Unmarshal(data, &dst); err != nil {
+		return nil, err
+	}
+	return &dst, nil
+}
+
+func (c *CLI) buildAPIPatchOperations(work *config.Config, apiName string, exprs []setExpression) ([]config.ConfigPatchOperation, error) {
+	if len(exprs) == 0 {
+		return nil, nil
+	}
+	if work.APIs == nil || work.APIs[apiName] == nil {
+		return nil, fmt.Errorf("unknown API %q", apiName)
+	}
+	apiCfg := work.APIs[apiName]
+	ops := make([]config.ConfigPatchOperation, 0, len(exprs))
+	for _, expr := range exprs {
+		resolved, err := resolveAPIConfigKey(apiName, expr.key)
+		if err != nil {
+			return nil, err
+		}
+
+		switch {
+		case expr.delete:
+			if err := deleteAPIField(apiCfg, resolved); err != nil {
+				return nil, err
+			}
+			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Delete: true})
+		case expr.append:
+			if err := appendAPIField(apiCfg, resolved, expr.value); err != nil {
+				return nil, err
+			}
+			finalValue, err := apiFieldValue(apiCfg, resolved)
+			if err != nil {
+				return nil, err
+			}
+			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Value: finalValue})
+		default:
+			if err := setAPIFieldValue(c, apiCfg, resolved, expr.value); err != nil {
+				return nil, err
+			}
+			finalValue, err := apiFieldValue(apiCfg, resolved)
+			if err != nil {
+				return nil, err
+			}
+			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Value: finalValue})
+		}
+	}
+	return ops, nil
+}
+
+func ensureProfile(apiCfg *config.APIConfig, profileName string) *config.ProfileConfig {
+	if apiCfg.Profiles == nil {
+		apiCfg.Profiles = make(map[string]*config.ProfileConfig)
+	}
+	if apiCfg.Profiles[profileName] == nil {
+		apiCfg.Profiles[profileName] = &config.ProfileConfig{}
+	}
+	return apiCfg.Profiles[profileName]
+}
+
+func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) error {
+	switch resolved.kind {
+	case apiKeyBaseURL:
+		apiCfg.BaseURL = ""
+	case apiKeySpecURL:
+		apiCfg.SpecURL = ""
+	case apiKeyAllowCrossOriginSpec:
+		apiCfg.AllowCrossOriginSpec = false
+	case apiKeyOperationBase:
+		apiCfg.OperationBase = ""
+	case apiKeyPaginationItemsPath:
+		if apiCfg.Pagination != nil {
+			apiCfg.Pagination.ItemsPath = ""
+		}
+	case apiKeyPaginationNextPath:
+		if apiCfg.Pagination != nil {
+			apiCfg.Pagination.NextPath = ""
+		}
+	case apiKeyProfileBaseURL:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			p.BaseURL = ""
+		}
+	case apiKeyProfileHeaders:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			p.Headers = nil
+		}
+	case apiKeyProfileQuery:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			p.Query = nil
+		}
+	case apiKeyProfileTLSSigner:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			p.TLSSigner = ""
+		}
+	case apiKeyProfileAuthType:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil {
+			p.Auth.Type = ""
+		}
+	case apiKeyProfileAuthParam:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil && p.Auth.Params != nil {
+			delete(p.Auth.Params, resolved.paramName)
+		}
+	default:
+		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
+	}
+	return nil
+}
+
+func appendAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey, value any) error {
+	v, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("append expects a string value")
+	}
+	prof := ensureProfile(apiCfg, resolved.profileName)
+	switch resolved.kind {
+	case apiKeyProfileHeaders:
+		prof.Headers = append(prof.Headers, v)
+	case apiKeyProfileQuery:
+		prof.Query = append(prof.Query, v)
+	default:
+		return fmt.Errorf("append is only supported for profiles.<name>.headers[] and profiles.<name>.query[]")
+	}
+	return nil
+}
+
+func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConfigKey, value any) error {
+	switch resolved.kind {
+	case apiKeyBaseURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("base_url must be a string")
+		}
+		apiCfg.BaseURL = v
+	case apiKeySpecURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("spec_url must be a string")
+		}
+		apiCfg.SpecURL = v
+	case apiKeyAllowCrossOriginSpec:
+		b, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("allow_cross_origin_spec must be a boolean")
+		}
+		apiCfg.AllowCrossOriginSpec = b
+	case apiKeyOperationBase:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("operation_base must be a string")
+		}
+		apiCfg.OperationBase = v
+	case apiKeyPaginationItemsPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("pagination.items_path must be a string")
+		}
+		if apiCfg.Pagination == nil {
+			apiCfg.Pagination = &config.PaginationConfig{}
+		}
+		apiCfg.Pagination.ItemsPath = v
+	case apiKeyPaginationNextPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("pagination.next_path must be a string")
+		}
+		if apiCfg.Pagination == nil {
+			apiCfg.Pagination = &config.PaginationConfig{}
+		}
+		apiCfg.Pagination.NextPath = v
+	case apiKeyProfileBaseURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.base_url must be a string", resolved.profileName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		prof.BaseURL = v
+	case apiKeyProfileHeaders:
+		arr, err := anyToStringSlice(value)
+		if err != nil {
+			return fmt.Errorf("profiles.%s.headers must be a string array", resolved.profileName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		prof.Headers = arr
+	case apiKeyProfileQuery:
+		arr, err := anyToStringSlice(value)
+		if err != nil {
+			return fmt.Errorf("profiles.%s.query must be a string array", resolved.profileName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		prof.Query = arr
+	case apiKeyProfileTLSSigner:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.tls_signer must be a string", resolved.profileName)
+		}
+		if v != "" {
+			if _, ok := c.pluginForHook(v, "tls-signer"); !ok {
+				return fmt.Errorf("tls_signer %q is not a registered tls-signer plugin", v)
+			}
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		prof.TLSSigner = v
+	case apiKeyProfileAuthType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.auth.type must be a string", resolved.profileName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.Auth == nil {
+			prof.Auth = &config.AuthConfig{}
+		}
+		candidate := &config.AuthConfig{Type: v, Params: map[string]string{}}
+		if _, err := c.authHandlerFor(candidate, authHandlerOptions{}); err != nil {
+			return fmt.Errorf("invalid auth.type %q: %w", v, err)
+		}
+		prof.Auth.Type = v
+	case apiKeyProfileAuthParam:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.auth.params.%s must be a string", resolved.profileName, resolved.paramName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.Auth == nil {
+			prof.Auth = &config.AuthConfig{}
+		}
+		if prof.Auth.Params == nil {
+			prof.Auth.Params = map[string]string{}
+		}
+		prof.Auth.Params[resolved.paramName] = v
+	default:
+		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
+	}
+	return nil
+}
+
+func anyToStringSlice(value any) ([]string, error) {
+	switch v := value.(type) {
+	case string:
+		return []string{v}, nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("array element is not a string")
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("not a string slice")
+	}
+}
+
+func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any, error) {
+	switch resolved.kind {
+	case apiKeyBaseURL:
+		return apiCfg.BaseURL, nil
+	case apiKeySpecURL:
+		return apiCfg.SpecURL, nil
+	case apiKeyAllowCrossOriginSpec:
+		return apiCfg.AllowCrossOriginSpec, nil
+	case apiKeyOperationBase:
+		return apiCfg.OperationBase, nil
+	case apiKeyPaginationItemsPath:
+		if apiCfg.Pagination == nil {
+			return "", nil
+		}
+		return apiCfg.Pagination.ItemsPath, nil
+	case apiKeyPaginationNextPath:
+		if apiCfg.Pagination == nil {
+			return "", nil
+		}
+		return apiCfg.Pagination.NextPath, nil
+	case apiKeyProfileBaseURL:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			return p.BaseURL, nil
+		}
+		return "", nil
+	case apiKeyProfileHeaders:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			return p.Headers, nil
+		}
+		return []string{}, nil
+	case apiKeyProfileQuery:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			return p.Query, nil
+		}
+		return []string{}, nil
+	case apiKeyProfileTLSSigner:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
+			return p.TLSSigner, nil
+		}
+		return "", nil
+	case apiKeyProfileAuthType:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil {
+			return p.Auth.Type, nil
+		}
+		return "", nil
+	case apiKeyProfileAuthParam:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil && p.Auth.Params != nil {
+			return p.Auth.Params[resolved.paramName], nil
+		}
+		return "", nil
+	default:
+		return nil, fmt.Errorf("unsupported field")
 	}
 }
 

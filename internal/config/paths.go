@@ -6,6 +6,10 @@ import (
 	"runtime"
 )
 
+var userConfigDirFunc = os.UserConfigDir
+var userCacheDirFunc = os.UserCacheDir
+var runtimeGOOS = runtime.GOOS
+
 // Paths provides centralized directory and path management for Restish,
 // supporting XDG Base Directory specification on Unix-like systems and
 // standard Windows directories. Paths honor explicit environment variable
@@ -59,7 +63,7 @@ func (p *Paths) TokenCache() string {
 
 // PluginManifestCache returns the directory for cached plugin manifests.
 func (p *Paths) PluginManifestCache() string {
-	return filepath.Join(p.cacheDir, "plugins")
+	return filepath.Join(p.configDir, "plugin-manifest-cache.cbor")
 }
 
 // ConfigFile returns the path to the main restish.json config file.
@@ -76,21 +80,21 @@ func computeConfigDir() string {
 	}
 
 	// Platform-specific defaults
-	if runtime.GOOS == "windows" {
+	if runtimeGOOS == "windows" {
 		// Windows: %APPDATA%\restish (or %UserProfile%\AppData\Roaming\restish)
 		if dir := os.Getenv("APPDATA"); dir != "" {
 			return filepath.Join(dir, "restish")
 		}
-		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
-			return filepath.Join(userProfile, "AppData", "Roaming", "restish")
+		if dir, err := userConfigDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
 		}
 	} else {
 		// Unix-like: XDG_CONFIG_HOME/restish or ~/.config/restish
 		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
 			return filepath.Join(xdgConfig, "restish")
 		}
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, ".config", "restish")
+		if dir, err := userConfigDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
 		}
 	}
 
@@ -107,21 +111,21 @@ func computeCacheDir() string {
 	}
 
 	// Platform-specific defaults
-	if runtime.GOOS == "windows" {
+	if runtimeGOOS == "windows" {
 		// Windows: %LOCALAPPDATA%\restish\cache
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 			return filepath.Join(localAppData, "restish", "cache")
 		}
-		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
-			return filepath.Join(userProfile, "AppData", "Local", "restish", "cache")
+		if dir, err := userCacheDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
 		}
 	} else {
 		// Unix-like: XDG_CACHE_HOME/restish or ~/.cache/restish
 		if xdgCache := os.Getenv("XDG_CACHE_HOME"); xdgCache != "" {
 			return filepath.Join(xdgCache, "restish")
 		}
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, ".cache", "restish")
+		if dir, err := userCacheDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
 		}
 	}
 
