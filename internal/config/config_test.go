@@ -157,16 +157,22 @@ func TestLoad_InvalidJSON(t *testing.T) {
 	if !errors.As(err, &parseErr) {
 		t.Errorf("expected *config.ParseError, got %T: %v", err, err)
 	}
+	if parseErr.Line == 0 || parseErr.Column == 0 {
+		t.Fatalf("expected line:column in parse error, got %d:%d", parseErr.Line, parseErr.Column)
+	}
 }
 
 func TestLoad_UnknownField(t *testing.T) {
-	path := writeConfig(t, `{"typo_field": "oops"}`)
+	path := writeConfig(t, `{"apiss": {}}`)
 	_, err := config.Load(path)
 	if err == nil {
 		t.Fatal("expected error for unknown field, got nil")
 	}
 	if !strings.Contains(err.Error(), "config:") {
 		t.Errorf("expected 'config:' prefix in error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("expected unknown-field suggestion, got: %v", err)
 	}
 }
 

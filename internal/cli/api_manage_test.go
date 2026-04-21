@@ -370,6 +370,33 @@ func TestAPISetShorthandExpression(t *testing.T) {
 	}
 }
 
+func TestAPISetMultipleShorthandExpressions(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://old.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI()
+	c.ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `allow_cross_origin_spec: true`, `pagination.items_path: "items"`}); err != nil {
+		t.Fatalf("api set multi shorthand: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if !written.APIs["myapi"].AllowCrossOriginSpec {
+		t.Fatalf("expected allow_cross_origin_spec to be true")
+	}
+	if got := written.APIs["myapi"].Pagination.ItemsPath; got != "items" {
+		t.Fatalf("expected pagination.items_path to be items, got %q", got)
+	}
+}
+
 func TestAPIAddWithShorthand(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 

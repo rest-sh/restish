@@ -77,7 +77,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "set <name> <key> <value> | <name> <path:value>",
 		Short: "Set API config using key/value or shorthand path:value syntax",
-		Args:  cobra.RangeArgs(2, 3),
+		Args:  cobra.MinimumNArgs(2),
 		RunE:  c.runAPISet,
 	})
 	apiCmd.AddCommand(&cobra.Command{
@@ -378,18 +378,19 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
 
-	key, value, err := parseAPISetArgs(args[1:])
-	if err != nil {
-		return err
-	}
-
 	cfgPath := c.configFilePath()
-	jsonPath, err := apiConfigJSONPath(apiName, key)
+	exprs, err := parseAPISetExpressions(args[1:])
 	if err != nil {
 		return err
 	}
-	if err := config.SaveConfigValue(cfgPath, jsonPath, value); err != nil {
-		return err
+	for _, expr := range exprs {
+		jsonPath, pathErr := apiConfigJSONPath(apiName, expr.key)
+		if pathErr != nil {
+			return pathErr
+		}
+		if err := config.SaveConfigValue(cfgPath, jsonPath, expr.value); err != nil {
+			return err
+		}
 	}
 	reloaded, err := config.Load(cfgPath)
 	if err == nil {
@@ -398,20 +399,35 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func parseAPISetArgs(args []string) (string, any, error) {
-	if len(args) == 2 {
-		v, err := parseConfigCLIValue(args[1])
-		return args[0], v, err
+type setExpression struct {
+	key   string
+	value any
+}
+
+func parseAPISetExpressions(args []string) ([]setExpression, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("expected <key> <value> or one or more <path:value> expressions")
 	}
-	if len(args) == 1 {
-		key, raw, err := parseShorthandAssignment(args[0])
+	if len(args) == 2 && !strings.Contains(args[0], ":") {
+		v, err := parseConfigCLIValue(args[1])
 		if err != nil {
-			return "", nil, err
+			return nil, err
+		}
+		return []setExpression{{key: args[0], value: v}}, nil
+	}
+	out := make([]setExpression, 0, len(args))
+	for _, arg := range args {
+		key, raw, err := parseShorthandAssignment(arg)
+		if err != nil {
+			return nil, err
 		}
 		v, err := parseConfigCLIValue(raw)
-		return key, v, err
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, setExpression{key: key, value: v})
 	}
-	return "", nil, fmt.Errorf("expected <key> <value> or <path:value>")
+	return out, nil
 }
 
 func parseShorthandAssignment(expr string) (string, string, error) {

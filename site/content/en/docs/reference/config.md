@@ -32,7 +32,7 @@ OAuth token cache is stored alongside config (default:
   "apis": {},
   "cache": {},
   "allowed_plugins": [],
-  "plugins": {}
+  "plugins": {},
 }
 ```
 
@@ -46,9 +46,9 @@ Example:
 {
   "apis": {
     "github": {
-      "base_url": "https://api.github.com"
-    }
-  }
+      "base_url": "https://api.github.com",
+    },
+  },
 }
 ```
 
@@ -126,9 +126,9 @@ Example:
   "plugins": {
     "bulk": {
       "concurrency": 4,
-      "retry": true
-    }
-  }
+      "retry": true,
+    },
+  },
 }
 ```
 
@@ -142,7 +142,7 @@ Example:
       "spec_url": "https://api.github.com/openapi.json",
       "profiles": {
         "default": {
-          "headers": ["Accept: application/json"]
+          "headers": ["Accept: application/json"],
         },
         "enterprise": {
           "base_url": "https://github.example.com/api/v3",
@@ -150,16 +150,16 @@ Example:
           "auth": {
             "type": "http-basic",
             "params": {
-              "username": "alice"
-            }
-          }
-        }
-      }
-    }
+              "username": "alice",
+            },
+          },
+        },
+      },
+    },
   },
   "cache": {
-    "max_size": "100MB"
-  }
+    "max_size": "100MB",
+  },
 }
 ```
 

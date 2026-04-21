@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"strings"
 
 	"github.com/tidwall/jsonc"
 )
@@ -211,6 +213,7 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(stripped))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
+		err = withUnknownFieldSuggestion(err, cfg)
 		line, col := extractJSONErrorPosition(err, stripped)
 		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
@@ -235,6 +238,86 @@ func extractJSONErrorPosition(err error, data []byte) (int, int) {
 		return line, col
 	}
 	return 0, 0
+}
+
+func withUnknownFieldSuggestion(err error, cfg Config) error {
+	const prefix = "json: unknown field "
+	msg := err.Error()
+	if !strings.HasPrefix(msg, prefix) {
+		return err
+	}
+	field := strings.Trim(msg[len(prefix):], `"`)
+	best := closestJSONTag(field, reflect.TypeOf(cfg))
+	if best == "" {
+		return err
+	}
+	return fmt.Errorf("%w (did you mean %q?)", err, best)
+}
+
+func closestJSONTag(input string, t reflect.Type) string {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return ""
+	}
+	best := ""
+	bestDistance := 3
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		if name == "" {
+			continue
+		}
+		d := levenshteinDistance(strings.ToLower(input), strings.ToLower(name))
+		if d < bestDistance {
+			bestDistance = d
+			best = name
+		}
+	}
+	return best
+}
+
+func levenshteinDistance(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		curr := make([]int, len(b)+1)
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			insert := curr[j-1] + 1
+			delete := prev[j] + 1
+			replace := prev[j-1] + cost
+			curr[j] = minInt(insert, minInt(delete, replace))
+		}
+		prev = curr
+	}
+	return prev[len(b)]
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // ParseError is returned when the config file contains invalid JSON or
