@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	authpkg "github.com/danielgtaylor/restish/v2/auth"
@@ -293,13 +294,44 @@ func (c *CLI) closeRequestClosers() {
 	c.requestClosers = nil
 }
 
+// builtinCommands is the set of top-level subcommand names registered by the
+// CLI itself. When the first non-flag argument is one of these, the fast-path
+// skips API-name detection and loads all configured APIs.
+var builtinCommands = map[string]bool{
+	"api": true, "cache": true, "cert": true, "completion": true,
+	"delete": true, "edit": true, "get": true, "head": true,
+	"help": true, "links": true, "options": true, "patch": true,
+	"plugin": true, "post": true, "put": true, "setup": true,
+}
+
 // generatedAPINames returns the APIs whose generated commands should be
-// registered for this invocation. When args[1] names a configured API, only
-// that API is loaded; otherwise all configured APIs remain available.
+// registered for this invocation. When the first non-flag positional argument
+// names a configured API, only that API's spec is loaded; otherwise all
+// configured APIs are registered. This prevents eagerly parsing every cached
+// spec on every invocation.
+//
+// Flags (tokens starting with "-") are skipped when scanning for the first
+// positional argument, so `restish -v myapi op` still fast-paths on myapi.
+// Flags of the form --flag=value are consumed as a single token; all other
+// flags consume the next token as their value unless it starts with "-".
 func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
-	if len(args) > 1 {
-		if _, ok := cfg.APIs[args[1]]; ok {
-			return []string{args[1]}
+	// Scan past the program name and any leading flags.
+	toks := args[1:]
+	for len(toks) > 0 {
+		t := toks[0]
+		toks = toks[1:]
+		if !strings.HasPrefix(t, "-") {
+			// First positional: if it's a known built-in, break and load all.
+			if !builtinCommands[t] {
+				if _, ok := cfg.APIs[t]; ok {
+					return []string{t}
+				}
+			}
+			break
+		}
+		// Flag token: --flag=value is self-contained; otherwise consume next.
+		if !strings.Contains(t, "=") && len(toks) > 0 && !strings.HasPrefix(toks[0], "-") {
+			toks = toks[1:]
 		}
 	}
 
