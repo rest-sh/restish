@@ -154,6 +154,9 @@ func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	baseURL := args[1]
 
+	if isBuiltinCommandName(apiName) {
+		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
+	}
 	if c.cfg == nil {
 		return fmt.Errorf("config not loaded")
 	}
@@ -197,6 +200,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	baseURL := args[1]
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+
+	if isBuiltinCommandName(apiName) {
+		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
+	}
 
 	// Run spec discovery with the supplied base URL (no existing config needed).
 	discCfg := spec.DiscoverConfig{

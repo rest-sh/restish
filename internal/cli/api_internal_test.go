@@ -2,8 +2,38 @@ package cli
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
+
+// TestAPIAddBuiltinNameRejected verifies that "api add" refuses names that
+// collide with top-level built-in commands (e.g. "api", "get", "post").
+func TestAPIAddBuiltinNameRejected(t *testing.T) {
+	for _, name := range []string{"api", "get", "post", "cache", "edit"} {
+		c := &CLI{}
+		err := c.runAPIAdd(nil, []string{name, "https://example.com"})
+		if err == nil {
+			t.Errorf("runAPIAdd(%q): expected error, got nil", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), "conflicts with a built-in command") {
+			t.Errorf("runAPIAdd(%q): unexpected error: %v", name, err)
+		}
+	}
+}
+
+// TestIsBuiltinCommandName verifies the helper covers the expected set of names.
+func TestIsBuiltinCommandName(t *testing.T) {
+	builtins := []string{"api", "cache", "cert", "completion", "delete", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "setup"}
+	for _, name := range builtins {
+		if !isBuiltinCommandName(name) {
+			t.Errorf("isBuiltinCommandName(%q) = false, want true", name)
+		}
+	}
+	if isBuiltinCommandName("myapi") {
+		t.Error("isBuiltinCommandName(\"myapi\") = true, want false")
+	}
+}
 
 func TestResolveAPIConfigKey_ProfileAuthParam(t *testing.T) {
 	got, err := resolveAPIConfigKey("myapi", "profiles.default.auth.params.token")

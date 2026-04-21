@@ -264,6 +264,13 @@ func (c *CLI) Run(args []string) error {
 
 	root := c.newRootCmd()
 
+	// Warn about any configured API names that shadow built-in commands.
+	for apiName := range cfg.APIs {
+		if isBuiltinCommandName(apiName) {
+			fmt.Fprintf(c.Stderr, "warning: API name %q shadows a built-in command and will not be reachable as a subcommand\n", apiName)
+		}
+	}
+
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
 	// API's cached spec to avoid eagerly parsing every registered API.
@@ -320,6 +327,12 @@ var builtinCommands = map[string]bool{
 	"delete": true, "edit": true, "get": true, "head": true,
 	"help": true, "links": true, "options": true, "patch": true,
 	"plugin": true, "post": true, "put": true, "setup": true,
+}
+
+// isBuiltinCommandName reports whether name collides with a top-level built-in
+// command, which would prevent the generated API subcommand from being reachable.
+func isBuiltinCommandName(name string) bool {
+	return builtinCommands[name]
 }
 
 // generatedAPINames returns the APIs whose generated commands should be
