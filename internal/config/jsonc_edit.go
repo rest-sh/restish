@@ -185,7 +185,7 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 
 	// Set the final key
 	lastKey := path[len(path)-1]
-	
+
 	// Marshal the value to JSON and parse it back as a hujson Value
 	valueJSON, err := json.Marshal(value)
 	if err != nil {

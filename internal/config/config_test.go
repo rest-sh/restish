@@ -247,6 +247,42 @@ func TestSave_CreatesConfigDirWithSecurePermissions(t *testing.T) {
 	}
 }
 
+func TestConfigFileHasInsecurePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits not authoritative on Windows")
+	}
+
+	path := writeConfig(t, `{}`)
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	insecure, err := config.ConfigFileHasInsecurePermissions(path)
+	if err != nil {
+		t.Fatalf("ConfigFileHasInsecurePermissions: %v", err)
+	}
+	if !insecure {
+		t.Fatalf("expected insecure permissions for 0644")
+	}
+}
+
+func TestConfigFileHasInsecurePermissions_Private(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits not authoritative on Windows")
+	}
+
+	path := writeConfig(t, `{}`)
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	insecure, err := config.ConfigFileHasInsecurePermissions(path)
+	if err != nil {
+		t.Fatalf("ConfigFileHasInsecurePermissions: %v", err)
+	}
+	if insecure {
+		t.Fatalf("expected secure permissions for 0600")
+	}
+}
+
 func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	home := t.TempDir()
 	setLegacyConfigEnv(t, home)

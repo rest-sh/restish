@@ -192,7 +192,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	}
 	cfg.APIs[apiName] = apiCfg
 
-	if config.HasComments(cfgPath) {
+	if config.NeedsPatchToPreserveFormatting(cfgPath) {
 		if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
 			return err
 		}
@@ -335,7 +335,7 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	}
 
 	cfgPath := c.configFilePath()
-	if config.HasComments(cfgPath) {
+	if config.NeedsPatchToPreserveFormatting(cfgPath) {
 		jsonPath, err := apiConfigJSONPath(apiName, key)
 		if err != nil {
 			return err
@@ -566,7 +566,7 @@ func (c *CLI) runAPIDelete(cmd *cobra.Command, args []string) error {
 	}
 	delete(c.cfg.APIs, apiName)
 	cfgPath := c.configFilePath()
-	if config.HasComments(cfgPath) {
+	if config.NeedsPatchToPreserveFormatting(cfgPath) {
 		if err := config.DeleteAPIConfig(cfgPath, apiName); err != nil {
 			return err
 		}

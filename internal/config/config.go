@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/tidwall/jsonc"
 )
@@ -141,15 +142,36 @@ func DefaultCacheDir() string {
 	return NewPaths().Cache()
 }
 
-// HasComments reports whether the config file at path contains JSONC comments.
+// NeedsPatchToPreserveFormatting reports whether the config file at path
+// contains JSONC comments and should use patch-based writes to preserve formatting.
 // Returns false when the file does not exist or cannot be read.
-// Use this before calling Save to warn users that comments will be lost.
-func HasComments(path string) bool {
+func NeedsPatchToPreserveFormatting(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
 	return string(jsonc.ToJSON(data)) != string(data)
+}
+
+// HasComments is deprecated; use NeedsPatchToPreserveFormatting instead.
+func HasComments(path string) bool {
+	return NeedsPatchToPreserveFormatting(path)
+}
+
+// ConfigFileHasInsecurePermissions reports whether path is readable by group or others.
+// On Windows this returns false because Unix permission bits are not authoritative.
+func ConfigFileHasInsecurePermissions(path string) (bool, error) {
+	if runtime.GOOS == "windows" {
+		return false, nil
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return info.Mode().Perm()&0o077 != 0, nil
 }
 
 // Save serialises cfg as indented JSON and writes it to path, creating the
@@ -267,15 +289,15 @@ func LockSiblingFile(path string) (io.Closer, error) {
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, lock *fileLock) error {
 	_ = lock
 	dir := filepath.Dir(path)
-	
+
 	// Check if directory exists before creating
 	_, err := os.Stat(dir)
 	dirExists := err == nil
-	
+
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
 	}
-	
+
 	// Only chmod if we just created the directory
 	if !dirExists {
 		if err := os.Chmod(dir, dirMode); err != nil {
@@ -316,14 +338,14 @@ func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMo
 		cleanup()
 		return fmt.Errorf("config: rename temp file: %w", err)
 	}
-	
+
 	// Sync parent directory after rename to ensure durability on all filesystems
 	dirFile, err := os.Open(dir)
 	if err == nil {
 		_ = dirFile.Sync()
 		_ = dirFile.Close()
 	}
-	
+
 	return nil
 }
 

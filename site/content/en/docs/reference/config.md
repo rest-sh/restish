@@ -16,7 +16,14 @@ By default, that file lives in:
 Restish accepts JSON with comments via JSONC parsing, but it still validates the
 final shape strictly and rejects unknown fields.
 
+Credentials may appear in this file (for example `auth.params.password` or
+`auth.params.client_secret`). Restish writes config files with private file
+permissions and warns when permissions are too open.
+
 You can override the config directory with `RSH_CONFIG_DIR`.
+
+OAuth token cache is stored alongside config (default:
+`~/.config/restish/tokens.cbor`). Keep the config directory private.
 
 ## Top-Level Shape
 

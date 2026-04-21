@@ -12,6 +12,16 @@ Auth is configured under a profile, not directly on every command. That keeps
 auth aligned with the same environment boundaries as base URLs, headers, and
 other request defaults.
 
+## Credential Storage Model
+
+Restish may store auth-related secrets on disk:
+
+- profile auth params in `restish.json` (for example passwords or client secrets)
+- OAuth tokens in the token cache file (default `tokens.cbor` in the config directory)
+
+Keep your config directory private. Restish writes config files with private
+permissions and warns if the config file becomes group/world-readable.
+
 ## Start With The Principle
 
 In Restish, auth is part of request setup, not a separate mode. That means:

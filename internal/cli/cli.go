@@ -221,6 +221,9 @@ func (c *CLI) Run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if insecure, permErr := config.ConfigFileHasInsecurePermissions(c.configFilePath()); permErr == nil && insecure {
+		fmt.Fprintf(c.Stderr, "warning: %s is group/world-readable; credentials in config should be kept private (chmod 600)\n", c.configFilePath())
+	}
 	c.cfg = cfg
 	if cfg.Migration != nil {
 		fmt.Fprintf(c.Stderr, "Migrated config from v1 at %s; kept backup at %s\n", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
