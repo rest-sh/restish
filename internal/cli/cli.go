@@ -242,7 +242,7 @@ func (c *CLI) Run(args []string) error {
 	// know their plugin is not active rather than silently ignoring it.
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), cfg.AllowedPlugins, func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	}, c.pluginManifestCachePath())
+	}, c.pluginManifestCachePath(), c.Stderr)
 	c.pluginsByHook = indexPluginsByHook(c.plugins)
 
 	// Register plugin-provided formatters and loaders.

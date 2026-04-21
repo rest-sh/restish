@@ -12,10 +12,24 @@ import (
 //
 // Most command plugins should create one with NewCommandClient and use it
 // for all communication with the host.
+//
+// Plugins that declare passthrough_stdio should register StdinDataHandler and
+// StdinCloseHandler before calling Do(). These handlers are invoked for any
+// stdin-data or stdin-close frames that arrive while Do() is waiting for an
+// http-response reply.
 type CommandClient struct {
 	dec     *Decoder
 	out     io.Writer
 	writeMu sync.Mutex
+
+	// StdinDataHandler is called with each chunk of stdin data received from
+	// the host while Do() is waiting for an http-response. Set this before
+	// calling Do() when passthrough_stdio is active.
+	StdinDataHandler func(data []byte)
+
+	// StdinCloseHandler is called when the host signals that stdin has reached
+	// EOF while Do() is waiting for an http-response.
+	StdinCloseHandler func()
 }
 
 // NewCommandClient returns a CommandClient backed by the given reader/writer.
@@ -33,9 +47,14 @@ func (c *CommandClient) ReadMessage(v any) error {
 	return c.dec.ReadMessage(v)
 }
 
-// Do sends one HTTP request to the host and blocks until the response
-// arrives.  It is safe to call from a single goroutine; for concurrent use
-// build an async wrapper on top of WriteMessage / ReadMessage instead.
+// Do sends one HTTP request to the host and blocks until the http-response
+// arrives. While waiting, any stdin-data or stdin-close frames are dispatched
+// to StdinDataHandler / StdinCloseHandler if registered — this is required
+// for plugins that declare passthrough_stdio, where the host interleaves
+// stdin frames with the HTTP response.
+//
+// Do is safe to call from a single goroutine. For concurrent use, build an
+// async wrapper on top of WriteMessage / ReadMessage instead.
 func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 	if req.Type == "" {
 		req.Type = MsgTypeHTTPRequest
@@ -43,14 +62,33 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 	if err := c.WriteMessage(req); err != nil {
 		return nil, err
 	}
-	var reply HTTPResponseMsg
-	if err := c.dec.ReadMessage(&reply); err != nil {
-		return nil, err
+	for {
+		raw, err := c.dec.ReadRaw()
+		if err != nil {
+			return nil, err
+		}
+		msgType := MessageType(raw)
+		switch msgType {
+		case MsgTypeHTTPResponse:
+			var reply HTTPResponseMsg
+			if err := DecMode.Unmarshal(raw, &reply); err != nil {
+				return nil, fmt.Errorf("plugin: decode http-response: %w", err)
+			}
+			return &reply, nil
+		case MsgTypeStdinData:
+			if c.StdinDataHandler != nil {
+				var msg StdinDataMsg
+				_ = DecMode.Unmarshal(raw, &msg)
+				c.StdinDataHandler(msg.Data)
+			}
+		case MsgTypeStdinClose:
+			if c.StdinCloseHandler != nil {
+				c.StdinCloseHandler()
+			}
+		default:
+			return nil, fmt.Errorf("plugin: unexpected message %q waiting for http-response", msgType)
+		}
 	}
-	if reply.Type != MsgTypeHTTPResponse {
-		return nil, fmt.Errorf("plugin: unexpected reply %q waiting for http-response", reply.Type)
-	}
-	return &reply, nil
 }
 
 // Stdout writes data to the user's terminal via the host.

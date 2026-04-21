@@ -46,6 +46,7 @@ func main() {
 	}
 
 	for {
+		var req plugin.FormatterRequest
 		if err := dec.ReadMessage(&req); err != nil {
 			fail(fmt.Errorf("read formatter request: %w", err))
 		}

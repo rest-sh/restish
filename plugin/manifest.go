@@ -1,6 +1,9 @@
 package plugin
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
 // Manifest is the metadata a plugin reports when called with
 // --rsh-plugin-manifest. Plugin authors populate and write this with
@@ -24,6 +27,10 @@ type Manifest struct {
 	// params (passwords, client secrets) to this plugin. When false (the
 	// default) secret params are omitted to minimise secret exposure.
 	NeedsAuthSecrets bool `cbor:"needs_auth_secrets,omitempty" json:"needs_auth_secrets,omitempty"`
+	// HookTimeouts overrides the per-hook subprocess deadline. Keys are hook
+	// names (e.g. "auth", "request-middleware"). The default is 30 s for all
+	// hooks except "auth", which defaults to 5 minutes.
+	HookTimeouts map[string]time.Duration `cbor:"hook_timeouts,omitempty" json:"hook_timeouts,omitempty"`
 }
 
 // CommandDecl describes one command that a command-plugin exposes.

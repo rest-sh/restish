@@ -105,7 +105,7 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 			},
 		}
 		var out pluginwire.AuthHookOutput
-		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+		if err := plugin.CallHookWithTimeout(p.Path, plugin.HookTimeout(p.Manifest, "auth"), in, &out); err != nil {
 			return fmt.Errorf("auth plugin %s: %w", p.Manifest.Name, err)
 		}
 		applyRequestUpdate(req, out.Request)
@@ -126,7 +126,7 @@ func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
 			},
 		}
 		var out pluginwire.RequestMiddlewareOutput
-		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+		if err := plugin.CallHookWithTimeout(p.Path, plugin.HookTimeout(p.Manifest, "request-middleware"), in, &out); err != nil {
 			return fmt.Errorf("request-middleware plugin %s: %w", p.Manifest.Name, err)
 		}
 		applyRequestUpdate(req, out.Request)
@@ -160,7 +160,7 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 			},
 		}
 		var out pluginwire.ResponseMiddlewareOutput
-		if err := plugin.CallHook(p.Path, in, &out); err != nil {
+		if err := plugin.CallHookWithTimeout(p.Path, plugin.HookTimeout(p.Manifest, "response-middleware"), in, &out); err != nil {
 			return false, nil, fmt.Errorf("response-middleware plugin %s: %w", p.Manifest.Name, err)
 		}
 

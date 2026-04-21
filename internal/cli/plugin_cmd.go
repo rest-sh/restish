@@ -57,7 +57,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	plugins := plugin.Discover(plugin.DefaultPluginDir(), c.cfg.AllowedPlugins, func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	}, c.pluginManifestCachePath())
+	}, c.pluginManifestCachePath(), c.Stderr)
 
 	if len(plugins) == 0 {
 		fmt.Fprintln(c.Stdout, "No plugins found.")
@@ -151,9 +151,10 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 	pluginCmd.Stdin = c.Stdin
 	pluginCmd.Stderr = c.Stderr
 
-	// Capture stdout for CBOR decoding while also passing it through.
+	// Capture stdout for CBOR decoding only; raw CBOR bytes must not be written
+	// to the terminal since they would corrupt it.
 	stdoutBuf := &cappedBuffer{limit: maxPluginDebugCaptureBytes}
-	pluginCmd.Stdout = io.MultiWriter(c.Stdout, stdoutBuf)
+	pluginCmd.Stdout = stdoutBuf
 
 	if err := pluginCmd.Run(); err != nil {
 		// Non-zero exit is reported but not fatal in debug mode.

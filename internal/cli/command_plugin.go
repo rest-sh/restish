@@ -172,6 +172,11 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	if loopErr == nil && waitErr != nil && !doneReceived {
 		loopErr = fmt.Errorf("command plugin %s: wait: %w", filepath.Base(pluginPath), waitErr)
 	}
+	// Warn when the plugin exits non-zero after sending Done — this is not a CLI
+	// error but may indicate a plugin bug (e.g. panic in a deferred cleanup).
+	if doneReceived && waitErr != nil {
+		fmt.Fprintf(c.Stderr, "warning: command plugin %s exited with error after Done: %v\n", filepath.Base(pluginPath), waitErr)
+	}
 	return loopErr
 }
 
@@ -340,17 +345,37 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if len(msg.Data) > 0 {
 			_, _ = cmd.ErrOrStderr().Write(msg.Data)
 		}
-	case "progress", "spinner", "log", pluginwire.MsgTypeWarn:
+	case pluginwire.MsgTypeWarn:
 		var msg pluginwire.WarnMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
 		if msg.Text != "" {
-			if msgType == pluginwire.MsgTypeWarn {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", msg.Text)
-			} else {
-				fmt.Fprintln(cmd.ErrOrStderr(), msg.Text)
-			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", msg.Text)
+		}
+	case pluginwire.MsgTypeProgress:
+		var msg pluginwire.ProgressMsg
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
+		if msg.Text != "" {
+			fmt.Fprintln(cmd.ErrOrStderr(), msg.Text)
+		}
+	case pluginwire.MsgTypeSpinner:
+		var msg pluginwire.SpinnerMsg
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
+		if msg.Text != "" {
+			fmt.Fprintln(cmd.ErrOrStderr(), msg.Text)
+		}
+	case pluginwire.MsgTypeLog:
+		var msg pluginwire.LogMsg
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
+		if msg.Text != "" {
+			fmt.Fprintln(cmd.ErrOrStderr(), msg.Text)
 		}
 	default:
 		if msgType != "" {
@@ -627,9 +652,11 @@ func isEOFLike(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
+	// CBOR decoder wraps io.EOF/io.ErrUnexpectedEOF; catch any remaining cases
+	// via string matching as a fallback for library-specific error types.
 	s := err.Error()
 	return strings.Contains(s, "EOF") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
 }

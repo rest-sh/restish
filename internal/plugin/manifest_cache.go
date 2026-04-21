@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -34,18 +36,29 @@ func loadManifestCache(cachePath string) manifestCache {
 	return cache
 }
 
-// saveManifestCache writes cache to cachePath as CBOR.
-// Errors are silently ignored; a stale or missing cache is not fatal.
-func saveManifestCache(cachePath string, cache manifestCache) {
+// saveManifestCache writes cache to cachePath as CBOR. If the write fails a
+// one-line warning is printed to w (a missing or stale cache is not fatal).
+// Pass nil for w to suppress the warning.
+func saveManifestCache(cachePath string, cache manifestCache, w io.Writer) {
 	if cachePath == "" {
 		return
 	}
 	data, err := cbor.Marshal(cache)
 	if err != nil {
+		if w != nil {
+			fmt.Fprintf(w, "warning: manifest cache: marshal: %v\n", err)
+		}
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+		if w != nil {
+			fmt.Fprintf(w, "warning: manifest cache: mkdir: %v\n", err)
+		}
 		return
 	}
-	_ = os.WriteFile(cachePath, data, 0o600)
+	if err := os.WriteFile(cachePath, data, 0o600); err != nil {
+		if w != nil {
+			fmt.Fprintf(w, "warning: manifest cache: write: %v\n", err)
+		}
+	}
 }

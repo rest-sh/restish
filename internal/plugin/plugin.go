@@ -16,6 +16,7 @@ import (
 	"time"
 
 	configpkg "github.com/danielgtaylor/restish/v2/internal/config"
+	pluginwire "github.com/danielgtaylor/restish/v2/plugin"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -28,31 +29,10 @@ const CurrentPluginAPIVersion = 2
 // tests may redirect it to suppress or capture output.
 var errorWriter io.Writer = os.Stderr
 
-// Manifest is the metadata a plugin reports when called with
-// --rsh-plugin-manifest.
-type Manifest struct {
-	Name              string   `json:"name"                cbor:"name"`
-	Version           string   `json:"version"             cbor:"version"`
-	Description       string   `json:"description"         cbor:"description"`
-	RestishAPIVersion int      `json:"restish_api_version" cbor:"restish_api_version"`
-	Hooks             []string `json:"hooks,omitempty"     cbor:"hooks,omitempty"`
-	// FormatterNames lists the output format names this plugin handles when
-	// the "formatter" hook is declared. Each name is available via -o <name>.
-	FormatterNames []string `json:"formatter_names,omitempty" cbor:"formatter_names,omitempty"`
-	// LoaderContentTypes lists the MIME types this plugin can convert to an
-	// OpenAPI descriptor when the "loader" hook is declared.
-	LoaderContentTypes []string `json:"loader_content_types,omitempty" cbor:"loader_content_types,omitempty"`
-	// AuthAPINames, when non-empty, limits the "auth" hook to only fire for
-	// requests targeting the named APIs. Plugins that handle auth for a
-	// specific API should declare this to avoid unnecessary subprocess spawns
-	// for all other APIs.
-	AuthAPINames []string `json:"auth_api_names,omitempty" cbor:"auth_api_names,omitempty"`
-	// NeedsAuthSecrets, when true, causes the full auth params map (including
-	// secret values such as passwords and client secrets) to be forwarded to
-	// this plugin's auth hook. When false (the default) secret params are
-	// omitted before dispatch to reduce secret exposure.
-	NeedsAuthSecrets bool `json:"needs_auth_secrets,omitempty" cbor:"needs_auth_secrets,omitempty"`
-}
+// Manifest is an alias for the canonical plugin.Manifest defined in the public
+// plugin package. Using the same type eliminates the dual-maintenance risk that
+// arose when the two structs diverged.
+type Manifest = pluginwire.Manifest
 
 // Plugin is a discovered plugin executable together with its manifest.
 type Plugin struct {
@@ -69,7 +49,7 @@ type Plugin struct {
 // keyed by plugin path + mtime. This avoids subprocess spawns on every
 // invocation when the plugin binary has not changed. When duplicate plugin
 // identities are found, pluginDir takes precedence over PATH.
-func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error), manifestCacheFile string) []Plugin {
+func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error), manifestCacheFile string, stderr io.Writer) []Plugin {
 	seenPaths := map[string]bool{}
 	seenNames := map[string]bool{}
 	var plugins []Plugin
@@ -172,7 +152,7 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 	}
 
 	if cacheUpdated && manifestCacheFile != "" {
-		saveManifestCache(manifestCacheFile, cache)
+		saveManifestCache(manifestCacheFile, cache, stderr)
 	}
 
 	return plugins

@@ -222,7 +222,7 @@ func TestDiscover_FindsPluginsInDir(t *testing.T) {
 
 	// Point PATH to our temp dir only so Discover finds our plugin.
 	t.Setenv("PATH", dir)
-	plugins := Discover("", nil, nil, "")
+	plugins := Discover("", nil, nil, "", nil)
 	if len(plugins) == 0 {
 		t.Fatal("expected at least one plugin to be discovered")
 	}
@@ -243,7 +243,7 @@ func TestDiscover_SkipsBrokenPlugins(t *testing.T) {
 	var errs []string
 	plugins := Discover("", nil, func(p string, err error) {
 		errs = append(errs, err.Error())
-	}, "")
+	}, "", nil)
 	if len(plugins) != 0 {
 		t.Errorf("expected 0 plugins, got %d", len(plugins))
 	}
@@ -263,7 +263,7 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 
 	// Add dir twice to PATH to test deduplication.
 	t.Setenv("PATH", dir+":"+dir)
-	plugins := Discover("", nil, nil, "")
+	plugins := Discover("", nil, nil, "", nil)
 	if len(plugins) != 1 {
 		t.Errorf("expected 1 unique plugin, got %d", len(plugins))
 	}
@@ -288,7 +288,7 @@ func TestDiscover_PrefersInstalledPluginOverPATHForSameIdentity(t *testing.T) {
 	})))
 
 	t.Setenv("PATH", pathDir)
-	plugins := Discover(pluginDir, nil, nil, "")
+	plugins := Discover(pluginDir, nil, nil, "", nil)
 	if len(plugins) != 1 {
 		t.Fatalf("expected 1 plugin, got %d", len(plugins))
 	}
@@ -299,7 +299,7 @@ func TestDiscover_PrefersInstalledPluginOverPATHForSameIdentity(t *testing.T) {
 
 func TestDiscover_EmptyPath_NoPlugins(t *testing.T) {
 	t.Setenv("PATH", "")
-	plugins := Discover("", nil, nil, "")
+	plugins := Discover("", nil, nil, "", nil)
 	if len(plugins) != 0 {
 		t.Errorf("expected 0 plugins for empty PATH, got %d", len(plugins))
 	}
@@ -316,7 +316,7 @@ func TestDiscover_AllowedPlugins(t *testing.T) {
 	writeScript(t, dir, "restish-blocked", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m2)))
 
 	t.Setenv("PATH", dir)
-	plugins := Discover("", []string{"restish-allowed"}, nil, "")
+	plugins := Discover("", []string{"restish-allowed"}, nil, "", nil)
 	if len(plugins) != 1 {
 		t.Fatalf("expected 1 plugin, got %d", len(plugins))
 	}
@@ -346,7 +346,7 @@ echo '%s'
 
 	t.Setenv("PATH", dir)
 
-	plugins := Discover("", nil, nil, cacheFile)
+	plugins := Discover("", nil, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
 	}
@@ -358,7 +358,7 @@ echo '%s'
 		t.Fatalf("first discover counter = %q, want 1", bytes.TrimSpace(count))
 	}
 
-	plugins = Discover("", nil, nil, cacheFile)
+	plugins = Discover("", nil, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("second discover: got %d plugins, want 1", len(plugins))
 	}
@@ -390,7 +390,7 @@ echo '%s'
 
 	t.Setenv("PATH", dir)
 
-	if plugins := Discover("", nil, nil, cacheFile); len(plugins) != 1 {
+	if plugins := Discover("", nil, nil, cacheFile, nil); len(plugins) != 1 {
 		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
 	}
 
@@ -411,11 +411,34 @@ echo '%s'
 		t.Fatalf("updating plugin mtime: %v", err)
 	}
 
-	plugins := Discover("", nil, nil, cacheFile)
+	plugins := Discover("", nil, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("second discover: got %d plugins, want 1", len(plugins))
 	}
 	if plugins[0].Manifest.Name != "refresh-v2" {
 		t.Fatalf("refreshed manifest name = %q, want refresh-v2", plugins[0].Manifest.Name)
+	}
+}
+
+// TestHookTimeout verifies default and override timeout logic.
+func TestHookTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		manifest Manifest
+		hook     string
+		want     time.Duration
+	}{
+		{"auth default", Manifest{}, "auth", 5 * time.Minute},
+		{"non-auth default", Manifest{}, "request-middleware", 30 * time.Second},
+		{"auth override", Manifest{HookTimeouts: map[string]time.Duration{"auth": 10 * time.Second}}, "auth", 10 * time.Second},
+		{"other override", Manifest{HookTimeouts: map[string]time.Duration{"request-middleware": 10 * time.Second}}, "request-middleware", 10 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HookTimeout(tt.manifest, tt.hook)
+			if got != tt.want {
+				t.Errorf("HookTimeout(%q) = %v, want %v", tt.hook, got, tt.want)
+			}
+		})
 	}
 }
