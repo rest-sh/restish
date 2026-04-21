@@ -74,7 +74,7 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), dialer.Timeout)
+	ctx, cancel := context.WithTimeout(cmd.Context(), dialer.Timeout)
 	defer cancel()
 	if err := conn.HandshakeContext(ctx); err != nil {
 		return fmt.Errorf("cert: handshake: %w", err)

@@ -396,10 +396,10 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		opts.ContentType = msg.ContentType
 	}
 
-	reqCtx := context.Background()
+	reqCtx := cmd.Context()
 	if msg.Timeout > 0 {
 		var cancel context.CancelFunc
-		reqCtx, cancel = context.WithTimeout(context.Background(), time.Duration(msg.Timeout)*time.Second)
+		reqCtx, cancel = context.WithTimeout(cmd.Context(), time.Duration(msg.Timeout)*time.Second)
 		defer cancel()
 	}
 

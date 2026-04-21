@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	authpkg "github.com/danielgtaylor/restish/v2/auth"
@@ -220,6 +222,12 @@ func (c *CLI) baseHTTPTransport() http.RoundTripper {
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).
 func (c *CLI) Run(args []string) error {
+	// Install a signal-aware context so that Ctrl-C / SIGTERM propagates to all
+	// in-flight requests and spec discovery without needing explicit signal
+	// handling elsewhere.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	c.requestClosers = nil
 	defer c.closeRequestClosers()
 
@@ -279,7 +287,7 @@ func (c *CLI) Run(args []string) error {
 			continue
 		}
 		if s == nil && spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
-			s, err = c.discoverSpec(context.Background(), apiName)
+			s, err = c.discoverSpec(ctx, apiName)
 		}
 		if err != nil || s == nil {
 			continue
@@ -292,7 +300,13 @@ func (c *CLI) Run(args []string) error {
 	root.SetArgs(args[1:])
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
-	return root.Execute()
+	err = root.ExecuteContext(ctx)
+	// When the context was cancelled by a signal (SIGINT/SIGTERM), return
+	// ExitCodeError{130} so main exits with 130 without printing any extra message.
+	if err != nil && errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return &ExitCodeError{Code: 130}
+	}
+	return err
 }
 
 func (c *CLI) registerRequestCloser(closer io.Closer) {
