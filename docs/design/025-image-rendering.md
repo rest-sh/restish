@@ -4,166 +4,204 @@
 
 Restish v2 renders `image/*` responses directly in the terminal when stdout is a
 TTY. The best available protocol is chosen automatically based on environment
-variables. Fallback to Unicode half-block rendering ensures something useful
-appears on any colour-capable terminal.
+variables and terminal heuristics. Fallback to Unicode half-block rendering
+ensures something useful appears on any colour-capable terminal.
 
-## Problem
+On non-TTY output, raw bytes still flow unchanged so `> out.png` works exactly
+as users expect.
 
-REST APIs increasingly return image payloads alongside JSON: generated avatars,
-QR codes, captchas, thumbnails, map tiles. When a user runs
+## Goals
 
-```
-restish get https://api.example.com/users/42/avatar
-```
+- make common image responses immediately useful in interactive terminals
+- preserve exact raw bytes for non-interactive output
+- choose the best available terminal image protocol without complex probing
+- keep image rendering inside the core output system rather than making users
+  install a plugin for basic behavior
 
-they want to see the image in-place, not binary noise or a base64 dump. On
-non-TTY (pipe or redirect), raw bytes should still flow unchanged so `> out.png`
-just works.
+## Non-Goals
 
-## Design
+- rasterizing every possible media type in the core binary
+- probing terminals with a complicated handshake before every request
+- forcing plugin formatters to solve core content-type dispatch problems
 
-### Core, not a plugin
+## Why It Lives In Core
 
 Image rendering ships in the core binary for three reasons:
 
-1. **Content-type-aware dispatch requires a core change anyway.** The existing
-   `Select()` function picks a formatter from `{name, tty}` only. Supporting
-   automatic image rendering requires consulting the response `Content-Type` at
-   selection time. That logic lives inside the CLI, not the plugin layer.
+1. content-type-aware dispatch requires a core decision anyway
+2. the required codecs and protocols are lightweight
+3. it should "just work" for a common API experience
 
-2. **No Cgo and no heavy dependencies.** PNG, JPEG, and GIF decoders are in the
-   Go standard library. The terminal protocols (Kitty, iTerm2) are base64 +
-   escape sequences. The half-block fallback needs only integer arithmetic and
-   ANSI codes. Nothing here requires native libraries.
+Plugin formatters remain the right hook for:
 
-3. **It should just work.** Downloading an avatar and having it render without
-   installing any plugin is the right default experience.
+- additional media families
+- richer image codecs
+- alternate rendering styles
 
-Plugin formatters remain the right hook for *additional* media types (video,
-SVG rasterization, custom image codecs) because those can't reasonably ship in
-every binary. See the extensibility section below.
+But the default experience for `image/*` should not depend on optional
+installation.
 
-### Content-type-aware formatter dispatch
+## Dispatch Rules
 
-`formatResponse` in `internal/cli/http.go` checks the response `Content-Type`
-before calling `Select()`. When stdout is a TTY, no explicit `-o` format was
-given, and no filter other than the default `@` is active, it routes `image/*`
-responses directly to the registered `"image"` formatter, bypassing the usual
-`readable` default:
+Image rendering is a content-type-aware dispatch decision.
 
-```
-TTY + fmtName=="" + filterExpr=="@" + Content-Type starts with "image/"
-    → fmts["image"].Format(...)
-```
+When:
 
-Non-TTY output is unaffected: `Select()` returns `RawFormatter` as before, and
-binary bytes flow through unchanged.
+- stdout is a TTY
+- no explicit `-o` format was given, and
+- no non-default filter is active that changes the logical output away from the
+  original image payload
+
+then `image/*` responses should route to the registered `image` formatter
+instead of the usual `readable` default.
+
+Non-TTY output is unaffected: raw bytes flow through unchanged.
 
 Explicit `-o image` forces image rendering regardless of content type.
 
-### Protocol auto-detection
+## Protocol Selection
 
-The formatter inspects environment variables at render time, no terminal queries:
+The formatter inspects environment variables at render time rather than actively
+querying the terminal.
 
-| Priority | Protocol                    | Condition                                       |
-|----------|-----------------------------|-------------------------------------------------|
-| 1        | `$RSH_IMAGE_PROTOCOL`       | `kitty`, `iterm2`, or `halfblock`               |
-| 2        | Kitty Graphics Protocol     | `$KITTY_WINDOW_ID` set, or `$TERM=xterm-kitty`  |
-| 3        | iTerm2 Inline Images (OSC 1337) | `$TERM_PROGRAM` is `iTerm.app`, `WezTerm`, or `Hyper` |
-| 4        | Unicode half-block          | always available (fallback)                     |
+Priority order:
 
-**Kitty** (`ESC_G…ESC\`): image data is base64-encoded and sent in 4096-byte
-chunks using APC sequences with `f=100` (PNG/JPEG/GIF forwarded as-is; the
-terminal decodes). `q=2` suppresses acknowledgement noise.
+1. `$RSH_IMAGE_PROTOCOL`
+2. Kitty graphics protocol detection
+3. iTerm2-style inline image detection
+4. half-block fallback
 
-**iTerm2/WezTerm** (`ESC]1337;File=…BEL`): the entire raw payload is
-base64-encoded and embedded in a single OSC 1337 sequence. Width and height are
-left as `auto` so the terminal scales to fit.
+This keeps first-byte latency low and avoids fragile terminal probing logic.
 
-**Half-block**: the image is decoded with `image.Decode` (PNG/JPEG/GIF via
-standard library), scaled with nearest-neighbour to fit the terminal width
-(capped at the original image width to avoid upscaling), then rendered one
-character cell per two pixel rows using `▀` (U+2580). Each cell's foreground
-colour is the upper pixel and background colour is the lower pixel, both using
-ANSI 24-bit sequences. Terminal width comes from `golang.org/x/term` (already a
-dependency) with a `$COLUMNS` fallback and a default of 80.
+## Supported Protocols
 
-### Supported image formats
+### Kitty Graphics Protocol
 
-| Format | Kitty/iTerm2 | Half-block |
-|--------|-------------|------------|
-| PNG    | yes          | yes (stdlib `image/png`)  |
-| JPEG   | yes          | yes (stdlib `image/jpeg`) |
-| GIF    | yes          | yes (stdlib `image/gif`)  |
-| WebP, AVIF, HEIC, … | yes (terminal decodes) | no — decodes as raw bytes fallback |
+Selected when:
 
-For Kitty and iTerm2, unsupported formats are forwarded anyway; whether they
-render depends on the terminal. For the half-block path, `image.Decode` returns
-an error for unknown formats and the formatter falls back to writing the raw
-bytes, which is the same as `RawFormatter`.
+- `$RSH_IMAGE_PROTOCOL=kitty`, or
+- `$KITTY_WINDOW_ID` is set, or
+- `$TERM=xterm-kitty`
 
-### Plugin extensibility for future media types
+Image data is base64-encoded and sent in chunks using Kitty APC sequences.
 
-The `"image"` formatter is registered in `DefaultFormatters()` like any other.
-A plugin can shadow it by declaring `"image"` in its `formatter_names` manifest
-field — the last-registered entry wins, which is the plugin's.
+### iTerm2 Inline Images
 
-For entirely new media type families (video, audio, documents), the recommended
-path is:
+Selected when:
 
-1. Declare the media type pattern in a new manifest field (e.g.
-   `media_types: ["video/*"]`) — this is not yet implemented; it is reserved for
-   a future plugin protocol extension.
-2. Register a formatter name (e.g. `"video"`) and teach `formatResponse` to
-   dispatch on `video/*` content types.
+- `$RSH_IMAGE_PROTOCOL=iterm2`, or
+- `$TERM_PROGRAM` indicates a compatible terminal such as `iTerm.app`,
+  `WezTerm`, or `Hyper`
 
-Until that extension lands, users can force plugin rendering with `-o myplugin`
-for any content type.
+The raw payload is base64-encoded and embedded in an OSC 1337 sequence.
+
+### Half-Block Fallback
+
+Selected when:
+
+- `$RSH_IMAGE_PROTOCOL=halfblock`, or
+- no richer protocol is detected
+
+The image is decoded locally, scaled to terminal width, and rendered using the
+Unicode upper half block (`▀`) with ANSI 24-bit foreground/background colors.
+
+This is the universal fallback path when inline image protocols are unavailable.
+
+## Image Format Support
+
+For Kitty and iTerm2-style protocols, the formatter can forward common image
+payloads as-is and let the terminal decode them.
+
+For the half-block path, Restish needs local decode support. The core design
+expects at least:
+
+- PNG
+- JPEG
+- GIF
+
+If local decoding fails in the half-block path, the formatter should fall back
+gracefully rather than pretending it rendered the image successfully.
+
+## Width And Scaling
+
+Half-block rendering needs a terminal width estimate.
+
+The design order is:
+
+1. terminal size query through the TTY helper
+2. `$COLUMNS`
+3. default width such as 80 columns
+
+The formatter should avoid upscaling tiny images unnecessarily. Its job is to
+render usefully, not to invent artificial enlargement.
+
+## Interaction With Output Planning
+
+Image rendering is part of the output system, not a separate feature.
+
+Important planner rules:
+
+- TTY + original `image/*` payload -> image formatter is eligible
+- redirected output -> raw bytes win
+- filtered or transformed image responses no longer count as "original image
+  payload" for auto-dispatch
+
+This keeps image rendering aligned with the same "raw versus normalized value"
+distinction used elsewhere in the output model.
+
+## Error And Fallback Behavior
+
+If the chosen image protocol path fails, Restish should degrade predictably:
+
+- protocol override asks for a supported path -> try that path
+- if local half-block decode fails -> fall back toward raw behavior rather than
+  emitting corrupted bytes to the terminal as if they were an image
+- explicit `-o image` with unusable image data should surface an error rather
+  than silently pretending success
+
+The design goal is graceful fallback, not silent corruption.
+
+## Examples
+
+Interactive image rendering:
+
+```bash
+restish get https://api.example.com/users/42/avatar
+```
+
+Raw file download:
+
+```bash
+restish get https://api.example.com/users/42/avatar > avatar.png
+```
+
+Force half-block rendering:
+
+```bash
+RSH_IMAGE_PROTOCOL=halfblock restish get https://api.example.com/users/42/avatar
+```
 
 ## Alternatives Considered
 
-### Implement via a hook plugin formatter
+### Implement Via A Hook Plugin Formatter
 
-A hook plugin can already register formatter names, but it cannot participate in
-content-type-aware auto-dispatch without changes to `formatResponse`. Those same
-changes are needed for the built-in path. Since the protocols are pure escape
-sequences and the decoders are stdlib, the complexity savings from out-of-process
-rendering are negative — more IPC, no less code.
+A plugin formatter can render image bytes, but the core still has to decide when
+to auto-dispatch based on content type. Since that dispatch logic already lives
+in the core, basic image rendering belongs there too.
 
-### Use `github.com/kenshaw/rasterm` or similar
+### Query The Terminal For Capability
 
-`rasterm` is a clean pure-Go library that covers all four protocols. It would
-reduce the implementation by ~150 lines. However, adding a new module dependency
-for ~150 lines of straightforward escape-sequence generation did not seem worth
-the tradeoff given we already have `golang.org/x/term` for terminal sizing.
+Would be more precise in some cases, but adds timing, raw-mode, and complexity
+cost that is hard to justify given the fallback path.
 
-### Query the terminal for capability (DA2 / `XTSMGRAPHICS`)
+### Sixel Support In Core
 
-Active terminal probing would give accurate capability detection, especially for
-Sixel support. It requires setting raw mode, writing an escape sequence, reading
-the response with a timeout, and restoring the terminal — all before the first
-HTTP request. The env-var approach covers the most common terminals (Kitty,
-iTerm2, WezTerm) without any timing risk or complexity, and the half-block
-fallback is acceptable on everything else.
+Useful for some terminals, but deferred because it increases protocol and
+rendering complexity substantially. A future plugin or future core expansion can
+add it deliberately.
 
-### Sixel support
+## Relationship To Other Designs
 
-Sixel would extend coverage to terminals like `mlterm` and `foot`. The protocol
-requires palette quantisation and run-length encoding, which is non-trivial to
-implement correctly. Given that Kitty and iTerm2 cover most developer terminals
-today, Sixel is deferred. A future plugin could add it.
-
-## Notes
-
-Implementation lives in:
-
-- `internal/output/image_formatter.go` — `ImageFormatter`, protocol detection,
-  Kitty/iTerm2/half-block renderers
-- `internal/output/format.go` — `"image"` entry in `DefaultFormatters()`
-- `internal/cli/http.go` — content-type-aware dispatch in `formatResponse()`
-- `internal/output/image_formatter_test.go` — unit tests
-
-The `image.Decode` call registers decoders via blank imports of
-`image/png`, `image/jpeg`, and `image/gif` in `image_formatter.go`. These add
-negligible binary size and are already pulled transitively by other packages in
-the module.
+- Design 009 defines the normalized/raw output split image rendering depends on.
+- Design 017 defines terminal-facing CLI behavior and diagnostics.
+- Design 028 defines output-family planning and auto-dispatch interactions.

@@ -2,39 +2,67 @@
 
 ## Summary
 
-Restish v2 turns each HTTP response into a normalized internal `Response`
-structure before filtering or formatting. That creates a stable seam between
-HTTP transport concerns and presentation concerns.
+Restish v2 turns each bounded HTTP response into a normalized internal
+`Response` structure before filtering or formatting. That creates a stable seam
+between HTTP transport concerns and presentation concerns.
 
-From there, output behavior is chosen based on format selection and whether
-stdout is a TTY.
+From there, output behavior is chosen based on format selection, content type,
+and whether stdout is a TTY.
 
-## Problem
+## Goals
 
-Restish needs to work well in two very different modes:
+- provide one stable response model for filters, formatters, and workflow
+  commands
+- preserve both decoded structure and original payload bytes where needed
+- support both human-oriented and machine-oriented output modes
+- keep formatting decisions separate from HTTP transport details
+- avoid corrupting text or binary payloads during normalization
 
-- interactive terminal use, where users want context, readability, and color
-- scripting or piping, where users want predictable machine-friendly output and
-  lossless handling of raw bytes
+## Non-Goals
 
-If those concerns are mixed too early, the result becomes hard to extend and
-hard to reason about. The same response should be usable by filters, formatters,
-stream handlers, and other higher-level behaviors without each part reaching
-back into `*http.Response`.
+- exposing `*http.Response` directly to every downstream consumer
+- forcing all output modes to operate on the same exact body representation
+- losing wire fidelity once a structured decode was possible
 
-## Design
+## Normalization Boundary
 
-The core design is to normalize responses once, then treat formatting as a
-separate concern.
+Normalization happens after:
 
-The normalized response includes:
+- status line and headers are available
+- response encodings such as gzip/brotli are decoded
+- the response body is fully read for bounded responses
+- the content registry has had a chance to decode the body
 
-- protocol version
-- numeric status
-- flattened headers
-- discovered hypermedia links
-- decoded body value
-- original raw body bytes
+Normalization does **not** apply to the same extent for true streams; streaming
+uses the separate path defined in design 012.
+
+## Normalized Response Schema
+
+Conceptually, the normalized response includes:
+
+- `proto`: protocol version string
+- `status`: numeric status code
+- `headers`: flattened header map
+- `links`: normalized hypermedia relation map
+- `body`: decoded or otherwise normalized logical body value
+- `raw`: original response bytes after transfer decoding but before logical
+  re-encoding
+
+That schema is the stable document filters and most formatters consume.
+
+## Header Model
+
+Headers are normalized into a presentation-friendly map keyed by header name.
+The exact casing policy should be stable and documented by implementation, but
+the design requirement is that:
+
+- header values remain inspectable and scriptable
+- downstream filters do not need raw `http.Header` semantics
+
+If a richer multi-value header representation is ever required, it should be
+added deliberately rather than by leaking transport-specific data structures.
+
+## Body Representation Classes
 
 The normalized model should preserve the distinction between:
 
@@ -42,21 +70,55 @@ The normalized model should preserve the distinction between:
 - printable text
 - raw binary payloads
 
-That distinction is essential for correct output defaults.
+That distinction is essential for correct output defaults and for preserving
+fidelity.
 
-That shape is important because different output modes need different views of
-the same response. For example:
+### Structured Values
 
-- human-readable output wants status, headers, and a pretty body
-- JSON output usually wants just the decoded body value
-- raw output wants the original bytes without re-encoding
-- filtering wants a stable document with `proto`, `status`, `headers`, `links`,
-  and `body`
+JSON, YAML, CBOR, msgpack, and similar responses become structured values that
+filters and formatters can traverse.
+
+### Printable Text
+
+Text payloads should remain text when that preserves meaning. Human-oriented
+formatters should not unnecessarily re-wrap plain text bodies as JSON strings if
+that would make the output less faithful or less readable.
+
+### Raw Binary
+
+Unknown or binary content must remain bytes. Coercing unknown binary into a Go
+`string` is a design bug because it corrupts the payload and produces misleading
+later output.
+
+## Why `raw` Also Exists
+
+The normalized response carries both decoded `body` and original `raw` bytes.
+That dual representation is what lets Restish support:
+
+- friendly reformatted output
+- exact byte-preserving output
+- filtering over structured data
+- image/content-type-aware dispatch decisions
+
+without forcing an irreversible choice too early in the pipeline.
+
+## Hypermedia Integration
+
+Normalization also includes hypermedia link extraction. The normalized `links`
+map is the same conceptual layer used by:
+
+- pagination
+- the `links` command
+- filters that project specific relations
+
+This keeps link handling out of individual formatter or command implementations.
+
+## Output Selection Rules
 
 The formatting model is intentionally adaptive:
 
 - explicit `-o <format>` wins
-- TTY + `image/*` content type → `image` formatter (inline terminal rendering)
+- TTY + `image/*` content type may dispatch to the image formatter
 - TTY default is `readable`
 - non-TTY defaults distinguish between original raw bytes and normalized data
 
@@ -64,35 +126,49 @@ Explicit conflicting modes should be surfaced clearly. If one option asks for
 headers-only output and another asks for filtered body projection, the user
 should not have to guess which one silently won.
 
-Restish now separates output formats into two families:
+## Output Families
+
+Restish separates output formats into two families:
 
 - **document formats** such as `json`, `yaml`, and `readable`
 - **record formats** such as `ndjson` and record-oriented formatter plugins
 
-Document formats must preserve their framing guarantees. In particular:
+Document formats must preserve framing guarantees:
 
 - `-o json` always emits one valid JSON document
 - `-o yaml` always emits one valid YAML document
 - `-o readable` emits one coherent human-readable response view
 
-When stdout is not a TTY and Restish is writing normalized structured data,
-the default output is JSON rather than raw bytes. Explicit `-o raw` remains the
+Design 028 defines the higher-level planner that combines normalization results
+with pagination, streaming, and filtering.
+
+## Default Output Behavior
+
+When stdout is not a TTY and Restish is writing normalized structured data, the
+default output is JSON rather than raw bytes. Explicit `-o raw` remains the
 escape hatch for original wire payloads.
 
+The practical rule is:
+
+- if Restish is still outputting the original payload unchanged, raw output is
+  meaningful
+- if Restish is outputting a transformed or selected logical value, default to
+  JSON
+
+## Readable Output Contract
+
 The readable formatter is designed to preserve useful HTTP context while keeping
-the body copyable as valid JSON. Non-interactive modes prioritize faithful data
-transfer and scriptability over presentation.
+the body copyable and understandable.
 
-## Raw Versus Normalized Data
+A bounded readable response typically includes:
 
-The normalized response carries both decoded `Body` and original `Raw` bytes.
-That dual representation is what lets Restish support:
+- status line / protocol
+- selected headers
+- a visually separated body view
 
-- friendly reformatted output
-- exact byte-preserving output
-- filtering over structured data
-
-without forcing a choice too early in the pipeline.
+Readable output is primarily for humans, but it should still preserve the
+meaning of text and structured content rather than aggressively prettifying
+everything into a less faithful shape.
 
 ## Text And Binary Handling
 
@@ -143,44 +219,30 @@ is normalized into a structure shaped like:
 
 From that same normalized response:
 
-- `-o readable` shows status, headers, and a pretty body
+- `-o readable` shows status, headers, and a human-oriented body
 - `-o json` emits just the decoded `body`
 - `-o ndjson` emits one JSON value per line when the logical result is
   record-shaped
 
 ## Alternatives Considered
 
-### Format directly from `*http.Response`
+### Format Directly From `*http.Response`
 
-This would couple every formatter to transport-layer details and make filtering
-and middleware behavior harder to compose cleanly.
+Too tightly coupled to transport details.
 
-### Always output only the response body
+### Always Output Only The Response Body
 
-That is convenient for scripts, but it throws away useful protocol context for
-interactive use. Restish needs both modes to feel natural.
+Too weak for interactive use and protocol inspection.
 
-### Use one default format everywhere
+### Use One Default Format Everywhere
 
-A single default sounds simpler, but terminal usage and pipe usage optimize for
-different things. Adaptive defaults are worth the small amount of extra logic.
+Too simplistic for the TTY/non-TTY split Restish needs.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/output/response.go` defines the normalized `Response` type and
-  normalization pipeline
-- `internal/output/format.go` defines formatter selection and default behavior
-- `internal/output/readable_formatter.go` renders the interactive view
-- `internal/output/json_formatter.go`, `internal/output/ndjson_formatter.go`,
-  and `internal/output/raw_formatter.go` cover the common machine-oriented
-  paths
-- `internal/output/image_formatter.go` renders `image/*` responses inline on TTY
-- `internal/cli/http.go` applies filtering before selecting the formatter; it also
-  performs content-type-aware dispatch for `image/*` before calling `Select()`
-
-One design detail worth preserving is that the normalized response carries both
-decoded `Body` and original `Raw` bytes. That dual representation is what lets
-Restish support both friendly reformatted output and exact byte-preserving raw
-output without forcing a choice too early in the pipeline.
+- Design 003 defines how content types are decoded before normalization.
+- Design 010 defines filtering over the normalized response document.
+- Design 011 and 012 define how pagination and streams diverge from the bounded
+  response path.
+- Design 025 defines content-type-aware image dispatch.
+- Design 028 defines document-versus-record output planning.

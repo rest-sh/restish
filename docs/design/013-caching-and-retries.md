@@ -8,20 +8,23 @@ transient failures less disruptive.
 
 These behaviors are layered so they cooperate without obscuring request flow.
 
-## Problem
-
-API clients benefit from both caching and retries, but the two features can
-interact in confusing ways if they are not clearly ordered.
-
-The design needed to:
+## Goals
 
 - support ordinary HTTP cache semantics for real responses
 - keep cache behavior bounded on disk
-- retry only meaningful failures
+- retry only meaningful transient failures
 - avoid retrying responses that were served from cache
-- preserve normal request/response behavior for callers
+- preserve consistent request semantics across generic commands and generated
+  commands
 
-## Design
+## Non-Goals
+
+- turning retries into blind replay of every failed request
+- making the cache an opaque black box with unbounded growth
+- hiding whether a response was live or cache-derived in ways that break
+  debugging
+
+## Transport Layering
 
 Restish builds its HTTP transport in layers:
 
@@ -34,19 +37,34 @@ This ordering is important.
 The retry layer sits below the cache so only real server requests are retried.
 Cache hits return immediately without replaying retry logic.
 
-The response cache is a disk-backed, size-bounded cache with LRU-style eviction.
-Entries are grouped under per-host directories so cache management can operate
-on one API host or the entire cache tree.
+## Cache Model
+
+The response cache is a disk-backed, size-bounded cache with LRU-style
+eviction. Entries are grouped under per-host directories so cache management can
+operate on one API host or the entire cache tree.
 
 The size bound is part of the public design, not just an implementation detail.
 If a size-related config value exists, it should affect actual eviction policy.
+
+The disk cache is organized roughly like:
+
+```text
+<cache-dir>/<hostname>/<sha256(url)>.cache
+```
+
+This layout supports both:
+
+- global cache management
+- targeted per-host clearing
+
+## Retry Policy
 
 Retry behavior is intentionally conservative:
 
 - network errors are retried
 - `5xx` responses are retried
 - `408` and `429` are retry candidates when policy allows
-- `4xx` responses are returned immediately
+- `4xx` responses are otherwise returned immediately
 - request bodies are only retried when they can be recreated safely
 - backoff uses exponential delay with jitter
 - `Retry-After` is honored when provided
@@ -55,11 +73,83 @@ This keeps retries focused on failures that are likely to succeed on a later
 attempt while avoiding silent replay of requests that cannot be reproduced
 correctly.
 
+## Replay Safety
+
+Retryability depends on whether the request body can be replayed safely.
+
+The design rule is:
+
+- if the body can be reconstructed, retry may proceed
+- if the body cannot be reconstructed, stop and return the last real failure
+
+Restish intentionally refuses to blindly retry requests whose bodies cannot be
+recreated, which is safer than assuming all failures are idempotent in practice.
+
+## Retry Algorithm
+
+The conceptual retry loop is:
+
+1. build or clone a retryable request attempt
+2. send the request through the base transport
+3. evaluate the result:
+   - success or non-retryable failure -> return
+   - retryable failure -> continue if limits allow
+4. compute wait delay from:
+   - `Retry-After` when applicable
+   - otherwise exponential backoff with jitter
+5. wait unless the context is canceled
+6. rebuild the next attempt with a fresh body reader if needed
+7. repeat until retry budget is exhausted
+
+This algorithm should be explicit in the implementation, not spread across
+early-return edge cases that can accidentally leak stale state.
+
 ## Retry State Hygiene
 
 Retries must not accidentally return stale response objects from earlier
 attempts when a later retry decision fails. Each retry attempt should treat its
 response/error pair as attempt-local state.
+
+This is a correctness rule, not just an implementation cleanup preference.
+
+## Cache/Retry Interaction
+
+The cache and retry layers should cooperate like this:
+
+- cache hit -> no retry logic
+- cache miss -> normal retry policy on live request
+- live successful response -> cache may store it according to HTTP cache rules
+- live failure -> retry policy evaluates it; cache should not mask it as a hit
+
+This preserves a clear distinction between:
+
+- a real live server interaction
+- a cache-served response
+
+## Observability
+
+Verbose output should be able to surface:
+
+- cache hits and misses
+- retry attempts
+- backoff delays
+- whether `Retry-After` was honored
+
+These diagnostics are important because cache and retry behavior are otherwise
+easy to misinterpret when debugging API calls.
+
+## Cache Management Commands
+
+Cache inspection and management are exposed directly in the CLI:
+
+```bash
+restish cache info
+restish cache clear
+restish cache clear myapi
+```
+
+Those commands are part of the operator model for working with a disk-backed
+cache, not an afterthought.
 
 ## Examples
 
@@ -89,50 +179,25 @@ GET /items -> 404
 
 Restish does not retry, because the error is unlikely to be transient.
 
-The disk cache is organized roughly like:
-
-```text
-<cache-dir>/<hostname>/<sha256(url)>.cache
-```
-
-which allows cache clearing by host as well as global cache management.
-
-Cache inspection and management are exposed directly in the CLI:
-
-```bash
-restish cache info
-restish cache clear
-restish cache clear myapi
-```
-
 ## Alternatives Considered
 
-### Retry above the cache layer
+### Retry Above The Cache Layer
 
-This would make cache hits participate in retry logic, which is unnecessary and
-blurs the distinction between cached and live requests.
+Would make cache hits participate in retry logic unnecessarily.
 
-### Retry all non-2xx responses
+### Retry All Non-2xx Responses
 
-That would waste time on client-side errors and produce surprising behavior for
-users. Restricting retries to network failures and `5xx` responses is a better
-default.
+Too noisy and too surprising for users.
 
-### Use an unbounded disk cache
+### Use An Unbounded Disk Cache
 
-That would be simpler initially, but it risks unbounded growth on developer
-machines and CI environments. Size limits and eviction are worth the added
-implementation detail.
+Too risky for developer machines and CI environments.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/request/do.go` assembles the transport stack
-- `internal/request/retry.go` implements retry policy and backoff behavior
-- `internal/cache/cache.go` provides the disk-backed bounded cache
-
-One detail worth preserving is that retryability depends on whether the request
-body can be replayed. Restish intentionally refuses to blindly retry requests
-whose bodies cannot be recreated, which is safer than assuming all failures are
-idempotent in practice.
+- Design 029 defines where the transport stack is assembled in the request
+  pipeline.
+- Design 017 defines the diagnostics surface that should expose cache and retry
+  behavior.
+- Design 030 defines the expectation that silent fallbacks and stale-state bugs
+  are unacceptable in core infrastructure.
