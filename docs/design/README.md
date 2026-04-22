@@ -26,6 +26,44 @@ then moves through request construction and API-aware behavior, then response
 handling and operator workflows. Each document should ideally rely only on
 concepts introduced earlier in the sequence.
 
+## How To Read This Corpus
+
+For an implementation or reimplementation effort, the recommended reading order
+is:
+
+1. read the foundations to understand the runtime shape, config model, body
+   model, and security stance
+2. read the request and API model to understand how commands are discovered,
+   planned, and executed
+3. read the response and data-flow records to understand normalization,
+   filtering, streaming, pagination, retries, and rendering
+4. read workflows and UX to recover interactive behavior, operator contracts,
+   setup, and exit semantics
+5. read extensibility last so plugin behavior is interpreted in the context of
+   the host runtime rather than as a parallel architecture
+
+When two records appear to overlap, the more specialized record should define
+the subsystem-specific contract while the broader record explains how that
+subsystem participates in the end-to-end pipeline.
+
+## Reimplementation Checklist
+
+A design-driven reimplementation should be able to recover at least the
+following from this corpus:
+
+- startup and runtime lifecycle
+- persistent configuration files, profile layering, and migration boundaries
+- command parsing, resolution, and generated API command behavior
+- request-body construction, serialization, transport execution, auth, and TLS
+- response decoding, normalization, filtering, formatting, and output framing
+- streaming, pagination, retries, cache behavior, and cancellation semantics
+- plugin discovery, lifecycle, trust boundaries, and host/plugin responsibility
+- operator-facing diagnostics, prompts, shell setup, and exit behavior
+
+If an implementation detail is important to interoperability, security,
+compatibility, or user expectations, it should live in one of these records
+rather than remaining implicit in code.
+
 **Foundations**
 
 - [000-restish-v1-baseline.md](./000-restish-v1-baseline.md) - Feature inventory of Restish v1, captured as the baseline that informed v2 design.

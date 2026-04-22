@@ -56,6 +56,55 @@ operations and schemas without requiring a client update.
 - Designed to be embeddable as a Go library so organizations can ship custom
   CLIs.
 
+## How To Use This Baseline
+
+This document is intentionally inventory-oriented. It exists to answer "what did
+v1 do?" rather than "what should v2 do?"
+
+Use it in combination with the v2 records as follows:
+
+- consult this file when preserving or intentionally breaking a v1 behavior
+- consult the v2 records when you need the normative design for the new runtime
+- record intentional v1 incompatibilities in design 031 rather than editing this
+  baseline to match v2
+
+For a reimplementation effort, this document is most useful as a coverage
+checklist: it helps confirm that the v2 design corpus either preserves,
+replaces, or intentionally retires each major v1 capability.
+
+## Baseline To v2 Crosswalk
+
+The mapping below helps contributors jump from a v1 feature area into the
+record that now defines the v2 design:
+
+| v1 Area | Primary v2 design record |
+| ------- | ------------------------ |
+| CLI runtime and lifecycle | `001-cli-architecture.md` |
+| Config, profiles, and persistence | `002-config-and-profiles.md` |
+| Content types and encodings | `003-content-types-and-encodings.md` |
+| Authentication | `004-authentication.md` |
+| TLS, mTLS, and cert inspection | `005-tls-and-cert-handling.md` |
+| Spec discovery and loading | `006-spec-discovery-and-loading.md` |
+| Generated API commands | `007-api-command-generation.md` |
+| Shorthand request input | `008-shorthand-input.md` |
+| Response model and output | `009-response-normalization-and-output.md` |
+| Filtering and projection | `010-filtering-and-projection.md` |
+| Hypermedia and pagination | `011-pagination-and-hypermedia.md` |
+| Streaming | `012-streaming.md` |
+| Caching and retries | `013-caching-and-retries.md` |
+| Edit workflow | `014-edit-workflow.md` |
+| `links` command | `015-links-command.md` |
+| Shell setup and completions | `016-setup-and-completions.md` |
+| CLI behavior, diagnostics, exit rules | `017-cli-behavior-and-diagnostics.md` |
+| Plugin architecture and concrete plugins | `018` through `027` |
+| Output framing | `028-document-and-record-output.md` |
+| End-to-end request pipeline | `029-request-execution-pipeline.md` |
+| Security model | `030-security-model-and-trust-boundaries.md` |
+| Compatibility and migration | `031-compatibility-and-migration.md` |
+
+Where the v2 design intentionally changes behavior, the crosswalk should be
+read together with design 031 rather than assuming direct one-to-one parity.
+
 ---
 
 ## 2. Architecture
