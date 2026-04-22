@@ -7,24 +7,42 @@ pipeline. Hypermedia parsers extract normalized links from headers or response
 bodies, and pagination builds on those links to follow multi-page collections
 automatically.
 
-## Problem
+This is a cross-cutting subsystem rather than a single command feature. It
+affects:
 
-Many APIs spread collections across multiple pages, and they advertise the next
-page in different ways:
+- normal GET requests
+- the `links` command
+- output planning for bounded collections
+- filters that operate over paginated data
 
-- HTTP `Link` headers
-- body-level hypermedia formats such as HAL or JSON:API
-- API-specific fields that contain items or next-page URLs
+## Goals
 
-Restish needed a pagination model that works well for common APIs without
-forcing every user to write custom scripts for collection traversal.
+- make common paginated APIs work automatically
+- normalize link discovery across several hypermedia styles
+- preserve one logical response shape for document-oriented output
+- allow incremental record output for record-oriented formats
+- avoid accidental infinite loops or silent shape changes
 
-## Design
+## Non-Goals
 
-The design has two layers.
+- hard-coding one API-specific pagination style into the core
+- assuming pagination is only exposed via HTTP `Link` headers
+- letting pagination rewrite explicit output contracts
 
-First, hypermedia parsing normalizes discovered links into a simple `rel -> uri`
-map. Built-in parsers currently recognize:
+## Two Layers
+
+The design has two explicit layers:
+
+1. hypermedia parsing
+2. pagination planning and execution
+
+Keeping those layers separate matters because link extraction is useful on its
+own, even when no multi-page traversal happens.
+
+## Hypermedia Parsing
+
+Hypermedia parsing normalizes discovered links into a simple `rel -> uri` map.
+Built-in parsers currently recognize:
 
 - HTTP `Link` headers
 - HAL `_links`
@@ -36,9 +54,53 @@ All discovered links are resolved to absolute URLs before being stored. This
 lets downstream behavior treat links uniformly regardless of how they were
 represented on the wire.
 
-Second, pagination uses that normalized link map plus optional per-API config.
+## Parser Precedence And Merge Rules
+
+Several parsers may discover links from the same response. The design should
+therefore define stable merge behavior.
+
+The preferred rule is:
+
+- header and body parsers all contribute to one normalized relation map
+- if multiple parsers discover the same relation with the same target, keep it
+- if multiple parsers disagree on the same relation target, prefer the more
+  explicit parser according to a stable precedence order and surface ambiguity
+  in diagnostics where helpful
+
+The important point is determinism. The resulting relation map should not depend
+on parser registration accident or map iteration order.
+
+## Relation Model
+
+The normalized relation model is intentionally simple:
+
+- relation name -> absolute URI
+
+This sacrifices some fidelity from richer hypermedia formats, but it is the
+right abstraction for:
+
+- pagination
+- `links` command output
+- lightweight link inspection
+
+If Restish ever needs a richer link object model, it should be added as a new
+design layer rather than smuggled into the current `rel -> uri` contract.
+
+## Pagination Triggers
+
+Pagination execution uses the normalized link map plus optional per-API config.
 For GET requests, if a `next` link is present, Restish can continue fetching
 pages automatically.
+
+Per-API pagination config can refine how page data is interpreted:
+
+- `items_path` extracts the collection from a nested body field
+- `next_path` can extract a next-page URL from the body
+
+This lets Restish handle both standard hypermedia and APIs whose collection
+wrappers need one extra hint.
+
+## Pagination Safety
 
 Pagination is bounded by safety rules:
 
@@ -48,37 +110,74 @@ Pagination is bounded by safety rules:
 
 Automatic pagination should never become an accidental infinite loop.
 
+## Output Contracts
+
 Two output contracts matter here:
 
 - **document output** preserves one logical response shape across all pages
 - **record output** emits one item at a time for incremental processing
 
-Pagination may change execution strategy, but it should not silently change the
-meaning of an explicit output format. In particular:
+Pagination may change execution strategy, but it must not silently change the
+meaning of an explicit output format.
+
+In particular:
 
 - `-o json` always produces one valid JSON document
 - `-o yaml` always produces one valid YAML document
-- `-o readable` keeps the same document framing on TTY, but may draw it
-  incrementally as pages arrive
+- `-o readable` keeps a coherent human-oriented framing contract
 - `-o ndjson` is the explicit record format for one item per line
 
-Per-API pagination config can refine how page data is interpreted:
+Design 028 defines the planner that combines pagination with filtering and
+format-family selection.
 
-- `items_path` extracts the collection from a nested body field
-- `next_path` can extract a next-page URL from the body
+## Shape Preservation
+
+For paginated bounded responses, Restish should preserve the logical response
+shape whenever possible:
+
+- a bare paginated array stays an array in document formats
+- a wrapped object with `items_path: data` stays an object whose `data` field
+  becomes the merged collection
+- paginated filtering in document mode operates on the logical merged shape, not
+  on one page at a time
 
 If `items_path` is configured, document-oriented pagination should preserve the
 wrapper object and only merge the collection field, not flatten the entire
 response into an array by accident.
 
-The overall intent is:
+## Page-Follow Algorithm
 
-- make common paginated APIs work automatically
-- preserve observability and escape hatches with flags like
-  `--rsh-no-paginate`, `--rsh-max-pages`, `--rsh-max-items`, and
-  `--rsh-collect`
-- keep pagination layered on top of normalized responses instead of special
-  casing specific APIs throughout the HTTP pipeline
+The conceptual paginator algorithm is:
+
+1. fetch first page
+2. normalize response and extract links
+3. determine whether pagination applies
+4. emit or collect items from the current page according to the output plan
+5. resolve the next target from:
+   - normalized `next` relation, or
+   - configured `next_path`
+6. stop when:
+   - there is no next target
+   - a safety bound is reached
+   - the context is canceled
+   - the planner no longer permits more pages
+7. merge or stream the final logical result according to the selected output
+   family
+
+This algorithm should remain explicit in the implementation rather than hidden
+inside formatter logic or link parsers.
+
+## Observability
+
+Pagination is one of the places where verbose output is especially useful.
+Diagnostics should be able to show:
+
+- whether pagination activated
+- which next URI was chosen
+- current page number / item counts
+- why pagination stopped
+
+This helps users debug both hypermedia parsing and pagination config.
 
 ## Examples
 
@@ -143,32 +242,22 @@ restish get https://api.example.com/items --rsh-collect -f '.body | length'
 
 ## Alternatives Considered
 
-### Do not paginate automatically
+### Do Not Paginate Automatically
 
-This would be simpler, but it would push a lot of repetitive paging logic onto
-users for a very common API pattern.
+Simpler, but too much repetitive work for users.
 
-### Hard-code pagination behavior per API style
+### Hard-Code Pagination Per API Style
 
-That does not scale well and makes the request pipeline harder to maintain. A
-normalized links layer plus small per-API overrides is more flexible.
+Does not scale and mixes too much policy into the request pipeline.
 
-### Always collect all pages before output
+### Always Collect All Pages Before Output
 
-This would make downstream formatting simpler, but it would increase memory use
-and delay first output for large collections. Record-oriented pagination still
-matters for shell pipelines and exporter plugins, which is why Restish now has
-an explicit `ndjson` formatter and readable incremental rendering on TTYs.
+Simpler for formatting, but too expensive for latency and memory.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/hypermedia/hypermedia.go` defines the normalized link model
-- `internal/hypermedia/parsers.go` provides the built-in parsers
-- `internal/cli/paginate.go` drives auto-pagination and output behavior
-
-One detail worth preserving is that pagination keeps the logical response shape
-when document formats are in use. A wrapped object with `items_path: data`
-should still render as an object whose `data` field is the merged collection,
-while explicit record formats such as `ndjson` may emit one item at a time.
+- Design 009 defines the normalized response model that carries discovered
+  links.
+- Design 012 distinguishes true streams from bounded paginated collections.
+- Design 015 exposes normalized links directly through the `links` command.
+- Design 028 defines how pagination composes with output-family planning.

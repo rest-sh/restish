@@ -8,33 +8,106 @@ hypermedia parsers, and prints the discovered links directly as JSON.
 This provides a focused tool for inspecting link relations without needing to
 manually filter full response output.
 
-## Problem
+## Goals
 
-Hypermedia parsing is useful internally for pagination and response inspection,
-but users also benefit from seeing the discovered links directly:
+- expose normalized hypermedia links directly to users
+- provide a compact debugging tool for pagination and hypermedia behavior
+- keep the output aligned with Restish's internal normalized link model
+- avoid requiring users to understand or reproduce parser internals manually
 
-- to understand navigable relations
-- to debug hypermedia parsing
-- to inspect APIs that advertise workflows through links
+## Non-Goals
 
-The design needed to expose link discovery in a compact, understandable form.
+- becoming a general-purpose alternate output formatter
+- exposing raw wire link syntax instead of Restish's normalized interpretation
+- bypassing the normal request/auth/TLS pipeline
 
-## Design
+## Position In The Architecture
 
 The `links` command is a focused wrapper around the normal request and
-hypermedia pipeline:
+hypermedia pipeline.
 
-1. GET the target URI
-2. normalize the response body
+It exists because hypermedia parsing is useful both:
+
+- internally for pagination and response inspection
+- externally for human debugging and API exploration
+
+## Command Flow
+
+The `links` command works conceptually like this:
+
+1. perform a GET against the target URI or API-relative path
+2. normalize the response enough for hypermedia parsing
 3. run all registered hypermedia parsers
-4. print the resulting `rel -> uri` map as JSON
+4. merge the discovered links into the normalized `rel -> uri` map
+5. optionally filter that map by relation names passed on the command line
+6. print the final relation map as JSON
 
-Optionally, users can supply one or more relation names after the URI to filter
-the output to only those links.
-
-This command intentionally does less than the general response path. It is not
+The command intentionally does less than the general response path. It is not
 trying to be a formatter mode; it is a targeted inspection command for the
 link-normalization layer.
+
+## Input Resolution
+
+Because the command goes through the normal request path, it should still honor:
+
+- API registrations
+- profiles
+- auth
+- TLS settings
+- retry and cache behavior where appropriate
+
+This is important because users often need to inspect links on the same secured
+APIs they use with normal requests.
+
+## Output Contract
+
+The output is the normalized relation map:
+
+- relation name -> absolute URI
+
+This is a deliberate product choice. The command shows Restish's interpreted
+link model, not the raw wire representation from headers or body documents.
+
+That makes it the right companion for debugging:
+
+- pagination activation
+- body-parser link extraction
+- relation naming and normalization
+
+## Relation Filtering
+
+Users may supply one or more relation names after the URI to filter output down
+to only those relations.
+
+This is intentionally simple:
+
+- no jq here
+- no partial matching
+- no alternate output modes
+
+The command is for quick inspection, not data transformation.
+
+## Failure Model
+
+The command should distinguish between:
+
+- request failure
+- no links discovered
+- requested relation names not present
+
+An empty JSON object is a meaningful result when no matching relations were
+found. That is different from transport failure.
+
+## Why It Exists Separately
+
+Users could technically extract links from full response output with filtering,
+but a dedicated command is still valuable because it:
+
+- shortens a common debugging task
+- presents the exact normalized link layer Restish uses internally
+- avoids requiring users to remember the full normalized response layout
+
+This is especially useful when debugging why pagination did or did not activate.
 
 ## Examples
 
@@ -61,24 +134,17 @@ Example output:
 
 ## Alternatives Considered
 
-### Expect users to filter links out of full response output
+### Expect Users To Filter Links Out Of Full Response Output
 
-That is possible, but it is clumsier for a common debugging and inspection
-task. A dedicated command is easier to teach and quicker to use.
+Possible, but clumsier and less explicit for a common task.
 
-### Treat links as only an internal implementation detail
+### Treat Links As Only An Internal Detail
 
-That would make it harder to debug pagination and hypermedia handling. Exposing
-the parsed link map directly is useful in its own right.
+Would make pagination and hypermedia behavior much harder to debug.
 
-## Notes
+## Relationship To Other Designs
 
-The current implementation reflects this design directly:
-
-- `internal/cli/links.go` implements the command
-- it reuses the normal request, normalization, and hypermedia parsing pipeline
-- output is a small JSON object keyed by relation name
-
-One detail worth preserving is that the command shows the normalized link map,
-not the raw wire representation. That keeps it aligned with how the rest of
-Restish interprets hypermedia internally.
+- Design 011 defines the normalized link model this command exposes.
+- Design 029 defines the shared request pipeline it reuses.
+- Design 017 defines the stdout/stderr and exit-behavior expectations around
+  command output.
