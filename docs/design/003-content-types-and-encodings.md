@@ -35,6 +35,7 @@ A content-type entry defines:
 
 - a short CLI-facing name like `json` or `yaml`
 - one or more MIME types
+- optional suffix matches such as `+json`
 - a quality value for `Accept` header generation
 - marshal behavior
 - unmarshal behavior
@@ -67,6 +68,7 @@ The built-in registry currently includes at least:
 - `yaml`
 - `cbor`
 - `msgpack`
+- `ion`
 - `form`
 - `multipart`
 - `text`
@@ -83,7 +85,7 @@ Media-type matching must handle:
 
 - exact MIME types
 - wildcard fallbacks such as `text/*`
-- structured suffixes such as `+json`, `+yaml`, and `+cbor`
+- structured suffixes such as `+json`, `+yaml`, `+cbor`, `+msgpack`, and `+ion`
 
 Structured suffix support is essential for common API responses such as:
 
@@ -93,6 +95,49 @@ Structured suffix support is essential for common API responses such as:
 - `application/ld+json`
 
 These are part of normal API usage, not rare edge cases.
+
+## Selection Algorithm
+
+Response decoder selection should follow a stable order:
+
+1. exact MIME-type match
+2. structured-suffix match such as `+json`
+3. wildcard fallback such as `text/*`
+4. unknown-content fallback rules
+
+The important design point is determinism. The selected decoder should not
+depend on registration order in ways users cannot reason about.
+
+If multiple entries could match within the same tier, the implementation should
+apply a stable tie-break order:
+
+1. higher explicit specificity over lower specificity
+2. built-in exact registration order only when two handlers are intentionally
+   aliases for the same wire format
+3. otherwise treat ambiguous registration as a startup-time bug
+
+This prevents "last plugin wins" behavior for core media-type resolution.
+
+## Request Content-Type Selection
+
+Request serialization needs an equally explicit selection model. The planner
+must determine both the logical body family and the concrete wire header.
+
+Conceptually, request body handling proceeds as follows:
+
+1. determine whether the command invocation produced a body at all
+2. determine whether the user explicitly selected a content type
+3. if explicit, resolve that name or MIME type through the registry
+4. otherwise infer a logical content type from the body source:
+   - shorthand/object/array structured values default to a structured encoder
+   - raw text input defaults to text when no structured parse occurred
+   - file or stream passthrough may preserve raw bytes instead of re-encoding
+5. ask the selected encoder for the concrete wire `Content-Type`
+6. serialize the body and attach the final header
+
+The key rule is that body shape and body source both matter. A pipeline that
+received raw bytes from stdin should not silently reinterpret them as JSON just
+because JSON is the most common format in the registry.
 
 ## Unknown Content Types
 
@@ -106,6 +151,31 @@ The design rule is:
 
 Unknown binary must not be coerced to a Go `string`, because that corrupts the
 payload and creates misleading later output.
+
+The printable-text decision should be based on body inspection after transport
+decoding, not on optimistic assumptions from missing or incorrect server
+metadata. If Restish cannot classify the body confidently as text, it should
+prefer the raw-bytes path.
+
+## Missing Or Invalid Content-Type Headers
+
+Servers do not always send correct `Content-Type` headers. The decoding model
+must therefore define behavior for:
+
+- no `Content-Type` header at all
+- malformed `Content-Type` values
+- mismatched headers such as binary content labeled `application/json`
+
+The preferred behavior is:
+
+1. attempt header parsing
+2. if parsing fails, record the parse issue for diagnostics
+3. fall back to unknown-content rules rather than guessing a structured format
+4. if parsing succeeds but the selected decoder fails, surface the decoder error
+   rather than silently retrying unrelated formats
+
+This keeps decoding failures explainable and avoids accidental format probing
+that could hide server-side bugs.
 
 ## Normalization Rules
 
@@ -130,7 +200,20 @@ That ordering is user-visible and can affect what servers return. If CBOR is
 preferred over JSON, users may observe CBOR responses from APIs that support
 both.
 
-The generated header conceptually looks like:
+The negotiation algorithm is:
+
+1. gather all registered MIME types
+2. include suffix-driven families only through their concrete MIME registrations
+3. sort by descending quality
+4. preserve stable ordering among equal-quality entries
+5. emit the resulting header
+
+Implementations should also deduplicate equivalent MIME types after
+normalization. If two plugins register the same canonical media type, the
+registry must resolve that conflict before header generation rather than
+advertising duplicates.
+
+A representative built-in header conceptually looks like:
 
 ```text
 application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, application/yaml;q=0.5, text/*;q=0.2
@@ -138,16 +221,30 @@ application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, appli
 
 Quality ordering should be stable and deliberate.
 
+Restish should not advertise suffix forms like `application/*+json` unless the
+runtime has an explicit reason to do so. Accept generation is based on concrete
+formats the client is prepared to decode, not speculative wildcard families.
+
 ## Accept-Encoding Negotiation
 
 `Accept-Encoding` is generated from the encoding registry and should only
 advertise encodings Restish can actually decode.
+
+The generation rule is parallel to content negotiation:
+
+1. gather supported encodings
+2. sort by descending quality
+3. emit the resulting header
 
 Example:
 
 ```text
 br, gzip, deflate
 ```
+
+If an operator explicitly overrides `Accept-Encoding`, Restish should treat that
+as a complete override. The registry still governs what the client can decode,
+but automatic header synthesis must not fight explicit user input.
 
 ## Multipart And Dynamic Content Types
 
@@ -159,6 +256,39 @@ This is why the design distinguishes:
 
 - logical content-type family
 - concrete wire `Content-Type` value
+
+The request-construction layer should treat those as related but not identical
+concepts.
+
+The same rule applies to any encoder whose final wire header includes generated
+parameters. The logical content family drives body construction, while the
+concrete header is produced late enough to include runtime-generated values.
+
+## Compression And Body Limits
+
+Transport decompression happens before content decoding, which means the body
+classification logic operates on the decompressed bytes. This implies:
+
+- decompression errors are transport-level failures, not decoder failures
+- body size limits, if configured, should specify whether they apply before or
+  after decompression
+- downstream decoders should not need to understand gzip, br, or deflate at all
+
+That separation is important for correctness and for clean responsibility
+boundaries in the request pipeline.
+
+## Streaming Reuse
+
+The same registry model should be reusable in streaming contexts, but with a
+different execution shape:
+
+- whole-document decoders consume a complete response body
+- stream decoders consume framed items or incremental events
+- unknown-content fallbacks still preserve bytes or text without inventing
+  structure
+
+This document therefore defines the registry contract, while design 012 defines
+how stream-oriented consumers invoke that contract incrementally.
 
 ## Examples
 

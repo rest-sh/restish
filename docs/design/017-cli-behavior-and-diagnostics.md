@@ -32,6 +32,32 @@ Bare-target GET is a convenience, not a replacement for command parsing. It
 must not bypass the normal subcommand tree in cases where the input is actually
 meant to be a built-in command.
 
+Resolution should be based on token classification, not vague best effort. A
+practical command planner should:
+
+1. parse global flags first
+2. inspect the first remaining positional token
+3. if it matches a built-in command, dispatch built-in handling
+4. otherwise attempt generated API command-group resolution
+5. otherwise attempt plugin command resolution
+6. otherwise, if the token is a URL or configured API alias target, interpret it
+   as the convenience GET form
+7. otherwise emit a normal unknown-command or usage error
+
+This ordering ensures user intent is explainable and stable.
+
+## Resolution Edge Cases
+
+The planner should explicitly define behavior for common ambiguous cases:
+
+- a token that looks like both a URL scheme and a command name
+- generated API operations whose names collide with plugin commands
+- commands invoked after `--` where further parsing should stop
+- built-ins that intentionally accept raw URL targets as later arguments
+
+The default bias should favor explicit command names over convenience parsing.
+Users can always write `get https://...` if they need to disambiguate.
+
 ## Global Flags And Environment
 
 Global flags should have one consistent precedence model:
@@ -45,6 +71,10 @@ Help text must only claim env-var support that actually exists.
 Global flags should eventually be parsed into one structured runtime object so
 every command sees the same resolved values instead of re-reading ad-hoc state.
 
+That runtime object should be immutable from the point command execution begins.
+Late mutation creates hard-to-debug differences between setup, request
+execution, plugins, and output.
+
 ## Stdout And Stderr Contract
 
 The channel split is strict:
@@ -53,6 +83,10 @@ The channel split is strict:
 - stderr is for diagnostics, prompts, warnings, progress, and verbose logs
 
 This is one of the most important scriptability guarantees in the product.
+
+The same contract applies to helper commands and diagnostics-oriented commands.
+Even a command like `cert` or `cache` should keep human-oriented warnings on
+stderr and reserve stdout for the primary command result.
 
 ## Verbose Logging
 
@@ -75,6 +109,10 @@ At higher verbosity, Restish may add:
 
 If help text advertises a verbosity level, the behavior should exist.
 
+Verbose output should be additive. Higher verbosity may include more detail, but
+it should not remove or reorder foundational information that users rely on
+during troubleshooting.
+
 ## Redaction
 
 Verbose logs must redact:
@@ -85,7 +123,7 @@ Verbose logs must redact:
 
 Redaction rules are defined in design 030 and apply here.
 
-## Exit Codes
+## Exit Code Matrix
 
 Restish uses both HTTP-derived and local-process-derived exit semantics.
 
@@ -102,6 +140,15 @@ Recommended mapping:
 The exact non-HTTP local mapping may evolve, but Restish should clearly
 distinguish "the server returned an error" from "the CLI failed locally."
 
+Recommended local categories are:
+
+- usage/validation failure before execution
+- local runtime/setup failure during execution
+- cancellation/interruption
+
+Whether usage failures collapse into `1` or use `2`, the mapping should remain
+stable and documented once finalized.
+
 ## Output Versus Exit Status
 
 Restish may still write the response body to stdout even if the final exit code
@@ -114,6 +161,9 @@ Two explicit flags modify the normal behavior:
 - `--rsh-silent` suppresses normal output
 
 Silence affects output channels, not internal success/failure semantics.
+
+Commands that naturally do not emit a body should still follow the same status
+rules. "No stdout" does not imply "success" or "no diagnostics."
 
 ## Prompting
 
@@ -129,6 +179,11 @@ Prompting rules:
 - do not treat EOF as implicit confirmation for destructive actions
 - defaults should be explicit in both UX text and behavior
 
+When the session is non-interactive and a prompt would otherwise be required,
+commands should fail with a clear message instead of hanging or guessing. This
+is especially important for auth flows, edit confirmation, and plugin approval
+prompts.
+
 ## Cancellation
 
 The root command should derive its context from `signal.NotifyContext`.
@@ -143,6 +198,61 @@ Every long-running command and subprocess should honor that context, including:
 
 On cancellation, Restish should avoid noisy redundant error output and should
 exit like a normal Unix CLI.
+
+Long-running loops should check cancellation between units of work as well as at
+the transport boundary. Waiting until the next network call to observe Ctrl-C is
+not sufficient for pagination, streaming, or plugin-driven workflows.
+
+## Diagnostic Categories
+
+Diagnostics shown on stderr should conceptually fall into these categories:
+
+- prompts
+- warnings
+- progress
+- verbose transport detail
+- local runtime failure explanation
+
+Keeping these categories distinct helps both implementation and user
+expectations.
+
+In addition, diagnostics should preserve user-actionable context. Good stderr
+messages explain:
+
+- what failed
+- at what stage it failed
+- what target or subsystem was involved
+- what the user can do next when there is an obvious action
+
+This is especially valuable for config resolution, auth, TLS, and plugin
+startup failures.
+
+## Usage Error Model
+
+Usage errors should be treated as a separate class from runtime failures.
+Examples include:
+
+- missing required arguments
+- unknown flags
+- invalid shorthand syntax detected before request execution
+- unsupported shell names passed to `setup`
+
+These should produce concise stderr output, reference help when useful, and
+avoid verbose stack-like dumps in ordinary mode.
+
+## Help And Completion Output
+
+Help and shell-completion generation are also part of CLI behavior.
+
+Design requirements:
+
+- help text should be reproducible and not depend on ambient network state
+- generated command help should reflect resolved API command structure for the
+  current context
+- completion output should be machine-oriented when emitted for shell
+  integration, not decorated with human commentary
+
+This keeps the CLI predictable both for people and for shell tooling.
 
 ## Shell Setup And Truth In Help
 
