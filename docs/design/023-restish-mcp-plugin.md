@@ -9,21 +9,35 @@ command-plugin protocol against a real integration target.
 Its job is to translate cached OpenAPI operations into MCP tool definitions,
 then delegate actual HTTP execution back to Restish.
 
-## Problem
+## Goals
 
-The generic command-plugin design explains the transport, but `restish-mcp`
-adds a second layer of product decisions that are worth documenting directly:
+- expose API operations as MCP tools without duplicating Restish's HTTP stack
+- make tool naming and filtering predictable
+- keep the plugin a protocol bridge rather than a second API client
+- preserve Restish auth, TLS, retry, cache, and profile behavior for tool calls
+- keep the MCP surface intentionally small and operator-friendly
 
-- which OpenAPI operations become tools
-- how tool names are derived and namespaced
-- how request arguments map onto HTTP requests
-- how much HTTP response detail gets surfaced to MCP clients
-- how stdio and plugin messaging interact
+## Non-Goals
 
-Those choices shape whether the plugin feels like a thin protocol adapter or a
-full parallel API client.
+- exposing every possible MCP transport or capability from day one
+- deriving tools from APIs that lack a usable operation identity
+- inventing a custom non-OpenAPI tool schema unrelated to the underlying API
 
-## Design
+## Position In The Architecture
+
+This plugin is a concrete implementation of the generic command-plugin design.
+
+It demonstrates all of these host/plugin capabilities at once:
+
+- plugin-contributed top-level command
+- delegated spec loading
+- delegated HTTP execution
+- passthrough stdio for a second protocol layered on top
+
+If this plugin became awkward, that would indicate the generic command-plugin
+design was missing an important capability.
+
+## Manifest And Command Shape
 
 The plugin advertises:
 
@@ -38,17 +52,24 @@ That command opts into `passthrough_stdio`, which is what allows the plugin to
 speak JSON-RPC over stdio to an MCP client while still living inside Restish's
 command-plugin transport.
 
-## Lifecycle
+## Nested Protocols
 
 The lifecycle has two nested protocols:
 
 1. Restish and the plugin speak the command-plugin CBOR protocol.
-2. The plugin and the MCP client speak JSON-RPC over framed stdio.
+2. The plugin and the MCP client speak JSON-RPC over stdio.
+
+The plugin therefore has to keep those concerns separate:
+
+- use command-plugin messages for host capabilities
+- use JSON-RPC for MCP-facing behavior
+
+## Startup Lifecycle
 
 At startup:
 
 1. Restish sends the command-plugin `init` message.
-2. The plugin parses command flags and API names.
+2. The plugin parses command flags and selected API names.
 3. The plugin asks Restish for each API spec using `api-spec`.
 4. The plugin converts the specs into MCP tool definitions.
 5. The plugin starts serving MCP stdio traffic.
@@ -56,41 +77,58 @@ At startup:
 This design keeps spec loading and HTTP transport inside Restish while letting
 the plugin own the MCP-facing protocol.
 
-## Tool Generation
+## Tool Inclusion Rules
 
-`restish-mcp` loads tools from cached or discoverable OpenAPI specs and only
-exposes operations that have an `operationId`.
+`restish-mcp` only exposes operations that have a stable operation identity.
+Today that means an operation must have an `operationId`.
 
 Operations are skipped when:
 
 - `x-cli-ignore` is true
 - `x-mcp-ignore` is true
 - `--read-only` is set and the method is not `GET` or `HEAD`
-- `--operations` is set and the operationId is not allowlisted
+- `--operations` is set and the `operationId` is not allowlisted
 
-When serving multiple APIs at once, tool names are namespaced as:
+This is a product decision, not just a parser shortcut. The plugin wants stable
+tool names that API authors can reason about.
+
+## Tool Naming
+
+When serving one API, tool names are based directly on `operationId`.
+
+When serving multiple APIs, tool names are namespaced as:
 
 - `<apiName>__<operationId>`
 
 That avoids collisions while keeping single-API use ergonomic.
 
+The separator and naming rule should stay deterministic so operators and MCP
+clients can rely on tool identity across runs.
+
+## Tool Schema Generation
+
 The generated MCP input schema is built from:
 
 - OpenAPI parameters mapped by name
-- request-body schema exposed as a `body` property
+- request-body schema exposed as a `body` property when applicable
 - the operation summary or description for tool help text
 
 This is intentionally close to the OpenAPI shape rather than a custom MCP-only
 abstraction.
 
-## Request Execution
+The plugin should prefer preserving the API author's intent over inventing a
+friendlier-but-less-faithful tool shape.
+
+## Request Mapping
 
 When an MCP client calls a tool, the plugin:
 
 1. validates required parameters
-2. maps path, query, header, and cookie params into an HTTP request
-3. attaches `body` when present
-4. emits a command-plugin `http-request` back to Restish
+2. maps path parameters into the URI path
+3. maps query parameters into the query string
+4. maps header and cookie parameters into request metadata
+5. attaches `body` when present
+6. emits a command-plugin `http-request` back to Restish
 
 The URI uses the form `<apiName><path>?...`, which deliberately routes through
 Restish's normal API-resolution path instead of hard-coding base URLs inside
@@ -109,8 +147,10 @@ The plugin currently implements a focused stdio MCP server:
 - `tools/list`
 - `tools/call`
 
-The `--http` transport flag exists but is explicitly not implemented yet. The
-current design is stdio-first.
+The `--http` transport flag exists but is intentionally not implemented yet.
+The current design is stdio-first.
+
+## Result Shaping
 
 Tool results are returned as MCP text content. By default the plugin formats
 the normalized HTTP body as pretty JSON, with a few deliberate choices:
@@ -120,50 +160,68 @@ the normalized HTTP body as pretty JSON, with a few deliberate choices:
   with status, headers, and body
 - large results are truncated to `--max-result-bytes`
 
-This keeps the MCP response simple while still surfacing a small amount of HTTP
-context when it matters.
+This keeps the MCP response concise for model-oriented tool use while still
+surfacing a small amount of HTTP context when it matters.
 
-## Why It Matters Architecturally
+The plugin is intentionally not trying to replicate the full Restish readable
+formatter or raw HTTP envelope in tool results.
 
-`restish-mcp` is more than "one more plugin." It demonstrates that the
-command-plugin system is expressive enough to support:
+## Error Model
 
-- plugin-defined top-level commands
-- spec discovery delegated back into Restish
-- HTTP execution delegated back into Restish
-- passthrough stdio for a second protocol layered on top
+The plugin has three main error classes:
 
-If this plugin became awkward, that would be a sign the generic command-plugin
-design was missing an important capability. In practice it is a strong
-integration test for that architecture.
+### Startup Errors
+
+- API spec could not be loaded
+- spec had no usable operations
+- command flags are invalid
+
+### Tool-Mapping Errors
+
+- required input missing
+- parameter coercion invalid
+- selected operation disallowed by plugin policy
+
+### Execution Errors
+
+- delegated HTTP returned failure status
+- host/plugin session broke
+- result exceeded output constraints
+
+The plugin should keep these categories distinct so operators can tell whether
+an issue is with configuration, tool invocation, or the underlying API call.
+
+## Why `x-mcp-ignore` Exists
+
+`x-mcp-ignore` is important because MCP exposure is not the same as CLI
+exposure.
+
+Some operations may be:
+
+- valid for direct CLI use by a human operator
+- too dangerous, noisy, or semantically odd as AI tools
+
+That is why `x-mcp-ignore` exists separately from `x-cli-ignore`.
 
 ## Alternatives Considered
 
-### Build MCP support directly into the main Restish binary
+### Build MCP Support Directly Into The Main Restish Binary
 
-Possible, but it would make the core CLI own another protocol surface and would
-be less useful as a validation of the plugin system.
+Possible, but less valuable as an architectural validation of the plugin model.
 
-### Have the plugin parse API configs and perform HTTP itself
+### Have The Plugin Parse API Configs And Perform HTTP Itself
 
-That would duplicate core Restish behavior and weaken the architectural point
-of using a command plugin in the first place.
+Would duplicate core Restish behavior and weaken the point of using a command
+plugin.
 
-### Expose every HTTP detail in MCP results
+### Expose Every HTTP Detail In MCP Results
 
-That would be more faithful to the wire, but noisier for model-oriented tool
-consumption. The current design prefers concise tool results with selective
-envelope inclusion.
+Too noisy for tool consumption.
 
-## Notes
+## Relationship To Other Designs
 
-The implementation lives in
-[`cmd/restish-mcp/main.go`](../../cmd/restish-mcp/main.go)
-and
-[`cmd/restish-mcp/mcp.go`](../../cmd/restish-mcp/mcp.go),
-with coverage in
-[`cmd/restish-mcp/mcp_test.go`](../../cmd/restish-mcp/mcp_test.go).
-
-One detail worth preserving is that the plugin depends on `operationId` as the
-stable tool identifier. That keeps names predictable and aligns the MCP surface
-with the API author's intended operation naming.
+- Design 007 defines how API operations are generated from specs.
+- Design 020 defines the generic command-plugin session this plugin uses.
+- Design 029 defines the delegated request pipeline the plugin depends on.
+- Design 031 treats `x-mcp-ignore` and stable operation naming as part of the
+  compatibility story.
