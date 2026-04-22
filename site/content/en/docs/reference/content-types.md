@@ -50,6 +50,18 @@ Common cases:
 Restish chooses a decoder by matching the response `Content-Type` header
 against the registry.
 
+That matching is broader than exact MIME-type equality. Restish also recognizes:
+
+- wildcard fallbacks such as `text/*`
+- structured suffixes such as `+json`, `+yaml`, `+cbor`, `+msgpack`, and `+ion`
+
+That means common API media types such as these still decode correctly:
+
+- `application/problem+json`
+- `application/hal+json`
+- `application/vnd.api+json`
+- `application/ld+json`
+
 That is why the same response can later be:
 
 - filtered with shorthand or jq
@@ -80,13 +92,18 @@ content types. Entries are sorted by quality value (`q`) descending, so higher
 quality types appear first. Content types with quality `1.0` are written
 without a `q` parameter.
 
-For example, a registry with JSON at `q=1.0` and CBOR at `q=0.9` produces:
+The built-in registry prefers compact binary formats first, then JSON/YAML,
+then lower-priority form and text fallbacks. A representative built-in header
+looks like:
 
 ```
-Accept: application/json, application/cbor;q=0.9
+Accept: application/cbor;q=0.9, application/msgpack;q=0.8, application/vnd.msgpack;q=0.8, application/ion;q=0.8, text/ion;q=0.8, application/json;q=0.5, application/yaml;q=0.5, application/x-yaml;q=0.5, text/yaml;q=0.5, text/x-yaml;q=0.5, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, text/*;q=0.2
 ```
 
-You can observe the full list your binary sends by running a request with
+This can surprise users if a server supports both JSON and CBOR or msgpack:
+Restish may receive the richer binary format first and then decode it for you.
+
+You can inspect the exact header your binary sends by running a request with
 `--rsh-verbose` and reading the `Accept` header line.
 
 ## Compression Encodings

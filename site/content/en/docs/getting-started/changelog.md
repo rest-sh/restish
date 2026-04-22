@@ -71,7 +71,8 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 
 ### Developer Experience
 
-- **Shell setup for fish** — `restish setup fish` adds a wrapper function.
+- **Shell setup guidance for fish** — Fish is documented as a completion-only
+  shell for now; quote glob-like shorthand and filter expressions explicitly.
 - **Built-in name collision guard** — registering an API with a name that
   conflicts with a built-in command (`api`, `get`, `post`, etc.) now errors.
 - **Verbose TLS details** — `-vv` dumps TLS version, cipher suite, and peer
@@ -95,8 +96,9 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 
 - v0-style slug aliases are removed permanently; use the current operation name
   or add `x-cli-aliases` to the spec.
-- `restish setup fish` now writes a function wrapper rather than a `noglob`
-  alias (fish does not support `noglob`).
+- `restish setup` currently supports `zsh` and `bash`. Fish users should still
+  install completion, but quote glob-like arguments explicitly because Fish
+  does not offer a compatible `noglob` alias equivalent.
 
 ### Plugins
 

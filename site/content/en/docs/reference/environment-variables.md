@@ -47,9 +47,27 @@ These affect where Restish reads persistent config and cached HTTP responses.
 - `RSH_PROFILE`: default active profile.
 - `RSH_TIMEOUT`: default request timeout.
 - `RSH_RETRY`: default retry count.
+- `RSH_HEADER`: default header added as if passed with `-H`.
+- `RSH_QUERY`: default query string parameter added as if passed with `-q`.
+- `RSH_OUTPUT_FORMAT`: default output format.
+- `RSH_FILTER`: default filter expression.
+- `RSH_INSECURE`: when truthy (`1`, `true`, or `yes`), act like
+  `--rsh-insecure`.
+- `RSH_NO_CACHE`: when truthy (`1`, `true`, or `yes`), act like
+  `--rsh-no-cache`.
 
 These are useful when you want a shell-wide default instead of repeating flags
 on each command.
+
+`RSH_HEADER` and `RSH_QUERY` are especially useful for session-wide defaults
+such as an `Accept` header or a shared API version query parameter.
+
+Example:
+
+```bash
+export RSH_HEADER='Accept: application/json'
+export RSH_OUTPUT_FORMAT=json
+```
 
 ## Choosing Between Env Vars, Flags, And Config
 

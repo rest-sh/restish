@@ -13,14 +13,12 @@ shell does not glob Restish input before Restish sees it.
 ```bash
 restish setup zsh
 restish setup bash
-restish setup fish
 ```
 
 ## Supported Shells
 
 - `zsh`
 - `bash`
-- `fish`
 
 ## What It Changes
 
@@ -31,10 +29,9 @@ CLI receives it.
 For `zsh` and `bash`, the alias wraps the command with `noglob` so the shell
 does not expand glob characters before Restish sees them.
 
-For `fish`, the alias wraps the command in a function that calls
-`command restish $argv`. Fish has different globbing semantics from
-POSIX shells and does not support `noglob`. If fish expands a glob pattern in
-your arguments before restish sees it, quote the argument explicitly.
+On macOS, `restish setup bash` writes to `~/.bash_profile` because login shells
+typically read that file by default. On Linux and other Unix-like systems,
+`bash` setup writes to `~/.bashrc`.
 
 That matters most for:
 
@@ -49,6 +46,9 @@ Run `setup` again when:
 - you switch shells
 - you set up Restish on another machine
 - your shell config was reset or replaced
+
+If you use a shell Restish does not currently support directly, quote shorthand
+and filter expressions explicitly instead of relying on `setup`.
 
 ## Related Pages
 
