@@ -188,10 +188,11 @@ with a top-level `theme` object in config:
 ```
 
 Theme values are Chroma style descriptors. Keys may be Chroma token names such
-as `NameTag` or Restish aliases such as `key`, `url`, `date`, `bracket_0`,
-`status_2xx`, `status_3xx`, and `status_error`. User entries overlay the
-built-in theme rather than replacing it wholesale, so small config snippets can
-change one or two colors without redefining every token.
+as `NameTag` or Restish aliases such as `key`, `keyword`, `function`, `class`,
+`builtin`, `operator`, `url`, `date`, `bracket_0`, `status_2xx`, `status_3xx`,
+and `status_error`. User entries overlay the built-in theme rather than
+replacing it wholesale, so small config snippets can change one or two colors
+without redefining every token.
 
 Invalid theme keys or invalid style descriptors are config errors. Restish
 should fail early during startup instead of silently producing partially styled

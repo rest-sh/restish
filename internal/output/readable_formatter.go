@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"unicode"
@@ -12,6 +15,9 @@ import (
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/charmbracelet/glamour"
+	"golang.org/x/term"
 )
 
 // ReadableFormatter writes the full response (status line, headers, body) in
@@ -38,6 +44,18 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	if data, ok := printableBody(resp); ok {
 		if len(data) == 0 || data[len(data)-1] != '\n' {
 			data = append(data, '\n')
+		}
+		if color {
+			if markdownBody(resp) {
+				rendered, err := renderMarkdownBody(w, string(data))
+				if err == nil {
+					_, err = io.WriteString(w, rendered)
+					return err
+				}
+			}
+			if lexer := textBodyLexer(resp); lexer != nil {
+				return highlight(w, lexer, data)
+			}
 		}
 		_, err := w.Write(data)
 		return err
@@ -247,6 +265,115 @@ func HighlightWithLexer(lexer chroma.Lexer, data []byte) ([]byte, error) {
 		return data, err
 	}
 	return []byte(buf.String()), nil
+}
+
+func textBodyLexer(resp *Response) chroma.Lexer {
+	if resp == nil {
+		return nil
+	}
+	if lexer := textBodyLexerByContentType(resp.Headers["Content-Type"]); lexer != nil {
+		return lexer
+	}
+	if resp.URL == "" {
+		return nil
+	}
+	name := resp.URL
+	if u, err := url.Parse(resp.URL); err == nil && u.Path != "" {
+		name = u.Path
+	}
+	if lexer := lexers.Match(name); highlightableLexer(lexer) {
+		return chroma.Coalesce(lexer)
+	}
+	return nil
+}
+
+func markdownBody(resp *Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := resp.Headers["Content-Type"]
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "text/markdown", "text/x-markdown":
+		return true
+	}
+	if resp.URL == "" {
+		return false
+	}
+	name := resp.URL
+	if u, err := url.Parse(resp.URL); err == nil && u.Path != "" {
+		name = u.Path
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".md", ".markdown", ".mdown", ".mkd":
+		return true
+	default:
+		return false
+	}
+}
+
+func renderMarkdownBody(w io.Writer, s string) (string, error) {
+	width := 80
+	if f, ok := w.(interface{ Fd() uintptr }); ok {
+		if cols, _, err := term.GetSize(int(f.Fd())); err == nil && cols > 0 {
+			width = cols
+		}
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return "", err
+	}
+	return r.Render(s)
+}
+
+func genericTextContentType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "text/plain", "application/octet-stream":
+		return true
+	default:
+		return false
+	}
+}
+
+func highlightableLexer(lexer chroma.Lexer) bool {
+	if lexer == nil || lexer == lexers.Fallback {
+		return false
+	}
+	cfg := lexer.Config()
+	if cfg == nil {
+		return false
+	}
+	name := strings.ToLower(cfg.Name)
+	if name == "plaintext" || name == "plain text" {
+		return false
+	}
+	for _, alias := range cfg.Aliases {
+		switch strings.ToLower(alias) {
+		case "text", "plain", "plaintext":
+			return false
+		}
+	}
+	return true
+}
+
+func textBodyLexerByContentType(contentType string) chroma.Lexer {
+	if contentType == "" {
+		return nil
+	}
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if !genericTextContentType(contentType) {
+		if lexer := lexers.MatchMimeType(contentType); highlightableLexer(lexer) {
+			return chroma.Coalesce(lexer)
+		}
+	}
+	return nil
 }
 
 var displayRanges = []*unicode.RangeTable{

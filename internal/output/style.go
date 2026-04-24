@@ -11,7 +11,7 @@ import (
 
 // ThemeEntries maps token names to Chroma style descriptors. Token names may be
 // Chroma token type names (for example, "NameTag") or Restish aliases such as
-// "key", "url", and "status_2xx".
+// "key", "keyword", "url", and "status_2xx".
 type ThemeEntries map[string]string
 
 // defaultStyleEntries is a 256-color terminal theme for Restish readable
@@ -33,6 +33,11 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.LiteralStringSymbol: "italic #D6FFB7", // URLs
 	chroma.LiteralDate:         "#af87af",        // ISO 8601 dates
 	chroma.LiteralNumberHex:    "#ffd7d7",        // hex binary (0x...)
+	chroma.Keyword:             "#ff5f87",
+	chroma.NameFunction:        "#5fafd7",
+	chroma.NameClass:           "#5fafd7",
+	chroma.NameBuiltin:         "#87afd7",
+	chroma.Operator:            "#d7af5f",
 
 	// Bracket-depth colorization: IndentLevel0/1/2 cycle through three colours.
 	IndentLevel0: "#d78700", // amber
@@ -62,6 +67,11 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"url":           chroma.LiteralStringSymbol,
 	"date":          chroma.LiteralDate,
 	"binary":        chroma.LiteralNumberHex,
+	"keyword":       chroma.Keyword,
+	"function":      chroma.NameFunction,
+	"class":         chroma.NameClass,
+	"builtin":       chroma.NameBuiltin,
+	"operator":      chroma.Operator,
 	"bracket_0":     IndentLevel0,
 	"bracket_1":     IndentLevel1,
 	"bracket_2":     IndentLevel2,

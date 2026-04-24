@@ -18,6 +18,9 @@ type Response struct {
 	Proto   string            `json:"proto"`
 	Status  int               `json:"status"`
 	Headers map[string]string `json:"headers"`
+	// URL is the final response URL. It is used for presentation concerns such
+	// as syntax highlighting file-like text responses by extension.
+	URL string `json:"-"`
 	// Links is populated by hypermedia parsers (Step 18); empty until then.
 	Links map[string]any `json:"links,omitempty"`
 	Body  any            `json:"body"`
@@ -55,9 +58,17 @@ func Normalize(resp *http.Response, reg *content.Registry, maxBytes int64) (*Res
 		Proto:   resp.Proto,
 		Status:  resp.StatusCode,
 		Headers: headers,
+		URL:     responseURL(resp),
 		Body:    body,
 		Raw:     raw,
 	}, nil
+}
+
+func responseURL(resp *http.Response) string {
+	if resp == nil || resp.Request == nil || resp.Request.URL == nil {
+		return ""
+	}
+	return resp.Request.URL.String()
 }
 
 // decodeBody reads the response body, decompresses it if needed, then decodes
