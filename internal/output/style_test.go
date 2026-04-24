@@ -3,7 +3,7 @@ package output
 import "testing"
 
 func TestParseThemeJSONDirectMap(t *testing.T) {
-	entries, err := ParseThemeJSON([]byte(`{"key":"#ffffff","status_2xx":"bold #00ff00","keyword":"#ff0000","function":"#00ffff","class":"#ff00ff","builtin":"#0000ff","operator":"#ffff00"}`))
+	entries, err := ParseThemeJSON([]byte(`{"key":"#ffffff","status_2xx":"bold #00ff00","keyword":"#ff0000","function":"#00ffff","class":"#ff00ff","builtin":"#0000ff","operator":"#ffff00","markdown_heading":"#123456"}`))
 	if err != nil {
 		t.Fatalf("ParseThemeJSON: %v", err)
 	}
@@ -14,6 +14,9 @@ func TestParseThemeJSONDirectMap(t *testing.T) {
 		if entries[name] == "" {
 			t.Fatalf("%s entry was not parsed", name)
 		}
+	}
+	if entries["markdown_heading"] != "#123456" {
+		t.Fatalf("markdown_heading entry = %q, want #123456", entries["markdown_heading"])
 	}
 }
 

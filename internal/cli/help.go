@@ -4,7 +4,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -57,10 +56,7 @@ func renderMarkdown(s string, c *CLI) (string, error) {
 		}
 	}
 
-	r, err := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(width),
-	)
+	r, err := output.NewMarkdownRenderer(width)
 	if err != nil {
 		return "", err
 	}

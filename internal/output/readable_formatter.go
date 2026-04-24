@@ -16,7 +16,6 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/charmbracelet/glamour"
 	"golang.org/x/term"
 )
 
@@ -321,10 +320,7 @@ func renderMarkdownBody(w io.Writer, s string) (string, error) {
 			width = cols
 		}
 	}
-	r, err := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(width),
-	)
+	r, err := NewMarkdownRenderer(width)
 	if err != nil {
 		return "", err
 	}

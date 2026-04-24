@@ -49,10 +49,19 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.GenericInserted: "bold #afd787", // 2xx       → bold light-green
 	chroma.GenericOutput:   "bold #d78700", // 3xx       → bold amber
 	chroma.GenericError:    "bold #ff5f87", // 4xx/5xx   → bold pink
+
+	// Markdown and diff tokens used by Glamour-rendered Markdown bodies/help.
+	chroma.GenericHeading:    "#5fafd7",
+	chroma.GenericSubheading: "#777777",
+	chroma.GenericEmph:       "italic #ffd7d7",
+	chroma.GenericStrong:     "bold #af87af",
+	chroma.GenericDeleted:    "#ff5f87",
+	chroma.NameAttribute:     "underline #5fafd7",
 }
 
 // restishStyle is the active style for terminal highlighting.
 var restishStyle = styles.Register(chroma.MustNewStyle("restish", defaultStyleEntries))
+var currentThemeEntries ThemeEntries
 
 var themeTokenAliases = map[string]chroma.TokenType{
 	"comment":       chroma.Comment,
@@ -79,6 +88,31 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"status_2xx":    chroma.GenericInserted,
 	"status_3xx":    chroma.GenericOutput,
 	"status_error":  chroma.GenericError,
+	"heading":       chroma.GenericHeading,
+	"subheading":    chroma.GenericSubheading,
+	"emphasis":      chroma.GenericEmph,
+	"strong":        chroma.GenericStrong,
+	"deleted":       chroma.GenericDeleted,
+	"inserted":      chroma.GenericInserted,
+	"attribute":     chroma.NameAttribute,
+}
+
+var markdownThemeAliases = map[string]struct{}{
+	"markdown_document":        {},
+	"markdown_quote":           {},
+	"markdown_heading":         {},
+	"markdown_h1":              {},
+	"markdown_h1_text":         {},
+	"markdown_h1_background":   {},
+	"markdown_link":            {},
+	"markdown_link_text":       {},
+	"markdown_code":            {},
+	"markdown_code_block":      {},
+	"markdown_code_background": {},
+	"markdown_rule":            {},
+	"markdown_table_border":    {},
+	"markdown_image":           {},
+	"markdown_image_text":      {},
 }
 
 // SetTheme overlays user-supplied theme entries onto the built-in Restish
@@ -89,6 +123,7 @@ func SetTheme(entries ThemeEntries) error {
 		return err
 	}
 	restishStyle = style
+	currentThemeEntries = normalizeThemeEntries(entries)
 	return nil
 }
 
@@ -99,6 +134,12 @@ func BuildTheme(entries ThemeEntries) (*chroma.Style, error) {
 		styleEntries[token] = entry
 	}
 	for name, entry := range entries {
+		if _, ok := markdownThemeAliases[normalizeThemeName(name)]; ok {
+			if _, err := chroma.ParseStyleEntry(entry); err != nil {
+				return nil, fmt.Errorf("theme: %s: %w", name, err)
+			}
+			continue
+		}
 		token, err := themeTokenType(name)
 		if err != nil {
 			return nil, err
@@ -128,8 +169,7 @@ func ParseThemeJSON(data []byte) (ThemeEntries, error) {
 }
 
 func themeTokenType(name string) (chroma.TokenType, error) {
-	key := strings.ToLower(strings.TrimSpace(name))
-	key = strings.ReplaceAll(key, "-", "_")
+	key := normalizeThemeName(name)
 	if token, ok := themeTokenAliases[key]; ok {
 		return token, nil
 	}
@@ -138,4 +178,20 @@ func themeTokenType(name string) (chroma.TokenType, error) {
 		return 0, fmt.Errorf("theme: unknown token %q", name)
 	}
 	return token, nil
+}
+
+func normalizeThemeEntries(entries ThemeEntries) ThemeEntries {
+	if len(entries) == 0 {
+		return nil
+	}
+	normalized := make(ThemeEntries, len(entries))
+	for name, entry := range entries {
+		normalized[normalizeThemeName(name)] = entry
+	}
+	return normalized
+}
+
+func normalizeThemeName(name string) string {
+	key := strings.ToLower(strings.TrimSpace(name))
+	return strings.ReplaceAll(key, "-", "_")
 }

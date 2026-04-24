@@ -88,6 +88,60 @@ func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
 	}
 }
 
+func TestReadableFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "")
+	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	defer func() {
+		if err := SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	}()
+
+	resp := &Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
+		Body:    "## Restish\n",
+		Raw:     []byte("## Restish\n"),
+	}
+	var out bytes.Buffer
+	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "\x1b[38;2;18;52;86") {
+		t.Fatalf("expected themed Markdown heading color, got %q", got)
+	}
+}
+
+func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "notty")
+	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	defer func() {
+		if err := SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	}()
+
+	resp := &Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
+		Body:    "## Restish\n",
+		Raw:     []byte("## Restish\n"),
+	}
+	var out bytes.Buffer
+	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	if got := out.String(); strings.Contains(got, "\x1b[38;2;18;52;86") {
+		t.Fatalf("expected GLAMOUR_STYLE to override Restish Markdown theme, got %q", got)
+	}
+}
+
 func TestMarkdownBodyDetectsMarkdownContentType(t *testing.T) {
 	resp := &Response{
 		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
