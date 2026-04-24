@@ -237,6 +237,9 @@ func (c *CLI) Run(args []string) error {
 	if cfg.Migration != nil {
 		fmt.Fprintf(c.Stderr, "Migrated config from v1 at %s; kept backup at %s\n", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
 	}
+	if err := output.SetTheme(output.ThemeEntries(cfg.Theme)); err != nil {
+		return fmt.Errorf("config theme: %w", err)
+	}
 
 	// Discover hook plugins at startup; warn about broken plugins so users
 	// know their plugin is not active rather than silently ignoring it.
@@ -327,6 +330,7 @@ var builtinCommands = map[string]bool{
 	"delete": true, "edit": true, "get": true, "head": true,
 	"help": true, "links": true, "options": true, "patch": true,
 	"plugin": true, "post": true, "put": true, "setup": true,
+	"theme": true,
 }
 
 // isBuiltinCommandName reports whether name collides with a top-level built-in

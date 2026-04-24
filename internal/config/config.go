@@ -24,6 +24,11 @@ type Config struct {
 	// Cache holds global cache settings.
 	Cache CacheConfig `json:"cache,omitempty"`
 
+	// Theme customizes syntax highlighting for readable terminal output.
+	// Keys are Chroma token names or Restish theme aliases; values are Chroma
+	// style descriptors such as "#afd787" or "bold #ff5f87".
+	Theme map[string]string `json:"theme,omitempty"`
+
 	// AllowedPlugins, when non-empty, restricts plugin auto-discovery to
 	// executables whose base names appear in this list (e.g.
 	// ["restish-foo", "restish-bar"]).  When empty (the default), all

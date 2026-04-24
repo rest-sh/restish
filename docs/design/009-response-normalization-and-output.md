@@ -170,6 +170,56 @@ Readable output is primarily for humans, but it should still preserve the
 meaning of text and structured content rather than aggressively prettifying
 everything into a less faithful shape.
 
+## Readable Theme Configuration
+
+Readable output uses a Chroma style for HTTP preambles, JSON-like structured
+values, special scalar values, and Restish's bracket-depth token types. The
+built-in theme is the default, but users may override individual token styles
+with a top-level `theme` object in config:
+
+```json
+{
+  "theme": {
+    "key": "#5fafd7",
+    "string": "#afd787",
+    "status_2xx": "bold #afd787"
+  }
+}
+```
+
+Theme values are Chroma style descriptors. Keys may be Chroma token names such
+as `NameTag` or Restish aliases such as `key`, `url`, `date`, `bracket_0`,
+`status_2xx`, `status_3xx`, and `status_error`. User entries overlay the
+built-in theme rather than replacing it wholesale, so small config snippets can
+change one or two colors without redefining every token.
+
+Invalid theme keys or invalid style descriptors are config errors. Restish
+should fail early during startup instead of silently producing partially styled
+output.
+
+The `restish theme set <source>` command fetches a theme JSON document,
+validates it, and saves its entries into the top-level config `theme` object
+while preserving JSONC comments where possible. The fetched JSON is a direct
+token map:
+
+```json
+{
+  "key": "#ffffff",
+  "status_2xx": "bold #00ff00"
+}
+```
+
+For convenience, `<source>` may be an `http` or `https` URL, or a GitHub
+`user/repo` shorthand. The shorthand resolves to the repository's root
+`theme.json` through GitHub's raw content host. A GitHub shorthand may also
+include an optional theme name:
+
+```bash
+restish theme set user/repo dark
+```
+
+which resolves to the repository's root `dark.json`.
+
 ## Text And Binary Handling
 
 Output behavior must not corrupt data:
