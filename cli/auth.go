@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -138,7 +139,11 @@ func (a *ExternalToolAuth) OnRequest(req *http.Request, key string, params map[s
 	stdin.Close()
 	outBytes, err := cmd.Output()
 	if err != nil {
-		return err
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return fmt.Errorf("external auth tool failed: %s: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return fmt.Errorf("external auth tool failed: %w", err)
 	}
 	if len(outBytes) <= 0 {
 		return nil
