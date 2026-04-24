@@ -29,8 +29,8 @@ require (
 	github.com/schollz/progressbar/v3 v3.12.2
 	github.com/shamaton/msgpack/v2 v2.1.1
 	github.com/spf13/afero v1.9.3
-	github.com/spf13/cobra v1.6.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
 	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tent/http-link-go v0.0.0-20130702225549-ac974c61c2f9
