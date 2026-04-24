@@ -23,8 +23,9 @@ const maxPluginDebugCaptureBytes = 64 << 20
 // addPluginCommand registers the "plugin" subcommand tree on root.
 func (c *CLI) addPluginCommand(root *cobra.Command) {
 	pluginCmd := &cobra.Command{
-		Use:   "plugin",
-		Short: "Manage restish plugins",
+		Use:     "plugin",
+		Short:   "Manage restish plugins",
+		GroupID: rootGroupPlugin,
 	}
 	pluginCmd.AddCommand(&cobra.Command{
 		Use:   "list",

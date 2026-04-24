@@ -33,10 +33,11 @@ func (p cliPrompter) PromptSecret(prompt string) (string, error) {
 // addAuthHeaderCommand registers the "auth-header" command on root.
 func (c *CLI) addAuthHeaderCommand(root *cobra.Command) {
 	root.AddCommand(&cobra.Command{
-		Use:   "auth-header <api>",
-		Short: "Print the Authorization header value for a registered API",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAuthHeader,
+		Use:     "auth-header <api>",
+		Short:   "Print the Authorization header value for a registered API",
+		GroupID: rootGroupUtility,
+		Args:    cobra.ExactArgs(1),
+		RunE:    c.runAuthHeader,
 	})
 }
 
@@ -117,8 +118,8 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 			Prompt: func(prompt string) (string, error) {
 				return c.Prompt(context.Background(), prompt)
 			},
-			CanPrompt:  c.canPromptCode(),
-			NoBrowser:  opts.NoBrowser,
+			CanPrompt: c.canPromptCode(),
+			NoBrowser: opts.NoBrowser,
 		}, nil
 	case "oauth-device-code":
 		return &auth.DeviceCode{

@@ -20,8 +20,9 @@ var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
 func (c *CLI) addThemeCommand(root *cobra.Command) {
 	themeCmd := &cobra.Command{
-		Use:   "theme",
-		Short: "Manage readable output highlighting theme",
+		Use:     "theme",
+		Short:   "Manage readable output highlighting theme",
+		GroupID: rootGroupConfig,
 	}
 	themeCmd.AddCommand(&cobra.Command{
 		Use:   "set <url-or-user/repo> [name]",

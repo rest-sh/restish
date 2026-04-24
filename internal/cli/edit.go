@@ -10,22 +10,23 @@ import (
 	"strings"
 
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/rest-sh/restish/v2/internal/output"
-	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
 )
 
 func (c *CLI) addEditCommand(root *cobra.Command) {
 	cmd := &cobra.Command{
-		Use:   "edit <uri> [patch ...]",
-		Short: "Fetch a resource, edit it locally, then send it back",
-		Args:  cobra.MinimumNArgs(1),
-		RunE:  c.runEdit,
+		Use:     "edit <uri> [patch ...]",
+		Short:   "Fetch a resource, edit it locally, then send it back",
+		GroupID: rootGroupUtility,
+		Args:    cobra.MinimumNArgs(1),
+		RunE:    c.runEdit,
 	}
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")
 	cmd.Flags().Bool("dry-run", false, "Show the diff without sending the update")
@@ -320,7 +321,6 @@ func splitCommandLine(s string) ([]string, error) {
 	flush()
 	return parts, nil
 }
-
 
 func supportsMergePatch(headers map[string]string) bool {
 	if value := headers["Accept-Patch"]; strings.Contains(strings.ToLower(value), "application/merge-patch+json") {

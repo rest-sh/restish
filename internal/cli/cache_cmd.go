@@ -12,8 +12,9 @@ import (
 // addCacheCommand registers the "cache" subcommand tree on root.
 func (c *CLI) addCacheCommand(root *cobra.Command) {
 	cacheCmd := &cobra.Command{
-		Use:   "cache",
-		Short: "Manage the HTTP response cache",
+		Use:     "cache",
+		Short:   "Manage the HTTP response cache",
+		GroupID: rootGroupConfig,
 	}
 	cacheCmd.AddCommand(c.newCacheInfoCmd(), c.newCacheClearCmd())
 	root.AddCommand(cacheCmd)

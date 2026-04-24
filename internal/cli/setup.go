@@ -42,6 +42,9 @@ func (c *CLI) addSetupCommand(root *cobra.Command) {
 		ValidArgs: shells,
 		RunE:      c.runSetup,
 	}
+	if rootCommandHasGroup(root, rootGroupConfig) {
+		setupCmd.GroupID = rootGroupConfig
+	}
 	setupCmd.Flags().Bool("dry-run", false, "Show what would be written without modifying files")
 	setupCmd.Flags().BoolP("yes", "y", false, "Apply changes without confirmation prompt")
 	root.AddCommand(setupCmd)

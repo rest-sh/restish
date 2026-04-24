@@ -295,6 +295,7 @@ func (c *CLI) Run(args []string) error {
 			root.AddCommand(apiCmd)
 		}
 	}
+	c.addAPIShortNameCommands(root, cfg)
 
 	root.SetArgs(args[1:])
 	root.SetOut(c.Stdout)
@@ -306,6 +307,47 @@ func (c *CLI) Run(args []string) error {
 		return &ExitCodeError{Code: 130}
 	}
 	return err
+}
+
+func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
+	if cfg == nil || len(cfg.APIs) == 0 {
+		return
+	}
+	names := make([]string, 0, len(cfg.APIs))
+	for name := range cfg.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, apiName := range names {
+		apiCfg := cfg.APIs[apiName]
+		if apiCfg == nil || isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
+			continue
+		}
+		apiName := apiName
+		short := "GET requests using the registered API base URL"
+		if apiCfg.BaseURL != "" {
+			short = fmt.Sprintf("GET requests using %s", apiCfg.BaseURL)
+		}
+		root.AddCommand(&cobra.Command{
+			Use:     apiName,
+			Short:   short,
+			GroupID: rootGroupAPI,
+			Args:    cobra.ArbitraryArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return c.runHTTP(cmd, "GET", append([]string{apiName}, args...))
+			},
+		})
+	}
+}
+
+func rootHasCommand(root *cobra.Command, name string) bool {
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CLI) registerRequestCloser(closer io.Closer) {
@@ -326,7 +368,7 @@ func (c *CLI) closeRequestClosers() {
 // CLI itself. When the first non-flag argument is one of these, the fast-path
 // skips API-name detection and loads all configured APIs.
 var builtinCommands = map[string]bool{
-	"api": true, "cache": true, "cert": true, "completion": true,
+	"api": true, "auth-header": true, "cache": true, "cert": true, "completion": true,
 	"delete": true, "edit": true, "get": true, "head": true,
 	"help": true, "links": true, "options": true, "patch": true,
 	"plugin": true, "post": true, "put": true, "setup": true,

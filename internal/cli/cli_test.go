@@ -60,6 +60,47 @@ func TestHelp(t *testing.T) {
 	}
 }
 
+func TestHelpGroupsTopLevelCommands(t *testing.T) {
+	c, out, _ := newTestCLI()
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{
+  "apis": {
+    "zapi": {
+      "base_url": "https://api.example.com"
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "--help"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"Generic HTTP Commands",
+		"Configuration and Setup",
+		"Plugin Commands",
+		"Registered APIs",
+		"Utilities",
+		"Help",
+		"Request Options",
+		"Output Options",
+		"TLS Options",
+		"Pagination and Streaming Options",
+		"Cache and Retry Options",
+		"General Options",
+		"zapi",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected grouped help to contain %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Additional Commands:") {
+		t.Fatalf("expected all top-level commands to be grouped:\n%s", got)
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	c, _, _ := newTestCLI()
 	if err := c.Run([]string{"restish", "no-such-command"}); err == nil {

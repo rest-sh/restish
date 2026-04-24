@@ -9,6 +9,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	rootGroupHTTP    = "http"
+	rootGroupConfig  = "config"
+	rootGroupPlugin  = "plugin"
+	rootGroupAPI     = "api"
+	rootGroupUtility = "utility"
+	rootGroupHelp    = "help"
+)
+
 func (c *CLI) newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "restish",
@@ -44,6 +53,8 @@ commands for registered APIs via OpenAPI 3.`,
 		},
 	}
 
+	addRootCommandGroups(root)
+	setupGroupedUsage(root)
 	c.addGlobalFlags(root)
 	c.addHTTPCommands(root)
 	c.addEditCommand(root)
@@ -58,6 +69,28 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addCommandPlugins(root)
 	c.setupMarkdownHelp(root)
 	return root
+}
+
+func addRootCommandGroups(root *cobra.Command) {
+	root.AddGroup(
+		&cobra.Group{ID: rootGroupHTTP, Title: "Generic HTTP Commands"},
+		&cobra.Group{ID: rootGroupConfig, Title: "Configuration and Setup"},
+		&cobra.Group{ID: rootGroupPlugin, Title: "Plugin Commands"},
+		&cobra.Group{ID: rootGroupAPI, Title: "Registered APIs"},
+		&cobra.Group{ID: rootGroupUtility, Title: "Utilities"},
+		&cobra.Group{ID: rootGroupHelp, Title: "Help"},
+	)
+	root.SetHelpCommandGroupID(rootGroupHelp)
+	root.SetCompletionCommandGroupID(rootGroupHelp)
+}
+
+func rootCommandHasGroup(root *cobra.Command, id string) bool {
+	for _, group := range root.Groups() {
+		if group.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // addGlobalFlags registers persistent flags that apply to all commands.

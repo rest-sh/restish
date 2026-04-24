@@ -36,8 +36,9 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 	}
 
 	apiCmd := &cobra.Command{
-		Use:   apiName,
-		Short: fmt.Sprintf("Commands generated from the %s API spec", apiName),
+		Use:     apiName,
+		Short:   fmt.Sprintf("Commands generated from the %s API spec", apiName),
+		GroupID: rootGroupAPI,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown command %q for %q", args[0], cmd.Name())

@@ -16,8 +16,9 @@ import (
 // addAPICommand registers the "api" subcommand tree on root.
 func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd := &cobra.Command{
-		Use:   "api",
-		Short: "Manage registered API configurations",
+		Use:     "api",
+		Short:   "Manage registered API configurations",
+		GroupID: rootGroupConfig,
 	}
 	clearAuthCmd := &cobra.Command{
 		Use:   "clear-auth-cache <name>",

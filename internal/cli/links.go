@@ -10,8 +10,9 @@ import (
 // addLinksCommand registers the "links" subcommand on root.
 func (c *CLI) addLinksCommand(root *cobra.Command) {
 	root.AddCommand(&cobra.Command{
-		Use:   "links <uri> [rel...]",
-		Short: "GET a URI and display its hypermedia links",
+		Use:     "links <uri> [rel...]",
+		Short:   "GET a URI and display its hypermedia links",
+		GroupID: rootGroupUtility,
 		Long: `Performs a GET request to <uri> and prints all hypermedia links
 found in the response (Link headers, HAL _links, JSON:API links, Siren links,
 JSON-LD @id). Optionally filter to specific relation types.`,
