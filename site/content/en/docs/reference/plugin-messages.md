@@ -9,6 +9,10 @@ Restish plugins communicate over stdin/stdout using CBOR. Each message is one
 self-delimiting CBOR data item. There is no extra length prefix or custom
 frame wrapper.
 
+This page is intended to be the practical reference for the message families
+used by the built-in plugin types today. When a section summarizes a family
+instead of spelling out every field on every payload, it says so explicitly.
+
 ## Hook Plugins
 
 Most hook plugins are one-shot. Restish writes one request message and expects
@@ -59,6 +63,16 @@ Command plugins are long-lived and exchange many messages in one session.
 Restish starts the command with an `init` message containing the declared
 command name and raw plugin args.
 
+### Messages A Plugin Can Receive
+
+- `init`
+- `http-response`
+- `api-spec-response`
+- `stdin-data`
+- `stdin-close`
+- `prompt-response`
+- `confirm-response`
+
 ### Messages A Plugin Can Send
 
 - `http-request`: ask Restish to perform an HTTP request on the plugin's behalf
@@ -74,13 +88,6 @@ command name and raw plugin args.
 - `confirm`: ask the user a yes/no question; fields: `message` (string). Restish replies with `confirm-response` containing `value` (bool).
 - `done`: signal that the command is complete; fields: `exit_code` (int, optional)
 
-### Messages Restish Sends Back
-
-- `http-response`
-- `api-spec-response`
-- `stdin-data`
-- `stdin-close`
-
 The key pattern is delegated HTTP: the plugin asks Restish to make the request,
 and Restish applies auth, retries, TLS, cache, and normalization on its behalf.
 
@@ -94,6 +101,9 @@ Typical flow:
 2. Plugin replies with `ready` and the leaf certificate.
 3. During TLS handshakes, Restish sends `sign` with a digest and hash id.
 4. Plugin replies with a signature or an error.
+
+The TLS signer exchange is intentionally narrow. It is not a general-purpose
+command-plugin protocol with progress, stdout, or prompt messages.
 
 ## Go Helper Package
 
