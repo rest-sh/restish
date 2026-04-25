@@ -47,6 +47,9 @@ var manifest = plugin.Manifest{
 }
 
 func main() {
+	if os.Getenv("RSH_HOOK_NEEDS_AUTH_SECRETS") == "1" {
+		manifest.NeedsAuthSecrets = true
+	}
 	if plugin.HandleStartupFlags(os.Stdout, manifest, nil) {
 		return
 	}
@@ -62,6 +65,7 @@ func main() {
 	case "auth":
 		var msg plugin.AuthHookInput
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
+		checkSecretHeaders(msg.Type, msg.Request.Headers)
 		out := plugin.AuthHookOutput{
 			Request: &plugin.HookRequestHeaderUpdate{
 				Headers: map[string]any{
@@ -77,13 +81,11 @@ func main() {
 	case "request-middleware":
 		var msg plugin.RequestMiddlewareInput
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
-		hdrs := map[string]any{}
-		for k, vs := range msg.Request.Headers {
-			hdrs[k] = vs
-		}
-		hdrs["X-Trace-Id"] = []any{"hook-trace-123"}
+		checkSecretHeaders(msg.Type, msg.Request.Headers)
 		out := plugin.RequestMiddlewareOutput{
-			Request: &plugin.HookRequestHeaderUpdate{Headers: hdrs},
+			Request: &plugin.HookRequestHeaderUpdate{
+				Headers: map[string]any{"X-Trace-Id": []any{"hook-trace-123"}},
+			},
 		}
 		if err := plugin.WriteMessage(os.Stdout, out); err != nil {
 			fmt.Fprintln(os.Stderr, "write:", err)
@@ -93,6 +95,7 @@ func main() {
 	case "response-middleware":
 		var msg plugin.ResponseMiddlewareInput
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
+		checkSecretHeaders(msg.Type, msg.Request.Headers)
 
 		behavior := os.Getenv("RSH_HOOK_RM_BEHAVIOR")
 		switch {
@@ -142,5 +145,31 @@ func main() {
 
 	default:
 		os.Exit(0)
+	}
+}
+
+func checkSecretHeaders(hook string, headers map[string][]string) {
+	expect := os.Getenv("RSH_HOOK_EXPECT_SECRET_HEADERS")
+	if expect == "" {
+		return
+	}
+	for _, name := range []string{"Authorization", "Cookie", "Proxy-Authorization"} {
+		values := headers[name]
+		if len(values) == 0 {
+			fmt.Fprintf(os.Stderr, "%s: missing %s header\n", hook, name)
+			os.Exit(2)
+		}
+		switch expect {
+		case "redacted":
+			if len(values) != 1 || values[0] != "<redacted>" {
+				fmt.Fprintf(os.Stderr, "%s: %s = %q, want redacted\n", hook, name, values)
+				os.Exit(2)
+			}
+		case "preserved":
+			if len(values) == 1 && values[0] == "<redacted>" {
+				fmt.Fprintf(os.Stderr, "%s: %s was redacted unexpectedly\n", hook, name)
+				os.Exit(2)
+			}
+		}
 	}
 }

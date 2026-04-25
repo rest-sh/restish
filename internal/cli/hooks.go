@@ -98,11 +98,7 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 			API:     apiName,
 			Profile: profileName,
 			Params:  params,
-			Request: pluginwire.HookRequest{
-				Method:  req.Method,
-				URI:     req.URL.String(),
-				Headers: headerMap(req.Header),
-			},
+			Request: hookRequestForPlugin(req, p),
 		}
 		var out pluginwire.AuthHookOutput
 		if err := plugin.CallHookWithTimeout(p.Path, plugin.HookTimeout(p.Manifest, "auth"), in, &out); err != nil {
@@ -118,12 +114,8 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
 	for _, p := range c.pluginsForHook("request-middleware") {
 		in := pluginwire.RequestMiddlewareInput{
-			Type: "request-middleware",
-			Request: pluginwire.HookRequest{
-				Method:  req.Method,
-				URI:     req.URL.String(),
-				Headers: headerMap(req.Header),
-			},
+			Type:    "request-middleware",
+			Request: hookRequestForPlugin(req, p),
 		}
 		var out pluginwire.RequestMiddlewareOutput
 		if err := plugin.CallHookWithTimeout(p.Path, plugin.HookTimeout(p.Manifest, "request-middleware"), in, &out); err != nil {
@@ -147,12 +139,8 @@ type HookFollowRequest struct {
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsForHook("response-middleware") {
 		in := pluginwire.ResponseMiddlewareInput{
-			Type: "response-middleware",
-			Request: pluginwire.HookRequest{
-				Method:  req.Method,
-				URI:     req.URL.String(),
-				Headers: headerMap(req.Header),
-			},
+			Type:    "response-middleware",
+			Request: hookRequestForPlugin(req, p),
 			Response: pluginwire.HookResponse{
 				Status:  resp.Status,
 				Headers: resp.Headers,
@@ -224,12 +212,41 @@ func applyRequestUpdate(req *http.Request, update *pluginwire.HookRequestHeaderU
 	}
 }
 
+func hookRequestForPlugin(req *http.Request, p plugin.Plugin) pluginwire.HookRequest {
+	headers := headerMap(req.Header)
+	if !p.Manifest.NeedsAuthSecrets {
+		redactHookRequestHeaders(headers)
+	}
+	return pluginwire.HookRequest{
+		Method:  req.Method,
+		URI:     req.URL.String(),
+		Headers: headers,
+	}
+}
+
+func redactHookRequestHeaders(headers map[string][]string) {
+	for name := range headers {
+		if isHookSecretHeader(name) {
+			headers[name] = []string{"<redacted>"}
+		}
+	}
+}
+
+func isHookSecretHeader(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Authorization", "Cookie", "Proxy-Authorization":
+		return true
+	default:
+		return false
+	}
+}
+
 // headerMap converts an http.Header (map[string][]string) to a plain Go map
 // suitable for CBOR serialization.
 func headerMap(h http.Header) map[string][]string {
 	m := make(map[string][]string, len(h))
 	for k, vs := range h {
-		m[k] = vs
+		m[k] = append([]string(nil), vs...)
 	}
 	return m
 }

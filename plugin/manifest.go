@@ -24,8 +24,10 @@ type Manifest struct {
 	// API names so the plugin is not invoked for every unrelated API.
 	AuthAPINames []string `cbor:"auth_api_names,omitempty" json:"auth_api_names,omitempty"`
 	// NeedsAuthSecrets, when true, tells Restish to forward secret auth
-	// params (passwords, client secrets) to this plugin. When false (the
-	// default) secret params are omitted to minimise secret exposure.
+	// params (passwords, client secrets) and credential-bearing request headers
+	// to this plugin. When false (the default), secret params are omitted and
+	// Authorization, Cookie, and Proxy-Authorization request headers are sent
+	// as "<redacted>" in auth and middleware hook payloads.
 	NeedsAuthSecrets bool `cbor:"needs_auth_secrets,omitempty" json:"needs_auth_secrets,omitempty"`
 	// HookTimeouts overrides the per-hook subprocess deadline. Keys are hook
 	// names (e.g. "auth", "request-middleware"). The default is 30 s for all

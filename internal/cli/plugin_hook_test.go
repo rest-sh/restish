@@ -152,6 +152,54 @@ func TestAuthHookPluginWithoutProfiles(t *testing.T) {
 	}
 }
 
+func TestHookPluginsRedactSecretRequestHeadersByDefault(t *testing.T) {
+	installHookPlugin(t)
+	t.Setenv("RSH_HOOK_EXPECT_SECRET_HEADERS", "redacted")
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
+
+	srv := hookJSONServer(t, 200, `{"ok":true}`)
+	c, _, _ := newTestCLI()
+	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
+
+	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHookPluginsPreserveSecretRequestHeadersWhenOptedIn(t *testing.T) {
+	installHookPlugin(t)
+	t.Setenv("RSH_HOOK_NEEDS_AUTH_SECRETS", "1")
+	t.Setenv("RSH_HOOK_EXPECT_SECRET_HEADERS", "preserved")
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
+
+	srv := hookJSONServer(t, 200, `{"ok":true}`)
+	c, _, _ := newTestCLI()
+	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
+
+	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func hookSecretHeaderConfig(baseURL string) string {
+	return fmt.Sprintf(`{
+		"apis": {
+			"testapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"headers": [
+							"Authorization: Bearer original",
+							"Cookie: session=abc",
+							"Proxy-Authorization: Basic proxy"
+						]
+					}
+				}
+			}
+		}
+	}`, baseURL)
+}
+
 // TestRequestMiddlewarePlugin verifies that a request-middleware hook plugin
 // adds a header to the outbound request.
 func TestRequestMiddlewarePlugin(t *testing.T) {
