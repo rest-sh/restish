@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -23,6 +24,7 @@ type bulkItem struct {
 
 type bulkServer struct {
 	server *httptest.Server
+	mu     sync.Mutex
 	items  map[string]*bulkItem
 }
 
@@ -48,6 +50,9 @@ func (s *bulkServer) listURL() string {
 }
 
 func (s *bulkServer) handle(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/all-items":
 		entries := make([]bulkListEntry, 0, len(s.items))
