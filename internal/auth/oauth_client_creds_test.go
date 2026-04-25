@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,6 +45,22 @@ func TestClientCredentials_FetchesToken(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer access-abc" {
 		t.Errorf("Authorization: got %q, want %q", got, "Bearer access-abc")
+	}
+}
+
+func TestClientCredentialsRejectsInvalidDirectTokenEndpoint(t *testing.T) {
+	h := &ClientCredentials{}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":     "id1",
+		"client_secret": "sec1",
+		"token_url":     "http://auth.example.com/token",
+	})
+	if err == nil {
+		t.Fatal("expected invalid token_url error")
+	}
+	if !strings.Contains(err.Error(), "must use https") {
+		t.Fatalf("expected https error, got %v", err)
 	}
 }
 

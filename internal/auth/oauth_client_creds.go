@@ -82,7 +82,11 @@ func (h *ClientCredentials) resolveToken(ctx context.Context, params map[string]
 
 	// Resolve token URL (possibly via OIDC discovery).
 	tokenURL := params["token_url"]
-	if tokenURL == "" {
+	if tokenURL != "" {
+		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+			return "", err
+		}
+	} else {
 		issuer := params["issuer_url"]
 		if issuer == "" {
 			return "", fmt.Errorf("oauth-client-credentials: token_url or issuer_url is required")

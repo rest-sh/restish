@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"context"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -103,6 +106,51 @@ func TestParseTokenEndpointErrorRedactsSecrets(t *testing.T) {
 		if strings.Contains(tokenErr.Body, secret) {
 			t.Fatalf("expected body redaction, got %q", tokenErr.Body)
 		}
+	}
+}
+
+func TestValidateDirectOAuthEndpoint(t *testing.T) {
+	cases := []struct {
+		name      string
+		param     string
+		rawURL    string
+		wantError bool
+	}{
+		{name: "valid https", param: "token_url", rawURL: "https://auth.example.com/token"},
+		{name: "localhost http", param: "token_url", rawURL: "http://localhost:8080/token"},
+		{name: "ipv4 loopback http", param: "token_url", rawURL: "http://127.0.0.1:8080/token"},
+		{name: "ipv6 loopback http", param: "token_url", rawURL: "http://[::1]:8080/token"},
+		{name: "public http rejected", param: "token_url", rawURL: "http://auth.example.com/token", wantError: true},
+		{name: "credentials rejected", param: "token_url", rawURL: "https://user:pass@auth.example.com/token", wantError: true},
+		{name: "fragment rejected", param: "authorize_url", rawURL: "https://auth.example.com/authorize#frag", wantError: true},
+		{name: "query rejected", param: "authorize_url", rawURL: "https://auth.example.com/authorize?prompt=login", wantError: true},
+		{name: "relative rejected", param: "token_url", rawURL: "/token", wantError: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateDirectOAuthEndpoint(tc.param, tc.rawURL)
+			if tc.wantError && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestFetchTokenRejectsOversizedBody(t *testing.T) {
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, "application/json", strings.Repeat("x", maxOAuthEndpointBodyBytes+1)), nil
+	})
+
+	_, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{}, nil)
+	if err == nil {
+		t.Fatal("expected oversized body error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size limit error, got %v", err)
 	}
 }
 

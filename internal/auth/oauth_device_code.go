@@ -87,6 +87,16 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 func (h *DeviceCode) resolveEndpoints(ctx context.Context, params map[string]string) (string, string, error) {
 	deviceURL := params["device_authorization_url"]
 	tokenURL := params["token_url"]
+	if deviceURL != "" {
+		if err := validateDirectOAuthEndpoint("device_authorization_url", deviceURL); err != nil {
+			return "", "", err
+		}
+	}
+	if tokenURL != "" {
+		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+			return "", "", err
+		}
+	}
 	if deviceURL != "" && tokenURL != "" {
 		return deviceURL, tokenURL, nil
 	}
@@ -205,7 +215,10 @@ func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readOAuthEndpointBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading device authorization response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseTokenEndpointError(resp.StatusCode, body)
 	}

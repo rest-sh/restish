@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -144,6 +145,20 @@ func TestAuthCode_ValidCachedToken(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer valid-token" {
 		t.Errorf("Authorization: got %q, want %q", got, "Bearer valid-token")
+	}
+}
+
+func TestAuthCodeRejectsInvalidDirectEndpoints(t *testing.T) {
+	h := &AuthorizationCode{}
+	_, _, err := h.resolveEndpoints(context.Background(), map[string]string{
+		"authorize_url": "https://auth.example.com/authorize?prompt=login",
+		"token_url":     "https://auth.example.com/token",
+	})
+	if err == nil {
+		t.Fatal("expected invalid authorize_url error")
+	}
+	if !strings.Contains(err.Error(), "query string") {
+		t.Fatalf("expected query string error, got %v", err)
 	}
 }
 

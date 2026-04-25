@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +102,21 @@ func TestDeviceCode_OIDCDiscovery(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer device-token" {
 		t.Fatalf("Authorization = %q", got)
+	}
+}
+
+func TestDeviceCodeRequestRejectsOversizedBody(t *testing.T) {
+	h := &DeviceCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			return testResponse(http.StatusOK, "application/json", strings.Repeat("x", maxOAuthEndpointBodyBytes+1)), nil
+		}),
+	}
+
+	_, err := h.requestDeviceAuthorization(context.Background(), map[string]string{"client_id": "id1"}, "https://auth.example.com/device")
+	if err == nil {
+		t.Fatal("expected oversized body error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size limit error, got %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -17,6 +18,7 @@ import (
 const (
 	authMethodClientSecretPost  = "client_secret_post"
 	authMethodClientSecretBasic = "client_secret_basic"
+	maxOAuthEndpointBodyBytes   = 1 << 20
 )
 
 // tokenResponse is the JSON response from an OAuth2 token endpoint.
@@ -127,6 +129,57 @@ func isPathWithinIssuerScope(issuerPath, endpointPath string) bool {
 	return endpointPath == issuerPath || strings.HasPrefix(endpointPath, issuerPrefix)
 }
 
+func validateDirectOAuthEndpoint(paramName, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("%s: invalid OAuth endpoint URL %q: %w", paramName, rawURL, err)
+	}
+	if !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("%s: OAuth endpoint URL %q must be absolute", paramName, rawURL)
+	}
+	if u.User != nil {
+		return fmt.Errorf("%s: OAuth endpoint URL %q must not include credentials", paramName, rawURL)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("%s: OAuth endpoint URL %q must not include a fragment", paramName, rawURL)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("%s: OAuth endpoint URL %q must not include a query string", paramName, rawURL)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackOAuthHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("%s: OAuth endpoint URL %q must use https unless the host is localhost or loopback", paramName, rawURL)
+	default:
+		return fmt.Errorf("%s: OAuth endpoint URL %q must use http or https", paramName, rawURL)
+	}
+}
+
+func isLoopbackOAuthHost(host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func readOAuthEndpointBody(r io.Reader) ([]byte, error) {
+	limited := &io.LimitedReader{R: r, N: maxOAuthEndpointBodyBytes + 1}
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxOAuthEndpointBodyBytes {
+		return nil, fmt.Errorf("OAuth endpoint response exceeds %d bytes", maxOAuthEndpointBodyBytes)
+	}
+	return body, nil
+}
+
 // FetchToken posts a token request to tokenURL and returns a CachedToken.
 // Pass nil for client to use http.DefaultClient.
 func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form url.Values, params map[string]string) (CachedToken, error) {
@@ -152,7 +205,10 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 		return CachedToken{}, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readOAuthEndpointBody(resp.Body)
+	if err != nil {
+		return CachedToken{}, fmt.Errorf("reading token endpoint response: %w", err)
+	}
 	if resp.StatusCode != 200 {
 		return CachedToken{}, parseTokenEndpointError(resp.StatusCode, body)
 	}

@@ -164,6 +164,9 @@ func (h *AuthorizationCode) SupportsForce() bool { return true }
 
 func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
 	if u := params["token_url"]; u != "" {
+		if err := validateDirectOAuthEndpoint("token_url", u); err != nil {
+			return "", err
+		}
 		return u, nil
 	}
 	_, tokenURL, err := h.resolveEndpoints(ctx, params)
@@ -173,6 +176,16 @@ func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[stri
 func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[string]string) (authorizeURL, tokenURL string, err error) {
 	authorizeURL = params["authorize_url"]
 	tokenURL = params["token_url"]
+	if authorizeURL != "" {
+		if err := validateDirectOAuthEndpoint("authorize_url", authorizeURL); err != nil {
+			return "", "", err
+		}
+	}
+	if tokenURL != "" {
+		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+			return "", "", err
+		}
+	}
 	if authorizeURL == "" || tokenURL == "" {
 		issuer := params["issuer_url"]
 		if issuer == "" {
