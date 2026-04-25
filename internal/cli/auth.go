@@ -183,7 +183,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 	}
 
 	// Auth hook plugins run even when no built-in auth is configured.
-	hookPlugins := c.pluginsForHook("auth")
+	hookPlugins := c.pluginsByHook["auth"]
 	if callbacks.OnRequest == nil && len(hookPlugins) == 0 {
 		return callbacks
 	}

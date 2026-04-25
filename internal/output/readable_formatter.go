@@ -10,12 +10,11 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/rest-sh/restish/v2/internal/content"
 	"golang.org/x/term"
 )
 
@@ -372,44 +371,20 @@ func textBodyLexerByContentType(contentType string) chroma.Lexer {
 	return nil
 }
 
-var displayRanges = []*unicode.RangeTable{
-	unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.White_Space,
-}
-
 func printableBody(resp *Response) ([]byte, bool) {
 	if resp == nil {
 		return nil, false
 	}
 	switch body := resp.Body.(type) {
 	case string:
-		if len(resp.Raw) > 0 && isPrintableText(resp.Raw) {
-			return resp.Raw, true
+		if len(resp.Raw) > 0 {
+			if data, ok := content.Printable(resp.Raw); ok {
+				return data, true
+			}
 		}
-		if isPrintableText([]byte(body)) {
-			return []byte(body), true
-		}
+		return content.Printable([]byte(body))
 	case []byte:
-		if isPrintableText(body) {
-			return body, true
-		}
+		return content.Printable(body)
 	}
 	return nil, false
-}
-
-func isPrintableText(data []byte) bool {
-	if len(data) >= 102400 || !utf8.Valid(data) {
-		return false
-	}
-	for i, r := range string(data) {
-		if i == 0 && r == '\uFEFF' {
-			continue
-		}
-		if i > 100 {
-			break
-		}
-		if !unicode.In(r, displayRanges...) {
-			return false
-		}
-	}
-	return true
 }

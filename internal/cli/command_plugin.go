@@ -43,7 +43,7 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 }
 
 func (c *CLI) addCommandPlugins(root *cobra.Command) {
-	for _, p := range c.pluginsForHook("command") {
+	for _, p := range c.pluginsByHook["command"] {
 		cmds, err := loadCommandPluginCommands(p.Path)
 		if err != nil {
 			fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(p.Path), err)
@@ -75,25 +75,20 @@ type commandPluginWriter struct {
 	w  io.Writer
 }
 
+func (w *commandPluginWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
+}
+
 func (w *commandPluginWriter) WriteMessage(v any) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return pluginwire.WriteMessage(w.w, v)
 }
 
-type synchronizedWriter struct {
-	mu sync.Mutex
-	w  io.Writer
-}
-
-func (w *synchronizedWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.w.Write(p)
-}
-
 func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
-	syncErr := &synchronizedWriter{w: cmd.ErrOrStderr()}
+	syncErr := &commandPluginWriter{w: cmd.ErrOrStderr()}
 	cmd.SetErr(syncErr)
 
 	proc := exec.Command(pluginPath, append(terminalContextFlags(c), args...)...)

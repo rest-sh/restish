@@ -12,13 +12,8 @@ import (
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
-// pluginsForHook returns all discovered plugins that declare the given hook.
-func (c *CLI) pluginsForHook(hook string) []plugin.Plugin {
-	return c.pluginsByHook[hook]
-}
-
 func (c *CLI) pluginForHook(name, hook string) (plugin.Plugin, bool) {
-	for _, p := range c.pluginsForHook(hook) {
+	for _, p := range c.pluginsByHook[hook] {
 		if p.Manifest.Name == name {
 			return p, true
 		}
@@ -70,7 +65,7 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 // Plugins that declare auth_api_names in their manifest are only called when
 // apiName appears in that list.
 func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
-	for _, p := range c.pluginsForHook("auth") {
+	for _, p := range c.pluginsByHook["auth"] {
 		if len(p.Manifest.AuthAPINames) > 0 {
 			matched := false
 			for _, name := range p.Manifest.AuthAPINames {
@@ -112,7 +107,7 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 // runRequestMiddlewarePlugins invokes all "request-middleware" hook plugins.
 // The returned headers from each plugin are applied to req.
 func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
-	for _, p := range c.pluginsForHook("request-middleware") {
+	for _, p := range c.pluginsByHook["request-middleware"] {
 		in := pluginwire.RequestMiddlewareInput{
 			Type:    "request-middleware",
 			Request: hookRequestForPlugin(req, p),
@@ -137,7 +132,7 @@ type HookFollowRequest struct {
 // Returns (drop, follow, err). drop=true means suppress all output. follow is
 // non-nil when the plugin wants Restish to issue a new request.
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
-	for _, p := range c.pluginsForHook("response-middleware") {
+	for _, p := range c.pluginsByHook["response-middleware"] {
 		in := pluginwire.ResponseMiddlewareInput{
 			Type:    "response-middleware",
 			Request: hookRequestForPlugin(req, p),

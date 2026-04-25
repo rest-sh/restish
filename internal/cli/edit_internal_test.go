@@ -50,6 +50,23 @@ func TestSplitCommandLinePreservesEmptyQuotedArgs(t *testing.T) {
 	}
 }
 
+func TestSplitCommandLineUsesShellFields(t *testing.T) {
+	got, err := splitCommandLine(`code --wait "two words.txt" 'single quoted' escaped\ space`)
+	if err != nil {
+		t.Fatalf("splitCommandLine() error = %v", err)
+	}
+	want := []string{"code", "--wait", "two words.txt", "single quoted", "escaped space"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("splitCommandLine() = %#v, want %#v", got, want)
+	}
+}
+
+func TestSplitCommandLineRejectsUnterminatedQuote(t *testing.T) {
+	if _, err := splitCommandLine(`vim "unterminated`); err == nil {
+		t.Fatal("expected unterminated quote error")
+	}
+}
+
 // TestConfirmEOFReturnsFalse verifies that piped or closed stdin treats
 // an EOF (or empty input) as "no", preventing accidental destructive confirms.
 func TestConfirmEOFReturnsFalse(t *testing.T) {

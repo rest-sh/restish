@@ -339,7 +339,7 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.
 		return err
 	}
 	defer lock.Close()
-	return atomicWriteFileLocked(path, data, fileMode, dirMode, lock)
+	return atomicWriteFileLocked(path, data, fileMode, dirMode)
 }
 
 // LockSiblingFile acquires the sibling advisory lock used for config-style
@@ -349,8 +349,7 @@ func LockSiblingFile(path string) (io.Closer, error) {
 	return lockConfigFile(path)
 }
 
-func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, lock *fileLock) error {
-	_ = lock
+func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
 	dir := filepath.Dir(path)
 
 	// Check if directory exists before creating
