@@ -27,6 +27,14 @@ const maxSpecBytes = 50 * 1024 * 1024
 
 const defaultDiscoverTimeout = 30 * time.Second
 
+var ErrNoSpecFound = errors.New("no API spec found")
+
+var errNoSpecCandidate = errors.New("no spec at candidate URL")
+
+var lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return net.DefaultResolver.LookupIPAddr(ctx, host)
+}
+
 // DiscoverConfig holds parameters for spec discovery for a single API.
 type DiscoverConfig struct {
 	// APIName is the registered short name (used as the cache key).
@@ -180,6 +188,9 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 			defer wg.Done()
 			ct, body, ttl, err := fn()
 			if err != nil {
+				if priority > 0 && errors.Is(err, errNoSpecCandidate) {
+					return
+				}
 				select {
 				case ch <- result{err: err, priority: priority}:
 				case <-ctx.Done():
@@ -200,7 +211,11 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	if cfg.SpecURL != "" {
 		u := cfg.SpecURL
 		launch(0, func() (string, []byte, time.Duration, error) {
-			return fetchBytes(ctx, u, tr)
+			ct, body, ttl, err := fetchBytes(ctx, u, tr)
+			if errors.Is(err, errNoSpecCandidate) {
+				return "", nil, 0, fmt.Errorf("GET %s: 404 Not Found", u)
+			}
+			return ct, body, ttl, err
 		})
 	}
 
@@ -264,7 +279,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
-	return nil, 0, fmt.Errorf("no API spec found at %s", cfg.BaseURL)
+	return nil, 0, fmt.Errorf("%w at %s", ErrNoSpecFound, cfg.BaseURL)
 }
 
 // fetchBytes performs a GET and returns content-type, body, cache TTL, and error.
@@ -286,6 +301,9 @@ func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper, al
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusNotFound {
+			return "", nil, 0, nil, errNoSpecCandidate
+		}
 		return "", nil, 0, nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
 	}
 
@@ -417,7 +435,7 @@ func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin 
 			if !strings.EqualFold(u.Hostname(), base.Hostname()) {
 				continue
 			}
-		} else if isDisallowedCrossOriginIP(u.Hostname()) {
+		} else if isDisallowedCrossOriginHost(base.Hostname(), u.Hostname()) {
 			continue
 		}
 		out = append(out, u.String())
@@ -425,15 +443,41 @@ func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin 
 	return out
 }
 
-func isDisallowedCrossOriginIP(host string) bool {
+func isDisallowedCrossOriginHost(baseHost, host string) bool {
+	basePrivate := hostIsNonPublic(baseHost)
+	targetPrivate := hostIsNonPublic(host)
+	return targetPrivate && !basePrivate
+}
+
+func hostIsNonPublic(host string) bool {
+	host = strings.Trim(strings.TrimSuffix(host, "."), "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
 	ip := net.ParseIP(host)
-	if ip == nil {
+	if ip != nil {
+		return isNonPublicIP(ip)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	addrs, err := lookupIPAddr(ctx, host)
+	if err != nil {
 		return false
 	}
+	for _, addr := range addrs {
+		if isNonPublicIP(addr.IP) {
+			return true
+		}
+	}
+	return false
+}
+
+func isNonPublicIP(ip net.IP) bool {
 	return ip.IsPrivate() ||
 		ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
 		ip.IsUnspecified()
 }
 

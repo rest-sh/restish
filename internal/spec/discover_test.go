@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -205,6 +206,36 @@ func TestExtractSpecLinks_NoHeader(t *testing.T) {
 	links := extractSpecLinks("https://api.example.com/", http.Header{})
 	if len(links) != 0 {
 		t.Errorf("expected 0 links, got %d", len(links))
+	}
+}
+
+func TestFilterDiscoveredSpecLinksRejectsLocalhostCrossOrigin(t *testing.T) {
+	links := filterDiscoveredSpecLinks("https://api.example.com", []string{"http://localhost:8080/openapi.json"}, true)
+	if len(links) != 0 {
+		t.Fatalf("expected localhost cross-origin spec link to be rejected, got %v", links)
+	}
+}
+
+func TestFilterDiscoveredSpecLinksRejectsDNSResolvedPrivateTarget(t *testing.T) {
+	oldLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		if host == "spec.example.com" {
+			return []net.IPAddr{{IP: net.ParseIP("10.0.0.10")}}, nil
+		}
+		return nil, errors.New("unexpected lookup")
+	}
+	t.Cleanup(func() { lookupIPAddr = oldLookup })
+
+	links := filterDiscoveredSpecLinks("https://api.example.com", []string{"https://spec.example.com/openapi.json"}, true)
+	if len(links) != 0 {
+		t.Fatalf("expected private DNS target to be rejected, got %v", links)
+	}
+}
+
+func TestFilterDiscoveredSpecLinksAllowsPrivateTargetFromPrivateBase(t *testing.T) {
+	links := filterDiscoveredSpecLinks("http://10.0.0.5", []string{"http://10.0.0.10/openapi.json"}, true)
+	if len(links) != 1 {
+		t.Fatalf("expected private-to-private link to be allowed, got %v", links)
 	}
 }
 

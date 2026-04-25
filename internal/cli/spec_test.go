@@ -186,6 +186,52 @@ func TestSpecDiscoveryViaWellKnownPath(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureFailsOnMalformedDiscoveredSpec(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/openapi.json" {
+			return jsonResponse(200, `{"openapi":"3.1.0","info":`), nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "api", "configure", "bad", "https://api.example.com"})
+	if err == nil {
+		t.Fatal("expected malformed discovered spec to fail configure")
+	}
+	if !strings.Contains(err.Error(), "discovering API spec") {
+		t.Fatalf("expected discovery error context, got %v", err)
+	}
+}
+
+func TestAPIConfigureAllowsTrueNoSpec(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "nospec", "https://api.example.com"}); err != nil {
+		t.Fatalf("configure should allow no spec: %v", err)
+	}
+	if !strings.Contains(out.String(), "no spec found") {
+		t.Fatalf("expected no spec message, got %q", out.String())
+	}
+}
+
 // TestSpecCacheReusedOnSecondDiscover verifies that a second Discover call does
 // not hit the server (result is served from the CBOR cache).
 func TestSpecCacheReusedOnSecondDiscover(t *testing.T) {

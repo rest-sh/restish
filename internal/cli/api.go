@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -216,7 +217,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		AllowCrossOrigin: allowCrossOrigin,
 		ForceRefresh:     true,
 	}
-	apiSpec, _ := spec.Discover(requestContext(cmd), discCfg, c.loaders)
+	apiSpec, discoverErr := spec.Discover(requestContext(cmd), discCfg, c.loaders)
+	if discoverErr != nil && !errors.Is(discoverErr, spec.ErrNoSpecFound) {
+		return fmt.Errorf("discovering API spec for %q: %w", apiName, discoverErr)
+	}
 
 	// Build the API config entry.
 	apiCfg := &config.APIConfig{
