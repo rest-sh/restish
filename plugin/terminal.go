@@ -22,11 +22,11 @@ type TerminalContext struct {
 func TerminalContextFromArgs(args []string) TerminalContext {
 	var ctx TerminalContext
 	for _, arg := range args {
-		if v, ok := strings.CutPrefix(arg, "--rsh-color="); ok {
+		if v, ok := strings.CutPrefix(arg, StartupFlagColor+"="); ok {
 			ctx.Color = v == "true"
-		} else if v, ok := strings.CutPrefix(arg, "--rsh-stdout-tty="); ok {
+		} else if v, ok := strings.CutPrefix(arg, StartupFlagStdoutTTY+"="); ok {
 			ctx.StdoutTTY = v == "true"
-		} else if v, ok := strings.CutPrefix(arg, "--rsh-stderr-tty="); ok {
+		} else if v, ok := strings.CutPrefix(arg, StartupFlagStderrTTY+"="); ok {
 			ctx.StderrTTY = v == "true"
 		}
 	}

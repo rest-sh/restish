@@ -19,6 +19,7 @@ import internalauth "github.com/rest-sh/restish/v2/internal/auth"
 // unless the plugin explicitly opts in with needs_auth_secrets in its manifest.
 type Param = internalauth.Param
 type AuthContext = internalauth.AuthContext
+type CachedToken = internalauth.CachedToken
 type TokenStore = internalauth.TokenStore
 type Prompter = internalauth.Prompter
 type Logger = internalauth.Logger

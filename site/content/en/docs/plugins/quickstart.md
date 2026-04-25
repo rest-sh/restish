@@ -134,7 +134,7 @@ func main() {
 	}
 
 	plugin.Run(manifest, commands, func(command string, args []string, c *plugin.CommandClient) error {
-		return c.Stdout([]byte("hello from plugin\n"))
+		return c.WriteStdout([]byte("hello from plugin\n"))
 	})
 }
 ```

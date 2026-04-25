@@ -12,8 +12,8 @@
 // Plugin binaries are discovered as executables named "restish-<name>".
 // Restish starts them with one of these startup flags:
 //
-//   - --rsh-plugin-manifest: write a CBOR Manifest to stdout
-//   - --rsh-plugin-commands: write a CBOR command list to stdout (command plugins)
+//   - StartupFlagManifest: write a CBOR Manifest to stdout
+//   - StartupFlagCommands: write a CBOR command list to stdout (command plugins)
 //
 // Most plugins should use HandleStartupFlags or Run instead of manually
 // handling startup flags.

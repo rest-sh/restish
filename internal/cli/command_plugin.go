@@ -24,7 +24,7 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--rsh-plugin-commands")
+	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagCommands)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), err)

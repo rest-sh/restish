@@ -188,9 +188,9 @@ func terminalContextFlags(c *CLI) []string {
 	stderrTTY := output.IsTerminal(c.Stderr)
 	color := output.ColorEnabled(c.Stdout)
 	return []string{
-		fmt.Sprintf("--rsh-stdout-tty=%v", stdoutTTY),
-		fmt.Sprintf("--rsh-stderr-tty=%v", stderrTTY),
-		fmt.Sprintf("--rsh-color=%v", color),
+		fmt.Sprintf("%s=%v", pluginwire.StartupFlagStdoutTTY, stdoutTTY),
+		fmt.Sprintf("%s=%v", pluginwire.StartupFlagStderrTTY, stderrTTY),
+		fmt.Sprintf("%s=%v", pluginwire.StartupFlagColor, color),
 	}
 }
 

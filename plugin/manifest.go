@@ -5,15 +5,33 @@ import (
 	"time"
 )
 
+const (
+	// StartupFlagManifest asks a plugin to write its Manifest and exit.
+	StartupFlagManifest = "--rsh-plugin-manifest"
+	// StartupFlagCommands asks a command plugin to write its command list and exit.
+	StartupFlagCommands = "--rsh-plugin-commands"
+	// StartupFlagColor tells a command plugin whether host terminal color is enabled.
+	StartupFlagColor = "--rsh-color"
+	// StartupFlagStdoutTTY tells a command plugin whether host stdout is a TTY.
+	StartupFlagStdoutTTY = "--rsh-stdout-tty"
+	// StartupFlagStderrTTY tells a command plugin whether host stderr is a TTY.
+	StartupFlagStderrTTY = "--rsh-stderr-tty"
+)
+
 // Manifest is the metadata a plugin reports when called with
 // --rsh-plugin-manifest. Plugin authors populate and write this with
 // WriteManifest instead of manually marshalling CBOR.
 type Manifest struct {
-	Name              string   `cbor:"name" json:"name"`
-	Version           string   `cbor:"version,omitempty" json:"version,omitempty"`
-	Description       string   `cbor:"description,omitempty" json:"description,omitempty"`
-	RestishAPIVersion int      `cbor:"restish_api_version" json:"restish_api_version"`
-	Hooks             []string `cbor:"hooks,omitempty" json:"hooks,omitempty"`
+	// Name is the stable plugin identifier, without the "restish-" executable prefix.
+	Name string `cbor:"name" json:"name"`
+	// Version is a plugin-defined version string shown in plugin listings.
+	Version string `cbor:"version,omitempty" json:"version,omitempty"`
+	// Description is a short human-readable summary of the plugin.
+	Description string `cbor:"description,omitempty" json:"description,omitempty"`
+	// RestishAPIVersion is the plugin protocol version the plugin expects.
+	RestishAPIVersion int `cbor:"restish_api_version" json:"restish_api_version"`
+	// Hooks lists plugin capabilities such as "command", "formatter", or "auth".
+	Hooks []string `cbor:"hooks,omitempty" json:"hooks,omitempty"`
 	// FormatterNames lists the output format names this plugin registers when
 	// the "formatter" hook is declared.
 	FormatterNames []string `cbor:"formatter_names,omitempty" json:"formatter_names,omitempty"`
@@ -38,16 +56,20 @@ type Manifest struct {
 // CommandDecl describes one command that a command-plugin exposes.
 // It is used in the response to --rsh-plugin-commands.
 type CommandDecl struct {
-	Name             string `cbor:"name" json:"name"`
-	Short            string `cbor:"short,omitempty" json:"short,omitempty"`
-	Long             string `cbor:"long,omitempty" json:"long,omitempty"`
-	PassthroughStdio bool   `cbor:"passthrough_stdio,omitempty" json:"passthrough_stdio,omitempty"`
+	// Name is the top-level command name contributed by the plugin.
+	Name string `cbor:"name" json:"name"`
+	// Short is the one-line help text shown in command listings.
+	Short string `cbor:"short,omitempty" json:"short,omitempty"`
+	// Long is optional extended help text.
+	Long string `cbor:"long,omitempty" json:"long,omitempty"`
+	// PassthroughStdio asks the host to forward stdin frames to the plugin.
+	PassthroughStdio bool `cbor:"passthrough_stdio,omitempty" json:"passthrough_stdio,omitempty"`
 }
 
 // WriteManifest serialises m as a CBOR data item and writes it to w.
 // It is the canonical way to respond to --rsh-plugin-manifest.
 //
-//	case "--rsh-plugin-manifest":
+//	case plugin.StartupFlagManifest:
 //	    return plugin.WriteManifest(os.Stdout, m)
 func WriteManifest(w io.Writer, m Manifest) error {
 	return WriteMessage(w, m)
@@ -56,7 +78,7 @@ func WriteManifest(w io.Writer, m Manifest) error {
 // WriteCommands serialises cmds as a CBOR map with a "commands" array and
 // writes it to w. It is the canonical way to respond to --rsh-plugin-commands.
 //
-//	case "--rsh-plugin-commands":
+//	case plugin.StartupFlagCommands:
 //	    return plugin.WriteCommands(os.Stdout, cmds)
 func WriteCommands(w io.Writer, cmds []CommandDecl) error {
 	type wrapper struct {

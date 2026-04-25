@@ -91,13 +91,13 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 	}
 }
 
-// Stdout writes data to the user's terminal via the host.
-func (c *CommandClient) Stdout(data []byte) error {
+// WriteStdout writes data to the user's terminal via the host.
+func (c *CommandClient) WriteStdout(data []byte) error {
 	return c.WriteMessage(StdoutDataMsg{Type: MsgTypeStdoutData, Data: append([]byte(nil), data...)})
 }
 
-// Stderr writes data to the user's terminal stderr via the host.
-func (c *CommandClient) Stderr(data []byte) error {
+// WriteStderr writes data to the user's terminal stderr via the host.
+func (c *CommandClient) WriteStderr(data []byte) error {
 	return c.WriteMessage(StderrDataMsg{Type: MsgTypeStderrData, Data: append([]byte(nil), data...)})
 }
 
@@ -126,14 +126,14 @@ func (c *CommandClient) WriteMessage(v any) error {
 	return WriteMessage(c.out, v)
 }
 
-// StdoutWriter returns an io.Writer that routes writes through Stdout.
+// StdoutWriter returns an io.Writer that routes writes through WriteStdout.
 func (c *CommandClient) StdoutWriter() io.Writer {
-	return &clientStreamWriter{fn: c.Stdout}
+	return &clientStreamWriter{fn: c.WriteStdout}
 }
 
-// StderrWriter returns an io.Writer that routes writes through Stderr.
+// StderrWriter returns an io.Writer that routes writes through WriteStderr.
 func (c *CommandClient) StderrWriter() io.Writer {
-	return &clientStreamWriter{fn: c.Stderr}
+	return &clientStreamWriter{fn: c.WriteStderr}
 }
 
 type clientStreamWriter struct {

@@ -60,7 +60,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/danielgtaylor/restish/v2/plugin"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 func main() {
@@ -127,7 +127,7 @@ HTTP back to the host instead of building their own client stack.
 ```go
 package main
 
-import "github.com/danielgtaylor/restish/v2/plugin"
+import "github.com/rest-sh/restish/v2/plugin"
 
 func main() {
 	manifest := plugin.Manifest{
@@ -142,7 +142,7 @@ func main() {
 	}
 
 	plugin.Run(manifest, commands, func(command string, args []string, c *plugin.CommandClient) error {
-		return c.Stdout([]byte("hello from plugin\n"))
+		return c.WriteStdout([]byte("hello from plugin\n"))
 	})
 }
 ```

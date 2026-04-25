@@ -115,13 +115,13 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 	return plugins
 }
 
-// LoadManifest calls path with --rsh-plugin-manifest and parses the CBOR (or
+// LoadManifest calls path with plugin.StartupFlagManifest and parses the CBOR (or
 // JSON fallback) manifest from stdout.
 func LoadManifest(path string) (*Manifest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, path, "--rsh-plugin-manifest")
+	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagManifest)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: manifest exec: %w", filepath.Base(path), err)

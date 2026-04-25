@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-// HandleStartupFlags checks os.Args for --rsh-plugin-manifest or
-// --rsh-plugin-commands.  If either flag is found the appropriate CBOR
+// HandleStartupFlags checks os.Args for StartupFlagManifest or
+// StartupFlagCommands. If either flag is found the appropriate CBOR
 // response is written to w and the function returns true — the caller should
 // return from main immediately.
 //
@@ -18,13 +18,13 @@ import (
 func HandleStartupFlags(w io.Writer, m Manifest, cmds []CommandDecl) bool {
 	for _, arg := range os.Args[1:] {
 		switch arg {
-		case "--rsh-plugin-manifest":
+		case StartupFlagManifest:
 			if err := WriteManifest(w, m); err != nil {
 				fmt.Fprintln(os.Stderr, "manifest:", err)
 				os.Exit(2)
 			}
 			return true
-		case "--rsh-plugin-commands":
+		case StartupFlagCommands:
 			if err := WriteCommands(w, cmds); err != nil {
 				fmt.Fprintln(os.Stderr, "commands:", err)
 				os.Exit(2)
@@ -64,9 +64,18 @@ func Run(m Manifest, cmds []CommandDecl, fn func(command string, args []string, 
 	args := initMsg.Args
 
 	if err := fn(command, args, client); err != nil {
-		_ = client.Stderr([]byte(err.Error() + "\n"))
-		_ = client.Done(1)
+		if writeErr := client.WriteStderr([]byte(err.Error() + "\n")); writeErr != nil {
+			fmt.Fprintln(os.Stderr, "write stderr:", writeErr)
+			os.Exit(1)
+		}
+		if doneErr := client.Done(1); doneErr != nil {
+			fmt.Fprintln(os.Stderr, "write done:", doneErr)
+			os.Exit(1)
+		}
 		return
 	}
-	_ = client.Done(0)
+	if err := client.Done(0); err != nil {
+		fmt.Fprintln(os.Stderr, "write done:", err)
+		os.Exit(1)
+	}
 }

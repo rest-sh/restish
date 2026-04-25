@@ -129,7 +129,7 @@ func main() {
 		}},
 		func(command string, args []string, client *plugin.CommandClient) error {
 			_ = client.Progress("running hello-plugin")
-			if err := client.Stdout([]byte("hello from command plugin\n")); err != nil {
+			if err := client.WriteStdout([]byte("hello from command plugin\n")); err != nil {
 				return err
 			}
 			return nil
