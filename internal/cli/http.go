@@ -285,7 +285,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return c.renderValue(cmd, filtered)
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty, filterExpr)
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
 	if err != nil {
 		return err
 	}
@@ -387,7 +387,7 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 		}}, nil
 	}
 
-	formatter, err := c.selectFormatter(cmd, fmtName, tty, "")
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 	}}, nil
 }
 
-func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool, filterExpr string) (output.Formatter, error) {
+func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
 	fmts := c.formatters
 	if fmts == nil {
 		fmts = output.DefaultFormatters()
@@ -447,7 +447,7 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool, filt
 		ok        bool
 	)
 	if fmtName == "" {
-		formatter, ok = output.SelectDefault(fmts, tty, filterExpr)
+		formatter, ok = output.SelectDefault(fmts, tty)
 	} else {
 		formatter, ok = output.Select(fmts, fmtName, tty)
 	}
@@ -768,6 +768,10 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	if err != nil {
 		return request.Options{}, fmt.Errorf("invalid tls signer param: %w", err)
 	}
+	cacheMaxBytes, err := c.cacheMaxBytes()
+	if err != nil {
+		return request.Options{}, err
+	}
 
 	return request.Options{
 		Headers:              gf.Headers,
@@ -786,7 +790,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		ContentType:          gf.ContentType,
 		Transport:            c.baseHTTPTransport(),
 		CacheDir:             c.cacheDir(),
-		CacheMaxBytes:        c.cacheMaxBytes(),
+		CacheMaxBytes:        cacheMaxBytes,
 		NoCache:              gf.NoCache,
 		Retry:                retry,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
@@ -794,22 +798,22 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	}, nil
 }
 
-func (c *CLI) cacheMaxBytes() int64 {
+func (c *CLI) cacheMaxBytes() (int64, error) {
 	if c == nil || c.cfg == nil {
-		return 0
+		return 0, nil
 	}
 	return cacheSizeStringToBytes(c.cfg.Cache.MaxSize)
 }
 
-func cacheSizeStringToBytes(s string) int64 {
+func cacheSizeStringToBytes(s string) (int64, error) {
 	if s == "" {
-		return 0
+		return 0, nil
 	}
 	parsed, err := parseByteSize(s)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("invalid cache.max_size %q: %w", s, err)
 	}
-	return parsed
+	return parsed, nil
 }
 
 // parseByteSize parses strings like "100MB", "64MiB", "1024", and returns bytes.

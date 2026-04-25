@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/tailscale/hujson"
 )
 
-func BenchmarkParseJSONC(b *testing.B) {
+func BenchmarkHUJSONParse(b *testing.B) {
 	for _, size := range []int{10, 100, 1000} {
 		doc := benchmarkConfigJSON(size)
 		b.Run(fmt.Sprintf("apis=%d", size), func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(doc)))
 			for i := 0; i < b.N; i++ {
-				if _, err := parseJSONC(doc); err != nil {
+				if _, err := hujson.Parse(doc); err != nil {
 					b.Fatal(err)
 				}
 			}

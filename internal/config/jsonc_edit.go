@@ -332,16 +332,6 @@ func decodeJSONKey(val hujson.ValueTrimmed) string {
 	return ""
 }
 
-// parseJSONC parses bytes as JSONC and returns a pointer to the parsed value.
-// This is used in tests to verify that output is still valid JSONC.
-func parseJSONC(data []byte) (*hujson.Value, error) {
-	v, err := hujson.Parse(data)
-	if err != nil {
-		return nil, err
-	}
-	return &v, nil
-}
-
 // describeValueType returns a user-friendly description of a hujson value type.
 func describeValueType(v hujson.ValueTrimmed) string {
 	switch v.(type) {

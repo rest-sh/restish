@@ -28,15 +28,19 @@ func TestParseByteSize(t *testing.T) {
 	}
 }
 
-func TestCacheSizeStringToBytes_InvalidReturnsZero(t *testing.T) {
-	if got := cacheSizeStringToBytes("not-a-size"); got != 0 {
-		t.Fatalf("expected 0 for invalid size, got %d", got)
+func TestCacheSizeStringToBytes_InvalidReturnsError(t *testing.T) {
+	if _, err := cacheSizeStringToBytes("not-a-size"); err == nil {
+		t.Fatal("expected invalid cache size error")
 	}
 }
 
 func TestCacheMaxBytes_FromConfig(t *testing.T) {
 	c := &CLI{cfg: &config.Config{Cache: config.CacheConfig{MaxSize: "2MB"}}}
-	if got, want := c.cacheMaxBytes(), int64(2*1000*1000); got != want {
+	got, err := c.cacheMaxBytes()
+	if err != nil {
+		t.Fatalf("cacheMaxBytes() error = %v", err)
+	}
+	if want := int64(2 * 1000 * 1000); got != want {
 		t.Fatalf("cacheMaxBytes() = %d, want %d", got, want)
 	}
 }

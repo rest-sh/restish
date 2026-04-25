@@ -59,20 +59,15 @@ func (h *AuthorizationCode) Parameters() []Param {
 }
 
 func (h *AuthorizationCode) OnRequest(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, false)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	return nil
+	return h.authenticateRequest(req, params, false)
 }
 
-func (h *AuthorizationCode) OnRequestForce(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, true)
+func (h *AuthorizationCode) authenticateRequest(req *http.Request, params map[string]string, force bool) error {
+	token, err := h.resolveToken(req.Context(), params, force)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	bearerAuth(req, token)
 	return nil
 }
 
@@ -153,17 +148,10 @@ func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request,
 		h2.Prompt = ac.Prompter.Prompt
 		h2.CanPrompt = true
 	}
-	params := cloneAuthParams(ac.Params)
-	if key := authCacheKey(ac); key != "" {
-		params["_cache_key"] = key
-	}
-	if ac.Force {
-		return h2.OnRequestForce(req, params)
-	}
-	return h2.OnRequest(req, params)
+	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 
-func (h *AuthorizationCode) SupportsForce() bool { return true }
+func (h *AuthorizationCode) SupportsForce() {}
 
 func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
 	if u := params["token_url"]; u != "" {

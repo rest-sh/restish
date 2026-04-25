@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rest-sh/restish/v2/internal/output"
 	"golang.org/x/term"
 )
 
@@ -14,7 +15,7 @@ func readPromptValue(prompt string, src io.Reader, stderr io.Writer, hidden bool
 	fmt.Fprint(stderr, prompt)
 
 	if hidden {
-		if f, ok := src.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		if f, ok := src.(*os.File); ok && output.IsTerminalReader(src) {
 			value, err := term.ReadPassword(int(f.Fd()))
 			fmt.Fprintln(stderr)
 			return string(value), err

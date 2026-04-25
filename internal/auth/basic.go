@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 )
@@ -38,8 +37,7 @@ func (h *HTTPBasic) OnRequest(req *http.Request, params map[string]string) error
 			return fmt.Errorf("http-basic: prompting for password: %w", err)
 		}
 	}
-	token := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-	req.Header.Set("Authorization", "Basic "+token)
+	req.SetBasicAuth(user, pass)
 	return nil
 }
 

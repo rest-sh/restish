@@ -55,10 +55,10 @@ type Handler interface {
 	Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error
 }
 
-// ForceCapable is implemented by handlers that can meaningfully bypass cached
-// credentials after a 401 and retry once with fresh auth state.
+// ForceCapable marks handlers that can meaningfully bypass cached credentials
+// after a 401 and retry once with fresh auth state.
 type ForceCapable interface {
-	SupportsForce() bool
+	SupportsForce()
 }
 
 func authCacheKey(ac AuthContext) string {
@@ -81,4 +81,16 @@ func cloneAuthParams(params map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func bearerAuth(req *http.Request, token string) {
+	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+func authParams(ac AuthContext) map[string]string {
+	params := cloneAuthParams(ac.Params)
+	if key := authCacheKey(ac); key != "" {
+		params["_cache_key"] = key
+	}
+	return params
 }

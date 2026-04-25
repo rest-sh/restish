@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -332,11 +331,7 @@ func applyTokenAuthHeader(req *http.Request, params map[string]string) {
 	if err != nil || method != authMethodClientSecretBasic {
 		return
 	}
-	req.Header.Set("Authorization", "Basic "+basicAuthValue(params["client_id"], params["client_secret"]))
-}
-
-func basicAuthValue(username, password string) string {
-	return base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	req.SetBasicAuth(params["client_id"], params["client_secret"])
 }
 
 func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {

@@ -44,20 +44,15 @@ func (h *DeviceCode) Parameters() []Param {
 }
 
 func (h *DeviceCode) OnRequest(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, false)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	return nil
+	return h.authenticateRequest(req, params, false)
 }
 
-func (h *DeviceCode) OnRequestForce(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, true)
+func (h *DeviceCode) authenticateRequest(req *http.Request, params map[string]string, force bool) error {
+	token, err := h.resolveToken(req.Context(), params, force)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	bearerAuth(req, token)
 	return nil
 }
 
@@ -252,14 +247,7 @@ func (h *DeviceCode) Authenticate(ctx context.Context, req *http.Request, ac Aut
 	if ac.Stderr != nil {
 		h2.Stderr = ac.Stderr
 	}
-	params := cloneAuthParams(ac.Params)
-	if key := authCacheKey(ac); key != "" {
-		params["_cache_key"] = key
-	}
-	if ac.Force {
-		return h2.OnRequestForce(req, params)
-	}
-	return h2.OnRequest(req, params)
+	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 
-func (h *DeviceCode) SupportsForce() bool { return true }
+func (h *DeviceCode) SupportsForce() {}

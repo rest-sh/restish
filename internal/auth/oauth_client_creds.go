@@ -29,20 +29,15 @@ func (h *ClientCredentials) Parameters() []Param {
 }
 
 func (h *ClientCredentials) OnRequest(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, false)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	return nil
+	return h.authenticateRequest(req, params, false)
 }
 
-func (h *ClientCredentials) OnRequestForce(req *http.Request, params map[string]string) error {
-	token, err := h.resolveToken(req.Context(), params, true)
+func (h *ClientCredentials) authenticateRequest(req *http.Request, params map[string]string, force bool) error {
+	token, err := h.resolveToken(req.Context(), params, force)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	bearerAuth(req, token)
 	return nil
 }
 
@@ -57,17 +52,10 @@ func (h *ClientCredentials) Authenticate(ctx context.Context, req *http.Request,
 	if ac.HTTPClient != nil {
 		h2.HTTPClient = ac.HTTPClient
 	}
-	params := cloneAuthParams(ac.Params)
-	if key := authCacheKey(ac); key != "" {
-		params["_cache_key"] = key
-	}
-	if ac.Force {
-		return h2.OnRequestForce(req, params)
-	}
-	return h2.OnRequest(req, params)
+	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 
-func (h *ClientCredentials) SupportsForce() bool { return true }
+func (h *ClientCredentials) SupportsForce() {}
 
 func (h *ClientCredentials) resolveToken(ctx context.Context, params map[string]string, force bool) (string, error) {
 	cacheKey := params["_cache_key"]

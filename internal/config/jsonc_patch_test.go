@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/tailscale/hujson"
 )
 
 func writeJSONCConfig(t *testing.T, content string) string {
@@ -327,7 +329,7 @@ func TestJSONCSetPath_PreservesUntouchedDeepSiblings(t *testing.T) {
 	if !strings.Contains(out, `"token": "secret"`) {
 		t.Fatalf("expected untouched sibling nested value preserved:\n%s", out)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
@@ -350,7 +352,7 @@ func TestJSONCSetPath_PreservesTriviaAroundValue(t *testing.T) {
 	if !strings.Contains(out, `"base_url" /* before colon */ : /* before value */ "https://new.example.com" // keep`) {
 		t.Fatalf("expected trivia around value preserved:\n%s", out)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
@@ -366,7 +368,7 @@ func TestJSONCSetPath_PreservesCRLFInput(t *testing.T) {
 	if !strings.Contains(out, "\r\n") {
 		t.Fatalf("expected CRLF newlines to remain present:\n%q", out)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
@@ -385,7 +387,7 @@ func TestJSONCSetPath_PreservesTabIndentation(t *testing.T) {
 	if gotURL := cfg.APIs["myapi"].BaseURL; gotURL != "https://api.example.com" {
 		t.Fatalf("base_url = %q, want https://api.example.com", gotURL)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
@@ -435,7 +437,7 @@ func TestJSONCSetPath_EscapedObjectKey(t *testing.T) {
 	if !strings.Contains(out, `"quote\"key": "new"`) {
 		t.Fatalf("expected escaped key to be updated:\n%s", out)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }
@@ -452,7 +454,7 @@ func TestJSONCSetPath_UnicodeEscapedObjectKey(t *testing.T) {
 	if !strings.Contains(out, `"na\u006de": "new"`) {
 		t.Fatalf("expected unicode-escaped key to be updated in place:\n%s", out)
 	}
-	if _, err := parseJSONC(got); err != nil {
+	if _, err := hujson.Parse(got); err != nil {
 		t.Fatalf("patched JSONC should still parse: %v", err)
 	}
 }

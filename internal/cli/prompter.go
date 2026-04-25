@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/output"
-	"golang.org/x/term"
 )
 
 // Prompter is the interface for interactive user prompts. All methods check ctx
@@ -74,7 +73,7 @@ func (c *CLI) Confirm(ctx context.Context, label string) (bool, error) {
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))
 	if answer == "" {
-		if f, ok := src.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		if output.IsTerminalReader(src) {
 			return true, nil
 		}
 		return false, nil

@@ -167,7 +167,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			}
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 		}
-		if forceable, ok := handler.(auth.ForceCapable); ok && forceable.SupportsForce() {
+		if _, ok := handler.(auth.ForceCapable); ok {
 			callbacks.OnUnauthorized = func(req *http.Request) error {
 				if prof.Auth.Type == "external-tool" {
 					if err := c.ensureExternalToolApproved(req.Context(), apiName, profileName, params["commandline"]); err != nil {

@@ -81,8 +81,8 @@ func FormatterNames(fmts map[string]Formatter) string {
 //   - If fmtName is set and recognised, that formatter is returned.
 //   - If fmtName is unrecognised, nil is returned so the caller can error.
 //   - TTY default: "readable" (syntax-highlighted, human-friendly).
-//   - Non-TTY default: "raw" (original bytes, safe for pipes and file redirects).
-func SelectDefault(fmts map[string]Formatter, tty bool, filterExpr string) (Formatter, bool) {
+//   - Non-TTY default: "json" (structured output for pipes and file redirects).
+func SelectDefault(fmts map[string]Formatter, tty bool) (Formatter, bool) {
 	if tty {
 		return fmts["readable"], true
 	}
@@ -94,5 +94,5 @@ func Select(fmts map[string]Formatter, fmtName string, tty bool) (Formatter, boo
 		f, ok := fmts[fmtName]
 		return f, ok
 	}
-	return SelectDefault(fmts, tty, "")
+	return SelectDefault(fmts, tty)
 }

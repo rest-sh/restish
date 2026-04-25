@@ -293,18 +293,11 @@ func levenshteinDistance(a, b string) int {
 			insert := curr[j-1] + 1
 			delete := prev[j] + 1
 			replace := prev[j-1] + cost
-			curr[j] = minInt(insert, minInt(delete, replace))
+			curr[j] = min(insert, min(delete, replace))
 		}
 		prev = curr
 	}
 	return prev[len(b)]
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // ParseError is returned when the config file contains invalid JSON or
