@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // ExternalTool delegates authentication to an external program. The program
@@ -33,7 +34,8 @@ import (
 // An empty or absent stdout response is a no-op (tool declined to mutate).
 // Compatible with the v1 external-tool auth wire format.
 type ExternalTool struct {
-	Stderr io.Writer
+	Stderr  io.Writer
+	Timeout time.Duration
 }
 
 func (a *ExternalTool) Parameters() []Param {
@@ -58,6 +60,10 @@ type externalToolResponse struct {
 }
 
 func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) error {
+	return a.run(req.Context(), req, params)
+}
+
+func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[string]string) error {
 	commandLine := params["commandline"]
 	if commandLine == "" {
 		return fmt.Errorf("external-tool auth: missing required param \"commandline\"")
@@ -90,7 +96,17 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 		return fmt.Errorf("external-tool auth: marshalling request: %w", err)
 	}
 
-	cmd := exec.Command(shell, "-c", commandLine)
+	timeout := a.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	if _, ok := ctx.Deadline(); !ok && timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	cmd := exec.CommandContext(ctx, shell, "-c", commandLine)
 	// Assign stdin directly so exec's internals copy the bytes after Start.
 	// Using StdinPipe + manual write before Start would deadlock for payloads
 	// larger than the OS pipe buffer (~64 KB).
@@ -99,6 +115,9 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("external-tool auth: tool timed out or was canceled: %w", ctx.Err())
+		}
 		return fmt.Errorf("external-tool auth: tool exited with error: %w", err)
 	}
 	if len(out) == 0 {
@@ -130,10 +149,13 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 	return nil
 }
 
-func (a *ExternalTool) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
 	stderr := a.Stderr
 	if stderr == nil {
 		stderr = ac.Stderr
 	}
-	return (&ExternalTool{Stderr: stderr}).OnRequest(req, ac.Params)
+	if req.Context() != nil {
+		ctx = req.Context()
+	}
+	return (&ExternalTool{Stderr: stderr, Timeout: a.Timeout}).run(ctx, req, ac.Params)
 }

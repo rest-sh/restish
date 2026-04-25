@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/tidwall/jsonc"
 )
@@ -333,22 +332,8 @@ func renderMigratedConfig(cfg *Config, source *legacyConfigSource) ([]byte, erro
 
 	var out bytes.Buffer
 	out.WriteString("// Migrated from Restish v1.\n")
-	appendLegacySnapshot := func(label string, data []byte) {
-		if len(data) == 0 {
-			return
-		}
-		out.WriteString("//\n")
-		out.WriteString("// Original " + label + " preserved for reference:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
-			if line == "" {
-				out.WriteString("//\n")
-				continue
-			}
-			out.WriteString("// " + line + "\n")
-		}
-	}
-	appendLegacySnapshot(filepath.Base(source.apisPath), source.apisData)
-	appendLegacySnapshot(filepath.Base(source.configPath), source.configData)
+	out.WriteString("// Original v1 files were copied to the .bak.v1 backup directory.\n")
+	out.WriteString("// Secrets are intentionally not duplicated in comments.\n")
 	out.Write(body)
 	out.WriteByte('\n')
 	return out.Bytes(), nil

@@ -401,7 +401,7 @@ func DefaultOpenBrowser(rawURL string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	return nil
+	return cmd.Wait()
 }
 
 // FreePort returns an available local TCP port as a string.

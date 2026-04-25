@@ -147,6 +147,48 @@ func TestValidateDirectOAuthEndpoint(t *testing.T) {
 	}
 }
 
+func TestValidateOAuthIssuerURL(t *testing.T) {
+	cases := []struct {
+		name      string
+		rawURL    string
+		wantError bool
+	}{
+		{name: "valid https", rawURL: "https://auth.example.com/realms/demo"},
+		{name: "localhost http", rawURL: "http://localhost:8080"},
+		{name: "loopback http", rawURL: "http://127.0.0.1:8080"},
+		{name: "public http rejected", rawURL: "http://auth.example.com", wantError: true},
+		{name: "userinfo rejected", rawURL: "https://user:pass@auth.example.com", wantError: true},
+		{name: "query rejected", rawURL: "https://auth.example.com?tenant=a", wantError: true},
+		{name: "fragment rejected", rawURL: "https://auth.example.com#frag", wantError: true},
+		{name: "relative rejected", rawURL: "/issuer", wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateOAuthIssuerURL(tc.rawURL)
+			if tc.wantError && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestDiscoverOIDCRejectsOversizedBody(t *testing.T) {
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, "application/json", strings.Repeat("x", maxOAuthEndpointBodyBytes+1)), nil
+	})
+
+	_, err := DiscoverOIDC(context.Background(), client, "https://auth.example.com")
+	if err == nil {
+		t.Fatal("expected oversized discovery body error")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected size limit error, got %v", err)
+	}
+}
+
 func TestFetchTokenRejectsOversizedBody(t *testing.T) {
 	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusOK, "application/json", strings.Repeat("x", maxOAuthEndpointBodyBytes+1)), nil

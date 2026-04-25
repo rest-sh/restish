@@ -64,6 +64,9 @@ func DiscoverOIDC(ctx context.Context, client *http.Client, issuerURL string) (*
 	if client == nil {
 		client = http.DefaultClient
 	}
+	if err := validateOAuthIssuerURL(issuerURL); err != nil {
+		return nil, err
+	}
 	discoveryURL := strings.TrimRight(issuerURL, "/") + "/.well-known/openid-configuration"
 	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
 	if err != nil {
@@ -77,11 +80,45 @@ func DiscoverOIDC(ctx context.Context, client *http.Client, issuerURL string) (*
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("OIDC discovery from %s: unexpected status %d", issuerURL, resp.StatusCode)
 	}
+	body, err := readOAuthEndpointBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("OIDC discovery from %s: %w", issuerURL, err)
+	}
 	var cfg OIDCConfig
-	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+	if err := json.Unmarshal(body, &cfg); err != nil {
 		return nil, fmt.Errorf("OIDC discovery from %s: %w", issuerURL, err)
 	}
 	return &cfg, nil
+}
+
+func validateOAuthIssuerURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("issuer_url: invalid OAuth issuer URL %q: %w", rawURL, err)
+	}
+	if !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must be absolute", rawURL)
+	}
+	if u.User != nil {
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must not include credentials", rawURL)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must not include a fragment", rawURL)
+	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must not include a query string", rawURL)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if isLoopbackOAuthHost(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must use https unless the host is localhost or loopback", rawURL)
+	default:
+		return fmt.Errorf("issuer_url: OAuth issuer URL %q must use http or https", rawURL)
+	}
 }
 
 // validateOIDCEndpoints checks that every non-empty endpoint URL in cfg uses

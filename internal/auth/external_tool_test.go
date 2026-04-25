@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExternalTool_Parameters(t *testing.T) {
@@ -128,5 +130,26 @@ func TestExternalTool_OnRequest_OmitBody(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExternalTool_AuthenticateCancelsHungTool(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command test not supported on Windows")
+	}
+	a := &ExternalTool{Timeout: 20 * time.Millisecond}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	start := time.Now()
+	err := a.Authenticate(context.Background(), req, AuthContext{
+		Params: map[string]string{"commandline": "sleep 5"},
+	})
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("hung tool was not canceled promptly: %v", time.Since(start))
+	}
+	if !strings.Contains(err.Error(), "timed out") && !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("expected timeout/cancel error, got %v", err)
 	}
 }

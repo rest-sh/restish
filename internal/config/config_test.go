@@ -353,7 +353,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	setLegacyConfigEnv(t, home)
 	legacyDir := filepath.Join(home, "Library", "Application Support", "restish")
 	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
-  // API comments should survive the migration snapshot.
+  // API comments stay in the v1 backup, not in migrated comments.
   "$schema": "https://rest.sh/schemas/apis.json",
   "example": {
     "base": "https://api.example.com",
@@ -376,7 +376,8 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
         "auth": {
           "name": "oauth-authorization-code",
           "params": {
-            "client_id": "abc"
+            "client_id": "abc",
+            "client_secret": "super-secret"
           }
         }
       }
@@ -384,7 +385,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
   }
 }`)
 	writeFile(t, filepath.Join(legacyDir, "config.json"), `{
-  // v1 global config is preserved as a comment snapshot.
+  // v1 global config stays in the v1 backup.
   "rsh-profile": "prod"
 }`)
 
@@ -427,7 +428,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	if len(prof.Query) != 1 || prof.Query[0] != "verbose=true" {
 		t.Fatalf("Query = %v", prof.Query)
 	}
-	if prof.Auth == nil || prof.Auth.Type != "oauth-authorization-code" || prof.Auth.Params["client_id"] != "abc" {
+	if prof.Auth == nil || prof.Auth.Type != "oauth-authorization-code" || prof.Auth.Params["client_id"] != "abc" || prof.Auth.Params["client_secret"] != "super-secret" {
 		t.Fatalf("Auth = %+v", prof.Auth)
 	}
 	if prof.TLSSigner != "pkcs11" {
@@ -444,13 +445,16 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	text := string(data)
 	for _, want := range []string{
 		"// Migrated from Restish v1.",
-		"// API comments should survive the migration snapshot.",
-		"// v1 global config is preserved as a comment snapshot.",
+		"// Original v1 files were copied to the .bak.v1 backup directory.",
+		"// Secrets are intentionally not duplicated in comments.",
 		"\"base_url\": \"https://api.example.com\"",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("migrated config missing %q:\n%s", want, text)
 		}
+	}
+	if strings.Contains(text, "API comments stay in the v1 backup") || strings.Contains(text, "v1 global config stays in the v1 backup") {
+		t.Fatalf("migrated config should not include legacy snapshot comments:\n%s", text)
 	}
 
 	for _, backupPath := range []string{
