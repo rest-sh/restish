@@ -100,7 +100,3 @@ completion behavior depend on the network.
 
 - [Connect to an API](../getting-started/connect-to-an-api/)
 - [Requests](../guides/requests/)
-
-## Source Material
-
-- [Design Records](/docs/contributing/design-records/)

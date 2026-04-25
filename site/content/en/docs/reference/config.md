@@ -33,6 +33,7 @@ token cache files.
 {
   "apis": {},
   "cache": {},
+  "theme": {},
   "plugins": {},
 }
 ```
@@ -103,6 +104,18 @@ Global cache settings currently support:
 The HTTP response cache directory defaults to `~/.cache/restish/responses` and
 can be overridden with `RSH_CACHE_DIR`.
 
+## `theme`
+
+`theme` stores terminal color/style entries used by readable output. You can
+edit it directly or use:
+
+```bash
+restish theme set <url-or-user/repo> [name]
+```
+
+The value is a map of style names to style attributes. Use `theme set` when you
+want Restish to fetch and install a shared theme definition.
+
 ## `plugins`
 
 `plugins` stores per-plugin configuration keyed by plugin short name. The value
@@ -150,6 +163,7 @@ Example:
   "cache": {
     "max_size": "100MB",
   },
+  "theme": {},
 }
 ```
 

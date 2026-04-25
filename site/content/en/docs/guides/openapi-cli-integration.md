@@ -154,8 +154,10 @@ This is the main way to teach Restish about:
 
 - the preferred auth scheme
 - persistent headers
-- prompts for usernames or other non-secret values
-- parameter templates derived from prompted values
+- profile-specific base URLs, headers, query params, and auth params
+
+If `x-cli-config` is absent, Restish can still infer useful profile auth from
+OpenAPI security schemes where the mapping is unambiguous.
 
 Example:
 
@@ -166,20 +168,19 @@ components:
       type: http
       scheme: basic
 x-cli-config:
-  security: default
-  headers:
-    accept: application/json
-  prompt:
-    username:
-      description: Username for the API
-      example: alice
-    password:
-      description: Password for the API
-      example: secret
+  profiles:
+    default:
+      headers:
+        - "Accept: application/json"
+      auth:
+        type: http-basic
+        params:
+          username: alice
 ```
 
-Do not put secrets in the OpenAPI document. Use prompts or auth flows that let
-the user provide them at configuration or request time.
+Do not put secrets in the OpenAPI document. v1-style `x-cli-config.prompt` is
+not part of v2 configuration; users should add secret values with `restish.json`,
+`api set`, or an auth flow that prompts at request time.
 
 ## Authoring Advice That Pays Off
 

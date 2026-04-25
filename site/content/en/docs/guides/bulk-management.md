@@ -157,6 +157,7 @@ restish bulk init https://api.example.com/items \
 
 ## Related Pages
 
+- [Bulk Command Reference](/docs/reference/bulk-command/)
 - [Example API](/docs/reference/example-api/)
 - [Command Plugins](/docs/plugins/command-plugins/)
 - [Requests](/docs/guides/requests/)

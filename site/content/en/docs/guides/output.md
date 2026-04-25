@@ -76,9 +76,9 @@ Link: </schemas/ImageItemList.json>; rel="describedby"
 
 [
   {
-    format: "jpeg"
-    name: "Dragonfly macro"
-    self: "/images/jpeg"
+    "format": "jpeg",
+    "name": "Dragonfly macro",
+    "self": "/images/jpeg"
   }
   ...
 ]

@@ -14,8 +14,9 @@ Retries are conservative by default:
 
 - network errors are retried
 - `5xx` responses are retried
-- `4xx` responses are not retried
-- `Retry-After` is honored when present
+- `408`, `429`, and `5xx` responses are retried
+- `Retry-After` is honored when present; `X-Retry-In` is also supported for
+  v1 compatibility when `Retry-After` is absent
 
 The default retry count is 2. Override it with `--rsh-retry`:
 

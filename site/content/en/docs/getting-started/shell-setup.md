@@ -49,19 +49,19 @@ restish setup zsh
 restish setup bash
 ```
 
-Today that writes one of these shell-specific lines:
+Today that writes one of these shell-specific snippets:
 
 - Zsh and Bash: `alias restish="noglob restish"`
+- Fish: `function restish; command restish $argv; end`
 
 The command is idempotent, so running it again does not keep appending the same
 line repeatedly.
 
 If you use Restish interactively, this step pays off quickly.
 
-Fish users should still install completion, but `restish setup fish` is not
-offered because Fish does not provide a compatible `noglob` alias equivalent.
-When needed, quote arguments containing glob characters such as `*`, `?`, or
-`[]` so Fish passes them through unchanged.
+Fish users can run `restish setup fish`; when needed, still quote arguments
+containing glob characters such as `*`, `?`, or `[]` so Fish passes them through
+unchanged.
 
 ## Restart Or Reload Your Shell
 
@@ -139,8 +139,3 @@ Then add shell completion once you are ready.
 - [Install](../install/)
 - [Quickstart](../quickstart/)
 - [Connect to an API](../connect-to-an-api/)
-
-## Source Material
-
-Based on the setup and completions design work summarized in the
-[design records](/docs/contributing/design-records/).

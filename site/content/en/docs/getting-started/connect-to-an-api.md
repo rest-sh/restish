@@ -221,7 +221,3 @@ Register an API when:
 - [Set Up Profiles](../set-up-profiles/)
 - [Requests](../guides/requests/)
 - [API Commands](../concepts/api-commands/)
-
-## Source Material
-
-- [Design Records](/docs/contributing/design-records/)

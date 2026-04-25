@@ -18,11 +18,21 @@ Use these commands to register and maintain named APIs.
 
 ```bash
 restish api configure <name> <url>
+restish api configure --allow-cross-origin-spec <name> <url>
 ```
 
 Registers an API and immediately tries to discover its OpenAPI description.
 
 This is the usual starting point for API-aware commands.
+
+If discovery finds a broken or unsafe spec source, `api configure` reports the
+error instead of writing a misleading config. If no spec is found, Restish still
+registers the API so the short name, profiles, auth, and pagination config can
+be useful.
+
+`--allow-cross-origin-spec` permits Link-header spec discovery on another
+origin. Private, loopback, link-local, multicast, and unspecified targets are
+still rejected unless the base API target is also private.
 
 Common follow-up checks:
 
@@ -39,11 +49,14 @@ can still carry `base_url`, profiles, auth, and pagination config.
 
 ```bash
 restish api sync <name>
+restish api sync --allow-cross-origin-spec <name>
 ```
 
 Forces Restish to re-fetch the cached spec for a named API.
 
 Use this after the upstream API description changes.
+
+`--allow-cross-origin-spec` has the same safety rules as `api configure`.
 
 ### `api list`
 
@@ -195,7 +208,8 @@ restish cache clear <api>
 Deletes cached responses globally or for one registered API.
 
 Use the API-specific form when you want to invalidate one API without losing the
-entire cache.
+entire cache. API-specific clearing removes cache namespaces for that API across
+all profiles without deleting another API that happens to share the same host.
 
 ## `cert`
 

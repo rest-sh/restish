@@ -24,8 +24,8 @@ HTTP/2.0 200 OK
 Content-Type: application/cbor
 
 {
-  message: "Welcome to the Restish example API"
-  self: "https://api.rest.sh/"
+  "message": "Welcome to the Restish example API",
+  "self": "https://api.rest.sh/"
 }
 ```
 
@@ -68,9 +68,9 @@ Content-Type: application/json
 
 [
   {
-    format: "jpeg"
-    name: "Dragonfly macro"
-    self: "/images/jpeg"
+    "format": "jpeg",
+    "name": "Dragonfly macro",
+    "self": "/images/jpeg"
   }
   ...
 ]

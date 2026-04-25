@@ -26,6 +26,7 @@ These commands are part of the main Restish binary:
 - `auth-header`: print the resolved `Authorization` header for a configured API
 - `api`: manage API registrations and cached specs
 - `cache`: inspect or clear the HTTP response cache
+- `theme`: install readable-output themes
 - `setup`: configure shell `noglob`-style behavior
 - `plugin`: inspect, install, remove, or debug plugins
 

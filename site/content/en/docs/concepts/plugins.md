@@ -99,7 +99,3 @@ Plugins extend specific seams where out-of-process behavior is the better fit.
 - [Hook Plugins](../plugins/hook-plugins/)
 - [Command Plugins](../plugins/command-plugins/)
 - [TLS Signer Plugins](../plugins/tls-signer-plugins/)
-
-## Source Material
-
-- [Design Records](/docs/contributing/design-records/)

@@ -93,6 +93,9 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 | API `base` | API `base_url` |
 | `restish api configure <name>` | `restish api configure <name> <url>` |
 
+The v1 interactive `api configure` prompt flow is intentionally retired. In v2,
+use `restish.json`, `api add`, `api set`, and `api edit` for persistent config.
+
 ### Commands And Flags
 
 - v0-style slug aliases are removed permanently; use the current operation name

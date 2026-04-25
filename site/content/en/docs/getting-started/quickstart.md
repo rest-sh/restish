@@ -43,8 +43,8 @@ HTTP/2.0 200 OK
 Content-Type: application/cbor
 
 {
-  message: "Welcome to the Restish example API"
-  self: "https://api.rest.sh/"
+  "message": "Welcome to the Restish example API",
+  "self": "https://api.rest.sh/"
 }
 ```
 

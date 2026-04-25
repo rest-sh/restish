@@ -80,12 +80,16 @@ HTTP/2.0 200 OK
 Content-Type: application/cbor
 
 {
-  message: "Welcome to the Restish example API"
-  self: "https://api.rest.sh/"
+  "message": "Welcome to the Restish example API",
+  "self": "https://api.rest.sh/"
 }
 ```
 
 If you see a formatted response like that, the install is working.
+
+Release-channel note: v2 packaging names and channels will be rechecked before
+the v2 release. Until then, install instructions may still point at the stable
+Restish distribution channel.
 
 ## Next Step
 
