@@ -100,6 +100,45 @@ func TestAPIConfigure(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{"components":{"schemas":{"Thing":{"type":"object"}}},"info":{"title":"Managed API","version":"1.0"},"paths":{"/things":{"get":{"operationId":"list-things","responses":{"200":{"description":"OK"}}}}},"openapi":"3.1.0"}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/vnd.oai.openapi+json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "example", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if strings.Contains(out.String(), "no spec found") {
+		t.Fatalf("expected spec to be found, got: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "spec loaded") {
+		t.Fatalf("expected spec loaded message, got: %q", out.String())
+	}
+}
+
 func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 

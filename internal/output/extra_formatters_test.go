@@ -86,6 +86,31 @@ func TestTableFormatter(t *testing.T) {
 	}
 }
 
+func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
+	resp := tableResp()
+	resp.Headers = map[string]string{
+		"Content-Type": "application/json",
+		"Date":         "Mon, 02 Jan 2006 15:04:05 GMT",
+	}
+
+	var buf bytes.Buffer
+	if err := (&output.TableFormatter{}).Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	for _, want := range []string{
+		"HTTP/1.1 200 OK",
+		"Content-Type: application/json",
+		"Date: Mon, 02 Jan 2006 15:04:05 GMT",
+		"Alice",
+		"Bob",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in table output:\n%s", want, got)
+		}
+	}
+}
+
 // TestTableFormatterColumns verifies that --rsh-columns restricts the output.
 func TestTableFormatterColumns(t *testing.T) {
 	var buf bytes.Buffer

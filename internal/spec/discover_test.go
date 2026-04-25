@@ -376,6 +376,31 @@ func TestDiscover_WellKnownPath(t *testing.T) {
 	}
 }
 
+func TestDiscover_WellKnownOfficialOpenAPIContentTypeWithLateOpenAPIKey(t *testing.T) {
+	spec := `{"components":{"schemas":{"Thing":{"type":"object"}}},"info":{"title":"WellKnown","version":"1.0.0"},"paths":{},"openapi":"3.1.0"}`
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			return httpResponse(200, "application/vnd.oai.openapi+json", spec, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "wellknown",
+		BaseURL:   "https://api.example.com",
+		Transport: tr,
+	}
+	result, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil spec")
+	}
+}
+
 func TestDiscover_LinkHeader(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Linked","version":"1.0.0"},"paths":{}}`
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {

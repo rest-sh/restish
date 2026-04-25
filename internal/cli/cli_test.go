@@ -135,7 +135,7 @@ func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(out.String(), "--rsh-retry int   Maximum retry attempts for network errors and 5xx responses (-1 = use default of 2; 0 = disable)") {
+	if strings.Contains(out.String(), "default -1") || strings.Contains(out.String(), "(default -1)") {
 		t.Fatalf("help leaked sentinel retry value:\n%s", out.String())
 	}
 	if !strings.Contains(out.String(), "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)") {

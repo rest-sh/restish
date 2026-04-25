@@ -17,19 +17,20 @@ func (OpenAPILoader) Priority() int { return 10 }
 // sniffing for an "openapi:" / `"openapi"` key in the first 512 bytes.
 func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 	ct := strings.ToLower(contentType)
+	if strings.Contains(ct, "openapi") {
+		return true
+	}
 	// Accept OpenAPI-specific MIME types and common JSON/YAML types.
-	if !strings.Contains(ct, "openapi") &&
-		!strings.Contains(ct, "json") &&
+	if !strings.Contains(ct, "json") &&
 		!strings.Contains(ct, "yaml") &&
 		ct != "" {
 		return false
 	}
 
-	// Body sniff: look for the "openapi" field within the first 512 bytes.
+	// Body sniff: look for the "openapi" field. Some generated specs write
+	// the top-level openapi field late in the document, so generic JSON/YAML
+	// cannot rely on a tiny prefix sniff.
 	sniff := body
-	if len(sniff) > 512 {
-		sniff = sniff[:512]
-	}
 	low := bytes.ToLower(sniff)
 	return bytes.Contains(low, []byte(`"openapi"`)) ||
 		bytes.Contains(low, []byte("openapi:"))
