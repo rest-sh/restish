@@ -429,7 +429,8 @@ func isBuiltinCommandName(name string) bool {
 // Flags (tokens starting with "-") are skipped when scanning for the first
 // positional argument, so `restish -v myapi op` still fast-paths on myapi.
 // Flags of the form --flag=value are consumed as a single token; all other
-// flags consume the next token as their value unless it starts with "-".
+// value-taking flags consume the next token as their value unless it starts
+// with "-"; bool/count flags do not consume the API name.
 func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 	// Scan past the program name and any leading flags.
 	toks := args[1:]
@@ -445,8 +446,9 @@ func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 			}
 			break
 		}
-		// Flag token: --flag=value is self-contained; otherwise consume next.
-		if !strings.Contains(t, "=") && len(toks) > 0 && !strings.HasPrefix(toks[0], "-") {
+		// Flag token: --flag=value is self-contained; otherwise only flags
+		// that actually take values consume the following token.
+		if flagConsumesNextArg(t) && len(toks) > 0 && !strings.HasPrefix(toks[0], "-") {
 			toks = toks[1:]
 		}
 	}
@@ -457,4 +459,33 @@ func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func flagConsumesNextArg(token string) bool {
+	if strings.Contains(token, "=") {
+		return false
+	}
+	name := strings.TrimLeft(token, "-")
+	if strings.HasPrefix(token, "--") {
+		_, noValue := boolLikeLongFlags[name]
+		return !noValue
+	}
+	for _, r := range name {
+		if !boolLikeShortFlags[r] {
+			return true
+		}
+	}
+	return false
+}
+
+var boolLikeLongFlags = map[string]bool{
+	"help": true, "version": true,
+	"rsh-silent": true, "rsh-headers": true, "rsh-raw": true,
+	"rsh-verbose": true, "rsh-insecure": true, "rsh-ignore-status-code": true,
+	"rsh-no-cache": true, "rsh-no-browser": true, "rsh-no-paginate": true,
+	"rsh-collect": true,
+}
+
+var boolLikeShortFlags = map[rune]bool{
+	'S': true, 'r': true, 'v': true,
 }

@@ -90,6 +90,12 @@ func TestToolsFromSpecFilteringAndNamespacing(t *testing.T) {
 	}
 }
 
+func TestParseArgsRejectsRemovedHTTPFlag(t *testing.T) {
+	if _, err := ParseArgs([]string{"--http", ":3000", "demo"}); err == nil {
+		t.Fatal("expected removed --http flag to be rejected by flag parser")
+	}
+}
+
 func TestRunServeToolCall(t *testing.T) {
 	spec := loadTestSpec(t, "demo", `{
 	  "openapi": "3.1.0",

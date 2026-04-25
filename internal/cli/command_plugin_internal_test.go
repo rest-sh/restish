@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -57,5 +58,32 @@ func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), fmt.Sprintf("plugin %s: command discovery", filepath.Base(path))) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidatePluginCommandNameRejectsCollisions(t *testing.T) {
+	c := &CLI{cfg: &config.Config{APIs: map[string]*config.APIConfig{"svc": {}}}}
+	root := &cobra.Command{Use: "restish"}
+	root.AddCommand(&cobra.Command{Use: "get"})
+
+	cases := []struct {
+		name string
+	}{
+		{name: "get"},
+		{name: "svc"},
+		{name: "Bad_Name"},
+	}
+	for _, tc := range cases {
+		if err := c.validatePluginCommandName(root, map[string]string{}, "plugin", tc.name); err == nil {
+			t.Fatalf("expected %q to be rejected", tc.name)
+		}
+	}
+
+	seen := map[string]string{"tool": "one"}
+	if err := c.validatePluginCommandName(root, seen, "two", "tool"); err == nil {
+		t.Fatal("expected duplicate plugin command to be rejected")
+	}
+	if err := c.validatePluginCommandName(root, map[string]string{}, "plugin", "valid-tool"); err != nil {
+		t.Fatalf("expected valid command name, got %v", err)
 	}
 }

@@ -117,7 +117,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-ca-cert", "", "Path to a PEM encoded CA certificate to trust")
 	pf.String("rsh-tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3")
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
-	pf.String("rsh-timeout", "", "Request timeout, e.g. 30s")
+	pf.StringP("rsh-timeout", "t", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
 	pf.Bool("rsh-no-browser", false, "Disable automatic browser launch for interactive auth flows")

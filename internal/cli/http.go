@@ -57,8 +57,13 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 	for _, v := range verbs {
 		v := v
 		method := strings.ToUpper(v.name)
+		use := v.name + " <url>"
+		switch method {
+		case "POST", "PUT", "PATCH":
+			use += " [body...]"
+		}
 		cmd := &cobra.Command{
-			Use:     v.name + " <url>",
+			Use:     use,
 			Aliases: []string{method},
 			Short:   v.short,
 			GroupID: rootGroupHTTP,
@@ -982,6 +987,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		AcceptHeader:         c.content.AcceptHeader(),
 		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
 		ContentType:          gf.ContentType,
+		UserAgent:            "restish/" + Version,
 		Transport:            c.baseHTTPTransport(),
 		CacheDir:             c.cacheDir(),
 		CacheMaxBytes:        cacheMaxBytes,

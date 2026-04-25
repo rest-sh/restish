@@ -298,6 +298,43 @@ func TestHTTPTimeout(t *testing.T) {
 	}
 }
 
+func TestHTTPTimeoutShorthand(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+	err := c.Run([]string{"restish", "get", "-t", "50ms", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+func TestHTTPDefaultUserAgentAndOverride(t *testing.T) {
+	var got []string
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		got = append(got, r.Header.Get("User-Agent"))
+		return jsonResponse(200, `{"ok":true}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get default UA: %v", err)
+	}
+
+	c2, _, _ := newTestCLI(t)
+	useTransport(c2, func(r *http.Request) (*http.Response, error) {
+		got = append(got, r.Header.Get("User-Agent"))
+		return jsonResponse(200, `{"ok":true}`), nil
+	})
+	if err := c2.Run([]string{"restish", "get", "-H", "User-Agent: custom", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get custom UA: %v", err)
+	}
+
+	if len(got) != 2 || !strings.HasPrefix(got[0], "restish/") || got[1] != "custom" {
+		t.Fatalf("User-Agent values = %v", got)
+	}
+}
+
 // TestHTTPInsecure verifies that --rsh-insecure disables TLS verification.
 // The test server uses TLS; without --rsh-insecure the request should fail,
 // with it the request should succeed.

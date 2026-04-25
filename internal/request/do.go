@@ -79,6 +79,9 @@ type Options struct {
 	// If empty and a body is present, the caller is responsible for setting
 	// the header via Headers.
 	ContentType string
+	// UserAgent, if non-empty, is sent when the caller has not supplied a
+	// User-Agent header.
+	UserAgent string
 	// OnRequest, if non-nil, is called after all standard headers and query
 	// params have been applied, immediately before the request is sent.
 	// Auth handlers use this hook to inject credentials.
@@ -171,6 +174,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			q.Add(key, value)
 		}
 		req.URL.RawQuery = q.Encode()
+	}
+	if opts.UserAgent != "" && req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", opts.UserAgent)
 	}
 
 	if opts.OnRequest != nil {

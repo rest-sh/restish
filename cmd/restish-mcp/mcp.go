@@ -102,7 +102,6 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-
 func Run(stdin io.Reader, stdout io.Writer, fetchSpec SpecFetcher, exec HTTPExecutor, args []string) error {
 	cfg, err := ParseArgs(args)
 	if err != nil {
@@ -133,18 +132,13 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var operations string
-	var httpAddr string
 	var maxResultBytes int
 	var readOnly bool
 	fs.StringVar(&operations, "operations", "", "Comma-separated operationId allowlist")
-	fs.StringVar(&httpAddr, "http", "", "HTTP transport address (not yet implemented)")
 	fs.IntVar(&maxResultBytes, "max-result-bytes", DefaultMaxResultBytes, "Maximum tool result payload size")
 	fs.BoolVar(&readOnly, "read-only", false, "Expose only GET/HEAD operations")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
-	}
-	if httpAddr != "" {
-		return nil, errors.New("--http is not implemented yet")
 	}
 	apiNames := fs.Args()
 	if len(apiNames) == 0 {

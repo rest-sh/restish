@@ -5,19 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/spf13/cobra"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"sort"
-	"strings"
-	"sync"
-	"time"
 )
 
 func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
@@ -43,6 +45,7 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 }
 
 func (c *CLI) addCommandPlugins(root *cobra.Command) {
+	seen := map[string]string{}
 	for _, p := range c.pluginsByHook["command"] {
 		cmds, err := loadCommandPluginCommands(p.Path)
 		if err != nil {
@@ -55,6 +58,11 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 		for _, decl := range cmds {
 			decl := decl
 			pluginPath := p.Path
+			if err := c.validatePluginCommandName(root, seen, filepath.Base(pluginPath), decl.Name); err != nil {
+				fmt.Fprintf(c.Stderr, "warning: %v\n", err)
+				continue
+			}
+			seen[decl.Name] = filepath.Base(pluginPath)
 			root.AddCommand(&cobra.Command{
 				Use:                decl.Name,
 				Short:              decl.Short,
@@ -68,6 +76,24 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 			})
 		}
 	}
+}
+
+var pluginCommandNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+func (c *CLI) validatePluginCommandName(root *cobra.Command, seen map[string]string, pluginName, name string) error {
+	if !pluginCommandNamePattern.MatchString(name) {
+		return fmt.Errorf("plugin %s: command name %q is invalid; use lower-case letters, digits, and dashes", pluginName, name)
+	}
+	if rootHasCommand(root, name) || isBuiltinCommandName(name) {
+		return fmt.Errorf("plugin %s: command %q collides with a built-in command; skipping", pluginName, name)
+	}
+	if c.cfg != nil && c.cfg.APIs[name] != nil {
+		return fmt.Errorf("plugin %s: command %q collides with a registered API; skipping", pluginName, name)
+	}
+	if previous := seen[name]; previous != "" {
+		return fmt.Errorf("plugin %s: command %q duplicates command from plugin %s; skipping", pluginName, name, previous)
+	}
+	return nil
 }
 
 type commandPluginWriter struct {

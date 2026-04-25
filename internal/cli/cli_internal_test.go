@@ -48,6 +48,16 @@ func TestGeneratedAPINames_SkipsLeadingFlags(t *testing.T) {
 	if !reflect.DeepEqual(got, []string{"myapi"}) {
 		t.Errorf("--flag value: got %v, want [myapi]", got)
 	}
+
+	got = c.generatedAPINames([]string{"restish", "--rsh-insecure", "myapi", "op"}, cfg)
+	if !reflect.DeepEqual(got, []string{"myapi"}) {
+		t.Errorf("--bool flag: got %v, want [myapi]", got)
+	}
+
+	got = c.generatedAPINames([]string{"restish", "-vv", "myapi", "op"}, cfg)
+	if !reflect.DeepEqual(got, []string{"myapi"}) {
+		t.Errorf("count flag cluster: got %v, want [myapi]", got)
+	}
 }
 
 func TestGeneratedAPINames_BuiltinVerb(t *testing.T) {
