@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -212,4 +213,47 @@ func (c *DiskCache) Clear(host string) error {
 		return err
 	}
 	return os.RemoveAll(target)
+}
+
+// ClearNamespaces deletes entries for the given cache namespaces across all
+// hosts. It is used for API-specific clearing because one registered API can
+// have multiple profile base URLs or operation hosts that share a hostname with
+// other APIs.
+func (c *DiskCache) ClearNamespaces(namespaces []string) error {
+	if len(namespaces) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(namespaces))
+	for _, namespace := range namespaces {
+		if namespace != "" {
+			want[namespace] = true
+		}
+	}
+	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() {
+			return nil
+		}
+		if want[info.Name()] {
+			_ = os.RemoveAll(path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+}
+
+// ClearNamespacePrefix deletes entries for every namespace with prefix.
+func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(info.Name(), prefix) {
+			_ = os.RemoveAll(path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
 }

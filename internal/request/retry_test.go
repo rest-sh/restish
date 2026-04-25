@@ -36,6 +36,25 @@ func TestWaitDurationHonorsRetryAfterBeforeJitter(t *testing.T) {
 	}
 }
 
+func TestWaitDurationHonorsXRetryIn(t *testing.T) {
+	rt := retryTransport{baseDelay: time.Second}
+	resp := &http.Response{Header: http.Header{"X-Retry-In": []string{"3"}}}
+	if wait := rt.waitDuration(resp, 2); wait != 3*time.Second {
+		t.Fatalf("waitDuration = %v, want %v", wait, 3*time.Second)
+	}
+}
+
+func TestWaitDurationPrefersRetryAfterOverXRetryIn(t *testing.T) {
+	rt := retryTransport{baseDelay: time.Second}
+	resp := &http.Response{Header: http.Header{
+		"Retry-After": []string{"5"},
+		"X-Retry-In":  []string{"3"},
+	}}
+	if wait := rt.waitDuration(resp, 2); wait != 5*time.Second {
+		t.Fatalf("waitDuration = %v, want Retry-After value", wait)
+	}
+}
+
 func TestRetryTransportRetries429AndLogsProgress(t *testing.T) {
 	var log bytes.Buffer
 	attempts := 0

@@ -132,6 +132,15 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 				}
 			}
 		}
+		if retryIn := resp.Header.Get("X-Retry-In"); retryIn != "" {
+			if secs, parseErr := strconv.Atoi(retryIn); parseErr == nil && secs >= 0 {
+				wait := time.Duration(secs) * time.Second
+				if wait > 60*time.Second {
+					wait = 60 * time.Second
+				}
+				return wait
+			}
+		}
 	}
 
 	// Exponential backoff: baseDelay * 2^(attempt-1), capped at 30 s.

@@ -146,6 +146,55 @@ func TestCacheClearEmptiesCache(t *testing.T) {
 	}
 }
 
+func TestCacheClearAPIDoesNotDeleteOtherAPIOnSameHost(t *testing.T) {
+	hits := map[string]*atomic.Int32{
+		"/one": {},
+		"/two": {},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if counter := hits[r.URL.Path]; counter != nil {
+			counter.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=3600")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	cacheDir := t.TempDir()
+	cfgFile := t.TempDir() + "/restish.json"
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"one": map[string]any{"base_url": srv.URL + "/one"},
+			"two": map[string]any{"base_url": srv.URL + "/two"},
+		},
+	})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	run := func(args ...string) {
+		t.Helper()
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().CachePath = cacheDir
+		if err := c.Run(append([]string{"restish"}, args...)); err != nil {
+			t.Fatalf("restish %v: %v", args, err)
+		}
+	}
+	run("get", "one")
+	run("get", "two")
+	run("cache", "clear", "one")
+	run("get", "one")
+	run("get", "two")
+
+	if got := hits["/one"].Load(); got != 2 {
+		t.Fatalf("/one hits = %d, want 2", got)
+	}
+	if got := hits["/two"].Load(); got != 1 {
+		t.Fatalf("/two hits = %d, want 1 (still cached)", got)
+	}
+}
+
 // TestCacheNoStoreNotCached verifies that responses with Cache-Control:
 // no-store are not stored in the cache.
 func TestCacheNoStoreNotCached(t *testing.T) {

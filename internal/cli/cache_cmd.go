@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/cache"
@@ -58,27 +57,22 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 				return err
 			}
 
-			var host string
 			if len(args) == 1 {
 				apiName := args[0]
 				if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 					return fmt.Errorf("unknown API %q", apiName)
 				}
-				u, parseErr := url.Parse(c.cfg.APIs[apiName].BaseURL)
-				if parseErr != nil || u.Host == "" {
-					return fmt.Errorf("cannot determine host for API %q", apiName)
+				if err := dc.ClearNamespacePrefix(apiName + ":"); err != nil {
+					return err
 				}
-				host = u.Host
+				fmt.Fprintf(c.Stdout, "Cache cleared for API %q.\n", args[0])
+				return nil
 			}
 
-			if err := dc.Clear(host); err != nil {
+			if err := dc.Clear(""); err != nil {
 				return err
 			}
-			if host == "" {
-				fmt.Fprintln(c.Stdout, "Cache cleared.")
-			} else {
-				fmt.Fprintf(c.Stdout, "Cache cleared for %q.\n", args[0])
-			}
+			fmt.Fprintln(c.Stdout, "Cache cleared.")
 			return nil
 		},
 	}
