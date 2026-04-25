@@ -17,10 +17,12 @@ other request defaults.
 Restish may store auth-related secrets on disk:
 
 - profile auth params in `restish.json` (for example passwords or client secrets)
-- OAuth tokens in the token cache file (default `tokens.cbor` in the config directory)
+- OAuth tokens in the CBOR token cache file (default `tokens.cbor` in the config directory)
+- approved `external-tool` command hashes in `external-tool-approvals.json`
 
 Keep your config directory private. Restish writes config files with private
-permissions and warns if the config file becomes group/world-readable.
+permissions, warns if the config file becomes group/world-readable, and rejects
+token or external-tool approval cache files with loose permissions.
 
 ## Start With The Principle
 
@@ -242,7 +244,9 @@ restish --rsh-no-browser -p default myapi/items
 ```
 
 When a TTY is attached, Restish prints the authorization URL and prompts for
-the pasted code instead of trying to open a local browser.
+the pasted code instead of trying to open a local browser. During normal browser
+launches, the full authorization URL is only printed when browser launch fails
+or verbose output is enabled.
 
 ## External Tool Example
 
@@ -272,6 +276,8 @@ script, signer, or local credential helper.
 
 At request time, Restish sends the outbound request to the tool as JSON on
 stdin. The tool can return updated headers, an updated URI, or both.
+The first time Restish sees a new `commandline` value, it prompts once and
+stores the approved command hash in the config directory.
 
 This is useful when:
 
@@ -281,6 +287,10 @@ This is useful when:
 
 The tool receives the full outbound request, including any headers already
 added earlier in request preparation. Treat it as trusted code.
+
+OAuth discovery, authorization, device, and token HTTP requests use the same
+TLS trust flags as ordinary requests, including `--rsh-ca-cert`,
+`--rsh-tls-min-version`, and `--rsh-insecure`.
 
 ## A Common Pattern
 

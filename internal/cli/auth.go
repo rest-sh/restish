@@ -9,11 +9,13 @@ import (
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 )
 
 type authHandlerOptions struct {
 	NoBrowser bool
+	Verbose   bool
 }
 
 type authCallbacks struct {
@@ -71,7 +73,7 @@ func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 
 	params := c.buildAuthParams(prof.Auth.Params)
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	if err := handler.Authenticate(context.Background(), req, c.authContext(apiName, profileName, params, false)); err != nil {
+	if err := handler.Authenticate(requestContext(cmd), req, c.authContext(requestContext(cmd), apiName, profileName, params, false)); err != nil {
 		return fmt.Errorf("building auth header: %w", err)
 	}
 
@@ -90,8 +92,8 @@ func (c *CLI) authHandlerOptionsFromCmd(cmd *cobra.Command) (authHandlerOptions,
 	if cmd == nil {
 		return authHandlerOptions{}, nil
 	}
-	noBrowser := globalFlagsFromContext(requestContext(cmd)).NoBrowser
-	return authHandlerOptions{NoBrowser: noBrowser}, nil
+	gf := globalFlagsFromContext(requestContext(cmd))
+	return authHandlerOptions{NoBrowser: gf.NoBrowser, Verbose: gf.Verbose > 0}, nil
 }
 
 func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (auth.Handler, error) {
@@ -120,6 +122,7 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 			},
 			CanPrompt: c.canPromptCode(),
 			NoBrowser: opts.NoBrowser,
+			Verbose:   opts.Verbose,
 		}, nil
 	case "oauth-device-code":
 		return &auth.DeviceCode{
@@ -154,14 +157,24 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			}
 		}
 		callbacks.OnRequest = func(req *http.Request) error {
-			if err := handler.Authenticate(req.Context(), req, c.authContext(apiName, profileName, params, false)); err != nil {
+			if prof.Auth.Type == "external-tool" {
+				if err := c.ensureExternalToolApproved(req.Context(), apiName, profileName, params["commandline"]); err != nil {
+					return err
+				}
+			}
+			if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, false)); err != nil {
 				return err
 			}
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 		}
 		if forceable, ok := handler.(auth.ForceCapable); ok && forceable.SupportsForce() {
 			callbacks.OnUnauthorized = func(req *http.Request) error {
-				if err := handler.Authenticate(req.Context(), req, c.authContext(apiName, profileName, params, true)); err != nil {
+				if prof.Auth.Type == "external-tool" {
+					if err := c.ensureExternalToolApproved(req.Context(), apiName, profileName, params["commandline"]); err != nil {
+						return err
+					}
+				}
+				if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, true)); err != nil {
 					return err
 				}
 				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
@@ -193,7 +206,7 @@ func (c *CLI) buildAuthParams(rawParams map[string]string) map[string]string {
 	return params
 }
 
-func (c *CLI) authContext(apiName, profileName string, params map[string]string, force bool) auth.AuthContext {
+func (c *CLI) authContext(ctx context.Context, apiName, profileName string, params map[string]string, force bool) auth.AuthContext {
 	return auth.AuthContext{
 		APIName:     apiName,
 		ProfileName: profileName,
@@ -201,10 +214,21 @@ func (c *CLI) authContext(apiName, profileName string, params map[string]string,
 		TokenStore:  auth.NewTokenCache(c.tokenCachePath()),
 		Prompter:    cliPrompter{cli: c},
 		Stderr:      c.Stderr,
-		HTTPClient:  &http.Client{Transport: c.baseHTTPTransport()},
+		HTTPClient:  c.authHTTPClient(ctx),
 		Logger:      log.New(c.Stderr, "", 0),
 		Force:       force,
 	}
+}
+
+func (c *CLI) authHTTPClient(ctx context.Context) *http.Client {
+	gf := globalFlagsFromContext(ctx)
+	tlsMinVersion, _ := request.TLSVersionFromString(gf.TLSMinVersion)
+	return &http.Client{Transport: request.BuildTransport(request.Options{
+		Transport:     c.baseHTTPTransport(),
+		Insecure:      gf.Insecure,
+		CACertPath:    gf.CACert,
+		TLSMinVersion: tlsMinVersion,
+	})}
 }
 
 // tokenCachePath returns the effective path for the token cache file.

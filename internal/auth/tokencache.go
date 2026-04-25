@@ -11,15 +11,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
 )
 
 // CachedToken holds a cached OAuth2 access token and optional refresh token.
 type CachedToken struct {
-	AccessToken  string    `json:"access_token"`
-	TokenType    string    `json:"token_type,omitempty"`
-	RefreshToken string    `json:"refresh_token,omitempty"`
-	Expiry       time.Time `json:"expiry,omitempty"`
+	AccessToken  string    `cbor:"access_token" json:"access_token"`
+	TokenType    string    `cbor:"token_type,omitempty" json:"token_type,omitempty"`
+	RefreshToken string    `cbor:"refresh_token,omitempty" json:"refresh_token,omitempty"`
+	Expiry       time.Time `cbor:"expiry,omitempty" json:"expiry,omitempty"`
 }
 
 // IsExpired reports whether the token is expired (or will expire within 30s).
@@ -30,7 +31,7 @@ func (t *CachedToken) IsExpired() bool {
 	return time.Now().Add(30 * time.Second).After(t.Expiry)
 }
 
-// TokenCache persists OAuth2 tokens as a flat JSON map at a given file path.
+// TokenCache persists OAuth2 tokens as a flat CBOR map at a given file path.
 // All operations are safe for concurrent use.
 type TokenCache struct {
 	path    string
@@ -129,6 +130,11 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 }
 
 func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
+	if insecure, err := configpkg.ConfigFileHasInsecurePermissions(c.path); err != nil {
+		return nil, err
+	} else if insecure {
+		return nil, fmt.Errorf("token cache %s is group/world-readable; run chmod 600 %s", c.path, c.path)
+	}
 	data, err := os.ReadFile(c.path)
 	if errors.Is(err, os.ErrNotExist) {
 		c.cache = map[string]CachedToken{}
@@ -140,8 +146,10 @@ func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 		return nil, err
 	}
 	var m map[string]CachedToken
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
+	if err := cbor.Unmarshal(data, &m); err != nil {
+		if jsonErr := json.Unmarshal(data, &m); jsonErr != nil {
+			return nil, fmt.Errorf("decoding token cache %s: cbor: %v; json: %v", c.path, err, jsonErr)
+		}
 	}
 	info, statErr := os.Stat(c.path)
 	if statErr == nil {
@@ -153,7 +161,7 @@ func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 }
 
 func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := cbor.Marshal(m)
 	if err != nil {
 		return err
 	}

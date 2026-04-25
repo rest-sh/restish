@@ -41,6 +41,8 @@ type AuthorizationCode struct {
 	// NoBrowser skips automatic browser launch and immediately falls back to
 	// printing the auth URL for manual use.
 	NoBrowser bool
+	// Verbose prints the full authorization URL before browser launch.
+	Verbose bool
 }
 
 func (h *AuthorizationCode) Parameters() []Param {
@@ -136,6 +138,7 @@ func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request,
 		Prompt:      h.Prompt,
 		CanPrompt:   h.CanPrompt,
 		NoBrowser:   h.NoBrowser,
+		Verbose:     h.Verbose,
 	}
 	if ac.TokenStore != nil {
 		h2.Cache = ac.TokenStore
@@ -314,9 +317,12 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	}
 	fullAuthorizeURL := authorizeURL + "?" + q.Encode()
 
-	// Notify user and open browser.
-	if h.Stderr != nil {
+	// Notify user and open browser. The full URL can contain sensitive request
+	// parameters, so keep it out of stderr unless it is needed for manual action.
+	if h.Stderr != nil && h.Verbose {
 		fmt.Fprintf(h.Stderr, "Opening browser for authentication:\n  %s\n", fullAuthorizeURL)
+	} else if h.Stderr != nil {
+		fmt.Fprintln(h.Stderr, "Opening browser for authentication.")
 	}
 
 	var openErr error
@@ -328,11 +334,11 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		if err := opener(fullAuthorizeURL); err != nil {
 			openErr = err
 			if h.Stderr != nil {
-				fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open the URL above manually.\n", err)
+				fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open this URL manually:\n  %s\n", err, fullAuthorizeURL)
 			}
 		}
 	} else if h.Stderr != nil {
-		fmt.Fprintln(h.Stderr, "Browser launch disabled; open the URL above manually.")
+		fmt.Fprintf(h.Stderr, "Browser launch disabled; open this URL manually:\n  %s\n", fullAuthorizeURL)
 	}
 
 	manualCodeCh := make(chan string, 1)

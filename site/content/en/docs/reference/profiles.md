@@ -103,7 +103,8 @@ Built-in auth types documented today:
 - `external-tool`
 
 `external-tool` is useful when a local script or helper must compute request
-auth dynamically.
+auth dynamically. New external-tool command lines require one-time approval;
+Restish stores the approved command hash in the config directory.
 
 Example:
 

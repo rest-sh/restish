@@ -1,11 +1,15 @@
 package auth
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 func TestTokenCache_MissingFile(t *testing.T) {
@@ -20,7 +24,7 @@ func TestTokenCache_MissingFile(t *testing.T) {
 }
 
 func TestTokenCache_RoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tokens.json")
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
 	tc := NewTokenCache(path)
 	tok := CachedToken{
 		AccessToken:  "abc123",
@@ -43,6 +47,43 @@ func TestTokenCache_RoundTrip(t *testing.T) {
 	}
 	if got.RefreshToken != tok.RefreshToken {
 		t.Errorf("RefreshToken: got %q, want %q", got.RefreshToken, tok.RefreshToken)
+	}
+}
+
+func TestTokenCache_WritesCBOR(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	tc := NewTokenCache(path)
+	if err := tc.Set("mykey", CachedToken{AccessToken: "abc123"}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var decoded map[string]CachedToken
+	if err := cbor.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("expected CBOR token cache: %v", err)
+	}
+	if decoded["mykey"].AccessToken != "abc123" {
+		t.Fatalf("decoded token = %+v", decoded["mykey"])
+	}
+	if json.Valid(data) {
+		t.Fatalf("token cache should not be JSON: %q", data)
+	}
+}
+
+func TestTokenCache_ReadsLegacyJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := os.WriteFile(path, []byte(`{"mykey":{"access_token":"legacy"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tc := NewTokenCache(path)
+	got, err := tc.Get("mykey")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got == nil || got.AccessToken != "legacy" {
+		t.Fatalf("expected legacy JSON token, got %+v", got)
 	}
 }
 
@@ -69,7 +110,7 @@ func TestTokenCache_Delete_Missing(t *testing.T) {
 }
 
 func TestTokenCache_FilePermissions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tokens.json")
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
 	tc := NewTokenCache(path)
 	if err := tc.Set("k", CachedToken{AccessToken: "x"}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -80,6 +121,21 @@ func TestTokenCache_FilePermissions(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0600 {
 		t.Errorf("expected file permission 0600, got %04o", perm)
+	}
+}
+
+func TestTokenCache_RejectsInsecurePermissionsOnRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits not authoritative on Windows")
+	}
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := os.WriteFile(path, []byte(`{"mykey":{"access_token":"legacy"}}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tc := NewTokenCache(path)
+	_, err := tc.Get("mykey")
+	if err == nil {
+		t.Fatal("expected insecure permission error")
 	}
 }
 

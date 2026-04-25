@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -163,7 +164,9 @@ func TestAuthCodeRejectsInvalidDirectEndpoints(t *testing.T) {
 }
 
 func TestAuthCode_BrowserFlow_FaviconRequestDoesNotAbort(t *testing.T) {
+	var stderr bytes.Buffer
 	h := &AuthorizationCode{
+		Stderr: &stderr,
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			if r.URL.String() != "https://auth.example.com/token" {
 				t.Fatalf("unexpected URL %q", r.URL.String())
@@ -216,6 +219,9 @@ func TestAuthCode_BrowserFlow_FaviconRequestDoesNotAbort(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer browser-token" {
 		t.Fatalf("Authorization = %q, want %q", got, "Bearer browser-token")
+	}
+	if strings.Contains(stderr.String(), "https://auth.example.com/authorize?") {
+		t.Fatalf("authorization URL should not be printed on successful browser launch without verbose: %q", stderr.String())
 	}
 }
 
@@ -362,7 +368,9 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 }
 
 func TestAuthCode_ManualCodeFallback(t *testing.T) {
+	var stderr bytes.Buffer
 	h := &AuthorizationCode{
+		Stderr: &stderr,
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			if err := r.ParseForm(); err != nil {
 				t.Fatalf("ParseForm: %v", err)
@@ -396,6 +404,9 @@ func TestAuthCode_ManualCodeFallback(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer manual-token" {
 		t.Fatalf("Authorization = %q, want %q", got, "Bearer manual-token")
+	}
+	if !strings.Contains(stderr.String(), "https://auth.example.com/authorize?") {
+		t.Fatalf("expected authorization URL after browser failure, got %q", stderr.String())
 	}
 }
 

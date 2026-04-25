@@ -22,8 +22,10 @@ permissions and warns when permissions are too open.
 
 You can override the config directory with `RSH_CONFIG_DIR`.
 
-OAuth token cache is stored alongside config (default:
-`~/.config/restish/tokens.cbor`). Keep the config directory private.
+OAuth token cache is stored as CBOR alongside config (default:
+`~/.config/restish/tokens.cbor`). Restish reads legacy JSON token caches for
+compatibility, writes CBOR on the next update, and rejects group/world-readable
+token cache files.
 
 ## Top-Level Shape
 

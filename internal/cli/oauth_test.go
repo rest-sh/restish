@@ -298,12 +298,12 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 		t.Fatalf("expected current profile in output, got %q", out.String())
 	}
 
-	// Read the cache file directly and verify the key is gone.
-	data, err := readJSONFile(cacheFile)
+	// Read through TokenCache so the test follows the on-disk CBOR format.
+	got, err := auth.NewTokenCache(cacheFile).Get("myapi:default")
 	if err != nil {
-		t.Fatalf("reading cache file: %v", err)
+		t.Fatalf("reading cache: %v", err)
 	}
-	if _, ok := data["myapi:default"]; ok {
+	if got != nil {
 		t.Error("expected cache entry to be deleted, but it still exists")
 	}
 }
@@ -326,15 +326,20 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 	if !strings.Contains(out.String(), "all profiles") {
 		t.Fatalf("expected all profiles output, got %q", out.String())
 	}
-	data, err := readJSONFile(cacheFile)
+	cache := auth.NewTokenCache(cacheFile)
+	other, err := cache.Get("other:default")
 	if err != nil {
-		t.Fatalf("reading cache file: %v", err)
+		t.Fatalf("reading unrelated cache entry: %v", err)
 	}
-	if _, ok := data["other:default"]; !ok {
+	if other == nil {
 		t.Fatal("expected unrelated cache entry to remain")
 	}
 	for _, key := range []string{"myapi:default", "myapi:prod"} {
-		if _, ok := data[key]; ok {
+		got, err := cache.Get(key)
+		if err != nil {
+			t.Fatalf("reading %q: %v", key, err)
+		}
+		if got != nil {
 			t.Fatalf("expected %q to be deleted", key)
 		}
 	}
