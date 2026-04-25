@@ -50,6 +50,14 @@ The invariant is simple: if a command needs user interaction or output, it
 should go through the `CLI` runtime rather than reaching directly for
 `os.Stdin`, `os.Stdout`, or `os.Stderr`.
 
+`CLI.Run` mutates runtime state for the duration of an invocation: it loads
+configuration, discovers plugins, registers generated commands, tracks request
+closers, and may temporarily wrap stdout for buffered non-TTY output. External
+embedders should create a fresh `CLI` per invocation, set streams and hooks
+before calling `Run`, and avoid sharing one `CLI` concurrently across commands.
+The test hooks exposed by `Hooks()` are intentionally narrow and are not a
+general extension API.
+
 ### 2. Paths And Persistence
 
 The runtime knows where user state lives:

@@ -1,17 +1,3 @@
-// Package plugin provides helpers for writing Restish out-of-process plugins.
-//
-// Restish communicates with plugins using CBOR messages over stdin/stdout.
-// Each message is a single self-delimiting CBOR data item — no length prefix
-// or other framing is added. This means any CBOR library can read and write
-// plugin messages without implementing custom framing.
-//
-// Use WriteMessage to send a message. For reading, prefer the higher-level
-// helpers (Run and NewCommandClient) whenever they fit your plugin type.
-// When you need lower-level stream access, use NewDecoder and call ReadMessage
-// on the returned Decoder — this is necessary whenever multiple messages will
-// be read from the same reader (os.Stdin in command and TLS-signer plugins).
-// The standalone ReadMessage function is provided as a convenience for true
-// one-shot reads only (hook plugins).
 package plugin
 
 import (

@@ -67,6 +67,21 @@ restish https://api.rest.sh/images -o json
 
 If you redirect to a file or pipe, structured output defaults to JSON already.
 
+## I Need To Compare A Request With Curl
+
+Restish does not currently print a full curl reproduction command because
+profile auth, hook plugins, TLS signer plugins, retries, and generated-command
+defaults can change the request after CLI parsing. Use `-v` to inspect the
+method, final URL, and redacted headers, then copy the non-secret parts into
+curl manually:
+
+```bash
+restish https://api.rest.sh/images -v
+```
+
+If you need byte-for-byte wire debugging, use curl directly for that check and
+then bring the confirmed headers or body back into Restish.
+
 ## The Command Failed Because of HTTP Status, But I Still Need the Body
 
 Use:

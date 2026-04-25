@@ -24,7 +24,7 @@ func TestAPIAddBuiltinNameRejected(t *testing.T) {
 
 // TestIsBuiltinCommandName verifies the helper covers the expected set of names.
 func TestIsBuiltinCommandName(t *testing.T) {
-	builtins := []string{"api", "cache", "cert", "completion", "delete", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "setup"}
+	builtins := []string{"api", "auth-header", "cache", "cert", "completion", "delete", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "setup", "theme"}
 	for _, name := range builtins {
 		if !isBuiltinCommandName(name) {
 			t.Errorf("isBuiltinCommandName(%q) = false, want true", name)
@@ -32,6 +32,19 @@ func TestIsBuiltinCommandName(t *testing.T) {
 	}
 	if isBuiltinCommandName("myapi") {
 		t.Error("isBuiltinCommandName(\"myapi\") = true, want false")
+	}
+}
+
+func TestBuiltinCommandNamesMatchRegisteredCommands(t *testing.T) {
+	c := New()
+	root := c.newRootCmd()
+	for _, cmd := range root.Commands() {
+		if cmd.Hidden {
+			continue
+		}
+		if !isBuiltinCommandName(cmd.Name()) {
+			t.Fatalf("registered built-in %q missing from builtinCommands", cmd.Name())
+		}
 	}
 }
 

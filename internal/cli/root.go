@@ -49,7 +49,7 @@ commands for registered APIs via OpenAPI 3.`,
 			if strings.ContainsAny(args[0], ".:/") || c.isAPIShortName(args[0]) {
 				return c.runHTTP(cmd, "GET", args)
 			}
-			return fmt.Errorf("unknown command %q for %q", args[0], cmd.Name())
+			return fmt.Errorf("unknown command %q for %q; run %q to see available commands or use a full URL", args[0], cmd.Name(), cmd.CommandPath()+" --help")
 		},
 	}
 

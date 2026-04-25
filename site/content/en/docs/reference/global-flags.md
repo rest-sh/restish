@@ -82,7 +82,7 @@ restish https://your-api.example.com/events --rsh-max-events 10 -o ndjson
 
 ## Resilience And Status Handling
 
-- `--rsh-retry`: set retry count, `0` to disable, `-1` to use the default
+- `--rsh-retry`: set retry count, `0` to disable; when omitted Restish retries twice
 - `--rsh-no-cache`: bypass cache reads and writes
 - `--rsh-ignore-status-code`: always exit `0` regardless of HTTP status
 - `--rsh-max-body-size`: cap response body size in MiB
@@ -90,6 +90,9 @@ restish https://your-api.example.com/events --rsh-max-events 10 -o ndjson
 Related env vars:
 
 - `RSH_RETRY`
+- `RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE`: plugin shutdown grace period, such as `250ms` or `2s`
+
+`RSH_HOOK_RM_BEHAVIOR` is used only by Restish's hook-plugin test fixture; it is not a supported user-facing setting.
 
 Examples:
 

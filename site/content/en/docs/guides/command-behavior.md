@@ -40,6 +40,16 @@ restish https://api.rest.sh/images -v
 
 Use `-vv` when you also want more TLS detail.
 
+Verbose diagnostics are prefixed so they remain easy to separate from response
+output:
+
+- `>` request line and request headers
+- `<` response status and response headers
+- `*` transport details such as TLS version, cipher suite, and certificates
+- `warning:` recoverable problems or limits that did not stop the command
+- `hint:` an actionable next step, usually after ambiguous input
+- `stderr:` stderr captured from a plugin when it explains a plugin failure
+
 ## Ignore Status Codes
 
 If you care more about capturing the body than about HTTP-derived exit codes,

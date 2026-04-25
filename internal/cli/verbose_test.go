@@ -95,6 +95,31 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 	}
 }
 
+func TestVerboseRedactsJSONBodies(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"token":"response-secret","ok":true}`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "token: request-secret"})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	stderr := errOut.String()
+	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") {
+		t.Fatalf("verbose body leaked secret:\n%s", stderr)
+	}
+	if strings.Count(stderr, `\u003credacted\u003e`) < 2 && strings.Count(stderr, "<redacted>") < 2 {
+		t.Fatalf("expected redacted request and response bodies, got:\n%s", stderr)
+	}
+}
+
 // TestVerboseTLSDetailsAtLevel2 verifies that -vv (verbose >= 2) prints TLS
 // version, cipher suite, and peer certificate information to stderr.
 func TestVerboseTLSDetailsAtLevel2(t *testing.T) {

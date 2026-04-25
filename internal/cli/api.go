@@ -532,7 +532,7 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 		case "next_path":
 			return resolvedAPIConfigKey{kind: apiKeyPaginationNextPath, jsonPath: append(basePath, "pagination", "next_path")}, nil
 		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported pagination field %q", parts[1])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported pagination field %q; supported: items_path, next_path", parts[1])
 		}
 	case "profiles":
 		if len(parts) < 3 {
@@ -587,13 +587,13 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 					paramName:   subParts[2],
 				}, nil
 			default:
-				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q", subParts[1])
+				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q; supported: type, params.<param>", subParts[1])
 			}
 		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q", parts[2])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, auth.type, auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
 	}
 }
 

@@ -125,6 +125,9 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	httpResp, err := c.sendPreparedRequest(requestContext(cmd), method, prepared)
 	if err != nil {
+		if hint := networkErrorHint(err); hint != "" {
+			return fmt.Errorf("network error for %s %s: %w\nhint: %s", method, rawURL, err, hint)
+		}
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
 	}
 
@@ -146,6 +149,9 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return err
+	}
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
+		c.logVerboseBodies(httpResp.Request, resp)
 	}
 
 	// Response-middleware plugins: can modify, drop, or follow.
@@ -494,6 +500,9 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 	if filterExpr == "" || strings.HasPrefix(filterExpr, "@") {
 		return false
 	}
+	if strings.HasPrefix(filterExpr, ".") || strings.ContainsAny(filterExpr, "|()") {
+		return false
+	}
 	roots := []string{"body", "headers", "links", "status", "proto"}
 	for _, root := range roots {
 		if filterExpr == root ||
@@ -560,6 +569,89 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 			fmt.Fprintf(c.Stderr, "* %s Issuer: %s\n", label, cert.Issuer)
 			fmt.Fprintf(c.Stderr, "* %s Expiry: %s (%s)\n", label, cert.NotAfter.Format(time.RFC3339), relativeExpiry(cert.NotAfter))
 		}
+	}
+}
+
+const verboseBodyLimit = 4096
+
+func (c *CLI) logVerboseBodies(req *http.Request, resp *output.Response) {
+	if req.GetBody != nil {
+		if body, err := req.GetBody(); err == nil {
+			data, _ := io.ReadAll(io.LimitReader(body, verboseBodyLimit+1))
+			_ = body.Close()
+			c.logVerboseBody("> body", data, req.Header.Get("Content-Type"))
+		}
+	}
+	if resp != nil && len(resp.Raw) > 0 {
+		c.logVerboseBody("< body", resp.Raw, resp.Headers["Content-Type"])
+	}
+}
+
+func (c *CLI) logVerboseBody(label string, data []byte, contentType string) {
+	if len(data) == 0 {
+		return
+	}
+	truncated := len(data) > verboseBodyLimit
+	if truncated {
+		data = data[:verboseBodyLimit]
+	}
+	rendered := redactVerboseBody(data, contentType)
+	if rendered == "" {
+		return
+	}
+	fmt.Fprintf(c.Stderr, "%s:\n%s\n", label, rendered)
+	if truncated {
+		fmt.Fprintf(c.Stderr, "%s truncated after %d bytes\n", label, verboseBodyLimit)
+	}
+}
+
+func redactVerboseBody(data []byte, contentType string) string {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if mediaType == "application/json" || strings.HasSuffix(mediaType, "+json") {
+		var value any
+		if err := json.Unmarshal(data, &value); err == nil {
+			redactSensitiveJSON(value)
+			if out, err := json.MarshalIndent(value, "", "  "); err == nil {
+				return string(out)
+			}
+		}
+	}
+	if !json.Valid(data) && strings.ContainsRune(string(data), '\x00') {
+		return ""
+	}
+	return string(data)
+}
+
+func redactSensitiveJSON(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, item := range v {
+			if isSensitiveQueryParam(key) {
+				v[key] = "<redacted>"
+				continue
+			}
+			redactSensitiveJSON(item)
+		}
+	case []any:
+		for _, item := range v {
+			redactSensitiveJSON(item)
+		}
+	}
+}
+
+func networkErrorHint(err error) string {
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "certificate") || strings.Contains(msg, "x509:"):
+		return "check the server certificate, use --rsh-ca-cert for a private CA, or --rsh-insecure only for deliberate testing"
+	case strings.Contains(msg, "no such host"):
+		return "check the hostname, DNS, VPN, or proxy settings"
+	case strings.Contains(msg, "connection refused"):
+		return "check that the service is running and that the host and port are correct"
+	case strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded"):
+		return "check network reachability or increase --rsh-timeout"
+	default:
+		return ""
 	}
 }
 
@@ -668,7 +760,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 				opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
 			} else {
 				if match.apiCfg.Profiles != nil {
-					return rawURL, match.name, opts, fmt.Errorf("profile %q not found for API %q", profileName, match.name)
+					return rawURL, match.name, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.name, profileNames(match.apiCfg.Profiles))
 				}
 				callbacks := c.authOnRequest(match.name, profileName, nil, authOpts)
 				opts.OnRequest = callbacks.OnRequest
@@ -690,7 +782,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 	}
 	if prof == nil {
 		if api.Profiles != nil {
-			return rawURL, apiName, opts, fmt.Errorf("profile %q not found for API %q", profileName, apiName)
+			return rawURL, apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, apiName, profileNames(api.Profiles))
 		}
 		callbacks := c.authOnRequest(apiName, profileName, nil, authOpts)
 		opts.OnRequest = callbacks.OnRequest

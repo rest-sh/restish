@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -48,14 +50,14 @@ func (c *CLI) addAuthHeaderCommand(root *cobra.Command) {
 func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+		return fmt.Errorf("unknown API %q; run \"restish api list\" to see configured APIs", apiName)
 	}
 	api := c.cfg.APIs[apiName]
 
 	profileName := c.profileFromCmd(cmd)
 
 	if api.Profiles == nil || api.Profiles[profileName] == nil {
-		return fmt.Errorf("API %q has no profile %q", apiName, profileName)
+		return fmt.Errorf("API %q has no profile %q; configured profiles: %s", apiName, profileName, profileNames(api.Profiles))
 	}
 	prof := api.Profiles[profileName]
 	if prof.Auth == nil {
@@ -229,6 +231,18 @@ func (c *CLI) authHTTPClient(ctx context.Context) *http.Client {
 		CACertPath:    gf.CACert,
 		TLSMinVersion: tlsMinVersion,
 	})}
+}
+
+func profileNames(profiles map[string]*config.ProfileConfig) string {
+	if len(profiles) == 0 {
+		return "(none)"
+	}
+	names := make([]string, 0, len(profiles))
+	for name := range profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // tokenCachePath returns the effective path for the token cache file.

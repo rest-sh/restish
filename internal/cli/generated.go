@@ -41,7 +41,7 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 		GroupID: rootGroupAPI,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown command %q for %q", args[0], cmd.Name())
+				return fmt.Errorf("unknown command %q for %q; run %q to see generated operations", args[0], cmd.Name(), cmd.CommandPath()+" --help")
 			}
 			return cmd.Help()
 		},
