@@ -192,8 +192,8 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("edit: encode update body: %w", err)
 	}
 
-	updateOpts := opts
-	updateOpts.Headers = append([]string{}, opts.Headers...)
+	updateOpts := prepared.opts
+	updateOpts.Headers = append([]string{}, prepared.opts.Headers...)
 	updateOpts.Headers = append(updateOpts.Headers, "Content-Type: "+actualContentType)
 	if etag := resp.Headers["Etag"]; etag != "" {
 		updateOpts.Headers = append(updateOpts.Headers, "If-Match: "+etag)

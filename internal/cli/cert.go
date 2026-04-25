@@ -59,10 +59,7 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		cfg.ServerName = u.Hostname()
 	}
 
-	hostPort := u.Host
-	if !strings.Contains(hostPort, ":") {
-		hostPort = net.JoinHostPort(u.Hostname(), "443")
-	}
+	hostPort := certDialAddress(u)
 
 	dialer := &net.Dialer{Timeout: opts.Timeout}
 	if dialer.Timeout == 0 {
@@ -106,6 +103,13 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func certDialAddress(u *url.URL) string {
+	if _, _, err := net.SplitHostPort(u.Host); err == nil {
+		return u.Host
+	}
+	return net.JoinHostPort(u.Hostname(), "443")
 }
 
 func writeCertInfo(w io.Writer, index int, cert *x509.Certificate) {

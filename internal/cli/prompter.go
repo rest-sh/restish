@@ -25,12 +25,18 @@ type Prompter interface {
 	Confirm(ctx context.Context, label string) (bool, error)
 }
 
+var promptOpenTTY = func() (*os.File, error) {
+	return os.Open("/dev/tty")
+}
+
 // Prompt implements Prompter by reading a visible input line from the user.
 func (c *CLI) Prompt(ctx context.Context, label string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return readPromptValue(label, c.promptSource(), c.Stderr, false)
+	src, cleanup := c.promptSource()
+	defer cleanup()
+	return readPromptValue(label, src, c.Stderr, false)
 }
 
 // Secret implements Prompter by reading a password/token without echo.
@@ -38,10 +44,8 @@ func (c *CLI) Secret(ctx context.Context, label string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	src := c.promptSource()
-	if c.hooks.PassReader != nil {
-		src = c.hooks.PassReader
-	}
+	src, cleanup := c.promptSource()
+	defer cleanup()
 	return readPromptValue(label, src, c.Stderr, true)
 }
 
@@ -58,7 +62,8 @@ func (c *CLI) Confirm(ctx context.Context, label string) (bool, error) {
 	}
 	fmt.Fprint(c.Stderr, label)
 
-	src := c.promptSource()
+	src, cleanup := c.promptSource()
+	defer cleanup()
 	reader := bufio.NewReader(src)
 	line, err := reader.ReadString('\n')
 	if errors.Is(err, io.EOF) {
@@ -83,14 +88,14 @@ func (c *CLI) Confirm(ctx context.Context, label string) (bool, error) {
 //  2. /dev/tty when c.Stdin is not a terminal (stdin may be piped but we still
 //     need to reach the user's keyboard for interactive prompts)
 //  3. c.Stdin as a last resort
-func (c *CLI) promptSource() io.Reader {
+func (c *CLI) promptSource() (io.Reader, func()) {
 	if c.hooks.PassReader != nil {
-		return c.hooks.PassReader
+		return c.hooks.PassReader, func() {}
 	}
 	if !output.IsTerminalReader(c.Stdin) {
-		if f, err := os.Open("/dev/tty"); err == nil {
-			return f
+		if f, err := promptOpenTTY(); err == nil {
+			return f, func() { _ = f.Close() }
 		}
 	}
-	return c.Stdin
+	return c.Stdin, func() {}
 }

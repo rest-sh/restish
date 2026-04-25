@@ -155,18 +155,7 @@ func LoadManifest(path string) (*Manifest, error) {
 
 // DefaultPluginDir returns the default directory for installed plugins.
 func DefaultPluginDir() string {
-	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "plugins")
-	}
-	if runtime.GOOS == "windows" {
-		if dir := os.Getenv("APPDATA"); dir != "" {
-			return filepath.Join(dir, "restish", "plugins")
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "restish", "plugins")
-	}
-	return filepath.Join(".restish", "plugins")
+	return filepath.Join(configpkg.NewPaths().Config(), "plugins")
 }
 
 // DefaultManifestCachePath returns the path to the on-disk plugin manifest

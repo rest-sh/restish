@@ -91,6 +91,20 @@ func TestDefaultPluginDir_HomeDir(t *testing.T) {
 	}
 }
 
+func TestDefaultPluginDir_XDGConfigHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping Unix XDG test on Windows")
+	}
+	xdg := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	dir := DefaultPluginDir()
+	want := filepath.Join(xdg, "restish", "plugins")
+	if dir != want {
+		t.Fatalf("DefaultPluginDir() = %q, want %q", dir, want)
+	}
+}
+
 // ---- LoadManifest ---------------------------------------------------------
 
 func TestLoadManifest_JSONOutput(t *testing.T) {

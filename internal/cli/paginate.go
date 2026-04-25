@@ -61,6 +61,7 @@ func (c *CLI) runPagination(
 	}
 
 	var allItems []any
+	var streamedCount int
 	var renderer valueRenderer
 	streamItems, err := c.paginationStreamsItems(cmd, firstResp)
 	if err != nil {
@@ -87,13 +88,18 @@ func (c *CLI) runPagination(
 	if collect || !streamItems {
 		allItems = make([]any, 0, paginationItemCapacity(len(items), maxPages, maxItems))
 	}
-	items, done := applyItemLimits(items, allItems, maxItems)
+	existingCount := len(allItems)
+	if !collect && streamItems {
+		existingCount = streamedCount
+	}
+	items, done := applyItemLimits(items, existingCount, maxItems)
 	if collect || !streamItems {
 		allItems = append(allItems, items...)
 	} else {
 		if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
 			return err
 		}
+		streamedCount += len(items)
 	}
 
 	nextURL := firstNextURL
@@ -136,13 +142,18 @@ func (c *CLI) runPagination(
 		if filterErr != nil {
 			fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
 		}
-		items, done = applyItemLimits(items, allItems, maxItems)
+		existingCount := len(allItems)
+		if !collect && streamItems {
+			existingCount = streamedCount
+		}
+		items, done = applyItemLimits(items, existingCount, maxItems)
 		if collect || !streamItems {
 			allItems = append(allItems, items...)
 		} else {
 			if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
 				return err
 			}
+			streamedCount += len(items)
 		}
 		nextURL = resolveNextURL(resp, pagCfg)
 	}
@@ -479,11 +490,11 @@ func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) stri
 
 // applyItemLimits truncates items to stay within maxItems. Returns the
 // (possibly truncated) items and a done flag indicating the limit was hit.
-func applyItemLimits(newItems, existing []any, maxItems int) ([]any, bool) {
+func applyItemLimits(newItems []any, existingCount, maxItems int) ([]any, bool) {
 	if maxItems <= 0 {
 		return newItems, false
 	}
-	remaining := maxItems - len(existing)
+	remaining := maxItems - existingCount
 	if remaining <= 0 {
 		return nil, true
 	}

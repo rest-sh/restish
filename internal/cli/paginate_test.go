@@ -195,6 +195,62 @@ func TestPaginationNDJSONOutputStreamsRecords(t *testing.T) {
 	}
 }
 
+func TestPaginationStreamingMaxItemsLimitsRecords(t *testing.T) {
+	c, out, errOut := newTestCLI()
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	requests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests++
+		pages := map[string]struct {
+			body string
+			next string
+		}{
+			"":  {`[{"id":1},{"id":2}]`, "https://api.example.com/items?page=2"},
+			"2": {`[{"id":3},{"id":4}]`, ""},
+		}
+		p := pages[r.URL.Query().Get("page")]
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if p.next != "" {
+			headers.Set("Link", `<`+p.next+`>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(p.body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson", "--rsh-max-items", "3"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := strings.TrimSpace(out.String())
+	lines := strings.Split(got, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 NDJSON lines, got %d:\n%s", len(lines), got)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+	if strings.Contains(got, `"id":4`) {
+		t.Fatalf("expected max-items to stop before id 4, got:\n%s", got)
+	}
+	if !strings.Contains(errOut.String(), "max-items") {
+		t.Fatalf("expected max-items warning on stderr, got %q", errOut.String())
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+}
+
 func TestPaginationReadableOutputNonTTYUsesDocumentRendering(t *testing.T) {
 	c, out, _ := newTestCLI()
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"

@@ -83,6 +83,50 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	}
 }
 
+func TestEditCommandUpdateUsesProfileHeaders(t *testing.T) {
+	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
+
+	var putAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer cfg-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			putAuth = r.Header.Get("Authorization")
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"headers": ["Authorization: Bearer cfg-token"]
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	c, _, _ := newTestCLI()
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	if err := c.Run([]string{"restish", "edit", "-y", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if putAuth != "Bearer cfg-token" {
+		t.Fatalf("PUT Authorization = %q", putAuth)
+	}
+}
+
 func TestEditCommandSendsIfMatch(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 
