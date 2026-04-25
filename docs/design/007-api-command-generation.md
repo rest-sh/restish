@@ -49,6 +49,10 @@ Under that group, each included operation becomes a child command.
 Built-in commands still take precedence over API short names. The generator does
 not get to shadow core commands such as `api`, `cache`, or `setup`.
 
+The set of reserved built-in command names should come from the actual root
+command tree or a guard test that proves the reserved list is in sync. A stale
+hand-maintained list can let generated APIs shadow core behavior.
+
 ## Operation Inclusion
 
 An operation is eligible for generation when:
@@ -59,6 +63,10 @@ An operation is eligible for generation when:
 
 If an operation cannot be generated safely, Restish should surface a clear
 diagnostic rather than silently dropping it.
+
+Empty or nil path items in an OpenAPI document are ignored safely. They should
+not panic command generation, MCP tool generation, or any plugin-facing
+operation export path.
 
 ## Naming
 

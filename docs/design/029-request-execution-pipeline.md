@@ -101,6 +101,22 @@ That includes:
 - constructing the request body from shorthand, stdin, files, or raw input
 - deriving content negotiation headers from the content registry
 
+Preparation is also where override semantics become concrete. Explicit CLI
+headers and environment-derived headers are user intent, not additional hints.
+For semantically singular headers such as `Accept` and `Accept-Encoding`, a
+manual value replaces the generated value rather than appending a second one.
+Header names are compared case-insensitively for this purpose.
+
+If the effective API or server target includes a path prefix, relative
+operation paths resolve beneath that prefix. A target like
+`https://api.example.com/v2` followed by `users` therefore requests
+`/v2/users`, not `/users`.
+
+Request bodies should be encoded into reusable bytes at preparation time. That
+lets retries, verbose logging, command plugins, and reproduction diagnostics
+observe the same prepared body without re-reading stdin or re-encoding a
+structured value differently.
+
 Preparation also applies request-time extensions in order:
 
 1. built-in auth resolution
@@ -199,6 +215,12 @@ Bounded GET responses may trigger follow-up work:
 
 Pagination must reuse the same request context and transport policy as the first
 page. That means auth, retry, TLS, and cache semantics stay consistent.
+
+Follow-up workflow requests, including `edit` PUT/PATCH requests and
+command-plugin delegated HTTP, must also reuse the prepared request options
+from this pipeline. They must not create ad-hoc clients or bypass profile
+headers, auth callbacks, query parameters, TLS settings, retry policy, or
+middleware.
 
 The paginator must also maintain its own safety state:
 

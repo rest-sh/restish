@@ -68,6 +68,11 @@ Global flags should have one consistent precedence model:
 
 Help text must only claim env-var support that actually exists.
 
+Environment variables that accept repeated values should preserve their
+documented input shape. For example, comma-separated `RSH_HEADER` entries from
+v1 are parsed into multiple headers unless a future design deliberately replaces
+that syntax and documents the migration.
+
 Global flags should eventually be parsed into one structured runtime object so
 every command sees the same resolved values instead of re-reading ad-hoc state.
 
@@ -97,6 +102,7 @@ At `-v`, users should see at least:
 
 - request method and URL
 - selected headers with sensitive values redacted
+- bounded redacted request and response bodies when available
 - response protocol and status
 - response headers
 - pagination or retry progress when relevant
@@ -176,6 +182,8 @@ Prompts should be coordinated through the runtime and behave consistently across
 Prompting rules:
 
 - prefer terminal devices over stdin when stdin is occupied by piped data
+- close terminal handles opened for a prompt, or centralize them in a runtime
+  owner with a clear lifetime
 - do not treat EOF as implicit confirmation for destructive actions
 - defaults should be explicit in both UX text and behavior
 

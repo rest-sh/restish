@@ -64,6 +64,8 @@ In auto mode:
 - if the expression begins with a recognized normalized-response root, treat it
   as shorthand
 - otherwise treat it as jq
+- if jq parsing fails and the expression is plausibly shorthand, fall back to
+  shorthand instead of reporting a jq parse error
 
 Typical shorthand expressions:
 
@@ -71,6 +73,7 @@ Typical shorthand expressions:
 - `body.items[0]`
 - `headers.Content-Type`
 - `links.next`
+- `..url|[@ contains github]`
 
 Typical jq expressions:
 
@@ -119,6 +122,7 @@ Shorthand filtering is intended for path-style projection over the normalized
 response document. It should stay simple and predictable:
 
 - direct root selection
+- explicit full-document selection via `@`
 - nested object traversal
 - array indexing
 - lightweight projection helpers compatible with the shorthand library's model
@@ -180,6 +184,10 @@ non-TTY/stdout-redirected cases:
   result
 
 This is a key interaction between filtering and design 009/028.
+
+An explicit `-f @` is not the same as omitting a filter. No filter may use a
+body-oriented display default, but `@` selects the full normalized response
+document with `status`, `headers`, `links`, and `body`.
 
 ## Performance And Caching
 

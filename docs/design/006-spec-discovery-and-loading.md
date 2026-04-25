@@ -140,6 +140,14 @@ The cache entry should include at least:
 Caching raw documents keeps the cache stable while letting parsing logic evolve
 with the binary.
 
+Startup may also cache extracted operation metadata alongside the raw bytes as
+a performance optimization. That cache is a command-generation artifact, not a
+replacement for the raw spec cache. It should be keyed by every input that can
+affect the generated command surface, including the API base URL, operation
+base, loader/cache schema version, spec source identity, and local spec file
+freshness. Rare flows that need the full document, such as `api show`, can
+parse the raw bytes lazily on demand.
+
 ## Cache Validity
 
 A cache entry is valid when:
@@ -161,6 +169,11 @@ If a cached spec cannot be parsed anymore:
 
 - the API should not silently disappear
 - Restish should surface a clear warning or error identifying the API and cause
+
+Cache filenames and paths derived from API or profile names must validate those
+names before writing or reading. Names containing path separators, `.` or `..`
+segments, or other traversal-shaped input should be rejected or migrated with a
+clear warning.
 
 ## `api configure` And `api sync`
 

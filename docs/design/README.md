@@ -58,11 +58,22 @@ following from this corpus:
 - response decoding, normalization, filtering, formatting, and output framing
 - streaming, pagination, retries, cache behavior, and cancellation semantics
 - plugin discovery, lifecycle, trust boundaries, and host/plugin responsibility
+- public Go API and plugin author contracts
 - operator-facing diagnostics, prompts, shell setup, and exit behavior
+- regression-test categories for v1 examples, binary fidelity, pagination
+  stdout/stderr separation, OAuth security boundaries, plugin protocols, and
+  deterministic filesystem behavior
 
 If an implementation detail is important to interoperability, security,
 compatibility, or user expectations, it should live in one of these records
 rather than remaining implicit in code.
+
+Implementation simplicity is part of that bar. A reimplementation should prefer
+one helper per runtime concern, standard library primitives over local
+reimplementations, deterministic tests over sleeps or wall-clock assumptions,
+and deletion of unused compatibility shims once v2 behavior is decided. These
+are maintainability rules because duplicated helpers and timing-sensitive tests
+were a recurring source of remediation work.
 
 **Foundations**
 

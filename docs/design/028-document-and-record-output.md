@@ -171,6 +171,11 @@ For bounded non-paginated responses, readable output stays as it is today:
 - blank line
 - pretty JSON body
 
+When the selected value is response metadata or the full response envelope,
+readable and table-like renderers should display that metadata instead of
+assuming every useful field lives under `body`. Status, headers, links, and
+body are all legitimate output roots.
+
 For pagination and true streams, readable output should switch to a
 record-oriented presentation mode internally while preserving a coherent human
 interface:

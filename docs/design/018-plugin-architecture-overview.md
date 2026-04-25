@@ -38,6 +38,10 @@ the configured directory is the explicit trust decision. If multiple plugins
 claim the same manifest name or command name, Restish must not silently pick one
 without surfacing the collision.
 
+The configured plugin directory comes from the same path resolver as the rest
+of Restish config. It should not have a separate helper that accidentally
+ignores XDG or test path overrides.
+
 ## Manifest
 
 Each discovered candidate is queried for a manifest. The manifest is the
@@ -53,6 +57,11 @@ plugin's declaration of identity and capability, including at least:
 
 Manifest compatibility is checked before the plugin is allowed to participate in
 runtime behavior.
+
+Manifest and startup protocol fields are part of the public Go API for plugin
+authors. They should have godoc that explains behavior and compatibility
+expectations, and exported constants should be used for host-provided startup
+flags instead of duplicating string literals across plugins.
 
 ## Transport
 
@@ -92,6 +101,11 @@ Even with plugins, the Restish host remains responsible for:
 
 Plugins are additive seams in the host pipeline, not alternate implementations
 of the whole product.
+
+The canonical public module path for plugins is
+`github.com/rest-sh/restish/v2`. Documentation and examples should compile
+against that module path rather than an old repository path or internal
+packages.
 
 ## Why Separate Plugin Types
 

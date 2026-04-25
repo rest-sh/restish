@@ -53,6 +53,11 @@ The design intent is consistency. Config, token cache, spec cache, and response
 cache should all come from one coherent path-resolution strategy rather than
 several unrelated helper functions.
 
+The plugin directory is part of this same path model. It should resolve beneath
+the configured Restish config directory, so tests, XDG overrides, and embedded
+CLIs do not accidentally use a different plugin trust root from the main
+configuration.
+
 ## Primary Config Shape
 
 The primary top-level keys are:
@@ -137,6 +142,14 @@ The config format is intentionally strict:
 
 Strictness is a feature here. It keeps config drift from becoming runtime
 mystery behavior.
+
+Validation diagnostics should list the legal fields for the object that failed
+when doing so is practical. A strict parser that says only "unsupported field"
+without the valid alternatives makes config migration much harder to debug.
+
+Size and duration values should surface parse errors. Falling back to a default
+after a malformed cache size, timeout, or similar operator setting hides the
+configuration mistake and makes behavior depend on accident.
 
 ## Example
 

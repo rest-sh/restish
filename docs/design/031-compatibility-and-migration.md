@@ -38,7 +38,16 @@ explicitly says otherwise:
 - HTML-unescaped JSON output
 - printable-text rendering for text bodies
 - query/header/profile ergonomics users already depend on
+- manual header override semantics, especially for `Accept`
+- documented environment input shapes such as comma-separated `RSH_HEADER`
 - headless-friendly auth paths for remote or SSH usage
+- interactive edit workflows, including v1-compatible shorthand flags where
+  the command still exists
+- response metadata filtering such as `headers.Date`
+- explicit full-response filters such as `-f @`
+- shorthand filter examples from the v1 docs when the syntax is clearly
+  shorthand rather than jq
+- raw and redirected binary output fidelity
 - v1-style aliases where they materially reduce migration pain
 
 ### Tier 2: May Change With Documentation
@@ -155,6 +164,32 @@ When reviewing a v2 behavior difference, classify it as one of:
 
 That classification should appear in design review or issue discussion so the
 project does not normalize accidental regressions as "just different now."
+
+## v1 Documentation Examples As Tests
+
+Commands from the v1 documentation are regression inputs for v2 when the same
+command shape is still accepted. The important compatibility target is user
+intent, not incidental formatting.
+
+The following examples represent specific classes that should be covered by
+tests or migration notes:
+
+- `-H 'Accept: application/json'` narrows the accepted response types instead
+  of appending to the generated Restish accept string
+- `RSH_HEADER=header1:value1,header2:value2` produces multiple headers unless
+  a future design replaces that input shape with a documented alternative
+- `restish edit -i ...` enters the supported interactive edit path or has a
+  documented replacement before release
+- `-f headers.Date`, `-f headers`, `-f status`, and `-f @` operate on the
+  normalized response envelope rather than the body alone
+- shorthand filters used by v1 examples continue to parse as shorthand when
+  jq parsing fails and the expression is plausibly shorthand
+- pagination progress never appears in stdout, and metadata filters do not
+  fetch extra pages merely because a body collection has a next link
+- `-r` and redirected image downloads preserve the original response body bytes
+
+Any future v1-docs example that does not work in v2 should be classified before
+release as restored, intentionally changed with documentation, or unsupported.
 
 ## Decision Rule
 

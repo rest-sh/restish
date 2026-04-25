@@ -72,6 +72,10 @@ The checkout is therefore a hybrid:
 - user-visible working files
 - hidden plugin-owned metadata and cache state
 
+Remote resource paths are resolved against the configured collection/base URL
+before local checkout paths or common prefixes are computed. This preserves
+relative URLs from APIs and avoids writing files under the wrong local path.
+
 ## Per-Resource Metadata
 
 Each tracked file stores enough metadata to reconcile local and remote state:
@@ -88,6 +92,11 @@ That metadata is enough to detect:
 - remote updates
 - remote deletions
 - new local files ready to be created remotely
+
+Metadata should continue to be saved after each resource update rather than
+only once at the end of a command. That is an intentional resilience tradeoff:
+an interrupted long-running pull or push should preserve as much completed work
+as possible.
 
 ## HTTP Delegation
 
@@ -120,6 +129,9 @@ one from item fields.
 
 An optional `-f` filter runs before extraction so non-standard list responses
 can be reshaped into the expected tuple.
+
+Filters and match expressions that run across many files should be parsed or
+compiled once per command, not once per resource.
 
 This is the plugin's main extensibility seam for weird collection responses
 without making bulk initialization entirely bespoke per API.
@@ -217,6 +229,12 @@ own:
 
 This keeps the generic host protocol small while still enabling rich command
 plugins.
+
+Bounded concurrent pull and push workers are desirable, but they depend on
+command-plugin protocol support. The host protocol needs response correlation,
+safe concurrent delegated HTTP handling, predictable output ownership, and
+per-file metadata locking before bulk can safely issue delegated requests in
+parallel.
 
 ## Alternatives Considered
 

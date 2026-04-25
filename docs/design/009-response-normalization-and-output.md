@@ -57,6 +57,7 @@ The exact casing policy should be stable and documented by implementation, but
 the design requirement is that:
 
 - header values remain inspectable and scriptable
+- common dotted filters such as `headers.Date` work case-insensitively
 - downstream filters do not need raw `http.Header` semantics
 
 If a richer multi-value header representation is ever required, it should be
@@ -101,6 +102,12 @@ That dual representation is what lets Restish support:
 - image/content-type-aware dispatch decisions
 
 without forcing an irreversible choice too early in the pipeline.
+
+For an unfiltered response, raw output is byte-oriented. `-r` or `-o raw` must
+write the original response body bytes after transfer decoding, not a Go value
+formatted through `fmt` and not a decode/re-encode approximation. Once the user
+selects a transformed logical value with a filter, byte fidelity no longer
+applies to that transformed value.
 
 ## Hypermedia Integration
 
@@ -227,10 +234,17 @@ Output behavior must not corrupt data:
 
 - printable text bodies should render as text in human-oriented formats
 - unknown binary should remain bytes, not coerced strings
+- redirected or piped binary responses, including `image/*`, should write the
+  payload bytes exactly unless the user explicitly selected a different
+  formatter
 - JSON formatters should emit stable JSON without unnecessary HTML escaping
 
 Binary-to-string coercion is a design bug because it damages fidelity and later
 formatting behavior.
+
+Terminal image rendering is a TTY presentation feature. It must not run when
+stdout is redirected to a file, because doing so corrupts downloads such as
+PNG, JPEG, or SVG assets.
 
 ## Example
 

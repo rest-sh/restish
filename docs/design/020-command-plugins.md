@@ -96,6 +96,11 @@ For long-lived request/response pairs, the protocol should support correlation
 identifiers so stale replies cannot be mistaken for the wrong request if
 cancellation or concurrency is introduced later.
 
+Until correlation identifiers and host-side concurrent reply handling are part
+of the protocol, a command client that performs delegated HTTP should be
+documented as single-goroutine and single-decoder. Concurrent calls over a
+shared decoder are not safe by implication.
+
 ### Delegated HTTP
 
 The most important design choice is that command plugins delegate HTTP back to
@@ -124,6 +129,10 @@ Command plugins have two output modes:
 
 This lets a workflow choose between "behave like a normal Restish command" and
 "own the terminal output myself" on a message-by-message basis.
+
+Public helper names should make these side effects obvious. Methods such as
+`WriteStdout` and `WriteStderr` are preferable to names that look like simple
+accessors, because they write directly to the user's output channels.
 
 Plugins that opt into passthrough stdio must still coexist with the host's
 session rules. The host must avoid leaking stdin readers that steal later shell
@@ -166,6 +175,10 @@ Protocol errors should identify:
 
 The host should prefer typed protocol errors over generic "unexpected reply"
 messages where possible.
+
+Plugin-side helpers should report write, decode, and reply errors to stderr and
+exit nonzero. Dropping protocol errors silently makes plugin failures look like
+successful no-op commands.
 
 ## Alternatives Considered
 

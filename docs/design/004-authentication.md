@@ -171,6 +171,10 @@ Common responsibilities include:
 - refresh behavior
 - cache integration
 
+Shared OAuth helpers should also centralize endpoint validation, bounded
+response reads, token-cache behavior, TLS client construction, and redaction.
+Those rules are security boundaries, not grant-type details.
+
 ### OIDC Discovery
 
 If the profile provides an issuer URL, Restish may resolve it through OIDC
@@ -192,6 +196,16 @@ OAuth clients should support at least:
 The auth method must be configurable because different providers require
 different token-endpoint auth behavior.
 
+Directly configured OAuth endpoint URLs must be validated before use. Restish
+should reject endpoint URLs with embedded credentials, fragments, or existing
+query strings, and should require HTTPS except for deliberate localhost or
+loopback development flows. Discovery, token, and device-authorization response
+bodies should be size-limited before parsing.
+
+OAuth HTTP clients should honor the same relevant TLS options as ordinary
+requests, including custom CA roots, TLS minimum version, and explicit
+insecure-skip settings.
+
 ### Authorization Code Flow
 
 Authorization code flow should support both:
@@ -204,6 +218,11 @@ The localhost callback server must:
 - validate path and state
 - ignore irrelevant requests like `/favicon.ico`
 - shut down cleanly on success, timeout, or cancellation
+
+Manual-code fallback must also shut down cleanly. If the callback, timeout, or
+context cancellation wins the race, any goroutine waiting for manual input must
+exit without leaking. The full authorization URL should only be printed when
+browser launch fails or verbose mode is enabled.
 
 ### Client Credentials Flow
 

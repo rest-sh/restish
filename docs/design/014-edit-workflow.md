@@ -41,6 +41,11 @@ The edit flow is:
 If the content is unchanged, the workflow exits cleanly without sending an
 update.
 
+Both the initial GET and the final PUT/PATCH are normal Restish requests. They
+must use the shared request pipeline, including profile headers, query defaults,
+auth callbacks, TLS options, retry policy, middleware, and prepared request
+overrides.
+
 ## Editable Representation
 
 The editable representation is derived from decoded structured data, not from
@@ -64,6 +69,9 @@ implicit default that may surprise the user.
 
 Editor selection is part of the runtime I/O model from design 001 and should not
 bypass it.
+
+Editor command parsing should follow shell-field rules for `$VISUAL` and
+`$EDITOR` rather than splitting on whitespace by hand.
 
 ## Patch-Only Mode
 
@@ -95,6 +103,10 @@ The diff exists for two reasons:
 
 By default, interactive edit mode should ask for confirmation before sending a
 destructive update unless the workflow or options make that clearly redundant.
+
+The v1-compatible `-i` flag selects the interactive edit path. It should remain
+available while `edit` keeps the same command shape, even if editor mode is also
+the default for some invocations.
 
 `-y` / `--rsh-yes` skips the confirmation prompt for automation.
 

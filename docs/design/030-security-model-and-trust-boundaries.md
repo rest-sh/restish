@@ -180,9 +180,22 @@ responsibilities:
 Restish should not claim plugin sandboxing. The safety story is instead:
 
 - discovery is explicit
-- allowlists can restrict which plugins are loaded
+- plugins are discovered only from the configured Restish plugin directory, not
+  from `$PATH`
+- allowlists can restrict which configured plugins are loaded if such a policy
+  is added
 - protocols are small and typed
 - subprocess lifetime is bounded by host context and cleanup rules
+
+Secret-bearing request fields require least exposure at plugin boundaries.
+Headers such as `Authorization`, `Cookie`, and `Proxy-Authorization` are
+redacted before hook payloads are sent to plugins unless the plugin declares a
+capability that explicitly requires auth secrets.
+
+External auth tools are also a trust transfer. Before using output from a new
+external command, Restish should require an explicit approval or TOFU-style
+record keyed by the command identity so a config edit does not silently start
+executing a different credential helper.
 
 ## Persistence Safety
 

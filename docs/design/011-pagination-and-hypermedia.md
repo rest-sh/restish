@@ -54,6 +54,12 @@ All discovered links are resolved to absolute URLs before being stored. This
 lets downstream behavior treat links uniformly regardless of how they were
 represented on the wire.
 
+The HTTP `Link` header parser always runs for bounded responses. Body-based
+hypermedia parsers may be lazy, because parsing structured bodies solely to
+populate `links` is wasted work when the selected output never reads links.
+Lazy parsing must still produce the same normalized link map when `links` is
+accessed by pagination, the `links` command, or a filter.
+
 ## Parser Precedence And Merge Rules
 
 Several parsers may discover links from the same response. The design should
@@ -100,6 +106,12 @@ Per-API pagination config can refine how page data is interpreted:
 This lets Restish handle both standard hypermedia and APIs whose collection
 wrappers need one extra hint.
 
+Filters that select response metadata rather than body records normally disable
+automatic pagination. For example, `-f headers`, `-f headers.Date`, and
+`-f status` ask about the first response envelope, not about every body page.
+Fetching additional pages for those filters produces repeated or misleading
+metadata and violates the user's selected data model.
+
 ## Pagination Safety
 
 Pagination is bounded by safety rules:
@@ -109,6 +121,10 @@ Pagination is bounded by safety rules:
 - `--rsh-max-pages` and `--rsh-max-items` are hard stops
 
 Automatic pagination should never become an accidental infinite loop.
+
+`--rsh-max-items` is a hard stop in both collected and streaming pagination.
+Once the item limit is reached, the paginator stops without rendering a final
+empty page or trailer value.
 
 ## Output Contracts
 
@@ -178,6 +194,11 @@ Diagnostics should be able to show:
 - why pagination stopped
 
 This helps users debug both hypermedia parsing and pagination config.
+
+Pagination diagnostics are diagnostics, not response data. Page progress such
+as "fetching page 2" belongs on stderr, should usually be gated by verbose mode
+or rendered as terminal status, and must never appear in stdout between records
+or document fragments.
 
 ## Examples
 
