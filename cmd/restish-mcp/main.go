@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/rest-sh/restish/v2/plugin"
 	"github.com/pb33f/libopenapi"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 func main() {
@@ -187,30 +187,10 @@ func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 	if err := c.writeMessage(plugin.APISpecMsg{Type: plugin.MsgTypeAPISpec, Name: name}); err != nil {
 		return nil, err
 	}
-	var reply plugin.APISpecResponseMsg
-	for {
-		raw, err := c.dec.ReadRaw()
-		if err != nil {
-			return nil, err
-		}
-		switch plugin.MessageType(raw) {
-		case plugin.MsgTypeAPISpecResponse:
-			if err := plugin.DecMode.Unmarshal(raw, &reply); err != nil {
-				return nil, fmt.Errorf("decode api spec response: %w", err)
-			}
-			goto haveReply
-		case plugin.MsgTypeStdinData:
-			var msg plugin.StdinDataMsg
-			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil && len(msg.Data) > 0 {
-				_, _ = c.pendingStdin.Write(msg.Data)
-			}
-		case plugin.MsgTypeStdinClose:
-			c.stdinClosed = true
-		default:
-			return nil, fmt.Errorf("unexpected plugin reply %q while loading %s", plugin.MessageType(raw), name)
-		}
+	reply, err := c.readAPISpecResponse(name)
+	if err != nil {
+		return nil, err
 	}
-haveReply:
 	if reply.Error != "" {
 		return nil, fmt.Errorf("%s", reply.Error)
 	}
@@ -227,6 +207,32 @@ haveReply:
 		Raw:         reply.Raw,
 		Document:    doc,
 	}, nil
+}
+
+func (c *pluginClient) readAPISpecResponse(name string) (plugin.APISpecResponseMsg, error) {
+	for {
+		raw, err := c.dec.ReadRaw()
+		if err != nil {
+			return plugin.APISpecResponseMsg{}, err
+		}
+		switch plugin.MessageType(raw) {
+		case plugin.MsgTypeAPISpecResponse:
+			var reply plugin.APISpecResponseMsg
+			if err := plugin.DecMode.Unmarshal(raw, &reply); err != nil {
+				return plugin.APISpecResponseMsg{}, fmt.Errorf("decode api spec response: %w", err)
+			}
+			return reply, nil
+		case plugin.MsgTypeStdinData:
+			var msg plugin.StdinDataMsg
+			if err := plugin.DecMode.Unmarshal(raw, &msg); err == nil && len(msg.Data) > 0 {
+				_, _ = c.pendingStdin.Write(msg.Data)
+			}
+		case plugin.MsgTypeStdinClose:
+			c.stdinClosed = true
+		default:
+			return plugin.APISpecResponseMsg{}, fmt.Errorf("unexpected plugin reply %q while loading %s", plugin.MessageType(raw), name)
+		}
+	}
 }
 
 func (c *pluginClient) writeMessage(v any) error {

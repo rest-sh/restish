@@ -215,7 +215,7 @@ func TestPluginIgnoresPathPlugins(t *testing.T) {
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
 
-	c, out, errOut := newTestCLI()
+	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	t.Setenv("RSH_CONFIG_DIR", t.TempDir())
 	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
@@ -252,7 +252,7 @@ func TestPluginDiscoverInPluginDir(t *testing.T) {
 	// Clear PATH to keep the test isolated from the user's shell.
 	t.Setenv("PATH", "")
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
 	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
 		t.Fatalf("plugin list: %v", err)
@@ -274,7 +274,7 @@ func TestPluginRemoveRejectsTraversal(t *testing.T) {
 	}
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	err := c.Run([]string{"restish", "plugin", "remove", "../victim"})
 	if err == nil {
@@ -302,7 +302,7 @@ func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 	pluginsParent := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	err := c.Run([]string{"restish", "plugin", "install", source})
 	if err == nil {
@@ -321,7 +321,7 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 	pluginsParent := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	c, out, errOut := newTestCLI()
+	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
 		t.Fatalf("plugin install: %v", err)
@@ -354,7 +354,7 @@ func TestPluginListShowsNameVersionHooks(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
 	_ = c.Run([]string{"restish", "plugin", "list"})
 
@@ -391,7 +391,7 @@ func TestPluginInvalidManifest(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	c, out, errOut := newTestCLI()
+	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
 
 	// Should not return an error — broken plugins are skipped.

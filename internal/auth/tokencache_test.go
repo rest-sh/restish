@@ -211,9 +211,12 @@ func TestTokenCache_ReloadsOnExternalChange(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 
-	time.Sleep(10 * time.Millisecond)
 	if err := os.WriteFile(path, []byte(`{"key":{"access_token":"new"}}`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
+	}
+	mtime := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
 	}
 
 	got, err := tc.Get("key")

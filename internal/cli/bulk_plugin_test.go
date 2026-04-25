@@ -169,7 +169,7 @@ func withWorkingDir(t *testing.T) string {
 func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 	installBulkPlugin(t)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("help: %v", err)
@@ -198,7 +198,7 @@ func TestBulkPluginWorkflow(t *testing.T) {
 		{User: "c", ID: "c1", Version: "c11", Body: map[string]any{"id": "c1"}, ETag: "c11"},
 	})
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
@@ -313,7 +313,7 @@ func TestBulkPullKeepsRemoteChangeWhenLocalEditsBlockWrite(t *testing.T) {
 		{User: "b", ID: "b1", Version: "b11", Body: map[string]any{"id": "b1"}, ETag: "b11"},
 	})
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {

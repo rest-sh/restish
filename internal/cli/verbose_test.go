@@ -11,7 +11,7 @@ import (
 // TestVerboseOutputToStderr verifies that -v writes request/response details
 // to stderr and not to stdout.
 func TestVerboseOutputToStderr(t *testing.T) {
-	c, out, errOut := newTestCLI()
+	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -50,7 +50,7 @@ func TestVerboseOutputToStderr(t *testing.T) {
 // TestNonVerboseOutputClean verifies that without -v, stderr is empty for
 // a successful request.
 func TestNonVerboseOutputClean(t *testing.T) {
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -70,7 +70,7 @@ func TestNonVerboseOutputClean(t *testing.T) {
 }
 
 func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -98,7 +98,7 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 // TestVerboseTLSDetailsAtLevel2 verifies that -vv (verbose >= 2) prints TLS
 // version, cipher suite, and peer certificate information to stderr.
 func TestVerboseTLSDetailsAtLevel2(t *testing.T) {
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -131,7 +131,7 @@ func TestVerboseTLSDetailsAtLevel2(t *testing.T) {
 // TestVerboseTLSDetailsNotAtLevel1 verifies that -v (verbose == 1) does NOT
 // print TLS details, keeping the output concise.
 func TestVerboseTLSDetailsNotAtLevel1(t *testing.T) {
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	useTransport(c, func(r *http.Request) (*http.Response, error) {

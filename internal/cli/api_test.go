@@ -24,7 +24,7 @@ func writeAPIConfig(t *testing.T, content string) string {
 // configured base URL before the request is sent.
 func TestAPIShortNameExpansion(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -45,7 +45,7 @@ func TestAPIShortNameExpansion(t *testing.T) {
 // the configured base URL root.
 func TestAPIShortNameNoPath(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -66,7 +66,7 @@ func TestAPIShortNameNoPath(t *testing.T) {
 // treated as a plain URL (not a fatal error about an unknown API).
 func TestUnknownAPINameFallback(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -89,7 +89,7 @@ func TestUnknownAPINameFallback(t *testing.T) {
 // profile is included in every request to that API.
 func TestProfilePersistentHeader(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -121,7 +121,7 @@ func TestProfilePersistentHeader(t *testing.T) {
 // active profile is appended to every request.
 func TestProfilePersistentQuery(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -153,7 +153,7 @@ func TestProfilePersistentQuery(t *testing.T) {
 // using its base_url and headers.
 func TestProfileOverrideWithFlag(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -193,7 +193,7 @@ func TestProfileOverrideWithFlag(t *testing.T) {
 // when the -p flag is not set.
 func TestProfileOverrideWithEnv(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -232,7 +232,7 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 // flag values appear after profile values in the header list).
 func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -291,7 +291,7 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 	t.Setenv("VISUAL", scriptPath)
 	t.Setenv("EDITOR", "")
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	cfgPath := filepath.Join(dir, "restish.json")
 	if err := os.WriteFile(cfgPath, []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)

@@ -578,13 +578,14 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	specPath := filepath.Join(t.TempDir(), "openapi.json")
+	specMtime := time.Unix(1700000000, 0)
 	writeSpec := func(body string) {
 		t.Helper()
 		if err := os.WriteFile(specPath, []byte(body), 0o644); err != nil {
 			t.Fatalf("write spec: %v", err)
 		}
-		now := time.Now()
-		if err := os.Chtimes(specPath, now, now); err != nil {
+		specMtime = specMtime.Add(time.Second)
+		if err := os.Chtimes(specPath, specMtime, specMtime); err != nil {
 			t.Fatalf("chtimes: %v", err)
 		}
 	}
@@ -623,7 +624,7 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 		t.Fatalf("api sync: %v", err)
 	}
 
-	time.Sleep(10 * time.Millisecond)
+	specMtime = time.Now().Add(time.Hour)
 	writeSpec(fmt.Sprintf(`{
   "openapi": "3.1.0",
   "info": {"title": "Test API", "version": "1.0"},

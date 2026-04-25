@@ -23,22 +23,21 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // newTestCLI returns a CLI wired to in-memory buffers for use in tests.
 // RetryBaseDelay is set to 1 ms so retry backoffs don't slow down the suite.
-func newTestCLI() (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
+func newTestCLI(t *testing.T) (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+
 	var stdout, stderr bytes.Buffer
 	c := cli.New()
 	c.Stdin = strings.NewReader("")
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 	c.Hooks().RetryBaseDelay = time.Millisecond
-	dir, err := os.MkdirTemp("", "restish-cli-test-*")
-	if err == nil {
-		c.Hooks().ConfigPath = filepath.Join(dir, "restish.json")
-	}
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	return c, &stdout, &stderr
 }
 
 func TestVersion(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--version"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -48,7 +47,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestHelp(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestHelp(t *testing.T) {
 }
 
 func TestHelpGroupsTopLevelCommands(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{
   "apis": {
     "zapi": {
@@ -102,14 +101,14 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 }
 
 func TestUnknownCommand(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "no-such-command"}); err == nil {
 		t.Error("expected error for unknown command, got nil")
 	}
 }
 
 func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if got, want := r.URL.String(), "https://api.example.com/items"; got != want {
 			t.Fatalf("URL = %q, want %q", got, want)
@@ -132,7 +131,7 @@ func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
 }
 
 func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,7 +165,7 @@ func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 		t.Fatalf("write apis.json: %v", err)
 	}
 
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = legacyConfigPath
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("Run: %v", err)

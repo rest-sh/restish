@@ -106,7 +106,7 @@ func TestAuthHookPlugin(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cfg := fmt.Sprintf(`{"apis":{"testapi":{"base_url":%q,"profiles":{"default":{}}}}}`, srv.URL)
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
@@ -136,7 +136,7 @@ func TestAuthHookPluginWithoutProfiles(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cfg := fmt.Sprintf(`{"apis":{"testapi":{"base_url":%q}}}`, srv.URL)
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
@@ -158,7 +158,7 @@ func TestHookPluginsRedactSecretRequestHeadersByDefault(t *testing.T) {
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
 
 	srv := hookJSONServer(t, 200, `{"ok":true}`)
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
@@ -173,7 +173,7 @@ func TestHookPluginsPreserveSecretRequestHeadersWhenOptedIn(t *testing.T) {
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
 
 	srv := hookJSONServer(t, 200, `{"ok":true}`)
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
@@ -215,7 +215,7 @@ func TestRequestMiddlewarePlugin(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -237,7 +237,7 @@ func TestResponseMiddlewarePluginModify(t *testing.T) {
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -255,7 +255,7 @@ func TestResponseMiddlewarePluginDrop(t *testing.T) {
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "drop")
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -278,7 +278,7 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 
 	// First server: the initial request target.
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -298,7 +298,7 @@ func TestFormatterPlugin(t *testing.T) {
 	installHookPlugin(t)
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", "-o", "hookformat", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -315,7 +315,7 @@ func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
 	installHookPlugin(t)
 
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	// No -o flag: default output should NOT contain plugin text.
 	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
@@ -331,7 +331,7 @@ func TestCSVFormatterPlugin(t *testing.T) {
 	installCSVPlugin(t)
 
 	srv := hookJSONServer(t, 200, `[{"id":1,"name":"alpha"},{"id":2,"name":"beta","active":true}]`)
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", "-o", "csv", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -351,7 +351,7 @@ func TestCSVFormatterPlugin(t *testing.T) {
 func TestCSVFormatterPluginPagination(t *testing.T) {
 	installCSVPlugin(t)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		pages := map[string]struct {
@@ -399,7 +399,7 @@ func TestCSVFormatterPluginNDJSONStream(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL, "-o", "csv"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)

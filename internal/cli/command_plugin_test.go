@@ -65,7 +65,7 @@ func installCmdPlugin(t *testing.T) {
 func TestCommandPluginHelp(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	_ = c.Run([]string{"restish", "--help"})
 
@@ -80,7 +80,7 @@ func TestCommandPluginHelp(t *testing.T) {
 func TestCommandPluginGreet(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	var errOut captureWriter
 	c.Stderr = &errOut
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
@@ -104,7 +104,7 @@ func TestCommandPluginFetch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "fetch", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -117,7 +117,7 @@ func TestCommandPluginFetch(t *testing.T) {
 func TestCommandPluginProgress(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	var errOut captureWriter
 	c.Stderr = &errOut
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
@@ -130,7 +130,7 @@ func TestCommandPluginProgress(t *testing.T) {
 func TestCommandPluginExitCode(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "fail"}); err == nil {
 		t.Fatal("expected error for exit_code=1, got nil")
@@ -140,7 +140,7 @@ func TestCommandPluginExitCode(t *testing.T) {
 func TestCommandPluginDeath(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "die"})
 	if err == nil {
@@ -154,7 +154,7 @@ func TestCommandPluginDeath(t *testing.T) {
 func TestCommandPluginPassthroughStdio(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	var errOut captureWriter
 	c.Stderr = &errOut
 	c.Stdin = strings.NewReader("hello\n")
@@ -175,7 +175,7 @@ func TestCommandPluginDoneHangKilledAfterGrace(t *testing.T) {
 	installCmdPlugin(t)
 	t.Setenv("RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE", "100ms")
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	start := time.Now()
@@ -190,7 +190,7 @@ func TestCommandPluginDoneHangKilledAfterGrace(t *testing.T) {
 func TestCommandPluginWithoutPassthroughDoesNotConsumeStdin(t *testing.T) {
 	installCmdPlugin(t)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Stdin = unreadableReader{}
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "greet"}); err != nil {

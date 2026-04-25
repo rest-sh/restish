@@ -30,7 +30,7 @@ func TestCacheSecondRequestServedFromCache(t *testing.T) {
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
 
-	c1, out1, _ := newTestCLI()
+	c1, out1, _ := newTestCLI(t)
 	c1.Hooks().CachePath = cacheDir
 	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("first request failed: %v", err)
@@ -39,7 +39,7 @@ func TestCacheSecondRequestServedFromCache(t *testing.T) {
 		t.Errorf("expected body in first response, got: %q", out1.String())
 	}
 
-	c2, out2, _ := newTestCLI()
+	c2, out2, _ := newTestCLI(t)
 	c2.Hooks().CachePath = cacheDir
 	if err := c2.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("second request failed: %v", err)
@@ -61,7 +61,7 @@ func TestCacheNoCacheBypassesCache(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	for i := range 3 {
-		c, _, _ := newTestCLI()
+		c, _, _ := newTestCLI(t)
 		c.Hooks().CachePath = cacheDir
 		if err := c.Run([]string{"restish", "get", "--rsh-no-cache", srv.URL}); err != nil {
 			t.Fatalf("request %d failed: %v", i+1, err)
@@ -81,14 +81,14 @@ func TestCacheClearEmptiesCache(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	// Prime the cache.
-	c1, _, _ := newTestCLI()
+	c1, _, _ := newTestCLI(t)
 	c1.Hooks().CachePath = cacheDir
 	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("prime request failed: %v", err)
 	}
 
 	// Clear the cache.
-	c2, out2, _ := newTestCLI()
+	c2, out2, _ := newTestCLI(t)
 	c2.Hooks().CachePath = cacheDir
 	if err := c2.Run([]string{"restish", "cache", "clear"}); err != nil {
 		t.Fatalf("cache clear failed: %v", err)
@@ -98,7 +98,7 @@ func TestCacheClearEmptiesCache(t *testing.T) {
 	}
 
 	// Next request should hit the server again (cache is empty).
-	c3, _, _ := newTestCLI()
+	c3, _, _ := newTestCLI(t)
 	c3.Hooks().CachePath = cacheDir
 	if err := c3.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("post-clear request failed: %v", err)
@@ -124,7 +124,7 @@ func TestCacheNoStoreNotCached(t *testing.T) {
 
 	cacheDir := t.TempDir()
 	for i := range 2 {
-		c, _, _ := newTestCLI()
+		c, _, _ := newTestCLI(t)
 		c.Hooks().CachePath = cacheDir
 		if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
 			t.Fatalf("request %d failed: %v", i+1, err)
@@ -143,13 +143,13 @@ func TestCacheInfo(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	// Prime the cache with one entry.
-	c1, _, _ := newTestCLI()
+	c1, _, _ := newTestCLI(t)
 	c1.Hooks().CachePath = cacheDir
 	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
 		t.Fatalf("prime request failed: %v", err)
 	}
 
-	c2, out, _ := newTestCLI()
+	c2, out, _ := newTestCLI(t)
 	c2.Hooks().CachePath = cacheDir
 	if err := c2.Run([]string{"restish", "cache", "info"}); err != nil {
 		t.Fatalf("cache info failed: %v", err)

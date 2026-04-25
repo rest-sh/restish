@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -22,7 +24,7 @@ func TestPluginClientDoReturnsEOFWhenHostReadLoopEnds(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err == nil || err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			t.Fatalf("expected io.EOF, got %v", err)
 		}
 	case <-time.After(time.Second):
@@ -44,7 +46,7 @@ func TestPluginClientCorrelatesHTTPResponsesByRequestID(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			resp, err := client.do(&HTTPRequest{Method: "GET", URI: "https://example.com/" + string('1'+byte(i))})
+			resp, err := client.do(&HTTPRequest{Method: "GET", URI: "https://example.com/" + strconv.Itoa(i+1)})
 			resultsMu.Lock()
 			results[i] = resp
 			errs[i] = err

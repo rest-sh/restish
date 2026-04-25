@@ -166,6 +166,9 @@ func (c *CLI) runPagination(
 	return nil
 }
 
+// contextWriter carries request cancellation into formatter writes. The io.Writer
+// interface has no context parameter, so this wrapper stores the context locally
+// instead of pushing cancellation checks into every formatter implementation.
 type contextWriter struct {
 	ctx    context.Context
 	writer io.Writer

@@ -10,7 +10,7 @@ import (
 func TestGeneratedAPINames_FastPath(t *testing.T) {
 	cfg := &config.Config{
 		APIs: map[string]*config.APIConfig{
-			"myapi":   {BaseURL: "https://api.example.com"},
+			"myapi":    {BaseURL: "https://api.example.com"},
 			"otherapi": {BaseURL: "https://other.example.com"},
 		},
 	}
@@ -53,7 +53,7 @@ func TestGeneratedAPINames_SkipsLeadingFlags(t *testing.T) {
 func TestGeneratedAPINames_BuiltinVerb(t *testing.T) {
 	cfg := &config.Config{
 		APIs: map[string]*config.APIConfig{
-			"myapi":   {BaseURL: "https://api.example.com"},
+			"myapi":    {BaseURL: "https://api.example.com"},
 			"otherapi": {BaseURL: "https://other.example.com"},
 		},
 	}

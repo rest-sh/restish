@@ -12,7 +12,7 @@ import (
 // returns 503 twice and then 200, the request ultimately succeeds.
 func TestRetrySucceedsAfterTransientFailures(t *testing.T) {
 	var callCount atomic.Int32
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		n := callCount.Add(1)
 		if n <= 2 {
@@ -39,7 +39,7 @@ func TestRetrySucceedsAfterTransientFailures(t *testing.T) {
 // immediately without any retry.
 func TestRetryNotAttemptedFor4xx(t *testing.T) {
 	var callCount atomic.Int32
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		callCount.Add(1)
 		return &http.Response{
@@ -62,7 +62,7 @@ func TestRetryNotAttemptedFor4xx(t *testing.T) {
 // request even when the server always returns 503.
 func TestRetryZeroDisablesRetries(t *testing.T) {
 	var callCount atomic.Int32
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		callCount.Add(1)
 		return &http.Response{
@@ -84,7 +84,7 @@ func TestRetryZeroDisablesRetries(t *testing.T) {
 // used as the wait duration (the test uses a 0-second value to stay fast).
 func TestRetryAfterHeaderRespected(t *testing.T) {
 	var callCount atomic.Int32
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		n := callCount.Add(1)
 		if n == 1 {

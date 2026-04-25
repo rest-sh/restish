@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -161,9 +162,5 @@ func TestFetchTokenRejectsOversizedBody(t *testing.T) {
 }
 
 func errorAsToken(err error, target **tokenEndpointError) bool {
-	te, ok := err.(*tokenEndpointError)
-	if ok {
-		*target = te
-	}
-	return ok
+	return errors.As(err, target)
 }

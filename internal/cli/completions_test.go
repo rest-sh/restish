@@ -8,7 +8,7 @@ import (
 // runCompletion invokes cobra's __complete subcommand and returns stdout.
 func runCompletion(t *testing.T, args ...string) string {
 	t.Helper()
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	full := append([]string{"restish", "__complete"}, args...)
 	// Errors from __complete are expected when no match; ignore them.
 	_ = c.Run(full)

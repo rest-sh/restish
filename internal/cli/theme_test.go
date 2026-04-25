@@ -20,7 +20,7 @@ func TestThemeSetFromURL(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		if got, want := r.URL.String(), "https://themes.example.com/theme.json"; got != want {
@@ -60,7 +60,7 @@ func TestThemeSetFromURL(t *testing.T) {
 }
 
 func TestThemeSetGithubShorthand(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		if got, want := r.URL.String(), "https://raw.githubusercontent.com/example/themes/HEAD/theme.json"; got != want {
 			t.Fatalf("URL = %q, want %q", got, want)
@@ -88,7 +88,7 @@ func TestThemeSetGithubShorthand(t *testing.T) {
 }
 
 func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		if got, want := r.URL.String(), "https://raw.githubusercontent.com/example/themes/HEAD/dark.json"; got != want {
 			t.Fatalf("URL = %q, want %q", got, want)
@@ -116,7 +116,7 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 }
 
 func TestThemeSetRejectsNameForURL(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	err := c.Run([]string{"restish", "theme", "set", "https://themes.example.com/theme.json", "dark"})
 	if err == nil {
 		t.Fatal("expected URL with theme name to fail")

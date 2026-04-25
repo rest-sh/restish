@@ -14,7 +14,7 @@ func TestCompletionScripts(t *testing.T) {
 	shells := []string{"bash", "zsh", "fish", "powershell"}
 	for _, shell := range shells {
 		t.Run(shell, func(t *testing.T) {
-			c, out, _ := newTestCLI()
+			c, out, _ := newTestCLI(t)
 			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 			if err := c.Run([]string{"restish", "completion", shell}); err != nil {
 				t.Fatalf("completion %s: %v", shell, err)
@@ -32,7 +32,7 @@ func TestSetupWritesAlias(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "setup", "zsh", "--yes"}); err != nil {
 		t.Fatalf("setup zsh: %v", err)
@@ -65,7 +65,7 @@ func TestSetupIdempotent(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	for i := 0; i < 2; i++ {
-		c, _, _ := newTestCLI()
+		c, _, _ := newTestCLI(t)
 		c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 		if err := c.Run([]string{"restish", "setup", "bash", "--yes"}); err != nil {
 			t.Fatalf("run %d: setup bash: %v", i, err)
@@ -89,7 +89,7 @@ func TestSetupIdempotent(t *testing.T) {
 
 // TestSetupUnsupportedShell verifies that an unknown shell returns an error.
 func TestSetupUnsupportedShell(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "setup", "tcsh"})
 	if err == nil {
@@ -101,7 +101,7 @@ func TestSetupFishSupported(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "setup", "fish", "--yes"})
 	if err != nil {
@@ -126,7 +126,7 @@ func TestSetupWarnsForPermissiveExistingRCFile(t *testing.T) {
 		t.Fatalf("write %s: %v", rcName, err)
 	}
 
-	c, _, errOut := newTestCLI()
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "setup", "bash", "--yes"}); err != nil {
 		t.Fatalf("setup bash: %v", err)
@@ -140,7 +140,7 @@ func TestSetupDryRunDoesNotWrite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "setup", "bash", "--dry-run"}); err != nil {
 		t.Fatalf("setup bash dry-run: %v", err)

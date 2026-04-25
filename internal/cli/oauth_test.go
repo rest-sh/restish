@@ -31,7 +31,7 @@ func oauthTokenResponse(r *http.Request, accessToken string) *http.Response {
 func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 	var tokenCount atomic.Int32
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://oauth.example.com/token":
@@ -126,7 +126,7 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 
 	// First request.
-	c1, _, _ := newTestCLI()
+	c1, _, _ := newTestCLI(t)
 	c1.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c1.Hooks().TokenCachePath = cacheFile
 	useTransport(c1, transport)
@@ -135,7 +135,7 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 	}
 
 	// Second request (new CLI instance, same cache file).
-	c2, _, _ := newTestCLI()
+	c2, _, _ := newTestCLI(t)
 	c2.Hooks().ConfigPath = c1.Hooks().ConfigPath
 	c2.Hooks().TokenCachePath = cacheFile
 	useTransport(c2, transport)
@@ -153,7 +153,7 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 	var tokenCount atomic.Int32
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://issuer.example.com/.well-known/openid-configuration":
@@ -216,7 +216,7 @@ func TestOAuthClientCredentials_OIDCDiscovery(t *testing.T) {
 func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 	var tokenCount atomic.Int32
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://oauth.example.com/token":
@@ -287,7 +287,7 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 	_ = tc.Set("myapi:default", auth.CachedToken{AccessToken: "tok"})
 
 	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
@@ -316,7 +316,7 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 	_ = tc.Set("other:default", auth.CachedToken{AccessToken: "tok3"})
 
 	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
@@ -349,7 +349,7 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 // unregistered API returns an error.
 func TestClearAuthCache_UnknownAPI(t *testing.T) {
 	cfg := `{"apis": {}}`
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
@@ -360,7 +360,7 @@ func TestClearAuthCache_UnknownAPI(t *testing.T) {
 
 func TestOAuthAuthorizationCode_NoBrowserManualCodeFallback(t *testing.T) {
 	var rr requestRecorder
-	c, _, errBuf := newTestCLI()
+	c, _, errBuf := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://oauth.example.com/token":
@@ -415,7 +415,7 @@ func TestOAuthAuthorizationCode_NoBrowserManualCodeFallback(t *testing.T) {
 
 func TestOAuthDeviceCodeFlow(t *testing.T) {
 	var rr requestRecorder
-	c, _, errBuf := newTestCLI()
+	c, _, errBuf := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://oauth.example.com/device":
@@ -480,7 +480,7 @@ func TestOAuthClientCredentials_401RetryForcesFreshToken(t *testing.T) {
 	var tokenCount atomic.Int32
 	var apiCount atomic.Int32
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
 		case "https://oauth.example.com/token":

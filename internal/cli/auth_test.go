@@ -15,7 +15,7 @@ import (
 // Authorization: Basic header on every request.
 func TestBasicAuthHeader(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -53,7 +53,7 @@ func TestBasicAuthHeader(t *testing.T) {
 // a prompt is written to stderr and the password is read from stdin.
 func TestBasicAuthPasswordPrompt(t *testing.T) {
 	var rr requestRecorder
-	c, _, errBuf := newTestCLI()
+	c, _, errBuf := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -112,7 +112,7 @@ func TestAuthHeaderCommand(t *testing.T) {
 			}
 		}
 	}`
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	if err := c.Run([]string{"restish", "auth-header", "myapi"}); err != nil {
@@ -130,7 +130,7 @@ func TestAuthHeaderCommand(t *testing.T) {
 // for an unregistered API name.
 func TestAuthHeaderCommandUnknownAPI(t *testing.T) {
 	cfg := `{"apis": {}}`
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	err := c.Run([]string{"restish", "auth-header", "noapi"})
@@ -154,7 +154,7 @@ func TestUnknownAuthTypeListsSupportedValues(t *testing.T) {
 			}
 		}
 	}`
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	err := c.Run([]string{"restish", "get", "myapi/items"})
@@ -196,7 +196,7 @@ func TestExternalToolAuthPromptsAndStoresApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, _, errBuf := newTestCLI()
+	c, _, errBuf := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -216,7 +216,7 @@ func TestExternalToolAuthPromptsAndStoresApproval(t *testing.T) {
 		t.Fatalf("expected approval cache: %v", err)
 	}
 
-	c2, _, errBuf2 := newTestCLI()
+	c2, _, errBuf2 := newTestCLI(t)
 	useTransport(c2, func(r *http.Request) (*http.Response, error) {
 		return jsonResponse(200, `{}`), nil
 	})
@@ -249,7 +249,7 @@ func TestExternalToolAuthRejectsUnapprovedCommand(t *testing.T) {
 			}
 		}
 	}`
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return jsonResponse(200, `{}`), nil
 	})

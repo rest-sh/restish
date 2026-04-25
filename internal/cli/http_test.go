@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -65,7 +66,7 @@ func TestHTTPVerbs(t *testing.T) {
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
 			var rr requestRecorder
-			c, _, _ := newTestCLI()
+			c, _, _ := newTestCLI(t)
 			useTransport(c, func(r *http.Request) (*http.Response, error) {
 				rr.capture(r)
 				return jsonResponse(200, `{}`), nil
@@ -83,7 +84,7 @@ func TestHTTPVerbs(t *testing.T) {
 // TestHTTPVerbUppercaseAlias verifies that the uppercase alias (e.g. GET) also works.
 func TestHTTPVerbUppercaseAlias(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -99,7 +100,7 @@ func TestHTTPVerbUppercaseAlias(t *testing.T) {
 // TestBareURL verifies that a URL without an explicit verb is treated as GET.
 func TestBareURL(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -128,7 +129,7 @@ func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	err := c.Run([]string{"restish", "get", "--rsh-profile", "missing", "testapi/items"})
 	if err == nil {
@@ -142,7 +143,7 @@ func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
 // TestHTTPHeader verifies that -H adds the header to the request.
 func TestHTTPHeader(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -158,7 +159,7 @@ func TestHTTPHeader(t *testing.T) {
 // TestHTTPHeaderRepeatable verifies that multiple -H flags all take effect.
 func TestHTTPHeaderRepeatable(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -183,7 +184,7 @@ func TestHTTPHeaderRepeatable(t *testing.T) {
 // TestHTTPQuery verifies that -q appends a query parameter to the request.
 func TestHTTPQuery(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -198,7 +199,7 @@ func TestHTTPQuery(t *testing.T) {
 
 func TestHTTPAcceptHeaderOverride(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -215,7 +216,7 @@ func TestHTTPAcceptHeaderOverride(t *testing.T) {
 func TestHTTPHeaderEnvSplitsCommaSeparatedValues(t *testing.T) {
 	t.Setenv("RSH_HEADER", "X-One: 1,X-Two: value:with:colons")
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -234,7 +235,7 @@ func TestHTTPHeaderEnvSplitsCommaSeparatedValues(t *testing.T) {
 // TestHTTPServerOverride verifies that -s replaces the scheme and host.
 func TestHTTPServerOverride(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -251,7 +252,7 @@ func TestHTTPServerOverride(t *testing.T) {
 
 func TestHTTPServerOverridePrefixesPath(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -268,7 +269,7 @@ func TestHTTPServerOverridePrefixesPath(t *testing.T) {
 // TestHTTPResponseBody verifies that the response body is written to stdout.
 // Uses a JSON content-type so the body is decoded and re-encoded as an object.
 func TestHTTPResponseBody(t *testing.T) {
-	c, out, _ := newTestCLI()
+	c, out, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return jsonResponse(200, `{"hello":"world"}`), nil
 	})
@@ -283,7 +284,7 @@ func TestHTTPResponseBody(t *testing.T) {
 // TestHTTPTimeout verifies that --rsh-timeout causes the request to fail
 // when the server is too slow.
 func TestHTTPTimeout(t *testing.T) {
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()
 		return nil, r.Context().Err()
@@ -309,13 +310,13 @@ func TestHTTPInsecure(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Without --rsh-insecure: TLS verification fails.
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "get", srv.URL}); err == nil {
 		t.Error("expected TLS error without --rsh-insecure, got nil")
 	}
 
 	// With --rsh-insecure: request succeeds.
-	c2, _, _ := newTestCLI()
+	c2, _, _ := newTestCLI(t)
 	if err := c2.Run([]string{"restish", "get", "--rsh-insecure", srv.URL}); err != nil {
 		t.Errorf("unexpected error with --rsh-insecure: %v", err)
 	}
@@ -325,7 +326,7 @@ func TestHTTPInsecure(t *testing.T) {
 // sent as a JSON body with the correct Content-Type.
 func TestShorthandBody(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -353,7 +354,7 @@ func TestShorthandBody(t *testing.T) {
 // TestShorthandBodyNested verifies deep shorthand paths.
 func TestShorthandBodyNested(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -377,7 +378,7 @@ func TestShorthandBodyNested(t *testing.T) {
 // send no body and no Content-Type.
 func TestNoBodyWhenNoArgs(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -397,7 +398,7 @@ func TestNoBodyWhenNoArgs(t *testing.T) {
 // TestStdinBody verifies that piped stdin is sent as the request body.
 func TestStdinBody(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -418,7 +419,7 @@ func TestStdinBody(t *testing.T) {
 
 func TestFormBody(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -443,7 +444,7 @@ func TestFormBody(t *testing.T) {
 
 func TestMultipartBody(t *testing.T) {
 	var rr requestRecorder
-	c, _, _ := newTestCLI()
+	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		rr.capture(r)
 		return jsonResponse(200, `{}`), nil
@@ -472,7 +473,7 @@ func TestMultipartBody(t *testing.T) {
 	filenames := map[string]string{}
 	for {
 		part, err := reader.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
