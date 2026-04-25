@@ -138,9 +138,8 @@ restish plugin debug restish-my-plugin
 Common causes:
 
 - the executable is not named `restish-<name>`
-- the binary is not on `PATH`
+- the binary was built but not installed into the Restish plugin directory
 - the manifest is invalid
-- `allowed_plugins` is set and the plugin name is not allowlisted
 
 ## TLS or mTLS Requests Fail
 

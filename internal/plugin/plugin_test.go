@@ -220,9 +220,8 @@ func TestDiscover_FindsPluginsInDir(t *testing.T) {
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	writeScript(t, dir, "restish-myplugin", script)
 
-	// Point PATH to our temp dir only so Discover finds our plugin.
-	t.Setenv("PATH", dir)
-	plugins := Discover("", nil, nil, "", nil)
+	t.Setenv("PATH", "")
+	plugins := Discover(dir, nil, "", nil)
 	if len(plugins) == 0 {
 		t.Fatal("expected at least one plugin to be discovered")
 	}
@@ -239,9 +238,8 @@ func TestDiscover_SkipsBrokenPlugins(t *testing.T) {
 	// Broken plugin: exits non-zero.
 	writeScript(t, dir, "restish-broken", "#!/bin/sh\nexit 1")
 
-	t.Setenv("PATH", dir)
 	var errs []string
-	plugins := Discover("", nil, func(p string, err error) {
+	plugins := Discover(dir, func(p string, err error) {
 		errs = append(errs, err.Error())
 	}, "", nil)
 	if len(plugins) != 0 {
@@ -260,16 +258,15 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 	m := Manifest{Name: "myplugin", RestishAPIVersion: CurrentPluginAPIVersion}
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	writeScript(t, dir, "restish-myplugin", script)
+	writeScript(t, dir, "restish-myplugin-copy", script)
 
-	// Add dir twice to PATH to test deduplication.
-	t.Setenv("PATH", dir+":"+dir)
-	plugins := Discover("", nil, nil, "", nil)
+	plugins := Discover(dir, nil, "", nil)
 	if len(plugins) != 1 {
 		t.Errorf("expected 1 unique plugin, got %d", len(plugins))
 	}
 }
 
-func TestDiscover_PrefersInstalledPluginOverPATHForSameIdentity(t *testing.T) {
+func TestDiscover_IgnoresPathPlugins(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
 	}
@@ -281,47 +278,19 @@ func TestDiscover_PrefersInstalledPluginOverPATHForSameIdentity(t *testing.T) {
 		Version:           "path",
 		RestishAPIVersion: CurrentPluginAPIVersion,
 	})))
-	writeScript(t, pluginDir, "restish-dupe", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(Manifest{
-		Name:              "dupe",
-		Version:           "installed",
-		RestishAPIVersion: CurrentPluginAPIVersion,
-	})))
 
 	t.Setenv("PATH", pathDir)
-	plugins := Discover(pluginDir, nil, nil, "", nil)
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(plugins))
-	}
-	if plugins[0].Manifest.Version != "installed" {
-		t.Fatalf("expected installed plugin to win, got version %q from %s", plugins[0].Manifest.Version, plugins[0].Path)
-	}
-}
-
-func TestDiscover_EmptyPath_NoPlugins(t *testing.T) {
-	t.Setenv("PATH", "")
-	plugins := Discover("", nil, nil, "", nil)
+	plugins := Discover(pluginDir, nil, "", nil)
 	if len(plugins) != 0 {
-		t.Errorf("expected 0 plugins for empty PATH, got %d", len(plugins))
+		t.Fatalf("expected PATH plugin to be ignored, got %d plugins", len(plugins))
 	}
 }
 
-func TestDiscover_AllowedPlugins(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell script tests not supported on Windows")
-	}
-	dir := t.TempDir()
-	m1 := Manifest{Name: "allowed", RestishAPIVersion: CurrentPluginAPIVersion}
-	m2 := Manifest{Name: "blocked", RestishAPIVersion: CurrentPluginAPIVersion}
-	writeScript(t, dir, "restish-allowed", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m1)))
-	writeScript(t, dir, "restish-blocked", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m2)))
-
-	t.Setenv("PATH", dir)
-	plugins := Discover("", []string{"restish-allowed"}, nil, "", nil)
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(plugins))
-	}
-	if plugins[0].Manifest.Name != "allowed" {
-		t.Errorf("Name: got %q, want %q", plugins[0].Manifest.Name, "allowed")
+func TestDiscover_EmptyPluginDir_NoPlugins(t *testing.T) {
+	t.Setenv("PATH", "")
+	plugins := Discover("", nil, "", nil)
+	if len(plugins) != 0 {
+		t.Errorf("expected 0 plugins without a plugin dir, got %d", len(plugins))
 	}
 }
 
@@ -341,12 +310,10 @@ fi
 count=$((count + 1))
 echo "$count" > %q
 echo '%s'
-`, counterFile, counterFile, counterFile, jsonManifest(m))
+	`, counterFile, counterFile, counterFile, jsonManifest(m))
 	writeScript(t, dir, "restish-cached", script)
 
-	t.Setenv("PATH", dir)
-
-	plugins := Discover("", nil, nil, cacheFile, nil)
+	plugins := Discover(dir, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
 	}
@@ -358,7 +325,7 @@ echo '%s'
 		t.Fatalf("first discover counter = %q, want 1", bytes.TrimSpace(count))
 	}
 
-	plugins = Discover("", nil, nil, cacheFile, nil)
+	plugins = Discover(dir, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("second discover: got %d plugins, want 1", len(plugins))
 	}
@@ -388,9 +355,7 @@ echo "$count" > %q
 echo '%s'
 `, counterFile, counterFile, counterFile, jsonManifest(Manifest{Name: "refresh", RestishAPIVersion: CurrentPluginAPIVersion})))
 
-	t.Setenv("PATH", dir)
-
-	if plugins := Discover("", nil, nil, cacheFile, nil); len(plugins) != 1 {
+	if plugins := Discover(dir, nil, cacheFile, nil); len(plugins) != 1 {
 		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
 	}
 
@@ -411,7 +376,7 @@ echo '%s'
 		t.Fatalf("updating plugin mtime: %v", err)
 	}
 
-	plugins := Discover("", nil, nil, cacheFile, nil)
+	plugins := Discover(dir, nil, cacheFile, nil)
 	if len(plugins) != 1 {
 		t.Fatalf("second discover: got %d plugins, want 1", len(plugins))
 	}

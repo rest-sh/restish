@@ -31,7 +31,6 @@ OAuth token cache is stored alongside config (default:
 {
   "apis": {},
   "cache": {},
-  "allowed_plugins": [],
   "plugins": {},
 }
 ```
@@ -101,17 +100,6 @@ Global cache settings currently support:
 
 The HTTP response cache directory defaults to `~/.cache/restish/responses` and
 can be overridden with `RSH_CACHE_DIR`.
-
-## `allowed_plugins`
-
-When non-empty, this limits plugin auto-discovery to specific executable base
-names such as:
-
-```json
-{
-  "allowed_plugins": ["restish-bulk", "restish-csv"]
-}
-```
 
 ## `plugins`
 

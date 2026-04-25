@@ -1,6 +1,6 @@
 // Package plugin handles discovery, manifest loading, and caching of Restish
 // out-of-process plugins. Plugins are executables named restish-<name> found
-// on PATH or in the plugin directory.
+// in the plugin directory.
 package plugin
 
 import (
@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
-	"github.com/fxamacker/cbor/v2"
 )
 
 // CurrentPluginAPIVersion is the highest plugin protocol version this build of
@@ -40,24 +40,17 @@ type Plugin struct {
 	Manifest Manifest
 }
 
-// Discover finds all restish-* plugins in pluginDir and on PATH.
+// Discover finds all executable restish-* plugins in pluginDir.
 // Errors loading individual plugin manifests are reported via errFn but do not
 // abort discovery. Pass nil for errFn to silently skip broken plugins.
-// When allowedPlugins is non-empty only executables whose base name appears in
-// the list are loaded; all others are silently skipped.
 // manifestCacheFile, when non-empty, enables a CBOR on-disk manifest cache
 // keyed by plugin path + mtime. This avoids subprocess spawns on every
 // invocation when the plugin binary has not changed. When duplicate plugin
-// identities are found, pluginDir takes precedence over PATH.
-func Discover(pluginDir string, allowedPlugins []string, errFn func(path string, err error), manifestCacheFile string, stderr io.Writer) []Plugin {
+// identities are found, the first plugin in directory order is loaded.
+func Discover(pluginDir string, errFn func(path string, err error), manifestCacheFile string, stderr io.Writer) []Plugin {
 	seenPaths := map[string]bool{}
 	seenNames := map[string]bool{}
 	var plugins []Plugin
-
-	allowed := make(map[string]bool, len(allowedPlugins))
-	for _, name := range allowedPlugins {
-		allowed[name] = true
-	}
 
 	cache := loadManifestCache(manifestCacheFile)
 	cacheUpdated := false
@@ -85,9 +78,6 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 		if seenPaths[path] {
 			return
 		}
-		if len(allowed) > 0 && !allowed[filepath.Base(path)] {
-			return
-		}
 		seenPaths[path] = true
 		m, err := resolveManifest(path)
 		if err != nil {
@@ -103,8 +93,6 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 		plugins = append(plugins, Plugin{Path: path, Manifest: *m})
 	}
 
-	// Scan plugin dir first so explicitly installed plugins override PATH
-	// plugins with the same declared identity.
 	if pluginDir != "" {
 		entries, err := os.ReadDir(pluginDir)
 		if err == nil {
@@ -113,37 +101,6 @@ func Discover(pluginDir string, allowedPlugins []string, errFn func(path string,
 					continue
 				}
 				full := filepath.Join(pluginDir, e.Name())
-				if isExecutable(full) {
-					add(full)
-				}
-			}
-		}
-	}
-
-	// Scan PATH.
-	if len(allowed) > 0 {
-		// Fast path: look up each allowed plugin directly instead of
-		// enumerating every entry in every PATH directory.
-		for name := range allowed {
-			if full, err := exec.LookPath(name); err == nil {
-				add(full)
-			}
-		}
-	} else {
-		for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				continue
-			}
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				name := e.Name()
-				if !strings.HasPrefix(name, "restish-") {
-					continue
-				}
-				full := filepath.Join(dir, name)
 				if isExecutable(full) {
 					add(full)
 				}

@@ -192,9 +192,9 @@ func skipNoCSVPlugin(t *testing.T) {
 	}
 }
 
-// TestPluginDiscoverOnPATH verifies that a restish-* binary on PATH is
-// discovered by "plugin list".
-func TestPluginDiscoverOnPATH(t *testing.T) {
+// TestPluginIgnoresPathPlugins verifies that restish-* binaries on PATH are
+// not discovered by "plugin list".
+func TestPluginIgnoresPathPlugins(t *testing.T) {
 	skipNoPlugin(t)
 
 	// Put a copy of the plugin in a temp dir and add it to PATH.
@@ -217,12 +217,13 @@ func TestPluginDiscoverOnPATH(t *testing.T) {
 
 	c, out, errOut := newTestCLI()
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	t.Setenv("RSH_CONFIG_DIR", t.TempDir())
 	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
 		t.Fatalf("plugin list: %v", err)
 	}
 	_ = errOut
-	if !strings.Contains(out.String(), "testplugin") {
-		t.Errorf("expected testplugin in plugin list output, got:\n%s", out.String())
+	if strings.Contains(out.String(), "testplugin") {
+		t.Errorf("PATH plugin should not appear in plugin list output, got:\n%s", out.String())
 	}
 }
 
@@ -231,26 +232,10 @@ func TestPluginDiscoverOnPATH(t *testing.T) {
 func TestPluginDiscoverInPluginDir(t *testing.T) {
 	skipNoPlugin(t)
 
-	pluginDir := t.TempDir()
-	t.Setenv("RSH_CONFIG_DIR", t.TempDir()) // redirect default plugin dir
-
-	// Install the binary into our custom plugin dir.
-	dest := filepath.Join(pluginDir, "restish-testplugin")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
 	data, err := os.ReadFile(testPluginBin)
 	if err != nil {
 		t.Fatalf("read plugin: %v", err)
 	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write plugin: %v", err)
-	}
-
-	// Discover from pluginDir directly.
-	from := &pluginDirDiscovery{dir: pluginDir}
-	_ = from // actually we use plugin.Discover() via the CLI command
-	// Use plugin list with RSH_CONFIG_DIR pointing to a dir containing plugins/.
 	pluginsParent := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(pluginsParent, "plugins"), 0o755); err != nil {
 		t.Fatal(err)
@@ -264,7 +249,7 @@ func TestPluginDiscoverInPluginDir(t *testing.T) {
 	}
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
-	// Clear PATH so the plugin isn't discovered there.
+	// Clear PATH to keep the test isolated from the user's shell.
 	t.Setenv("PATH", "")
 
 	c, out, _ := newTestCLI()
@@ -354,20 +339,23 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 func TestPluginListShowsNameVersionHooks(t *testing.T) {
 	skipNoPlugin(t)
 
-	dir := t.TempDir()
-	dest := filepath.Join(dir, "restish-testplugin")
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(pluginDir, "restish-testplugin")
 	if runtime.GOOS == "windows" {
 		dest += ".exe"
 	}
 	data, _ := os.ReadFile(testPluginBin)
 	_ = os.WriteFile(dest, data, 0o755)
 
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
-	t.Setenv("RSH_CONFIG_DIR", t.TempDir())
+	t.Setenv("PATH", "")
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, out, _ := newTestCLI()
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
 	_ = c.Run([]string{"restish", "plugin", "list"})
 
 	got := out.String()
@@ -385,7 +373,11 @@ func TestPluginListShowsNameVersionHooks(t *testing.T) {
 // TestPluginInvalidManifest verifies that a plugin that exits non-zero on
 // --rsh-plugin-manifest is reported as a warning but doesn't crash Restish.
 func TestPluginInvalidManifest(t *testing.T) {
-	dir := t.TempDir()
+	pluginsParent := t.TempDir()
+	dir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a fake plugin that always exits 1.
 	badPlugin := filepath.Join(dir, "restish-bad")
@@ -396,12 +388,11 @@ func TestPluginInvalidManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
-	t.Setenv("RSH_CONFIG_DIR", t.TempDir())
+	t.Setenv("PATH", "")
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, out, errOut := newTestCLI()
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
 
 	// Should not return an error — broken plugins are skipped.
 	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
@@ -419,6 +410,3 @@ func TestPluginInvalidManifest(t *testing.T) {
 		t.Errorf("bad plugin should not appear in list:\n%s", out.String())
 	}
 }
-
-// pluginDirDiscovery is a test helper (unused beyond syntax check).
-type pluginDirDiscovery struct{ dir string }

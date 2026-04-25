@@ -454,7 +454,7 @@ func TestLoaderPluginRegistration(t *testing.T) {
 	installHookPlugin(t)
 
 	// Verify the plugin declares the expected content type.
-	plugins := plugin.Discover(plugin.DefaultPluginDir(), nil, nil, "", nil)
+	plugins := plugin.Discover(plugin.DefaultPluginDir(), nil, "", nil)
 	if len(plugins) == 0 {
 		t.Fatal("no plugins discovered")
 	}

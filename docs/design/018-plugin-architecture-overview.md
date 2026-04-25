@@ -31,14 +31,12 @@ the extension use cases have very different lifecycle and trust requirements:
 
 Plugins are discovered from:
 
-1. executables on `PATH` named `restish-*`
-2. the configured plugin directory
+1. executables named `restish-*` in the configured plugin directory
 
-Discovery order and precedence should be documented and deterministic. If
-multiple plugins claim the same manifest name or command name, Restish must not
-silently pick one without surfacing the collision.
-
-Configuration may further restrict loading through allowlists or similar policy.
+Plugin discovery intentionally does not scan `PATH`; installing a plugin into
+the configured directory is the explicit trust decision. If multiple plugins
+claim the same manifest name or command name, Restish must not silently pick one
+without surfacing the collision.
 
 ## Manifest
 

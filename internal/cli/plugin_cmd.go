@@ -56,7 +56,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 
 // runPluginList discovers and prints all available plugins with their hooks.
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
-	plugins := plugin.Discover(plugin.DefaultPluginDir(), c.cfg.AllowedPlugins, func(path string, err error) {
+	plugins := plugin.Discover(plugin.DefaultPluginDir(), func(path string, err error) {
 		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
 	}, c.pluginManifestCachePath(), c.Stderr)
 

@@ -12,36 +12,10 @@ Restish.
 
 ## How Discovery Works
 
-Restish discovers executables named `restish-<name>` in this order:
-
-1. executables on `PATH`
-2. the installed plugin directory, usually `~/.config/restish/plugins/`
-
-PATH is checked first. A plugin found in both places will load from `PATH`
-because the PATH entry shadows the installed copy.
-
-Each discovered executable is loaded once. If two entries on `PATH` share the
-same `restish-<name>`, the first one found takes precedence.
-
-## Restricting Discovery with `allowed_plugins`
-
-By default, Restish loads every `restish-<name>` executable it finds in either
-location. Use `allowed_plugins` in `restish.json` to restrict loading to an
-explicit allowlist:
-
-```jsonc
-{
-  "allowed_plugins": ["restish-bulk", "restish-csv"]
-}
-```
-
-When `allowed_plugins` is set:
-
-- only executables whose base name appears in the list are loaded
-- PATH-discovered plugins are also subject to the allowlist; a plugin on PATH
-  is not automatically trusted just because it was found before the plugin
-  directory
-- plugins not in the list are silently skipped at startup
+Restish discovers executable files named `restish-<name>` only from the
+installed plugin directory, usually `~/.config/restish/plugins/`. Binaries on
+`PATH` are ignored for plugin discovery; install plugins explicitly so the
+operator-controlled plugin directory is the trust boundary.
 
 ## Install a Local Plugin Binary
 

@@ -37,8 +37,8 @@ restish plugin debug restish-my-plugin
 3. use the plugin through its command surface or hook integration
 4. run `restish plugin debug ...` if discovery or runtime behavior looks wrong
 
-If you need to narrow which plugins can be loaded automatically, use the
-`allowed_plugins` config setting.
+Plugin discovery only loads binaries from the Restish plugin directory. Use
+`plugin install` to copy a local build there.
 
 ## Related Pages
 

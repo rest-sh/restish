@@ -65,7 +65,8 @@ start at [Upgrade From v1](../upgrade-from-v1/).
   plugin manifest; defaults are 30 s general, 5 min for `auth`.
 - **`plugin debug`** — decode and inspect raw CBOR plugin traffic from the
   terminal.
-- **`allowed_plugins` allowlist** — restrict which plugins are loaded at startup.
+- **Config-directory plugin discovery** — plugins are loaded only after they are
+  installed into Restish's plugin directory.
 - **TLS signer plugin type** — out-of-process client certificate signing for
   hardware keys and HSMs.
 

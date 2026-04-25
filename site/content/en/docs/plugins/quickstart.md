@@ -104,7 +104,8 @@ func main() {
 }
 ```
 
-Build it as `restish-hello-format`, put it on `PATH`, then run:
+Build it as `restish-hello-format`, install it into the Restish plugin
+directory, then run:
 
 ```bash
 restish https://httpbin.org/json -o hello
@@ -160,7 +161,7 @@ before the reply comes back to your plugin.
 ## Local Development Loop
 
 1. Build the plugin binary with a `restish-` prefix.
-2. Put it on `PATH` or install it with `restish plugin install ./restish-name`.
+2. Install it with `restish plugin install ./restish-name`.
 3. Check startup output directly:
 
 ```bash

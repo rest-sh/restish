@@ -12,8 +12,7 @@ not enough but you still want to stay inside the Restish workflow model.
 
 Restish discovers plugins from:
 
-1. executables on `PATH` whose filename starts with `restish-`
-2. the installed plugin directory, usually `~/.config/restish/plugins/`
+1. the installed plugin directory, usually `~/.config/restish/plugins/`
 
 Each candidate is invoked with `--rsh-plugin-manifest`, and Restish uses the
 returned manifest to decide how the plugin participates.
@@ -46,17 +45,6 @@ restish plugin debug restish-my-plugin
 
 Those commands let you inspect discovered plugins, copy a local plugin into the
 default plugin directory, remove an installed plugin, or debug CBOR traffic.
-
-## Restricting Auto-Discovery
-
-Use `allowed_plugins` in `restish.json` when you want Restish to load only a
-known set of plugin executables:
-
-```json
-{
-  "allowed_plugins": ["restish-bulk", "restish-csv"]
-}
-```
 
 ## Where To Go Next
 

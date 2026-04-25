@@ -29,12 +29,6 @@ type Config struct {
 	// style descriptors such as "#afd787" or "bold #ff5f87".
 	Theme map[string]string `json:"theme,omitempty"`
 
-	// AllowedPlugins, when non-empty, restricts plugin auto-discovery to
-	// executables whose base names appear in this list (e.g.
-	// ["restish-foo", "restish-bar"]).  When empty (the default), all
-	// discovered plugins are loaded.
-	AllowedPlugins []string `json:"allowed_plugins,omitempty"`
-
 	// Plugins holds per-plugin configuration keyed by plugin name (without the
 	// "restish-" prefix). Each value is stored as raw JSON so that restish
 	// itself does not need to know the shape of each plugin's config.
