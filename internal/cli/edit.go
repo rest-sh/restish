@@ -29,6 +29,7 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 		RunE:    c.runEdit,
 	}
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")
+	cmd.Flags().BoolP("rsh-interactive", "i", false, "Open an interactive editor")
 	cmd.Flags().Bool("dry-run", false, "Show the diff without sending the update")
 	cmd.Flags().BoolP("rsh-yes", "y", false, "Skip the confirmation prompt")
 	root.AddCommand(cmd)
@@ -115,7 +116,15 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("edit: marshal patched value: %w", err)
 		}
-	} else {
+	}
+
+	interactive, _ := cmd.Flags().GetBool("rsh-interactive")
+	if interactive && len(patchArgs) > 0 {
+		if err := os.WriteFile(tmpPath, editedText, 0o600); err != nil {
+			return fmt.Errorf("edit: write patched temp file: %w", err)
+		}
+	}
+	if interactive || len(patchArgs) == 0 {
 		editorCmd, err := c.editorCommand(tmpPath)
 		if err != nil {
 			return err

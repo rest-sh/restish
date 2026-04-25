@@ -83,6 +83,32 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	}
 }
 
+func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
+	captured := installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI()
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-i", "-y", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(captured); err != nil {
+		t.Fatalf("expected editor to capture fetched resource: %v", err)
+	}
+}
+
 func TestEditCommandUpdateUsesProfileHeaders(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 
