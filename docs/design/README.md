@@ -108,6 +108,7 @@ were a recurring source of remediation work.
 - [016-setup-and-completions.md](./016-setup-and-completions.md) - Shell setup, noglob aliases, and completion behavior.
 - [017-cli-behavior-and-diagnostics.md](./017-cli-behavior-and-diagnostics.md) - Command resolution, global flag policy, diagnostics, exit codes, prompts, and operator-facing behavior conventions.
 - [031-compatibility-and-migration.md](./031-compatibility-and-migration.md) - v1-to-v2 compatibility goals, intentional breaks, migration path, and release-readiness checklist for user-visible behavior.
+- [032-implementation-contract.md](./032-implementation-contract.md) - Cross-cutting implementation matrix for global flags, config schema, command precedence, plugin message families, and output ownership.
 
 **Extensibility**
 

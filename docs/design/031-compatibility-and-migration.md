@@ -78,6 +78,8 @@ The current design set intentionally changes v1 in at least these areas:
 - stronger separation between document and record output
 - JSONC-backed typed config model
 - more explicit pipeline planning for pagination and streaming
+- retirement of the v1 interactive `api configure <name>` prompt flow in favor
+  of `restish.json`, `api add`, `api set`, and `api edit`
 
 Those are acceptable breaks, but they require migration documentation and
 operator guidance.
