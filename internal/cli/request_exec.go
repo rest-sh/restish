@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
@@ -75,16 +76,12 @@ func (c *CLI) prepareRequest(
 		return c.runRequestMiddlewarePlugins(req)
 	}
 
-	body, err := c.requestBodyReader(opts.ContentType, bodyValue, &opts.Headers)
+	bodyRaw, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request body: %w", err)
 	}
-	var bodyRaw []byte
-	if body != nil {
-		bodyRaw, err = io.ReadAll(body)
-		if err != nil {
-			return nil, fmt.Errorf("reading prepared body: %w", err)
-		}
+	var body io.Reader
+	if len(bodyRaw) > 0 {
 		body = bytes.NewReader(bodyRaw)
 	}
 
@@ -114,7 +111,7 @@ func cloneRequestOptions(opts request.Options) request.Options {
 	return cloned
 }
 
-func (c *CLI) requestBodyReader(contentType string, bodyValue any, headers *[]string) (io.Reader, error) {
+func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]string) ([]byte, error) {
 	if bodyValue == nil {
 		return nil, nil
 	}
@@ -132,7 +129,7 @@ func (c *CLI) requestBodyReader(contentType string, bodyValue any, headers *[]st
 		return nil, err
 	}
 	*headers = append(*headers, "Content-Type: "+actualContentType)
-	return bytes.NewReader(encoded), nil
+	return encoded, nil
 }
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {
@@ -173,7 +170,7 @@ func (c *CLI) normalizeHTTPResponse(httpResp *http.Response, maxBodyBytes int64)
 	// httpResp headers/request are still accessible after Normalize has closed
 	// and consumed the body.
 	if httpResp.Request != nil {
-		if links := hypermedia.Parse(httpResp.Request.URL, httpResp.Header, resp.Body, c.linkParsers); len(links) > 0 {
+		if links := hypermedia.Parse(httpResp.Request.URL, httpResp.Header, nil, []hypermedia.Parser{hypermedia.LinkHeaderParser{}}); len(links) > 0 {
 			resp.Links = make(map[string]any, len(links))
 			for k, v := range links {
 				resp.Links[k] = v
@@ -182,4 +179,28 @@ func (c *CLI) normalizeHTTPResponse(httpResp *http.Response, maxBodyBytes int64)
 	}
 
 	return resp, nil
+}
+
+func (c *CLI) ensureBodyLinks(resp *output.Response) {
+	if resp == nil || resp.URL == "" {
+		return
+	}
+	base, err := url.Parse(resp.URL)
+	if err != nil {
+		return
+	}
+	headers := make(http.Header, len(resp.Headers))
+	for k, v := range resp.Headers {
+		headers.Set(k, v)
+	}
+	links := hypermedia.Parse(base, headers, resp.Body, c.linkParsers)
+	if len(links) == 0 {
+		return
+	}
+	if resp.Links == nil {
+		resp.Links = make(map[string]any, len(links))
+	}
+	for k, v := range links {
+		resp.Links[k] = v
+	}
 }

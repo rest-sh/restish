@@ -46,14 +46,22 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 		})
 	}
 
+	cells := make([][]string, len(rows))
+	for r, row := range rows {
+		cells[r] = make([]string, len(cols))
+		for i, c := range cols {
+			cells[r][i] = truncate(cellString(row[c]), tableMaxColWidth)
+		}
+	}
+
 	// Compute column widths (min = header width, max = tableMaxColWidth).
 	widths := make([]int, len(cols))
 	for i, c := range cols {
 		widths[i] = utf8.RuneCountInString(c)
 	}
-	for _, row := range rows {
-		for i, c := range cols {
-			w2 := utf8.RuneCountInString(truncate(cellString(row[c]), tableMaxColWidth))
+	for _, row := range cells {
+		for i, cell := range row {
+			w2 := utf8.RuneCountInString(cell)
 			if w2 > widths[i] {
 				widths[i] = w2
 			}
@@ -97,12 +105,8 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	writeSep("├", "┼", "┤", "─")
 
 	// Data rows.
-	for _, row := range rows {
-		cells := make([]string, len(cols))
-		for i, c := range cols {
-			cells[i] = truncate(cellString(row[c]), tableMaxColWidth)
-		}
-		writeRow(cells)
+	for _, row := range cells {
+		writeRow(row)
 	}
 
 	// Bottom border.
@@ -174,9 +178,18 @@ func cellString(v any) string {
 
 // truncate shortens s to at most maxRunes runes, appending "…" if cut.
 func truncate(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
 	if utf8.RuneCountInString(s) <= maxRunes {
 		return s
 	}
-	runes := []rune(s)
-	return string(runes[:maxRunes-1]) + "…"
+	count := 0
+	for i := range s {
+		if count == maxRunes-1 {
+			return s[:i] + "…"
+		}
+		count++
+	}
+	return s
 }

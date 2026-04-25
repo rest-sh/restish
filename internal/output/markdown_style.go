@@ -2,12 +2,21 @@ package output
 
 import (
 	"os"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 )
+
+var markdownStyleCache struct {
+	sync.Mutex
+	key   string
+	style ansi.StyleConfig
+	ok    bool
+}
 
 // NewMarkdownRenderer returns a Glamour renderer that respects GLAMOUR_STYLE
 // when explicitly configured, otherwise falling back to the active Restish
@@ -30,6 +39,51 @@ func NewMarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 // MarkdownStyle returns the Restish Glamour style, with colors derived from the
 // active user theme so Markdown bodies and help match readable output.
 func MarkdownStyle() ansi.StyleConfig {
+	key := themeCacheKey()
+	markdownStyleCache.Lock()
+	if markdownStyleCache.ok && markdownStyleCache.key == key {
+		style := markdownStyleCache.style
+		markdownStyleCache.Unlock()
+		return style
+	}
+	markdownStyleCache.Unlock()
+
+	style := buildMarkdownStyle()
+
+	markdownStyleCache.Lock()
+	markdownStyleCache.key = key
+	markdownStyleCache.style = style
+	markdownStyleCache.ok = true
+	markdownStyleCache.Unlock()
+	return style
+}
+
+func resetMarkdownStyleCache() {
+	markdownStyleCache.Lock()
+	markdownStyleCache.ok = false
+	markdownStyleCache.Unlock()
+}
+
+func themeCacheKey() string {
+	if len(currentThemeEntries) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(currentThemeEntries))
+	for key := range currentThemeEntries {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(currentThemeEntries[key])
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func buildMarkdownStyle() ansi.StyleConfig {
 	document := markdownPrimitive("markdown_document", chroma.Text)
 	quote := markdownPrimitive("markdown_quote", chroma.GenericEmph)
 	heading := markdownPrimitive("markdown_heading", chroma.GenericHeading)

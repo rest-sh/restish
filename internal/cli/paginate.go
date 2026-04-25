@@ -29,6 +29,7 @@ func (c *CLI) tryPaginate(
 		return false, nil
 	}
 
+	c.ensureBodyLinks(firstResp)
 	nextURL := resolveNextURL(firstResp, pagCfg)
 	if nextURL == "" {
 		return false, nil
@@ -149,6 +150,7 @@ func (c *CLI) runPagination(
 			}
 			streamedCount += len(items)
 		}
+		c.ensureBodyLinks(resp)
 		nextURL = resolveNextURL(resp, pagCfg)
 	}
 

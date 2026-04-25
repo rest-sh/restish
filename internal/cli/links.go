@@ -48,6 +48,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	c.ensureBodyLinks(resp)
 
 	var links map[string]string
 	if len(resp.Links) > 0 {

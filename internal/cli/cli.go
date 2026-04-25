@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -113,6 +114,17 @@ func (c *CLI) AddEncoding(e *content.Encoding) {
 	c.content.AddEncoding(e)
 }
 
+type flushWriter interface {
+	Flush() error
+}
+
+func (c *CLI) flushStdout() error {
+	if f, ok := c.Stdout.(flushWriter); ok {
+		return f.Flush()
+	}
+	return nil
+}
+
 // AddAuthHandler registers a custom auth handler under the given type name.
 // The name is used in the profile's auth.type config field.
 // Built-in names (http-basic, oauth-client-credentials,
@@ -219,6 +231,16 @@ func (c *CLI) Run(args []string) error {
 
 	c.requestClosers = nil
 	defer c.closeRequestClosers()
+
+	if !output.IsTerminal(c.Stdout) {
+		origStdout := c.Stdout
+		buf := bufio.NewWriterSize(origStdout, 64*1024)
+		c.Stdout = buf
+		defer func() {
+			_ = buf.Flush()
+			c.Stdout = origStdout
+		}()
+	}
 
 	// On first run (no config file yet), suggest shell setup if on a supported
 	// shell so users discover the noglob alias before hitting the foot-gun.

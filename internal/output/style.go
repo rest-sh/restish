@@ -124,6 +124,7 @@ func SetTheme(entries ThemeEntries) error {
 	}
 	restishStyle = style
 	currentThemeEntries = normalizeThemeEntries(entries)
+	resetMarkdownStyleCache()
 	return nil
 }
 

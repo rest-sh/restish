@@ -244,6 +244,18 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		}
 	}
 
+	if explicitFilter && filterNeedsLinks(filterExpr) {
+		c.ensureBodyLinks(resp)
+	}
+
+	if filterExpr == "@" && !explicitFilter {
+		formatter, err := c.selectFormatter(cmd, fmtName, tty)
+		if err != nil {
+			return err
+		}
+		return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+	}
+
 	// Resolve filter language.
 	var lang filter.Lang
 	switch strings.ToLower(filterLang) {
@@ -291,6 +303,14 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+}
+
+func filterNeedsLinks(filterExpr string) bool {
+	filterExpr = strings.TrimSpace(filterExpr)
+	return filterExpr == "@" || filterExpr == "links" ||
+		strings.HasPrefix(filterExpr, "links.") ||
+		strings.HasPrefix(filterExpr, "links[") ||
+		strings.HasPrefix(filterExpr, ".links")
 }
 
 // renderValue writes a filtered/subselected value using the same formatter

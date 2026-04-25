@@ -4,11 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
 	authpkg "github.com/rest-sh/restish/v2/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"github.com/rest-sh/restish/v2/internal/request"
 )
 
@@ -171,6 +173,50 @@ func TestNormalizeHTTPResponseParsesLinks(t *testing.T) {
 	}
 	if got, want := resp.Links["next"], "https://api.example.com/items?page=2"; got != want {
 		t.Fatalf("resp.Links[next] = %v, want %q", got, want)
+	}
+}
+
+type countingBodyLinkParser struct {
+	calls int
+}
+
+func (p *countingBodyLinkParser) ParseLinks(_ *url.URL, _ http.Header, body any) []hypermedia.Link {
+	p.calls++
+	if body == nil {
+		return nil
+	}
+	return []hypermedia.Link{{Rel: "self", URI: "https://api.example.com/items/1"}}
+}
+
+func TestNormalizeHTTPResponseDefersBodyLinkParsers(t *testing.T) {
+	parser := &countingBodyLinkParser{}
+	c := New()
+	c.linkParsers = []hypermedia.Parser{hypermedia.LinkHeaderParser{}, parser}
+	req, err := http.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	httpResp := &http.Response{
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"_links":{"self":{"href":"/items/1"}}}`)),
+		Request:    req,
+	}
+
+	resp, err := c.normalizeHTTPResponse(httpResp, 0)
+	if err != nil {
+		t.Fatalf("normalizeHTTPResponse() error = %v", err)
+	}
+	if parser.calls != 0 {
+		t.Fatalf("body parser called during normalize: %d", parser.calls)
+	}
+	c.ensureBodyLinks(resp)
+	if parser.calls != 1 {
+		t.Fatalf("body parser calls = %d, want 1", parser.calls)
+	}
+	if got := resp.Links["self"]; got != "https://api.example.com/items/1" {
+		t.Fatalf("resp.Links[self] = %v", got)
 	}
 }
 

@@ -723,6 +723,11 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 	}
 
 	if match != "" {
+		ast, err := mexpr.Parse(match, map[string]any{}, mexpr.UnquotedStrings)
+		if err != nil {
+			return nil, err
+		}
+		interpreter := mexpr.NewInterpreter(ast, mexpr.UnquotedStrings)
 		filtered := make([]string, 0, len(args))
 		for _, path := range args {
 			data, err := os.ReadFile(path)
@@ -736,11 +741,7 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 			if err := json.Unmarshal(data, &content); err != nil {
 				continue
 			}
-			ast, err := mexpr.Parse(match, content, mexpr.UnquotedStrings)
-			if err != nil {
-				return nil, err
-			}
-			result, err := mexpr.NewInterpreter(ast, mexpr.UnquotedStrings).Run(content)
+			result, err := interpreter.Run(content)
 			if err != nil || isFalsey(result) {
 				continue
 			}

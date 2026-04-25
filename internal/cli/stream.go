@@ -234,7 +234,10 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 		}
 	}
 
-	return renderer.Render(result)
+	if err := renderer.Render(result); err != nil {
+		return err
+	}
+	return c.flushStdout()
 }
 
 func validateStreamingOutputMode(cmd *cobra.Command) error {
