@@ -438,24 +438,22 @@ func setSimplePath(value any, path string, replacement any) (any, bool) {
 // so callers can surface the problem rather than silently returning no items.
 func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 	if pagCfg != nil && pagCfg.ItemsPath != "" {
-		if m, ok := body.(map[string]any); ok {
-			result, err := filter.Apply(pagCfg.ItemsPath, m, filter.LangAuto)
-			if err != nil {
-				return nil, fmt.Errorf("items_path filter %q: %w", pagCfg.ItemsPath, err)
-			}
-			if arr, ok := result.([]any); ok {
-				return arr, nil
-			}
-			if result == nil {
-				return nil, fmt.Errorf("items_path %q returned no items", pagCfg.ItemsPath)
-			}
-			if result != nil {
-				return []any{result}, fmt.Errorf("items_path %q returned %T instead of an array", pagCfg.ItemsPath, result)
-			}
-		} else {
-			return nil, fmt.Errorf("items_path %q requires an object response body", pagCfg.ItemsPath)
+		m, ok := body.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("pagination: items_path %q requires an object response body", pagCfg.ItemsPath)
 		}
-		return nil, fmt.Errorf("items_path %q returned no items", pagCfg.ItemsPath)
+		result, err := filter.Apply(pagCfg.ItemsPath, m, filter.LangAuto)
+		if err != nil {
+			return nil, fmt.Errorf("pagination: items_path filter %q: %w", pagCfg.ItemsPath, err)
+		}
+		switch items := result.(type) {
+		case nil:
+			return nil, fmt.Errorf("pagination: items_path %q returned no items", pagCfg.ItemsPath)
+		case []any:
+			return items, nil
+		default:
+			return []any{items}, fmt.Errorf("pagination: items_path %q returned %T instead of an array", pagCfg.ItemsPath, result)
+		}
 	}
 	if arr, ok := body.([]any); ok {
 		return arr, nil

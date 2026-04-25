@@ -16,6 +16,9 @@ type MethodOp struct {
 // in the conventional order GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
 // Callers should check Op for nil before use.
 func PathItemMethods(item *v3.PathItem) []MethodOp {
+	if item == nil {
+		return nil
+	}
 	return []MethodOp{
 		{"GET", item.Get},
 		{"POST", item.Post},

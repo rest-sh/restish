@@ -22,9 +22,7 @@ var relParamRe = regexp.MustCompile(`(?i);\s*rel\s*=\s*(?:"([^"]*)"|([\w!#$&'*+.
 func (LinkHeaderParser) ParseLinks(baseURL *url.URL, header http.Header, _ any) []Link {
 	var result []Link
 	for _, h := range header["Link"] {
-		// Each comma-separated segment is one link element. Commas inside <>
-		// or quotes are unlikely in Link headers, so a simple split suffices.
-		for _, part := range strings.Split(h, ",") {
+		for _, part := range splitLinkHeaderValues(h) {
 			part = strings.TrimSpace(part)
 			uriM := linkURIRe.FindStringSubmatch(part)
 			relM := relParamRe.FindStringSubmatch(part)
@@ -42,6 +40,33 @@ func (LinkHeaderParser) ParseLinks(baseURL *url.URL, header http.Header, _ any) 
 		}
 	}
 	return result
+}
+
+func splitLinkHeaderValues(value string) []string {
+	var parts []string
+	start := 0
+	inAngle := false
+	inQuote := false
+	escaped := false
+	for i, r := range value {
+		switch {
+		case escaped:
+			escaped = false
+		case inQuote && r == '\\':
+			escaped = true
+		case r == '"' && !inAngle:
+			inQuote = !inQuote
+		case r == '<' && !inQuote:
+			inAngle = true
+		case r == '>' && !inQuote:
+			inAngle = false
+		case r == ',' && !inAngle && !inQuote:
+			parts = append(parts, value[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, value[start:])
+	return parts
 }
 
 // ─── HAL (application/hal+json) ──────────────────────────────────────────────

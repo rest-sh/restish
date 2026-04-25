@@ -380,8 +380,7 @@ func (a *app) pullIndex(m *Meta) error {
 	}
 
 	baseURL, _ := url.Parse(normalizedBaseURL(m.URL))
-	prefixURL, _ := url.Parse(commonPrefix(entries))
-	m.Base = baseURL.ResolveReference(prefixURL).String()
+	m.Base = commonPrefix(baseURL, entries)
 
 	for _, f := range m.Files {
 		f.VersionRemote = ""
@@ -856,13 +855,24 @@ func normalizeDiffJSON(data []byte) []byte {
 	return append(formatted, '\n')
 }
 
-func commonPrefix(entries []listEntry) string {
+func commonPrefix(base *url.URL, entries []listEntry) string {
 	if len(entries) == 0 {
 		return ""
 	}
-	prefix := strings.Split(entries[0].URL, "/")
-	for _, entry := range entries[1:] {
-		parts := strings.Split(entry.URL, "/")
+	resolved := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		u, err := url.Parse(entry.URL)
+		if err != nil {
+			continue
+		}
+		resolved = append(resolved, base.ResolveReference(u).String())
+	}
+	if len(resolved) == 0 {
+		return base.String()
+	}
+	prefix := strings.Split(resolved[0], "/")
+	for _, entry := range resolved[1:] {
+		parts := strings.Split(entry, "/")
 		for i, part := range parts {
 			if len(prefix) == i || prefix[i] != part {
 				prefix = prefix[:i]

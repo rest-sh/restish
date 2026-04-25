@@ -1,5 +1,7 @@
 package plugin
 
+import "math"
+
 // MsgBytes coerces a CBOR-decoded value into a []byte.
 // CBOR byte strings decode to []byte natively. Some CBOR implementations or
 // intermediate representations may produce a string or a []any of integers
@@ -20,6 +22,10 @@ func MsgBytes(v any) []byte {
 				out = append(out, byte(n))
 			case int:
 				out = append(out, byte(n))
+			case float64:
+				if n >= 0 && n <= 255 && math.Trunc(n) == n {
+					out = append(out, byte(n))
+				}
 			}
 		}
 		return out

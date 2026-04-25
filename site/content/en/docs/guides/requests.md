@@ -139,7 +139,9 @@ restish --rsh-server https://api.rest.sh example list-images
 ```
 
 This is useful for temporary environment switching without changing the saved
-API config.
+API config. If the override includes a path, Restish prefixes that path onto the
+outgoing request path, so `--rsh-server https://staging.example.com/v2` sends
+`/users` requests to `/v2/users`.
 
 Use this as an escape hatch, not a replacement for profiles. If you keep doing
 it, that is usually a sign you should add a profile.

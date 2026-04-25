@@ -16,7 +16,7 @@ Command-line flags override environment variables and config-file defaults.
 - `-H`, `--rsh-header`: add a request header in `Name: Value` format
 - `-q`, `--rsh-query`: add a request query parameter in `key=value` format
 - `-c`, `--rsh-content-type`: choose the request body content type
-- `-s`, `--rsh-server`: override the scheme and host for a request
+- `-s`, `--rsh-server`: override the scheme and host for a request; when the override includes a path, that path is prefixed to outgoing request paths
 - `-p`, `--rsh-profile`: choose the active API profile
 - `--rsh-timeout`: set the request timeout, for example `30s`
 
@@ -31,6 +31,7 @@ Examples:
 restish -H 'Accept: application/json' https://api.rest.sh/
 restish post -c yaml https://api.rest.sh/types string: hello
 restish --rsh-server https://staging.example.com myapi users list
+restish --rsh-server https://staging.example.com/v2 myapi users list
 ```
 
 ## Output And Filtering

@@ -214,6 +214,22 @@ func TestHTTPServerOverride(t *testing.T) {
 	}
 }
 
+func TestHTTPServerOverridePrefixesPath(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	err := c.Run([]string{"restish", "get", "-s", "https://staging.example.com/v2", "https://api.example.com/items"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().URL.String(); got != "https://staging.example.com/v2/items" {
+		t.Errorf("URL = %q, want override path prefix", got)
+	}
+}
+
 // TestHTTPResponseBody verifies that the response body is written to stdout.
 // Uses a JSON content-type so the body is decoded and re-encoded as an object.
 func TestHTTPResponseBody(t *testing.T) {

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"net/url"
+	"testing"
+)
 
 func TestBulkRelativePath(t *testing.T) {
 	tests := []struct {
@@ -46,5 +49,20 @@ func TestBulkRelativePath(t *testing.T) {
 				t.Fatalf("bulkRelativePath = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCommonPrefixResolvesAgainstBaseURL(t *testing.T) {
+	base, err := url.Parse("https://api.example.com/root/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := commonPrefix(base, []listEntry{
+		{URL: "https://api.example.com/root/users/a"},
+		{URL: "/root/users/b"},
+	})
+	want := "https://api.example.com/root/users/"
+	if got != want {
+		t.Fatalf("commonPrefix = %q, want %q", got, want)
 	}
 }

@@ -72,6 +72,18 @@ func TestNormalize(t *testing.T) {
 			override: "https://staging.example.com",
 			want:     "https://staging.example.com/items?page=2",
 		},
+		{
+			name:     "server override path prefixes request path",
+			raw:      "https://api.example.com/items?page=2",
+			override: "https://staging.example.com/v2",
+			want:     "https://staging.example.com/v2/items?page=2",
+		},
+		{
+			name:     "server override path handles root request",
+			raw:      "https://api.example.com",
+			override: "https://staging.example.com/v2",
+			want:     "https://staging.example.com/v2",
+		},
 	}
 
 	for _, tc := range cases {

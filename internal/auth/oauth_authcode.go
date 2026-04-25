@@ -341,30 +341,25 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		fmt.Fprintf(h.Stderr, "Browser launch disabled; open this URL manually:\n  %s\n", fullAuthorizeURL)
 	}
 
-	manualCodeCh := make(chan string, 1)
-	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
-		go func() {
-			code, err := h.Prompt("Paste the authorization code: ")
-			if err != nil {
-				trySendErr(errCh, err)
-				return
-			}
-			manualCodeCh <- strings.TrimSpace(code)
-		}()
-	}
-
 	// Wait for callback.
 	ctx2, cancel := context.WithTimeout(ctx, authTimeout)
 	defer cancel()
 
 	var code string
-	select {
-	case code = <-codeCh:
-	case code = <-manualCodeCh:
-	case err = <-errCh:
-		return CachedToken{}, fmt.Errorf("callback error: %w", err)
-	case <-ctx2.Done():
-		return CachedToken{}, fmt.Errorf("timed out waiting for authorization callback")
+	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
+		promptCode, promptErr := h.Prompt("Paste the authorization code: ")
+		if promptErr != nil {
+			return CachedToken{}, promptErr
+		}
+		code = strings.TrimSpace(promptCode)
+	} else {
+		select {
+		case code = <-codeCh:
+		case err = <-errCh:
+			return CachedToken{}, fmt.Errorf("callback error: %w", err)
+		case <-ctx2.Done():
+			return CachedToken{}, fmt.Errorf("timed out waiting for authorization callback")
+		}
 	}
 
 	// Exchange code for token.

@@ -53,6 +53,25 @@ func TestLinkHeaderRelativeResolution(t *testing.T) {
 	}
 }
 
+func TestLinkHeaderParserAllowsCommasInURIAndQuotedParams(t *testing.T) {
+	hdr := http.Header{
+		"Link": {`<https://api.example.com/search?q=a,b>; rel="next"; title="a,b", </items?page=1>; rel="prev"`},
+	}
+	p := hypermedia.LinkHeaderParser{}
+	links := p.ParseLinks(base, hdr, nil)
+
+	got := map[string]string{}
+	for _, l := range links {
+		got[l.Rel] = l.URI
+	}
+	if got["next"] != "https://api.example.com/search?q=a,b" {
+		t.Fatalf("next = %q", got["next"])
+	}
+	if got["prev"] != "https://api.example.com/items?page=1" {
+		t.Fatalf("prev = %q", got["prev"])
+	}
+}
+
 // ─── HAL tests ────────────────────────────────────────────────────────────────
 
 func TestHALParser(t *testing.T) {

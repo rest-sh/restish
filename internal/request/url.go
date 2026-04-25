@@ -3,6 +3,7 @@ package request
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -11,9 +12,9 @@ import (
 //   - ":<port>/path"      → "http://localhost:<port>/path"
 //   - "example.com/items" → "https://example.com/items"
 //
-// If serverOverride is non-empty (e.g. "https://staging.example.com"),
+// If serverOverride is non-empty (e.g. "https://staging.example.com/v2"),
 // the scheme and host of the resulting URL are replaced with those from
-// serverOverride, leaving the path and query string intact.
+// serverOverride. A path on the override is prefixed to the request path.
 func Normalize(rawURL, serverOverride string) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 
@@ -54,7 +55,18 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 		}
 		u.Scheme = override.Scheme
 		u.Host = override.Host
+		if override.Path != "" && override.Path != "/" {
+			u.Path = joinURLPath(override.EscapedPath(), u.EscapedPath())
+			u.RawPath = ""
+		}
 	}
 
 	return u.String(), nil
+}
+
+func joinURLPath(prefix, requestPath string) string {
+	if requestPath == "" || requestPath == "/" {
+		return path.Clean("/" + strings.TrimPrefix(prefix, "/"))
+	}
+	return path.Join("/", prefix, requestPath)
 }
