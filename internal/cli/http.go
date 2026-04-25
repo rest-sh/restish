@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +119,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	opts = prepared.opts
 	if firstPartyHost == "" {
 		if u, parseErr := url.Parse(prepared.rawURL); parseErr == nil {
-			firstPartyHost = u.Hostname()
+			firstPartyHost = u.Scheme + "://" + u.Host
 		}
 	}
 
@@ -198,15 +198,19 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	return nil
 }
 
-func followCrossesFirstPartyHost(firstPartyHost, followURI string) bool {
-	if firstPartyHost == "" {
+func followCrossesFirstPartyHost(firstPartyOrigin, followURI string) bool {
+	if firstPartyOrigin == "" {
 		return false
 	}
 	followU, err := url.Parse(followURI)
 	if err != nil {
 		return false
 	}
-	return !strings.EqualFold(followU.Hostname(), firstPartyHost)
+	baseU, err := url.Parse(firstPartyOrigin)
+	if err != nil || baseU.Scheme == "" {
+		return !strings.EqualFold(followU.Hostname(), firstPartyOrigin)
+	}
+	return !sameURLOrigin(baseU, followU)
 }
 
 // formatResponse applies any filter then selects and runs the formatter.
@@ -697,6 +701,12 @@ func isSensitiveHeader(name string) bool {
 	case "Authorization", "Cookie", "Set-Cookie", "Proxy-Authorization":
 		return true
 	}
+	lower := strings.ToLower(name)
+	for _, marker := range []string{"api-key", "apikey", "auth-token", "token", "secret", "password"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -717,102 +727,156 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 		return rawURL, "", opts, nil
 	}
 
-	// Split "apiname/rest/of/path" → apiName="apiname", rest="rest/of/path"
-	apiName, rest, _ := strings.Cut(rawURL, "/")
-	api, ok := c.cfg.APIs[apiName]
+	match, ok := c.matchAPIProfile(rawURL, profileName)
 	if !ok {
-		// Fallback: rawURL may be a full URL built from an operation_base prefix.
-		// Check if any registered API's operation_base is a prefix of rawURL,
-		// and if so apply that API's profile for auth/headers without rewriting
-		// the URL (it is already correct).
-		type candidate struct {
-			name   string
-			apiCfg *config.APIConfig
-			base   string
-		}
-		var candidates []candidate
-		for name, apiCfg := range c.cfg.APIs {
-			if apiCfg.OperationBase == "" {
-				continue
-			}
-			base := strings.TrimRight(apiCfg.OperationBase, "/")
-			if strings.HasPrefix(rawURL, base) {
-				candidates = append(candidates, candidate{name: name, apiCfg: apiCfg, base: base})
-			}
-		}
-		sort.Slice(candidates, func(i, j int) bool {
-			return len(candidates[i].base) > len(candidates[j].base)
-		})
-		for _, match := range candidates {
-			var prof *config.ProfileConfig
-			if match.apiCfg.Profiles != nil {
-				prof = match.apiCfg.Profiles[profileName]
-			}
-			if prof != nil {
-				opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
-				opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-				callbacks := c.authOnRequest(match.name, profileName, prof, authOpts)
-				opts.OnRequest = callbacks.OnRequest
-				opts.OnUnauthorized = callbacks.OnUnauthorized
-				if opts.TLSSignerName == "" {
-					opts.TLSSignerName = prof.TLSSigner
-				}
-				opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
-			} else {
-				if match.apiCfg.Profiles != nil {
-					return rawURL, match.name, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.name, profileNames(match.apiCfg.Profiles))
-				}
-				callbacks := c.authOnRequest(match.name, profileName, nil, authOpts)
-				opts.OnRequest = callbacks.OnRequest
-				opts.OnUnauthorized = callbacks.OnUnauthorized
-			}
-			return rawURL, match.name, opts, nil
-		}
 		return rawURL, "", opts, nil
 	}
+	rawURL = match.rawURL
 
-	// Determine effective base URL and profile.
-	baseURL := api.BaseURL
-	var prof *config.ProfileConfig
-	if api.Profiles != nil {
-		prof = api.Profiles[profileName]
-		if prof != nil && prof.BaseURL != "" {
-			baseURL = prof.BaseURL
+	if match.profile == nil {
+		if match.api.Profiles != nil {
+			return rawURL, match.apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.apiName, profileNames(match.api.Profiles))
 		}
-	}
-	if prof == nil {
-		if api.Profiles != nil {
-			return rawURL, apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, apiName, profileNames(api.Profiles))
-		}
-		callbacks := c.authOnRequest(apiName, profileName, nil, authOpts)
+		callbacks := c.authOnRequest(match.apiName, profileName, nil, authOpts)
 		opts.OnRequest = callbacks.OnRequest
 		opts.OnUnauthorized = callbacks.OnUnauthorized
-	}
-
-	// Build the expanded URL.
-	expanded := strings.TrimRight(baseURL, "/")
-	if rest != "" {
-		expanded = expanded + "/" + rest
 	}
 
 	// Prepend persistent profile headers/query so flag-supplied values take
 	// precedence (they appear later in the slice, and are applied last).
-	if prof != nil {
-		opts.Headers = append(append([]string(nil), prof.Headers...), opts.Headers...)
-		opts.Query = append(append([]string(nil), prof.Query...), opts.Query...)
-		callbacks := c.authOnRequest(apiName, profileName, prof, authOpts)
+	if match.profile != nil {
+		opts.Headers = append(append([]string(nil), match.profile.Headers...), opts.Headers...)
+		opts.Query = append(append([]string(nil), match.profile.Query...), opts.Query...)
+		callbacks := c.authOnRequest(match.apiName, profileName, match.profile, authOpts)
 		opts.OnRequest = callbacks.OnRequest
 		opts.OnUnauthorized = callbacks.OnUnauthorized
 		if opts.TLSSignerName == "" {
-			opts.TLSSignerName = prof.TLSSigner
+			opts.TLSSignerName = match.profile.TLSSigner
 		}
-		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
+		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, match.profile.TLSSignerParams)
 	}
-	if apiName != "" {
-		opts.CacheNamespace = apiName + ":" + profileName
+	if match.apiName != "" {
+		opts.CacheNamespace = match.apiName + ":" + profileName
 	}
 
-	return expanded, apiName, opts, nil
+	return rawURL, match.apiName, opts, nil
+}
+
+type apiProfileMatch struct {
+	apiName string
+	api     *config.APIConfig
+	profile *config.ProfileConfig
+	rawURL  string
+	score   int
+}
+
+func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool) {
+	apiName, rest, _ := strings.Cut(rawURL, "/")
+	if api := c.cfg.APIs[apiName]; api != nil {
+		baseURL := api.BaseURL
+		prof := profileForName(api, profileName)
+		if prof != nil && prof.BaseURL != "" {
+			baseURL = prof.BaseURL
+		}
+		expanded := strings.TrimRight(baseURL, "/")
+		if rest != "" {
+			expanded += "/" + rest
+		}
+		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true
+	}
+
+	var best apiProfileMatch
+	for name, api := range c.cfg.APIs {
+		if api == nil {
+			continue
+		}
+		prof := profileForName(api, profileName)
+		for _, base := range apiMatchBases(api, prof) {
+			score, ok := matchURLBase(rawURL, base)
+			if !ok || score <= best.score {
+				continue
+			}
+			best = apiProfileMatch{apiName: name, api: api, profile: prof, rawURL: rawURL, score: score}
+		}
+	}
+	return best, best.apiName != ""
+}
+
+func profileForName(api *config.APIConfig, profileName string) *config.ProfileConfig {
+	if api == nil || api.Profiles == nil {
+		return nil
+	}
+	return api.Profiles[profileName]
+}
+
+func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) []string {
+	var bases []string
+	if api.BaseURL != "" {
+		bases = append(bases, api.BaseURL)
+	}
+	if prof != nil && prof.BaseURL != "" {
+		bases = append(bases, prof.BaseURL)
+	}
+	if api.OperationBase != "" {
+		bases = append(bases, api.OperationBase)
+	}
+	return bases
+}
+
+func matchURLBase(rawURL, rawBase string) (int, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || !u.IsAbs() {
+		return 0, false
+	}
+	base, err := url.Parse(rawBase)
+	if err != nil || !base.IsAbs() {
+		return 0, false
+	}
+	if !sameURLOrigin(base, u) {
+		return 0, false
+	}
+	basePath := strings.TrimRight(base.EscapedPath(), "/")
+	if basePath == "" {
+		basePath = "/"
+	}
+	path := u.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if basePath != "/" {
+		if path != basePath && !strings.HasPrefix(path, basePath+"/") {
+			return 0, false
+		}
+	}
+	return len(base.Scheme) + len(base.Host) + len(basePath), true
+}
+
+func sameURLOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		effectivePort(a) == effectivePort(b)
+}
+
+func effectivePort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	}
+	if _, port, err := net.SplitHostPort(u.Host); err == nil {
+		return port
+	}
+	return ""
 }
 
 // mergeTLSSignerParams merges src entries into dst, not overwriting existing

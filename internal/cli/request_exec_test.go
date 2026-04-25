@@ -243,14 +243,17 @@ func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
 }
 
 func TestFollowCrossesFirstPartyHost(t *testing.T) {
-	if !followCrossesFirstPartyHost("api.example.com", "https://redirect.example.com/follow") {
+	if !followCrossesFirstPartyHost("https://api.example.com", "https://redirect.example.com/follow") {
 		t.Fatal("expected different host to be treated as cross-host")
 	}
-	if followCrossesFirstPartyHost("api.example.com", "https://api.example.com/follow") {
+	if followCrossesFirstPartyHost("https://api.example.com", "https://api.example.com/follow") {
 		t.Fatal("expected same host to stay first-party")
 	}
-	if !followCrossesFirstPartyHost("origin.example.com", "https://redirect.example.com/follow") {
+	if !followCrossesFirstPartyHost("https://origin.example.com", "https://redirect.example.com/follow") {
 		t.Fatal("expected follow host comparison to use the original first-party host")
+	}
+	if !followCrossesFirstPartyHost("https://api.example.com:8443", "https://api.example.com/follow") {
+		t.Fatal("expected same hostname with a different effective port to be cross-origin")
 	}
 }
 
@@ -285,5 +288,104 @@ func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
 	}
 	if got := strings.Join(opts.Headers, "\n"); !strings.Contains(got, "X-API: long") {
 		t.Fatalf("expected longest-prefix headers, got %q", got)
+	}
+}
+
+func TestApplyAPIProfileMatchesFullBaseURLWithAuthAndNamespace(t *testing.T) {
+	c := New()
+	c.AddAuthHandler("test", testAuthHandler{})
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com/v1",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Headers: []string{"X-Profile: yes"},
+						Auth: &config.AuthConfig{
+							Type:   "test",
+							Params: map[string]string{"token": "abc"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rawURL, apiName, opts, err := c.applyAPIProfile("https://api.example.com/v1/items", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
+	}
+	if rawURL != "https://api.example.com/v1/items" {
+		t.Fatalf("rawURL = %q", rawURL)
+	}
+	if apiName != "svc" {
+		t.Fatalf("apiName = %q, want svc", apiName)
+	}
+	if got := opts.CacheNamespace; got != "svc:default" {
+		t.Fatalf("CacheNamespace = %q, want svc:default", got)
+	}
+	req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err := opts.OnRequest(req); err != nil {
+		t.Fatalf("OnRequest() error = %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer abc" {
+		t.Fatalf("Authorization = %q, want bearer token", got)
+	}
+}
+
+func TestApplyAPIProfileMatchesProfileBaseURL(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://prod.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"staging": {
+						BaseURL: "https://staging.example.com/api",
+						Headers: []string{"X-Stage: yes"},
+					},
+				},
+			},
+		},
+	}
+
+	_, apiName, opts, err := c.applyAPIProfile("https://staging.example.com/api/items", "staging", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
+	}
+	if apiName != "svc" {
+		t.Fatalf("apiName = %q, want svc", apiName)
+	}
+	if got := strings.Join(opts.Headers, "\n"); !strings.Contains(got, "X-Stage: yes") {
+		t.Fatalf("expected staging profile headers, got %q", got)
+	}
+}
+
+func TestApplyAPIProfileRejectsHostAndPathLookalikes(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL:       "https://api.example.com/v1",
+				OperationBase: "https://ops.example.com/api",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {Headers: []string{"X-Profile: yes"}},
+				},
+			},
+		},
+	}
+
+	for _, rawURL := range []string{
+		"https://api.example.com.evil/v1/items",
+		"https://api.example.com/v10/items",
+		"https://ops.example.com/apis/items",
+	} {
+		_, apiName, opts, err := c.applyAPIProfile(rawURL, "default", request.Options{}, authHandlerOptions{})
+		if err != nil {
+			t.Fatalf("applyAPIProfile(%q) error = %v", rawURL, err)
+		}
+		if apiName != "" || len(opts.Headers) != 0 {
+			t.Fatalf("applyAPIProfile(%q) matched apiName=%q headers=%v", rawURL, apiName, opts.Headers)
+		}
 	}
 }
