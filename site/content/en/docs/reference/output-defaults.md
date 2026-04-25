@@ -12,8 +12,8 @@ whether the output is still the original wire payload or a normalized value.
 
 - on a terminal, structured output defaults to `readable`
 - off a terminal, structured output defaults to JSON
-- raw bytes are preserved when you explicitly ask for `-o raw`, or when the
-  response is still being passed through as raw bytes
+- raw bytes are preserved when you explicitly ask for `-o raw`, when you use
+  `-r` without a filter, or when image output is redirected
 
 ## Why The Defaults Exist
 

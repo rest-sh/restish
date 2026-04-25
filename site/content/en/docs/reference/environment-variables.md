@@ -60,12 +60,14 @@ These are useful when you want a shell-wide default instead of repeating flags
 on each command.
 
 `RSH_HEADER` and `RSH_QUERY` are especially useful for session-wide defaults
-such as an `Accept` header or a shared API version query parameter.
+such as an `Accept` header or a shared API version query parameter. Separate
+multiple values with commas, the same way older Restish examples did.
 
 Example:
 
 ```bash
 export RSH_HEADER='Accept: application/json'
+export RSH_HEADER='Accept: application/json,X-Debug: true'
 export RSH_OUTPUT_FORMAT=json
 ```
 

@@ -13,7 +13,7 @@ Command-line flags override environment variables and config-file defaults.
 
 ## Request Construction
 
-- `-H`, `--rsh-header`: add a request header in `Name: Value` format
+- `-H`, `--rsh-header`: add a request header in `Name: Value` format; manually setting `Accept` overrides Restish's generated content-negotiation header
 - `-q`, `--rsh-query`: add a request query parameter in `key=value` format
 - `-c`, `--rsh-content-type`: choose the request body content type
 - `-s`, `--rsh-server`: override the scheme and host for a request; when the override includes a path, that path is prefixed to outgoing request paths
@@ -39,7 +39,7 @@ restish --rsh-server https://staging.example.com/v2 myapi users list
 - `-o`, `--rsh-output-format`: choose a formatter such as `json`, `ndjson`, `yaml`, or `table`
 - `-f`, `--rsh-filter`: filter the normalized response with shorthand or jq
 - `--rsh-filter-lang`: force `shorthand` or `jq`
-- `-r`, `--rsh-raw`: make filtered scalar output shell-friendly
+- `-r`, `--rsh-raw`: with no filter, write the original response body bytes; with a filter, make scalar output shell-friendly
 - `--rsh-columns`: pick columns for `-o table`
 - `--rsh-sort-by`: sort table rows by a column
 - `--rsh-headers`: shorthand for `-f headers`

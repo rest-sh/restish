@@ -55,8 +55,8 @@ Best when you need the original response bytes unchanged.
 
 - ideal for redirects to files or pipes
 - preserves binary payloads
-- opt in explicitly when the original wire payload matters more than decoded
-  structured output
+- use `-o raw` or `-r` without a filter when the original wire payload matters
+  more than decoded structured output
 
 ```bash
 restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
