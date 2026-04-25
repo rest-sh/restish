@@ -57,6 +57,12 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:      "idna hostname match",
+			issuer:    "https://bücher.example",
+			tokenURL:  "https://xn--bcher-kva.example/token",
+			wantError: false,
+		},
+		{
 			name:      "path-scoped issuer allows child endpoint paths",
 			issuer:    "https://auth.example.com/realms/demo",
 			authURL:   "https://auth.example.com/realms/demo/protocol/openid-connect/auth",

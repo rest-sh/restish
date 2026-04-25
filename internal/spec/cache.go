@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -24,9 +25,22 @@ func cacheFile(cacheDir, apiName string) string {
 	return filepath.Join(cacheDir, apiName+".cbor")
 }
 
+func validCacheAPIName(apiName string) bool {
+	if apiName == "" || apiName == "." || apiName == ".." {
+		return false
+	}
+	if strings.ContainsAny(apiName, `/\`) {
+		return false
+	}
+	return filepath.Base(apiName) == apiName
+}
+
 // readCache loads and validates a cached spec entry.
 // Returns the entry and true if the cache is valid (not expired, version matches).
 func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
+	if !validCacheAPIName(apiName) {
+		return nil, false
+	}
 	path := cacheFile(cacheDir, apiName)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -47,6 +61,9 @@ func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
 
 // writeCache serialises entry to the CBOR cache file.
 func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
+	if !validCacheAPIName(apiName) {
+		return fmt.Errorf("spec cache: invalid API name %q", apiName)
+	}
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return fmt.Errorf("spec cache: mkdir: %w", err)
 	}
@@ -82,6 +99,9 @@ func HasLocalSpecFiles(specFiles []string) bool {
 // InvalidateCache removes the cached spec file for apiName.
 // Returns nil if the file did not exist.
 func InvalidateCache(cacheDir, apiName string) error {
+	if !validCacheAPIName(apiName) {
+		return fmt.Errorf("spec cache: invalid API name %q", apiName)
+	}
 	err := os.Remove(cacheFile(cacheDir, apiName))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

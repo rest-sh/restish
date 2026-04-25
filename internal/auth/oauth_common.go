@@ -13,6 +13,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -108,7 +110,15 @@ func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 		if u.Scheme != "https" {
 			return fmt.Errorf("OIDC: endpoint %q must use https", endpoint)
 		}
-		if !strings.EqualFold(u.Hostname(), issuer.Hostname()) {
+		endpointHost, err := canonicalOIDCHostname(u.Hostname())
+		if err != nil {
+			return fmt.Errorf("OIDC: endpoint hostname %q is invalid: %w", u.Hostname(), err)
+		}
+		issuerHost, err := canonicalOIDCHostname(issuer.Hostname())
+		if err != nil {
+			return fmt.Errorf("OIDC: issuer hostname %q is invalid: %w", issuer.Hostname(), err)
+		}
+		if endpointHost != issuerHost {
 			return fmt.Errorf("OIDC: endpoint hostname %q does not match issuer hostname %q", u.Hostname(), issuer.Hostname())
 		}
 		if !isPathWithinIssuerScope(issuer.Path, u.Path) {
@@ -116,6 +126,14 @@ func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 		}
 	}
 	return nil
+}
+
+func canonicalOIDCHostname(host string) (string, error) {
+	ascii, err := idna.Lookup.ToASCII(host)
+	if err != nil {
+		return "", err
+	}
+	return strings.ToLower(ascii), nil
 }
 
 func isPathWithinIssuerScope(issuerPath, endpointPath string) bool {

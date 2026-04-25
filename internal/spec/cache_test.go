@@ -31,6 +31,26 @@ func TestWriteAndReadCache(t *testing.T) {
 	}
 }
 
+func TestWriteCacheRejectsUnsafeAPIName(t *testing.T) {
+	entry := &cacheEntry{
+		Version:     "v2",
+		ExpiresAt:   time.Now().Add(time.Hour),
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	for _, name := range []string{"../secret", "nested/api", ".", ".."} {
+		if err := writeCache(t.TempDir(), name, entry); err == nil {
+			t.Fatalf("expected unsafe cache name %q to fail", name)
+		}
+	}
+}
+
+func TestReadCacheRejectsUnsafeAPIName(t *testing.T) {
+	if _, ok := readCache(t.TempDir(), "../secret", "v2"); ok {
+		t.Fatal("expected unsafe cache name to miss")
+	}
+}
+
 func TestReadCache_Miss_Missing(t *testing.T) {
 	_, ok := readCache(t.TempDir(), "nonexistent", "v2")
 	if ok {
@@ -153,5 +173,11 @@ func TestInvalidateCache_Nonexistent(t *testing.T) {
 	// Should not error if the cache file doesn't exist.
 	if err := InvalidateCache(t.TempDir(), "nonexistent"); err != nil {
 		t.Fatalf("InvalidateCache: %v", err)
+	}
+}
+
+func TestInvalidateCacheRejectsUnsafeAPIName(t *testing.T) {
+	if err := InvalidateCache(t.TempDir(), "../secret"); err == nil {
+		t.Fatal("expected unsafe cache name to fail")
 	}
 }
