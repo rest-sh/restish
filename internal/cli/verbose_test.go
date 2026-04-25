@@ -95,6 +95,38 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 	}
 }
 
+func TestVerboseRedactsSensitiveResponseHeaders(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Set-Cookie":   []string{"session=secret"},
+				"X-Request-Id": []string{"visible"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request: r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/hello"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	stderr := errOut.String()
+	if strings.Contains(stderr, "session=secret") {
+		t.Fatalf("verbose response leaked Set-Cookie:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "< Set-Cookie: <redacted>") {
+		t.Fatalf("expected redacted Set-Cookie, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "< X-Request-Id: visible") {
+		t.Fatalf("expected non-sensitive header to remain visible, got:\n%s", stderr)
+	}
+}
+
 func TestVerboseRedactsJSONBodies(t *testing.T) {
 	c, _, errOut := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {

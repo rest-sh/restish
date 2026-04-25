@@ -562,6 +562,9 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 	fmt.Fprintf(c.Stderr, "< %s %d %s\n", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode))
 	for k, vs := range resp.Header {
 		for _, v := range vs {
+			if isSensitiveHeader(k) {
+				v = "<redacted>"
+			}
 			fmt.Fprintf(c.Stderr, "< %s: %s\n", k, v)
 		}
 	}

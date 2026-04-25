@@ -58,6 +58,10 @@ func (c *CLI) prepareRequest(
 		opts.Headers = filtered
 	}
 
+	if opts.OnRequest != nil || requestOptionHeadersContainCredentials(opts.Headers) {
+		opts.NoCache = true
+	}
+
 	// Build the transport once so follow-up requests can reuse the same
 	// connection pool via the returned opts value.
 	opts.Transport = request.BuildTransport(opts)
@@ -92,6 +96,16 @@ func (c *CLI) prepareRequest(
 		body:    body,
 		bodyRaw: bodyRaw,
 	}, nil
+}
+
+func requestOptionHeadersContainCredentials(headers []string) bool {
+	for _, h := range headers {
+		name, _, _ := strings.Cut(h, ":")
+		if isSensitiveHeader(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneRequestOptions(opts request.Options) request.Options {

@@ -1,8 +1,10 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,6 +52,41 @@ func TestCacheSecondRequestServedFromCache(t *testing.T) {
 
 	if n := hits.Load(); n != 1 {
 		t.Errorf("expected server to be called once, got %d calls", n)
+	}
+}
+
+func TestCacheAuthenticatedRequestBypassesCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	cacheDir := t.TempDir()
+	cfgFile := t.TempDir() + "/restish.json"
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"svc": map[string]any{
+				"base_url": srv.URL,
+				"profiles": map[string]any{
+					"default": map[string]any{
+						"headers": []string{"Authorization: Bearer secret"},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	for i := range 2 {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().CachePath = cacheDir
+		if err := c.Run([]string{"restish", "get", "svc/items"}); err != nil {
+			t.Fatalf("request %d failed: %v", i+1, err)
+		}
+	}
+
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("authenticated responses should bypass cache, got %d server hits", n)
 	}
 }
 

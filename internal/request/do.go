@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -177,6 +178,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			return nil, fmt.Errorf("auth: %w", err)
 		}
 	}
+	if requestHasCredentialHeaders(req) {
+		opts.NoCache = true
+	}
 
 	transport := opts.Transport
 	builtTransport := false
@@ -185,7 +189,8 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		builtTransport = true
 	}
 	client := &http.Client{
-		Transport: transport,
+		Transport:     transport,
+		CheckRedirect: credentialStrippingRedirectPolicy,
 	}
 
 	resp, err := doWithHeaderTimeout(client, req, opts.Timeout, cancelRequest)
@@ -203,6 +208,73 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 	}
 	return resp, nil
+}
+
+func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+	prev := via[len(via)-1]
+	if prev == nil || sameOrigin(prev.URL, req.URL) {
+		return nil
+	}
+	for name := range req.Header {
+		if isCredentialHeader(name) {
+			req.Header.Del(name)
+		}
+	}
+	return nil
+}
+
+func requestHasCredentialHeaders(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	for name := range req.Header {
+		if isCredentialHeader(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func isCredentialHeader(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Authorization", "Cookie", "Proxy-Authorization", "Set-Cookie":
+		return true
+	}
+	lower := strings.ToLower(name)
+	for _, marker := range []string{"api-key", "apikey", "auth-token", "token", "secret", "password"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		effectivePort(a) == effectivePort(b)
+}
+
+func effectivePort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	}
+	return ""
 }
 
 type doResult struct {

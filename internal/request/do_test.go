@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -142,6 +143,59 @@ func TestDo_Post_WithBody(t *testing.T) {
 	}
 	if gotBody != `{"name":"test"}` {
 		t.Errorf("unexpected body: %q", gotBody)
+	}
+}
+
+func TestDo_CrossOriginRedirectStripsCredentialHeaders(t *testing.T) {
+	var gotAPIKey, gotTrace string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAPIKey = r.Header.Get("X-API-Key")
+		gotTrace = r.Header.Get("X-Trace")
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/next", http.StatusFound)
+	}))
+	defer source.Close()
+
+	resp, err := request.Do(context.Background(), "GET", source.URL, nil, request.Options{
+		Headers: []string{"X-API-Key: secret", "X-Trace: keep"},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+	if gotAPIKey != "" {
+		t.Fatalf("X-API-Key crossed origin: %q", gotAPIKey)
+	}
+	if gotTrace != "keep" {
+		t.Fatalf("X-Trace = %q, want keep", gotTrace)
+	}
+}
+
+func TestDo_SameOriginRedirectKeepsCredentialHeaders(t *testing.T) {
+	var gotAPIKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/next", http.StatusFound)
+			return
+		}
+		gotAPIKey = r.Header.Get("X-API-Key")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	resp, err := request.Do(context.Background(), "GET", srv.URL+"/start", nil, request.Options{
+		Headers: []string{"X-API-Key: secret"},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+	if gotAPIKey != "secret" {
+		t.Fatalf("X-API-Key = %q, want secret", gotAPIKey)
 	}
 }
 
