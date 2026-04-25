@@ -3,11 +3,14 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 // sseBody builds an SSE response body from the provided event data strings.
@@ -266,6 +269,55 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	if !strings.Contains(err.Error(), "use -o ndjson") {
 		t.Fatalf("expected ndjson hint in error, got: %v", err)
 	}
+}
+
+func TestSSEErrorStatusMapsToExitCodeAfterStreaming(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, sseBody(`{"error":"missing"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "get", srv.URL + "/events"})
+	if exitCode(err) != 4 {
+		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
+	}
+	if !strings.Contains(out.String(), "missing") {
+		t.Fatalf("expected streamed body before exit, got %q", out.String())
+	}
+}
+
+func TestNDJSONErrorStatusCanBeIgnored(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, `{"error":"temporary"}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-ignore-status-code"}); err != nil {
+		t.Fatalf("get with ignore-status failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "temporary") {
+		t.Fatalf("expected streamed error body, got %q", out.String())
+	}
+}
+
+func exitCode(err error) int {
+	var exitErr *cli.ExitCodeError
+	if errors.As(err, &exitErr) {
+		return exitErr.Code
+	}
+	return 0
 }
 
 func TestSSENamedEventExposesMetadataToFilters(t *testing.T) {

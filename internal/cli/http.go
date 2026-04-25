@@ -141,12 +141,20 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		var streamErr error
 		switch kind {
 		case "sse":
-			return c.handleSSE(cmd, httpResp)
+			streamErr = c.handleSSE(cmd, httpResp)
 		case "ndjson":
-			return c.handleNDJSON(cmd, httpResp)
+			streamErr = c.handleNDJSON(cmd, httpResp)
 		}
+		if streamErr != nil {
+			return streamErr
+		}
+		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
@@ -192,11 +200,15 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return err
 	}
 
-	ignoreStatus := globalFlagsFromContext(requestContext(cmd)).IgnoreStatus
-	if !ignoreStatus {
-		if code := output.StatusToExitCode(resp.Status); code != 0 {
-			return &ExitCodeError{Code: code}
-		}
+	return c.statusError(cmd, resp.Status)
+}
+
+func (c *CLI) statusError(cmd *cobra.Command, status int) error {
+	if globalFlagsFromContext(requestContext(cmd)).IgnoreStatus {
+		return nil
+	}
+	if code := output.StatusToExitCode(status); code != 0 {
+		return &ExitCodeError{Code: code}
 	}
 	return nil
 }

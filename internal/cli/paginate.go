@@ -55,6 +55,9 @@ func (c *CLI) runPagination(
 	maxPages, maxItems int,
 ) (retErr error) {
 	ctx := requestContext(cmd)
+	if err := c.paginationStatusError(cmd, 1, firstResp.Status); err != nil {
+		return err
+	}
 	if !output.IsTerminal(c.Stdout) {
 		origStdout := c.Stdout
 		c.Stdout = contextWriter{ctx: ctx, writer: origStdout}
@@ -132,6 +135,9 @@ func (c *CLI) runPagination(
 		if err != nil {
 			return fmt.Errorf("paginate page %d normalize: %w", page, err)
 		}
+		if err := c.paginationStatusError(cmd, page, resp.Status); err != nil {
+			return err
+		}
 
 		items, filterErr = pageItems(resp.Body, pagCfg)
 		if filterErr != nil {
@@ -164,6 +170,17 @@ func (c *CLI) runPagination(
 			return err
 		}
 		return c.formatResponse(cmd, synthetic)
+	}
+	return nil
+}
+
+func (c *CLI) paginationStatusError(cmd *cobra.Command, page, status int) error {
+	if globalFlagsFromContext(requestContext(cmd)).IgnoreStatus {
+		return nil
+	}
+	if code := output.StatusToExitCode(status); code != 0 {
+		fmt.Fprintf(c.Stderr, "pagination page %d returned HTTP %d; stopping\n", page, status)
+		return &ExitCodeError{Code: code}
 	}
 	return nil
 }

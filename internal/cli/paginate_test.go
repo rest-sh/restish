@@ -524,3 +524,110 @@ func TestPaginationRawFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
 		t.Fatalf("raw filtered pagination output = %q, want %q", got, want)
 	}
 }
+
+func TestPaginationLaterPageErrorFailsCollectedOutput(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			return &http.Response{
+				StatusCode: 500,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request: r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
+	}
+	if out.String() != "" {
+		t.Fatalf("collected pagination should not emit partial JSON document, got %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 500") {
+		t.Fatalf("expected page status warning, got %q", errOut.String())
+	}
+}
+
+func TestPaginationLaterPageErrorKeepsStreamedPartialOutput(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			return &http.Response{
+				StatusCode: 500,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request: r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson"})
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
+	}
+	if !strings.Contains(out.String(), `"id":1`) {
+		t.Fatalf("expected first page item to remain streamed, got %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 500") {
+		t.Fatalf("expected page status warning, got %q", errOut.String())
+	}
+}
+
+func TestPaginationLaterPageErrorCanBeIgnored(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			return &http.Response{
+				StatusCode: 500,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`[{"id":2}]`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request: r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-ignore-status-code"}); err != nil {
+		t.Fatalf("get with ignore-status failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"id":1`) || !strings.Contains(out.String(), `"id":2`) {
+		t.Fatalf("expected both pages when status ignored, got %q", out.String())
+	}
+}
