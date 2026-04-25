@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/peterhellberg/link"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -350,70 +350,17 @@ func cacheTTL(resp *http.Response) time.Duration {
 // extractSpecLinks parses Link response headers and returns URLs whose rel is
 // "service-desc" or "describedby".
 func extractSpecLinks(baseURL string, h http.Header) []string {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil
+	}
 	var out []string
-	for _, header := range h["Link"] {
-		for _, entry := range splitLinkHeaderValues(header) {
-			for _, parsed := range link.Parse(protectLinkURICommas(entry)) {
-				uri := strings.ReplaceAll(parsed.URI, "%2C", ",")
-				for _, rel := range strings.Fields(parsed.Rel) {
-					if rel == "service-desc" || rel == "describedby" {
-						if u := resolveRef(baseURL, uri); u != "" {
-							out = append(out, u)
-						}
-						break
-					}
-				}
-			}
+	for _, parsed := range hypermedia.LinkHeaderLinks(base, h) {
+		if parsed.Rel == "service-desc" || parsed.Rel == "describedby" {
+			out = append(out, parsed.URI)
 		}
 	}
 	return out
-}
-
-func splitLinkHeaderValues(header string) []string {
-	var (
-		out      []string
-		start    int
-		inAngles bool
-		inQuotes bool
-	)
-
-	for i := 0; i < len(header); i++ {
-		switch header[i] {
-		case '<':
-			if !inQuotes {
-				inAngles = true
-			}
-		case '>':
-			if !inQuotes {
-				inAngles = false
-			}
-		case '"':
-			inQuotes = !inQuotes
-		case ',':
-			if !inAngles && !inQuotes {
-				part := strings.TrimSpace(header[start:i])
-				if part != "" {
-					out = append(out, part)
-				}
-				start = i + 1
-			}
-		}
-	}
-
-	if part := strings.TrimSpace(header[start:]); part != "" {
-		out = append(out, part)
-	}
-	return out
-}
-
-func protectLinkURICommas(entry string) string {
-	start := strings.IndexByte(entry, '<')
-	end := strings.IndexByte(entry, '>')
-	if start < 0 || end <= start {
-		return entry
-	}
-	protected := strings.ReplaceAll(entry[start+1:end], ",", "%2C")
-	return entry[:start+1] + protected + entry[end:]
 }
 
 func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin bool) []string {

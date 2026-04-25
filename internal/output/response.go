@@ -21,7 +21,7 @@ type Response struct {
 	// URL is the final response URL. It is used for presentation concerns such
 	// as syntax highlighting file-like text responses by extension.
 	URL string `json:"-"`
-	// Links is populated by hypermedia parsers (Step 18); empty until then.
+	// Links is populated by hypermedia parsers; empty until then.
 	Links map[string]any `json:"links,omitempty"`
 	Body  any            `json:"body"`
 	// Raw holds the original, unmodified response body bytes. Used by

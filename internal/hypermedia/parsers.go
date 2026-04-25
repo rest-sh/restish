@@ -20,6 +20,11 @@ var linkURIRe = regexp.MustCompile(`<([^>]*)>`)
 var relParamRe = regexp.MustCompile(`(?i);\s*rel\s*=\s*(?:"([^"]*)"|([\w!#$&'*+.^_` + "`" + `|~-]+))`)
 
 func (LinkHeaderParser) ParseLinks(baseURL *url.URL, header http.Header, _ any) []Link {
+	return LinkHeaderLinks(baseURL, header)
+}
+
+// LinkHeaderLinks extracts all rel/URI pairs from HTTP Link headers.
+func LinkHeaderLinks(baseURL *url.URL, header http.Header) []Link {
 	var result []Link
 	for _, h := range header["Link"] {
 		for _, part := range splitLinkHeaderValues(h) {

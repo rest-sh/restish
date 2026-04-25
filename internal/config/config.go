@@ -16,7 +16,6 @@ import (
 )
 
 // Config is the top-level configuration for Restish, loaded from restish.json.
-// Fields are added incrementally as steps are implemented.
 type Config struct {
 	// APIs is a map of short API name to per-API configuration.
 	APIs map[string]*APIConfig `json:"apis,omitempty"`
@@ -107,7 +106,6 @@ type AuthConfig struct {
 }
 
 // CacheConfig holds cache settings.
-// Additional fields are added in Step 11.
 type CacheConfig struct {
 	// MaxSize is the maximum cache size (e.g. "100MB"). Default: "100MB".
 	MaxSize string `json:"max_size,omitempty"`
