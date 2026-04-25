@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/auth"
@@ -481,87 +480,6 @@ func parseConfigCLIValue(raw string) (any, error) {
 		return v, nil
 	}
 	return raw, nil
-}
-
-// setAPIField updates a single field of apiCfg identified by a dot-path key.
-// Supported keys:
-//
-//	base_url
-//	spec_url
-//	allow_cross_origin_spec
-//	operation_base
-//	pagination.items_path
-//	pagination.next_path
-//	profiles.<name>.base_url
-//	profiles.<name>.auth.type
-//	profiles.<name>.auth.params.<param>
-//	profiles.<name>.tls_signer
-func setAPIField(apiCfg *config.APIConfig, key, value string) error {
-	resolved, err := resolveAPIConfigKey("", key)
-	if err != nil {
-		return err
-	}
-
-	switch resolved.kind {
-	case apiKeyBaseURL:
-		apiCfg.BaseURL = value
-	case apiKeySpecURL:
-		apiCfg.SpecURL = value
-	case apiKeyAllowCrossOriginSpec:
-		b, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("allow_cross_origin_spec must be a boolean: %w", err)
-		}
-		apiCfg.AllowCrossOriginSpec = b
-	case apiKeyOperationBase:
-		apiCfg.OperationBase = value
-	case apiKeyPaginationItemsPath:
-		if apiCfg.Pagination == nil {
-			apiCfg.Pagination = &config.PaginationConfig{}
-		}
-		apiCfg.Pagination.ItemsPath = value
-	case apiKeyPaginationNextPath:
-		if apiCfg.Pagination == nil {
-			apiCfg.Pagination = &config.PaginationConfig{}
-		}
-		apiCfg.Pagination.NextPath = value
-	case apiKeyProfileBaseURL, apiKeyProfileTLSSigner, apiKeyProfileAuthType, apiKeyProfileAuthParam:
-		if apiCfg.Profiles == nil {
-			apiCfg.Profiles = make(map[string]*config.ProfileConfig)
-		}
-		if apiCfg.Profiles[resolved.profileName] == nil {
-			apiCfg.Profiles[resolved.profileName] = &config.ProfileConfig{}
-		}
-		prof := apiCfg.Profiles[resolved.profileName]
-		switch resolved.kind {
-		case apiKeyProfileBaseURL:
-			prof.BaseURL = value
-		case apiKeyProfileTLSSigner:
-			prof.TLSSigner = value
-		case apiKeyProfileAuthType:
-			if prof.Auth == nil {
-				prof.Auth = &config.AuthConfig{}
-			}
-			prof.Auth.Type = value
-		case apiKeyProfileAuthParam:
-			if prof.Auth == nil {
-				prof.Auth = &config.AuthConfig{}
-			}
-			if prof.Auth.Params == nil {
-				prof.Auth.Params = make(map[string]string)
-			}
-			prof.Auth.Params[resolved.paramName] = value
-		}
-	}
-	return nil
-}
-
-func apiConfigJSONPath(apiName, key string) ([]string, error) {
-	resolved, err := resolveAPIConfigKey(apiName, key)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.jsonPath, nil
 }
 
 type apiConfigKeyKind int

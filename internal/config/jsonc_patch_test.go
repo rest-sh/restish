@@ -423,12 +423,6 @@ func TestJSONCSetPath_RejectsNonObjectRoot(t *testing.T) {
 	}
 }
 
-func TestIsInlineObjectHandlesInvalidBounds(t *testing.T) {
-	if !isInlineObject([]byte("{}"), &jsoncObject{lbrace: 1, rbrace: 0}) {
-		t.Fatal("expected invalid bounds to be treated as inline")
-	}
-}
-
 func TestJSONCSetPath_EscapedObjectKey(t *testing.T) {
 	input := []byte("{\n  \"apis\": {\n    \"myapi\": {\n      \"quote\\\"key\": \"old\"\n    }\n  }\n}")
 

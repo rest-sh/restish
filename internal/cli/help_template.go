@@ -115,17 +115,6 @@ func setupGroupedUsage(root *cobra.Command) {
 	root.SetUsageTemplate(groupedUsageTemplate)
 }
 
-func setFlagGroup(flags *pflag.FlagSet, name, group string) {
-	flag := flags.Lookup(name)
-	if flag == nil {
-		return
-	}
-	if flag.Annotations == nil {
-		flag.Annotations = map[string][]string{}
-	}
-	flag.Annotations[rshFlagGroupAnnotation] = []string{group}
-}
-
 func groupedFlagUsages(flags *pflag.FlagSet) string {
 	if flags == nil {
 		return ""

@@ -113,13 +113,6 @@ type CacheConfig struct {
 	MaxSize string `json:"max_size,omitempty"`
 }
 
-// configDir returns the effective config directory, honoring the
-// RSH_CONFIG_DIR environment variable override.
-// Deprecated: use Paths.Config() instead.
-func configDir() string {
-	return NewPaths().Config()
-}
-
 // DefaultPath returns the path to the default config file, honoring
 // the RSH_CONFIG_DIR and XDG environment variable overrides.
 func DefaultPath() string {
@@ -152,11 +145,6 @@ func NeedsPatchToPreserveFormatting(path string) bool {
 		return false
 	}
 	return string(jsonc.ToJSON(data)) != string(data)
-}
-
-// HasComments is deprecated; use NeedsPatchToPreserveFormatting instead.
-func HasComments(path string) bool {
-	return NeedsPatchToPreserveFormatting(path)
 }
 
 // ConfigFileHasInsecurePermissions reports whether path is readable by group or others.

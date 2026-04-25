@@ -1,10 +1,6 @@
 package main
 
-import (
-	"io"
-
-	pluginwire "github.com/rest-sh/restish/v2/plugin"
-)
+import pluginwire "github.com/rest-sh/restish/v2/plugin"
 
 type pluginClient struct {
 	*pluginwire.CommandClient
@@ -16,13 +12,6 @@ type httpResponse struct {
 	Headers map[string]string
 	Body    any
 	Error   string
-}
-
-func newPluginClient(in io.Reader, out io.Writer, term pluginwire.TerminalContext) *pluginClient {
-	return &pluginClient{
-		CommandClient: pluginwire.NewCommandClient(in, out),
-		term:          term,
-	}
 }
 
 func (c *pluginClient) request(method, uri string, headers map[string]string, body any) (*httpResponse, error) {

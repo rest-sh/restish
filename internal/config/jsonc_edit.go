@@ -248,7 +248,7 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 	} else {
 		// Create new member
 		newMember := hujson.ObjectMember{
-			Name: hujson.Value{Value: hujson.String(lastKey)},
+			Name:  hujson.Value{Value: hujson.String(lastKey)},
 			Value: valueHuJSON,
 		}
 		obj.Members = append(obj.Members, newMember)
@@ -340,24 +340,6 @@ func parseJSONC(data []byte) (*hujson.Value, error) {
 		return nil, err
 	}
 	return &v, nil
-}
-
-// ---- Test helper types for backwards compatibility ----
-
-// jsoncObject is a compatibility shim for old tests.
-// This type is only used in tests and can be removed once tests are updated.
-type jsoncObject struct {
-	lbrace int
-	rbrace int
-}
-
-// isInlineObject is a compatibility shim that always returns true for invalid bounds.
-// This function is only used in one edge-case test.
-func isInlineObject(data []byte, obj *jsoncObject) bool {
-	if obj.rbrace <= obj.lbrace {
-		return true
-	}
-	return false
 }
 
 // describeValueType returns a user-friendly description of a hujson value type.
