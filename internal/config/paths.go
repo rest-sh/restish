@@ -70,6 +70,9 @@ func computeConfigDir() string {
 	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
 		return dir
 	}
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return filepath.Join(dir, "restish")
+	}
 	if dir, err := userConfigDirFunc(); err == nil && dir != "" {
 		return filepath.Join(dir, "restish")
 	}
@@ -81,6 +84,9 @@ func computeConfigDir() string {
 func computeCacheDir() string {
 	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
 		return dir
+	}
+	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
+		return filepath.Join(dir, "restish")
 	}
 	if dir, err := userCacheDirFunc(); err == nil && dir != "" {
 		return filepath.Join(dir, "restish")
