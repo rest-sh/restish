@@ -140,13 +140,14 @@ The cache entry should include at least:
 Caching raw documents keeps the cache stable while letting parsing logic evolve
 with the binary.
 
-Startup may also cache extracted operation metadata alongside the raw bytes as
-a performance optimization. That cache is a command-generation artifact, not a
-replacement for the raw spec cache. It should be keyed by every input that can
-affect the generated command surface, including the API base URL, operation
-base, loader/cache schema version, spec source identity, and local spec file
-freshness. Rare flows that need the full document, such as `api show`, can
-parse the raw bytes lazily on demand.
+Startup also caches extracted operation metadata alongside the raw bytes as a
+performance optimization. That cache is a command-generation artifact, not a
+replacement for the raw spec cache. It is keyed by the API base URL, operation
+base, cache schema version, Restish version, raw spec hash, and local spec file
+freshness. Routine startup can build generated commands from this operation
+cache without invoking the OpenAPI parser. Rare flows that need the full
+document, such as `api show` or plugin `api-spec` requests, parse the raw bytes
+lazily on demand.
 
 ## Cache Validity
 

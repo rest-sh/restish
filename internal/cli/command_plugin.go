@@ -139,6 +139,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 
 	var loopErr error
 	doneReceived := false
+	var requestWG sync.WaitGroup
 	dec := pluginwire.NewDecoder(stdoutPipe)
 	for {
 		raw, err := dec.ReadRaw()
@@ -151,7 +152,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 			break
 		}
 
-		done, err := c.handleCommandPluginMessage(cmd, writer, pluginwire.MessageType(raw), raw)
+		done, err := c.handleCommandPluginMessage(cmd, writer, &requestWG, pluginwire.MessageType(raw), raw)
 		if err != nil {
 			loopErr = err
 			break
@@ -163,7 +164,13 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	}
 
 	close(stopCh)
-	_ = stdinPipe.Close()
+	if loopErr != nil {
+		_ = stdinPipe.Close()
+		requestWG.Wait()
+	} else {
+		requestWG.Wait()
+		_ = stdinPipe.Close()
+	}
 	waitErr := waitCommandPluginExit(proc, commandPluginShutdownGrace())
 	if loopErr == nil && waitErr != nil && !doneReceived {
 		loopErr = fmt.Errorf("command plugin %s: wait: %w", filepath.Base(pluginPath), waitErr)
@@ -270,7 +277,7 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 	}
 }
 
-func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, msgType string, raw []byte) (bool, error) {
+func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, requestWG *sync.WaitGroup, msgType string, raw []byte) (bool, error) {
 	switch msgType {
 	case pluginwire.MsgTypeDone:
 		var msg pluginwire.DoneMsg
@@ -286,7 +293,18 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
-		return false, c.handlePluginHTTPRequest(cmd, writer, msg)
+		requestWG.Add(1)
+		go func() {
+			defer requestWG.Done()
+			if err := c.handlePluginHTTPRequest(cmd, writer, msg); err != nil {
+				_ = writer.WriteMessage(pluginwire.HTTPResponseMsg{
+					Type:      pluginwire.MsgTypeHTTPResponse,
+					RequestID: msg.RequestID,
+					Error:     err.Error(),
+				})
+			}
+		}()
+		return false, nil
 	case pluginwire.MsgTypeAPISpec:
 		var msg pluginwire.APISpecMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {

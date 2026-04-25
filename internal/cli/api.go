@@ -133,6 +133,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		SpecURL:          apiCfg.SpecURL,
 		SpecFiles:        apiCfg.SpecFiles,
 		CacheDir:         c.specCacheDir(),
+		OperationBase:    apiCfg.OperationBase,
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,

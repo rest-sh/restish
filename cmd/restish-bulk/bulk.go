@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/danielgtaylor/mexpr"
 	"github.com/danielgtaylor/shorthand/v2"
@@ -24,8 +25,9 @@ import (
 )
 
 const (
-	metaDir  = ".rshbulk"
-	metaFile = ".rshbulk/meta"
+	metaDir     = ".rshbulk"
+	metaFile    = ".rshbulk/meta"
+	defaultJobs = 4
 )
 
 type File struct {
@@ -108,6 +110,7 @@ func (a *app) newInitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filter, _ := cmd.Flags().GetString("filter")
 			template, _ := cmd.Flags().GetString("url-template")
+			jobs, _ := cmd.Flags().GetInt("jobs")
 			meta := &Meta{
 				URL:         args[0],
 				Filter:      filter,
@@ -117,11 +120,12 @@ func (a *app) newInitCmd() *cobra.Command {
 			if err := meta.save(); err != nil {
 				return err
 			}
-			return a.pull(meta)
+			return a.pull(meta, jobs)
 		},
 	}
 	cmd.Flags().StringP("filter", "f", "", "Filter/project the list response before extracting url/version")
 	cmd.Flags().String("url-template", "", "URL template to build resource links, e.g. /users/{id}")
+	cmd.Flags().IntP("jobs", "j", defaultJobs, "Maximum concurrent resource requests")
 	return cmd
 }
 
@@ -277,7 +281,7 @@ func (a *app) newResetCmd() *cobra.Command {
 }
 
 func (a *app) newPullCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "pull",
 		Aliases: []string{"pl"},
 		Short:   "Pull remote updates without overwriting local changes",
@@ -286,13 +290,16 @@ func (a *app) newPullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return a.pull(meta)
+			jobs, _ := cmd.Flags().GetInt("jobs")
+			return a.pull(meta, jobs)
 		},
 	}
+	cmd.Flags().IntP("jobs", "j", defaultJobs, "Maximum concurrent resource requests")
+	return cmd
 }
 
 func (a *app) newPushCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "push",
 		Aliases: []string{"ps"},
 		Short:   "Upload local changes to the remote server",
@@ -301,9 +308,12 @@ func (a *app) newPushCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return a.push(meta)
+			jobs, _ := cmd.Flags().GetInt("jobs")
+			return a.push(meta, jobs)
 		},
 	}
+	cmd.Flags().IntP("jobs", "j", defaultJobs, "Maximum concurrent resource requests")
+	return cmd
 }
 
 func loadMeta() (*Meta, error) {
@@ -402,10 +412,11 @@ func (a *app) pullIndex(m *Meta) error {
 	return nil
 }
 
-func (a *app) pull(m *Meta) error {
+func (a *app) pull(m *Meta, jobs int) error {
 	if err := a.pullIndex(m); err != nil {
 		return err
 	}
+	jobs = normalizeJobs(jobs)
 
 	updates := []*File{}
 	for _, f := range m.Files {
@@ -426,6 +437,7 @@ func (a *app) pull(m *Meta) error {
 		return err
 	}
 
+	fetches := make([]*File, 0, len(updates))
 	for _, f := range updates {
 		if f.VersionRemote == "" {
 			delete(m.Files, f.Path)
@@ -435,23 +447,234 @@ func (a *app) pull(m *Meta) error {
 			}
 			continue
 		}
-		body, err := a.fetchFile(f)
-		if err != nil {
-			return err
-		}
-		_ = m.save()
-		if f.isChangedLocal(true) {
-			if err := a.client.Warn("skipping due to local edits: " + f.Path); err != nil {
-				return err
+		fetches = append(fetches, f)
+	}
+
+	results := a.fetchFiles(fetches, jobs)
+	var firstErr error
+	for result := range results {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
 			}
 			continue
 		}
-		if err := f.write(body); err != nil {
-			return err
+		f := result.file
+		applyFetchedFile(f, result.fetched)
+		_ = m.save()
+		if f.isChangedLocal(true) {
+			if err := a.client.Warn("skipping due to local edits: " + f.Path); err != nil && firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if err := f.write(result.fetched.body); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 		f.VersionLocal = f.VersionRemote
+		_ = m.save()
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 	return m.save()
+}
+
+type pullFetchResult struct {
+	file    *File
+	fetched *fetchedFile
+	err     error
+}
+
+func (a *app) fetchFiles(files []*File, jobs int) <-chan pullFetchResult {
+	results := make(chan pullFetchResult)
+	if len(files) == 0 {
+		close(results)
+		return results
+	}
+	go func() {
+		defer close(results)
+		jobs = min(jobs, len(files))
+		work := make(chan *File)
+		var wg sync.WaitGroup
+		for range jobs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for f := range work {
+					body, err := a.fetchFileData(f)
+					results <- pullFetchResult{file: f, fetched: body, err: err}
+				}
+			}()
+		}
+		for _, f := range files {
+			work <- f
+		}
+		close(work)
+		wg.Wait()
+	}()
+	return results
+}
+
+func (a *app) push(m *Meta, jobs int) error {
+	jobs = normalizeJobs(jobs)
+	paths, err := collectFiles(m, nil, "", false)
+	if err != nil {
+		return err
+	}
+	local, _, err := a.getChanged(m, paths)
+	if err != nil {
+		return err
+	}
+	sort.Slice(local, func(i, j int) bool { return local[i].File.Path < local[j].File.Path })
+
+	results := a.pushFiles(local, jobs)
+	var firstErr error
+	for result := range results {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+			continue
+		}
+		changed := result.changed
+		f := changed.File
+		switch changed.Status {
+		case statusAdded, statusModified:
+			if changed.Status == statusAdded {
+				m.Files[f.Path] = f
+			}
+			if len(result.hash) > 0 {
+				f.Hash = result.hash
+				_ = m.save()
+			}
+			applyFetchedFile(f, result.fetched)
+			if err := f.write(result.fetched.body); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			_ = m.save()
+		case statusRemoved:
+			delete(m.Files, f.Path)
+			_ = m.save()
+		}
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+
+	if err := a.pullIndex(m); err != nil {
+		return err
+	}
+	for _, changed := range local {
+		if changed.File != nil {
+			changed.File.VersionLocal = changed.File.VersionRemote
+		}
+	}
+	return m.save()
+}
+
+type pushResult struct {
+	changed changedFile
+	fetched *fetchedFile
+	hash    []byte
+	err     error
+}
+
+func (a *app) pushFiles(changes []changedFile, jobs int) <-chan pushResult {
+	results := make(chan pushResult)
+	if len(changes) == 0 {
+		close(results)
+		return results
+	}
+	go func() {
+		defer close(results)
+		jobs = min(jobs, len(changes))
+		work := make(chan changedFile)
+		var wg sync.WaitGroup
+		for range jobs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for changed := range work {
+					fetched, hash, err := a.pushFile(changed)
+					results <- pushResult{changed: changed, fetched: fetched, hash: hash, err: err}
+				}
+			}()
+		}
+		for _, changed := range changes {
+			work <- changed
+		}
+		close(work)
+		wg.Wait()
+	}()
+	return results
+}
+
+func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
+	f := changed.File
+	switch changed.Status {
+	case statusAdded, statusModified:
+		body, err := os.ReadFile(f.Path)
+		if err != nil {
+			return nil, nil, err
+		}
+		payload, err := decodeJSON(body)
+		if err != nil {
+			return nil, nil, err
+		}
+		headers := map[string]string{}
+		if f.ETag != "" {
+			headers["If-Match"] = f.ETag
+		} else if f.LastModified != "" {
+			headers["If-Unmodified-Since"] = f.LastModified
+		}
+		resp, err := a.client.request("PUT", f.URL, headers, payload)
+		if err != nil {
+			return nil, nil, err
+		}
+		if resp.Error != "" {
+			return nil, nil, fmt.Errorf("%s", resp.Error)
+		}
+		if resp.Status >= 400 {
+			_ = a.client.response(resp)
+			return nil, nil, fmt.Errorf("error uploading %s", f.Path)
+		}
+		var localHash []byte
+		if formatted, err := reformat(body); err == nil {
+			localHash = hashBytes(formatted)
+		}
+		remoteBody, err := a.fetchFileData(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		return remoteBody, localHash, nil
+	case statusRemoved:
+		headers := map[string]string{}
+		if f.ETag != "" {
+			headers["If-Match"] = f.ETag
+		} else if f.LastModified != "" {
+			headers["If-Unmodified-Since"] = f.LastModified
+		}
+		resp, err := a.client.request("DELETE", f.URL, headers, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		if resp.Error != "" {
+			return nil, nil, fmt.Errorf("%s", resp.Error)
+		}
+		if resp.Status >= 400 {
+			_ = a.client.response(resp)
+			return nil, nil, fmt.Errorf("error deleting %s", f.Path)
+		}
+		return nil, nil, nil
+	}
+	return nil, nil, nil
 }
 
 func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile, error) {
@@ -503,94 +726,6 @@ func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile,
 	sort.Slice(local, func(i, j int) bool { return local[i].File.Path < local[j].File.Path })
 	sort.Slice(remote, func(i, j int) bool { return remote[i].File.Path < remote[j].File.Path })
 	return local, remote, nil
-}
-
-func (a *app) push(m *Meta) error {
-	paths, err := collectFiles(m, nil, "", false)
-	if err != nil {
-		return err
-	}
-	local, _, err := a.getChanged(m, paths)
-	if err != nil {
-		return err
-	}
-	sort.Slice(local, func(i, j int) bool { return local[i].File.Path < local[j].File.Path })
-
-	for _, changed := range local {
-		f := changed.File
-		switch changed.Status {
-		case statusAdded, statusModified:
-			body, err := os.ReadFile(f.Path)
-			if err != nil {
-				return err
-			}
-			payload, err := decodeJSON(body)
-			if err != nil {
-				return err
-			}
-			headers := map[string]string{}
-			if f.ETag != "" {
-				headers["If-Match"] = f.ETag
-			} else if f.LastModified != "" {
-				headers["If-Unmodified-Since"] = f.LastModified
-			}
-			resp, err := a.client.request("PUT", f.URL, headers, payload)
-			if err != nil {
-				return err
-			}
-			if resp.Error != "" {
-				return fmt.Errorf("%s", resp.Error)
-			}
-			if resp.Status >= 400 {
-				_ = a.client.response(resp)
-				return fmt.Errorf("error uploading %s", f.Path)
-			}
-			if changed.Status == statusAdded {
-				m.Files[f.Path] = f
-			}
-			if formatted, err := reformat(body); err == nil {
-				f.Hash = hashBytes(formatted)
-				_ = m.save()
-			}
-			remoteBody, err := a.fetchFile(f)
-			if err != nil {
-				return err
-			}
-			if err := f.write(remoteBody); err != nil {
-				return err
-			}
-		case statusRemoved:
-			headers := map[string]string{}
-			if f.ETag != "" {
-				headers["If-Match"] = f.ETag
-			} else if f.LastModified != "" {
-				headers["If-Unmodified-Since"] = f.LastModified
-			}
-			resp, err := a.client.request("DELETE", f.URL, headers, nil)
-			if err != nil {
-				return err
-			}
-			if resp.Error != "" {
-				return fmt.Errorf("%s", resp.Error)
-			}
-			if resp.Status >= 400 {
-				_ = a.client.response(resp)
-				return fmt.Errorf("error deleting %s", f.Path)
-			}
-			delete(m.Files, f.Path)
-			_ = m.save()
-		}
-	}
-
-	if err := a.pullIndex(m); err != nil {
-		return err
-	}
-	for _, changed := range local {
-		if changed.File != nil {
-			changed.File.VersionLocal = changed.File.VersionRemote
-		}
-	}
-	return m.save()
 }
 
 func (a *app) localDiff(meta *Meta, files []string) error {
@@ -659,6 +794,21 @@ func (a *app) remoteDiff(meta *Meta) error {
 }
 
 func (a *app) fetchFile(f *File) ([]byte, error) {
+	fetched, err := a.fetchFileData(f)
+	if err != nil {
+		return nil, err
+	}
+	applyFetchedFile(f, fetched)
+	return fetched.body, nil
+}
+
+type fetchedFile struct {
+	body         []byte
+	etag         string
+	lastModified string
+}
+
+func (a *app) fetchFileData(f *File) (*fetchedFile, error) {
 	resp, err := a.client.request("GET", f.URL, nil, nil)
 	if err != nil {
 		return nil, err
@@ -670,12 +820,6 @@ func (a *app) fetchFile(f *File) ([]byte, error) {
 		_ = a.client.response(resp)
 		return nil, fmt.Errorf("error fetching %s", f.URL)
 	}
-	if etag := resp.Headers["Etag"]; etag != "" {
-		f.ETag = etag
-	}
-	if lastModified := resp.Headers["Last-Modified"]; lastModified != "" {
-		f.LastModified = lastModified
-	}
 	body, err := prettyJSON(resp.Body)
 	if err != nil {
 		return nil, err
@@ -683,7 +827,30 @@ func (a *app) fetchFile(f *File) ([]byte, error) {
 	if err := f.writeCached(body); err != nil {
 		return nil, err
 	}
-	return append(body, '\n'), nil
+	return &fetchedFile{
+		body:         append(body, '\n'),
+		etag:         resp.Headers["Etag"],
+		lastModified: resp.Headers["Last-Modified"],
+	}, nil
+}
+
+func applyFetchedFile(f *File, fetched *fetchedFile) {
+	if fetched == nil {
+		return
+	}
+	if fetched.etag != "" {
+		f.ETag = fetched.etag
+	}
+	if fetched.lastModified != "" {
+		f.LastModified = fetched.lastModified
+	}
+}
+
+func normalizeJobs(jobs int) int {
+	if jobs < 1 {
+		return defaultJobs
+	}
+	return jobs
 }
 
 func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) ([]string, error) {

@@ -19,6 +19,10 @@ import (
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
 	ops, err := s.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+	return c.buildAPICommandFromOperationResult(apiName, apiCfg, ops, err)
+}
+
+func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.APIConfig, ops []spec.Operation, err error) *cobra.Command {
 	if err != nil {
 		source := apiCfg.SpecURL
 		if source == "" && len(apiCfg.SpecFiles) > 0 {
@@ -30,6 +34,10 @@ func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.
 		fmt.Fprintf(c.Stderr, "warning: skipping generated commands for API %q from %s: %v\n", apiName, source, err)
 		return nil
 	}
+	return c.buildAPICommandFromOperations(apiName, apiCfg, ops)
+}
+
+func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APIConfig, ops []spec.Operation) *cobra.Command {
 	// ops == nil means no V3 model or no paths section — nothing to generate.
 	if ops == nil {
 		return nil

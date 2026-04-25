@@ -248,8 +248,8 @@ func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
 	if err := c.Run([]string{"restish", "alpha", "list-items"}); err != nil {
 		t.Fatalf("alpha list-items: %v", err)
 	}
-	if got := loader.detects.Load(); got != 1 {
-		t.Fatalf("loader Detect called %d times, want 1 targeted API load", got)
+	if got := loader.detects.Load(); got != 0 {
+		t.Fatalf("loader Detect called %d times, want 0 when generated commands load from cached operations", got)
 	}
 }
 

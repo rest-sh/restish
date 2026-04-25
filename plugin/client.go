@@ -3,7 +3,9 @@ package plugin
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 // CommandClient is the plugin-side counterpart of the host command-plugin
@@ -15,12 +17,17 @@ import (
 //
 // Plugins that declare passthrough_stdio should register StdinDataHandler and
 // StdinCloseHandler before calling Do(). These handlers are invoked for any
-// stdin-data or stdin-close frames that arrive while Do() is waiting for an
-// http-response reply.
+// stdin-data or stdin-close frames that arrive after Do starts the background
+// response reader.
 type CommandClient struct {
 	dec     *Decoder
 	out     io.Writer
 	writeMu sync.Mutex
+
+	readOnce sync.Once
+	readErr  atomic.Value
+	nextID   atomic.Uint64
+	pending  sync.Map
 
 	// StdinDataHandler is called with each chunk of stdin data received from
 	// the host while Do() is waiting for an http-response. Set this before
@@ -34,47 +41,79 @@ type CommandClient struct {
 
 // NewCommandClient returns a CommandClient backed by the given reader/writer.
 // Pass os.Stdin and os.Stdout from a plugin's main function.
-// A single Decoder is created from in and reused for all reads, so it is safe
-// to call ReadMessage on the client after NewCommandClient returns.
+// A single Decoder is created from in and reused for all reads. Call
+// ReadMessage for startup messages before calling Do; after Do starts the
+// background response reader, all host replies are routed through Do.
 func NewCommandClient(in io.Reader, out io.Writer) *CommandClient {
 	return &CommandClient{dec: NewDecoder(in), out: out}
 }
 
 // ReadMessage reads one CBOR message from the host into v. Use this when the
-// plugin needs to receive messages that are not covered by Do (for example,
-// stdin-data frames in passthrough-stdio commands).
+// plugin needs to receive startup messages that are not covered by Do.
 func (c *CommandClient) ReadMessage(v any) error {
 	return c.dec.ReadMessage(v)
 }
 
-// Do sends one HTTP request to the host and blocks until the http-response
-// arrives. While waiting, any stdin-data or stdin-close frames are dispatched
-// to StdinDataHandler / StdinCloseHandler if registered — this is required
-// for plugins that declare passthrough_stdio, where the host interleaves
-// stdin frames with the HTTP response.
+// Do sends one HTTP request to the host and blocks until the matching
+// http-response arrives. While waiting, any stdin-data or stdin-close frames
+// are dispatched to StdinDataHandler / StdinCloseHandler if registered.
 //
-// Do is safe to call from a single goroutine. For concurrent use, build an
-// async wrapper on top of WriteMessage / ReadMessage instead.
+// Do is safe to call concurrently. Requests without RequestID are assigned one
+// automatically so replies can be routed back to the caller.
 func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 	if req.Type == "" {
 		req.Type = MsgTypeHTTPRequest
 	}
+	if req.RequestID == "" {
+		req.RequestID = "req-" + strconv.FormatUint(c.nextID.Add(1), 10)
+	}
+	replyCh := make(chan commandReply, 1)
+	if _, loaded := c.pending.LoadOrStore(req.RequestID, replyCh); loaded {
+		return nil, fmt.Errorf("plugin: duplicate request_id %q", req.RequestID)
+	}
+	defer c.pending.Delete(req.RequestID)
+
+	c.startReadLoop()
+	if errValue := c.readErr.Load(); errValue != nil {
+		return nil, errValue.(error)
+	}
 	if err := c.WriteMessage(req); err != nil {
 		return nil, err
 	}
+	reply := <-replyCh
+	if reply.err != nil {
+		return nil, reply.err
+	}
+	return &reply.resp, nil
+}
+
+type commandReply struct {
+	resp HTTPResponseMsg
+	err  error
+}
+
+func (c *CommandClient) startReadLoop() {
+	c.readOnce.Do(func() {
+		go c.readLoop()
+	})
+}
+
+func (c *CommandClient) readLoop() {
 	for {
 		raw, err := c.dec.ReadRaw()
 		if err != nil {
-			return nil, err
+			c.failPending(err)
+			return
 		}
 		msgType := MessageType(raw)
 		switch msgType {
 		case MsgTypeHTTPResponse:
 			var reply HTTPResponseMsg
 			if err := DecMode.Unmarshal(raw, &reply); err != nil {
-				return nil, fmt.Errorf("plugin: decode http-response: %w", err)
+				c.failPending(fmt.Errorf("plugin: decode http-response: %w", err))
+				return
 			}
-			return &reply, nil
+			c.deliverHTTPResponse(reply)
 		case MsgTypeStdinData:
 			if c.StdinDataHandler != nil {
 				var msg StdinDataMsg
@@ -86,9 +125,38 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 				c.StdinCloseHandler()
 			}
 		default:
-			return nil, fmt.Errorf("plugin: unexpected message %q waiting for http-response", msgType)
+			c.failPending(fmt.Errorf("plugin: unexpected message %q waiting for http-response", msgType))
+			return
 		}
 	}
+}
+
+func (c *CommandClient) deliverHTTPResponse(reply HTTPResponseMsg) {
+	if reply.RequestID != "" {
+		if ch, ok := c.pending.Load(reply.RequestID); ok {
+			ch.(chan commandReply) <- commandReply{resp: reply}
+		}
+		return
+	}
+
+	var only chan commandReply
+	count := 0
+	c.pending.Range(func(_, value any) bool {
+		only = value.(chan commandReply)
+		count++
+		return count < 2
+	})
+	if count == 1 {
+		only <- commandReply{resp: reply}
+	}
+}
+
+func (c *CommandClient) failPending(err error) {
+	c.readErr.Store(err)
+	c.pending.Range(func(_, value any) bool {
+		value.(chan commandReply) <- commandReply{err: err}
+		return true
+	})
 }
 
 // WriteStdout writes data to the user's terminal via the host.

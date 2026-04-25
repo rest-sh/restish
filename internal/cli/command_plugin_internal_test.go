@@ -28,7 +28,7 @@ func TestHandleCommandPluginMessageRejectsMalformedDone(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	done, gotErr := cli.handleCommandPluginMessage(cmd, nil, "done", raw)
+	done, gotErr := cli.handleCommandPluginMessage(cmd, nil, nil, "done", raw)
 	if !done {
 		t.Fatal("expected malformed done message to stop processing")
 	}

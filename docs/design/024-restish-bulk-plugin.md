@@ -101,7 +101,8 @@ as possible.
 ## HTTP Delegation
 
 The plugin never constructs its own HTTP client. It emits command-plugin
-`http-request` messages and waits for normalized `http-response` replies.
+`http-request` messages and waits for normalized, request-correlated
+`http-response` replies.
 
 That means bulk operations automatically inherit normal Restish behavior:
 
@@ -112,8 +113,11 @@ That means bulk operations automatically inherit normal Restish behavior:
 - caching
 - TLS signer support
 
-`bulk push` and `bulk pull` therefore behave like ordinary Restish traffic
-instead of a parallel implementation.
+`bulk init`, `bulk push`, and `bulk pull` therefore behave like ordinary
+Restish traffic instead of a parallel implementation. Resource fetches and
+updates use bounded concurrency with `--jobs` (default 4). Metadata writes stay
+serialized and still happen after each completed file so interrupted long runs
+preserve completed progress.
 
 ## Collection Discovery
 
@@ -230,11 +234,11 @@ own:
 This keeps the generic host protocol small while still enabling rich command
 plugins.
 
-Bounded concurrent pull and push workers are desirable, but they depend on
-command-plugin protocol support. The host protocol needs response correlation,
-safe concurrent delegated HTTP handling, predictable output ownership, and
-per-file metadata locking before bulk can safely issue delegated requests in
-parallel.
+Bounded concurrent pull and push workers rely on command-plugin request
+correlation. Bulk can issue several delegated HTTP requests in parallel while
+the host routes each response back to the correct request. File and metadata
+updates are applied after each worker result, keeping local checkout state
+predictable and preserving per-file progress.
 
 ## Alternatives Considered
 

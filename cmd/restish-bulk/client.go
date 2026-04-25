@@ -4,7 +4,8 @@ import pluginwire "github.com/rest-sh/restish/v2/plugin"
 
 type pluginClient struct {
 	*pluginwire.CommandClient
-	term pluginwire.TerminalContext
+	term        pluginwire.TerminalContext
+	requestFunc func(method, uri string, headers map[string]string, body any) (*httpResponse, error)
 }
 
 type httpResponse struct {
@@ -15,6 +16,9 @@ type httpResponse struct {
 }
 
 func (c *pluginClient) request(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+	if c.requestFunc != nil {
+		return c.requestFunc(method, uri, headers, body)
+	}
 	req := &pluginwire.HTTPRequestMsg{
 		Method: method,
 		URI:    uri,

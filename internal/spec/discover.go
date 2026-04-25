@@ -42,6 +42,9 @@ type DiscoverConfig struct {
 	SpecFiles []string
 	// CacheDir is the directory for CBOR spec cache files.
 	CacheDir string
+	// OperationBase overrides operation URL generation and is included in the
+	// cached operation metadata key.
+	OperationBase string
 	// Version is the running restish version; cache entries with a different
 	// version are discarded.
 	Version string
@@ -74,7 +77,7 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 			if specFilesChangedSince(cfg.SpecFiles, entry.FetchedAt) {
 				goto loadFresh
 			}
-			if spec, err := load(entry.ContentType, entry.Raw, loaders); err == nil && spec != nil {
+			if spec, err := load(entry.contentType(), entry.raw(), loaders); err == nil && spec != nil {
 				return spec, nil
 			}
 		}
@@ -88,12 +91,18 @@ loadFresh:
 			return nil, err
 		}
 		if spec != nil && cfg.CacheDir != "" {
+			ops, _ := spec.Operations(cfg.BaseURL, cfg.OperationBase)
 			entry := &cacheEntry{
-				Version:     cfg.Version,
-				FetchedAt:   time.Now(),
-				ExpiresAt:   time.Now().Add(24 * time.Hour),
-				ContentType: spec.ContentType,
-				Raw:         spec.Raw,
+				Version:   cfg.Version,
+				FetchedAt: time.Now(),
+				ExpiresAt: time.Now().Add(24 * time.Hour),
+				Spec: cachedRaw{
+					ContentType: spec.ContentType,
+					Raw:         spec.Raw,
+				},
+			}
+			if ops != nil {
+				entry.upsertOperations(cfg.BaseURL, cfg.OperationBase, ops)
 			}
 			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 		}
@@ -114,12 +123,18 @@ loadFresh:
 		} else {
 			expiresAt = time.Now().Add(24 * time.Hour)
 		}
+		ops, _ := spec.Operations(cfg.BaseURL, cfg.OperationBase)
 		entry := &cacheEntry{
-			Version:     cfg.Version,
-			FetchedAt:   time.Now(),
-			ExpiresAt:   expiresAt,
-			ContentType: spec.ContentType,
-			Raw:         spec.Raw,
+			Version:   cfg.Version,
+			FetchedAt: time.Now(),
+			ExpiresAt: expiresAt,
+			Spec: cachedRaw{
+				ContentType: spec.ContentType,
+				Raw:         spec.Raw,
+			},
+		}
+		if ops != nil {
+			entry.upsertOperations(cfg.BaseURL, cfg.OperationBase, ops)
 		}
 		_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 	}

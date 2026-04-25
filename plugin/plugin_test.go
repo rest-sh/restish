@@ -2,8 +2,10 @@ package plugin_test
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -121,6 +123,79 @@ func TestTypedMessageRoundTrip(t *testing.T) {
 	}
 	if decoded["filter"] != "body.items" {
 		t.Errorf("filter: got %v, want body.items", decoded["filter"])
+	}
+}
+
+func TestCommandClientDoConcurrentRoutesByRequestID(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := plugin.NewCommandClient(hostToPluginR, pluginToHostW)
+	requests := make(chan plugin.HTTPRequestMsg, 2)
+	go func() {
+		dec := plugin.NewDecoder(pluginToHostR)
+		for i := 0; i < 2; i++ {
+			var req plugin.HTTPRequestMsg
+			if err := dec.ReadMessage(&req); err != nil {
+				t.Errorf("read request: %v", err)
+				return
+			}
+			requests <- req
+		}
+		close(requests)
+	}()
+
+	var wg sync.WaitGroup
+	responses := make(chan string, 2)
+	for _, uri := range []string{"https://api.example.com/one", "https://api.example.com/two"} {
+		wg.Add(1)
+		go func(uri string) {
+			defer wg.Done()
+			resp, err := client.Do(&plugin.HTTPRequestMsg{URI: uri})
+			if err != nil {
+				t.Errorf("Do(%s): %v", uri, err)
+				return
+			}
+			responses <- resp.Body.(string)
+		}(uri)
+	}
+
+	var gotReqs []plugin.HTTPRequestMsg
+	for req := range requests {
+		gotReqs = append(gotReqs, req)
+	}
+	if len(gotReqs) != 2 {
+		t.Fatalf("got %d requests, want 2", len(gotReqs))
+	}
+	for i := len(gotReqs) - 1; i >= 0; i-- {
+		req := gotReqs[i]
+		if req.RequestID == "" {
+			t.Fatal("expected request_id to be assigned")
+		}
+		if err := plugin.WriteMessage(hostToPluginW, plugin.HTTPResponseMsg{
+			Type:      plugin.MsgTypeHTTPResponse,
+			RequestID: req.RequestID,
+			Status:    200,
+			Body:      req.URI,
+		}); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}
+	wg.Wait()
+	close(responses)
+
+	seen := map[string]bool{}
+	for body := range responses {
+		seen[body] = true
+	}
+	for _, uri := range []string{"https://api.example.com/one", "https://api.example.com/two"} {
+		if !seen[uri] {
+			t.Fatalf("missing response body %q in %#v", uri, seen)
+		}
 	}
 }
 

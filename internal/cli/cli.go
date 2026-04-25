@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -71,6 +72,7 @@ type CLI struct {
 	plugins            []internalplugin.Plugin
 	pluginsByHook      map[string][]internalplugin.Plugin
 	customAuthHandlers map[string]authpkg.Handler
+	requestClosersMu   sync.Mutex
 	requestClosers     []io.Closer
 }
 
@@ -207,6 +209,7 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		SpecURL:          api.SpecURL,
 		SpecFiles:        api.SpecFiles,
 		CacheDir:         c.specCacheDir(),
+		OperationBase:    api.OperationBase,
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
@@ -303,6 +306,12 @@ func (c *CLI) Run(args []string) error {
 	// to prime the cache for an API.)
 	for _, apiName := range c.generatedAPINames(args, cfg) {
 		apiCfg := cfg.APIs[apiName]
+		if ops, ok := spec.LoadOperationsFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, apiCfg.BaseURL, apiCfg.OperationBase); ok {
+			if apiCmd := c.buildAPICommandFromOperations(apiName, apiCfg, ops); apiCmd != nil {
+				root.AddCommand(apiCmd)
+			}
+			continue
+		}
 		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
 		if err != nil {
 			continue
@@ -313,7 +322,11 @@ func (c *CLI) Run(args []string) error {
 		if err != nil || s == nil {
 			continue
 		}
-		if apiCmd := c.buildAPICommand(apiName, apiCfg, s); apiCmd != nil {
+		ops, opsErr := s.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+		if opsErr == nil {
+			_ = spec.StoreOperationsInCache(c.specCacheDir(), apiName, Version, apiCfg.BaseURL, apiCfg.OperationBase, ops)
+		}
+		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, ops, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)
 		}
 	}
@@ -376,10 +389,14 @@ func (c *CLI) registerRequestCloser(closer io.Closer) {
 	if closer == nil {
 		return
 	}
+	c.requestClosersMu.Lock()
+	defer c.requestClosersMu.Unlock()
 	c.requestClosers = append(c.requestClosers, closer)
 }
 
 func (c *CLI) closeRequestClosers() {
+	c.requestClosersMu.Lock()
+	defer c.requestClosersMu.Unlock()
 	for i := len(c.requestClosers) - 1; i >= 0; i-- {
 		_ = c.requestClosers[i].Close()
 	}

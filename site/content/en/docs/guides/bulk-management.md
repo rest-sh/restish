@@ -117,6 +117,15 @@ restish bulk pull
 `pull` updates remote state without overwriting local edits. `push` applies your
 local adds, edits, and deletions back to the server.
 
+For large checkouts, `init`, `pull`, and `push` fetch or update resources with
+four workers by default. Use `--jobs` to tune concurrency for slower servers or
+larger collections:
+
+```bash
+restish bulk pull --jobs 8
+restish bulk push --jobs 2
+```
+
 ## Non-Standard List Responses
 
 If the list response does not already expose the fields Restish expects, shape

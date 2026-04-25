@@ -1,8 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 func TestBulkRelativePath(t *testing.T) {
@@ -64,5 +72,104 @@ func TestCommonPrefixResolvesAgainstBaseURL(t *testing.T) {
 	want := "https://api.example.com/root/users/"
 	if got != want {
 		t.Fatalf("commonPrefix = %q, want %q", got, want)
+	}
+}
+
+func TestFetchFilesHonorsJobsLimit(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	var active atomic.Int32
+	var maxActive atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			now := active.Add(1)
+			for {
+				max := maxActive.Load()
+				if now <= max || maxActive.CompareAndSwap(max, now) {
+					break
+				}
+			}
+			time.Sleep(25 * time.Millisecond)
+			active.Add(-1)
+			return &httpResponse{
+				Status:  200,
+				Headers: map[string]string{"Etag": uri},
+				Body:    map[string]any{"url": uri},
+			}, nil
+		},
+	}
+	a := &app{client: client}
+	files := []*File{
+		{Path: "one.json", URL: "https://api.example.com/items/one"},
+		{Path: "two.json", URL: "https://api.example.com/items/two"},
+		{Path: "three.json", URL: "https://api.example.com/items/three"},
+		{Path: "four.json", URL: "https://api.example.com/items/four"},
+	}
+
+	for result := range a.fetchFiles(files, 2) {
+		if result.err != nil {
+			t.Fatalf("fetchFiles: %v", result.err)
+		}
+	}
+
+	if got := maxActive.Load(); got != 2 {
+		t.Fatalf("max concurrent requests = %d, want 2", got)
+	}
+}
+
+func TestPullPersistsMetadataAfterCompletedFileWhenLaterFileFails(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			switch uri {
+			case "https://api.example.com/items":
+				return &httpResponse{
+					Status: 200,
+					Body: []any{
+						map[string]any{"url": "https://api.example.com/items/one", "version": "v1"},
+						map[string]any{"url": "https://api.example.com/items/two", "version": "v1"},
+					},
+				}, nil
+			case "https://api.example.com/items/one":
+				return &httpResponse{Status: 200, Headers: map[string]string{"Etag": "one-etag"}, Body: map[string]any{"id": "one"}}, nil
+			case "https://api.example.com/items/two":
+				time.Sleep(20 * time.Millisecond)
+				return &httpResponse{Status: 500, Body: map[string]any{"error": "boom"}}, nil
+			default:
+				t.Fatalf("unexpected request %s %s", method, uri)
+				return nil, nil
+			}
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{URL: "https://api.example.com/items", Files: map[string]*File{}}
+	if err := meta.save(); err != nil {
+		t.Fatalf("save meta: %v", err)
+	}
+
+	if err := a.pull(meta, 2); err == nil {
+		t.Fatal("expected pull error")
+	}
+
+	data, err := os.ReadFile(metaFile)
+	if err != nil {
+		t.Fatalf("read meta: %v", err)
+	}
+	var saved Meta
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("decode meta: %v", err)
+	}
+	one := saved.Files["one.json"]
+	if one == nil {
+		t.Fatalf("expected one.json metadata in %#v", saved.Files)
+	}
+	if one.VersionLocal != "v1" || one.VersionRemote != "v1" || one.ETag != "one-etag" {
+		t.Fatalf("one.json metadata = %#v, want completed file persisted", one)
+	}
+	if _, err := os.Stat(filepath.Join(metaDir, "one.json")); err != nil {
+		t.Fatalf("expected cached body for one.json: %v", err)
 	}
 }

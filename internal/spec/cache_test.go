@@ -149,6 +149,96 @@ func TestLoadFromCache_LocalSpecFileNewerThanCache(t *testing.T) {
 	}
 }
 
+func TestLoadOperationsFromCache(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items/{id}":{"get":{"operationId":"getItem","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"OK"}}}}}}`)
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+		},
+	}
+	entry.upsertOperations("https://api.example.com", "", ops)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	got, ok := LoadOperationsFromCache(dir, "testapi", "v2", nil, "https://api.example.com", "")
+	if !ok {
+		t.Fatal("expected operations cache hit")
+	}
+	if len(got) != 1 || got[0].ID != "getItem" || got[0].Path != "/items/{id}" {
+		t.Fatalf("unexpected operations: %#v", got)
+	}
+}
+
+func TestLoadOperationsFromCache_MissRawOnlyEntry(t *testing.T) {
+	dir := t.TempDir()
+	entry := &cacheEntry{
+		Version:     "v2",
+		FetchedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(time.Hour),
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	if _, ok := LoadOperationsFromCache(dir, "testapi", "v2", nil, "https://api.example.com", ""); ok {
+		t.Fatal("expected raw-only cache to miss operations")
+	}
+}
+
+func BenchmarkLoadOperationsFromCache(b *testing.B) {
+	dir := b.TempDir()
+	ops := make([]Operation, 0, 250)
+	for i := 0; i < cap(ops); i++ {
+		ops = append(ops, Operation{
+			ID:     "getItem",
+			Method: "GET",
+			Path:   "/items/{id}",
+			Parameters: []Param{{
+				Name:     "id",
+				In:       "path",
+				Required: true,
+			}},
+		})
+	}
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         []byte(testSpecRaw),
+		},
+	}
+	entry.upsertOperations("https://api.example.com", "", ops)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		b.Fatalf("writeCache: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := LoadOperationsFromCache(dir, "testapi", "v2", nil, "https://api.example.com", ""); !ok {
+			b.Fatal("operations cache miss")
+		}
+	}
+}
+
 func TestInvalidateCache(t *testing.T) {
 	dir := t.TempDir()
 	entry := &cacheEntry{

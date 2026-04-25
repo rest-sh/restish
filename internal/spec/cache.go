@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -13,12 +15,34 @@ import (
 
 // cacheEntry is the on-disk format for a cached spec.
 type cacheEntry struct {
-	Version     string    `cbor:"version"`
-	FetchedAt   time.Time `cbor:"fetched_at"`
-	ExpiresAt   time.Time `cbor:"expires_at"`
-	ContentType string    `cbor:"content_type"`
-	Raw         []byte    `cbor:"raw"`
+	Version    string    `cbor:"version"`
+	FetchedAt  time.Time `cbor:"fetched_at"`
+	ExpiresAt  time.Time `cbor:"expires_at"`
+	Schema     int       `cbor:"schema,omitempty"`
+	Spec       cachedRaw `cbor:"spec,omitempty"`
+	Operations []opsBlob `cbor:"operations,omitempty"`
+
+	// Legacy v2-dev fields. Keep them readable so older raw-only cache entries
+	// can be upgraded opportunistically after a successful parse.
+	ContentType string `cbor:"content_type,omitempty"`
+	Raw         []byte `cbor:"raw,omitempty"`
 }
+
+type cachedRaw struct {
+	ContentType string `cbor:"content_type,omitempty"`
+	Raw         []byte `cbor:"raw,omitempty"`
+}
+
+type opsBlob struct {
+	Schema        int         `cbor:"schema"`
+	BaseURL       string      `cbor:"base_url"`
+	OperationBase string      `cbor:"operation_base,omitempty"`
+	RawSHA256     string      `cbor:"raw_sha256"`
+	Operations    []Operation `cbor:"operations"`
+}
+
+const currentCacheSchema = 2
+const currentOperationCacheSchema = 1
 
 // cacheFile returns the path of the CBOR cache file for the given API.
 func cacheFile(cacheDir, apiName string) string {
@@ -56,6 +80,7 @@ func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
 	if !e.ExpiresAt.IsZero() && time.Now().After(e.ExpiresAt) {
 		return nil, false // TTL expired
 	}
+	e.normalize()
 	return &e, true
 }
 
@@ -67,11 +92,43 @@ func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return fmt.Errorf("spec cache: mkdir: %w", err)
 	}
+	entry.normalize()
+	if entry.Schema == 0 {
+		entry.Schema = currentCacheSchema
+	}
 	data, err := cbor.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("spec cache: marshal: %w", err)
 	}
 	return os.WriteFile(cacheFile(cacheDir, apiName), data, 0o600)
+}
+
+func (e *cacheEntry) normalize() {
+	if e == nil {
+		return
+	}
+	if len(e.Spec.Raw) == 0 && len(e.Raw) > 0 {
+		e.Spec.Raw = e.Raw
+	}
+	if e.Spec.ContentType == "" && e.ContentType != "" {
+		e.Spec.ContentType = e.ContentType
+	}
+}
+
+func (e *cacheEntry) contentType() string {
+	if e == nil {
+		return ""
+	}
+	e.normalize()
+	return e.Spec.ContentType
+}
+
+func (e *cacheEntry) raw() []byte {
+	if e == nil {
+		return nil
+	}
+	e.normalize()
+	return e.Spec.Raw
 }
 
 // LoadFromCache reads the cached spec for apiName, re-parses it using loaders,
@@ -84,7 +141,69 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {
 		return nil, nil
 	}
-	return load(entry.ContentType, entry.Raw, loaders)
+	return load(entry.contentType(), entry.raw(), loaders)
+}
+
+// LoadOperationsFromCache reads extracted operations for a cached spec without
+// re-parsing the raw OpenAPI document. The bool return is false when the cache
+// entry is missing, expired, stale against local files, or lacks operations for
+// the requested base URL and operation base.
+func LoadOperationsFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) ([]Operation, bool) {
+	entry, ok := readCache(cacheDir, apiName, version)
+	if !ok {
+		return nil, false
+	}
+	if specFilesChangedSince(specFiles, entry.FetchedAt) {
+		return nil, false
+	}
+	rawHash := cacheRawHash(entry.raw())
+	for _, blob := range entry.Operations {
+		if blob.Schema != currentOperationCacheSchema {
+			continue
+		}
+		if blob.BaseURL == baseURL && blob.OperationBase == operationBase && blob.RawSHA256 == rawHash {
+			if blob.Operations == nil {
+				return []Operation{}, true
+			}
+			return append([]Operation(nil), blob.Operations...), true
+		}
+	}
+	return nil, false
+}
+
+// StoreOperationsInCache updates an existing raw cache entry with extracted
+// operations. It is best-effort for callers; failed upgrades should not make
+// startup fail when the raw cache can still be parsed.
+func StoreOperationsInCache(cacheDir, apiName, version, baseURL, operationBase string, ops []Operation) error {
+	entry, ok := readCache(cacheDir, apiName, version)
+	if !ok {
+		return nil
+	}
+	entry.upsertOperations(baseURL, operationBase, ops)
+	return writeCache(cacheDir, apiName, entry)
+}
+
+func (e *cacheEntry) upsertOperations(baseURL, operationBase string, ops []Operation) {
+	rawHash := cacheRawHash(e.raw())
+	blob := opsBlob{
+		Schema:        currentOperationCacheSchema,
+		BaseURL:       baseURL,
+		OperationBase: operationBase,
+		RawSHA256:     rawHash,
+		Operations:    append([]Operation(nil), ops...),
+	}
+	for i := range e.Operations {
+		if e.Operations[i].BaseURL == baseURL && e.Operations[i].OperationBase == operationBase {
+			e.Operations[i] = blob
+			return
+		}
+	}
+	e.Operations = append(e.Operations, blob)
+}
+
+func cacheRawHash(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 func HasLocalSpecFiles(specFiles []string) bool {

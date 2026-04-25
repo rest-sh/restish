@@ -92,14 +92,12 @@ Restish currently sends:
 - `api-spec-response` after handling an `api-spec`
 - `stdin-data` and `stdin-close` when `passthrough_stdio` is enabled
 
-For long-lived request/response pairs, the protocol should support correlation
-identifiers so stale replies cannot be mistaken for the wrong request if
-cancellation or concurrency is introduced later.
-
-Until correlation identifiers and host-side concurrent reply handling are part
-of the protocol, a command client that performs delegated HTTP should be
-documented as single-goroutine and single-decoder. Concurrent calls over a
-shared decoder are not safe by implication.
+Long-lived request/response pairs use `request_id` correlation identifiers so
+plugins can issue more than one delegated HTTP request at a time. The host
+continues reading plugin messages while HTTP work runs, and replies include the
+same `request_id` as the original request. The public `CommandClient.Do` helper
+assigns request IDs when needed and routes replies back to the goroutine that
+sent the request.
 
 ### Delegated HTTP
 
