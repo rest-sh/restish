@@ -74,7 +74,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
-	return c.runHTTPInternal(cmd, method, args, false, nil, false, "")
+	return c.runHTTPInternal(cmd, method, args, false, nil, false, "", "")
 }
 
 // runHTTPInternal is the implementation of runHTTP. followMode=true is used for
@@ -85,13 +85,16 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 // the cobra.Command itself since command objects are reused across invocations.
 // noAuth strips authentication when following a redirect to a different host,
 // preventing credentialed SSRF via a compromised response-middleware plugin.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string) error {
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
 		return err
+	}
+	if opts.ContentType == "" && contentTypeOverride != "" {
+		opts.ContentType = contentTypeOverride
 	}
 
 	// Resolve API short names and merge persistent profile settings.
@@ -169,7 +172,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 			if crossHost {
 				fmt.Fprintf(c.Stderr, "warning: response-middleware follow to different host %q — stripping credentials\n", followReq.URI)
 			}
-			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost)
+			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost, "")
 		}
 	}
 

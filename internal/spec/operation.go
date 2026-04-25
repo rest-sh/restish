@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -29,12 +30,18 @@ type ParamXCLI struct {
 
 // Param is a single request parameter (path, query, header, or cookie).
 type Param struct {
-	Name     string
-	In       string // "path", "query", "header", "cookie"
-	Desc     string
-	Required bool
-	Enum     []string
-	XCLI     ParamXCLI
+	Name       string
+	In         string // "path", "query", "header", "cookie"
+	Desc       string
+	Required   bool
+	Type       string
+	ItemType   string
+	Default    string
+	HasDefault bool
+	Style      string
+	Explode    *bool
+	Enum       []string
+	XCLI       ParamXCLI
 }
 
 // Operation is a single HTTP operation extracted from a spec, expressed in
@@ -52,7 +59,10 @@ type Operation struct {
 	Parameters  []Param
 	// HasBody is true when the operation has a requestBody.
 	HasBody bool
-	XCLI    OperationXCLI
+	// RequestMediaType is the deterministic preferred content type from
+	// requestBody.content, if the operation accepts a body.
+	RequestMediaType string
+	XCLI             OperationXCLI
 }
 
 // Operations returns all HTTP operations extracted from the spec's V3 model,
@@ -131,14 +141,15 @@ func (s *APISpec) buildOperations(baseURL, operationBase string) ([]Operation, e
 // extractOperation converts a single libopenapi operation to the neutral form.
 func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation) Operation {
 	o := Operation{
-		ID:          op.OperationId,
-		Method:      method,
-		Path:        path,
-		Summary:     op.Summary,
-		Description: op.Description,
-		Deprecated:  op.Deprecated != nil && *op.Deprecated,
-		Tags:        op.Tags,
-		HasBody:     op.RequestBody != nil,
+		ID:               op.OperationId,
+		Method:           method,
+		Path:             path,
+		Summary:          op.Summary,
+		Description:      op.Description,
+		Deprecated:       op.Deprecated != nil && *op.Deprecated,
+		Tags:             op.Tags,
+		HasBody:          op.RequestBody != nil,
+		RequestMediaType: preferredRequestMediaType(op),
 		XCLI: OperationXCLI{
 			Ignore:      OpExtBool(op, "x-cli-ignore"),
 			Hidden:      OpExtBool(op, "x-cli-hidden"),
@@ -154,8 +165,23 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			continue
 		}
 		var enum []string
+		var paramType, itemType, defaultValue string
+		var hasDefault bool
 		if p.Schema != nil {
 			if schema := p.Schema.Schema(); schema != nil {
+				paramType = schemaType(schema.Type)
+				if paramType == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
+					if itemSchema := schema.Items.A.Schema(); itemSchema != nil {
+						itemType = schemaType(itemSchema.Type)
+					}
+				}
+				if schema.Default != nil {
+					var decoded any
+					if err := schema.Default.Decode(&decoded); err == nil {
+						defaultValue = scalarString(decoded)
+						hasDefault = true
+					}
+				}
 				for _, node := range schema.Enum {
 					if node != nil {
 						enum = append(enum, node.Value)
@@ -164,11 +190,17 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			}
 		}
 		o.Parameters = append(o.Parameters, Param{
-			Name:     p.Name,
-			In:       p.In,
-			Desc:     p.Description,
-			Required: p.Required != nil && *p.Required,
-			Enum:     enum,
+			Name:       p.Name,
+			In:         p.In,
+			Desc:       p.Description,
+			Required:   p.Required != nil && *p.Required,
+			Type:       paramType,
+			ItemType:   itemType,
+			Default:    defaultValue,
+			HasDefault: hasDefault,
+			Style:      p.Style,
+			Explode:    p.Explode,
+			Enum:       enum,
 			XCLI: ParamXCLI{
 				Ignore:      ParamExtBool(p, "x-cli-ignore"),
 				Hidden:      ParamExtBool(p, "x-cli-hidden"),
@@ -281,6 +313,65 @@ func mergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter 
 		add(p)
 	}
 	return merged
+}
+
+func schemaType(types []string) string {
+	for _, t := range types {
+		if t != "null" {
+			return t
+		}
+	}
+	if len(types) > 0 {
+		return types[0]
+	}
+	return "string"
+}
+
+func scalarString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case int:
+		return fmt.Sprint(v)
+	case int64:
+		return fmt.Sprint(v)
+	case float64:
+		return fmt.Sprint(v)
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			parts = append(parts, scalarString(item))
+		}
+		return strings.Join(parts, ",")
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func preferredRequestMediaType(op *v3.Operation) string {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil {
+		return ""
+	}
+	var names []string
+	for name := range op.RequestBody.Content.FromOldest() {
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	for _, name := range names {
+		mt := strings.ToLower(strings.TrimSpace(strings.Split(name, ";")[0]))
+		if mt == "application/json" || strings.HasSuffix(mt, "+json") {
+			return name
+		}
+	}
+	sort.Strings(names)
+	return names[0]
 }
 
 func joinOperationPath(basePath, opPath string) string {

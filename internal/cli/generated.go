@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -98,13 +99,19 @@ func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APICo
 
 // paramInfo holds the information we need about a single parameter.
 type paramInfo struct {
-	name     string // original API parameter name
-	flagName string // kebab-case flag name
-	in       string // "path", "query", "header", "cookie"
-	required bool
-	hidden   bool
-	desc     string
-	enum     []string // allowed values from OpenAPI schema enum, if present
+	name         string // original API parameter name
+	flagName     string // kebab-case flag name
+	in           string // "path", "query", "header", "cookie"
+	required     bool
+	hidden       bool
+	desc         string
+	typ          string
+	itemType     string
+	defaultValue string
+	hasDefault   bool
+	style        string
+	explode      *bool
+	enum         []string // allowed values from OpenAPI schema enum, if present
 }
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
@@ -116,7 +123,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 	// Derive command name from operationId, with x-cli-name override.
 	cmdName := toKebabCase(op.ID)
 	if cmdName == "" {
-		cmdName = toKebabCase(op.Method + "-" + strings.Trim(op.Path, "/"))
+		cmdName = fallbackOperationName(op.Method, op.Path)
 	}
 	if op.XCLI.Name != "" {
 		cmdName = op.XCLI.Name
@@ -139,13 +146,19 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 			desc = p.XCLI.Description
 		}
 		allParams[p.Name] = &paramInfo{
-			name:     p.Name,
-			flagName: flagName,
-			in:       p.In,
-			required: p.Required,
-			hidden:   p.XCLI.Hidden,
-			desc:     desc,
-			enum:     p.Enum,
+			name:         p.Name,
+			flagName:     flagName,
+			in:           p.In,
+			required:     p.Required,
+			hidden:       p.XCLI.Hidden,
+			desc:         desc,
+			typ:          p.Type,
+			itemType:     p.ItemType,
+			defaultValue: p.Default,
+			hasDefault:   p.HasDefault,
+			style:        p.Style,
+			explode:      p.Explode,
+			enum:         p.Enum,
 		}
 	}
 
@@ -234,7 +247,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, required, optional, args, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, required, optional, args, operationBase)
 		},
 	}
 	if !op.HasBody {
@@ -242,7 +255,25 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 	}
 
 	for _, p := range optional {
-		cmd.Flags().String(p.flagName, "", p.desc)
+		switch p.typ {
+		case "boolean":
+			def, _ := strconv.ParseBool(p.defaultValue)
+			cmd.Flags().Bool(p.flagName, def, p.desc)
+		case "integer":
+			def, _ := strconv.Atoi(p.defaultValue)
+			cmd.Flags().Int(p.flagName, def, p.desc)
+		case "number":
+			def, _ := strconv.ParseFloat(p.defaultValue, 64)
+			cmd.Flags().Float64(p.flagName, def, p.desc)
+		case "array":
+			var def []string
+			if p.hasDefault && p.defaultValue != "" {
+				def = strings.Split(p.defaultValue, ",")
+			}
+			cmd.Flags().StringArray(p.flagName, def, p.desc)
+		default:
+			cmd.Flags().String(p.flagName, p.defaultValue, p.desc)
+		}
 		if p.required {
 			_ = cmd.MarkFlagRequired(p.flagName)
 		}
@@ -276,7 +307,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 // runGeneratedOp is the RunE handler for generated operation commands.
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
-	apiName, opPath, method string,
+	apiName, opPath, method, requestMediaType string,
 	required, optional []*paramInfo,
 	args []string,
 	operationBase string,
@@ -289,32 +320,19 @@ func (c *CLI) runGeneratedOp(
 
 	for i, p := range required {
 		val := args[i]
-		switch p.in {
-		case "path":
-			path = strings.ReplaceAll(path, "{"+p.name+"}", url.PathEscape(val))
-		case "query":
-			q.Set(p.name, val)
-		case "header":
-			extraHeaders = append(extraHeaders, p.name+": "+val)
-		case "cookie":
-			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.PathEscape(val))
-		}
+		path, extraHeaders = addGeneratedParam(path, q, extraHeaders, p, []string{val})
 	}
 
 	// Collect optional param flags.
 	for _, p := range optional {
-		val, err := cmd.Flags().GetString(p.flagName)
-		if err != nil || val == "" {
+		if !cmd.Flags().Changed(p.flagName) && !p.hasDefault {
 			continue
 		}
-		switch p.in {
-		case "query":
-			q.Set(p.name, val)
-		case "header":
-			extraHeaders = append(extraHeaders, p.name+": "+val)
-		case "cookie":
-			extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.PathEscape(val))
+		values, err := generatedFlagValues(cmd, p)
+		if err != nil {
+			return err
 		}
+		path, extraHeaders = addGeneratedParam(path, q, extraHeaders, p, values)
 	}
 
 	// Build the raw URL. When operation_base is set, use it as the full URL
@@ -332,7 +350,85 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
-	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, false, "")
+	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, false, "", requestMediaType)
+}
+
+func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
+	switch p.typ {
+	case "boolean":
+		v, err := cmd.Flags().GetBool(p.flagName)
+		if err != nil {
+			return nil, err
+		}
+		return []string{strconv.FormatBool(v)}, nil
+	case "integer":
+		v, err := cmd.Flags().GetInt(p.flagName)
+		if err != nil {
+			return nil, err
+		}
+		return []string{strconv.Itoa(v)}, nil
+	case "number":
+		v, err := cmd.Flags().GetFloat64(p.flagName)
+		if err != nil {
+			return nil, err
+		}
+		return []string{strconv.FormatFloat(v, 'f', -1, 64)}, nil
+	case "array":
+		values, err := cmd.Flags().GetStringArray(p.flagName)
+		if err != nil {
+			return nil, err
+		}
+		if len(values) == 0 && p.hasDefault && p.defaultValue != "" {
+			values = strings.Split(p.defaultValue, ",")
+		}
+		return values, nil
+	default:
+		v, err := cmd.Flags().GetString(p.flagName)
+		if err != nil {
+			return nil, err
+		}
+		if v == "" && !p.hasDefault {
+			return nil, nil
+		}
+		return []string{v}, nil
+	}
+}
+
+func addGeneratedParam(path string, q url.Values, extraHeaders []string, p *paramInfo, values []string) (string, []string) {
+	if len(values) == 0 {
+		return path, extraHeaders
+	}
+	switch p.in {
+	case "path":
+		path = strings.ReplaceAll(path, "{"+p.name+"}", url.PathEscape(values[0]))
+	case "query":
+		for _, val := range serializeGeneratedParamValues(p, values) {
+			q.Add(p.name, val)
+		}
+	case "header":
+		extraHeaders = append(extraHeaders, p.name+": "+strings.Join(serializeGeneratedParamValues(p, values), ","))
+	case "cookie":
+		extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.QueryEscape(strings.Join(serializeGeneratedParamValues(p, values), ",")))
+	}
+	return path, extraHeaders
+}
+
+func serializeGeneratedParamValues(p *paramInfo, values []string) []string {
+	if p.typ != "array" {
+		return values[:1]
+	}
+	style := p.style
+	if style == "" {
+		style = "form"
+	}
+	explode := true
+	if p.explode != nil {
+		explode = *p.explode
+	}
+	if p.in == "query" && style == "form" && explode {
+		return values
+	}
+	return []string{strings.Join(values, ",")}
 }
 
 // extractPathParamNames returns path parameter names in left-to-right order
@@ -366,10 +462,28 @@ func toKebabCase(s string) string {
 		b.WriteRune(unicode.ToLower(r))
 		prev = r
 	}
-	// Replace underscores and spaces with dashes, collapse multiple dashes.
-	result := strings.ReplaceAll(b.String(), "_", "-")
-	result = strings.ReplaceAll(result, " ", "-")
-	return result
+	return slugify(b.String())
+}
+
+func fallbackOperationName(method, path string) string {
+	return slugify(strings.ToLower(method) + "-" + strings.Trim(path, "/"))
+}
+
+func slugify(s string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+			lastDash = false
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // deprecatedNotice returns the cobra Deprecated string when flagged, else "".

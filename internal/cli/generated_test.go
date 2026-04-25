@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -377,6 +378,142 @@ func TestGeneratedCommandMissingOperationIDFallsBackToMethodAndPath(t *testing.T
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-widgets"}); err != nil {
 		t.Fatalf("get-widgets failed: %v", err)
+	}
+}
+
+func TestGeneratedCommandMissingOperationIDFallbackSlugIsSafe(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/123/repos", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/users/{user_id}/repos": {
+      "get": {
+        "parameters": [
+          {"name": "user_id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-users-user-id-repos", "123"}); err != nil {
+		t.Fatalf("safe fallback command failed: %v", err)
+	}
+}
+
+func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "parameters": [
+          {"name": "includeArchived", "in": "query", "schema": {"type": "boolean"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 25}},
+          {"name": "score", "in": "query", "schema": {"type": "number"}},
+          {"name": "tag", "in": "query", "style": "form", "explode": true, "schema": {"type": "array", "items": {"type": "string"}}},
+          {"name": "ids", "in": "query", "style": "form", "explode": false, "schema": {"type": "array", "items": {"type": "string"}}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "search", "--include-archived", "--score", "1.5", "--tag", "red", "--tag", "blue", "--ids", "1", "--ids", "2"}); err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("includeArchived"); got != "true" {
+		t.Fatalf("includeArchived = %q, want true", got)
+	}
+	if got := values.Get("limit"); got != "25" {
+		t.Fatalf("limit default = %q, want 25", got)
+	}
+	if got := values.Get("score"); got != "1.5" {
+		t.Fatalf("score = %q, want 1.5", got)
+	}
+	if got := values["tag"]; strings.Join(got, ",") != "red,blue" {
+		t.Fatalf("tag values = %v, want red and blue", got)
+	}
+	if got := values.Get("ids"); got != "1,2" {
+		t.Fatalf("ids = %q, want 1,2", got)
+	}
+}
+
+func TestGeneratedCommandUsesRequestBodyMediaType(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/submit": {
+      "post": {
+        "operationId": "submit",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {"schema": {"type": "object"}},
+            "text/plain": {"schema": {"type": "string"}}
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "submit", "name:", "Widget"}); err != nil {
+		t.Fatalf("submit failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/x-www-form-urlencoded") {
+		t.Fatalf("Content-Type = %q, want form", gotContentType)
+	}
+	if gotBody != "name=Widget" {
+		t.Fatalf("body = %q, want form body", gotBody)
 	}
 }
 
