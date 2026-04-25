@@ -42,9 +42,8 @@ func (f *ImageFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	if len(resp.Raw) == 0 {
 		return nil
 	}
-	// Non-TTY: emit a placeholder rather than raw binary bytes.
 	if !color {
-		_, err := fmt.Fprintf(w, "[image %s, %d bytes]\n", resp.Headers["Content-Type"], len(resp.Raw))
+		_, err := w.Write(resp.Raw)
 		return err
 	}
 

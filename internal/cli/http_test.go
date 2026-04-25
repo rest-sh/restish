@@ -196,6 +196,41 @@ func TestHTTPQuery(t *testing.T) {
 	}
 }
 
+func TestHTTPAcceptHeaderOverride(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "-H", "Accept: application/json", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	values := rr.Last().Header.Values("Accept")
+	if len(values) != 1 || values[0] != "application/json" {
+		t.Fatalf("Accept headers = %#v, want only application/json", values)
+	}
+}
+
+func TestHTTPHeaderEnvSplitsCommaSeparatedValues(t *testing.T) {
+	t.Setenv("RSH_HEADER", "X-One: 1,X-Two: value:with:colons")
+	var rr requestRecorder
+	c, _, _ := newTestCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Header.Get("X-One"); got != "1" {
+		t.Fatalf("X-One = %q", got)
+	}
+	if got := rr.Last().Header.Get("X-Two"); got != "value:with:colons" {
+		t.Fatalf("X-Two = %q", got)
+	}
+}
+
 // TestHTTPServerOverride verifies that -s replaces the scheme and host.
 func TestHTTPServerOverride(t *testing.T) {
 	var rr requestRecorder

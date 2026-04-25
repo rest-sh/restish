@@ -105,7 +105,6 @@ func (c *CLI) runPagination(
 	nextURL := firstNextURL
 	page := 1
 	visited := map[string]int{firstURL: 1}
-	stderrIsTTY := output.IsTerminal(c.Stderr)
 
 	for !done && nextURL != "" {
 		if err := ctx.Err(); err != nil {
@@ -122,11 +121,6 @@ func (c *CLI) runPagination(
 		}
 		page++
 		visited[nextURL] = page
-
-		// Progress feedback on TTY stderr.
-		if stderrIsTTY {
-			fmt.Fprintf(c.Stderr, "\rfetching page %d...\x1b[K", page)
-		}
 
 		httpResp, err := request.Do(ctx, "GET", nextURL, nil, opts)
 		if err != nil {
@@ -156,11 +150,6 @@ func (c *CLI) runPagination(
 			streamedCount += len(items)
 		}
 		nextURL = resolveNextURL(resp, pagCfg)
-	}
-
-	// Erase progress line on TTY.
-	if stderrIsTTY {
-		fmt.Fprintf(c.Stderr, "\r\x1b[K")
 	}
 
 	if done && maxItems > 0 {

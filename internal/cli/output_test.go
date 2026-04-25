@@ -1,8 +1,12 @@
 package cli_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -21,6 +25,17 @@ func useJSONResponse(c *cli.CLI, status int, body string) {
 			Request:    r,
 		}, nil
 	})
+}
+
+func pngBytes(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	return buf.Bytes()
 }
 
 // TestJSONOutput verifies that a non-TTY invocation outputs the body as JSON.
@@ -201,6 +216,28 @@ func TestFilterHeaders(t *testing.T) {
 	}
 }
 
+func TestFilterHeaderValue(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Date":         []string{"Mon, 02 Jan 2006 15:04:05 GMT"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{}`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-f", "headers.Date", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != `"Mon, 02 Jan 2006 15:04:05 GMT"` {
+		t.Fatalf("headers.Date output = %q", got)
+	}
+}
+
 func TestFilterTopLevelRootsDoNotTriggerBodyHint(t *testing.T) {
 	c, _, errOut := newTestCLI()
 	useJSONResponse(c, 200, `{}`)
@@ -244,7 +281,46 @@ func TestFilterAtNonTTYUsesJSONFormatter(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
 		t.Fatalf("expected JSON output for -f @ on non-TTY, got %q: %v", out.String(), err)
 	}
-	if decoded["name"] != "Alice" {
-		t.Fatalf("unexpected JSON body: %#v", decoded)
+	if decoded["status"] != float64(200) {
+		t.Fatalf("expected full response status, got %#v", decoded)
+	}
+	body, ok := decoded["body"].(map[string]any)
+	if !ok || body["name"] != "Alice" {
+		t.Fatalf("unexpected response body: %#v", decoded)
+	}
+}
+
+func TestRawFlagWithoutFilterWritesOriginalBytes(t *testing.T) {
+	raw := "{\n  \"z\": 1,\n  \"a\": 2\n}\n"
+	c, out, _ := newTestCLI()
+	useJSONResponse(c, 200, raw)
+	if err := c.Run([]string{"restish", "get", "-r", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.String() != raw {
+		t.Fatalf("raw output changed:\ngot  %q\nwant %q", out.String(), raw)
+	}
+}
+
+func TestImageResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
+	data := pngBytes(t)
+	c, out, _ := newTestCLI()
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(data)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/logo.png"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), data) {
+		t.Fatalf("image bytes changed: got %d bytes, want %d", out.Len(), len(data))
+	}
+	if _, err := png.Decode(bytes.NewReader(out.Bytes())); err != nil {
+		t.Fatalf("output is not a valid png: %v", err)
 	}
 }

@@ -42,7 +42,7 @@ func imageResp(raw []byte) *output.Response {
 
 // --- ImageFormatter: non-color (non-TTY) ---
 
-func TestImageFormatter_NonColor_WritesPlaceholder(t *testing.T) {
+func TestImageFormatter_NonColor_WritesRawBytes(t *testing.T) {
 	data := makePNG(t, 4, 4, color.RGBA{255, 0, 0, 255})
 	resp := imageResp(data)
 
@@ -51,9 +51,8 @@ func TestImageFormatter_NonColor_WritesPlaceholder(t *testing.T) {
 	if err := f.Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "[image image/png, "
-	if !strings.Contains(buf.String(), want) {
-		t.Errorf("expected placeholder on non-TTY, got %q", buf.String())
+	if !bytes.Equal(buf.Bytes(), data) {
+		t.Errorf("expected raw image bytes on non-TTY")
 	}
 }
 

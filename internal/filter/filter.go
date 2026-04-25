@@ -43,13 +43,44 @@ func Apply(expr string, doc map[string]any, lang Lang) (any, error) {
 	if expr == "" || expr == "@" {
 		return doc, nil
 	}
+	if lang != LangJQ {
+		if value, ok := headerField(expr, doc); ok {
+			return value, nil
+		}
+	}
 
 	switch resolve(expr, lang) {
 	case LangShorthand:
 		return applyShorthand(expr, doc)
 	default:
-		return applyJQ(expr, doc)
+		result, err := applyJQ(expr, doc)
+		if err == nil || lang != LangAuto || !strings.Contains(err.Error(), "jq parse:") {
+			return result, err
+		}
+		return applyShorthand(expr, doc)
 	}
+}
+
+func headerField(expr string, doc map[string]any) (any, bool) {
+	name, ok := strings.CutPrefix(expr, "headers.")
+	if !ok || name == "" || strings.ContainsAny(name, "[]|") {
+		return nil, false
+	}
+	switch headers := doc["headers"].(type) {
+	case map[string]string:
+		for key, value := range headers {
+			if strings.EqualFold(key, name) {
+				return value, true
+			}
+		}
+	case map[string]any:
+		for key, value := range headers {
+			if strings.EqualFold(key, name) {
+				return value, true
+			}
+		}
+	}
+	return nil, true
 }
 
 // resolve returns the effective language for expr.

@@ -56,6 +56,18 @@ func TestAutoDetect_JQBuiltin(t *testing.T) {
 	}
 }
 
+func TestAutoDetectFallsBackToShorthandWhenJQCannotParse(t *testing.T) {
+	doc := testDoc()
+	doc["body"].(map[string]any)["example"] = map[string]any{"url": "https://github.com/rest-sh/restish"}
+	result, err := filter.Apply("..url|[@ contains github]", doc, filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected shorthand fallback result")
+	}
+}
+
 // --- Shorthand ---
 
 func TestShorthand_BodyName(t *testing.T) {

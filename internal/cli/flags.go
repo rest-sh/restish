@@ -99,12 +99,12 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 	gf.MaxBodySize, _ = cmd.Flags().GetInt("rsh-max-body-size")
 
 	// Apply env-var overrides (env var loses to explicit flag).
-	// For StringArray flags (header, query), env var appends one value.
+	// For StringArray flags (header, query), env var prepends values.
 	if v := os.Getenv("RSH_HEADER"); v != "" && !cmd.Flags().Changed("rsh-header") {
-		gf.Headers = append([]string{v}, gf.Headers...)
+		gf.Headers = append(splitEnvList(v), gf.Headers...)
 	}
 	if v := os.Getenv("RSH_QUERY"); v != "" && !cmd.Flags().Changed("rsh-query") {
-		gf.Query = append([]string{v}, gf.Query...)
+		gf.Query = append(splitEnvList(v), gf.Query...)
 	}
 	if v := os.Getenv("RSH_OUTPUT_FORMAT"); v != "" && !cmd.Flags().Changed("rsh-output-format") {
 		gf.OutputFormat = v
@@ -131,6 +131,18 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 	}
 
 	return gf
+}
+
+func splitEnvList(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // isTruthy reports whether a string env value means "true".

@@ -113,6 +113,9 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 // toRows converts body to a slice of map rows. Returns false when body is not
 // a []any of map[string]any.
 func toRows(body any) ([]map[string]any, bool) {
+	if m, ok := body.(map[string]any); ok {
+		return []map[string]any{m}, true
+	}
 	arr, ok := body.([]any)
 	if !ok {
 		return nil, false

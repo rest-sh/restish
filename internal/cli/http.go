@@ -168,7 +168,8 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	}
 
 	// Pagination: if this is a GET and there's a next link, paginate.
-	if method == "GET" {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if method == "GET" && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
 		var pagCfg *config.PaginationConfig
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
@@ -212,9 +213,19 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	fmtName := gf.OutputFormat
 	filterExpr := gf.Filter
+	explicitFilter := filterExpr != "" || gf.HeadersShorthand
 	filterLang := gf.FilterLang
 	headersOnly := gf.HeadersShorthand
 	tty := output.IsTerminal(c.Stdout)
+
+	if gf.Raw && !explicitFilter && fmtName == "" {
+		_, err := c.Stdout.Write(resp.Raw)
+		return err
+	}
+	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(resp.Headers["Content-Type"], "image/") {
+		_, err := c.Stdout.Write(resp.Raw)
+		return err
+	}
 
 	if headersOnly && filterExpr != "" {
 		fmt.Fprintln(c.Stderr, `warning: --rsh-headers overrides -f; using "headers"`)
@@ -264,6 +275,10 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	if handled {
 		return nil
+	}
+
+	if explicitFilter && filterExpr == "@" {
+		return c.renderValue(cmd, doc)
 	}
 
 	if filterExpr != "@" {
@@ -469,6 +484,14 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 		}
 	}
 	return true
+}
+
+func filterRequestsResponseMetadata(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	return expr == "@" ||
+		expr == "headers" || strings.HasPrefix(expr, "headers.") || strings.HasPrefix(expr, "headers[") ||
+		expr == "status" || strings.HasPrefix(expr, "status.") || strings.HasPrefix(expr, "status[") ||
+		expr == "proto" || strings.HasPrefix(expr, "proto.") || strings.HasPrefix(expr, "proto[")
 }
 
 // logVerbose prints request and response summary lines to stderr.

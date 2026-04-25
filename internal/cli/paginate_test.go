@@ -455,4 +455,72 @@ func TestPaginationProgressOnStderr(t *testing.T) {
 	if !strings.Contains(errOut.String(), "max-pages") {
 		t.Errorf("expected warning on stderr, got: %q", errOut.String())
 	}
+	if strings.Contains(errOut.String(), "fetching page") {
+		t.Fatalf("pagination progress should not be printed by default, got: %q", errOut.String())
+	}
+}
+
+func TestPaginationSkipsForHeaderFilter(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	requests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests++
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+			"X-Page":       []string{r.URL.Query().Get("page")},
+		}
+		if r.URL.Query().Get("page") == "" {
+			headers.Set("X-Page", "1")
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-f", "headers", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	if !strings.Contains(out.String(), `"X-Page"`) || strings.Contains(out.String(), `"2"`) {
+		t.Fatalf("expected only first-page headers, got:\n%s", out.String())
+	}
+}
+
+func TestPaginationRawFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
+	c, out, _ := newTestCLI()
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		pages := map[string]struct {
+			body string
+			next string
+		}{
+			"":  {`[{"self":"one"}]`, "https://api.example.com/items?page=2"},
+			"2": {`[{"self":"two"}]`, ""},
+		}
+		p := pages[r.URL.Query().Get("page")]
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if p.next != "" {
+			headers.Set("Link", `<`+p.next+`>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(p.body)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-f", "body.self", "-r", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got, want := out.String(), "one\ntwo\n"; got != want {
+		t.Fatalf("raw filtered pagination output = %q, want %q", got, want)
+	}
 }

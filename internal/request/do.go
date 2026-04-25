@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/gregjones/httpcache"
+	"github.com/rest-sh/restish/v2/internal/cache"
 )
 
 type closeableTransport struct {
@@ -150,7 +150,13 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		if !ok {
 			return nil, fmt.Errorf("invalid header %q: expected \"Name: Value\" format", h)
 		}
-		req.Header.Add(strings.TrimSpace(name), strings.TrimSpace(value))
+		name = strings.TrimSpace(name)
+		value = strings.TrimSpace(value)
+		if strings.EqualFold(name, "Accept") || strings.EqualFold(name, "Accept-Encoding") {
+			req.Header.Set(name, value)
+			continue
+		}
+		req.Header.Add(name, value)
 	}
 
 	// Append extra query parameters.
