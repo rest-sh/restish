@@ -196,6 +196,20 @@ func Load(path string) (*Config, error) {
 	return parseConfigBytes(path, data)
 }
 
+// LoadExplicit reads a user-selected config file. Unlike Load, a missing file
+// is an error because explicit config selection must not silently fall back to
+// an empty or platform-default config.
+func LoadExplicit(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("config: explicit config file %s does not exist", path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
+	}
+	return parseConfigBytes(path, data)
+}
+
 func parseConfigBytes(path string, data []byte) (*Config, error) {
 
 	// Strip JSONC comments before parsing so users can annotate their config.

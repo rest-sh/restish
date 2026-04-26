@@ -102,6 +102,18 @@ validated. Examples:
 - response middleware can request specific follow-up actions, not arbitrary host
   behavior
 
+### Explicit Config Roots
+
+Restish does not implicitly discover project config files from the current
+working directory in v2. Project config is selected with `--rsh-config` or
+`RSH_CONFIG`, and that selected file is the entire config source of truth rather
+than an overlay on top of the operator's global config.
+
+This avoids surprise trust transfer from a checked-out repository into normal
+requests. It also makes command review easier: the config trust root is visible
+in the command line or environment, and missing explicit files fail instead of
+falling back to the platform default.
+
 ### Least Necessary Exposure
 
 Restish should only expose sensitive data where it is required:

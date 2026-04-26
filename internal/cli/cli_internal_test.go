@@ -1,11 +1,33 @@
 package cli
 
 import (
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 )
+
+func TestExplicitConfigSidecarAndCachePaths(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "restish.json")
+	c := &CLI{
+		Paths:              config.NewPathsWithConfigFile(cfgPath),
+		explicitConfigFile: true,
+	}
+	if got, want := c.tokenCachePath(), filepath.Join(filepath.Dir(cfgPath), "tokens.cbor"); got != want {
+		t.Fatalf("tokenCachePath() = %q, want %q", got, want)
+	}
+	if got, want := c.externalToolApprovalsPath(), filepath.Join(filepath.Dir(cfgPath), "external-tool-approvals.json"); got != want {
+		t.Fatalf("externalToolApprovalsPath() = %q, want %q", got, want)
+	}
+	if got := c.specCacheDir(); !strings.Contains(got, filepath.Join("specs", "configs")) {
+		t.Fatalf("specCacheDir() = %q, want config-scoped specs dir", got)
+	}
+	if got := c.cacheDir(); !strings.Contains(got, "configs") {
+		t.Fatalf("cacheDir() = %q, want config-scoped cache dir", got)
+	}
+}
 
 func TestGeneratedAPINames_FastPath(t *testing.T) {
 	cfg := &config.Config{

@@ -86,6 +86,17 @@ restish api set example spec_url https://api.rest.sh/openapi.json
 restish api show example
 ```
 
+For a project-local config, create the file first and select it explicitly:
+
+```bash
+printf '{}\n' > ./restish.json
+restish --rsh-config ./restish.json api configure example https://api.rest.sh
+```
+
+`--rsh-config` and `RSH_CONFIG` select one complete config file. Restish does
+not merge that file with your global config, and a missing explicit config file
+is treated as an error.
+
 ## Where To Go Next
 
 - [Set Up Profiles](../set-up-profiles/)

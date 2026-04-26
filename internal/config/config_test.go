@@ -65,6 +65,17 @@ func TestLoad_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadExplicit_MissingFileErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restish.json")
+	_, err := config.LoadExplicit(path)
+	if err == nil {
+		t.Fatal("expected missing explicit config to error")
+	}
+	if !strings.Contains(err.Error(), "explicit config file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoad_JSONC_Comments(t *testing.T) {
 	path := writeConfig(t, `{
 		// This is a comment

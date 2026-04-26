@@ -21,14 +21,31 @@ type Paths struct {
 	// 1. RSH_CACHE_DIR env var
 	// 2. os.UserCacheDir()/restish
 	cacheDir string
+	// ConfigFile is the explicit config file path when RSH_CONFIG or
+	// --rsh-config selects a file instead of the platform default directory.
+	configFile string
 }
 
 // NewPaths creates a new Paths instance that computes directories
 // based on the current environment and OS.
 func NewPaths() *Paths {
+	if file := os.Getenv("RSH_CONFIG"); file != "" {
+		return NewPathsWithConfigFile(file)
+	}
 	return &Paths{
 		configDir: computeConfigDir(),
 		cacheDir:  computeCacheDir(),
+	}
+}
+
+// NewPathsWithConfigFile creates Paths for an explicit config file. Sidecar
+// state stored in the config directory, such as token caches and external-tool
+// approvals, follows the selected config file.
+func NewPathsWithConfigFile(path string) *Paths {
+	return &Paths{
+		configDir:  filepath.Dir(path),
+		configFile: path,
+		cacheDir:   computeCacheDir(),
 	}
 }
 
@@ -61,6 +78,9 @@ func (p *Paths) PluginManifestCache() string {
 
 // ConfigFile returns the path to the main restish.json config file.
 func (p *Paths) ConfigFile() string {
+	if p.configFile != "" {
+		return p.configFile
+	}
 	return filepath.Join(p.configDir, "restish.json")
 }
 

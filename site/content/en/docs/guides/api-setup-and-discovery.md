@@ -51,6 +51,27 @@ restish api list
 restish example --help
 ```
 
+## Project Configs
+
+Use an explicit config file when a project should keep its API registrations
+separate from your normal Restish config:
+
+```bash
+printf '{}\n' > ./restish.json
+restish --rsh-config ./restish.json api configure example https://api.rest.sh
+```
+
+Every command in that invocation reads and writes only `./restish.json`. You
+can also set the path for a shell session:
+
+```bash
+export RSH_CONFIG="$PWD/restish.json"
+restish api list
+```
+
+If the selected file does not exist, Restish stops with an error instead of
+falling back to your global config.
+
 If the OpenAPI description asks setup questions, you can answer them on the
 same command line with `prompt.*` expressions. Other expressions use the same
 config shorthand as `api set` and apply after discovery:

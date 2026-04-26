@@ -107,6 +107,72 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestExplicitConfigFlagWritesSelectedFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "project-restish.json")
+	if err := os.WriteFile(cfgPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	if err := c.Run([]string{"restish", "--rsh-config", cfgPath, "api", "add", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api add: %v", err)
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load explicit config: %v", err)
+	}
+	if got := cfg.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url = %q", got)
+	}
+}
+
+func TestRSHConfigReadsSelectedFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "project-restish.json")
+	if err := os.WriteFile(cfgPath, []byte(`{
+  "apis": {
+    "project": {"base_url": "https://project.example.com"}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RSH_CONFIG", cfgPath)
+
+	var stdout, stderr bytes.Buffer
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	if err := c.Run([]string{"restish", "api", "list"}); err != nil {
+		t.Fatalf("api list: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "project.example.com") {
+		t.Fatalf("expected RSH_CONFIG API in output, got %q", stdout.String())
+	}
+}
+
+func TestExplicitConfigMissingErrors(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	err := c.Run([]string{"restish", "--rsh-config", missing, "api", "list"})
+	if err == nil {
+		t.Fatal("expected missing explicit config to error")
+	}
+	if !strings.Contains(err.Error(), "explicit config file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {

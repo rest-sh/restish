@@ -18,6 +18,28 @@ func TestPaths_ConfigFromRSHConfigDir(t *testing.T) {
 	}
 }
 
+func TestPaths_ConfigFromRSHConfigFile(t *testing.T) {
+	t.Setenv("RSH_CONFIG", "/tmp/project/restish.json")
+	t.Setenv("RSH_CONFIG_DIR", "/tmp/rsh-cfg")
+	p := NewPaths()
+	if got, want := p.Config(), "/tmp/project"; got != want {
+		t.Fatalf("Config() = %q, want %q", got, want)
+	}
+	if got, want := p.ConfigFile(), "/tmp/project/restish.json"; got != want {
+		t.Fatalf("ConfigFile() = %q, want %q", got, want)
+	}
+}
+
+func TestPaths_WithExplicitConfigFile(t *testing.T) {
+	p := NewPathsWithConfigFile("/tmp/work/restish.json")
+	if got, want := p.Config(), "/tmp/work"; got != want {
+		t.Fatalf("Config() = %q, want %q", got, want)
+	}
+	if got, want := p.ConfigFile(), "/tmp/work/restish.json"; got != want {
+		t.Fatalf("ConfigFile() = %q, want %q", got, want)
+	}
+}
+
 func TestPaths_CacheFromXDGCacheHome(t *testing.T) {
 	oldUserCache := userCacheDirFunc
 	userCacheDirFunc = func() (string, error) { return "/tmp/xdg-cache", nil }

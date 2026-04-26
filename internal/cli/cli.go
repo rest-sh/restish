@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -78,6 +79,7 @@ type CLI struct {
 	customAuthHandlers map[string]authpkg.Handler
 	requestClosersMu   sync.Mutex
 	requestClosers     []io.Closer
+	explicitConfigFile bool
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -183,7 +185,7 @@ func (c *CLI) specCacheDir() string {
 	if c.hooks.SpecCachePath != "" {
 		return c.hooks.SpecCachePath
 	}
-	return c.paths().SpecCache()
+	return c.configScopedCacheDir(c.paths().SpecCache())
 }
 
 // pluginManifestCachePath returns the effective plugin manifest cache file path.
@@ -199,6 +201,21 @@ func (c *CLI) paths() *config.Paths {
 		return c.Paths
 	}
 	return config.NewPaths()
+}
+
+func (c *CLI) configScopedCacheDir(base string) string {
+	if !c.explicitConfigFile {
+		return base
+	}
+	sum := sha256.Sum256([]byte(c.configFilePath()))
+	return filepath.Join(base, "configs", fmt.Sprintf("%x", sum[:8]))
+}
+
+func (c *CLI) loadConfig() (*config.Config, error) {
+	if c.explicitConfigFile {
+		return config.LoadExplicit(c.configFilePath())
+	}
+	return config.Load(c.configFilePath())
 }
 
 // discoverSpec runs spec discovery for the named API using the registered loaders.
@@ -240,6 +257,15 @@ func (c *CLI) Run(args []string) error {
 	c.requestClosers = nil
 	defer c.closeRequestClosers()
 
+	if c.hooks.ConfigPath == "" {
+		if configPath, ok := explicitConfigPathFromArgs(args); ok {
+			c.Paths = config.NewPathsWithConfigFile(configPath)
+			c.explicitConfigFile = true
+		} else if os.Getenv("RSH_CONFIG") != "" {
+			c.explicitConfigFile = true
+		}
+	}
+
 	if !output.IsTerminal(c.Stdout) {
 		origStdout := c.Stdout
 		buf := bufio.NewWriterSize(origStdout, 64*1024)
@@ -256,7 +282,7 @@ func (c *CLI) Run(args []string) error {
 		c.hintShellSetup()
 	}
 
-	cfg, err := config.Load(c.configFilePath())
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return err
 	}
@@ -387,6 +413,26 @@ func profileNameFromArgs(args []string) string {
 		}
 	}
 	return profile
+}
+
+func explicitConfigPathFromArgs(args []string) (string, bool) {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "--rsh-config=") {
+			value := strings.TrimPrefix(arg, "--rsh-config=")
+			return value, value != ""
+		}
+		if arg == "--rsh-config" {
+			if i+1 < len(args) && args[i+1] != "" {
+				return args[i+1], true
+			}
+			return "", false
+		}
+	}
+	return "", false
 }
 
 func effectiveServerVariables(apiCfg *config.APIConfig, profileName string) map[string]string {

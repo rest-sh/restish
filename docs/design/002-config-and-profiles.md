@@ -58,6 +58,25 @@ the configured Restish config directory, so tests, XDG overrides, and embedded
 CLIs do not accidentally use a different plugin trust root from the main
 configuration.
 
+User-facing config file selection follows this precedence:
+
+1. `--rsh-config <file>`
+2. `RSH_CONFIG=<file>`
+3. `RSH_CONFIG_DIR=<dir>/restish.json`
+4. the platform default config directory
+
+`--rsh-config` and `RSH_CONFIG` select a complete config file, not an overlay.
+When either is present, Restish reads and writes only that file. A missing
+explicit config file is an error so operators do not accidentally run with the
+global default after mistyping a project path. The ordinary platform-default
+config path keeps the v1 migration and auto-create behavior described below.
+
+Sidecar state that belongs to the selected config trust root, such as OAuth
+token caches and external-tool approval records, lives next to the explicit
+config file. Response and spec caches remain under the cache root, but explicit
+configs get a cache namespace derived from the config path so two project
+configs do not reuse each other's cached HTTP responses or discovered specs.
+
 ## Primary Config Shape
 
 The primary top-level keys are:

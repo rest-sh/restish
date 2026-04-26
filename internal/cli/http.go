@@ -26,7 +26,7 @@ func (c *CLI) cacheDir() string {
 	if c.hooks.CachePath != "" {
 		return c.hooks.CachePath
 	}
-	return c.paths().Cache()
+	return c.configScopedCacheDir(c.paths().Cache())
 }
 
 // maxBodyBytes returns the response body size cap derived from the
