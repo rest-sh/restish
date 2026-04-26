@@ -363,6 +363,31 @@ func TestApplyAPIProfileMatchesProfileBaseURL(t *testing.T) {
 	}
 }
 
+func TestApplyAPIProfilePreservesMixedCaseProfileQuery(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Query: []string{"camelCase=value", "X-ID=123"},
+					},
+				},
+			},
+		},
+	}
+
+	_, _, opts, err := c.applyAPIProfile("svc/items", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
+	}
+	got := strings.Join(opts.Query, ",")
+	if !strings.Contains(got, "camelCase=value") || !strings.Contains(got, "X-ID=123") {
+		t.Fatalf("profile query = %q, want original case preserved", got)
+	}
+}
+
 func TestApplyAPIProfileRejectsHostAndPathLookalikes(t *testing.T) {
 	c := New()
 	c.cfg = &config.Config{

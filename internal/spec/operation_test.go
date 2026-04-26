@@ -192,3 +192,76 @@ servers:
 		t.Fatalf("operation path = %q, want /x/x/x/x/items", got)
 	}
 }
+
+func TestOpenAPIOperationMissingResponsesDoesNotPanic(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Missing Responses
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if ops[0].ID != "listItems" {
+		t.Fatalf("operation ID = %q", ops[0].ID)
+	}
+}
+
+func TestOpenAPINullDefaultAndCircularAllOfDoNotPanic(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Regression Fixture
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: maybe
+          in: query
+          schema:
+            type: [string, "null"]
+            nullable: true
+            default: null
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+components:
+  schemas:
+    Node:
+      allOf:
+        - type: object
+          properties:
+            id:
+              type: string
+        - $ref: "#/components/schemas/Node"`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if len(ops[0].Parameters) != 1 {
+		t.Fatalf("parameters = %#v", ops[0].Parameters)
+	}
+}

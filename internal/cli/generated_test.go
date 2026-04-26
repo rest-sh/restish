@@ -1148,3 +1148,102 @@ func TestGeneratedCommandWithoutBodyRejectsExtraArgs(t *testing.T) {
 		t.Fatalf("expected ExactArgs error, got: %v", err)
 	}
 }
+
+func TestGeneratedCommandProfileBaseURLUsesSharedSpec(t *testing.T) {
+	var gotHost string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	staging := httptest.NewServer(mux)
+	t.Cleanup(staging.Close)
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.APIs["tapi"].Profiles = map[string]*config.ProfileConfig{
+		"staging": {BaseURL: staging.URL},
+	}
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(env.cfgFile, data, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items: %v", err)
+	}
+	if wantHost := strings.TrimPrefix(staging.URL, "http://"); gotHost != wantHost {
+		t.Fatalf("request host = %q, want staging host %q", gotHost, wantHost)
+	}
+}
+
+func TestGeneratedCommandPercentEscapesPathAndQueryArgs(t *testing.T) {
+	var gotRequestURI string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/%@domain.com", func(w http.ResponseWriter, r *http.Request) {
+		gotRequestURI = r.RequestURI
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Percent API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/users/{email}": {
+      "get": {
+        "operationId": "getUser",
+        "parameters": [
+          {"name": "email", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "filter", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL)
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{"pct": {BaseURL: srv.URL}}})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := t.TempDir()
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "sync", "pct"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "pct", "get-user", "%@domain.com", "--filter", "%@domain.com"}); err != nil {
+		t.Fatalf("get-user: %v", err)
+	}
+	if !strings.Contains(gotRequestURI, "/users/%25@domain.com") {
+		t.Fatalf("RequestURI = %q, want escaped percent in path", gotRequestURI)
+	}
+	if !strings.Contains(gotRequestURI, "filter=%25%40domain.com") {
+		t.Fatalf("RequestURI = %q, want escaped percent and at in query", gotRequestURI)
+	}
+}
