@@ -47,6 +47,11 @@ It reads `apis.json` and `config.json`, converts supported API/profile settings
 into the v2 shape, writes `restish.json`, and keeps a `.bak.v1` backup of the
 original directory.
 
+Explicit config selection is different. If you pass `--rsh-config ./restish.json`
+or set `RSH_CONFIG`, that exact file must already exist. Restish does not use
+an explicit missing file as a signal to search other config directories or run
+default-location v1 migration.
+
 The migration carries over the main API-specific settings:
 
 - API base URLs

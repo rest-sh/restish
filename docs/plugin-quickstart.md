@@ -195,6 +195,25 @@ These are the best examples in the repo:
 - [`docs/design/020-command-plugins.md`](./design/020-command-plugins.md)
   for command-plugin protocol details
 
+## Plugin Ideas That Should Stay Out Of Core For Now
+
+Some useful features fit better as plugins or wrappers than as built-in Restish
+behavior:
+
+- Page/count pagination strategies for APIs that do not expose standard links.
+  A response-middleware plugin can inspect the first response and ask Restish to
+  follow calculated page URLs while the host still owns auth, retries, TLS, and
+  output.
+- Swagger/OpenAPI 2.0 loading. A loader plugin can convert Swagger 2.0 into
+  OpenAPI 3.x and return that document to Restish, keeping generated command
+  creation on the canonical OpenAPI path.
+- Rate-limit experiments or light load-test workflows. A command plugin can
+  own pacing, concurrency, and reporting while delegating each request to the
+  host.
+
+Use these patterns when the behavior is valuable but provider-specific, still
+experimental, or too workflow-shaped for a generic request flag.
+
 ## Common Pitfalls
 
 - Plugin executables must be named `restish-<name>`.

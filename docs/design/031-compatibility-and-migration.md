@@ -90,15 +90,22 @@ operator guidance.
 
 Restish must support a migration path from v1 config locations and filenames.
 
-The design expectation is:
+The implemented v2 behavior is:
 
-- detect known legacy locations on startup or first write
-- offer automatic migration when safe
+- when the default v2 `restish.json` is missing, detect known legacy locations
+  on startup or first write
+- automatically migrate v1 `apis.json` and `config.json` into `restish.json`
+  when safe
 - preserve comments where possible
 - emit a clear hint when migration cannot be automatic
 
 Migration should not be macOS-only, Linux-only, or implicit based on whichever
 path happened to work on the developer's machine.
+
+Explicit config file selection is intentionally stricter. If `--rsh-config` or
+`RSH_CONFIG` names a file that does not exist, Restish errors instead of falling
+back to global config or running default-location migration. That makes project
+configs predictable and prevents accidental writes to the wrong config file.
 
 ### API Registrations
 

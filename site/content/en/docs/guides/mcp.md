@@ -15,6 +15,11 @@ letting Restish handle:
 - TLS and mTLS
 - retries and cache behavior
 
+Use regular Restish commands when you want precise, human-controlled CLI calls.
+Use `restish-mcp` when you want an agent or MCP client to see selected OpenAPI
+operations as tools. They share the same registrations and runtime behavior,
+but they are optimized for different callers.
+
 ## What It Needs
 
 Before `restish mcp` is useful, register at least one API with a usable spec:

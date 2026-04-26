@@ -9,6 +9,10 @@ command-plugin protocol against a real integration target.
 Its job is to translate cached OpenAPI operations into MCP tool definitions,
 then delegate actual HTTP execution back to Restish.
 
+The product positioning is deliberately narrow: use Restish itself for precise
+human CLI calls, and use `restish-mcp` when an MCP client or agent should see
+selected OpenAPI operations as tools.
+
 ## Goals
 
 - expose API operations as MCP tools without duplicating Restish's HTTP stack

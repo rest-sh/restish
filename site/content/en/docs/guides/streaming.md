@@ -45,6 +45,21 @@ For explicit machine-oriented record output, prefer `ndjson`:
 restish https://your-api.example.com/events -o ndjson
 ```
 
+That is the Restish equivalent of curl/httpie live-stream calls such as:
+
+```bash
+curl -N -H 'Accept: text/event-stream' https://your-api.example.com/events
+http --stream https://your-api.example.com/events Accept:text/event-stream
+```
+
+With Restish, use the same `Accept` header when the server needs it, then let
+the `text/event-stream` response switch the output path into streaming mode:
+
+```bash
+restish -H 'Accept: text/event-stream' https://your-api.example.com/events
+restish -H 'Accept: text/event-stream' https://your-api.example.com/events -o ndjson
+```
+
 Think about stream handling in two categories:
 
 - bounded streams, where EOF arrives naturally

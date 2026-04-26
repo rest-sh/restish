@@ -107,6 +107,11 @@ The canonical public module path for plugins is
 against that module path rather than an old repository path or internal
 packages.
 
+Good plugin candidates include provider-specific pagination strategies,
+Swagger/OpenAPI 2.0 loaders, rate/load-test workflows, and auth systems with
+nonstandard token exchange. These features are useful extension points but
+should not force the core request path to grow provider-specific policy.
+
 ## Why Separate Plugin Types
 
 The split is intentional:

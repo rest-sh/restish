@@ -96,6 +96,11 @@ For a header-based API key scheme named `X-API-Key`, Restish writes a persistent
 profile header such as `X-API-Key: env:MYAPI_TOKEN`. For a query API key, it
 writes a persistent profile query parameter instead.
 
+That persistent header/query storage is an implementation detail of the profile
+model. Requests still behave like API-key auth: Restish applies the stored
+profile value during request preparation, and late-resolved values such as
+`env:MYAPI_TOKEN` are read when the request runs.
+
 ## Prompting For Secrets
 
 You do not have to store every secret in config.
@@ -284,6 +289,22 @@ the OAuth endpoints. This is useful for IdP-specific fields such as:
 - `resource`
 - `organization`
 
+Endpoint parameters such as `authorize_url`, `token_url`, and
+`device_authorization_url` must be absolute URLs. If your provider publishes
+standard discovery metadata, set `issuer_url` and let Restish derive the
+standard endpoint URLs when possible:
+
+```json
+{
+  "type": "oauth-client-credentials",
+  "params": {
+    "client_id": "ci-client",
+    "client_secret": "env:MYAPI_CLIENT_SECRET",
+    "issuer_url": "https://issuer.example.com"
+  }
+}
+```
+
 ### OAuth Device Code Example
 
 Use device code when the machine running Restish cannot complete a browser
@@ -384,6 +405,11 @@ This is useful when:
 The tool receives the full outbound request, including any headers already
 added earlier in request preparation. Treat it as trusted code.
 
+Remote OpenAPI specs cannot install or approve external commands
+automatically. A spec can suggest an auth shape through `x-cli-config`, but the
+local `commandline` value and its first-run approval must come from the user or
+a trusted setup script.
+
 OAuth discovery, authorization, device, and token HTTP requests use the same
 TLS trust flags as ordinary requests, including `--rsh-ca-cert`,
 `--rsh-tls-min-version`, and `--rsh-insecure`.
@@ -467,6 +493,11 @@ command.
 
 That keeps authentication in the same request-time extension seam as the
 built-in auth types.
+
+Provider-specific OAuth token exchange is a good plugin fit when the standard
+OAuth handlers are too small. The plugin can own the provider-specific exchange
+and return ordinary request updates, while Restish keeps the rest of the
+request pipeline unchanged.
 
 ## Learn More
 

@@ -56,6 +56,17 @@ The important mapping rules are:
 That makes `operationId` one of the most important author-controlled inputs to
 the final CLI shape.
 
+Generated commands are operation-first. Generic HTTP commands are
+method-and-path-first. For example:
+
+```bash
+restish example create-repo org: myorg repo: myrepo
+restish put example/repos org: myorg repo: myrepo
+```
+
+The first form comes from an OpenAPI operation. The second form remains useful
+for exploration or for paths that are not represented in the spec yet.
+
 For operations with request bodies, users can ask Restish to print an example
 body without sending a request:
 
@@ -66,6 +77,65 @@ restish myapi create-item --rsh-generate-body
 The example comes from OpenAPI examples, schema examples/defaults/enums, or
 schema-derived placeholders. Users can redirect it to a file, edit it, and pass
 that file back as request input.
+
+## Query Parameter Serialization
+
+Scalar query parameters are single-value flags or positional arguments:
+
+```yaml
+parameters:
+  - name: filter
+    in: query
+    schema:
+      type: string
+```
+
+```bash
+restish example list-items --filter active
+# sends ?filter=active
+```
+
+Repeated query parameters should be modeled as OpenAPI arrays. Restish treats
+scalar params as single values; they are intentionally not repeatable unless
+the spec says the parameter is an array.
+
+For the common repeated form, use `style: form` and `explode: true`:
+
+```yaml
+parameters:
+  - name: tag
+    in: query
+    style: form
+    explode: true
+    schema:
+      type: array
+      items:
+        type: string
+```
+
+```bash
+restish example list-items --tag red --tag blue
+# sends ?tag=red&tag=blue
+```
+
+For comma-joined arrays, use `style: form` and `explode: false`:
+
+```yaml
+parameters:
+  - name: ids
+    in: query
+    style: form
+    explode: false
+    schema:
+      type: array
+      items:
+        type: string
+```
+
+```bash
+restish example list-items --ids 10 --ids 20
+# sends ?ids=10,20
+```
 
 ## CLI-Specific OpenAPI Extensions
 
@@ -195,6 +265,10 @@ Do not put secrets in the OpenAPI document. v1-style `x-cli-config.prompt` is
 still supported for specs already in the wild: `api configure` prompts once,
 writes the answers into the local profile config, and never prompts from
 `x-cli-config` during normal requests.
+
+Remote specs also cannot install or approve `external-tool` auth commands.
+Use `x-cli-config` to describe the desired auth profile, then have users or a
+trusted setup script configure the local command line explicitly.
 
 Legacy prompt-shaped config is normalized to the `default` profile:
 

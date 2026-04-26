@@ -131,9 +131,32 @@ cat payload.txt | restish post https://api.rest.sh
 One subtle but important rule is that file-reference shorthand is
 content-type-aware.
 
-For form-style content types such as `multipart/form-data`, Restish does not
-eagerly interpret values like `@upload.txt` as shorthand file input. It keeps
-them literal so form submissions behave predictably.
+For structured JSON/YAML bodies, `@file` shorthand loads a file as a value. For
+multipart bodies, `@file` becomes a file part instead:
+
+```bash
+restish post -c multipart https://api.example.com/uploads \
+  name: avatar \
+  file: @./avatar.png
+```
+
+That sends a `multipart/form-data` request with a generated boundary, a text
+field named `name`, and a file field named `file`.
+
+Multiple form fields and repeated file fields work through the same shorthand
+shape:
+
+```bash
+restish post -c multipart https://api.example.com/uploads \
+  title: report \
+  attachments[]: @./summary.pdf \
+  attachments[]: @./data.csv
+```
+
+Restish only treats `@...` as file input where the selected content type calls
+for it. It does not fetch remote URLs, expand shell globs itself, or run command
+substitutions. Keep paths quoted when your shell might rewrite them before
+Restish sees the argument.
 
 ## Shell Quoting
 

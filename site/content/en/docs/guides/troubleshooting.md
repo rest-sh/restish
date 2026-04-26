@@ -178,6 +178,16 @@ Work through this in order:
 
 Use `--rsh-insecure` only as a temporary debugging step.
 
+For PKCS#11-backed client keys, install the `restish-pkcs11` TLS signer plugin
+and pass signer params instead of a private-key file:
+
+```bash
+restish https://api.example.com \
+  --rsh-tls-signer pkcs11 \
+  --rsh-tls-signer-param module=/path/to/opensc-pkcs11.so \
+  --rsh-tls-signer-param label=my-cert
+```
+
 ## Two Operations Produce the Same Command Name
 
 Symptoms:
@@ -269,20 +279,27 @@ refresh.
 ## Config Migrated from v1 — Where Did My APIs Go?
 
 Restish v2 reads config from a new path (`restish.json` in
-`$RSH_CONFIG_DIR` or the platform default config directory). It does not
-automatically migrate v1 config on first run.
+`$RSH_CONFIG_DIR` or the platform default config directory). On the first v2
+run, if no v2 `restish.json` exists, Restish checks the legacy v1 config
+location and migrates `apis.json` and `config.json` into v2 config.
 
-To locate your v1 config:
+If APIs are missing, first check whether you selected an explicit config file.
+`--rsh-config` and `RSH_CONFIG` are exact file selections: if the selected file
+does not exist, Restish errors instead of falling back to global config or
+running v1 migration.
+
+To inspect a legacy v1 config manually:
 
 ```bash
 cat ~/.restish/apis.json 2>/dev/null || echo "not found"
 ```
 
-Migration steps:
+Recovery steps:
 
-1. export each API name and base URL from the v1 config
-2. run `restish api configure <name> <base_url>` for each
-3. re-run `restish api sync <name>` if the spec is not auto-discovered
+1. run without `--rsh-config` once to let default-location migration happen, or
+   create the selected file intentionally
+2. check the generated `restish.json` and `.bak.v1` backup
+3. run `restish api sync <name>` if a migrated API needs a fresh spec cache
 
 See the [Upgrade from v1](/docs/getting-started/upgrade-from-v1/) guide for a
 complete list of breaking changes.

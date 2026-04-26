@@ -114,6 +114,77 @@ or `spec_files` explicitly:
 Use `spec_files` when you want to point at local files or merge multiple spec
 documents in order.
 
+`base_url` and `spec_url` have different jobs:
+
+- `base_url` is the request root Restish uses for API calls
+- `spec_url` is only where Restish fetches the OpenAPI document
+
+That matters for APIs that publish docs from a separate path:
+
+```json
+{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "spec_url": "https://api.example.com/v3/api-docs"
+    }
+  }
+}
+```
+
+If an OpenAPI document includes path elements that should not be repeated in
+generated operation URLs, set `operation_base`. This is the v2 replacement for
+older setups that effectively ignored part of the API base path:
+
+```json
+{
+  "apis": {
+    "billing": {
+      "base_url": "https://billing.example.com/api/v2-beta1",
+      "operation_base": "/",
+      "spec_url": "https://billing.example.com/openapi.json"
+    }
+  }
+}
+```
+
+`operation_base` must be an absolute path such as `/` or `/v1`; it is resolved
+against `base_url`.
+
+## Non-Interactive Setup
+
+Use `api add` when you already know the API name and base URL:
+
+```bash
+restish api add example https://api.example.com \
+  spec_url: https://api.example.com/v3/api-docs \
+  profiles.default.headers[]: "Accept: application/json"
+```
+
+Use `api set` for later edits:
+
+```bash
+restish api set example spec_url: https://api.example.com/openapi.json
+restish api set example profiles.default.query[]: "per_page=100"
+restish api set example operation_base: /
+```
+
+Use `api configure` when you want Restish to discover the spec and apply
+`x-cli-config` defaults from it:
+
+```bash
+restish api configure example https://api.example.com \
+  prompt.api_key: env:EXAMPLE_API_KEY
+```
+
+For project-local setup scripts, combine those commands with an explicit
+config file:
+
+```bash
+restish --rsh-config ./restish.json api add example https://api.example.com
+restish --rsh-config ./restish.json api sync example
+```
+
 ## Generated Command Shape
 
 Generated commands are grouped under the API short name. They behave like
@@ -124,6 +195,35 @@ For example:
 ```bash
 restish example get-image jpeg
 ```
+
+Generated commands name the operation. Generic HTTP commands name the method
+and path. For the same API, these are intentionally different shapes:
+
+```bash
+restish example create-repo org: myorg repo: myrepo
+restish put example/repos org: myorg repo: myrepo
+```
+
+Use the generated command when the OpenAPI operation is known and stable. Use
+the generic form when you are exploring, testing a new path, or calling an
+endpoint before it appears in the spec.
+
+## Shipping A Preconfigured Experience
+
+API authors can make setup smoother without asking users to run arbitrary code:
+
+- publish a discoverable OpenAPI document
+- include `x-cli-config` for safe defaults such as profiles, headers, query
+  params, and auth shape
+- provide a small setup script that runs `restish api configure` or
+  `restish api add` with an explicit config file
+- ship command plugins for workflows that are larger than one HTTP operation
+- tell users to run `restish api sync <name>` after the spec changes
+
+Remote specs cannot install or approve `external-tool` auth commands
+automatically. A spec can describe the auth shape, but local command execution
+is a separate trust decision that the user or setup script must configure and
+approve on the machine running Restish.
 
 ## When To Re-Sync
 
