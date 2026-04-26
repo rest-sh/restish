@@ -162,6 +162,12 @@ func (r *Registry) AcceptEncodingHeader() string {
 // is always safe to pass to encoding/json. Returns the raw bytes as a
 // string or []byte if no match is found.
 func (r *Registry) Decode(mimeType string, data []byte) (any, error) {
+	if strings.EqualFold(strings.TrimSpace(mimeType), "identity") {
+		if b, ok := Printable(data); ok {
+			return string(b), nil
+		}
+		return data, nil
+	}
 	ct := r.find(mimeType)
 	if ct == nil {
 		if b, ok := Printable(data); ok {

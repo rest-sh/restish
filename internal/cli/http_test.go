@@ -114,6 +114,25 @@ func TestBareURL(t *testing.T) {
 	}
 }
 
+func TestHTTPResponseContentTypeIdentity(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"identity"}},
+			Body:       io.NopCloser(strings.NewReader("plain response")),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "-r", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "plain response" {
+		t.Fatalf("output = %q, want plain response", got)
+	}
+}
+
 func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

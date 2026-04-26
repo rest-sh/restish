@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -759,7 +760,10 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 		return rawURL, "", opts, nil
 	}
 
-	match, ok := c.matchAPIProfile(rawURL, profileName)
+	match, ok, err := c.matchAPIProfile(rawURL, profileName)
+	if err != nil {
+		return rawURL, "", opts, err
+	}
 	if !ok {
 		return rawURL, "", opts, nil
 	}
@@ -802,7 +806,7 @@ type apiProfileMatch struct {
 	score   int
 }
 
-func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool) {
+func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool, error) {
 	apiName, rest, _ := strings.Cut(rawURL, "/")
 	if api := c.cfg.APIs[apiName]; api != nil {
 		baseURL := api.BaseURL
@@ -814,10 +818,11 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 		if rest != "" {
 			expanded += "/" + rest
 		}
-		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true
+		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true, nil
 	}
 
 	var best apiProfileMatch
+	var ties []string
 	for name, api := range c.cfg.APIs {
 		if api == nil {
 			continue
@@ -829,13 +834,22 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 		}
 		for _, base := range bases {
 			score, ok := matchURLBase(rawURL, base)
-			if !ok || score <= best.score {
+			if !ok || score < best.score {
+				continue
+			}
+			if score == best.score && best.apiName != "" {
+				ties = append(ties, name)
 				continue
 			}
 			best = apiProfileMatch{apiName: name, api: api, profile: prof, rawURL: rawURL, score: score}
+			ties = []string{name}
 		}
 	}
-	return best, best.apiName != ""
+	if best.apiName != "" && len(ties) > 1 {
+		sort.Strings(ties)
+		return apiProfileMatch{}, false, fmt.Errorf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", rawURL, strings.Join(ties, ", "))
+	}
+	return best, best.apiName != "", nil
 }
 
 func profileForName(api *config.APIConfig, profileName string) *config.ProfileConfig {

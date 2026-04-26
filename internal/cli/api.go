@@ -160,10 +160,6 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	}
 	apiCfg := c.cfg.APIs[apiName]
 
-	if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
-		return fmt.Errorf("api sync: invalidate cache: %w", err)
-	}
-
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	discCfg := spec.DiscoverConfig{
 		APIName:          apiName,
@@ -176,10 +172,11 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
+		ForceRefresh:     true,
 	}
 	apiSpec, err := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 	if err != nil {
-		return fmt.Errorf("api sync: %w", err)
+		return fmt.Errorf("api sync %q failed: %w\nhint: API registration and existing spec cache were left unchanged; check the network and spec_url, then retry api sync", apiName, err)
 	}
 
 	if apiSpec != nil {

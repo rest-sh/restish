@@ -82,6 +82,17 @@ restish https://api.rest.sh/images -v
 If you need byte-for-byte wire debugging, use curl directly for that check and
 then bring the confirmed headers or body back into Restish.
 
+## A Server Requires Exact Header Casing
+
+HTTP header names are case-insensitive. Restish uses Go's standard HTTP
+transport, which canonicalizes header names and may use HTTP/2 where header
+names are lowercase on the wire.
+
+If a broken HTTP/1.1 server requires exact outbound header casing, Restish
+cannot currently guarantee that casing without replacing the transport. Use
+curl or a small purpose-built helper for that endpoint, or fix the server/proxy
+to treat header names case-insensitively.
+
 ## The Command Failed Because of HTTP Status, But I Still Need the Body
 
 Use:

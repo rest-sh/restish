@@ -56,6 +56,16 @@ func TestYAMLRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDecodeIdentityContentType(t *testing.T) {
+	out, err := reg.Decode("identity", []byte("plain response"))
+	if err != nil {
+		t.Fatalf("decode identity: %v", err)
+	}
+	if out != "plain response" {
+		t.Fatalf("identity decode = %#v, want plain response", out)
+	}
+}
+
 func TestCBORRoundTrip(t *testing.T) {
 	in := map[string]any{"cbor": true}
 	out := roundTrip(t, "application/cbor", in)
@@ -157,6 +167,21 @@ func TestGzipDecompression(t *testing.T) {
 	}
 	if string(data) != `{"compressed":true}` {
 		t.Errorf("decompressed: %q", data)
+	}
+}
+
+func TestIdentityDecompressionNoOp(t *testing.T) {
+	rc, err := reg.Decompress("identity", strings.NewReader("plain"))
+	if err != nil {
+		t.Fatalf("decompress identity: %v", err)
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read identity: %v", err)
+	}
+	if string(data) != "plain" {
+		t.Fatalf("identity decoded %q, want plain", data)
 	}
 }
 

@@ -293,6 +293,34 @@ func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
 	}
 }
 
+func TestApplyAPIProfileAmbiguousDuplicateBaseURL(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"a": {
+				BaseURL: "https://api.example.com/v1",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {},
+				},
+			},
+			"b": {
+				BaseURL: "https://api.example.com/v1",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {},
+				},
+			},
+		},
+	}
+
+	_, _, _, err := c.applyAPIProfile("https://api.example.com/v1/items", "default", request.Options{}, authHandlerOptions{})
+	if err == nil {
+		t.Fatal("expected duplicate base URL ambiguity error")
+	}
+	if !strings.Contains(err.Error(), "ambiguous API match") || !strings.Contains(err.Error(), "a, b") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestApplyAPIProfileMatchesFullBaseURLWithAuthAndNamespace(t *testing.T) {
 	c := New()
 	c.AddAuthHandler("test", testAuthHandler{})

@@ -2,10 +2,12 @@ package cli_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1252,6 +1254,38 @@ func TestAPISyncReportsSuccess(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Synced") {
 		t.Errorf("expected Synced in output, got: %q", out.String())
+	}
+}
+
+func TestAPISyncNetworkFailureLeavesRegistrationAndCache(t *testing.T) {
+	c := newSpecTestCLI(t, "syncapi", "https://api.example.com")
+	cacheFile := filepath.Join(c.Hooks().SpecCachePath, "syncapi.cbor")
+	if err := os.MkdirAll(filepath.Dir(cacheFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cacheFile, []byte("existing-cache"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("offline")
+	})
+
+	err := c.Run([]string{"restish", "api", "sync", "syncapi"})
+	if err == nil {
+		t.Fatal("expected api sync failure")
+	}
+	if !strings.Contains(err.Error(), "left unchanged") {
+		t.Fatalf("expected unchanged hint, got %v", err)
+	}
+	if _, statErr := os.Stat(cacheFile); statErr != nil {
+		t.Fatalf("expected existing cache to remain: %v", statErr)
+	}
+	cfg, loadErr := config.Load(c.Hooks().ConfigPath)
+	if loadErr != nil {
+		t.Fatalf("load config: %v", loadErr)
+	}
+	if cfg.APIs["syncapi"] == nil {
+		t.Fatal("expected API registration to remain")
 	}
 }
 
