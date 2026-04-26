@@ -17,6 +17,7 @@ import (
 type MigrationInfo struct {
 	SourcePath string
 	BackupPath string
+	Warnings   []string
 }
 
 type legacyConfigSource struct {
@@ -130,7 +131,7 @@ func loadLegacyConfigSource(dir string) (*legacyConfigSource, error) {
 }
 
 func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, error) {
-	cfg, err := parseLegacyConfig(source)
+	cfg, warnings, err := parseLegacyConfig(source)
 	if err != nil {
 		return nil, err
 	}
@@ -155,29 +156,33 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 	loaded.Migration = &MigrationInfo{
 		SourcePath: source.dir,
 		BackupPath: backupDir,
+		Warnings:   warnings,
 	}
 	return loaded, nil
 }
 
-func parseLegacyConfig(source *legacyConfigSource) (*Config, error) {
+func parseLegacyConfig(source *legacyConfigSource) (*Config, []string, error) {
 	cfg := &Config{}
 	if len(source.apisData) == 0 {
-		return cfg, nil
+		return cfg, nil, nil
 	}
 
 	raw, err := parseLegacyAPIMap(source.apisPath, source.apisData)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(raw) == 0 {
-		return cfg, nil
+		return cfg, nil, nil
 	}
 
+	var warnings []string
 	cfg.APIs = make(map[string]*APIConfig, len(raw))
 	for name, legacy := range raw {
-		cfg.APIs[name] = convertLegacyAPIConfig(legacy)
+		api, apiWarnings := convertLegacyAPIConfig(name, legacy)
+		cfg.APIs[name] = api
+		warnings = append(warnings, apiWarnings...)
 	}
-	return cfg, nil
+	return cfg, warnings, nil
 }
 
 func parseLegacyAPIMap(path string, data []byte) (map[string]*legacyAPIConfig, error) {
@@ -200,14 +205,15 @@ func parseLegacyAPIMap(path string, data []byte) (map[string]*legacyAPIConfig, e
 	return result, nil
 }
 
-func convertLegacyAPIConfig(legacy *legacyAPIConfig) *APIConfig {
+func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, []string) {
 	if legacy == nil {
-		return &APIConfig{}
+		return &APIConfig{}, nil
 	}
+	operationBase, warning := convertLegacyOperationBase(name, legacy.OperationBase)
 
 	api := &APIConfig{
 		BaseURL:       legacy.Base,
-		OperationBase: convertLegacyOperationBase(legacy.Base, legacy.OperationBase),
+		OperationBase: operationBase,
 		SpecFiles:     append([]string(nil), legacy.SpecFiles...),
 	}
 	if len(legacy.Profiles) > 0 {
@@ -240,17 +246,21 @@ func convertLegacyAPIConfig(legacy *legacyAPIConfig) *APIConfig {
 		}
 	}
 
-	return api
+	var warnings []string
+	if warning != "" {
+		warnings = append(warnings, warning)
+	}
+	return api, warnings
 }
 
-func convertLegacyOperationBase(_ string, operationBase string) string {
+func convertLegacyOperationBase(apiName, operationBase string) (string, string) {
 	if operationBase == "" {
-		return ""
+		return "", ""
 	}
 	if err := ValidateOperationBase(operationBase); err == nil {
-		return operationBase
+		return operationBase, ""
 	}
-	return ""
+	return "", fmt.Sprintf("api %q: dropped invalid legacy operation_base %q; v2 operation_base must be an absolute path", apiName, operationBase)
 }
 
 func convertLegacyProfile(legacy *legacyAPIProfile) *ProfileConfig {

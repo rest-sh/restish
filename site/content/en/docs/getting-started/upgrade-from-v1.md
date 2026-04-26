@@ -31,6 +31,11 @@ Migrated config from v1 at /path/to/restish; kept backup at /path/to/restish.bak
 
 That backup directory contains copies of your original v1 files.
 
+Migration warnings are printed after the notice when v1 values cannot be
+carried over safely. For example, v2 only accepts `operation_base` as an
+absolute path such as `/v1`; legacy full-URL `operation_base` values are
+dropped with a warning instead of being rewritten to a different host.
+
 ## Config Migration
 
 When v2 does not find `restish.json`, it checks the legacy v1 config locations:

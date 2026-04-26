@@ -41,6 +41,13 @@ type XCLIProfile struct {
 	// Prompt describes configuration-time questions. Prompted values are written
 	// into Params before Resolve runs; prompts are never evaluated at request time.
 	Prompt map[string]XCLIPromptVar `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+
+	// PromptValues holds configure-time prompt answers, including excluded
+	// answers that are only available for template expansion.
+	PromptValues map[string]string `json:"-" yaml:"-"`
+	// PromptedParams marks Params entries that came directly from prompt input.
+	// Prompt answers are literal values and are not expanded a second time.
+	PromptedParams map[string]bool `json:"-" yaml:"-"`
 }
 
 // XCLIPromptVar describes a single configuration-time prompt from the legacy
@@ -217,17 +224,30 @@ func cloneXCLIProfile(src *XCLIProfile) *XCLIProfile {
 		return &XCLIProfile{}
 	}
 	dst := &XCLIProfile{
-		Headers:  append([]string(nil), src.Headers...),
-		Query:    append([]string(nil), src.Query...),
-		Security: src.Security,
-		Params:   cloneStringMap(src.Params),
-		Prompt:   clonePromptMap(src.Prompt),
+		Headers:        append([]string(nil), src.Headers...),
+		Query:          append([]string(nil), src.Query...),
+		Security:       src.Security,
+		Params:         cloneStringMap(src.Params),
+		Prompt:         clonePromptMap(src.Prompt),
+		PromptValues:   cloneStringMap(src.PromptValues),
+		PromptedParams: cloneBoolMap(src.PromptedParams),
 	}
 	if src.Auth != nil {
 		dst.Auth = &XCLIAuth{
 			Type:   src.Auth.Type,
 			Params: cloneStringMap(src.Auth.Params),
 		}
+	}
+	return dst
+}
+
+func cloneBoolMap(src map[string]bool) map[string]bool {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]bool, len(src))
+	for k, v := range src {
+		dst[k] = v
 	}
 	return dst
 }
@@ -274,10 +294,22 @@ func sortedLegacyHeaders(headers map[string]string) []string {
 // ExpandParams replaces {var} placeholders in s with the corresponding values
 // from params. Unrecognised placeholders are left as-is.
 func ExpandParams(s string, params map[string]string) string {
-	for k, v := range params {
-		s = strings.ReplaceAll(s, "{"+k+"}", v)
+	var out strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '{' {
+			if end := strings.IndexByte(s[i+1:], '}'); end >= 0 {
+				key := s[i+1 : i+1+end]
+				if value, ok := params[key]; ok {
+					out.WriteString(value)
+					i += end + 2
+					continue
+				}
+			}
+		}
+		out.WriteByte(s[i])
+		i++
 	}
-	return s
+	return out.String()
 }
 
 // Resolve returns a copy of xcli with all Security scheme names resolved to
@@ -308,22 +340,34 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 	}
 
 	for name, xp := range xcli.Profiles {
+		expansionParams := cloneStringMap(xp.Params)
+		if expansionParams == nil {
+			expansionParams = map[string]string{}
+		}
+		for k, v := range xp.PromptValues {
+			expansionParams[k] = v
+		}
+		resolvedParams := expandXCLIParams(xp.Params, expansionParams, xp.PromptedParams)
+
 		rp := &XCLIProfile{
 			Query: xp.Query,
 		}
 
 		// Resolve Security → Auth when no explicit Auth is set.
 		auth := cloneXCLIAuth(xp.Auth)
+		if auth != nil && len(auth.Params) > 0 {
+			auth.Params = expandStringMap(auth.Params, expansionParams)
+		}
 		if auth == nil && xp.Security != "" {
 			if scheme, ok := schemeMap[xp.Security]; ok {
-				auth = SchemeToXCLIAuth(scheme, xp.Params)
+				auth = SchemeToXCLIAuth(scheme, resolvedParams)
 			}
 		}
 		if auth == nil && xp.Security != "" {
-			auth = &XCLIAuth{Type: xp.Security, Params: cloneStringMap(xp.Params)}
+			auth = &XCLIAuth{Type: xp.Security, Params: cloneStringMap(resolvedParams)}
 		}
-		if auth != nil && len(xp.Params) > 0 {
-			params := cloneStringMap(xp.Params)
+		if auth != nil && len(resolvedParams) > 0 {
+			params := cloneStringMap(resolvedParams)
 			for k, v := range auth.Params {
 				params[k] = v
 			}
@@ -334,13 +378,39 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 		// Expand {var} templates in headers.
 		rp.Headers = make([]string, len(xp.Headers))
 		for i, h := range xp.Headers {
-			rp.Headers[i] = ExpandParams(h, xp.Params)
+			rp.Headers[i] = ExpandParams(h, expansionParams)
 		}
 
 		resolved.Profiles[name] = rp
 	}
 
 	return resolved
+}
+
+func expandXCLIParams(params map[string]string, expansionParams map[string]string, prompted map[string]bool) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(params))
+	for k, v := range params {
+		if prompted[k] {
+			out[k] = v
+			continue
+		}
+		out[k] = ExpandParams(v, expansionParams)
+	}
+	return out
+}
+
+func expandStringMap(params map[string]string, expansionParams map[string]string) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(params))
+	for k, v := range params {
+		out[k] = ExpandParams(v, expansionParams)
+	}
+	return out
 }
 
 func cloneXCLIAuth(src *XCLIAuth) *XCLIAuth {

@@ -66,6 +66,14 @@ restish https://api.rest.sh/images --rsh-no-cache
 
 That disables both cache reads and cache writes for that request.
 
+Verbose mode includes cache hits in the same request/response transcript as
+live responses. When a response is served from the local cache, stderr includes
+`* Cache: HIT`:
+
+```bash
+restish https://api.rest.sh/images -v
+```
+
 ## How Cache And Retry Work Together
 
 The transport is layered so cache hits return immediately, while only real

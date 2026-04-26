@@ -288,7 +288,12 @@ func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error
 		if profile.Params == nil {
 			profile.Params = map[string]string{}
 		}
-		responses := map[string]string{}
+		if profile.PromptValues == nil {
+			profile.PromptValues = map[string]string{}
+		}
+		if profile.PromptedParams == nil {
+			profile.PromptedParams = map[string]bool{}
+		}
 		promptNames := make([]string, 0, len(profile.Prompt))
 		for name := range profile.Prompt {
 			promptNames = append(promptNames, name)
@@ -300,21 +305,11 @@ func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error
 			if err != nil {
 				return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
 			}
-			responses[name] = value
+			profile.PromptValues[name] = value
 			if !profile.Prompt[name].Exclude {
 				profile.Params[name] = value
+				profile.PromptedParams[name] = true
 			}
-		}
-		for k, v := range profile.Params {
-			profile.Params[k] = spec.ExpandParams(v, responses)
-		}
-		if profile.Auth != nil && len(profile.Auth.Params) > 0 {
-			for k, v := range profile.Auth.Params {
-				profile.Auth.Params[k] = spec.ExpandParams(v, responses)
-			}
-		}
-		for i, h := range profile.Headers {
-			profile.Headers[i] = spec.ExpandParams(h, responses)
 		}
 	}
 	return nil
@@ -322,29 +317,33 @@ func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error
 
 func (c *CLI) readXCLIPrompt(ctx context.Context, profileName, name string, prompt spec.XCLIPromptVar) (string, error) {
 	label := xcliPromptLabel(profileName, name, prompt)
-	var (
-		value string
-		err   error
-	)
-	if xcliPromptLooksSecret(name) {
-		value, err = c.Secret(ctx, label)
-	} else {
-		value, err = c.Prompt(ctx, label)
+	for {
+		var (
+			value string
+			err   error
+		)
+		if xcliPromptLooksSecret(name) {
+			value, err = c.Secret(ctx, label)
+		} else {
+			value, err = c.Prompt(ctx, label)
+		}
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if value == "" && prompt.Default != nil {
+			value = fmt.Sprint(prompt.Default)
+		}
+		if value == "" {
+			fmt.Fprintf(c.Stderr, "%s is required; please enter a non-empty value.\n", name)
+			continue
+		}
+		if len(prompt.Enum) > 0 && !xcliPromptValueAllowed(value, prompt.Enum) {
+			fmt.Fprintf(c.Stderr, "%s must be one of: %s.\n", name, xcliPromptEnumList(prompt.Enum))
+			continue
+		}
+		return value, nil
 	}
-	if err != nil {
-		return "", err
-	}
-	value = strings.TrimSpace(value)
-	if value == "" && prompt.Default != nil {
-		value = fmt.Sprint(prompt.Default)
-	}
-	if value == "" {
-		return "", fmt.Errorf("empty value")
-	}
-	if len(prompt.Enum) > 0 && !xcliPromptValueAllowed(value, prompt.Enum) {
-		return "", fmt.Errorf("value %q is not one of: %s", value, xcliPromptEnumList(prompt.Enum))
-	}
-	return value, nil
 }
 
 func xcliPromptLabel(profileName, name string, prompt spec.XCLIPromptVar) string {
@@ -388,6 +387,12 @@ func xcliPromptLooksSecret(name string) bool {
 	return strings.Contains(lower, "password") ||
 		strings.Contains(lower, "secret") ||
 		strings.Contains(lower, "token") ||
+		strings.Contains(lower, "auth_token") ||
+		strings.Contains(lower, "access_key") ||
+		strings.Contains(lower, "credential") ||
+		strings.Contains(lower, "credentials") ||
+		strings.Contains(lower, "passphrase") ||
+		strings.Contains(lower, "bearer") ||
 		strings.Contains(lower, "api_key") ||
 		strings.Contains(lower, "apikey") ||
 		strings.Contains(lower, "private_key")

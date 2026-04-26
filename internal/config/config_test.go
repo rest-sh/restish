@@ -512,6 +512,72 @@ func TestLoadValidatesOperationBasePath(t *testing.T) {
 			}
 		})
 	}
+
+	for _, tc := range []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{name: "empty", baseURL: "", want: "absolute http/https URL"},
+		{name: "malformed", baseURL: "://bad", want: "absolute http/https URL"},
+		{name: "non-http", baseURL: "file:///tmp/api", want: "http or https"},
+	} {
+		t.Run("base_url_"+tc.name, func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": %q,
+      "operation_base": "/v1"
+    }
+  }
+}`, tc.baseURL))
+			_, err := config.Load(path)
+			if err == nil {
+				t.Fatal("expected invalid operation_base/base_url combination to be rejected")
+			}
+			if !strings.Contains(err.Error(), "apis.example.base_url") || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected base_url error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestLoad_MigratesLegacyFullURLOperationBaseWithWarning(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "bad": {
+    "base": "https://api.example.com/root",
+    "operation_base": "https://other.example.com/v1"
+  },
+  "good": {
+    "base": "https://api.example.com/root",
+    "operation_base": "/v2"
+  }
+}`)
+
+	t.Setenv("RSH_CONFIG_DIR", filepath.Join(home, ".config", "restish-v2"))
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.APIs["bad"].OperationBase; got != "" {
+		t.Fatalf("bad OperationBase = %q, want dropped", got)
+	}
+	if got := cfg.APIs["good"].OperationBase; got != "/v2" {
+		t.Fatalf("good OperationBase = %q, want /v2", got)
+	}
+	if cfg.Migration == nil || len(cfg.Migration.Warnings) != 1 {
+		t.Fatalf("expected one migration warning, got %#v", cfg.Migration)
+	}
+	warning := cfg.Migration.Warnings[0]
+	for _, want := range []string{`api "bad"`, `https://other.example.com/v1`, "dropped invalid legacy operation_base"} {
+		if !strings.Contains(warning, want) {
+			t.Fatalf("warning missing %q: %q", want, warning)
+		}
+	}
 }
 
 func TestLoad_MigratesLegacyLinuxConfig(t *testing.T) {

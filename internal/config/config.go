@@ -229,6 +229,11 @@ func Validate(cfg *Config) error {
 		if err := ValidateOperationBase(api.OperationBase); err != nil {
 			return fmt.Errorf("apis.%s.operation_base: %w", name, err)
 		}
+		if api.OperationBase != "" {
+			if err := ValidateBaseURLForOperationBase(api.BaseURL); err != nil {
+				return fmt.Errorf("apis.%s.base_url: %w", name, err)
+			}
+		}
 	}
 	return nil
 }
@@ -252,6 +257,22 @@ func ValidateOperationBase(raw string) error {
 	return nil
 }
 
+// ValidateBaseURLForOperationBase ensures operation_base can be resolved at
+// load time instead of failing later when generated commands run.
+func ValidateBaseURLForOperationBase(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() {
+		return fmt.Errorf("must be an absolute http/https URL when operation_base is set")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("must use http or https when operation_base is set")
+	}
+	if u.Host == "" {
+		return fmt.Errorf("must be an absolute http/https URL when operation_base is set")
+	}
+	return nil
+}
+
 // ResolveOperationBaseURL resolves an absolute operation_base path against the
 // API base URL using the same URL-reference semantics as Restish v1.
 func ResolveOperationBaseURL(baseURL, operationBase string) (string, error) {
@@ -262,11 +283,10 @@ func ResolveOperationBaseURL(baseURL, operationBase string) (string, error) {
 		return "", err
 	}
 	base, err := url.Parse(baseURL)
-	if err != nil || !base.IsAbs() || base.Host == "" {
-		return "", fmt.Errorf("base_url must be an absolute URL")
-	}
-	if base.Scheme != "http" && base.Scheme != "https" {
-		return "", fmt.Errorf("base_url must use http or https")
+	if err != nil || !base.IsAbs() || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+		if validateErr := ValidateBaseURLForOperationBase(baseURL); validateErr != nil {
+			return "", validateErr
+		}
 	}
 	return base.ResolveReference(&url.URL{Path: operationBase}).String(), nil
 }

@@ -4,7 +4,9 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -149,6 +151,68 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 	}
 	if strings.Count(stderr, `\u003credacted\u003e`) < 2 && strings.Count(stderr, "<redacted>") < 2 {
 		t.Fatalf("expected redacted request and response bodies, got:\n%s", stderr)
+	}
+}
+
+func TestVerboseLogsRequestBodyBeforeResponseHeaders(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 201,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "name: Ada"}); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	stderr := errOut.String()
+	bodyAt := strings.Index(stderr, "> body:")
+	responseAt := strings.Index(stderr, "< HTTP/1.1 201")
+	if bodyAt < 0 || responseAt < 0 {
+		t.Fatalf("expected request body and response headers in verbose output, got:\n%s", stderr)
+	}
+	if bodyAt > responseAt {
+		t.Fatalf("expected request body before response headers, got:\n%s", stderr)
+	}
+}
+
+func TestVerboseLogsCachedResponses(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=3600")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cacheDir := t.TempDir()
+	c1, _, errOut1 := newTestCLI(t)
+	c1.Hooks().CachePath = cacheDir
+	if err := c1.Run([]string{"restish", "get", "-v", srv.URL}); err != nil {
+		t.Fatalf("first get: %v", err)
+	}
+	if strings.Contains(errOut1.String(), "* Cache: HIT") {
+		t.Fatalf("first request should not be marked as cache hit:\n%s", errOut1.String())
+	}
+
+	c2, _, errOut2 := newTestCLI(t)
+	c2.Hooks().CachePath = cacheDir
+	if err := c2.Run([]string{"restish", "get", "-v", srv.URL}); err != nil {
+		t.Fatalf("second get: %v", err)
+	}
+	stderr := errOut2.String()
+	for _, want := range []string{"> GET ", "< HTTP/1.1 200 OK", "* Cache: HIT"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("cached verbose output missing %q:\n%s", want, stderr)
+		}
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server hits = %d, want 1", got)
 	}
 }
 

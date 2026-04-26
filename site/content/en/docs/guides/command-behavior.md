@@ -50,6 +50,9 @@ output:
 - `hint:` an actionable next step, usually after ambiguous input
 - `stderr:` stderr captured from a plugin when it explains a plugin failure
 
+If a response comes from the local HTTP cache, verbose output still prints the
+request and response headers and adds `* Cache: HIT` before the response block.
+
 ## Ignore Status Codes
 
 If you care more about capturing the body than about HTTP-derived exit codes,

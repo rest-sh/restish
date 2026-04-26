@@ -549,6 +549,9 @@ func filterRequestsResponseMetadata(expr string) bool {
 // certificate chain (subject, issuer, expiry).
 func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 	req := resp.Request
+	if req == nil {
+		return
+	}
 	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, redactedRequestURL(req.URL))
 	for k, vs := range req.Header {
 		for _, v := range vs {
@@ -558,7 +561,11 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
 		}
 	}
+	c.logVerboseRequestBody(req)
 	fmt.Fprintln(c.Stderr, ">")
+	if resp.Header.Get("X-From-Cache") != "" {
+		fmt.Fprintln(c.Stderr, "* Cache: HIT")
+	}
 	fmt.Fprintf(c.Stderr, "< %s %d %s\n", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode))
 	for k, vs := range resp.Header {
 		for _, v := range vs {
@@ -812,7 +819,11 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 			continue
 		}
 		prof := profileForName(api, profileName)
-		for _, base := range apiMatchBases(api, prof) {
+		bases, err := apiMatchBases(api, prof)
+		if err != nil {
+			c.warnf("API %q: %v", name, err)
+		}
+		for _, base := range bases {
 			score, ok := matchURLBase(rawURL, base)
 			if !ok || score <= best.score {
 				continue
@@ -830,7 +841,7 @@ func profileForName(api *config.APIConfig, profileName string) *config.ProfileCo
 	return api.Profiles[profileName]
 }
 
-func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) []string {
+func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) ([]string, error) {
 	var bases []string
 	if api.BaseURL != "" {
 		bases = append(bases, api.BaseURL)
@@ -839,11 +850,13 @@ func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) []string {
 		bases = append(bases, prof.BaseURL)
 	}
 	if api.OperationBase != "" {
-		if resolved, err := config.ResolveOperationBaseURL(api.BaseURL, api.OperationBase); err == nil {
-			bases = append(bases, resolved)
+		resolved, err := config.ResolveOperationBaseURL(api.BaseURL, api.OperationBase)
+		if err != nil {
+			return bases, fmt.Errorf("operation_base: %w", err)
 		}
+		bases = append(bases, resolved)
 	}
-	return bases
+	return bases, nil
 }
 
 func matchURLBase(rawURL, rawBase string) (int, bool) {

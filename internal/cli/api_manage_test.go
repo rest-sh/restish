@@ -343,6 +343,158 @@ func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "headers": ["X-Env: {environment}"],
+        "prompt": {
+          "environment": {"description": "Environment", "enum": ["prod", "stage"]}
+        }
+      }
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("\nqa\nprod\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	errText := stderr.String()
+	if !strings.Contains(errText, "environment is required; please enter a non-empty value.") {
+		t.Fatalf("expected required-value retry guidance, got %q", errText)
+	}
+	if !strings.Contains(errText, "environment must be one of: prod, stage.") {
+		t.Fatalf("expected enum retry guidance, got %q", errText)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].Profiles["default"].Headers; len(got) != 1 || got[0] != "X-Env: prod" {
+		t.Fatalf("headers = %#v", got)
+	}
+}
+
+func TestAPIConfigureV2ProfilePromptShape(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "headers": ["X-Org: {org}", "Authorization: Bearer {auth_token}"],
+        "auth": {
+          "type": "bearer",
+          "params": {
+            "token": "{auth_token}",
+            "audience": "https://example.com/{org}"
+          }
+        },
+        "params": {
+          "region": "{org}-west"
+        },
+        "prompt": {
+          "auth_token": {"description": "API token"},
+          "org": {"description": "Organization"}
+        }
+      }
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("tok-{org}\nacme\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	prof := written.APIs["myapi"].Profiles["default"]
+	if prof == nil || prof.Auth == nil {
+		t.Fatalf("expected default auth profile, got %#v", prof)
+	}
+	for _, want := range []string{"X-Org: acme", "Authorization: Bearer tok-{org}"} {
+		if !containsString(prof.Headers, want) {
+			t.Fatalf("headers missing %q: %#v", want, prof.Headers)
+		}
+	}
+	for key, want := range map[string]string{
+		"auth_token": "tok-{org}",
+		"org":        "acme",
+		"region":     "acme-west",
+		"token":      "tok-{org}",
+		"audience":   "https://example.com/acme",
+	} {
+		if got := prof.Auth.Params[key]; got != want {
+			t.Fatalf("auth param %s = %q, want %q (all params %#v)", key, got, want, prof.Auth.Params)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 // TestAPIShow verifies that "api show" prints the API config as JSON.
 func TestAPIShow(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{

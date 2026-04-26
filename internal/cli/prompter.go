@@ -33,6 +33,9 @@ func (c *CLI) Prompt(ctx context.Context, label string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	if c.hooks.PromptFunc != nil {
+		return c.hooks.PromptFunc(ctx, label)
+	}
 	src, cleanup := c.promptSource()
 	defer cleanup()
 	return readPromptValue(label, src, c.Stderr, false)
@@ -42,6 +45,9 @@ func (c *CLI) Prompt(ctx context.Context, label string) (string, error) {
 func (c *CLI) Secret(ctx context.Context, label string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
+	}
+	if c.hooks.SecretFunc != nil {
+		return c.hooks.SecretFunc(ctx, label)
 	}
 	src, cleanup := c.promptSource()
 	defer cleanup()

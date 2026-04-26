@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"context"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 // TestAPIAddBuiltinNameRejected verifies that "api add" refuses names that
@@ -45,6 +49,49 @@ func TestBuiltinCommandNamesMatchRegisteredCommands(t *testing.T) {
 		if !isBuiltinCommandName(cmd.Name()) {
 			t.Fatalf("registered built-in %q missing from builtinCommands", cmd.Name())
 		}
+	}
+}
+
+func TestXCLIPromptLooksSecretCommonNames(t *testing.T) {
+	for _, name := range []string{
+		"auth_token",
+		"access_key",
+		"credential",
+		"credentials",
+		"passphrase",
+		"bearer",
+		"private_key",
+	} {
+		if !xcliPromptLooksSecret(name) {
+			t.Fatalf("xcliPromptLooksSecret(%q) = false, want true", name)
+		}
+	}
+	if xcliPromptLooksSecret("organization") {
+		t.Fatal("organization should not look secret")
+	}
+}
+
+func TestReadXCLIPromptUsesSecretForSecretLookingName(t *testing.T) {
+	c := &CLI{Stderr: io.Discard}
+	var secretPrompts int
+	c.hooks.PromptFunc = func(context.Context, string) (string, error) {
+		t.Fatal("expected secret prompt path")
+		return "", nil
+	}
+	c.hooks.SecretFunc = func(context.Context, string) (string, error) {
+		secretPrompts++
+		return "secret-value", nil
+	}
+
+	got, err := c.readXCLIPrompt(context.Background(), "default", "auth_token", spec.XCLIPromptVar{})
+	if err != nil {
+		t.Fatalf("readXCLIPrompt: %v", err)
+	}
+	if got != "secret-value" {
+		t.Fatalf("value = %q, want secret-value", got)
+	}
+	if secretPrompts != 1 {
+		t.Fatalf("secret prompts = %d, want 1", secretPrompts)
 	}
 }
 

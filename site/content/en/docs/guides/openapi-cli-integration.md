@@ -203,6 +203,11 @@ Prompted values are saved as auth params unless `exclude: true` is set. Excluded
 values can still be used in `{name}` templates for `params`, headers, and auth
 params during `api configure`.
 
+If a required prompt is left blank or an answer does not match its enum, Restish
+prints guidance and retries the same prompt. Prompt answers are treated as
+literal values, so an answer like `{org}` is not expanded again when headers or
+auth params are written.
+
 ## Authoring Advice That Pays Off
 
 - Give every user-facing operation a stable `operationId`.

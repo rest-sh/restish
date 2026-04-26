@@ -36,6 +36,10 @@ type testHooks struct {
 	ConfigPath string
 	// PassReader, if non-nil, is used as the source for secret prompts.
 	PassReader io.Reader
+	// PromptFunc overrides visible prompt reads in tests.
+	PromptFunc func(context.Context, string) (string, error)
+	// SecretFunc overrides secret prompt reads in tests.
+	SecretFunc func(context.Context, string) (string, error)
 	// TokenCachePath overrides the default token cache file location.
 	TokenCachePath string
 	// CachePath overrides the default HTTP response cache directory.
@@ -261,6 +265,9 @@ func (c *CLI) Run(args []string) error {
 	c.cfg = cfg
 	if cfg.Migration != nil {
 		c.infof("Migrated config from v1 at %s; kept backup at %s", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
+		for _, warning := range cfg.Migration.Warnings {
+			c.warnf("migration: %s", warning)
+		}
 	}
 	if err := output.SetTheme(output.ThemeEntries(cfg.Theme)); err != nil {
 		return fmt.Errorf("config theme: %w", err)

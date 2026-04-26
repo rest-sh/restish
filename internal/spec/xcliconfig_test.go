@@ -383,6 +383,25 @@ func TestResolve_HeaderExpansion(t *testing.T) {
 	}
 }
 
+func TestResolve_PromptedHeaderExpansionIsSinglePass(t *testing.T) {
+	xcli := &XCLIConfig{
+		Profiles: map[string]*XCLIProfile{
+			"default": {
+				Headers: []string{"X-Token: {token}"},
+				Params:  map[string]string{"token": "{org}", "org": "acme"},
+				PromptedParams: map[string]bool{
+					"token": true,
+				},
+			},
+		},
+	}
+	resolved := xcli.Resolve(nil)
+	got := resolved.Profiles["default"].Headers[0]
+	if got != "X-Token: {org}" {
+		t.Fatalf("header = %q, want prompted value preserved", got)
+	}
+}
+
 func TestResolve_ExplicitAuthTakesPrecedence(t *testing.T) {
 	raw := `
 openapi: "3.1.0"

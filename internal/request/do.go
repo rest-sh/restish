@@ -108,8 +108,8 @@ type Options struct {
 	RetryBaseDelay time.Duration
 	// Logger receives retry progress warnings on stderr-style output.
 	Logger io.Writer
-	// WrapTransport, when non-nil, wraps the network transport after TLS setup
-	// and before retry/cache layers are applied.
+	// WrapTransport, when non-nil, wraps the final transport after TLS, retry,
+	// and cache layers are applied.
 	WrapTransport func(http.RoundTripper) http.RoundTripper
 	// Transport, when passed to BuildTransport, is the underlying transport to
 	// wrap with TLS/cache/retry behavior. When passed to Do, it is treated as a
@@ -391,10 +391,6 @@ func BuildTransport(opts Options) http.RoundTripper {
 			return nil, err
 		})
 	}
-	if opts.WrapTransport != nil {
-		base = opts.WrapTransport(base)
-	}
-
 	// Wrap with retry if requested.
 	var inner http.RoundTripper = base
 	if opts.Retry > 0 {
@@ -406,6 +402,9 @@ func BuildTransport(opts Options) http.RoundTripper {
 	}
 
 	if opts.NoCache || opts.CacheDir == "" {
+		if opts.WrapTransport != nil {
+			return opts.WrapTransport(inner)
+		}
 		return inner
 	}
 	maxBytes := opts.CacheMaxBytes
@@ -415,11 +414,18 @@ func BuildTransport(opts Options) http.RoundTripper {
 	dc, err := cache.New(opts.CacheDir, maxBytes, opts.CacheNamespace)
 	if err != nil {
 		// Cache unavailable; fall back without caching.
+		if opts.WrapTransport != nil {
+			return opts.WrapTransport(inner)
+		}
 		return inner
 	}
 	ct := httpcache.NewTransport(dc)
 	ct.Transport = inner
-	return wrapTransportWithCloseFns(ct, transportCleanup(inner)...)
+	final := wrapTransportWithCloseFns(ct, transportCleanup(inner)...)
+	if opts.WrapTransport != nil {
+		return opts.WrapTransport(final)
+	}
+	return final
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

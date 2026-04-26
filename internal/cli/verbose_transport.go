@@ -20,7 +20,6 @@ func (t *verboseTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		resp.Request = req
 	}
 	t.cli.logVerbose(resp, t.verbose)
-	t.cli.logVerboseRequestBody(resp.Request)
 	return resp, err
 }
 
