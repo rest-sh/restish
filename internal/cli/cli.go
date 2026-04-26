@@ -214,6 +214,7 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		SpecFiles:        api.SpecFiles,
 		CacheDir:         c.specCacheDir(),
 		OperationBase:    api.OperationBase,
+		ServerVariables:  effectiveServerVariables(api, "default"),
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
@@ -311,9 +312,15 @@ func (c *CLI) Run(args []string) error {
 	// API's cached spec to avoid eagerly parsing every registered API.
 	// (Network discovery is not triggered here; use "restish api sync <name>"
 	// to prime the cache for an API.)
+	startupProfile := profileNameFromArgs(args)
 	for _, apiName := range c.generatedAPINames(args, cfg) {
 		apiCfg := cfg.APIs[apiName]
-		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, apiCfg.BaseURL, apiCfg.OperationBase); ok {
+		opOpts := spec.OperationOptions{
+			BaseURL:         apiCfg.BaseURL,
+			OperationBase:   apiCfg.OperationBase,
+			ServerVariables: effectiveServerVariables(apiCfg, startupProfile),
+		}
+		if set, ok := spec.LoadOperationSetFromCacheWithVariables(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
@@ -329,9 +336,9 @@ func (c *CLI) Run(args []string) error {
 		if err != nil || s == nil {
 			continue
 		}
-		set, opsErr := s.OperationSet(apiCfg.BaseURL, apiCfg.OperationBase)
+		set, opsErr := s.OperationSetWithOptions(opOpts)
 		if opsErr == nil {
-			_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, apiCfg.BaseURL, apiCfg.OperationBase, set)
+			_ = spec.StoreOperationSetInCacheWithVariables(c.specCacheDir(), apiName, Version, opOpts, set)
 		}
 		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)
@@ -349,6 +356,62 @@ func (c *CLI) Run(args []string) error {
 		return &ExitCodeError{Code: 130}
 	}
 	return err
+}
+
+func profileNameFromArgs(args []string) string {
+	profile := os.Getenv("RSH_PROFILE")
+	if profile == "" {
+		profile = "default"
+	}
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "--rsh-profile=") {
+			value := strings.TrimPrefix(arg, "--rsh-profile=")
+			if value != "" {
+				profile = value
+			}
+			continue
+		}
+		if arg == "--rsh-profile" || arg == "-p" {
+			if i+1 < len(args) && args[i+1] != "" {
+				profile = args[i+1]
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-p") && len(arg) > 2 {
+			profile = strings.TrimPrefix(arg, "-p")
+		}
+	}
+	return profile
+}
+
+func effectiveServerVariables(apiCfg *config.APIConfig, profileName string) map[string]string {
+	if apiCfg == nil {
+		return nil
+	}
+	var out map[string]string
+	for key, value := range apiCfg.ServerVariables {
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[key] = value
+	}
+	if profileName == "" {
+		profileName = "default"
+	}
+	if prof := apiCfg.Profiles[profileName]; prof != nil {
+		for key, value := range prof.ServerVariables {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[key] = value
+		}
+	}
+	return out
 }
 
 func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {

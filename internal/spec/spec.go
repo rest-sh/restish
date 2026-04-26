@@ -2,6 +2,8 @@
 package spec
 
 import (
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/pb33f/libopenapi"
@@ -48,10 +50,50 @@ type APIInfo struct {
 	Version     string
 }
 
-type opsKey struct{ baseURL, operationBase string }
+type opsKey struct {
+	baseURL, operationBase string
+	serverVariables        string
+}
 type opsEntry struct {
 	ops []Operation
 	err error
+}
+
+// OperationOptions controls config-sensitive OpenAPI operation extraction.
+type OperationOptions struct {
+	BaseURL         string
+	OperationBase   string
+	ServerVariables map[string]string
+}
+
+func operationOptionsKey(opts OperationOptions) opsKey {
+	return opsKey{
+		baseURL:         opts.BaseURL,
+		operationBase:   opts.OperationBase,
+		serverVariables: ServerVariablesCacheKey(opts.ServerVariables),
+	}
+}
+
+// ServerVariablesCacheKey returns a deterministic string for operation-cache
+// identity. It is exported so on-disk cache metadata can use the same shape as
+// the in-memory APISpec cache.
+func ServerVariablesCacheKey(values map[string]string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(values[key])
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 // V3Model returns the built V3 document model, memoizing the result so that

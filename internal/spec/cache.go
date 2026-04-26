@@ -34,16 +34,17 @@ type cachedRaw struct {
 }
 
 type opsBlob struct {
-	Schema        int         `cbor:"schema"`
-	BaseURL       string      `cbor:"base_url"`
-	OperationBase string      `cbor:"operation_base,omitempty"`
-	RawSHA256     string      `cbor:"raw_sha256"`
-	Info          APIInfo     `cbor:"info,omitempty"`
-	Operations    []Operation `cbor:"operations"`
+	Schema             int         `cbor:"schema"`
+	BaseURL            string      `cbor:"base_url"`
+	OperationBase      string      `cbor:"operation_base,omitempty"`
+	ServerVariablesKey string      `cbor:"server_variables,omitempty"`
+	RawSHA256          string      `cbor:"raw_sha256"`
+	Info               APIInfo     `cbor:"info,omitempty"`
+	Operations         []Operation `cbor:"operations"`
 }
 
 const currentCacheSchema = 2
-const currentOperationCacheSchema = 3
+const currentOperationCacheSchema = 4
 
 // cacheFile returns the path of the CBOR cache file for the given API.
 func cacheFile(cacheDir, apiName string) string {
@@ -157,6 +158,15 @@ func LoadOperationsFromCache(cacheDir, apiName, version string, specFiles []stri
 // LoadOperationSetFromCache reads extracted operations and API metadata for a
 // cached spec without reparsing the raw OpenAPI document.
 func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) (OperationSet, bool) {
+	return LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version, specFiles, OperationOptions{
+		BaseURL:       baseURL,
+		OperationBase: operationBase,
+	})
+}
+
+// LoadOperationSetFromCacheWithVariables reads extracted operations and API
+// metadata for a cache key that includes OpenAPI server variable values.
+func LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version string, specFiles []string, opts OperationOptions) (OperationSet, bool) {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
 		return OperationSet{}, false
@@ -169,7 +179,10 @@ func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []st
 		if blob.Schema != currentOperationCacheSchema {
 			continue
 		}
-		if blob.BaseURL == baseURL && blob.OperationBase == operationBase && blob.RawSHA256 == rawHash {
+		if blob.BaseURL == opts.BaseURL &&
+			blob.OperationBase == opts.OperationBase &&
+			blob.ServerVariablesKey == ServerVariablesCacheKey(opts.ServerVariables) &&
+			blob.RawSHA256 == rawHash {
 			set := OperationSet{
 				Info:       blob.Info,
 				Operations: append([]Operation(nil), blob.Operations...),
@@ -193,11 +206,20 @@ func StoreOperationsInCache(cacheDir, apiName, version, baseURL, operationBase s
 // StoreOperationSetInCache updates an existing raw cache entry with extracted
 // operations and API metadata.
 func StoreOperationSetInCache(cacheDir, apiName, version, baseURL, operationBase string, set OperationSet) error {
+	return StoreOperationSetInCacheWithVariables(cacheDir, apiName, version, OperationOptions{
+		BaseURL:       baseURL,
+		OperationBase: operationBase,
+	}, set)
+}
+
+// StoreOperationSetInCacheWithVariables updates an existing raw cache entry
+// with operation metadata keyed by server variable values.
+func StoreOperationSetInCacheWithVariables(cacheDir, apiName, version string, opts OperationOptions, set OperationSet) error {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
 		return nil
 	}
-	entry.upsertOperationSet(baseURL, operationBase, set)
+	entry.upsertOperationSetWithOptions(opts, set)
 	return writeCache(cacheDir, apiName, entry)
 }
 
@@ -206,17 +228,24 @@ func (e *cacheEntry) upsertOperations(baseURL, operationBase string, ops []Opera
 }
 
 func (e *cacheEntry) upsertOperationSet(baseURL, operationBase string, set OperationSet) {
+	e.upsertOperationSetWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase}, set)
+}
+
+func (e *cacheEntry) upsertOperationSetWithOptions(opts OperationOptions, set OperationSet) {
 	rawHash := cacheRawHash(e.raw())
 	blob := opsBlob{
-		Schema:        currentOperationCacheSchema,
-		BaseURL:       baseURL,
-		OperationBase: operationBase,
-		RawSHA256:     rawHash,
-		Info:          set.Info,
-		Operations:    append([]Operation(nil), set.Operations...),
+		Schema:             currentOperationCacheSchema,
+		BaseURL:            opts.BaseURL,
+		OperationBase:      opts.OperationBase,
+		ServerVariablesKey: ServerVariablesCacheKey(opts.ServerVariables),
+		RawSHA256:          rawHash,
+		Info:               set.Info,
+		Operations:         append([]Operation(nil), set.Operations...),
 	}
 	for i := range e.Operations {
-		if e.Operations[i].BaseURL == baseURL && e.Operations[i].OperationBase == operationBase {
+		if e.Operations[i].BaseURL == opts.BaseURL &&
+			e.Operations[i].OperationBase == opts.OperationBase &&
+			e.Operations[i].ServerVariablesKey == blob.ServerVariablesKey {
 			e.Operations[i] = blob
 			return
 		}

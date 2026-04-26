@@ -53,6 +53,9 @@ type DiscoverConfig struct {
 	// OperationBase overrides operation URL generation and is included in the
 	// cached operation metadata key.
 	OperationBase string
+	// ServerVariables supplies explicit OpenAPI server variable values and is
+	// included in cached operation metadata keys.
+	ServerVariables map[string]string
 	// Version is the running restish version; cache entries with a different
 	// version are discarded.
 	Version string
@@ -99,7 +102,8 @@ loadFresh:
 			return nil, err
 		}
 		if spec != nil && cfg.CacheDir != "" {
-			set, _ := spec.OperationSet(cfg.BaseURL, cfg.OperationBase)
+			opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
+			set, _ := spec.OperationSetWithOptions(opts)
 			entry := &cacheEntry{
 				Version:   cfg.Version,
 				FetchedAt: time.Now(),
@@ -110,7 +114,7 @@ loadFresh:
 				},
 			}
 			if set.Operations != nil {
-				entry.upsertOperationSet(cfg.BaseURL, cfg.OperationBase, set)
+				entry.upsertOperationSetWithOptions(opts, set)
 			}
 			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 		}
@@ -131,7 +135,8 @@ loadFresh:
 		} else {
 			expiresAt = time.Now().Add(24 * time.Hour)
 		}
-		set, _ := spec.OperationSet(cfg.BaseURL, cfg.OperationBase)
+		opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
+		set, _ := spec.OperationSetWithOptions(opts)
 		entry := &cacheEntry{
 			Version:   cfg.Version,
 			FetchedAt: time.Now(),
@@ -142,7 +147,7 @@ loadFresh:
 			},
 		}
 		if set.Operations != nil {
-			entry.upsertOperationSet(cfg.BaseURL, cfg.OperationBase, set)
+			entry.upsertOperationSetWithOptions(opts, set)
 		}
 		_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 	}

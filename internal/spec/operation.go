@@ -102,7 +102,13 @@ type OperationSet struct {
 
 // OperationSet returns all operations with top-level API metadata.
 func (s *APISpec) OperationSet(baseURL, operationBase string) (OperationSet, error) {
-	ops, err := s.Operations(baseURL, operationBase)
+	return s.OperationSetWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase})
+}
+
+// OperationSetWithOptions returns all operations with config-sensitive
+// OpenAPI server variable resolution applied.
+func (s *APISpec) OperationSetWithOptions(opts OperationOptions) (OperationSet, error) {
+	ops, err := s.OperationsWithOptions(opts)
 	if err != nil {
 		return OperationSet{}, err
 	}
@@ -121,7 +127,14 @@ func (s *APISpec) OperationSet(baseURL, operationBase string) (OperationSet, err
 //
 // Results are memoized per (baseURL, operationBase) pair.
 func (s *APISpec) Operations(baseURL, operationBase string) ([]Operation, error) {
-	key := opsKey{baseURL, operationBase}
+	return s.OperationsWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase})
+}
+
+// OperationsWithOptions is the config-sensitive form of Operations. It uses
+// OpenAPI server variable defaults plus explicit local values, never enum
+// Cartesian-product expansion.
+func (s *APISpec) OperationsWithOptions(opts OperationOptions) ([]Operation, error) {
+	key := operationOptionsKey(opts)
 
 	s.opsCacheMu.Lock()
 	if s.opsCache != nil {
@@ -132,7 +145,7 @@ func (s *APISpec) Operations(baseURL, operationBase string) ([]Operation, error)
 	}
 	s.opsCacheMu.Unlock()
 
-	ops, err := s.buildOperations(baseURL, operationBase)
+	ops, err := s.buildOperations(opts)
 
 	s.opsCacheMu.Lock()
 	if s.opsCache == nil {
@@ -145,13 +158,13 @@ func (s *APISpec) Operations(baseURL, operationBase string) ([]Operation, error)
 }
 
 // buildOperations performs the actual extraction without caching.
-func (s *APISpec) buildOperations(baseURL, operationBase string) ([]Operation, error) {
+func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 	model, err := s.V3Model()
 	if err != nil || model == nil || model.Model.Paths == nil {
 		return nil, err
 	}
 
-	basePath, err := deriveBasePath(baseURL, operationBase, model.Model.Servers)
+	basePath, err := deriveBasePath(opts.BaseURL, opts.OperationBase, model.Model.Servers, opts.ServerVariables)
 	if err != nil {
 		return nil, fmt.Errorf("derive base path: %w", err)
 	}
@@ -268,9 +281,12 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 // When operationBase is set, no prefix is needed (the URL prefix is resolved
 // from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
 // inspected for a URL that shares the same scheme+host as baseURL.
-func deriveBasePath(baseURL, operationBase string, servers []*v3.Server) (string, error) {
+func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, error) {
 	if operationBase != "" || len(servers) == 0 {
 		return "", nil
+	}
+	if err := validateConfiguredServerVariables(servers, serverVariables); err != nil {
+		return "", err
 	}
 
 	location, err := url.Parse(baseURL)
@@ -285,54 +301,87 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server) (string
 		}
 		// Relative paths (starting with "/") always apply.
 		if strings.HasPrefix(server.URL, "/") {
-			return strings.TrimSuffix(server.URL, "/"), nil
+			return strings.TrimSuffix(resolveServerURLVariables(server, serverVariables), "/"), nil
 		}
 
-		// Absolute URL: expand server variables then match against baseURL host.
-		endpoints := expandServerVariables(server)
-		for _, endpoint := range endpoints {
-			if !strings.HasPrefix(endpoint, prefix) {
-				continue
-			}
-			parsed, err := url.Parse(endpoint)
-			if err != nil {
-				return "", err
-			}
-			return strings.TrimSuffix(parsed.Path, "/"), nil
+		// Absolute URL: resolve each server variable once, using explicit local
+		// config values where present and OpenAPI defaults otherwise. Enum
+		// values are intentionally not expanded; remote specs must not be able
+		// to create a Cartesian-product allocation during command generation.
+		endpoint := resolveServerURLVariables(server, serverVariables)
+		if !strings.HasPrefix(endpoint, prefix) {
+			continue
 		}
+		parsed, err := url.Parse(endpoint)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSuffix(parsed.Path, "/"), nil
 	}
 
 	// No matching server found — fall back to the path of the base URL.
 	return strings.TrimSuffix(location.Path, "/"), nil
 }
 
-// expandServerVariables returns all concrete URL strings for a server by
-// substituting its variable defaults (and enums when present).
-func expandServerVariables(server *v3.Server) []string {
-	endpoints := []string{server.URL}
+// resolveServerURLVariables returns one concrete URL string for a server by
+// substituting explicit local values or OpenAPI defaults. Enum values may be
+// useful for validation/help, but are never eagerly expanded.
+func resolveServerURLVariables(server *v3.Server, values map[string]string) string {
+	if server == nil {
+		return ""
+	}
+	endpoint := server.URL
 	if server.Variables == nil {
-		return endpoints
+		return endpoint
 	}
 	for key, value := range server.Variables.FromOldest() {
 		if value == nil {
 			continue
 		}
 		placeholder := fmt.Sprintf("{%s}", key)
-		if len(value.Enum) == 0 {
-			for i := range endpoints {
-				endpoints[i] = strings.ReplaceAll(endpoints[i], placeholder, value.Default)
-			}
-			continue
+		replacement := value.Default
+		if configured, ok := values[key]; ok {
+			replacement = configured
 		}
-		next := make([]string, 0, len(endpoints)*len(value.Enum))
-		for _, enumVal := range value.Enum {
-			for _, ep := range endpoints {
-				next = append(next, strings.ReplaceAll(ep, placeholder, enumVal))
-			}
-		}
-		endpoints = next
+		endpoint = strings.ReplaceAll(endpoint, placeholder, replacement)
 	}
-	return endpoints
+	return endpoint
+}
+
+func validateConfiguredServerVariables(servers []*v3.Server, values map[string]string) error {
+	for configuredName, configuredValue := range values {
+		declared := false
+		allowedByAnyEnum := false
+		hasEnum := false
+		for _, server := range servers {
+			if server == nil || server.Variables == nil {
+				continue
+			}
+			variable := server.Variables.GetOrZero(configuredName)
+			if variable == nil {
+				continue
+			}
+			declared = true
+			if len(variable.Enum) == 0 {
+				allowedByAnyEnum = true
+				continue
+			}
+			hasEnum = true
+			for _, enumValue := range variable.Enum {
+				if configuredValue == enumValue {
+					allowedByAnyEnum = true
+					break
+				}
+			}
+		}
+		if !declared {
+			return fmt.Errorf("server variable %q is configured but not declared by the OpenAPI servers", configuredName)
+		}
+		if hasEnum && !allowedByAnyEnum {
+			return fmt.Errorf("server variable %q value %q is not allowed by the OpenAPI enum", configuredName, configuredValue)
+		}
+	}
+	return nil
 }
 
 // mergeParameters merges path-level and operation-level parameters.

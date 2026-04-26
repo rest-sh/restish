@@ -64,6 +64,10 @@ type APIConfig struct {
 	// paths generated from OpenAPI operations. Useful when operation paths should
 	// escape or replace a sub-path in base_url.
 	OperationBase string `json:"operation_base,omitempty"`
+	// ServerVariables supplies explicit values for OpenAPI server URL variables.
+	// Values are used for generated operation path resolution; enum values from
+	// remote specs are never expanded eagerly.
+	ServerVariables map[string]string `json:"server_variables,omitempty"`
 	// Profiles is a map of profile name to profile configuration.
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
 	// Pagination holds optional per-API pagination configuration.
@@ -93,6 +97,9 @@ type ProfileConfig struct {
 	TLSSigner string `json:"tls_signer,omitempty"`
 	// TLSSignerParams passes plugin-specific configuration to the tls-signer.
 	TLSSignerParams map[string]string `json:"tls_signer_params,omitempty"`
+	// ServerVariables overrides API-level OpenAPI server URL variables for this
+	// profile when generating operation paths.
+	ServerVariables map[string]string `json:"server_variables,omitempty"`
 	// Auth holds authentication configuration for this profile.
 	Auth *AuthConfig `json:"auth,omitempty"`
 }

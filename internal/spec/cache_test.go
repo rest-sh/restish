@@ -222,6 +222,55 @@ func TestLoadOperationSetFromCacheIncludesInfo(t *testing.T) {
 	}
 }
 
+func TestLoadOperationSetFromCacheKeysServerVariables(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"servers":[{"url":"https://api.example.com/{version}","variables":{"version":{"default":"v1"}}}],"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	optsV1 := OperationOptions{BaseURL: "https://api.example.com", ServerVariables: map[string]string{"version": "v1"}}
+	optsV2 := OperationOptions{BaseURL: "https://api.example.com", ServerVariables: map[string]string{"version": "v2"}}
+	setV1, err := loaded.OperationSetWithOptions(optsV1)
+	if err != nil {
+		t.Fatalf("operation set v1: %v", err)
+	}
+	setV2, err := loaded.OperationSetWithOptions(optsV2)
+	if err != nil {
+		t.Fatalf("operation set v2: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+		},
+	}
+	entry.upsertOperationSetWithOptions(optsV1, setV1)
+	entry.upsertOperationSetWithOptions(optsV2, setV2)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	gotV1, ok := LoadOperationSetFromCacheWithVariables(dir, "testapi", "v2", nil, optsV1)
+	if !ok {
+		t.Fatal("expected v1 operations cache hit")
+	}
+	if got := gotV1.Operations[0].Path; got != "/v1/items" {
+		t.Fatalf("v1 path = %q, want /v1/items", got)
+	}
+	gotV2, ok := LoadOperationSetFromCacheWithVariables(dir, "testapi", "v2", nil, optsV2)
+	if !ok {
+		t.Fatal("expected v2 operations cache hit")
+	}
+	if got := gotV2.Operations[0].Path; got != "/v2/items" {
+		t.Fatalf("v2 path = %q, want /v2/items", got)
+	}
+}
+
 func TestLoadOperationsFromCache_MissRawOnlyEntry(t *testing.T) {
 	dir := t.TempDir()
 	entry := &cacheEntry{

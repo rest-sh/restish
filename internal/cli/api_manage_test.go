@@ -761,6 +761,51 @@ func TestAPISetValidatesOperationBasePath(t *testing.T) {
 	}
 }
 
+func TestAPISetServerVariables(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "staging": {}
+      }
+    }
+  }
+}`)
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `server_variables.env: staging`, `profiles.staging.server_variables.version: v2`}); err != nil {
+		t.Fatalf("api set server variables: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	api := written.APIs["myapi"]
+	if got := api.ServerVariables["env"]; got != "staging" {
+		t.Fatalf("server_variables.env = %q, want staging", got)
+	}
+	if got := api.Profiles["staging"].ServerVariables["version"]; got != "v2" {
+		t.Fatalf("profiles.staging.server_variables.version = %q, want v2", got)
+	}
+
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `server_variables.env: undefined`, `profiles.staging.server_variables.version: undefined`}); err != nil {
+		t.Fatalf("api delete server variables: %v", err)
+	}
+	written, err = config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload written config: %v", err)
+	}
+	if _, ok := written.APIs["myapi"].ServerVariables["env"]; ok {
+		t.Fatal("expected server_variables.env to be deleted")
+	}
+	if _, ok := written.APIs["myapi"].Profiles["staging"].ServerVariables["version"]; ok {
+		t.Fatal("expected profile server variable to be deleted")
+	}
+}
+
 func TestAPISetRejectsUnknownAuthType(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

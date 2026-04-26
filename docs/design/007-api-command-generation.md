@@ -174,6 +174,15 @@ https://example.com/my-api/v2-beta1` plus `operation_base: /` makes operation
 `https://example.com/my-api/v2-beta1/my-op`. Relative paths such as `v1` and
 full URLs are rejected.
 
+OpenAPI server URL variables are resolved with one bounded value per variable.
+Restish first uses explicit local config values from API-level
+`server_variables`, then profile-level `server_variables` overrides, and finally
+the OpenAPI variable `default`. Server variable `enum` values may be used for
+validation or help, but they are never expanded into every possible URL. This is
+a security boundary: an untrusted spec must not be able to allocate a Cartesian
+product during command generation or silently redirect authenticated requests to
+another origin.
+
 ## Help And Discoverability
 
 Generated commands should feel like ordinary Cobra commands:

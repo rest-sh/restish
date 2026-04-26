@@ -136,6 +136,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		SpecFiles:        apiCfg.SpecFiles,
 		CacheDir:         c.specCacheDir(),
 		OperationBase:    apiCfg.OperationBase,
+		ServerVariables:  effectiveServerVariables(apiCfg, c.profileFromCmd(cmd)),
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
@@ -213,6 +214,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		APIName:          apiName,
 		BaseURL:          baseURL,
 		CacheDir:         c.specCacheDir(),
+		ServerVariables:  nil,
 		Version:          Version,
 		Transport:        c.baseHTTPTransport(),
 		AllowCrossOrigin: allowCrossOrigin,
@@ -508,9 +510,11 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 
 // runAPISet updates a single config field for a named API using a dot-path key.
 // Supported keys: base_url, spec_url, allow_cross_origin_spec, operation_base,
+// server_variables.<name>,
 // pagination.items_path, pagination.next_path,
 // profiles.<name>.base_url, profiles.<name>.auth.type,
-// profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer.
+// profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer,
+// profiles.<name>.server_variables.<name>.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 
@@ -627,12 +631,14 @@ const (
 	apiKeySpecURL
 	apiKeyAllowCrossOriginSpec
 	apiKeyOperationBase
+	apiKeyServerVariable
 	apiKeyPaginationItemsPath
 	apiKeyPaginationNextPath
 	apiKeyProfileBaseURL
 	apiKeyProfileHeaders
 	apiKeyProfileQuery
 	apiKeyProfileTLSSigner
+	apiKeyProfileServerVariable
 	apiKeyProfileAuthType
 	apiKeyProfileAuthParam
 )
@@ -642,6 +648,7 @@ type resolvedAPIConfigKey struct {
 	jsonPath    []string
 	profileName string
 	paramName   string
+	varName     string
 }
 
 func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
@@ -660,6 +667,15 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 		return resolvedAPIConfigKey{kind: apiKeyAllowCrossOriginSpec, jsonPath: append(basePath, "allow_cross_origin_spec")}, nil
 	case "operation_base":
 		return resolvedAPIConfigKey{kind: apiKeyOperationBase, jsonPath: append(basePath, "operation_base")}, nil
+	case "server_variables":
+		if len(parts) < 2 || parts[1] == "" {
+			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected server_variables.<name>", key)
+		}
+		return resolvedAPIConfigKey{
+			kind:     apiKeyServerVariable,
+			jsonPath: append(basePath, "server_variables", parts[1]),
+			varName:  parts[1],
+		}, nil
 	case "pagination":
 		if len(parts) < 2 {
 			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected pagination.<field>", key)
@@ -703,6 +719,16 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 				jsonPath:    append(basePath, "profiles", profileName, "tls_signer"),
 				profileName: profileName,
 			}, nil
+		case "server_variables":
+			if len(subParts) < 2 || subParts[1] == "" {
+				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.server_variables.<var>", key)
+			}
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileServerVariable,
+				jsonPath:    append(basePath, "profiles", profileName, "server_variables", subParts[1]),
+				profileName: profileName,
+				varName:     subParts[1],
+			}, nil
 		case "auth":
 			if len(subParts) < 2 {
 				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
@@ -728,10 +754,10 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q; supported: type, params.<param>", subParts[1])
 			}
 		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, auth.type, auth.params.<param>", parts[2])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth.type, auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
 	}
 }
 
@@ -814,6 +840,10 @@ func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) err
 		apiCfg.AllowCrossOriginSpec = false
 	case apiKeyOperationBase:
 		apiCfg.OperationBase = ""
+	case apiKeyServerVariable:
+		if apiCfg.ServerVariables != nil {
+			delete(apiCfg.ServerVariables, resolved.varName)
+		}
 	case apiKeyPaginationItemsPath:
 		if apiCfg.Pagination != nil {
 			apiCfg.Pagination.ItemsPath = ""
@@ -837,6 +867,10 @@ func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) err
 	case apiKeyProfileTLSSigner:
 		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
 			p.TLSSigner = ""
+		}
+	case apiKeyProfileServerVariable:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.ServerVariables != nil {
+			delete(p.ServerVariables, resolved.varName)
 		}
 	case apiKeyProfileAuthType:
 		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil {
@@ -898,6 +932,15 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 			return fmt.Errorf("operation_base %w", err)
 		}
 		apiCfg.OperationBase = v
+	case apiKeyServerVariable:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("server_variables.%s must be a string", resolved.varName)
+		}
+		if apiCfg.ServerVariables == nil {
+			apiCfg.ServerVariables = map[string]string{}
+		}
+		apiCfg.ServerVariables[resolved.varName] = v
 	case apiKeyPaginationItemsPath:
 		v, ok := value.(string)
 		if !ok {
@@ -949,6 +992,16 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 		}
 		prof := ensureProfile(apiCfg, resolved.profileName)
 		prof.TLSSigner = v
+	case apiKeyProfileServerVariable:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.server_variables.%s must be a string", resolved.profileName, resolved.varName)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.ServerVariables == nil {
+			prof.ServerVariables = map[string]string{}
+		}
+		prof.ServerVariables[resolved.varName] = v
 	case apiKeyProfileAuthType:
 		v, ok := value.(string)
 		if !ok {
@@ -1011,6 +1064,11 @@ func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any
 		return apiCfg.AllowCrossOriginSpec, nil
 	case apiKeyOperationBase:
 		return apiCfg.OperationBase, nil
+	case apiKeyServerVariable:
+		if apiCfg.ServerVariables != nil {
+			return apiCfg.ServerVariables[resolved.varName], nil
+		}
+		return "", nil
 	case apiKeyPaginationItemsPath:
 		if apiCfg.Pagination == nil {
 			return "", nil
@@ -1039,6 +1097,11 @@ func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any
 	case apiKeyProfileTLSSigner:
 		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
 			return p.TLSSigner, nil
+		}
+		return "", nil
+	case apiKeyProfileServerVariable:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.ServerVariables != nil {
+			return p.ServerVariables[resolved.varName], nil
 		}
 		return "", nil
 	case apiKeyProfileAuthType:

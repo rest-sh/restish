@@ -19,7 +19,11 @@ import (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
-	set, err := s.OperationSet(apiCfg.BaseURL, apiCfg.OperationBase)
+	set, err := s.OperationSetWithOptions(spec.OperationOptions{
+		BaseURL:         apiCfg.BaseURL,
+		OperationBase:   apiCfg.OperationBase,
+		ServerVariables: effectiveServerVariables(apiCfg, "default"),
+	})
 	return c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
 }
 

@@ -143,11 +143,15 @@ with the binary.
 Startup also caches extracted operation metadata alongside the raw bytes as a
 performance optimization. That cache is a command-generation artifact, not a
 replacement for the raw spec cache. It is keyed by the API base URL, operation
-base, cache schema version, Restish version, raw spec hash, and local spec file
-freshness. Routine startup can build generated commands from this operation
-cache without invoking the OpenAPI parser. Rare flows that need the full
-document, such as `api show` or plugin `api-spec` requests, parse the raw bytes
-lazily on demand.
+base, effective OpenAPI server-variable values, cache schema version, Restish
+version, raw spec hash, and local spec file freshness. Routine startup can build
+generated commands from this operation cache without invoking the OpenAPI parser.
+Rare flows that need the full document, such as `api show` or plugin `api-spec`
+requests, parse the raw bytes lazily on demand.
+
+OpenAPI server variables are intentionally part of operation-cache identity.
+Changing `server_variables` in API config, or profile-level overrides, can change
+generated operation paths even when the raw spec bytes are unchanged.
 
 ## Cache Validity
 

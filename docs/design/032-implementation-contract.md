@@ -67,14 +67,16 @@ API fields:
 | `spec_files` | array | Ordered local/remote specs to merge. |
 | `allow_cross_origin_spec` | bool | Permit safe cross-origin Link spec discovery. |
 | `operation_base` | string | Absolute path prefix resolved against `base_url` for generated operations. |
+| `server_variables` | map | Explicit OpenAPI server URL variable values used for generated operation paths. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |
 
 Profile fields are `base_url`, `headers`, `query`, `tls_signer`,
-`tls_signer_params`, and `auth`. Auth fields are `type` plus string
-`params`. Config files are written private and insecure permissions are
-warning-only, not fatal.
+`tls_signer_params`, `server_variables`, and `auth`. Profile server variables
+override API-level server variables for command generation. Auth fields are
+`type` plus string `params`. Config files are written private and insecure
+permissions are warning-only, not fatal.
 
 ## Command Surface And Precedence
 
