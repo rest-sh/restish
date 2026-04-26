@@ -50,9 +50,22 @@ The important mapping rules are:
 - required path and query parameters become positional arguments
 - optional parameters become flags
 - request bodies still use shorthand or stdin
+- `anyOf` and `oneOf` parameters that do not have one clear scalar type become
+  string flags, so they remain usable from the CLI
 
 That makes `operationId` one of the most important author-controlled inputs to
 the final CLI shape.
+
+For operations with request bodies, users can ask Restish to print an example
+body without sending a request:
+
+```bash
+restish myapi create-item --rsh-generate-body
+```
+
+The example comes from OpenAPI examples, schema examples/defaults/enums, or
+schema-derived placeholders. Users can redirect it to a file, edit it, and pass
+that file back as request input.
 
 ## CLI-Specific OpenAPI Extensions
 

@@ -83,6 +83,16 @@ Quote the value when you want the literal string instead:
 restish post https://api.rest.sh enabled: "true" missing: "null"
 ```
 
+Generated OpenAPI commands can use request schema information to preserve
+string fields automatically. If the spec says `id` is a string, then:
+
+```bash
+restish myapi create-item id: 123
+```
+
+sends `"id": "123"` for that generated command. Generic HTTP commands keep the
+normal shorthand coercion rules.
+
 Use `""` or a blank value for an empty string:
 
 ```bash

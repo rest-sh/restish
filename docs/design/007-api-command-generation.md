@@ -168,6 +168,12 @@ properties and dotted nested object paths without adding default-on request-body
 validation. Unknown fields are still accepted unless a future explicit
 validation mode is enabled.
 
+Generated operation commands also expose `--rsh-generate-body` for request-body
+operations. The flag prints an example body derived from OpenAPI examples,
+schema examples/defaults/enums, or bounded schema placeholders, then exits
+before request execution. This keeps body generation explicit: users can save
+the example, edit it, and pass it back through the normal request-body path.
+
 ## Server Resolution
 
 The operation URL is not just `api base URL + path`. The design must account

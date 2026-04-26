@@ -480,6 +480,31 @@ func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandGenerateBodyPrintsExampleWithoutRequest(t *testing.T) {
+	var hit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		w.WriteHeader(500)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-item", "--rsh-generate-body"}); err != nil {
+		t.Fatalf("generate body: %v", err)
+	}
+	if hit {
+		t.Fatal("generate body should not send a request")
+	}
+	got := out.String()
+	for _, want := range []string{`"id": "string"`, `"amount": "string"`, `"count": 1`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("generated body missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestGeneratedCommandHelp verifies that --help shows parameter descriptions
 // from the OpenAPI spec.
 func TestGeneratedCommandHelp(t *testing.T) {
@@ -763,6 +788,47 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	}
 	if got := values.Get("ids"); got != "1,2" {
 		t.Fatalf("ids = %q, want 1,2", got)
+	}
+}
+
+func TestGeneratedCommandAnyOfQueryParamUsesStringFlag(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "parameters": [
+          {"name": "value", "in": "query", "schema": {"anyOf": [{"type": "string"}, {"type": "integer"}]}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "search", "--value", "abc123"}); err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("value"); got != "abc123" {
+		t.Fatalf("value = %q, want abc123", got)
 	}
 }
 

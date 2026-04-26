@@ -256,20 +256,30 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 	long = appendGeneratedOperationHelp(long, required, optional, op.Help)
 
 	cmd := &cobra.Command{
-		Use:        use,
-		Short:      short,
-		Long:       long,
-		Example:    generatedOperationExamples(apiName, use, op.Help.Examples),
-		Aliases:    op.XCLI.Aliases,
-		Args:       cobra.MinimumNArgs(len(required)),
+		Use:     use,
+		Short:   short,
+		Long:    long,
+		Example: generatedOperationExamples(apiName, use, op.Help.Examples),
+		Aliases: op.XCLI.Aliases,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
+				return nil
+			}
+			return cobra.MinimumNArgs(len(required))(cmd, args)
+		},
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
+				return c.printGeneratedBodyExample(op.Help.Request)
+			}
 			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
 		},
 	}
 	if !op.HasBody {
 		cmd.Args = cobra.ExactArgs(len(required))
+	} else {
+		cmd.Flags().Bool("rsh-generate-body", false, "Print an example request body and exit")
 	}
 
 	for _, p := range optional {
@@ -320,6 +330,15 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 	}
 
 	return cmd, nil
+}
+
+func (c *CLI) printGeneratedBodyExample(request *spec.OperationBodyHelp) error {
+	if request != nil && strings.TrimSpace(request.Example) != "" {
+		fmt.Fprintln(c.Stdout, request.Example)
+		return nil
+	}
+	fmt.Fprintln(c.Stdout, "{}")
+	return nil
 }
 
 func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, help spec.OperationHelp) string {
