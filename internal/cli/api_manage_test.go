@@ -806,6 +806,56 @@ func TestAPISetServerVariables(t *testing.T) {
 	}
 }
 
+func TestAPISetInvalidatesSpecCacheForBaseFields(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+	cacheDir := t.TempDir()
+	cacheFile := cacheDir + "/myapi.cbor"
+	if err := os.WriteFile(cacheFile, []byte("cached"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `base_url: "https://new.example.com"`}); err != nil {
+		t.Fatalf("api set: %v", err)
+	}
+	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+		t.Fatalf("expected spec cache to be invalidated, stat err=%v", err)
+	}
+}
+
+func TestAPISetDoesNotInvalidateSpecCacheForUnrelatedFields(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+	cacheDir := t.TempDir()
+	cacheFile := cacheDir + "/myapi.cbor"
+	if err := os.WriteFile(cacheFile, []byte("cached"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.headers[]: "X-Test: 1"`}); err != nil {
+		t.Fatalf("api set: %v", err)
+	}
+	if _, err := os.Stat(cacheFile); err != nil {
+		t.Fatalf("expected spec cache to remain, stat err=%v", err)
+	}
+}
+
 func TestAPISetRejectsUnknownAuthType(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

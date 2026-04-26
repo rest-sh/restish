@@ -189,6 +189,9 @@ Examples:
 
 - `api configure` should not blindly trust stale cached `x-cli-config`
 - `api sync` should refresh from the authoritative source
+- `api set` and `api edit` should invalidate cached specs when fields that
+  affect discovery or operation generation change, including `base_url`,
+  `spec_url`, `spec_files`, `operation_base`, and OpenAPI server variables
 
 Those commands exist specifically to reconcile config with the current server
 state, so using a stale cache without telling the user defeats their purpose.

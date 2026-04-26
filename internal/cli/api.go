@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -498,6 +499,10 @@ func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any
 // runAPIEdit opens the restish config file in $VISUAL or $EDITOR.
 func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 	cfgPath := c.configFilePath()
+	oldCfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
 	editorCmd, err := c.editorCommand(cfgPath)
 	if err != nil {
 		return err
@@ -505,7 +510,49 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 	editorCmd.Stdin = c.Stdin
 	editorCmd.Stdout = c.Stdout
 	editorCmd.Stderr = c.Stderr
-	return editorCmd.Run()
+	if err := editorCmd.Run(); err != nil {
+		return err
+	}
+	newCfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	for _, apiName := range apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg) {
+		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
+			return fmt.Errorf("api edit: invalidate spec cache for %q: %w", apiName, err)
+		}
+	}
+	c.cfg = newCfg
+	return nil
+}
+
+func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []string {
+	namesSeen := map[string]struct{}{}
+	if oldCfg != nil {
+		for name := range oldCfg.APIs {
+			namesSeen[name] = struct{}{}
+		}
+	}
+	if newCfg != nil {
+		for name := range newCfg.APIs {
+			namesSeen[name] = struct{}{}
+		}
+	}
+	var changed []string
+	for name := range namesSeen {
+		var oldAPI, newAPI *config.APIConfig
+		if oldCfg != nil {
+			oldAPI = oldCfg.APIs[name]
+		}
+		if newCfg != nil {
+			newAPI = newCfg.APIs[name]
+		}
+		if apiSpecCacheRelevantFieldsChanged(oldAPI, newAPI) {
+			changed = append(changed, name)
+		}
+	}
+	sort.Strings(changed)
+	return changed
 }
 
 // runAPISet updates a single config field for a named API using a dot-path key.
@@ -539,8 +586,48 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
 		return err
 	}
+	if apiSpecCacheRelevantFieldsChanged(c.cfg.APIs[apiName], work.APIs[apiName]) {
+		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
+			return fmt.Errorf("api set: invalidate spec cache: %w", err)
+		}
+	}
 	c.cfg = work
 	return nil
+}
+
+func apiSpecCacheRelevantFieldsChanged(oldAPI, newAPI *config.APIConfig) bool {
+	if oldAPI == nil || newAPI == nil {
+		return oldAPI != newAPI
+	}
+	return oldAPI.BaseURL != newAPI.BaseURL ||
+		oldAPI.SpecURL != newAPI.SpecURL ||
+		oldAPI.OperationBase != newAPI.OperationBase ||
+		!reflect.DeepEqual(oldAPI.SpecFiles, newAPI.SpecFiles) ||
+		!reflect.DeepEqual(oldAPI.ServerVariables, newAPI.ServerVariables) ||
+		!profileServerVariablesEqual(oldAPI.Profiles, newAPI.Profiles)
+}
+
+func profileServerVariablesEqual(a, b map[string]*config.ProfileConfig) bool {
+	names := map[string]struct{}{}
+	for name := range a {
+		names[name] = struct{}{}
+	}
+	for name := range b {
+		names[name] = struct{}{}
+	}
+	for name := range names {
+		var av, bv map[string]string
+		if a[name] != nil {
+			av = a[name].ServerVariables
+		}
+		if b[name] != nil {
+			bv = b[name].ServerVariables
+		}
+		if !reflect.DeepEqual(av, bv) {
+			return false
+		}
+	}
+	return true
 }
 
 type setExpression struct {

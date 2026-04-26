@@ -335,3 +335,62 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 		t.Errorf("expected editor stdout in c.Stdout, got: %q", out.String())
 	}
 }
+
+func TestAPIEditInvalidatesChangedAPISpecCache(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("editor test uses a POSIX shell script")
+	}
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "restish.json")
+	if err := os.WriteFile(cfgPath, []byte(`{
+  "apis": {
+    "changed": {"base_url": "https://old.example.com"},
+    "same": {"base_url": "https://same.example.com"}
+  }
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(dir, "specs")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	changedCache := filepath.Join(cacheDir, "changed.cbor")
+	sameCache := filepath.Join(cacheDir, "same.cbor")
+	for _, path := range []string{changedCache, sameCache} {
+		if err := os.WriteFile(path, []byte("cached"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scriptPath := filepath.Join(dir, "editor.sh")
+	script := `#!/bin/sh
+cat > "$1" <<'JSON'
+{
+  "apis": {
+    "changed": {"base_url": "https://new.example.com"},
+    "same": {"base_url": "https://same.example.com"}
+  }
+}
+JSON
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISUAL", scriptPath)
+	t.Setenv("EDITOR", "")
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgPath
+	c.Hooks().SpecCachePath = cacheDir
+
+	if err := c.Run([]string{"restish", "api", "edit"}); err != nil {
+		t.Fatalf("api edit: %v", err)
+	}
+	if _, err := os.Stat(changedCache); !os.IsNotExist(err) {
+		t.Fatalf("expected changed API cache to be invalidated, stat err=%v", err)
+	}
+	if _, err := os.Stat(sameCache); err != nil {
+		t.Fatalf("expected unchanged API cache to remain, stat err=%v", err)
+	}
+}
