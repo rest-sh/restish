@@ -6,133 +6,151 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
-// testPluginBin is the path to the compiled test plugin binary, set in TestMain.
-var testPluginBin string
+var testPluginBuildDir string
 
-// testHookPluginBin is the path to the compiled hook test plugin binary.
-var testHookPluginBin string
-var testCmdPluginBin string
-var testMCPPluginBin string
-var testBulkPluginBin string
-var testTLSSignerPluginBin string
-var testCSVPluginBin string
+// testPluginBin values are populated lazily by the skipNo* helpers below.
+var (
+	testPluginBin          string
+	testHookPluginBin      string
+	testCmdPluginBin       string
+	testMCPPluginBin       string
+	testBulkPluginBin      string
+	testTLSSignerPluginBin string
+	testCSVPluginBin       string
+)
 
-// TestMain compiles the test plugin binaries once for the whole test run.
+var (
+	testPluginBuilder = testPluginBuild{
+		name: "restish-testplugin",
+		pkg:  "./testdata/testplugin",
+		bin:  &testPluginBin,
+	}
+	testHookPluginBuilder = testPluginBuild{
+		name:   "restish-hookplugin",
+		source: &testPluginBuilder,
+		bin:    &testHookPluginBin,
+	}
+	testCmdPluginBuilder = testPluginBuild{
+		name:   "restish-cmdplugin",
+		source: &testPluginBuilder,
+		bin:    &testCmdPluginBin,
+	}
+	testMCPPluginBuilder = testPluginBuild{
+		name: "restish-mcp",
+		pkg:  "../../cmd/restish-mcp",
+		bin:  &testMCPPluginBin,
+	}
+	testBulkPluginBuilder = testPluginBuild{
+		name: "restish-bulk",
+		pkg:  "../../cmd/restish-bulk",
+		bin:  &testBulkPluginBin,
+	}
+	testTLSSignerPluginBuilder = testPluginBuild{
+		name:   "restish-test-tls-signer",
+		source: &testPluginBuilder,
+		bin:    &testTLSSignerPluginBin,
+	}
+	testCSVPluginBuilder = testPluginBuild{
+		name: "restish-csv",
+		pkg:  "../../cmd/restish-csv",
+		bin:  &testCSVPluginBin,
+	}
+)
+
+// TestMain owns cleanup for lazily built helper plugin binaries.
 func TestMain(m *testing.M) {
-	// Build testplugin.
-	bin := filepath.Join(os.TempDir(), "restish-testplugin")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
-	}
-	cmd := exec.Command("go", "build", "-o", bin, "./testdata/testplugin")
-	cmd.Dir = testdataDir()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testPluginBin = bin
-	}
-
-	// Build hookplugin.
-	hookBin := filepath.Join(os.TempDir(), "restish-hookplugin")
-	if runtime.GOOS == "windows" {
-		hookBin += ".exe"
-	}
-
-	// Build cmdplugin.
-	cmdBin := filepath.Join(os.TempDir(), "restish-cmdplugin")
-	if runtime.GOOS == "windows" {
-		cmdBin += ".exe"
-	}
-	cmd3 := exec.Command("go", "build", "-o", cmdBin, "./testdata/cmdplugin")
-	cmd3.Dir = testdataDir()
-	if out, err := cmd3.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testCmdPluginBin = cmdBin
-	}
-
-	mcpBin := filepath.Join(os.TempDir(), "restish-mcp")
-	if runtime.GOOS == "windows" {
-		mcpBin += ".exe"
-	}
-	cmd4 := exec.Command("go", "build", "-o", mcpBin, "../../cmd/restish-mcp")
-	cmd4.Dir = testdataDir()
-	if out, err := cmd4.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testMCPPluginBin = mcpBin
-	}
-
-	bulkBin := filepath.Join(os.TempDir(), "restish-bulk")
-	if runtime.GOOS == "windows" {
-		bulkBin += ".exe"
-	}
-	cmdBulk := exec.Command("go", "build", "-o", bulkBin, "../../cmd/restish-bulk")
-	cmdBulk.Dir = testdataDir()
-	if out, err := cmdBulk.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testBulkPluginBin = bulkBin
-	}
-
-	csvBin := filepath.Join(os.TempDir(), "restish-csv")
-	if runtime.GOOS == "windows" {
-		csvBin += ".exe"
-	}
-	cmdCSV := exec.Command("go", "build", "-o", csvBin, "../../cmd/restish-csv")
-	cmdCSV.Dir = testdataDir()
-	if out, err := cmdCSV.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testCSVPluginBin = csvBin
-	}
-
-	tlsSignerBin := filepath.Join(os.TempDir(), "restish-test-tls-signer")
-	if runtime.GOOS == "windows" {
-		tlsSignerBin += ".exe"
-	}
-	cmd5 := exec.Command("go", "build", "-o", tlsSignerBin, "../request/testdata/tlssigner")
-	cmd5.Dir = testdataDir()
-	if out, err := cmd5.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testTLSSignerPluginBin = tlsSignerBin
-	}
-	cmd2 := exec.Command("go", "build", "-o", hookBin, "./testdata/hookplugin")
-	cmd2.Dir = testdataDir()
-	if out, err := cmd2.CombinedOutput(); err != nil {
-		_ = out
-	} else {
-		testHookPluginBin = hookBin
+	dir, err := os.MkdirTemp("", "restish-cli-test-plugins-*")
+	if err == nil {
+		testPluginBuildDir = dir
 	}
 
 	code := m.Run()
 
-	if testPluginBin != "" {
-		_ = os.Remove(testPluginBin)
-	}
-	if testHookPluginBin != "" {
-		_ = os.Remove(testHookPluginBin)
-	}
-	if testCmdPluginBin != "" {
-		_ = os.Remove(testCmdPluginBin)
-	}
-	if testMCPPluginBin != "" {
-		_ = os.Remove(testMCPPluginBin)
-	}
-	if testBulkPluginBin != "" {
-		_ = os.Remove(testBulkPluginBin)
-	}
-	if testTLSSignerPluginBin != "" {
-		_ = os.Remove(testTLSSignerPluginBin)
-	}
-	if testCSVPluginBin != "" {
-		_ = os.Remove(testCSVPluginBin)
+	if testPluginBuildDir != "" {
+		_ = os.RemoveAll(testPluginBuildDir)
 	}
 	os.Exit(code)
+}
+
+type testPluginBuild struct {
+	once   sync.Once
+	name   string
+	pkg    string
+	source *testPluginBuild
+	bin    *string
+	out    []byte
+	err    error
+}
+
+func (b *testPluginBuild) path(t *testing.T, description string) string {
+	t.Helper()
+	b.once.Do(b.build)
+	if *b.bin != "" {
+		return *b.bin
+	}
+	if b.err != nil {
+		t.Skipf("%s plugin binary not compiled; skipping %s plugin tests: %v\n%s", description, description, b.err, b.out)
+	}
+	t.Skipf("%s plugin binary not compiled; skipping %s plugin tests", description, description)
+	return ""
+}
+
+func (b *testPluginBuild) build() {
+	if b.source != nil {
+		b.source.once.Do(b.source.build)
+		if b.source.err != nil {
+			b.out = b.source.out
+			b.err = b.source.err
+			return
+		}
+		b.aliasBuiltPlugin(*b.source.bin)
+		return
+	}
+
+	bin := filepath.Join(testPluginBuildDir, b.name)
+	if testPluginBuildDir == "" {
+		bin = filepath.Join(os.TempDir(), b.name)
+	}
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+
+	cmd := exec.Command("go", "build", "-o", bin, b.pkg)
+	cmd.Dir = testdataDir()
+	b.out, b.err = cmd.CombinedOutput()
+	if b.err == nil {
+		*b.bin = bin
+	}
+}
+
+func (b *testPluginBuild) aliasBuiltPlugin(source string) {
+	bin := filepath.Join(testPluginBuildDir, b.name)
+	if testPluginBuildDir == "" {
+		bin = filepath.Join(os.TempDir(), b.name)
+	}
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+
+	if err := os.Link(source, bin); err == nil {
+		*b.bin = bin
+		return
+	}
+	data, err := os.ReadFile(source)
+	if err != nil {
+		b.err = err
+		return
+	}
+	if err := os.WriteFile(bin, data, 0o755); err != nil {
+		b.out = data
+		b.err = err
+		return
+	}
+	*b.bin = bin
 }
 
 // testdataDir returns the directory containing testdata/ relative to this file.
@@ -144,52 +162,38 @@ func testdataDir() string {
 // skipNoPlugin skips the test if the plugin binary wasn't compiled.
 func skipNoPlugin(t *testing.T) {
 	t.Helper()
-	if testPluginBin == "" {
-		t.Skip("test plugin binary not compiled; skipping plugin tests")
-	}
+	testPluginBuilder.path(t, "test")
 }
 
 // skipNoHookPlugin skips the test if the hook plugin binary wasn't compiled.
 func skipNoHookPlugin(t *testing.T) {
 	t.Helper()
-	if testHookPluginBin == "" {
-		t.Skip("hook plugin binary not compiled; skipping hook plugin tests")
-	}
+	testHookPluginBuilder.path(t, "hook")
 }
 
 func skipNoCmdPlugin(t *testing.T) {
 	t.Helper()
-	if testCmdPluginBin == "" {
-		t.Skip("command plugin binary not compiled; skipping command plugin tests")
-	}
+	testCmdPluginBuilder.path(t, "command")
 }
 
 func skipNoMCPPlugin(t *testing.T) {
 	t.Helper()
-	if testMCPPluginBin == "" {
-		t.Skip("mcp plugin binary not compiled; skipping mcp plugin tests")
-	}
+	testMCPPluginBuilder.path(t, "mcp")
 }
 
 func skipNoBulkPlugin(t *testing.T) {
 	t.Helper()
-	if testBulkPluginBin == "" {
-		t.Skip("bulk plugin binary not compiled; skipping bulk plugin tests")
-	}
+	testBulkPluginBuilder.path(t, "bulk")
 }
 
 func skipNoTLSSignerPlugin(t *testing.T) {
 	t.Helper()
-	if testTLSSignerPluginBin == "" {
-		t.Skip("tls-signer plugin binary not compiled; skipping tls-signer plugin tests")
-	}
+	testTLSSignerPluginBuilder.path(t, "tls-signer")
 }
 
 func skipNoCSVPlugin(t *testing.T) {
 	t.Helper()
-	if testCSVPluginBin == "" {
-		t.Skip("csv plugin binary not compiled; skipping csv plugin tests")
-	}
+	testCSVPluginBuilder.path(t, "csv")
 }
 
 // TestPluginIgnoresPathPlugins verifies that restish-* binaries on PATH are
