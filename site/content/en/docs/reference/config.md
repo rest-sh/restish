@@ -62,6 +62,7 @@ Example:
   spec source
 - `operation_base`: optional absolute path prefix resolved against `base_url`
   for generated operation paths
+- `command_layout`: optional generated command layout; `flat` or `tags`
 - `profiles`: map of profile name to profile config
 - `pagination`: optional pagination config
 
@@ -69,6 +70,22 @@ Use `spec_url` when the API publishes one main spec document.
 
 Use `spec_files` when you want to merge several local or remote spec files in a
 fixed order.
+
+Set `command_layout` to `tags` when generated operations should be nested under
+their first OpenAPI tag:
+
+```jsonc
+{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "command_layout": "tags"
+    },
+  },
+}
+```
+
+The default is a flat operation namespace.
 
 ## `profiles`
 

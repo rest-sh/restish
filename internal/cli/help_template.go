@@ -108,6 +108,21 @@ Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
 Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
 `
 
+const generatedOperationUsageTemplate = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableLocalFlags}}{{with rshFlagUsages .LocalFlags}}
+
+Flags:
+{{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Use "{{.CommandPath}} --help-all" to show global Restish flags.{{end}}
+`
+
 func setupGroupedUsage(root *cobra.Command) {
 	addHelpTemplateFuncsOnce.Do(func() {
 		cobra.AddTemplateFunc("rshFlagUsages", groupedFlagUsages)

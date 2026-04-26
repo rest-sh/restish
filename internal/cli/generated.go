@@ -73,9 +73,20 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 
 	tagsSeen := map[string]bool{}
 	commandNames := map[string]bool{}
+	tagCommands := map[string]*cobra.Command{}
+	tagCommandOrder := []string{}
+	tagCommandNameByTag := map[string]string{}
+	commandNamesByTag := map[string]map[string]bool{}
+	useTagLayout := apiCfg.CommandLayout == "tags"
 
 	for _, op := range ops {
-		cmd, err := c.buildOperationCommand(apiName, op, apiCfg.BaseURL, apiCfg.OperationBase)
+		tagCommandName := ""
+		examplePrefix := apiName
+		if useTagLayout && len(op.Tags) > 0 {
+			tagCommandName = generatedTagCommandName(op.Tags[0], tagCommandNameByTag, tagCommands)
+			examplePrefix = apiName + " " + tagCommandName
+		}
+		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op, apiCfg.BaseURL, apiCfg.OperationBase)
 		if err != nil {
 			c.warnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
 			continue
@@ -83,12 +94,21 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		if cmd == nil {
 			continue
 		}
-		if commandNames[cmd.Name()] {
+		collisionScope := commandNames
+		if useTagLayout && tagCommandName != "" {
+			if tagCommands[tagCommandName] == nil {
+				tagCommands[tagCommandName] = newGeneratedTagCommand(tagCommandName, op.Tags[0])
+				tagCommandOrder = append(tagCommandOrder, tagCommandName)
+				commandNamesByTag[tagCommandName] = map[string]bool{}
+			}
+			collisionScope = commandNamesByTag[tagCommandName]
+		}
+		if collisionScope[cmd.Name()] {
 			originalName := cmd.Name()
 			disambiguated := originalName + "-" + strings.ToLower(op.Method)
-			if commandNames[disambiguated] {
+			if collisionScope[disambiguated] {
 				suffix := 2
-				for commandNames[fmt.Sprintf("%s-%d", disambiguated, suffix)] {
+				for collisionScope[fmt.Sprintf("%s-%d", disambiguated, suffix)] {
 					suffix++
 				}
 				disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
@@ -97,8 +117,13 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
 			cmd.Aliases = append(cmd.Aliases, originalName)
 		}
+		collisionScope[cmd.Name()] = true
+		if useTagLayout && tagCommandName != "" {
+			tagCommands[tagCommandName].AddCommand(cmd)
+			continue
+		}
 		commandNames[cmd.Name()] = true
-		if len(op.Tags) > 0 {
+		if !useTagLayout && len(op.Tags) > 0 {
 			tag := op.Tags[0]
 			if !tagsSeen[tag] {
 				tagsSeen[tag] = true
@@ -108,8 +133,43 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		}
 		apiCmd.AddCommand(cmd)
 	}
+	if useTagLayout {
+		for _, name := range tagCommandOrder {
+			apiCmd.AddCommand(tagCommands[name])
+		}
+	}
 
 	return apiCmd
+}
+
+func generatedTagCommandName(tag string, namesByTag map[string]string, existing map[string]*cobra.Command) string {
+	if name := namesByTag[tag]; name != "" {
+		return name
+	}
+	base := toKebabCase(tag)
+	if base == "" {
+		base = "operations"
+	}
+	name := base
+	for suffix := 2; existing[name] != nil; suffix++ {
+		name = fmt.Sprintf("%s-%d", base, suffix)
+	}
+	namesByTag[tag] = name
+	return name
+}
+
+func newGeneratedTagCommand(name, tag string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   name,
+		Short: fmt.Sprintf("Operations tagged %s", tag),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown command %q for %q; run %q to see tagged operations", args[0], cmd.Name(), cmd.CommandPath()+" --help")
+			}
+			return cmd.Help()
+		},
+	}
+	return cmd
 }
 
 // paramInfo holds the information we need about a single parameter.
@@ -134,7 +194,7 @@ type paramInfo struct {
 // Returns nil when the operation is excluded via x-cli-ignore.
 // operationBase, when non-empty, is resolved against baseURL and replaces the
 // apiName short-name prefix in generated URLs.
-func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, operationBase string) (*cobra.Command, error) {
+func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation, baseURL, operationBase string) (*cobra.Command, error) {
 	// Derive command name from operationId, with x-cli-name override.
 	cmdName := toKebabCase(op.ID)
 	if cmdName == "" {
@@ -259,7 +319,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 		Use:     use,
 		Short:   short,
 		Long:    long,
-		Example: generatedOperationExamples(apiName, use, op.Help.Examples),
+		Example: generatedOperationExamples(examplePrefix, use, op.Help.Examples),
 		Aliases: op.XCLI.Aliases,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
@@ -270,15 +330,21 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if helpAll, _ := cmd.Flags().GetBool("help-all"); helpAll {
+				return showGeneratedOperationHelpAll(cmd)
+			}
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
 			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
 		},
 	}
+	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
+	cmd.SetUsageTemplate(generatedOperationUsageTemplate)
 	if !op.HasBody {
-		cmd.Args = cobra.ExactArgs(len(required))
+		cmd.Args = generatedOperationArgs(len(required), false)
 	} else {
+		cmd.Args = generatedOperationArgs(len(required), true)
 		cmd.Flags().Bool("rsh-generate-body", false, "Print an example request body and exit")
 	}
 
@@ -330,6 +396,29 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 	}
 
 	return cmd, nil
+}
+
+func generatedOperationArgs(required int, hasBody bool) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		if helpAll, _ := cmd.Flags().GetBool("help-all"); helpAll {
+			return nil
+		}
+		if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
+			return nil
+		}
+		if hasBody {
+			return cobra.MinimumNArgs(required)(cmd, args)
+		}
+		return cobra.ExactArgs(required)(cmd, args)
+	}
+}
+
+func showGeneratedOperationHelpAll(cmd *cobra.Command) error {
+	orig := cmd.UsageTemplate()
+	cmd.SetUsageTemplate(groupedUsageTemplate)
+	err := cmd.Help()
+	cmd.SetUsageTemplate(orig)
+	return err
 }
 
 func (c *CLI) printGeneratedBodyExample(request *spec.OperationBodyHelp) error {

@@ -267,6 +267,12 @@ context cancellation wins the race, any goroutine waiting for manual input must
 exit without leaking. The full authorization URL should only be printed when
 browser launch fails or verbose mode is enabled.
 
+Local HTTPS callbacks are a post-release extension, not a v2 release blocker.
+If added, the callback listener should be explicit and operator-controlled:
+configurable scheme/host/port/path plus either user-supplied certificate/key
+files or documented `mkcert` setup. Restish should not silently generate or
+trust local certificates on the user's behalf.
+
 ### Client Credentials Flow
 
 Client credentials flow should support provider-specific extra parameters such

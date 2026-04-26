@@ -67,6 +67,19 @@ restish put example/repos org: myorg repo: myrepo
 The first form comes from an OpenAPI operation. The second form remains useful
 for exploration or for paths that are not represented in the spec yet.
 
+Generated operation help is operation-focused by default. It hides inherited
+global Restish flags so the operation arguments, flags, schemas, and examples
+are easier to scan. Users can run the same operation with `--help-all` to see
+the full inherited flag set.
+
+The default generated command layout is flat. Operators can opt into first-tag
+subcommands with local config when that makes a large API easier to navigate:
+
+```bash
+restish api set example command_layout: tags
+restish example repos create-repo org: myorg repo: myrepo
+```
+
 For operations with request bodies, users can ask Restish to print an example
 body without sending a request:
 

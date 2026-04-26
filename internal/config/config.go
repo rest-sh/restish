@@ -68,6 +68,10 @@ type APIConfig struct {
 	// paths generated from OpenAPI operations. Useful when operation paths should
 	// escape or replace a sub-path in base_url.
 	OperationBase string `json:"operation_base,omitempty"`
+	// CommandLayout controls how generated operations are arranged under the
+	// API command. Empty or "flat" keeps one flat command namespace; "tags"
+	// groups operations under first-tag subcommands.
+	CommandLayout string `json:"command_layout,omitempty"`
 	// ServerVariables supplies explicit values for OpenAPI server URL variables.
 	// Values are used for generated operation path resolution; enum values from
 	// remote specs are never expanded eagerly.
@@ -256,6 +260,9 @@ func Validate(cfg *Config) error {
 		if err := ValidateOperationBase(api.OperationBase); err != nil {
 			return fmt.Errorf("apis.%s.operation_base: %w", name, err)
 		}
+		if err := ValidateCommandLayout(api.CommandLayout); err != nil {
+			return fmt.Errorf("apis.%s.command_layout: %w", name, err)
+		}
 		if api.OperationBase != "" {
 			if err := ValidateBaseURLForOperationBase(api.BaseURL); err != nil {
 				return fmt.Errorf("apis.%s.base_url: %w", name, err)
@@ -276,6 +283,16 @@ func Validate(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+// ValidateCommandLayout enforces supported generated command arrangements.
+func ValidateCommandLayout(raw string) error {
+	switch raw {
+	case "", "flat", "tags":
+		return nil
+	default:
+		return fmt.Errorf("must be \"flat\" or \"tags\"")
+	}
 }
 
 // ValidateOperationBase enforces the v2 contract that operation_base is an

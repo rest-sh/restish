@@ -182,6 +182,24 @@ the real user command path instead of only through startup flags.
 - `internal/cli/testdata/cmdplugin/main.go` for a tiny command-plugin test fixture
 - [Design Records](/docs/contributing/design-records/) for hook payload shapes and command-plugin protocol details
 
+## Plugin Ideas
+
+These feature ideas are intentionally plugin-shaped instead of core v2 release
+blockers:
+
+- Page/count pagination for APIs that use `page`, `count`, `offset`, or similar
+  query parameters instead of links. A response-middleware or command plugin
+  can track pagination state while delegating HTTP back to Restish.
+- Swagger/OpenAPI 2.0 loading for older API descriptions. A loader plugin can
+  convert Swagger 2.0 into OpenAPI 3.x and return the converted document to the
+  host.
+- Rate limiting and light load-test workflows. A command plugin can own pacing,
+  concurrency, and reporting while asking Restish to perform each shaped
+  request.
+
+Those are good places to extend Restish without making the core request flags
+provider-specific.
+
 ## Operator Path vs Author Path
 
 Two common confusions:

@@ -94,6 +94,7 @@ Typical uses:
 ```bash
 restish api set github spec_url https://api.github.com/openapi.json
 restish api set github base_url https://github.example.com/api/v3
+restish api set github command_layout tags
 restish api set github 'profiles.default.auth.type: "oauth-client-credentials"'
 restish api set github 'profiles.default.headers[]: "Authorization: Bearer abc"'
 restish api set github 'operation_base: undefined'

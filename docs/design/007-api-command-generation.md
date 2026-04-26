@@ -53,6 +53,24 @@ The set of reserved built-in command names should come from the actual root
 command tree or a guard test that proves the reserved list is in sync. A stale
 hand-maintained list can let generated APIs shadow core behavior.
 
+By default, operations live in one flat namespace under the API command. APIs
+that benefit from tag hierarchy can opt into:
+
+```jsonc
+{
+  "apis": {
+    "example": {
+      "command_layout": "tags"
+    }
+  }
+}
+```
+
+In tag layout, operations with a first OpenAPI tag are nested under a tag
+subcommand such as `restish example repos create-repo`. Untagged operations
+remain directly under the API command. The default remains flat because tag
+taxonomies are not always stable or ergonomic.
+
 ## Operation Inclusion
 
 An operation is eligible for generation when:
@@ -215,6 +233,12 @@ Generated commands should feel like ordinary Cobra commands:
 
 This is why generated commands are registered into the normal root tree instead
 of living behind a special sub-interpreter.
+
+Generated operation help is operation-focused by default: it shows the operation
+usage, local parameters, schemas, and examples without repeating every inherited
+Restish flag. `--help-all` on a generated operation shows the full Cobra help,
+including global request, output, auth, TLS, pagination, cache, and config
+flags.
 
 ## Name-Collision Policy
 

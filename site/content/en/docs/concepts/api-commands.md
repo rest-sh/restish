@@ -39,6 +39,15 @@ case:
 That keeps generated commands feeling like native CLI commands instead of a
 separate subsystem.
 
+Generated operation help is focused on the operation by default. Use
+`--help-all` on a generated operation when you need the full set of inherited
+Restish flags:
+
+```bash
+restish example get-image --help
+restish example get-image --help-all
+```
+
 ## Example Shape
 
 An operation like:
@@ -61,6 +70,27 @@ instead of a manual URL such as:
 
 ```bash
 restish https://api.rest.sh/images/jpeg
+```
+
+## Flat vs Tag Layout
+
+Generated commands are flat by default:
+
+```bash
+restish example create-repo org: myorg repo: myrepo
+```
+
+If an API is easier to navigate by OpenAPI tags, set `command_layout` to
+`tags`:
+
+```bash
+restish api set example command_layout: tags
+```
+
+Then tagged operations live under tag subcommands:
+
+```bash
+restish example repos create-repo org: myorg repo: myrepo
 ```
 
 ## Why Generated Commands Feel Better

@@ -523,6 +523,75 @@ func TestGeneratedCommandHelp(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandHelpFocusesOperationAndHelpAllShowsGlobals(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-item", "--help"}); err != nil {
+		t.Fatalf("focused help: %v", err)
+	}
+	focused := out.String()
+	if strings.Contains(focused, "Global Flags:") || strings.Contains(focused, "--rsh-header") {
+		t.Fatalf("focused help should hide global flags, got:\n%s", focused)
+	}
+	if !strings.Contains(focused, "--help-all") {
+		t.Fatalf("focused help should point to --help-all, got:\n%s", focused)
+	}
+
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-item", "--help-all"}); err != nil {
+		t.Fatalf("help-all: %v", err)
+	}
+	full := out.String()
+	if !strings.Contains(full, "Global Flags:") || !strings.Contains(full, "--rsh-header") {
+		t.Fatalf("help-all should include inherited global flags, got:\n%s", full)
+	}
+}
+
+func TestGeneratedCommandLayoutTagsCreatesTagSubcommands(t *testing.T) {
+	var hit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.APIs["tapi"].CommandLayout = "tags"
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	if !strings.Contains(out.String(), "items") {
+		t.Fatalf("expected tag subcommand in API help, got:\n%s", out.String())
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "items", "list-items"}); err != nil {
+		t.Fatalf("tagged list-items failed: %v", err)
+	}
+	if !hit {
+		t.Fatal("tagged operation did not send request")
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err == nil {
+		t.Fatal("flat command should not be registered when command_layout is tags")
+	}
+}
+
 func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })

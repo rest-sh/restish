@@ -866,6 +866,7 @@ const (
 	apiKeySpecURL
 	apiKeyAllowCrossOriginSpec
 	apiKeyOperationBase
+	apiKeyCommandLayout
 	apiKeyServerVariable
 	apiKeyPaginationItemsPath
 	apiKeyPaginationNextPath
@@ -903,6 +904,8 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 		return resolvedAPIConfigKey{kind: apiKeyAllowCrossOriginSpec, jsonPath: append(basePath, "allow_cross_origin_spec")}, nil
 	case "operation_base":
 		return resolvedAPIConfigKey{kind: apiKeyOperationBase, jsonPath: append(basePath, "operation_base")}, nil
+	case "command_layout":
+		return resolvedAPIConfigKey{kind: apiKeyCommandLayout, jsonPath: append(basePath, "command_layout")}, nil
 	case "server_variables":
 		if len(parts) < 2 || parts[1] == "" {
 			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected server_variables.<name>", key)
@@ -999,7 +1002,7 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, command_layout, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
 	}
 }
 
@@ -1082,6 +1085,8 @@ func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) err
 		apiCfg.AllowCrossOriginSpec = false
 	case apiKeyOperationBase:
 		apiCfg.OperationBase = ""
+	case apiKeyCommandLayout:
+		apiCfg.CommandLayout = ""
 	case apiKeyServerVariable:
 		if apiCfg.ServerVariables != nil {
 			delete(apiCfg.ServerVariables, resolved.varName)
@@ -1174,6 +1179,15 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 			return fmt.Errorf("operation_base %w", err)
 		}
 		apiCfg.OperationBase = v
+	case apiKeyCommandLayout:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("command_layout must be a string")
+		}
+		if err := config.ValidateCommandLayout(v); err != nil {
+			return fmt.Errorf("command_layout %w", err)
+		}
+		apiCfg.CommandLayout = v
 	case apiKeyServerVariable:
 		v, ok := value.(string)
 		if !ok {
@@ -1325,6 +1339,8 @@ func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any
 		return apiCfg.AllowCrossOriginSpec, nil
 	case apiKeyOperationBase:
 		return apiCfg.OperationBase, nil
+	case apiKeyCommandLayout:
+		return apiCfg.CommandLayout, nil
 	case apiKeyServerVariable:
 		if apiCfg.ServerVariables != nil {
 			return apiCfg.ServerVariables[resolved.varName], nil
