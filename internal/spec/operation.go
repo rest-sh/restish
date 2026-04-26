@@ -65,6 +65,26 @@ type Operation struct {
 	XCLI             OperationXCLI
 }
 
+// OperationSet is the extracted operation list plus API-level metadata needed
+// to present the generated command group without reparsing the raw spec.
+type OperationSet struct {
+	Info       APIInfo
+	Operations []Operation
+}
+
+// OperationSet returns all operations with top-level API metadata.
+func (s *APISpec) OperationSet(baseURL, operationBase string) (OperationSet, error) {
+	ops, err := s.Operations(baseURL, operationBase)
+	if err != nil {
+		return OperationSet{}, err
+	}
+	info, err := s.Info()
+	if err != nil {
+		return OperationSet{}, err
+	}
+	return OperationSet{Info: info, Operations: ops}, nil
+}
+
 // Operations returns all HTTP operations extracted from the spec's V3 model,
 // with paths prefixed by the base path derived from the spec's servers[] list
 // and the provided baseURL. When operationBase is non-empty the spec servers

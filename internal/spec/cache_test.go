@@ -184,6 +184,44 @@ func TestLoadOperationsFromCache(t *testing.T) {
 	}
 }
 
+func TestLoadOperationSetFromCacheIncludesInfo(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0","description":"API **docs**"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	set, err := loaded.OperationSet("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operation set: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+		},
+	}
+	entry.upsertOperationSet("https://api.example.com", "", set)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	got, ok := LoadOperationSetFromCache(dir, "testapi", "v2", nil, "https://api.example.com", "")
+	if !ok {
+		t.Fatal("expected operations cache hit")
+	}
+	if got.Info.Description != "API **docs**" {
+		t.Fatalf("description = %q, want API **docs**", got.Info.Description)
+	}
+	if len(got.Operations) != 1 || got.Operations[0].ID != "listItems" {
+		t.Fatalf("unexpected operations: %#v", got.Operations)
+	}
+}
+
 func TestLoadOperationsFromCache_MissRawOnlyEntry(t *testing.T) {
 	dir := t.TempDir()
 	entry := &cacheEntry{

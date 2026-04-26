@@ -39,6 +39,15 @@ type APISpec struct {
 	opsCache   map[opsKey]opsEntry
 }
 
+// APIInfo is the top-level OpenAPI info object fields Restish surfaces in
+// generated command help and cached operation metadata.
+type APIInfo struct {
+	Title       string
+	Summary     string
+	Description string
+	Version     string
+}
+
 type opsKey struct{ baseURL, operationBase string }
 type opsEntry struct {
 	ops []Operation
@@ -52,6 +61,21 @@ func (s *APISpec) V3Model() (*libopenapi.DocumentModel[v3.Document], error) {
 		s.modelResult, s.modelErr = s.Document.BuildV3Model()
 	})
 	return s.modelResult, s.modelErr
+}
+
+// Info returns top-level OpenAPI info metadata from the V3 model.
+func (s *APISpec) Info() (APIInfo, error) {
+	model, err := s.V3Model()
+	if err != nil || model == nil || model.Model.Info == nil {
+		return APIInfo{}, err
+	}
+	info := model.Model.Info
+	return APIInfo{
+		Title:       info.Title,
+		Summary:     info.Summary,
+		Description: info.Description,
+		Version:     info.Version,
+	}, nil
 }
 
 // DefaultLoaders returns the built-in set of loaders.

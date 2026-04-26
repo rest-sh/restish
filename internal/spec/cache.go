@@ -38,11 +38,12 @@ type opsBlob struct {
 	BaseURL       string      `cbor:"base_url"`
 	OperationBase string      `cbor:"operation_base,omitempty"`
 	RawSHA256     string      `cbor:"raw_sha256"`
+	Info          APIInfo     `cbor:"info,omitempty"`
 	Operations    []Operation `cbor:"operations"`
 }
 
 const currentCacheSchema = 2
-const currentOperationCacheSchema = 1
+const currentOperationCacheSchema = 2
 
 // cacheFile returns the path of the CBOR cache file for the given API.
 func cacheFile(cacheDir, apiName string) string {
@@ -149,12 +150,19 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 // entry is missing, expired, stale against local files, or lacks operations for
 // the requested base URL and operation base.
 func LoadOperationsFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) ([]Operation, bool) {
+	set, ok := LoadOperationSetFromCache(cacheDir, apiName, version, specFiles, baseURL, operationBase)
+	return set.Operations, ok
+}
+
+// LoadOperationSetFromCache reads extracted operations and API metadata for a
+// cached spec without reparsing the raw OpenAPI document.
+func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) (OperationSet, bool) {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
-		return nil, false
+		return OperationSet{}, false
 	}
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {
-		return nil, false
+		return OperationSet{}, false
 	}
 	rawHash := cacheRawHash(entry.raw())
 	for _, blob := range entry.Operations {
@@ -162,35 +170,50 @@ func LoadOperationsFromCache(cacheDir, apiName, version string, specFiles []stri
 			continue
 		}
 		if blob.BaseURL == baseURL && blob.OperationBase == operationBase && blob.RawSHA256 == rawHash {
-			if blob.Operations == nil {
-				return []Operation{}, true
+			set := OperationSet{
+				Info:       blob.Info,
+				Operations: append([]Operation(nil), blob.Operations...),
 			}
-			return append([]Operation(nil), blob.Operations...), true
+			if blob.Operations == nil {
+				set.Operations = []Operation{}
+			}
+			return set, true
 		}
 	}
-	return nil, false
+	return OperationSet{}, false
 }
 
 // StoreOperationsInCache updates an existing raw cache entry with extracted
 // operations. It is best-effort for callers; failed upgrades should not make
 // startup fail when the raw cache can still be parsed.
 func StoreOperationsInCache(cacheDir, apiName, version, baseURL, operationBase string, ops []Operation) error {
+	return StoreOperationSetInCache(cacheDir, apiName, version, baseURL, operationBase, OperationSet{Operations: ops})
+}
+
+// StoreOperationSetInCache updates an existing raw cache entry with extracted
+// operations and API metadata.
+func StoreOperationSetInCache(cacheDir, apiName, version, baseURL, operationBase string, set OperationSet) error {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
 		return nil
 	}
-	entry.upsertOperations(baseURL, operationBase, ops)
+	entry.upsertOperationSet(baseURL, operationBase, set)
 	return writeCache(cacheDir, apiName, entry)
 }
 
 func (e *cacheEntry) upsertOperations(baseURL, operationBase string, ops []Operation) {
+	e.upsertOperationSet(baseURL, operationBase, OperationSet{Operations: ops})
+}
+
+func (e *cacheEntry) upsertOperationSet(baseURL, operationBase string, set OperationSet) {
 	rawHash := cacheRawHash(e.raw())
 	blob := opsBlob{
 		Schema:        currentOperationCacheSchema,
 		BaseURL:       baseURL,
 		OperationBase: operationBase,
 		RawSHA256:     rawHash,
-		Operations:    append([]Operation(nil), ops...),
+		Info:          set.Info,
+		Operations:    append([]Operation(nil), set.Operations...),
 	}
 	for i := range e.Operations {
 		if e.Operations[i].BaseURL == baseURL && e.Operations[i].OperationBase == operationBase {

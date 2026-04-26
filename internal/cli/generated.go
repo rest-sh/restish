@@ -19,11 +19,11 @@ import (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
-	ops, err := s.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
-	return c.buildAPICommandFromOperationResult(apiName, apiCfg, ops, err)
+	set, err := s.OperationSet(apiCfg.BaseURL, apiCfg.OperationBase)
+	return c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
 }
 
-func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.APIConfig, ops []spec.Operation, err error) *cobra.Command {
+func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.APIConfig, set spec.OperationSet, err error) *cobra.Command {
 	if err != nil {
 		source := apiCfg.SpecURL
 		if source == "" && len(apiCfg.SpecFiles) > 0 {
@@ -35,18 +35,29 @@ func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.
 		c.warnf("skipping generated commands for API %q from %s: %v", apiName, source, err)
 		return nil
 	}
-	return c.buildAPICommandFromOperations(apiName, apiCfg, ops)
+	return c.buildAPICommandFromOperationSet(apiName, apiCfg, set)
 }
 
 func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APIConfig, ops []spec.Operation) *cobra.Command {
+	return c.buildAPICommandFromOperationSet(apiName, apiCfg, spec.OperationSet{Operations: ops})
+}
+
+func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.APIConfig, set spec.OperationSet) *cobra.Command {
+	ops := set.Operations
 	// ops == nil means no V3 model or no paths section — nothing to generate.
 	if ops == nil {
 		return nil
 	}
 
+	long := strings.TrimSpace(set.Info.Description)
+	if long == "" {
+		long = strings.TrimSpace(set.Info.Summary)
+	}
+
 	apiCmd := &cobra.Command{
 		Use:     apiName,
 		Short:   fmt.Sprintf("Commands generated from the %s API spec", apiName),
+		Long:    long,
 		GroupID: rootGroupAPI,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {

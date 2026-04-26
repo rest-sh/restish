@@ -99,7 +99,7 @@ loadFresh:
 			return nil, err
 		}
 		if spec != nil && cfg.CacheDir != "" {
-			ops, _ := spec.Operations(cfg.BaseURL, cfg.OperationBase)
+			set, _ := spec.OperationSet(cfg.BaseURL, cfg.OperationBase)
 			entry := &cacheEntry{
 				Version:   cfg.Version,
 				FetchedAt: time.Now(),
@@ -109,8 +109,8 @@ loadFresh:
 					Raw:         spec.Raw,
 				},
 			}
-			if ops != nil {
-				entry.upsertOperations(cfg.BaseURL, cfg.OperationBase, ops)
+			if set.Operations != nil {
+				entry.upsertOperationSet(cfg.BaseURL, cfg.OperationBase, set)
 			}
 			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 		}
@@ -131,7 +131,7 @@ loadFresh:
 		} else {
 			expiresAt = time.Now().Add(24 * time.Hour)
 		}
-		ops, _ := spec.Operations(cfg.BaseURL, cfg.OperationBase)
+		set, _ := spec.OperationSet(cfg.BaseURL, cfg.OperationBase)
 		entry := &cacheEntry{
 			Version:   cfg.Version,
 			FetchedAt: time.Now(),
@@ -141,8 +141,8 @@ loadFresh:
 				Raw:         spec.Raw,
 			},
 		}
-		if ops != nil {
-			entry.upsertOperations(cfg.BaseURL, cfg.OperationBase, ops)
+		if set.Operations != nil {
+			entry.upsertOperationSet(cfg.BaseURL, cfg.OperationBase, set)
 		}
 		_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 	}

@@ -306,8 +306,8 @@ func (c *CLI) Run(args []string) error {
 	// to prime the cache for an API.)
 	for _, apiName := range c.generatedAPINames(args, cfg) {
 		apiCfg := cfg.APIs[apiName]
-		if ops, ok := spec.LoadOperationsFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, apiCfg.BaseURL, apiCfg.OperationBase); ok {
-			if apiCmd := c.buildAPICommandFromOperations(apiName, apiCfg, ops); apiCmd != nil {
+		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, apiCfg.BaseURL, apiCfg.OperationBase); ok {
+			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
 			continue
@@ -322,11 +322,11 @@ func (c *CLI) Run(args []string) error {
 		if err != nil || s == nil {
 			continue
 		}
-		ops, opsErr := s.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+		set, opsErr := s.OperationSet(apiCfg.BaseURL, apiCfg.OperationBase)
 		if opsErr == nil {
-			_ = spec.StoreOperationsInCache(c.specCacheDir(), apiName, Version, apiCfg.BaseURL, apiCfg.OperationBase, ops)
+			_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, apiCfg.BaseURL, apiCfg.OperationBase, set)
 		}
-		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, ops, opsErr); apiCmd != nil {
+		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)
 		}
 	}

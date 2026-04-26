@@ -23,7 +23,7 @@ import (
 func specWithOperations(baseURL string) string {
 	return fmt.Sprintf(`{
   "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
+  "info": {"title": "Test API", "version": "1.0", "description": "# Test API\n\nGenerated **markdown** help."},
   "servers": [{"url": %q}],
   "paths": {
     "/items": {
@@ -175,6 +175,34 @@ func (l *countingLoader) Load(body []byte) (*spec.APISpec, error) {
 
 func (l *countingLoader) Priority() int {
 	return 1000
+}
+
+func TestGeneratedAPIHelpUsesSpecDescriptionFromOperationCache(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c, out := env.newCaptureCLI()
+	loader := &countingLoader{}
+	c.AddLoader(loader)
+
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Generated **markdown** help.") {
+		t.Fatalf("expected API description in help, got:\n%s", got)
+	}
+	if strings.Contains(got, "Commands generated from the tapi API spec\n\nUsage:") {
+		t.Fatalf("expected long help to replace generated placeholder, got:\n%s", got)
+	}
+	if got := loader.detects.Load(); got != 0 {
+		t.Fatalf("loader Detect called %d times, want 0 when API help loads from cached operations", got)
+	}
 }
 
 // TestGeneratedCommandKebabCase verifies that operationId "listItems" becomes
