@@ -2,7 +2,9 @@
 package input
 
 import (
+	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/shorthand/v2"
@@ -24,6 +26,14 @@ import (
 // stdinReader is cli.Stdin; pass strings.NewReader("") with stdinIsTTY=true
 // in tests to simulate an empty terminal.
 func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string) (any, error) {
+	return BodyWithSchemaTypes(stdinReader, stdinIsTTY, args, contentType, nil)
+}
+
+// BodyWithSchemaTypes parses a request body like Body, then coerces values for
+// dotted paths whose schema type is known. This is used by generated commands
+// so OpenAPI string fields keep string semantics for numeric-looking shorthand
+// values without changing generic request shorthand behavior.
+func BodyWithSchemaTypes(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string, schemaTypes map[string]string) (any, error) {
 	opts := shorthand.ParseOptions{
 		EnableFileInput:       enableFileInput(contentType),
 		EnableObjectDetection: true,
@@ -47,6 +57,7 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType str
 				// Can't patch non-structured stdin; treat it as args-only.
 			} else {
 				if len(args) == 0 {
+					coerceSchemaTypes(parsed, schemaTypes)
 					return parsed, nil
 				}
 				base = parsed
@@ -65,7 +76,72 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType str
 	if err != nil {
 		return nil, err
 	}
+	coerceSchemaTypes(result, schemaTypes)
 	return result, nil
+}
+
+func coerceSchemaTypes(value any, schemaTypes map[string]string) {
+	if len(schemaTypes) == 0 {
+		return
+	}
+	for path, typ := range schemaTypes {
+		if typ != "string" {
+			continue
+		}
+		coercePathToString(value, strings.Split(path, "."))
+	}
+}
+
+func coercePathToString(value any, parts []string) {
+	if len(parts) == 0 {
+		return
+	}
+	switch m := value.(type) {
+	case map[string]any:
+		coerceStringMapPath(m, parts)
+	case map[any]any:
+		coerceAnyMapPath(m, parts)
+	}
+}
+
+func coerceStringMapPath(m map[string]any, parts []string) {
+	if len(parts) == 1 {
+		if v, ok := m[parts[0]]; ok {
+			m[parts[0]] = schemaString(v)
+		}
+		return
+	}
+	next, ok := m[parts[0]]
+	if !ok {
+		return
+	}
+	coercePathToString(next, parts[1:])
+}
+
+func coerceAnyMapPath(m map[any]any, parts []string) {
+	key := any(parts[0])
+	value, ok := m[key]
+	if !ok {
+		return
+	}
+	if len(parts) == 1 {
+		m[key] = schemaString(value)
+		return
+	}
+	coercePathToString(value, parts[1:])
+}
+
+func schemaString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return fmt.Sprint(v)
+	}
 }
 
 func enableFileInput(contentType string) bool {

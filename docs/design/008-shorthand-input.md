@@ -103,6 +103,13 @@ Quoting forces string semantics where needed. Restish should preserve the parser
 library's type-coercion contract rather than reinterpreting those values later
 in the CLI layer.
 
+The exception is generated-command request bodies when an OpenAPI request schema
+declares a body property as `type: string`. In that case Restish may coerce the
+parsed shorthand value back to a string for that generated operation only, so
+numeric-looking IDs and amounts are not sent as JSON numbers. Generic HTTP
+commands keep the raw shorthand parser semantics, and generated commands do not
+reject unknown body fields by default.
+
 ## Array And Object Semantics
 
 Shorthand must support:

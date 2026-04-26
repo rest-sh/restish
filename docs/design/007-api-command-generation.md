@@ -158,6 +158,16 @@ body-construction model as the generic HTTP commands:
 
 Generated commands should not invent a separate body grammar.
 
+Generated commands may use request-body schema metadata to preserve OpenAPI
+string semantics after shorthand parsing. For example, if a generated operation
+has a JSON object request schema where `id` is `type: string`, then
+`restish api create id: 123` sends `"id": "123"` even though generic shorthand
+would normally parse `123` as a number. This schema-guided coercion is scoped to
+generated commands and is intentionally shallow: it covers simple object
+properties and dotted nested object paths without adding default-on request-body
+validation. Unknown fields are still accepted unless a future explicit
+validation mode is enabled.
+
 ## Server Resolution
 
 The operation URL is not just `api base URL + path`. The design must account

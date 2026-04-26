@@ -265,7 +265,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.NoAuth, required, optional, args, baseURL, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
 		},
 	}
 	if !op.HasBody {
@@ -458,6 +458,7 @@ func generatedOperationExamples(apiName, use string, examples []string) string {
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
 	apiName, opPath, method, requestMediaType string,
+	requestSchemaTypes map[string]string,
 	noAuth bool,
 	required, optional []*paramInfo,
 	args []string,
@@ -505,7 +506,7 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
-	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType)
+	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestSchemaTypes)
 }
 
 func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {

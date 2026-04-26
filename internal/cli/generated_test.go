@@ -47,7 +47,19 @@ func specWithOperations(baseURL string) string {
         "summary": "Create an item",
         "requestBody": {
           "required": true,
-          "content": {"application/json": {"schema": {"type": "object"}}}
+          "content": {"application/json": {"schema": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "amount": {"type": "string"},
+              "name": {"type": "string"},
+              "count": {"type": "integer"},
+              "meta": {
+                "type": "object",
+                "properties": {"code": {"type": "string"}}
+              }
+            }
+          }}}
         },
         "responses": {"201": {"description": "Created"}}
       }
@@ -411,6 +423,60 @@ func TestGeneratedCommandShorthandBody(t *testing.T) {
 	}
 	if body["name"] != "Widget" {
 		t.Errorf("name: got %v, want Widget", body["name"])
+	}
+}
+
+func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
+	var gotBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			gotBody, _ = io.ReadAll(r.Body)
+		}
+		w.WriteHeader(201)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	err := c.Run([]string{
+		"restish", "tapi", "create-item",
+		"id:", "123,",
+		"amount:", "9223372036854775807,",
+		"count:", "7,",
+		"meta.code:", "456,",
+		"unknown:", "789",
+	})
+	if err != nil {
+		t.Fatalf("create-item: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(gotBody, &body); err != nil {
+		t.Fatalf("body not valid JSON: %v — body: %s", err, gotBody)
+	}
+	for _, key := range []string{"id", "amount"} {
+		if _, ok := body[key].(string); !ok {
+			t.Fatalf("%s = %#v (%T), want string", key, body[key], body[key])
+		}
+	}
+	if body["id"] != "123" {
+		t.Fatalf("id = %#v, want string 123", body["id"])
+	}
+	if body["amount"] != "9223372036854775807" {
+		t.Fatalf("amount = %#v, want string 9223372036854775807", body["amount"])
+	}
+	meta, ok := body["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("meta = %T, want object", body["meta"])
+	}
+	if meta["code"] != "456" {
+		t.Fatalf("meta.code = %#v, want string 456", meta["code"])
+	}
+	if _, ok := body["count"].(float64); !ok {
+		t.Fatalf("count = %#v (%T), want JSON number", body["count"], body["count"])
+	}
+	if _, ok := body["unknown"].(float64); !ok {
+		t.Fatalf("unknown = %#v (%T), want unknown fields left as parsed numbers", body["unknown"], body["unknown"])
 	}
 }
 

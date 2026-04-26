@@ -90,7 +90,7 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 // the cobra.Command itself since command objects are reused across invocations.
 // noAuth strips authentication when following a redirect to a different host,
 // preventing credentialed SSRF via a compromised response-middleware plugin.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string) error {
+func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodySchemaTypes ...map[string]string) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -112,7 +112,11 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType)
+	var schemaTypes map[string]string
+	if len(bodySchemaTypes) > 0 {
+		schemaTypes = bodySchemaTypes[0]
+	}
+	bodyVal, err := input.BodyWithSchemaTypes(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, schemaTypes)
 	if err != nil {
 		return fmt.Errorf("building request body: %w", err)
 	}

@@ -91,8 +91,11 @@ type Operation struct {
 	// RequestMediaType is the deterministic preferred content type from
 	// requestBody.content, if the operation accepts a body.
 	RequestMediaType string
-	XCLI             OperationXCLI
-	Help             OperationHelp
+	// RequestSchemaTypes maps dotted request-body property paths to simple
+	// OpenAPI schema types for generated-command shorthand coercion.
+	RequestSchemaTypes map[string]string
+	XCLI               OperationXCLI
+	Help               OperationHelp
 }
 
 // OperationSet is the extracted operation list plus API-level metadata needed
@@ -224,6 +227,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		},
 	}
 	o.Help = buildOperationHelp(op, o.RequestMediaType)
+	o.RequestSchemaTypes = buildRequestSchemaTypes(op, o.RequestMediaType)
 
 	merged := mergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {

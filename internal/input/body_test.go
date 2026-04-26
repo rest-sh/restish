@@ -51,6 +51,35 @@ func TestBody_ShorthandArgs(t *testing.T) {
 	}
 }
 
+func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
+	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456"}
+	body, err := input.BodyWithSchemaTypes(strings.NewReader(""), true, args, "", map[string]string{
+		"id":        "string",
+		"count":     "integer",
+		"meta.code": "string",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := body.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", body, body)
+	}
+	if got := m["id"]; got != "123" {
+		t.Fatalf("id = %#v, want string 123", got)
+	}
+	meta, ok := m["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("meta = %T, want map", m["meta"])
+	}
+	if got := meta["code"]; got != "456" {
+		t.Fatalf("meta.code = %#v, want string 456", got)
+	}
+	if _, ok := m["count"].(string); ok {
+		t.Fatalf("count = %#v, want numeric because schema is integer", m["count"])
+	}
+}
+
 func TestBody_NestedShorthand(t *testing.T) {
 	args := []string{"user.address.city:", "NYC"}
 	body, err := input.Body(strings.NewReader(""), true, args, "")
