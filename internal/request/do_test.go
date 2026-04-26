@@ -83,6 +83,27 @@ func TestDo_HeaderWithColonInValue(t *testing.T) {
 	}
 }
 
+func TestDo_HostHeaderSetsRequestHost(t *testing.T) {
+	var gotHost, gotHeader string
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			gotHost = r.Host
+			gotHeader = r.Header.Get("Host")
+			return response(200, ""), nil
+		}),
+		Headers: []string{"Host: tenant.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotHost != "tenant.example.com" {
+		t.Errorf("expected req.Host tenant.example.com, got %q", gotHost)
+	}
+	if gotHeader != "" {
+		t.Errorf("expected Host not to be stored as a regular header, got %q", gotHeader)
+	}
+}
+
 func TestDo_InvalidHeader(t *testing.T) {
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
 		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {

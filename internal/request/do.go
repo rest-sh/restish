@@ -163,6 +163,10 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			req.Header.Set(name, value)
 			continue
 		}
+		if strings.EqualFold(name, "Host") {
+			req.Host = value
+			continue
+		}
 		req.Header.Add(name, value)
 	}
 

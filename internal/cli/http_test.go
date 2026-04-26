@@ -34,6 +34,7 @@ func (rr *requestRecorder) capture(r *http.Request) {
 	rr.last = &http.Request{
 		Method: r.Method,
 		URL:    r.URL,
+		Host:   r.Host,
 		Header: r.Header.Clone(),
 	}
 	if r.Body != nil {
@@ -153,6 +154,21 @@ func TestHTTPHeader(t *testing.T) {
 	}
 	if got := rr.Last().Header.Get("X-Test"); got != "hello" {
 		t.Errorf("expected X-Test=hello, got %q", got)
+	}
+}
+
+func TestHTTPHostHeader(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "-H", "Host: tenant.example.com", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Host; got != "tenant.example.com" {
+		t.Errorf("expected Host tenant.example.com, got %q", got)
 	}
 }
 

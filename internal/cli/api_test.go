@@ -117,6 +117,36 @@ func TestProfilePersistentHeader(t *testing.T) {
 	}
 }
 
+func TestProfilePersistentHostHeader(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"headers": ["Host: tenant.example.com"]
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Host; got != "tenant.example.com" {
+		t.Errorf("expected Host tenant.example.com, got %q", got)
+	}
+}
+
 // TestProfilePersistentQuery verifies that a query param declared in the
 // active profile is appended to every request.
 func TestProfilePersistentQuery(t *testing.T) {
