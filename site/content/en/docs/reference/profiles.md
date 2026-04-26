@@ -150,6 +150,10 @@ the OpenAPI spec. Use `operation_base` when the spec's `servers` block differs
 from the actual host, or when operations live on a different URL root than the
 API itself.
 
+`operation_base` must be an absolute `http://` or `https://` URL. Relative
+prefixes such as `/v1` are rejected in v2 config; migrated v1 configs resolve
+relative values against the API's `base_url`.
+
 Example:
 
 ```json

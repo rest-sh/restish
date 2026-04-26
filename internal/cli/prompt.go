@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -22,8 +21,7 @@ func readPromptValue(prompt string, src io.Reader, stderr io.Writer, hidden bool
 		}
 	}
 
-	reader := bufio.NewReader(src)
-	value, err := reader.ReadString('\n')
+	value, err := readPromptLine(src)
 	if err == nil {
 		return strings.TrimRight(value, "\r\n"), nil
 	}
@@ -37,4 +35,24 @@ func readPromptValue(prompt string, src io.Reader, stderr io.Writer, hidden bool
 		return "", fmt.Errorf("unexpected EOF reading password")
 	}
 	return "", fmt.Errorf("unexpected EOF reading prompt")
+}
+
+func readPromptLine(src io.Reader) (string, error) {
+	var b strings.Builder
+	buf := make([]byte, 1)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			b.WriteByte(buf[0])
+			if buf[0] == '\n' {
+				return b.String(), nil
+			}
+		}
+		if err != nil {
+			if err == io.EOF && b.Len() > 0 {
+				return b.String(), io.EOF
+			}
+			return b.String(), err
+		}
+	}
 }

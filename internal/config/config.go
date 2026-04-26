@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -209,8 +210,44 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 		line, col := extractJSONErrorPosition(err, stripped)
 		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
+	if err := Validate(&cfg); err != nil {
+		return nil, &ParseError{Path: path, Err: err}
+	}
 
 	return &cfg, nil
+}
+
+// Validate checks cross-field config invariants that JSON decoding alone cannot
+// enforce.
+func Validate(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for name, api := range cfg.APIs {
+		if api == nil {
+			continue
+		}
+		if err := ValidateOperationBase(api.OperationBase); err != nil {
+			return fmt.Errorf("apis.%s.operation_base: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// ValidateOperationBase enforces the v2 contract that operation_base is an
+// absolute HTTP(S) URL prefix.
+func ValidateOperationBase(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("must be an absolute URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("must use http or https")
+	}
+	return nil
 }
 
 // extractJSONErrorPosition attempts to extract line:column from a JSON decode error.

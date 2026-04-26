@@ -257,6 +257,92 @@ func TestAPIConfigureForceRefreshesCachedSpec(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "default": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {}
+          }
+        }
+      }
+    }
+  },
+  "x-cli-config": {
+    "security": "default",
+    "headers": {"X-Org": "{org}"},
+    "prompt": {
+      "client_id": {"description": "Client identifier", "example": "abc123"},
+      "org": {"description": "Organization", "exclude": true}
+    },
+    "params": {
+      "audience": "https://example.com/{org}"
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("abc123\nacme\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "Client identifier") || !strings.Contains(stderr.String(), "Organization") {
+		t.Fatalf("expected configure-time prompts, got stderr %q", stderr.String())
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	prof := written.APIs["myapi"].Profiles["default"]
+	if prof == nil || prof.Auth == nil {
+		t.Fatalf("expected default auth profile, got %#v", prof)
+	}
+	if got := prof.Auth.Params["client_id"]; got != "abc123" {
+		t.Fatalf("client_id = %q, want abc123", got)
+	}
+	if _, ok := prof.Auth.Params["org"]; ok {
+		t.Fatalf("excluded prompt value was saved in auth params: %#v", prof.Auth.Params)
+	}
+	if got := prof.Auth.Params["audience"]; got != "https://example.com/acme" {
+		t.Fatalf("audience = %q, want rendered org audience", got)
+	}
+	if got := prof.Headers; len(got) != 1 || got[0] != "X-Org: acme" {
+		t.Fatalf("headers = %#v", got)
+	}
+}
+
 // TestAPIShow verifies that "api show" prints the API config as JSON.
 func TestAPIShow(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
@@ -463,7 +549,7 @@ func TestAPISetShorthandAppendHeaders(t *testing.T) {
 func TestAPISetShorthandDeleteKey(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
-			"myapi": {BaseURL: "https://api.example.com", OperationBase: "/v1"},
+			"myapi": {BaseURL: "https://api.example.com", OperationBase: "https://api.example.com/v1"},
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
@@ -481,6 +567,26 @@ func TestAPISetShorthandDeleteKey(t *testing.T) {
 	}
 	if got := written.APIs["myapi"].OperationBase; got != "" {
 		t.Fatalf("expected operation_base to be deleted, got %q", got)
+	}
+}
+
+func TestAPISetRejectsRelativeOperationBase(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "set", "myapi", `operation_base: "/v1"`})
+	if err == nil {
+		t.Fatal("expected relative operation_base to be rejected")
+	}
+	if !strings.Contains(err.Error(), "operation_base must be an absolute URL") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -12,6 +14,13 @@ import (
 type XCLIConfig struct {
 	// Profiles maps profile names to their pre-populated settings.
 	Profiles map[string]*XCLIProfile `json:"profiles,omitempty" yaml:"profiles,omitempty"`
+
+	// Legacy v1 shape. These fields are normalized into Profiles["default"]
+	// during API configuration so specs already in the wild keep working.
+	Security string                   `json:"security,omitempty" yaml:"security,omitempty"`
+	Headers  map[string]string        `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Prompt   map[string]XCLIPromptVar `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+	Params   map[string]string        `json:"params,omitempty" yaml:"params,omitempty"`
 }
 
 // XCLIProfile holds pre-populated configuration for a single API profile.
@@ -28,6 +37,23 @@ type XCLIProfile struct {
 	// Params holds key→value pairs used for {var} template expansion in Headers.
 	// Empty-string values indicate a placeholder that the operator should fill in.
 	Params map[string]string `json:"params,omitempty" yaml:"params,omitempty"`
+
+	// Prompt describes configuration-time questions. Prompted values are written
+	// into Params before Resolve runs; prompts are never evaluated at request time.
+	Prompt map[string]XCLIPromptVar `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+}
+
+// XCLIPromptVar describes a single configuration-time prompt from the legacy
+// v1 x-cli-config.prompt extension.
+type XCLIPromptVar struct {
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Example     string `json:"example,omitempty" yaml:"example,omitempty"`
+	Default     any    `json:"default,omitempty" yaml:"default,omitempty"`
+	Enum        []any  `json:"enum,omitempty" yaml:"enum,omitempty"`
+
+	// Exclude keeps the prompted value out of auth params; it can still be used
+	// for {var} template expansion in Params, Headers, or explicit Auth params.
+	Exclude bool `json:"exclude,omitempty" yaml:"exclude,omitempty"`
 }
 
 // XCLIAuth holds pre-populated authentication configuration.
@@ -159,6 +185,92 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 	return &XCLIAuth{Type: authType, Params: p}
 }
 
+// Normalize returns a copy of xcli using the v2 profile-shaped structure.
+// Legacy top-level v1 x-cli-config fields are mapped to the default profile.
+func (xcli *XCLIConfig) Normalize() *XCLIConfig {
+	if xcli == nil {
+		return nil
+	}
+	out := &XCLIConfig{
+		Profiles: make(map[string]*XCLIProfile, len(xcli.Profiles)),
+	}
+	for name, profile := range xcli.Profiles {
+		out.Profiles[name] = cloneXCLIProfile(profile)
+	}
+	if len(out.Profiles) == 0 && xcli.hasLegacyDefaultProfile() {
+		out.Profiles["default"] = &XCLIProfile{
+			Headers:  sortedLegacyHeaders(xcli.Headers),
+			Security: xcli.Security,
+			Params:   cloneStringMap(xcli.Params),
+			Prompt:   clonePromptMap(xcli.Prompt),
+		}
+	}
+	return out
+}
+
+func (xcli *XCLIConfig) hasLegacyDefaultProfile() bool {
+	return xcli.Security != "" || len(xcli.Headers) > 0 || len(xcli.Prompt) > 0 || len(xcli.Params) > 0
+}
+
+func cloneXCLIProfile(src *XCLIProfile) *XCLIProfile {
+	if src == nil {
+		return &XCLIProfile{}
+	}
+	dst := &XCLIProfile{
+		Headers:  append([]string(nil), src.Headers...),
+		Query:    append([]string(nil), src.Query...),
+		Security: src.Security,
+		Params:   cloneStringMap(src.Params),
+		Prompt:   clonePromptMap(src.Prompt),
+	}
+	if src.Auth != nil {
+		dst.Auth = &XCLIAuth{
+			Type:   src.Auth.Type,
+			Params: cloneStringMap(src.Auth.Params),
+		}
+	}
+	return dst
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func clonePromptMap(src map[string]XCLIPromptVar) map[string]XCLIPromptVar {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]XCLIPromptVar, len(src))
+	for k, v := range src {
+		v.Enum = append([]any(nil), v.Enum...)
+		dst[k] = v
+	}
+	return dst
+}
+
+func sortedLegacyHeaders(headers map[string]string) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, fmt.Sprintf("%s: %s", k, headers[k]))
+	}
+	return out
+}
+
 // ExpandParams replaces {var} placeholders in s with the corresponding values
 // from params. Unrecognised placeholders are left as-is.
 func ExpandParams(s string, params map[string]string) string {
@@ -174,6 +286,10 @@ func ExpandParams(s string, params map[string]string) string {
 // (in which case unresolved Security fields are silently dropped).
 // The original XCLIConfig is not modified.
 func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
+	xcli = xcli.Normalize()
+	if xcli == nil {
+		return &XCLIConfig{}
+	}
 	// Build the security scheme map once (best-effort).
 	schemeMap := map[string]*v3high.SecurityScheme{}
 	if s != nil && s.Document != nil {
@@ -197,11 +313,21 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 		}
 
 		// Resolve Security → Auth when no explicit Auth is set.
-		auth := xp.Auth
+		auth := cloneXCLIAuth(xp.Auth)
 		if auth == nil && xp.Security != "" {
 			if scheme, ok := schemeMap[xp.Security]; ok {
 				auth = SchemeToXCLIAuth(scheme, xp.Params)
 			}
+		}
+		if auth == nil && xp.Security != "" {
+			auth = &XCLIAuth{Type: xp.Security, Params: cloneStringMap(xp.Params)}
+		}
+		if auth != nil && len(xp.Params) > 0 {
+			params := cloneStringMap(xp.Params)
+			for k, v := range auth.Params {
+				params[k] = v
+			}
+			auth.Params = params
 		}
 		rp.Auth = auth
 
@@ -215,4 +341,14 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 	}
 
 	return resolved
+}
+
+func cloneXCLIAuth(src *XCLIAuth) *XCLIAuth {
+	if src == nil {
+		return nil
+	}
+	return &XCLIAuth{
+		Type:   src.Type,
+		Params: cloneStringMap(src.Params),
+	}
 }

@@ -179,8 +179,29 @@ x-cli-config:
 ```
 
 Do not put secrets in the OpenAPI document. v1-style `x-cli-config.prompt` is
-not part of v2 configuration; users should add secret values with `restish.json`,
-`api set`, or an auth flow that prompts at request time.
+still supported for specs already in the wild: `api configure` prompts once,
+writes the answers into the local profile config, and never prompts from
+`x-cli-config` during normal requests.
+
+Legacy prompt-shaped config is normalized to the `default` profile:
+
+```yaml
+x-cli-config:
+  security: default
+  prompt:
+    client_id:
+      description: Client identifier
+      example: abc123
+    org:
+      description: Organization ID
+      exclude: true
+  params:
+    audience: https://example.com/{org}
+```
+
+Prompted values are saved as auth params unless `exclude: true` is set. Excluded
+values can still be used in `{name}` templates for `params`, headers, and auth
+params during `api configure`.
 
 ## Authoring Advice That Pays Off
 

@@ -412,7 +412,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	if api.BaseURL != "https://api.example.com" {
 		t.Fatalf("BaseURL = %q", api.BaseURL)
 	}
-	if api.OperationBase != "/v1" {
+	if api.OperationBase != "https://api.example.com/v1" {
 		t.Fatalf("OperationBase = %q", api.OperationBase)
 	}
 	if len(api.SpecFiles) != 1 || api.SpecFiles[0] != "spec.yaml" {
@@ -464,6 +464,24 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 		if _, err := os.Stat(backupPath); err != nil {
 			t.Fatalf("expected backup file %s: %v", backupPath, err)
 		}
+	}
+}
+
+func TestLoadRejectsRelativeOperationBase(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "operation_base": "/v1"
+    }
+  }
+}`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected relative operation_base to be rejected")
+	}
+	if !strings.Contains(err.Error(), "apis.example.operation_base: must be an absolute URL") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

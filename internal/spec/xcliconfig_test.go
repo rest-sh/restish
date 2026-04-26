@@ -50,6 +50,47 @@ paths: {}`)
 	}
 }
 
+func TestReadXCLIConfig_LegacyPromptShapeNormalizesToDefaultProfile(t *testing.T) {
+	raw := []byte(`
+x-cli-config:
+  security: default
+  headers:
+    Accept: application/json
+  prompt:
+    client_id:
+      description: Client identifier
+      example: abc123
+  params:
+    audience: https://example.com/{client_id}
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}`)
+	spec := &APISpec{Raw: raw}
+	cfg, err := ReadXCLIConfig(spec)
+	if err != nil {
+		t.Fatalf("ReadXCLIConfig: %v", err)
+	}
+	normalized := cfg.Normalize()
+	profile := normalized.Profiles["default"]
+	if profile == nil {
+		t.Fatal("expected legacy config to normalize to default profile")
+	}
+	if profile.Security != "default" {
+		t.Fatalf("Security = %q, want default", profile.Security)
+	}
+	if got := profile.Headers; len(got) != 1 || got[0] != "Accept: application/json" {
+		t.Fatalf("Headers = %#v", got)
+	}
+	if profile.Prompt["client_id"].Description != "Client identifier" {
+		t.Fatalf("Prompt = %#v", profile.Prompt)
+	}
+	if profile.Params["audience"] != "https://example.com/{client_id}" {
+		t.Fatalf("Params = %#v", profile.Params)
+	}
+}
+
 func TestReadXCLIConfig_Absent(t *testing.T) {
 	raw := []byte(`openapi: "3.1.0"
 info:

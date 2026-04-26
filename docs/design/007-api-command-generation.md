@@ -166,6 +166,10 @@ The generator or request planner must honor those server blocks and merge them
 with API registration rules such as `operation_base` or profile base URL
 overrides.
 
+In v2 config, `operation_base` is an absolute HTTP(S) URL prefix. Relative v1
+values are resolved against the API base URL during migration; new relative
+values are rejected.
+
 ## Help And Discoverability
 
 Generated commands should feel like ordinary Cobra commands:

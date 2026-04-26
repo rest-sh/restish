@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -235,6 +236,10 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 			xcli = spec.FallbackXCLIConfig(apiSpec)
 		}
 		if xcli != nil {
+			xcli = xcli.Normalize()
+			if err := c.promptXCLIConfig(requestContext(cmd), xcli); err != nil {
+				return err
+			}
 			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
 		}
 	}
@@ -263,6 +268,129 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
 	}
 	return nil
+}
+
+func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error {
+	if xcli == nil || len(xcli.Profiles) == 0 {
+		return nil
+	}
+	profileNames := make([]string, 0, len(xcli.Profiles))
+	for name := range xcli.Profiles {
+		profileNames = append(profileNames, name)
+	}
+	sort.Strings(profileNames)
+
+	for _, profileName := range profileNames {
+		profile := xcli.Profiles[profileName]
+		if profile == nil || len(profile.Prompt) == 0 {
+			continue
+		}
+		if profile.Params == nil {
+			profile.Params = map[string]string{}
+		}
+		responses := map[string]string{}
+		promptNames := make([]string, 0, len(profile.Prompt))
+		for name := range profile.Prompt {
+			promptNames = append(promptNames, name)
+		}
+		sort.Strings(promptNames)
+
+		for _, name := range promptNames {
+			value, err := c.readXCLIPrompt(ctx, profileName, name, profile.Prompt[name])
+			if err != nil {
+				return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
+			}
+			responses[name] = value
+			if !profile.Prompt[name].Exclude {
+				profile.Params[name] = value
+			}
+		}
+		for k, v := range profile.Params {
+			profile.Params[k] = spec.ExpandParams(v, responses)
+		}
+		if profile.Auth != nil && len(profile.Auth.Params) > 0 {
+			for k, v := range profile.Auth.Params {
+				profile.Auth.Params[k] = spec.ExpandParams(v, responses)
+			}
+		}
+		for i, h := range profile.Headers {
+			profile.Headers[i] = spec.ExpandParams(h, responses)
+		}
+	}
+	return nil
+}
+
+func (c *CLI) readXCLIPrompt(ctx context.Context, profileName, name string, prompt spec.XCLIPromptVar) (string, error) {
+	label := xcliPromptLabel(profileName, name, prompt)
+	var (
+		value string
+		err   error
+	)
+	if xcliPromptLooksSecret(name) {
+		value, err = c.Secret(ctx, label)
+	} else {
+		value, err = c.Prompt(ctx, label)
+	}
+	if err != nil {
+		return "", err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" && prompt.Default != nil {
+		value = fmt.Sprint(prompt.Default)
+	}
+	if value == "" {
+		return "", fmt.Errorf("empty value")
+	}
+	if len(prompt.Enum) > 0 && !xcliPromptValueAllowed(value, prompt.Enum) {
+		return "", fmt.Errorf("value %q is not one of: %s", value, xcliPromptEnumList(prompt.Enum))
+	}
+	return value, nil
+}
+
+func xcliPromptLabel(profileName, name string, prompt spec.XCLIPromptVar) string {
+	label := name
+	if prompt.Description != "" {
+		label = prompt.Description
+	}
+	if profileName != "" && profileName != "default" {
+		label = profileName + " " + label
+	}
+	if len(prompt.Enum) > 0 {
+		label += " (" + xcliPromptEnumList(prompt.Enum) + ")"
+	} else if prompt.Example != "" {
+		label += " (example: " + prompt.Example + ")"
+	}
+	if prompt.Default != nil {
+		label += " [" + fmt.Sprint(prompt.Default) + "]"
+	}
+	return label + ": "
+}
+
+func xcliPromptValueAllowed(value string, enum []any) bool {
+	for _, candidate := range enum {
+		if value == fmt.Sprint(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func xcliPromptEnumList(enum []any) string {
+	values := make([]string, 0, len(enum))
+	for _, candidate := range enum {
+		values = append(values, fmt.Sprint(candidate))
+	}
+	return strings.Join(values, ", ")
+}
+
+func xcliPromptLooksSecret(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "password") ||
+		strings.Contains(lower, "secret") ||
+		strings.Contains(lower, "token") ||
+		strings.Contains(lower, "api_key") ||
+		strings.Contains(lower, "apikey") ||
+		strings.Contains(lower, "private_key")
 }
 
 // applyXCLIConfig merges x-cli-config fields into apiCfg.
@@ -760,6 +888,9 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("operation_base must be a string")
+		}
+		if err := config.ValidateOperationBase(v); err != nil {
+			return fmt.Errorf("operation_base %w", err)
 		}
 		apiCfg.OperationBase = v
 	case apiKeyPaginationItemsPath:

@@ -66,7 +66,7 @@ API fields:
 | `spec_url` | string | Explicit spec URL. |
 | `spec_files` | array | Ordered local/remote specs to merge. |
 | `allow_cross_origin_spec` | bool | Permit safe cross-origin Link spec discovery. |
-| `operation_base` | string | URL prefix used by generated operations. |
+| `operation_base` | string | Absolute HTTP(S) URL prefix used by generated operations. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |
@@ -127,6 +127,9 @@ across pagination, streaming, filters, and explicit formats.
 
 The v1 interactive `api configure <name>` prompt flow is retired. v2 config is
 edited through `restish.json`, `api add`, `api set`, and `api edit`.
+Legacy `x-cli-config.prompt` is not retired: `api configure <name> <url>`
+prompts for those values while writing local config, then normal requests use
+the saved config without extension-driven prompting.
 
 The `restish-mcp --http` flag is not part of v2; MCP currently uses stdio as a
 command plugin.
