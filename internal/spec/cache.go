@@ -43,7 +43,7 @@ type opsBlob struct {
 }
 
 const currentCacheSchema = 2
-const currentOperationCacheSchema = 2
+const currentOperationCacheSchema = 3
 
 // cacheFile returns the path of the CBOR cache file for the given API.
 func cacheFile(cacheDir, apiName string) string {

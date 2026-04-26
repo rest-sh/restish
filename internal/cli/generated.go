@@ -116,6 +116,7 @@ type paramInfo struct {
 	required     bool
 	hidden       bool
 	desc         string
+	schema       string
 	typ          string
 	itemType     string
 	defaultValue string
@@ -162,6 +163,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 			required:     p.Required,
 			hidden:       p.XCLI.Hidden,
 			desc:         desc,
+			schema:       p.Schema,
 			typ:          p.Type,
 			itemType:     p.ItemType,
 			defaultValue: p.Default,
@@ -247,11 +249,13 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 		}
 		long += argDocs.String()
 	}
+	long = appendGeneratedOperationHelp(long, required, optional, op.Help)
 
 	cmd := &cobra.Command{
 		Use:        use,
 		Short:      short,
 		Long:       long,
+		Example:    generatedOperationExamples(apiName, use, op.Help.Examples),
 		Aliases:    op.XCLI.Aliases,
 		Args:       cobra.MinimumNArgs(len(required)),
 		Hidden:     op.XCLI.Hidden,
@@ -312,6 +316,138 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, 
 	}
 
 	return cmd, nil
+}
+
+func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, help spec.OperationHelp) string {
+	var b strings.Builder
+	if strings.TrimSpace(long) != "" {
+		b.WriteString(strings.TrimRight(long, "\n"))
+	}
+	appendSection := func(title string) {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(title)
+		b.WriteString("\n")
+	}
+
+	if hasParamSchemas(required) {
+		appendSection("Argument Schema:")
+		b.WriteString("```schema\n{\n")
+		for _, p := range required {
+			if p.schema == "" {
+				continue
+			}
+			b.WriteString("  " + p.flagName + ": " + indentSchemaContinuation(p.schema, "  ") + "\n")
+		}
+		b.WriteString("}\n```")
+	}
+
+	if hasParamSchemas(optional) {
+		appendSection("Option Schema:")
+		b.WriteString("```schema\n{\n")
+		for _, p := range optional {
+			if p.schema == "" {
+				continue
+			}
+			b.WriteString("  --" + p.flagName + ": " + indentSchemaContinuation(p.schema, "  ") + "\n")
+		}
+		b.WriteString("}\n```")
+	}
+
+	if help.Request != nil {
+		if help.Request.Example != "" {
+			appendSection("Input Example:")
+			b.WriteString("```json\n")
+			b.WriteString(help.Request.Example)
+			b.WriteString("\n```")
+		}
+		if help.Request.Schema != "" {
+			title := "Request Schema"
+			if help.Request.MediaType != "" {
+				title += " (" + help.Request.MediaType + ")"
+			}
+			appendSection(title + ":")
+			b.WriteString("```schema\n")
+			b.WriteString(help.Request.Schema)
+			b.WriteString("\n```")
+		}
+	}
+
+	for _, resp := range help.Responses {
+		if len(resp.Codes) == 0 {
+			continue
+		}
+		prefix := "Response"
+		if len(resp.Codes) > 1 {
+			prefix = "Responses"
+		}
+		title := prefix + " " + strings.Join(resp.Codes, "/")
+		if resp.MediaType != "" {
+			title += " (" + resp.MediaType + ")"
+		}
+		appendSection(title + ":")
+		if resp.Description != "" && len(resp.Codes) == 1 {
+			b.WriteString(resp.Description)
+			b.WriteString("\n\n")
+		}
+		if resp.NoBody && resp.Schema == "" {
+			b.WriteString("Response has no body")
+			continue
+		}
+		if resp.Example != "" {
+			b.WriteString("```json\n")
+			b.WriteString(resp.Example)
+			b.WriteString("\n```\n\n")
+		}
+		if resp.Schema != "" {
+			b.WriteString("```schema\n")
+			b.WriteString(resp.Schema)
+			b.WriteString("\n```")
+		}
+	}
+
+	return b.String()
+}
+
+func hasParamSchemas(params []*paramInfo) bool {
+	for _, p := range params {
+		if p.schema != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func indentSchemaContinuation(schema, indent string) string {
+	lines := strings.Split(schema, "\n")
+	if len(lines) <= 1 {
+		return schema
+	}
+	for i := 1; i < len(lines); i++ {
+		lines[i] = indent + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func generatedOperationExamples(apiName, use string, examples []string) string {
+	if len(examples) == 0 {
+		return ""
+	}
+	use = strings.TrimSuffix(use, " [body...]")
+	var b strings.Builder
+	for _, ex := range examples {
+		b.WriteString("  restish ")
+		b.WriteString(apiName)
+		b.WriteString(" ")
+		b.WriteString(use)
+		if ex != "" {
+			b.WriteString(" ")
+			b.WriteString(ex)
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // runGeneratedOp is the RunE handler for generated operation commands.

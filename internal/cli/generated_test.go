@@ -379,6 +379,154 @@ func TestGeneratedCommandHelp(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Pets", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "schemas": {
+      "Pet": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {"type": "string", "readOnly": true},
+          "name": {"type": "string"},
+          "secret_token": {"type": "string", "writeOnly": true}
+        }
+      },
+      "ErrorModel": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {"type": "string"}
+        }
+      }
+    }
+  },
+  "paths": {
+    "/pets": {
+      "post": {
+        "operationId": "createPet",
+        "summary": "Create a pet",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {"name": "Fluffy", "secret_token": "abc123"},
+              "schema": {"$ref": "#/components/schemas/Pet"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorModel"}}}
+          },
+          "404": {
+            "description": "Not found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorModel"}}}
+          },
+          "500": {
+            "description": "Inline equivalent error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["message"],
+                  "properties": {"message": {"type": "string"}}
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default error",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorModel"}}}
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-pet", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Input Example:",
+		`"name": "Fluffy"`,
+		`"secret_token": "abc123"`,
+		"Request Schema (application/json):",
+		"name*: (string)",
+		"Response 201 (application/json):",
+		"id*: (string)",
+		"Responses 400/404/500/default (application/json):",
+		"message*: (string)",
+		"restish tapi create-pet name: Fluffy, secret_token: abc123",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected help to contain %q, got:\n%s", want, got)
+		}
+	}
+}
+
+func TestGeneratedCommandHelpBoundsRecursiveSchemas(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Tree", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "schemas": {
+      "Node": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "child": {"$ref": "#/components/schemas/Node"}
+        }
+      }
+    }
+  },
+  "paths": {
+    "/tree": {
+      "get": {
+        "operationId": "getTree",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Node"}}}
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-tree", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "<recursive ref>") {
+		t.Fatalf("expected recursive schema marker, got:\n%s", got)
+	}
+}
+
 func TestGeneratedCommandMissingOperationIDFallsBackToMethodAndPath(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {

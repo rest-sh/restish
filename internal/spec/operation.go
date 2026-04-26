@@ -33,6 +33,7 @@ type Param struct {
 	Name       string
 	In         string // "path", "query", "header", "cookie"
 	Desc       string
+	Schema     string
 	Required   bool
 	Type       string
 	ItemType   string
@@ -42,6 +43,32 @@ type Param struct {
 	Explode    *bool
 	Enum       []string
 	XCLI       ParamXCLI
+}
+
+// OperationBodyHelp is a compact request/response body example extracted from
+// OpenAPI schemas for generated command help.
+type OperationBodyHelp struct {
+	MediaType string
+	Schema    string
+	Example   string
+}
+
+// OperationResponseHelp is a compact response shape for generated command help.
+// Codes may contain several status codes when they share the same schema.
+type OperationResponseHelp struct {
+	Codes       []string
+	MediaType   string
+	Schema      string
+	Example     string
+	NoBody      bool
+	Description string
+}
+
+// OperationHelp stores pre-rendered help snippets for generated commands.
+type OperationHelp struct {
+	Request   *OperationBodyHelp
+	Responses []OperationResponseHelp
+	Examples  []string
 }
 
 // Operation is a single HTTP operation extracted from a spec, expressed in
@@ -63,6 +90,7 @@ type Operation struct {
 	// requestBody.content, if the operation accepts a body.
 	RequestMediaType string
 	XCLI             OperationXCLI
+	Help             OperationHelp
 }
 
 // OperationSet is the extracted operation list plus API-level metadata needed
@@ -179,6 +207,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			Aliases:     OpExtStrings(op, "x-cli-aliases"),
 		},
 	}
+	o.Help = buildOperationHelp(op, o.RequestMediaType)
 
 	merged := mergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {
@@ -186,10 +215,11 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			continue
 		}
 		var enum []string
-		var paramType, itemType, defaultValue string
+		var paramType, itemType, defaultValue, schemaHelp string
 		var hasDefault bool
 		if p.Schema != nil {
 			if schema := p.Schema.Schema(); schema != nil {
+				schemaHelp = buildParameterSchemaHelp(schema)
 				paramType = schemaType(schema.Type)
 				if paramType == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
 					if itemSchema := schema.Items.A.Schema(); itemSchema != nil {
@@ -214,6 +244,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			Name:       p.Name,
 			In:         p.In,
 			Desc:       p.Description,
+			Schema:     schemaHelp,
 			Required:   p.Required != nil && *p.Required,
 			Type:       paramType,
 			ItemType:   itemType,
