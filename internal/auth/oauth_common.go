@@ -397,6 +397,7 @@ func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":    true,
 		"authorize_url": true,
+		"cache_key":     true,
 		"issuer_url":    true,
 		"redirect_port": true,
 		"token_url":     true,

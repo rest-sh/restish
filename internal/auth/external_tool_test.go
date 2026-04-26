@@ -68,6 +68,24 @@ func TestExternalTool_OnRequest_UpdatesURI(t *testing.T) {
 	}
 }
 
+func TestExternalTool_OnRequest_BearerTokenOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command test not supported on Windows")
+	}
+	a := &ExternalTool{}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	err := a.OnRequest(req, map[string]string{
+		"commandline": `printf '%s\n' token-from-tool`,
+		"output":      "bearer-token",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer token-from-tool" {
+		t.Fatalf("Authorization = %q, want bearer token", got)
+	}
+}
+
 func TestExternalTool_OnRequest_EmptyOutput_NoOp(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell command test not supported on Windows")
@@ -98,6 +116,30 @@ func TestExternalTool_OnRequest_ToolExitError(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("expected error for non-zero tool exit")
+	}
+}
+
+func TestExternalTool_OnRequest_ToolExitErrorIncludesBoundedStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command test not supported on Windows")
+	}
+	var streamed strings.Builder
+	a := &ExternalTool{Stderr: &streamed}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := a.OnRequest(req, map[string]string{
+		"commandline": `printf 'client_secret=super-secret\n' >&2; exit 1`,
+	})
+	if err == nil {
+		t.Fatal("expected error for non-zero tool exit")
+	}
+	if !strings.Contains(streamed.String(), "super-secret") {
+		t.Fatalf("expected stderr to be streamed, got %q", streamed.String())
+	}
+	if !strings.Contains(err.Error(), "stderr:") {
+		t.Fatalf("expected stderr excerpt in error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "super-secret") || !strings.Contains(err.Error(), "client_secret=***") {
+		t.Fatalf("expected redacted stderr in error, got %v", err)
 	}
 }
 

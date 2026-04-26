@@ -95,6 +95,12 @@ merged into the outbound request before it is sent.
 This keeps external auth providers inside the same request-hook stage as
 built-in auth handlers.
 
+Provider-specific OAuth token exchange is a good fit for this hook/plugin
+boundary when the built-in OAuth flows are too small. The plugin can own the
+provider-specific token exchange and return ordinary request updates, while the
+core keeps common OAuth helpers focused on standard client credentials,
+authorization code, and device-code behavior.
+
 ### Request Middleware Hook
 
 The `request-middleware` hook receives the prepared request and can return

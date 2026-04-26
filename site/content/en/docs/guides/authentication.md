@@ -120,12 +120,75 @@ That gives you a useful middle ground:
 
 This is usually better than copying full auth headers into shell history.
 
+You can also point an auth param at a late-resolved source:
+
+```json
+{
+  "type": "oauth-client-credentials",
+  "params": {
+    "client_id": "ci-client",
+    "client_secret": "env:MYAPI_CLIENT_SECRET",
+    "token_url": "https://issuer.example.com/oauth/token"
+  }
+}
+```
+
+Supported prefixes are:
+
+- `env:NAME` reads an environment variable when the request runs
+- `command:...` runs a local command and uses stdout, trimmed of trailing newlines
+
+Resolved values are not written back to config. Command stderr is bounded in
+errors and common secret assignments are redacted.
+
+## Shared Auth Profiles
+
+Use top-level `auth_profiles` when several API registrations should use the
+same auth context:
+
+```json
+{
+  "auth_profiles": {
+    "work": {
+      "type": "oauth-client-credentials",
+      "params": {
+        "client_id": "ci-client",
+        "client_secret": "env:MYAPI_CLIENT_SECRET",
+        "issuer_url": "https://issuer.example.com"
+      }
+    }
+  },
+  "apis": {
+    "orders": {
+      "base_url": "https://orders.example.com",
+      "profiles": {
+        "default": {"auth_ref": "work"}
+      }
+    },
+    "billing": {
+      "base_url": "https://billing.example.com",
+      "profiles": {
+        "default": {"auth_ref": "work"}
+      }
+    }
+  }
+}
+```
+
+`auth_ref` and inline `auth` are mutually exclusive. OAuth tokens for shared
+auth profiles are shared when the token-affecting params match. Clear them with:
+
+```bash
+restish api clear-auth-cache --auth-profile work
+```
+
 ## OAuth Notes
 
 For token-based flows, Restish treats auth as request-time behavior:
 
 - the selected profile chooses the auth context
-- tokens are cached per `api:profile`
+- tokens are cached per `api:profile`, or per shared `auth_profiles` entry when
+  a profile uses `auth_ref`
 - the handler mutates the outbound request just before send
 
 This keeps auth composable with the rest of the request pipeline instead of
@@ -296,6 +359,21 @@ At request time, Restish sends the outbound request to the tool as JSON on
 stdin. The tool can return updated headers, an updated URI, or both.
 The first time Restish sees a new `commandline` value, it prompts once and
 stores the approved command hash in the config directory.
+
+If a helper already prints a bearer token, opt into token-output mode:
+
+```json
+{
+  "type": "external-tool",
+  "params": {
+    "commandline": "my-token-helper",
+    "output": "bearer-token"
+  }
+}
+```
+
+In that mode, Restish trims stdout and sends it as
+`Authorization: Bearer <token>`.
 
 This is useful when:
 

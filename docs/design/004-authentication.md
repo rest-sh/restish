@@ -81,6 +81,36 @@ configuration.
 
 Unknown auth types are errors unless a matching auth plugin is available.
 
+Shared auth can also live under top-level `auth_profiles` and be referenced
+from API profiles with `auth_ref`:
+
+```jsonc
+{
+  "auth_profiles": {
+    "work": {
+      "type": "oauth-client-credentials",
+      "params": {
+        "client_id": "ci",
+        "client_secret": "env:RESTISH_CLIENT_SECRET",
+        "issuer_url": "https://issuer.example.com"
+      }
+    }
+  },
+  "apis": {
+    "one": {
+      "profiles": {
+        "default": {"auth_ref": "work"}
+      }
+    }
+  }
+}
+```
+
+Inline `auth` and `auth_ref` are mutually exclusive. A reference is a
+source-of-truth pointer to one named auth profile, not an overlay. Named auth
+profiles make the v2 config schema capable of sharing credentials and OAuth
+tokens between API registrations without duplicating secret-bearing params.
+
 ## Built-In Auth Types
 
 The built-in set should include:
@@ -141,6 +171,13 @@ Token-bearing auth flows use a persistent token cache keyed by at least:
 - API identity
 - profile name
 - any additional cache partition key required by the auth config
+
+When a profile uses `auth_ref`, the token cache key is based on the named auth
+profile and selected token-affecting params such as issuer, token endpoint,
+client ID, scopes, audience, resource, or an explicit `cache_key` param. This
+lets two APIs that reference the same named auth profile share a token when the
+auth context is actually the same, while still partitioning tokens when the
+named profile changes materially.
 
 The token store must provide:
 
@@ -235,6 +272,34 @@ browser launch fails or verbose mode is enabled.
 Client credentials flow should support provider-specific extra parameters such
 as `audience`, `resource`, or `organization`. Restish should forward unknown
 endpoint parameters rather than silently dropping them.
+
+## Secret Sources
+
+Auth params may use late-resolved secret sources:
+
+- `env:NAME` reads an environment variable at request time
+- `command:...` runs a local command and uses its stdout, trimmed of trailing
+  newlines
+
+Resolution happens after config loading and before the auth handler runs, so
+commands such as `api show` do not need to print resolved secret values.
+Command stderr is bounded and redacted when included in errors.
+
+## External Tool Auth
+
+`external-tool` preserves the v1 JSON request-mutation protocol by default:
+Restish sends request metadata as JSON on stdin, and the tool returns JSON
+header or URI updates on stdout. A new opt-in output mode,
+`params.output: bearer-token`, treats stdout as the bearer token and sets
+`Authorization: Bearer <token>`.
+
+External auth commands remain trusted local code. Restish requires command
+approval, streams stderr to the user, captures a bounded stderr excerpt for
+errors, and redacts common secret assignments in the returned diagnostic.
+
+OAuth token exchange for provider-specific systems should be modeled as an auth
+hook/plugin pattern when the built-in flows are not enough. The core should keep
+generic OAuth helpers, not vendor-specific token exchange parameters.
 
 ### Device Code Or Headless Alternative
 

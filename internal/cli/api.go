@@ -30,6 +30,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runClearAuthCache,
 	}
 	clearAuthCmd.Flags().Bool("all", false, "Delete cached auth tokens for every profile of the named API")
+	clearAuthCmd.Flags().Bool("auth-profile", false, "Treat name as a shared auth profile instead of an API")
 	apiCmd.AddCommand(clearAuthCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -95,6 +96,18 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 // runClearAuthCache deletes the token cache entry for the named API+profile.
 func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
+	authProfileMode, _ := cmd.Flags().GetBool("auth-profile")
+	tc := auth.NewTokenCache(c.tokenCachePath())
+	if authProfileMode {
+		if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[apiName] == nil {
+			return fmt.Errorf("unknown auth profile %q", apiName)
+		}
+		if err := tc.DeletePrefix("auth_profile:" + apiName + ":"); err != nil {
+			return fmt.Errorf("clear-auth-cache: %w", err)
+		}
+		fmt.Fprintf(c.Stdout, "Cleared auth cache for auth profile %q\n", apiName)
+		return nil
+	}
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
@@ -102,10 +115,20 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 	profileName := c.profileFromCmd(cmd)
 	allProfiles, _ := cmd.Flags().GetBool("all")
 
-	tc := auth.NewTokenCache(c.tokenCachePath())
 	if allProfiles {
 		if err := tc.DeletePrefix(apiName + ":"); err != nil {
 			return fmt.Errorf("clear-auth-cache: %w", err)
+		}
+		for _, prof := range c.cfg.APIs[apiName].Profiles {
+			resolved, err := c.resolveProfileAuth(apiName, "", prof)
+			if err != nil {
+				return err
+			}
+			if resolved.Ref != "" {
+				if err := tc.DeletePrefix("auth_profile:" + resolved.Ref + ":"); err != nil {
+					return fmt.Errorf("clear-auth-cache: %w", err)
+				}
+			}
 		}
 		fmt.Fprintf(c.Stdout, "Cleared auth cache for %q (all profiles)\n", apiName)
 		return nil
@@ -113,6 +136,17 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 	key := apiName + ":" + profileName
 	if err := tc.Delete(key); err != nil {
 		return fmt.Errorf("clear-auth-cache: %w", err)
+	}
+	if prof := c.cfg.APIs[apiName].Profiles[profileName]; prof != nil {
+		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
+		if err != nil {
+			return err
+		}
+		if resolved.CacheKey != "" {
+			if err := tc.Delete(resolved.CacheKey); err != nil {
+				return fmt.Errorf("clear-auth-cache: %w", err)
+			}
+		}
 	}
 	fmt.Fprintf(c.Stdout, "Cleared auth cache for %q (profile %q)\n", apiName, profileName)
 	return nil
@@ -843,6 +877,7 @@ const (
 	apiKeyProfileQuery
 	apiKeyProfileTLSSigner
 	apiKeyProfileServerVariable
+	apiKeyProfileAuthRef
 	apiKeyProfileAuthType
 	apiKeyProfileAuthParam
 )
@@ -933,6 +968,12 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 				profileName: profileName,
 				varName:     subParts[1],
 			}, nil
+		case "auth_ref":
+			return resolvedAPIConfigKey{
+				kind:        apiKeyProfileAuthRef,
+				jsonPath:    append(basePath, "profiles", profileName, "auth_ref"),
+				profileName: profileName,
+			}, nil
 		case "auth":
 			if len(subParts) < 2 {
 				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
@@ -958,10 +999,10 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q; supported: type, params.<param>", subParts[1])
 			}
 		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth.type, auth.params.<param>", parts[2])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
 	}
 }
 
@@ -1206,12 +1247,28 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 			prof.ServerVariables = map[string]string{}
 		}
 		prof.ServerVariables[resolved.varName] = v
+	case apiKeyProfileAuthRef:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.auth_ref must be a string", resolved.profileName)
+		}
+		if v != "" && (c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[v] == nil) {
+			return fmt.Errorf("profiles.%s.auth_ref: unknown auth profile %q", resolved.profileName, v)
+		}
+		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.Auth != nil && v != "" {
+			return fmt.Errorf("profiles.%s.auth_ref cannot be set while auth is configured", resolved.profileName)
+		}
+		prof.AuthRef = v
 	case apiKeyProfileAuthType:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("profiles.%s.auth.type must be a string", resolved.profileName)
 		}
 		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.AuthRef != "" {
+			return fmt.Errorf("profiles.%s.auth cannot be set while auth_ref is configured", resolved.profileName)
+		}
 		if prof.Auth == nil {
 			prof.Auth = &config.AuthConfig{}
 		}
@@ -1226,6 +1283,9 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 			return fmt.Errorf("profiles.%s.auth.params.%s must be a string", resolved.profileName, resolved.paramName)
 		}
 		prof := ensureProfile(apiCfg, resolved.profileName)
+		if prof.AuthRef != "" {
+			return fmt.Errorf("profiles.%s.auth cannot be set while auth_ref is configured", resolved.profileName)
+		}
 		if prof.Auth == nil {
 			prof.Auth = &config.AuthConfig{}
 		}

@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const maxExternalToolStderrBytes = 4096
+
 // ExternalTool delegates authentication to an external program. The program
 // receives the outbound request as JSON on stdin and returns header updates
 // (and optionally a new URI) as JSON on stdout.
@@ -21,6 +23,7 @@ import (
 //
 //	commandline  (required) shell command to run; executed via $SHELL -c
 //	omitbody     (optional) "true" skips sending the request body to the tool
+//	output       (optional) "bearer-token" treats stdout as a bearer token
 //
 // Wire format (stdin → tool):
 //
@@ -42,6 +45,7 @@ func (a *ExternalTool) Parameters() []Param {
 	return []Param{
 		{Name: "commandline", Description: "Shell command to run for auth (executed via $SHELL -c)", Required: true},
 		{Name: "omitbody", Description: "Set to \"true\" to skip sending the request body to the tool"},
+		{Name: "output", Description: "Set to \"bearer-token\" to treat stdout as an OAuth bearer token"},
 	}
 }
 
@@ -111,16 +115,33 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 	// Using StdinPipe + manual write before Start would deadlock for payloads
 	// larger than the OS pipe buffer (~64 KB).
 	cmd.Stdin = bytes.NewReader(payload)
-	cmd.Stderr = a.Stderr
+	stderrCapture := &limitedBuffer{limit: maxExternalToolStderrBytes}
+	if a.Stderr != nil {
+		cmd.Stderr = io.MultiWriter(a.Stderr, stderrCapture)
+	} else {
+		cmd.Stderr = stderrCapture
+	}
 
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("external-tool auth: tool timed out or was canceled: %w", ctx.Err())
 		}
+		if excerpt := redactExternalToolStderr(stderrCapture.String()); excerpt != "" {
+			return fmt.Errorf("external-tool auth: tool exited with error: %w: stderr: %s", err, excerpt)
+		}
 		return fmt.Errorf("external-tool auth: tool exited with error: %w", err)
 	}
 	if len(out) == 0 {
+		return nil
+	}
+
+	if strings.EqualFold(params["output"], "bearer-token") {
+		token := strings.TrimSpace(string(out))
+		if token == "" {
+			return nil
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	}
 
@@ -158,4 +179,62 @@ func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac A
 		ctx = req.Context()
 	}
 	return (&ExternalTool{Stderr: stderr, Timeout: a.Timeout}).run(ctx, req, ac.Params)
+}
+
+type limitedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.limit <= 0 || b.buf.Len() < b.limit {
+		remaining := b.limit - b.buf.Len()
+		if b.limit <= 0 || remaining > len(p) {
+			remaining = len(p)
+		}
+		if remaining > 0 {
+			_, _ = b.buf.Write(p[:remaining])
+		}
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	return strings.TrimSpace(b.buf.String())
+}
+
+func redactExternalToolStderr(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	redactedFields := []string{"access_token", "refresh_token", "id_token", "client_secret", "password", "authorization"}
+	for _, field := range redactedFields {
+		value = redactFieldAssignments(value, field)
+	}
+	return value
+}
+
+func redactFieldAssignments(value, field string) string {
+	for _, sep := range []string{"=", ":"} {
+		lower := strings.ToLower(value)
+		needle := strings.ToLower(field + sep)
+		searchFrom := 0
+		for {
+			idxRel := strings.Index(lower[searchFrom:], needle)
+			if idxRel < 0 {
+				break
+			}
+			idx := searchFrom + idxRel
+			start := idx + len(needle)
+			end := start
+			for end < len(value) && !strings.ContainsRune(" \t\r\n,;&", rune(value[end])) {
+				end++
+			}
+			value = value[:start] + "***" + value[end:]
+			lower = strings.ToLower(value)
+			searchFrom = start + len("***")
+		}
+	}
+	return value
 }

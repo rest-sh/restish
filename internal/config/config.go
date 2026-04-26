@@ -21,6 +21,10 @@ type Config struct {
 	// APIs is a map of short API name to per-API configuration.
 	APIs map[string]*APIConfig `json:"apis,omitempty"`
 
+	// AuthProfiles holds named auth configurations that API profiles can
+	// reference with auth_ref.
+	AuthProfiles map[string]*AuthConfig `json:"auth_profiles,omitempty"`
+
 	// Cache holds global cache settings.
 	Cache CacheConfig `json:"cache,omitempty"`
 
@@ -102,6 +106,8 @@ type ProfileConfig struct {
 	ServerVariables map[string]string `json:"server_variables,omitempty"`
 	// Auth holds authentication configuration for this profile.
 	Auth *AuthConfig `json:"auth,omitempty"`
+	// AuthRef names a top-level auth_profiles entry to use for this profile.
+	AuthRef string `json:"auth_ref,omitempty"`
 }
 
 // AuthConfig holds authentication configuration for a profile.
@@ -253,6 +259,19 @@ func Validate(cfg *Config) error {
 		if api.OperationBase != "" {
 			if err := ValidateBaseURLForOperationBase(api.BaseURL); err != nil {
 				return fmt.Errorf("apis.%s.base_url: %w", name, err)
+			}
+		}
+		for profileName, prof := range api.Profiles {
+			if prof == nil {
+				continue
+			}
+			if prof.Auth != nil && prof.AuthRef != "" {
+				return fmt.Errorf("apis.%s.profiles.%s: auth and auth_ref are mutually exclusive", name, profileName)
+			}
+			if prof.AuthRef != "" {
+				if cfg.AuthProfiles == nil || cfg.AuthProfiles[prof.AuthRef] == nil {
+					return fmt.Errorf("apis.%s.profiles.%s.auth_ref: unknown auth profile %q", name, profileName, prof.AuthRef)
+				}
 			}
 		}
 	}

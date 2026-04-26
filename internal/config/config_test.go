@@ -76,6 +76,50 @@ func TestLoadExplicit_MissingFileErrors(t *testing.T) {
 	}
 }
 
+func TestValidate_AuthRefRequiresKnownProfile(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {AuthRef: "missing"},
+				},
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	if err == nil {
+		t.Fatal("expected unknown auth_ref error")
+	}
+	if !strings.Contains(err.Error(), "unknown auth profile") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_AuthAndAuthRefAreMutuallyExclusive(t *testing.T) {
+	cfg := &config.Config{
+		AuthProfiles: map[string]*config.AuthConfig{
+			"shared": {Type: "http-basic"},
+		},
+		APIs: map[string]*config.APIConfig{
+			"myapi": {
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						AuthRef: "shared",
+						Auth:    &config.AuthConfig{Type: "http-basic"},
+					},
+				},
+			},
+		},
+	}
+	err := config.Validate(cfg)
+	if err == nil {
+		t.Fatal("expected mutual exclusion error")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoad_JSONC_Comments(t *testing.T) {
 	path := writeConfig(t, `{
 		// This is a comment

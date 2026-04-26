@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +82,63 @@ func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 	}
 }
 
+func TestOAuthClientCredentials_EnvSecretSource(t *testing.T) {
+	t.Setenv("RESTISH_TEST_CLIENT_SECRET", "resolved-secret")
+	var gotSecret string
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			body, _ := io.ReadAll(r.Body)
+			values, _ := url.ParseQuery(string(body))
+			gotSecret = values.Get("client_secret")
+			return oauthTokenResponse(r, "env-token"), nil
+		case "https://api.example.com/items":
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{}`), nil
+		}
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "oauth-client-credentials",
+							"params": {
+								"client_id": "myid",
+								"client_secret": "env:RESTISH_TEST_CLIENT_SECRET",
+								"token_url": "https://oauth.example.com/token"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotSecret != "resolved-secret" {
+		t.Fatalf("client_secret = %q, want resolved secret", gotSecret)
+	}
+
+	show, out, _ := newTestCLI(t)
+	show.Hooks().ConfigPath = c.Hooks().ConfigPath
+	if err := show.Run([]string{"restish", "api", "show", "myapi"}); err != nil {
+		t.Fatalf("api show: %v", err)
+	}
+	if strings.Contains(out.String(), "resolved-secret") {
+		t.Fatalf("api show leaked resolved secret: %s", out.String())
+	}
+}
+
 // TestOAuthClientCredentials_TokenCached verifies that repeated requests reuse
 // the cached token (token endpoint called only once).
 func TestOAuthClientCredentials_TokenCached(t *testing.T) {
@@ -145,6 +203,76 @@ func TestOAuthClientCredentials_TokenCached(t *testing.T) {
 
 	if n := tokenCount.Load(); n != 1 {
 		t.Errorf("expected token endpoint called once across two requests, got %d", n)
+	}
+}
+
+func TestSharedAuthProfileTokenCachedAcrossAPIs(t *testing.T) {
+	var tokenCount atomic.Int32
+	var first, second requestRecorder
+	transport := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "shared-token"), nil
+		case "https://api.example.com/items":
+			first.capture(r)
+			return jsonResponse(200, `{}`), nil
+		case "https://other.example.com/items":
+			second.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{}`), nil
+		}
+	})
+
+	cfg := `{
+		"auth_profiles": {
+			"shared": {
+				"type": "oauth-client-credentials",
+				"params": {
+					"client_id": "myid",
+					"client_secret": "mysecret",
+					"token_url": "https://oauth.example.com/token"
+				}
+			}
+		},
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {"default": {"auth_ref": "shared"}}
+			},
+			"other": {
+				"base_url": "https://other.example.com",
+				"profiles": {"default": {"auth_ref": "shared"}}
+			}
+		}
+	}`
+
+	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
+	c1, _, _ := newTestCLI(t)
+	c1.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c1.Hooks().TokenCachePath = cacheFile
+	useTransport(c1, transport)
+	if err := c1.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+
+	c2, _, _ := newTestCLI(t)
+	c2.Hooks().ConfigPath = c1.Hooks().ConfigPath
+	c2.Hooks().TokenCachePath = cacheFile
+	useTransport(c2, transport)
+	if err := c2.Run([]string{"restish", "get", "other/items"}); err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+
+	if n := tokenCount.Load(); n != 1 {
+		t.Fatalf("expected one shared token fetch, got %d", n)
+	}
+	if got := first.Last().Header.Get("Authorization"); got != "Bearer shared-token" {
+		t.Fatalf("first Authorization = %q", got)
+	}
+	if got := second.Last().Header.Get("Authorization"); got != "Bearer shared-token" {
+		t.Fatalf("second Authorization = %q", got)
 	}
 }
 
@@ -342,6 +470,60 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 		if got != nil {
 			t.Fatalf("expected %q to be deleted", key)
 		}
+	}
+}
+
+func TestClearAuthCache_SharedAuthProfile(t *testing.T) {
+	var tokenCount atomic.Int32
+	transport := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://oauth.example.com/token":
+			tokenCount.Add(1)
+			return oauthTokenResponse(r, "shared-token"), nil
+		case "https://api.example.com/items":
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{}`), nil
+		}
+	})
+	cfg := `{
+		"auth_profiles": {
+			"shared": {
+				"type": "oauth-client-credentials",
+				"params": {
+					"client_id": "myid",
+					"client_secret": "mysecret",
+					"token_url": "https://oauth.example.com/token"
+				}
+			}
+		},
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {"default": {"auth_ref": "shared"}}
+			}
+		}
+	}`
+	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
+	cfgPath := writeAPIConfig(t, cfg)
+
+	for _, args := range [][]string{
+		{"restish", "get", "myapi/items"},
+		{"restish", "api", "clear-auth-cache", "myapi"},
+		{"restish", "get", "myapi/items"},
+		{"restish", "api", "clear-auth-cache", "--auth-profile", "shared"},
+		{"restish", "get", "myapi/items"},
+	} {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgPath
+		c.Hooks().TokenCachePath = cacheFile
+		useTransport(c, transport)
+		if err := c.Run(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	if n := tokenCount.Load(); n != 3 {
+		t.Fatalf("token endpoint called %d times, want 3 after two clears", n)
 	}
 }
 

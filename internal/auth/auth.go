@@ -38,6 +38,7 @@ type Logger interface {
 type AuthContext struct {
 	APIName     string
 	ProfileName string
+	CacheKey    string
 	Params      map[string]string // user-supplied only
 	TokenStore  TokenStore
 	Prompter    Prompter
@@ -62,6 +63,9 @@ type ForceCapable interface {
 }
 
 func authCacheKey(ac AuthContext) string {
+	if ac.CacheKey != "" {
+		return ac.CacheKey
+	}
 	if ac.APIName == "" && ac.ProfileName == "" {
 		return ""
 	}
