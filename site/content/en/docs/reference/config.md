@@ -60,8 +60,8 @@ Example:
 - `spec_url`: optional URL of the API spec
 - `spec_files`: optional ordered list of local paths or URLs to merge as the
   spec source
-- `operation_base`: optional absolute HTTP(S) URL prefix used for generated
-  operation paths
+- `operation_base`: optional absolute path prefix resolved against `base_url`
+  for generated operation paths
 - `profiles`: map of profile name to profile config
 - `pagination`: optional pagination config
 

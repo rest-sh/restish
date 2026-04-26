@@ -66,7 +66,7 @@ API fields:
 | `spec_url` | string | Explicit spec URL. |
 | `spec_files` | array | Ordered local/remote specs to merge. |
 | `allow_cross_origin_spec` | bool | Permit safe cross-origin Link spec discovery. |
-| `operation_base` | string | Absolute HTTP(S) URL prefix used by generated operations. |
+| `operation_base` | string | Absolute path prefix resolved against `base_url` for generated operations. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |

@@ -150,9 +150,9 @@ the OpenAPI spec. Use `operation_base` when the spec's `servers` block differs
 from the actual host, or when operations live on a different URL root than the
 API itself.
 
-`operation_base` must be an absolute `http://` or `https://` URL. Relative
-prefixes such as `/v1` are rejected in v2 config; migrated v1 configs resolve
-relative values against the API's `base_url`.
+`operation_base` must be an absolute path such as `/` or `/v1`, not a full URL
+and not a relative path. Restish resolves that path against the API's
+`base_url`, matching v1 behavior.
 
 Example:
 
@@ -160,8 +160,8 @@ Example:
 {
   "apis": {
     "billing": {
-      "base_url": "https://billing.example.com",
-      "operation_base": "https://billing.example.com/v1",
+      "base_url": "https://billing.example.com/api/v2-beta1",
+      "operation_base": "/",
       "profiles": {}
     }
   }
@@ -169,12 +169,15 @@ Example:
 ```
 
 With `operation_base` set, each OpenAPI path (e.g. `/invoices`) is appended to
-`operation_base` rather than `base_url`.
+the URL produced by resolving `operation_base` against `base_url`. In the
+example above, `/invoices` becomes
+`https://billing.example.com/invoices` rather than
+`https://billing.example.com/api/v2-beta1/invoices`.
 
 Set `operation_base` via `restish api set`:
 
 ```bash
-restish api set billing operation_base: "https://billing.example.com/v1"
+restish api set billing operation_base: "/"
 ```
 
 Remove it with:

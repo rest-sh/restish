@@ -68,7 +68,8 @@ type Operation struct {
 // Operations returns all HTTP operations extracted from the spec's V3 model,
 // with paths prefixed by the base path derived from the spec's servers[] list
 // and the provided baseURL. When operationBase is non-empty the spec servers
-// are ignored and Operation.Path contains only the bare path template.
+// are ignored and Operation.Path contains only the bare path template; the CLI
+// resolves operationBase against baseURL at request time.
 //
 // Results are memoized per (baseURL, operationBase) pair.
 func (s *APISpec) Operations(baseURL, operationBase string) ([]Operation, error) {
@@ -213,8 +214,8 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 }
 
 // deriveBasePath computes the path prefix to prepend to all operation paths.
-// When operationBase is set, no prefix is needed (the full URL is built from
-// operationBase at call time). Otherwise, the spec's servers[] list is
+// When operationBase is set, no prefix is needed (the URL prefix is resolved
+// from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
 // inspected for a URL that shares the same scheme+host as baseURL.
 func deriveBasePath(baseURL, operationBase string, servers []*v3.Server) (string, error) {
 	if operationBase != "" || len(servers) == 0 {

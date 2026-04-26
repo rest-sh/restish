@@ -60,10 +60,9 @@ type APIConfig struct {
 	// spec from. Multiple files are deep-merged in order (later entries win on
 	// conflict). When set, network spec discovery is skipped entirely.
 	SpecFiles []string `json:"spec_files,omitempty"`
-	// OperationBase, when set, is used as the URL prefix for paths generated
-	// from OpenAPI operations instead of base_url. Useful when the spec's
-	// servers block differs from the actual base URL, or when operations are
-	// served from a different host than the API root.
+	// OperationBase, when set, is an absolute path resolved against base_url for
+	// paths generated from OpenAPI operations. Useful when operation paths should
+	// escape or replace a sub-path in base_url.
 	OperationBase string `json:"operation_base,omitempty"`
 	// Profiles is a map of profile name to profile configuration.
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
@@ -235,19 +234,41 @@ func Validate(cfg *Config) error {
 }
 
 // ValidateOperationBase enforces the v2 contract that operation_base is an
-// absolute HTTP(S) URL prefix.
+// absolute URL path prefix.
 func ValidateOperationBase(raw string) error {
 	if raw == "" {
 		return nil
 	}
 	u, err := url.Parse(raw)
-	if err != nil || !u.IsAbs() || u.Host == "" {
-		return fmt.Errorf("must be an absolute URL")
+	if err != nil {
+		return fmt.Errorf("must be an absolute path")
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("must use http or https")
+	if u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") {
+		return fmt.Errorf("must be an absolute path")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("must not include query or fragment")
 	}
 	return nil
+}
+
+// ResolveOperationBaseURL resolves an absolute operation_base path against the
+// API base URL using the same URL-reference semantics as Restish v1.
+func ResolveOperationBaseURL(baseURL, operationBase string) (string, error) {
+	if operationBase == "" {
+		return baseURL, nil
+	}
+	if err := ValidateOperationBase(operationBase); err != nil {
+		return "", err
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || !base.IsAbs() || base.Host == "" {
+		return "", fmt.Errorf("base_url must be an absolute URL")
+	}
+	if base.Scheme != "http" && base.Scheme != "https" {
+		return "", fmt.Errorf("base_url must use http or https")
+	}
+	return base.ResolveReference(&url.URL{Path: operationBase}).String(), nil
 }
 
 // extractJSONErrorPosition attempts to extract line:column from a JSON decode error.

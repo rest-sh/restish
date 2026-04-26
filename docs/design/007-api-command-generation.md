@@ -166,9 +166,13 @@ The generator or request planner must honor those server blocks and merge them
 with API registration rules such as `operation_base` or profile base URL
 overrides.
 
-In v2 config, `operation_base` is an absolute HTTP(S) URL prefix. Relative v1
-values are resolved against the API base URL during migration; new relative
-values are rejected.
+In v2 config, `operation_base` is an absolute path prefix such as `/` or `/v1`,
+not a full URL. The request planner resolves that path against `base_url` with
+the same URL-reference behavior v1 used. For example, `base_url:
+https://example.com/my-api/v2-beta1` plus `operation_base: /` makes operation
+`/my-op` request `https://example.com/my-op`, not
+`https://example.com/my-api/v2-beta1/my-op`. Relative paths such as `v1` and
+full URLs are rejected.
 
 ## Help And Discoverability
 

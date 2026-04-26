@@ -262,13 +262,15 @@ func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
 	c.cfg = &config.Config{
 		APIs: map[string]*config.APIConfig{
 			"short": {
-				OperationBase: "https://api.example.com/v1",
+				BaseURL:       "https://api.example.com/root",
+				OperationBase: "/v1",
 				Profiles: map[string]*config.ProfileConfig{
 					"default": {Headers: []string{"X-API: short"}},
 				},
 			},
 			"long": {
-				OperationBase: "https://api.example.com/v1/admin",
+				BaseURL:       "https://api.example.com/root",
+				OperationBase: "/v1/admin",
 				Profiles: map[string]*config.ProfileConfig{
 					"default": {Headers: []string{"X-API: long"}},
 				},
@@ -367,7 +369,7 @@ func TestApplyAPIProfileRejectsHostAndPathLookalikes(t *testing.T) {
 		APIs: map[string]*config.APIConfig{
 			"svc": {
 				BaseURL:       "https://api.example.com/v1",
-				OperationBase: "https://ops.example.com/api",
+				OperationBase: "/api",
 				Profiles: map[string]*config.ProfileConfig{
 					"default": {Headers: []string{"X-Profile: yes"}},
 				},
@@ -378,7 +380,7 @@ func TestApplyAPIProfileRejectsHostAndPathLookalikes(t *testing.T) {
 	for _, rawURL := range []string{
 		"https://api.example.com.evil/v1/items",
 		"https://api.example.com/v10/items",
-		"https://ops.example.com/apis/items",
+		"https://api.example.com/apis/items",
 	} {
 		_, apiName, opts, err := c.applyAPIProfile(rawURL, "default", request.Options{}, authHandlerOptions{})
 		if err != nil {

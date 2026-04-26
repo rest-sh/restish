@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -412,7 +413,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	if api.BaseURL != "https://api.example.com" {
 		t.Fatalf("BaseURL = %q", api.BaseURL)
 	}
-	if api.OperationBase != "https://api.example.com/v1" {
+	if api.OperationBase != "/v1" {
 		t.Fatalf("OperationBase = %q", api.OperationBase)
 	}
 	if len(api.SpecFiles) != 1 || api.SpecFiles[0] != "spec.yaml" {
@@ -467,7 +468,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsRelativeOperationBase(t *testing.T) {
+func TestLoadValidatesOperationBasePath(t *testing.T) {
 	path := writeConfig(t, `{
   "apis": {
     "example": {
@@ -476,12 +477,40 @@ func TestLoadRejectsRelativeOperationBase(t *testing.T) {
     }
   }
 }`)
-	_, err := config.Load(path)
-	if err == nil {
-		t.Fatal("expected relative operation_base to be rejected")
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("expected absolute path operation_base to load: %v", err)
 	}
-	if !strings.Contains(err.Error(), "apis.example.operation_base: must be an absolute URL") {
-		t.Fatalf("unexpected error: %v", err)
+	if got := cfg.APIs["example"].OperationBase; got != "/v1" {
+		t.Fatalf("OperationBase = %q, want /v1", got)
+	}
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "relative", raw: `"v1"`, want: "absolute path"},
+		{name: "url", raw: `"https://api.example.com/v1"`, want: "absolute path"},
+		{name: "query", raw: `"/v1?debug=true"`, want: "query or fragment"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "operation_base": %s
+    }
+  }
+}`, tc.raw))
+			_, err := config.Load(path)
+			if err == nil {
+				t.Fatal("expected invalid operation_base to be rejected")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 

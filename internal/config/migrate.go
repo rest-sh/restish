@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -244,22 +243,14 @@ func convertLegacyAPIConfig(legacy *legacyAPIConfig) *APIConfig {
 	return api
 }
 
-func convertLegacyOperationBase(baseURL, operationBase string) string {
+func convertLegacyOperationBase(_ string, operationBase string) string {
 	if operationBase == "" {
 		return ""
 	}
-	if parsed, err := url.Parse(operationBase); err == nil && parsed.IsAbs() {
+	if err := ValidateOperationBase(operationBase); err == nil {
 		return operationBase
 	}
-	base, err := url.Parse(baseURL)
-	if err != nil || !base.IsAbs() || base.Host == "" {
-		return operationBase
-	}
-	ref, err := url.Parse(operationBase)
-	if err != nil {
-		return operationBase
-	}
-	return base.ResolveReference(ref).String()
+	return ""
 }
 
 func convertLegacyProfile(legacy *legacyAPIProfile) *ProfileConfig {

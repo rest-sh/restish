@@ -60,7 +60,7 @@ func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APICo
 	commandNames := map[string]bool{}
 
 	for _, op := range ops {
-		cmd, err := c.buildOperationCommand(apiName, op, apiCfg.OperationBase)
+		cmd, err := c.buildOperationCommand(apiName, op, apiCfg.BaseURL, apiCfg.OperationBase)
 		if err != nil {
 			fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", op.Method, op.Path, apiName, err)
 			continue
@@ -116,10 +116,9 @@ type paramInfo struct {
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
 // Returns nil when the operation is excluded via x-cli-ignore.
-// operationBase, when non-empty, replaces the apiName short-name prefix in
-// generated URLs so operations are served from a different host/path than
-// the API root.
-func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operationBase string) (*cobra.Command, error) {
+// operationBase, when non-empty, is resolved against baseURL and replaces the
+// apiName short-name prefix in generated URLs.
+func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, baseURL, operationBase string) (*cobra.Command, error) {
 	// Derive command name from operationId, with x-cli-name override.
 	cmdName := toKebabCase(op.ID)
 	if cmdName == "" {
@@ -247,7 +246,7 @@ func (c *CLI) buildOperationCommand(apiName string, op spec.Operation, operation
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, required, optional, args, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, required, optional, args, baseURL, operationBase)
 		},
 	}
 	if !op.HasBody {
@@ -310,6 +309,7 @@ func (c *CLI) runGeneratedOp(
 	apiName, opPath, method, requestMediaType string,
 	required, optional []*paramInfo,
 	args []string,
+	baseURL string,
 	operationBase string,
 ) error {
 	// Substitute required params into the path, query string, and headers.
@@ -335,13 +335,16 @@ func (c *CLI) runGeneratedOp(
 		path, extraHeaders = addGeneratedParam(path, q, extraHeaders, p, values)
 	}
 
-	// Build the raw URL. When operation_base is set, use it as the full URL
-	// prefix instead of the short-name shorthand so that generated commands
-	// hit a different host/path than the API root (auth is still applied via
-	// the operation_base prefix match in applyAPIProfile).
+	// Build the raw URL. When operation_base is set, resolve its absolute path
+	// against base_url using v1 semantics so generated operations can escape a
+	// base URL sub-path.
 	var rawURL string
 	if operationBase != "" {
-		rawURL = strings.TrimRight(operationBase, "/") + path
+		resolvedBase, err := config.ResolveOperationBaseURL(baseURL, operationBase)
+		if err != nil {
+			return fmt.Errorf("operation_base: %w", err)
+		}
+		rawURL = strings.TrimRight(resolvedBase, "/") + path
 	} else {
 		rawURL = apiName + path
 	}

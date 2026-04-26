@@ -841,7 +841,9 @@ func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) []string {
 		bases = append(bases, prof.BaseURL)
 	}
 	if api.OperationBase != "" {
-		bases = append(bases, api.OperationBase)
+		if resolved, err := config.ResolveOperationBaseURL(api.BaseURL, api.OperationBase); err == nil {
+			bases = append(bases, resolved)
+		}
 	}
 	return bases
 }

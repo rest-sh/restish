@@ -549,7 +549,7 @@ func TestAPISetShorthandAppendHeaders(t *testing.T) {
 func TestAPISetShorthandDeleteKey(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
-			"myapi": {BaseURL: "https://api.example.com", OperationBase: "https://api.example.com/v1"},
+			"myapi": {BaseURL: "https://api.example.com", OperationBase: "/v1"},
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
@@ -570,7 +570,7 @@ func TestAPISetShorthandDeleteKey(t *testing.T) {
 	}
 }
 
-func TestAPISetRejectsRelativeOperationBase(t *testing.T) {
+func TestAPISetValidatesOperationBasePath(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
 			"myapi": {BaseURL: "https://api.example.com"},
@@ -581,11 +581,30 @@ func TestAPISetRejectsRelativeOperationBase(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	err := c.Run([]string{"restish", "api", "set", "myapi", `operation_base: "/v1"`})
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `operation_base: "/v1"`}); err != nil {
+		t.Fatalf("expected absolute path operation_base to be accepted: %v", err)
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].OperationBase; got != "/v1" {
+		t.Fatalf("OperationBase = %q, want /v1", got)
+	}
+
+	err = c.Run([]string{"restish", "api", "set", "myapi", `operation_base: "v1"`})
 	if err == nil {
 		t.Fatal("expected relative operation_base to be rejected")
 	}
-	if !strings.Contains(err.Error(), "operation_base must be an absolute URL") {
+	if !strings.Contains(err.Error(), "operation_base must be an absolute path") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = c.Run([]string{"restish", "api", "set", "myapi", `operation_base: "https://api.example.com/v1"`})
+	if err == nil {
+		t.Fatal("expected URL operation_base to be rejected")
+	}
+	if !strings.Contains(err.Error(), "operation_base must be an absolute path") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

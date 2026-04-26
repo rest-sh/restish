@@ -704,6 +704,54 @@ func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandsResolveOperationBasePathAgainstBaseURL(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/my-op", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/api/v2-beta1/my-op", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("operation_base should escape the API base path, got %s", r.URL.Path)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/my-op": {
+      "get": {
+        "operationId": "myOp",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL+"/api/v2-beta1")
+	})
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	baseURL := cfg.APIs["tapi"].BaseURL
+	cfg.APIs["tapi"].BaseURL = baseURL + "/api/v2-beta1"
+	cfg.APIs["tapi"].OperationBase = "/"
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "my-op"}); err != nil {
+		t.Fatalf("my-op failed: %v", err)
+	}
+	if lastPath != "/my-op" {
+		t.Fatalf("expected operation_base path to resolve against base_url root, got %q", lastPath)
+	}
+}
+
 func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {
