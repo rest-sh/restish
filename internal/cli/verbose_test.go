@@ -152,6 +152,33 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 	}
 }
 
+func TestVerboseLogsEveryPaginatedRequest(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageTransport(c)
+
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	stderr := errOut.String()
+	if got := strings.Count(stderr, "> GET "); got != 3 {
+		t.Fatalf("expected verbose output for 3 requests, got %d:\n%s", got, stderr)
+	}
+	if got := strings.Count(stderr, "< HTTP/1.1 200 OK"); got != 3 {
+		t.Fatalf("expected verbose output for 3 responses, got %d:\n%s", got, stderr)
+	}
+	for _, want := range []string{
+		"https://api.example.com/items",
+		"https://api.example.com/items?page=2",
+		"https://api.example.com/items?page=3",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected verbose output to include %s, got:\n%s", want, stderr)
+		}
+	}
+}
+
 // TestVerboseTLSDetailsAtLevel2 verifies that -vv (verbose >= 2) prints TLS
 // version, cipher suite, and peer certificate information to stderr.
 func TestVerboseTLSDetailsAtLevel2(t *testing.T) {

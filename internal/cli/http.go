@@ -139,11 +139,6 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
 	}
 
-	// Verbose logging to stderr.
-	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp, v)
-	}
-
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
 		var streamErr error
@@ -166,8 +161,8 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 	if err != nil {
 		return err
 	}
-	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
-		c.logVerboseBodies(httpResp.Request, resp)
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
+		c.logVerboseResponseBody(resp)
 	}
 
 	// Response-middleware plugins: can modify, drop, or follow.
@@ -601,7 +596,7 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 
 const verboseBodyLimit = 4096
 
-func (c *CLI) logVerboseBodies(req *http.Request, resp *output.Response) {
+func (c *CLI) logVerboseRequestBody(req *http.Request) {
 	if req.GetBody != nil {
 		if body, err := req.GetBody(); err == nil {
 			data, _ := io.ReadAll(io.LimitReader(body, verboseBodyLimit+1))
@@ -609,6 +604,9 @@ func (c *CLI) logVerboseBodies(req *http.Request, resp *output.Response) {
 			c.logVerboseBody("> body", data, req.Header.Get("Content-Type"))
 		}
 	}
+}
+
+func (c *CLI) logVerboseResponseBody(resp *output.Response) {
 	if resp != nil && len(resp.Raw) > 0 {
 		c.logVerboseBody("< body", resp.Raw, resp.Headers["Content-Type"])
 	}
@@ -997,6 +995,12 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		Retry:                retry,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		Logger:               c.Stderr,
+		WrapTransport: func(rt http.RoundTripper) http.RoundTripper {
+			if gf.Verbose < 1 {
+				return rt
+			}
+			return &verboseTransport{inner: rt, cli: c, verbose: gf.Verbose}
+		},
 	}, nil
 }
 

@@ -108,6 +108,9 @@ type Options struct {
 	RetryBaseDelay time.Duration
 	// Logger receives retry progress warnings on stderr-style output.
 	Logger io.Writer
+	// WrapTransport, when non-nil, wraps the network transport after TLS setup
+	// and before retry/cache layers are applied.
+	WrapTransport func(http.RoundTripper) http.RoundTripper
 	// Transport, when passed to BuildTransport, is the underlying transport to
 	// wrap with TLS/cache/retry behavior. When passed to Do, it is treated as a
 	// fully built transport and reused as-is. Callers that make multiple
@@ -387,6 +390,9 @@ func BuildTransport(opts Options) http.RoundTripper {
 		return roundTripperFunc(func(*http.Request) (*http.Response, error) {
 			return nil, err
 		})
+	}
+	if opts.WrapTransport != nil {
+		base = opts.WrapTransport(base)
 	}
 
 	// Wrap with retry if requested.

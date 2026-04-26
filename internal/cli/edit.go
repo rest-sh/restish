@@ -58,13 +58,12 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("network error for GET %s: %w", rawURL, err)
 	}
 
-	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && httpResp.Request != nil {
-		c.logVerbose(httpResp, v)
-	}
-
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
 		return err
+	}
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
+		c.logVerboseResponseBody(resp)
 	}
 	if code := output.StatusToExitCode(resp.Status); code != 0 {
 		if formatErr := c.formatResponse(cmd, resp); formatErr != nil {
@@ -215,13 +214,12 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", updateMethod, rawURL, err)
 	}
-	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 && updateResp.Request != nil {
-		c.logVerbose(updateResp, v)
-	}
-
 	normalized, err := output.Normalize(updateResp, c.content, maxBodyBytes(cmd))
 	if err != nil {
 		return err
+	}
+	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
+		c.logVerboseResponseBody(normalized)
 	}
 	if err := c.formatResponse(cmd, normalized); err != nil {
 		return err

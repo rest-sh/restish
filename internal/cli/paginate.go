@@ -135,6 +135,9 @@ func (c *CLI) runPagination(
 		if err != nil {
 			return fmt.Errorf("paginate page %d normalize: %w", page, err)
 		}
+		if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
+			c.logVerboseResponseBody(resp)
+		}
 		if err := c.paginationStatusError(cmd, page, resp.Status); err != nil {
 			return err
 		}
