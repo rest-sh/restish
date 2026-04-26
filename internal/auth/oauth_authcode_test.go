@@ -362,8 +362,14 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 	if query.Get("audience") != "https://api.example.com/" || query.Get("resource") != "urn:example" || query.Get("organization") != "acme" {
 		t.Fatalf("unexpected authorize params: %#v", query)
 	}
+	if redirectURI := query.Get("redirect_uri"); !strings.HasSuffix(redirectURI, "/") {
+		t.Fatalf("redirect_uri = %q, want trailing slash", redirectURI)
+	}
 	if gotForm.Get("audience") != "https://api.example.com/" || gotForm.Get("resource") != "urn:example" || gotForm.Get("organization") != "acme" {
 		t.Fatalf("unexpected token form params: %#v", gotForm)
+	}
+	if redirectURI := gotForm.Get("redirect_uri"); !strings.HasSuffix(redirectURI, "/") {
+		t.Fatalf("token redirect_uri = %q, want trailing slash", redirectURI)
 	}
 }
 

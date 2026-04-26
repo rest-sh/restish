@@ -180,6 +180,10 @@ restish -p ci myapi/items
 restish -p default myapi/items
 ```
 
+For authorization-code profiles, register the local redirect URL with your
+provider as `http://localhost:8484/` unless you set a different `redirect_port`.
+Restish includes the trailing slash in the OAuth `redirect_uri`.
+
 ### OAuth Auth Method And Extra Endpoint Params
 
 OAuth token requests default to `client_secret_post`. If your IdP requires HTTP

@@ -21,6 +21,9 @@ func newTokenClient(t *testing.T, callCount *atomic.Int32, accessToken string, e
 		if ct := r.Header.Get("Content-Type"); ct != "application/x-www-form-urlencoded" {
 			t.Fatalf("expected form content type, got %q", ct)
 		}
+		if accept := r.Header.Get("Accept"); accept != "application/json" {
+			t.Fatalf("expected Accept application/json, got %q", accept)
+		}
 		return testResponse(200, "application/json", fmt.Sprintf(`{"access_token":%q,"token_type":"bearer","expires_in":%d}`, accessToken, expiresIn)), nil
 	})
 }

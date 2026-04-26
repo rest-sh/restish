@@ -203,6 +203,42 @@ func TestFetchTokenRejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestFetchTokenAcceptsNumericStringExpiresInAndSendsAccept(t *testing.T) {
+	var gotAccept string
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		gotAccept = r.Header.Get("Accept")
+		return testResponse(http.StatusOK, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":"3600"}`), nil
+	})
+
+	token, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{}, nil)
+	if err != nil {
+		t.Fatalf("FetchToken: %v", err)
+	}
+	if token.AccessToken != "abc" {
+		t.Fatalf("AccessToken = %q, want abc", token.AccessToken)
+	}
+	if token.Expiry.IsZero() {
+		t.Fatal("expected expiry from numeric string expires_in")
+	}
+	if gotAccept != "application/json" {
+		t.Fatalf("Accept = %q, want application/json", gotAccept)
+	}
+}
+
+func TestFetchTokenRejectsInvalidStringExpiresIn(t *testing.T) {
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		return testResponse(http.StatusOK, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":"soon"}`), nil
+	})
+
+	_, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{}, nil)
+	if err == nil {
+		t.Fatal("expected invalid expires_in error")
+	}
+	if !strings.Contains(err.Error(), "expires_in") {
+		t.Fatalf("expected expires_in error, got %v", err)
+	}
+}
+
 func errorAsToken(err error, target **tokenEndpointError) bool {
 	return errors.As(err, target)
 }

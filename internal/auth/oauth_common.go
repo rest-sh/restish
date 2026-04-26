@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,11 +25,31 @@ const (
 
 // tokenResponse is the JSON response from an OAuth2 token endpoint.
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"` // seconds; 0 means no expiry info
-	RefreshToken string `json:"refresh_token,omitempty"`
-	Scope        string `json:"scope,omitempty"`
+	AccessToken  string          `json:"access_token"`
+	TokenType    string          `json:"token_type"`
+	ExpiresIn    secondsOrString `json:"expires_in"` // seconds; 0 means no expiry info
+	RefreshToken string          `json:"refresh_token,omitempty"`
+	Scope        string          `json:"scope,omitempty"`
+}
+
+type secondsOrString int
+
+func (s *secondsOrString) UnmarshalJSON(data []byte) error {
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		*s = secondsOrString(n)
+		return nil
+	}
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("expires_in must be a number or numeric string")
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fmt.Errorf("expires_in must be a number or numeric string")
+	}
+	*s = secondsOrString(parsed)
+	return nil
 }
 
 // OIDCConfig holds the fields we use from an OIDC discovery document.
@@ -253,6 +274,7 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 		return CachedToken{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	applyTokenAuthHeader(req, params)
 	resp, err := client.Do(req)
 	if err != nil {

@@ -202,6 +202,10 @@ query strings, and should require HTTPS except for deliberate localhost or
 loopback development flows. Discovery, token, and device-authorization response
 bodies should be size-limited before parsing.
 
+Token endpoint requests should send `Accept: application/json` and tolerate
+provider-compatible token response variants where they are common in the wild.
+In particular, `expires_in` may be either a JSON number or a numeric string.
+
 OAuth HTTP clients should honor the same relevant TLS options as ordinary
 requests, including custom CA roots, TLS minimum version, and explicit
 insecure-skip settings.
@@ -218,6 +222,8 @@ The localhost callback server must:
 - validate path and state
 - ignore irrelevant requests like `/favicon.ico`
 - shut down cleanly on success, timeout, or cancellation
+- use a v1-compatible redirect URI with a trailing slash:
+  `http://localhost:<port>/`
 
 Manual-code fallback must also shut down cleanly. If the callback, timeout, or
 context cancellation wins the race, any goroutine waiting for manual input must

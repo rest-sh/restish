@@ -235,7 +235,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	if port == "" {
 		port = defaultRedirectPort
 	}
-	redirectURI := "http://localhost:" + port
+	redirectURI := "http://localhost:" + port + "/"
 
 	// Start local callback server.
 	ln, err := net.Listen("tcp", "localhost:"+port)
