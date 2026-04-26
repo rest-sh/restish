@@ -178,7 +178,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 		if followReq != nil {
 			crossHost := followCrossesFirstPartyHost(firstPartyHost, followReq.URI)
 			if crossHost {
-				fmt.Fprintf(c.Stderr, "warning: response-middleware follow to different host %q — stripping credentials\n", followReq.URI)
+				c.warnf("response-middleware follow to different host %q — stripping credentials", followReq.URI)
 			}
 			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost, "")
 		}
@@ -253,7 +253,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	if headersOnly && filterExpr != "" {
-		fmt.Fprintln(c.Stderr, `warning: --rsh-headers overrides -f; using "headers"`)
+		c.warnf(`--rsh-headers overrides -f; using "headers"`)
 	}
 	if headersOnly {
 		filterExpr = "headers"
@@ -307,7 +307,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
-		fmt.Fprintf(c.Stderr, "hint: filter returned no results; to access response body fields use 'body.%s'\n", filterExpr)
+		c.hintf("filter returned no results; to access response body fields use 'body.%s'", filterExpr)
 	}
 
 	if handled {
@@ -939,7 +939,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	gf := globalFlagsFromContext(requestContext(cmd))
 
 	if gf.Insecure {
-		fmt.Fprintln(c.Stderr, "warning: TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
+		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
 	}
 
 	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
@@ -994,7 +994,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		NoCache:              gf.NoCache,
 		Retry:                retry,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
-		Logger:               c.Stderr,
+		Logger:               diagnosticPrefixWriter(c.Stderr),
 		WrapTransport: func(rt http.RoundTripper) http.RoundTripper {
 			if gf.Verbose < 1 {
 				return rt

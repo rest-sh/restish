@@ -92,7 +92,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	if info, err := os.Stat(rcPath); err == nil && info.Mode().Perm()&0o077 != 0 {
-		fmt.Fprintf(c.Stderr, "warning: %s is more permissive than recommended; consider chmod 600 %s\n", rcPath, rcPath)
+		c.warnf("%s is more permissive than recommended; consider chmod 600 %s", rcPath, rcPath)
 	}
 
 	updated := string(existing) + line
@@ -162,10 +162,10 @@ func (c *CLI) hintShellSetup() {
 		return
 	}
 	if source == "$SHELL" {
-		fmt.Fprintf(c.Stderr, "tip: run `restish setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)\n", shell)
+		c.tipf("run `restish setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)", shell)
 		return
 	}
-	fmt.Fprintf(c.Stderr, "tip: run `restish setup %s` to configure your shell (prevents glob expansion issues)\n", shell)
+	c.tipf("run `restish setup %s` to configure your shell (prevents glob expansion issues)", shell)
 }
 
 func detectRunningShell() (string, string) {

@@ -224,6 +224,23 @@ Diagnostics shown on stderr should conceptually fall into these categories:
 Keeping these categories distinct helps both implementation and user
 expectations.
 
+TTY diagnostics should make those categories visually scannable without
+changing the stdout/stderr contract. When stderr is color-capable according to
+Restish's normal color rules (`NO_COLOR`/`NOCOLOR` disable color, `COLOR`
+forces it, otherwise a TTY enables it), Restish colorizes only the diagnostic
+label, such as `info:`, `warning:`, `error:`, `hint:`, or `tip:`. The message
+body remains plain so it can be copied, searched, and read in low-contrast
+themes.
+
+Diagnostic label colors are part of the same theme system as readable response
+output. Themes may override `diagnostic_info`, `diagnostic_warn`,
+`diagnostic_error`, and `diagnostic_hint`; otherwise Restish uses the built-in
+theme colors. Non-TTY stderr, disabled color, and raw plugin stderr pass-through
+must remain free of injected ANSI escapes. Structured plugin messages that the
+host renders as warnings, progress, or logs may use the host diagnostic helper,
+but opaque plugin stderr bytes are already owned by the plugin and should not be
+rewritten.
+
 In addition, diagnostics should preserve user-actionable context. Good stderr
 messages explain:
 

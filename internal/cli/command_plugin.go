@@ -49,7 +49,7 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 	for _, p := range c.pluginsByHook["command"] {
 		cmds, err := loadCommandPluginCommands(p.Path)
 		if err != nil {
-			fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(p.Path), err)
+			c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
 			continue
 		}
 		if len(cmds) == 0 {
@@ -59,7 +59,7 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 			decl := decl
 			pluginPath := p.Path
 			if err := c.validatePluginCommandName(root, seen, filepath.Base(pluginPath), decl.Name); err != nil {
-				fmt.Fprintf(c.Stderr, "warning: %v\n", err)
+				c.warnf("%v", err)
 				continue
 			}
 			seen[decl.Name] = filepath.Base(pluginPath)
@@ -204,7 +204,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	// Warn when the plugin exits non-zero after sending Done — this is not a CLI
 	// error but may indicate a plugin bug (e.g. panic in a deferred cleanup).
 	if doneReceived && waitErr != nil {
-		fmt.Fprintf(c.Stderr, "warning: command plugin %s exited with error after Done: %v\n", filepath.Base(pluginPath), waitErr)
+		c.warnf("command plugin %s exited with error after Done: %v", filepath.Base(pluginPath), waitErr)
 	}
 	return loopErr
 }
@@ -391,7 +391,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 			return false, err
 		}
 		if msg.Text != "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", msg.Text)
+			writeDiagnostic(cmd.ErrOrStderr(), diagnosticWarn, "warning", "%s", msg.Text)
 		}
 	case pluginwire.MsgTypeProgress:
 		var msg pluginwire.ProgressMsg
@@ -419,7 +419,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		}
 	default:
 		if msgType != "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: unhandled plugin message type %q\n", msgType)
+			writeDiagnostic(cmd.ErrOrStderr(), diagnosticWarn, "warning", "unhandled plugin message type %q", msgType)
 		}
 	}
 	return false, nil

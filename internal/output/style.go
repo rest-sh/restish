@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/styles"
 )
 
@@ -57,6 +58,12 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.GenericStrong:     "bold #af87af",
 	chroma.GenericDeleted:    "#ff5f87",
 	chroma.NameAttribute:     "underline #5fafd7",
+
+	// Diagnostic labels written to stderr.
+	DiagnosticInfo:  "#5fafd7",
+	DiagnosticWarn:  "bold #d78700",
+	DiagnosticError: "bold #ff5f87",
+	DiagnosticHint:  "#d7af5f",
 }
 
 // restishStyle is the active style for terminal highlighting.
@@ -64,37 +71,41 @@ var restishStyle = styles.Register(chroma.MustNewStyle("restish", defaultStyleEn
 var currentThemeEntries ThemeEntries
 
 var themeTokenAliases = map[string]chroma.TokenType{
-	"comment":       chroma.Comment,
-	"constant":      chroma.KeywordConstant,
-	"punctuation":   chroma.Punctuation,
-	"key":           chroma.NameTag,
-	"number":        chroma.LiteralNumber,
-	"float":         chroma.LiteralNumberFloat,
-	"integer":       chroma.LiteralNumberInteger,
-	"string":        chroma.LiteralString,
-	"quoted_string": chroma.LiteralStringDouble,
-	"url":           chroma.LiteralStringSymbol,
-	"date":          chroma.LiteralDate,
-	"binary":        chroma.LiteralNumberHex,
-	"keyword":       chroma.Keyword,
-	"function":      chroma.NameFunction,
-	"class":         chroma.NameClass,
-	"builtin":       chroma.NameBuiltin,
-	"operator":      chroma.Operator,
-	"bracket_0":     IndentLevel0,
-	"bracket_1":     IndentLevel1,
-	"bracket_2":     IndentLevel2,
-	"http":          chroma.NameNamespace,
-	"status_2xx":    chroma.GenericInserted,
-	"status_3xx":    chroma.GenericOutput,
-	"status_error":  chroma.GenericError,
-	"heading":       chroma.GenericHeading,
-	"subheading":    chroma.GenericSubheading,
-	"emphasis":      chroma.GenericEmph,
-	"strong":        chroma.GenericStrong,
-	"deleted":       chroma.GenericDeleted,
-	"inserted":      chroma.GenericInserted,
-	"attribute":     chroma.NameAttribute,
+	"comment":          chroma.Comment,
+	"constant":         chroma.KeywordConstant,
+	"punctuation":      chroma.Punctuation,
+	"key":              chroma.NameTag,
+	"number":           chroma.LiteralNumber,
+	"float":            chroma.LiteralNumberFloat,
+	"integer":          chroma.LiteralNumberInteger,
+	"string":           chroma.LiteralString,
+	"quoted_string":    chroma.LiteralStringDouble,
+	"url":              chroma.LiteralStringSymbol,
+	"date":             chroma.LiteralDate,
+	"binary":           chroma.LiteralNumberHex,
+	"keyword":          chroma.Keyword,
+	"function":         chroma.NameFunction,
+	"class":            chroma.NameClass,
+	"builtin":          chroma.NameBuiltin,
+	"operator":         chroma.Operator,
+	"bracket_0":        IndentLevel0,
+	"bracket_1":        IndentLevel1,
+	"bracket_2":        IndentLevel2,
+	"http":             chroma.NameNamespace,
+	"status_2xx":       chroma.GenericInserted,
+	"status_3xx":       chroma.GenericOutput,
+	"status_error":     chroma.GenericError,
+	"heading":          chroma.GenericHeading,
+	"subheading":       chroma.GenericSubheading,
+	"emphasis":         chroma.GenericEmph,
+	"strong":           chroma.GenericStrong,
+	"deleted":          chroma.GenericDeleted,
+	"inserted":         chroma.GenericInserted,
+	"attribute":        chroma.NameAttribute,
+	"diagnostic_info":  DiagnosticInfo,
+	"diagnostic_warn":  DiagnosticWarn,
+	"diagnostic_error": DiagnosticError,
+	"diagnostic_hint":  DiagnosticHint,
 }
 
 var markdownThemeAliases = map[string]struct{}{
@@ -167,6 +178,25 @@ func ParseThemeJSON(data []byte) (ThemeEntries, error) {
 		return nil, err
 	}
 	return direct, nil
+}
+
+// StyleText renders text with the named Restish theme token. It returns the
+// original text if the token is unknown or terminal formatting is unavailable.
+func StyleText(tokenName, text string) string {
+	token, err := themeTokenType(tokenName)
+	if err != nil {
+		return text
+	}
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		return text
+	}
+	var out strings.Builder
+	iter := chroma.Literator(chroma.Token{Type: token, Value: text})
+	if err := formatter.Format(&out, restishStyle, iter); err != nil {
+		return text
+	}
+	return out.String()
 }
 
 func themeTokenType(name string) (chroma.TokenType, error) {

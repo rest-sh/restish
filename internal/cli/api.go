@@ -411,7 +411,7 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 		}
 		if xp.Auth != nil {
 			if xp.Auth.Type == "external-tool" {
-				fmt.Fprintf(c.Stderr, "warning: x-cli-config: auth type %q is not permitted; skipping profile %q\n", xp.Auth.Type, name)
+				c.warnf("x-cli-config: auth type %q is not permitted; skipping profile %q", xp.Auth.Type, name)
 				continue
 			}
 			prof.Auth = &config.AuthConfig{

@@ -32,7 +32,7 @@ func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.
 		if source == "" {
 			source = apiCfg.BaseURL
 		}
-		fmt.Fprintf(c.Stderr, "warning: skipping generated commands for API %q from %s: %v\n", apiName, source, err)
+		c.warnf("skipping generated commands for API %q from %s: %v", apiName, source, err)
 		return nil
 	}
 	return c.buildAPICommandFromOperations(apiName, apiCfg, ops)
@@ -62,7 +62,7 @@ func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APICo
 	for _, op := range ops {
 		cmd, err := c.buildOperationCommand(apiName, op, apiCfg.BaseURL, apiCfg.OperationBase)
 		if err != nil {
-			fmt.Fprintf(c.Stderr, "warning: skipping %s %s for API %q: %v\n", op.Method, op.Path, apiName, err)
+			c.warnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
 			continue
 		}
 		if cmd == nil {
@@ -78,7 +78,7 @@ func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APICo
 				}
 				disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
 			}
-			fmt.Fprintf(c.Stderr, "warning: command name collision for API %q: %q; using %q for %s %s\n", apiName, originalName, disambiguated, op.Method, op.Path)
+			c.warnf("command name collision for API %q: %q; using %q for %s %s", apiName, originalName, disambiguated, op.Method, op.Path)
 			cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
 			cmd.Aliases = append(cmd.Aliases, originalName)
 		}

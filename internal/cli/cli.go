@@ -256,11 +256,11 @@ func (c *CLI) Run(args []string) error {
 		return err
 	}
 	if insecure, permErr := config.ConfigFileHasInsecurePermissions(c.configFilePath()); permErr == nil && insecure {
-		fmt.Fprintf(c.Stderr, "warning: %s is group/world-readable; credentials in config should be kept private (chmod 600)\n", c.configFilePath())
+		c.warnf("%s is group/world-readable; credentials in config should be kept private (chmod 600)", c.configFilePath())
 	}
 	c.cfg = cfg
 	if cfg.Migration != nil {
-		fmt.Fprintf(c.Stderr, "Migrated config from v1 at %s; kept backup at %s\n", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
+		c.infof("Migrated config from v1 at %s; kept backup at %s", cfg.Migration.SourcePath, cfg.Migration.BackupPath)
 	}
 	if err := output.SetTheme(output.ThemeEntries(cfg.Theme)); err != nil {
 		return fmt.Errorf("config theme: %w", err)
@@ -269,8 +269,8 @@ func (c *CLI) Run(args []string) error {
 	// Discover hook plugins at startup; warn about broken plugins so users
 	// know their plugin is not active rather than silently ignoring it.
 	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), func(path string, err error) {
-		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	}, c.pluginManifestCachePath(), c.Stderr)
+		c.warnf("plugin %s: %v", filepath.Base(path), err)
+	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 	c.pluginsByHook = indexPluginsByHook(c.plugins)
 
 	// Register plugin-provided formatters and loaders.
@@ -295,7 +295,7 @@ func (c *CLI) Run(args []string) error {
 	// Warn about any configured API names that shadow built-in commands.
 	for apiName := range cfg.APIs {
 		if isBuiltinCommandName(apiName) {
-			fmt.Fprintf(c.Stderr, "warning: API name %q shadows a built-in command and will not be reachable as a subcommand\n", apiName)
+			c.warnf("API name %q shadows a built-in command and will not be reachable as a subcommand", apiName)
 		}
 	}
 

@@ -98,7 +98,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	for {
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			fmt.Fprintf(c.Stderr, "warning: SSE stream error: %v\n", readErr)
+			c.warnf("SSE stream error: %v", readErr)
 			return nil
 		}
 		line = strings.TrimRight(line, "\r\n")
@@ -202,7 +202,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(c.Stderr, "warning: NDJSON stream error: %v\n", err)
+		c.warnf("NDJSON stream error: %v", err)
 	}
 	return nil
 }

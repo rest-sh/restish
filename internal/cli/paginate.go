@@ -87,7 +87,7 @@ func (c *CLI) runPagination(
 	// Process first page.
 	items, filterErr := pageItems(firstResp.Body, pagCfg)
 	if filterErr != nil {
-		fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
+		c.warnf("pagination items_path: %v", filterErr)
 	}
 	if collect || !streamItems {
 		allItems = make([]any, 0, paginationItemCapacity(len(items), maxPages, maxItems))
@@ -116,11 +116,11 @@ func (c *CLI) runPagination(
 		}
 		// Safety: max pages check (page is 1-indexed, firstResp is page 1).
 		if maxPages > 0 && page >= maxPages {
-			fmt.Fprintf(c.Stderr, "warning: reached --rsh-max-pages limit (%d); stopping pagination\n", maxPages)
+			c.warnf("reached --rsh-max-pages limit (%d); stopping pagination", maxPages)
 			break
 		}
 		if seenPage, ok := visited[nextURL]; ok {
-			fmt.Fprintf(c.Stderr, "warning: pagination cycle detected at page %d URL %q; stopping\n", seenPage, nextURL)
+			c.warnf("pagination cycle detected at page %d URL %q; stopping", seenPage, nextURL)
 			break
 		}
 		page++
@@ -144,7 +144,7 @@ func (c *CLI) runPagination(
 
 		items, filterErr = pageItems(resp.Body, pagCfg)
 		if filterErr != nil {
-			fmt.Fprintf(c.Stderr, "warning: pagination items_path: %v\n", filterErr)
+			c.warnf("pagination items_path: %v", filterErr)
 		}
 		existingCount := len(allItems)
 		if !collect && streamItems {
@@ -164,7 +164,7 @@ func (c *CLI) runPagination(
 	}
 
 	if done && maxItems > 0 {
-		fmt.Fprintf(c.Stderr, "warning: reached --rsh-max-items limit (%d); stopping pagination\n", maxItems)
+		c.warnf("reached --rsh-max-items limit (%d); stopping pagination", maxItems)
 	}
 
 	if collect || !streamItems {
@@ -182,7 +182,7 @@ func (c *CLI) paginationStatusError(cmd *cobra.Command, page, status int) error 
 		return nil
 	}
 	if code := output.StatusToExitCode(status); code != 0 {
-		fmt.Fprintf(c.Stderr, "pagination page %d returned HTTP %d; stopping\n", page, status)
+		c.warnf("pagination page %d returned HTTP %d; stopping", page, status)
 		return &ExitCodeError{Code: code}
 	}
 	return nil

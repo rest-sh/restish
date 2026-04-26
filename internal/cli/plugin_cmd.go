@@ -57,8 +57,8 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 // runPluginList discovers and prints all available plugins with their hooks.
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	plugins := plugin.Discover(plugin.DefaultPluginDir(), func(path string, err error) {
-		fmt.Fprintf(c.Stderr, "warning: plugin %s: %v\n", filepath.Base(path), err)
-	}, c.pluginManifestCachePath(), c.Stderr)
+		c.warnf("plugin %s: %v", filepath.Base(path), err)
+	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 
 	if len(plugins) == 0 {
 		fmt.Fprintln(c.Stdout, "No plugins found.")
@@ -106,7 +106,7 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("install: %w", err)
 	}
 
-	fmt.Fprintln(c.Stderr, "warning: installed plugins are trusted executables and may run arbitrary code on future restish invocations")
+	c.warnf("installed plugins are trusted executables and may run arbitrary code on future restish invocations")
 	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", filepath.Base(source))
 	return nil
 }
@@ -176,7 +176,7 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if stdoutBuf.Truncated() {
-		fmt.Fprintf(c.Stderr, "warning: plugin debug capture truncated after %d bytes\n", maxPluginDebugCaptureBytes)
+		c.warnf("plugin debug capture truncated after %d bytes", maxPluginDebugCaptureBytes)
 	}
 	return nil
 }

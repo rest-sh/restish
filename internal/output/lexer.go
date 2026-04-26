@@ -5,12 +5,17 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 )
 
-// Custom token types for bracket-depth colorization.
+// Custom token types for bracket-depth colorization and Restish-specific
+// diagnostics.
 // Brackets alternate through three colours as nesting increases.
 const (
 	IndentLevel0 chroma.TokenType = 9000 + iota
 	IndentLevel1
 	IndentLevel2
+	DiagnosticInfo
+	DiagnosticWarn
+	DiagnosticError
+	DiagnosticHint
 )
 
 // indentDepthKey is the MutatorContext key used to store per-tokenise-call
