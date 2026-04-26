@@ -321,15 +321,71 @@ info:
 paths: {}
 components:
   securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer`
+	doc := loadDoc(t, raw)
+	cfg := FallbackXCLIConfig(doc)
+	if cfg != nil {
+		t.Errorf("expected nil for unsupported scheme, got %v", cfg)
+	}
+}
+
+func TestFallbackXCLIConfig_APIKeyHeader(t *testing.T) {
+	raw := `
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  securitySchemes:
     apikey:
       type: apiKey
       in: header
-      name: X-API-Key`
+      name: X-API-Key
+      description: Tenant API key`
 	doc := loadDoc(t, raw)
 	cfg := FallbackXCLIConfig(doc)
-	// apiKey is not supported, so should return nil.
-	if cfg != nil {
-		t.Errorf("expected nil for unsupported scheme, got %v", cfg)
+	if cfg == nil {
+		t.Fatal("expected non-nil fallback config")
+	}
+	profile := cfg.Profiles["default"]
+	if profile == nil {
+		t.Fatal("expected default profile")
+	}
+	if len(profile.Headers) != 1 || profile.Headers[0] != "X-API-Key: {api_key}" {
+		t.Fatalf("headers = %#v", profile.Headers)
+	}
+	if profile.Prompt["api_key"].Description != "Tenant API key" {
+		t.Fatalf("prompt = %#v", profile.Prompt["api_key"])
+	}
+}
+
+func TestFallbackXCLIConfig_APIKeyQueryResolvesPrompt(t *testing.T) {
+	raw := `
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  securitySchemes:
+    apikey:
+      type: apiKey
+      in: query
+      name: apiKey`
+	doc := loadDoc(t, raw)
+	cfg := FallbackXCLIConfig(doc)
+	if cfg == nil {
+		t.Fatal("expected non-nil fallback config")
+	}
+	profile := cfg.Profiles["default"]
+	profile.PromptValues = map[string]string{"api_key": "secret"}
+	resolved := cfg.Resolve(doc)
+	got := resolved.Profiles["default"].Query
+	if len(got) != 1 || got[0] != "apiKey=secret" {
+		t.Fatalf("query = %#v, want apiKey=secret", got)
 	}
 }
 

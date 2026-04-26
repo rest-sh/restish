@@ -68,6 +68,11 @@ Empty or nil path items in an OpenAPI document are ignored safely. They should
 not panic command generation, MCP tool generation, or any plugin-facing
 operation export path.
 
+An operation that explicitly declares `security: []` is generated as a no-auth
+operation. Request execution should suppress configured profile auth for that
+operation so public health, status, and discovery endpoints do not run external
+auth tools or attach credentials unnecessarily.
+
 ## Naming
 
 ### Default Name

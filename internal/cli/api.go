@@ -11,6 +11,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
@@ -57,9 +58,9 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runAPIAdd,
 	})
 	configureCmd := &cobra.Command{
-		Use:   "configure <name> <url>",
+		Use:   "configure <name> <url> [setup-expression ...]",
 		Short: "Register an API and pre-populate config from its OpenAPI spec",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.MinimumNArgs(2),
 		RunE:  c.runAPIConfigure,
 	}
 	configureCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
@@ -157,7 +158,10 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 
 func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	baseURL := args[1]
+	baseURL, err := normalizeAPIBaseURL(args[1])
+	if err != nil {
+		return err
+	}
 
 	if isBuiltinCommandName(apiName) {
 		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
@@ -203,8 +207,15 @@ func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
 // it from the API's OpenAPI spec x-cli-config extension if available.
 func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	baseURL := args[1]
+	baseURL, err := normalizeAPIBaseURL(args[1])
+	if err != nil {
+		return err
+	}
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+	promptAnswers, setupExprs, err := parseAPIConfigureSetupExpressions(args[2:])
+	if err != nil {
+		return err
+	}
 
 	if isBuiltinCommandName(apiName) {
 		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
@@ -240,10 +251,16 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		}
 		if xcli != nil {
 			xcli = xcli.Normalize()
-			if err := c.promptXCLIConfig(requestContext(cmd), xcli); err != nil {
+			if err := c.promptXCLIConfig(requestContext(cmd), xcli, promptAnswers); err != nil {
 				return err
 			}
 			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
+		}
+	}
+	if len(setupExprs) > 0 {
+		work := &config.Config{APIs: map[string]*config.APIConfig{apiName: apiCfg}}
+		if _, err := c.buildAPIPatchOperations(work, apiName, setupExprs); err != nil {
+			return err
 		}
 	}
 
@@ -273,7 +290,87 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error {
+func normalizeAPIBaseURL(raw string) (string, error) {
+	normalized, err := request.Normalize(raw, "")
+	if err != nil {
+		return "", err
+	}
+	return normalized, nil
+}
+
+type configurePromptAnswers map[string]map[string]string
+
+func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, []setExpression, error) {
+	if len(args) == 0 {
+		return nil, nil, nil
+	}
+	answers := configurePromptAnswers{}
+	var patchArgs []string
+	for _, arg := range args {
+		key, raw, appendOp, err := parseShorthandAssignment(arg)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !strings.HasPrefix(key, "prompt.") {
+			patchArgs = append(patchArgs, arg)
+			continue
+		}
+		if appendOp {
+			return nil, nil, fmt.Errorf("invalid shorthand %q: prompt answers cannot use append", arg)
+		}
+		trimmed := strings.TrimPrefix(key, "prompt.")
+		if trimmed == "" {
+			return nil, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
+		}
+		profileName := "default"
+		promptName := trimmed
+		if first, rest, ok := strings.Cut(trimmed, "."); ok {
+			profileName = first
+			promptName = rest
+		}
+		if profileName == "" || promptName == "" {
+			return nil, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
+		}
+		if answers[profileName] == nil {
+			answers[profileName] = map[string]string{}
+		}
+		value, err := parseConfigCLIValue(raw)
+		if err != nil {
+			return nil, nil, err
+		}
+		valueString, ok := value.(string)
+		if !ok {
+			return nil, nil, fmt.Errorf("invalid prompt answer %q: value must be a string", arg)
+		}
+		answers[profileName][promptName] = valueString
+	}
+	exprs, err := parseAPISetExpressions(patchArgs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return answers, exprs, nil
+}
+
+func (a configurePromptAnswers) answer(profileName, name string) (string, bool) {
+	if len(a) == 0 {
+		return "", false
+	}
+	if profileAnswers := a[profileName]; profileAnswers != nil {
+		if value, ok := profileAnswers[name]; ok {
+			return value, true
+		}
+	}
+	if profileName != "default" {
+		if profileAnswers := a["default"]; profileAnswers != nil {
+			if value, ok := profileAnswers[name]; ok {
+				return value, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig, answers configurePromptAnswers) error {
 	if xcli == nil || len(xcli.Profiles) == 0 {
 		return nil
 	}
@@ -304,9 +401,19 @@ func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig) error
 		sort.Strings(promptNames)
 
 		for _, name := range promptNames {
-			value, err := c.readXCLIPrompt(ctx, profileName, name, profile.Prompt[name])
-			if err != nil {
-				return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
+			var value string
+			if answer, ok := answers.answer(profileName, name); ok {
+				var err error
+				value, err = validateXCLIPromptValue(name, strings.TrimSpace(answer), profile.Prompt[name])
+				if err != nil {
+					return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
+				}
+			} else {
+				var err error
+				value, err = c.readXCLIPrompt(ctx, profileName, name, profile.Prompt[name])
+				if err != nil {
+					return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
+				}
 			}
 			profile.PromptValues[name] = value
 			if !profile.Prompt[name].Exclude {
@@ -337,16 +444,26 @@ func (c *CLI) readXCLIPrompt(ctx context.Context, profileName, name string, prom
 		if value == "" && prompt.Default != nil {
 			value = fmt.Sprint(prompt.Default)
 		}
-		if value == "" {
-			fmt.Fprintf(c.Stderr, "%s is required; please enter a non-empty value.\n", name)
+		validated, validateErr := validateXCLIPromptValue(name, value, prompt)
+		if validateErr != nil {
+			fmt.Fprintf(c.Stderr, "%v.\n", validateErr)
 			continue
 		}
-		if len(prompt.Enum) > 0 && !xcliPromptValueAllowed(value, prompt.Enum) {
-			fmt.Fprintf(c.Stderr, "%s must be one of: %s.\n", name, xcliPromptEnumList(prompt.Enum))
-			continue
-		}
-		return value, nil
+		return validated, nil
 	}
+}
+
+func validateXCLIPromptValue(name, value string, prompt spec.XCLIPromptVar) (string, error) {
+	if value == "" && prompt.Default != nil {
+		value = fmt.Sprint(prompt.Default)
+	}
+	if value == "" {
+		return "", fmt.Errorf("%s is required; please enter a non-empty value", name)
+	}
+	if len(prompt.Enum) > 0 && !xcliPromptValueAllowed(value, prompt.Enum) {
+		return "", fmt.Errorf("%s must be one of: %s", name, xcliPromptEnumList(prompt.Enum))
+	}
+	return value, nil
 }
 
 func xcliPromptLabel(profileName, name string, prompt spec.XCLIPromptVar) string {

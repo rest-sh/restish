@@ -131,14 +131,21 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 		return nil
 	}
 
+	profile := &XCLIProfile{}
 	xcliAuth := SchemeToXCLIAuth(chosenScheme, nil)
-	if xcliAuth == nil {
-		return nil
+	if xcliAuth != nil {
+		profile.Auth = xcliAuth
+	} else {
+		apiKeyProfile := SchemeToXCLIAPIKeyProfile(chosenScheme)
+		if apiKeyProfile == nil {
+			return nil
+		}
+		profile = apiKeyProfile
 	}
 
 	return &XCLIConfig{
 		Profiles: map[string]*XCLIProfile{
-			"default": {Auth: xcliAuth},
+			"default": profile,
 		},
 	}
 }
@@ -190,6 +197,33 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 	}
 
 	return &XCLIAuth{Type: authType, Params: p}
+}
+
+// SchemeToXCLIAPIKeyProfile converts an OpenAPI apiKey security scheme into
+// first-class setup prompts that persist as profile headers or query params.
+func SchemeToXCLIAPIKeyProfile(scheme *v3high.SecurityScheme) *XCLIProfile {
+	if scheme == nil || scheme.Type != "apiKey" || scheme.Name == "" {
+		return nil
+	}
+	promptName := "api_key"
+	description := "API key"
+	if scheme.Description != "" {
+		description = scheme.Description
+	}
+	profile := &XCLIProfile{
+		Prompt: map[string]XCLIPromptVar{
+			promptName: {Description: description},
+		},
+	}
+	switch scheme.In {
+	case "header":
+		profile.Headers = []string{fmt.Sprintf("%s: {%s}", scheme.Name, promptName)}
+	case "query":
+		profile.Query = []string{fmt.Sprintf("%s={%s}", scheme.Name, promptName)}
+	default:
+		return nil
+	}
+	return profile
 }
 
 // Normalize returns a copy of xcli using the v2 profile-shaped structure.
@@ -349,9 +383,7 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 		}
 		resolvedParams := expandXCLIParams(xp.Params, expansionParams, xp.PromptedParams)
 
-		rp := &XCLIProfile{
-			Query: xp.Query,
-		}
+		rp := &XCLIProfile{}
 
 		// Resolve Security → Auth when no explicit Auth is set.
 		auth := cloneXCLIAuth(xp.Auth)
@@ -379,6 +411,10 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 		rp.Headers = make([]string, len(xp.Headers))
 		for i, h := range xp.Headers {
 			rp.Headers[i] = ExpandParams(h, expansionParams)
+		}
+		rp.Query = make([]string, len(xp.Query))
+		for i, q := range xp.Query {
+			rp.Query[i] = ExpandParams(q, expansionParams)
 		}
 
 		resolved.Profiles[name] = rp

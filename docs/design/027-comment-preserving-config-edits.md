@@ -88,7 +88,8 @@ Without that, a perfect patcher can still lose user edits.
 The command behavior is now:
 
 - `api configure` preserves comments in an existing JSONC config when adding or
-  replacing an API entry
+  replacing an API entry, including when setup expressions are supplied on the
+  command line
 - `api set` preserves comments when updating a supported config path
 - `api delete` preserves comments around unaffected entries
 

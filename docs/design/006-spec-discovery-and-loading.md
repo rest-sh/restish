@@ -188,6 +188,12 @@ more aggressively than routine startup.
 Examples:
 
 - `api configure` should not blindly trust stale cached `x-cli-config`
+- `api configure <name> <url>` and `api add <name> <url>` normalize schemeless
+  URLs the same way requests do: `https://` by default, but `http://` for
+  localhost and loopback targets
+- `api configure <name> <url> [setup-expression ...]` may consume
+  `prompt.*` expressions as prompt preanswers, then apply ordinary config
+  shorthand expressions as final overrides before saving
 - `api sync` should refresh from the authoritative source
 - `api set` and `api edit` should invalidate cached specs when fields that
   affect discovery or operation generation change, including `base_url`,

@@ -82,6 +82,20 @@ That is the simplest useful pattern:
 2. add auth under the profile
 3. use ordinary Restish commands from there on
 
+## API Keys
+
+OpenAPI `apiKey` security schemes are set up as profile headers or query
+parameters. You can let `api configure` prompt for the key, or pre-answer the
+prompt:
+
+```bash
+restish api configure myapi api.example.com prompt.api_key: env:MYAPI_TOKEN
+```
+
+For a header-based API key scheme named `X-API-Key`, Restish writes a persistent
+profile header such as `X-API-Key: env:MYAPI_TOKEN`. For a query API key, it
+writes a persistent profile query parameter instead.
+
 ## Prompting For Secrets
 
 You do not have to store every secret in config.

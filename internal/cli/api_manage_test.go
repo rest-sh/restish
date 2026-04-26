@@ -948,6 +948,159 @@ func TestAPIAddWithShorthand(t *testing.T) {
 	}
 }
 
+func TestAPIAddNormalizesSchemelessURL(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "add", "remote", "api.example.com"}); err != nil {
+		t.Fatalf("api add remote: %v", err)
+	}
+	if err := c.Run([]string{"restish", "api", "add", "local", "localhost:8080"}); err != nil {
+		t.Fatalf("api add local: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["remote"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("remote base_url = %q, want https://api.example.com", got)
+	}
+	if got := written.APIs["local"].BaseURL; got != "http://localhost:8080" {
+		t.Fatalf("local base_url = %q, want http://localhost:8080", got)
+	}
+}
+
+func TestAPIConfigureSetupExpressions(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "headers": ["X-Client: {client_id}"],
+        "auth": {"type": "bearer", "params": {"token": "{token}"}},
+        "prompt": {
+          "client_id": {"description": "Client ID"},
+          "token": {"description": "Token"}
+        }
+      }
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{
+		"restish", "api", "configure", "myapi", "api.example.com",
+		`prompt.client_id: abc123`,
+		`prompt.token: secret-token`,
+		`profiles.default.headers[]: "X-Env: prod"`,
+	}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	api := written.APIs["myapi"]
+	if got := api.BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url = %q, want https://api.example.com", got)
+	}
+	prof := api.Profiles["default"]
+	for _, want := range []string{"X-Client: abc123", "X-Env: prod"} {
+		if !containsString(prof.Headers, want) {
+			t.Fatalf("headers missing %q: %#v", want, prof.Headers)
+		}
+	}
+	if got := prof.Auth.Params["token"]; got != "secret-token" {
+		t.Fatalf("token = %q, want secret-token", got)
+	}
+}
+
+func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{
+		"restish", "api", "configure", "myapi", "api.example.com",
+		`prompt.api_key: secret-key`,
+	}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	prof := written.APIs["myapi"].Profiles["default"]
+	if prof.Auth != nil {
+		t.Fatalf("api key fallback should persist as header/query, got auth %#v", prof.Auth)
+	}
+	if !containsString(prof.Headers, "X-API-Key: secret-key") {
+		t.Fatalf("expected API key header, got %#v", prof.Headers)
+	}
+}
+
 func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   // Existing APIs

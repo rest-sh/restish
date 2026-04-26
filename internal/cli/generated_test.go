@@ -84,6 +84,14 @@ func specWithOperations(baseURL string) string {
         "responses": {"200": {"description": "OK"}}
       }
     },
+    "/public": {
+      "get": {
+        "operationId": "getPublic",
+        "summary": "Public endpoint",
+        "security": [],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
     "/secret": {
       "get": {
         "operationId": "getSecret",
@@ -220,6 +228,51 @@ func TestGeneratedCommandKebabCase(t *testing.T) {
 	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
 		t.Fatalf("list-items failed: %v", err)
 	}
+}
+
+func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/public", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "secret"}},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-public"}); err != nil {
+		t.Fatalf("get-public failed: %v", err)
+	}
+	if gotAuth != "" {
+		t.Fatalf("Authorization = %q, want empty for security: [] operation", gotAuth)
+	}
+}
+
+func readBaseURLFromConfig(t *testing.T, path string) string {
+	t.Helper()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	return cfg.APIs["tapi"].BaseURL
 }
 
 func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {

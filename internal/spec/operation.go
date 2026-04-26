@@ -86,6 +86,8 @@ type Operation struct {
 	Parameters  []Param
 	// HasBody is true when the operation has a requestBody.
 	HasBody bool
+	// NoAuth is true when the operation explicitly declares security: [].
+	NoAuth bool
 	// RequestMediaType is the deterministic preferred content type from
 	// requestBody.content, if the operation accepts a body.
 	RequestMediaType string
@@ -211,6 +213,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		Deprecated:       op.Deprecated != nil && *op.Deprecated,
 		Tags:             op.Tags,
 		HasBody:          op.RequestBody != nil,
+		NoAuth:           op.Security != nil && len(op.Security) == 0,
 		RequestMediaType: preferredRequestMediaType(op),
 		XCLI: OperationXCLI{
 			Ignore:      OpExtBool(op, "x-cli-ignore"),

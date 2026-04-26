@@ -32,11 +32,34 @@ Register an API:
 restish api configure example https://api.rest.sh
 ```
 
+You can omit the scheme for ordinary HTTPS APIs:
+
+```bash
+restish api configure example api.rest.sh
+```
+
+Localhost and loopback targets default to HTTP:
+
+```bash
+restish api add local localhost:8080
+```
+
 Then inspect what Restish learned:
 
 ```bash
 restish api list
 restish example --help
+```
+
+If the OpenAPI description asks setup questions, you can answer them on the
+same command line with `prompt.*` expressions. Other expressions use the same
+config shorthand as `api set` and apply after discovery:
+
+```bash
+restish api configure acme api.example.com \
+  prompt.client_id: abc123 \
+  prompt.api_key: env:ACME_API_KEY \
+  profiles.default.headers[]: "X-Env: prod"
 ```
 
 ## How Discovery Works
