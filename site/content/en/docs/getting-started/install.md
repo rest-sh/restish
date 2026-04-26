@@ -47,6 +47,39 @@ it somewhere on your `PATH`, such as `/usr/local/bin/restish`.
 
 This is a good fallback when you do not want to use a package manager.
 
+## OCI Container Image
+
+For CI jobs, Kubernetes tasks, or other containerized environments, use the
+official image:
+
+```bash
+docker run --rm ghcr.io/rest-sh/restish:latest --version
+docker run --rm ghcr.io/rest-sh/restish:latest https://api.rest.sh/
+```
+
+Stable releases publish multi-arch images for `linux/amd64` and `linux/arm64`
+at `ghcr.io/rest-sh/restish`. Release candidates publish their exact candidate
+tags but do not update `latest`.
+
+The default image contains the `restish` CLI and normal CA certificates. It
+does not bundle optional plugin binaries. For plugin-heavy workflows, build a
+derived image that copies the required `restish-*` plugin binaries into the
+configured plugin directory.
+
+Mount config and secrets explicitly. For example:
+
+```bash
+docker run --rm \
+  -e RSH_CONFIG=/config/restish.json \
+  -e MYAPI_TOKEN \
+  -v "$PWD/restish.json:/config/restish.json:ro" \
+  ghcr.io/rest-sh/restish:latest myapi/items
+```
+
+In Kubernetes, mount `restish.json` from a ConfigMap or Secret, mount token
+material as environment variables or secret files, and set `RSH_CONFIG` to the
+mounted file path.
+
 ## `go install`
 
 If you already have a Go toolchain and just want the CLI:
