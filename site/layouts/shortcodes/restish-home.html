@@ -5,7 +5,7 @@
         <h1>A CLI for any <span>REST</span>-ish API.</h1>
         <p class="restish-hero__lead">Discover operations, auth, and schemas from the server. No local clients to build or update.</p>
         <div class="restish-hero__actions">
-          <a class="restish-button restish-button--primary" href="{{ "docs/getting-started/install/" | relURL }}">Get started <span aria-hidden="true">-&gt;</span></a>
+          <a class="restish-button restish-button--primary" href="{{ "docs/getting-started/quickstart/" | relURL }}">Get started <span aria-hidden="true">-&gt;</span></a>
           <code><span class="token-symbol">$</span> brew install restish</code>
         </div>
       </div>
@@ -16,21 +16,21 @@
           <span class="restish-dot restish-dot--amber"></span>
           <span class="restish-dot restish-dot--green"></span>
         </div>
-        <pre><code><span class="token-symbol">$</span> restish my-api get-user 1843
-HTTP/2.0 <span class="token-string">200</span> OK
-<span class="token-url">Content-Type:</span> application/json
-<span class="token-url">Date:</span> <script type="text/javascript">
-  document.write(new Date().toUTCString());
-</script>
+        <pre><code><span class="token-symbol">$</span> restish https://api.rest.sh/
+<span class="token-url">method:</span> <span class="token-string">"GET"</span>
+<span class="token-url">host:</span> <span class="token-string">"api.rest.sh"</span>
+<span class="token-url">path:</span> <span class="token-string">"/"</span>
+<span class="token-url">url:</span> <span class="token-string">"https://api.rest.sh/"</span>
 
-{
-  <span class="token-url">"id"</span>: <span class="token-number">1843</span>,
-  <span class="token-url">"active"</span>: <span class="token-bool">true</span>,
-  <span class="token-url">"name"</span>: <span class="token-string">"Ada Lovelace"</span>,
-  <span class="token-url">"email"</span>: <span class="token-string">"ada@example.com"</span>,
-  <span class="token-url">"created_at"</span>: <span class="token-date">"2026-04-18T19:15:30Z"</span>,
-  <span class="token-url">"link"</span>: <span class="token-href">"https://api.example.com/users/1843"</span>
-}</code></pre>
+<span class="token-symbol">$</span> restish api configure example \
+  https://api.rest.sh \
+  'prompt.api_key: docs-key'
+<span class="token-url">configured:</span> <span class="token-string">"example"</span>
+
+<span class="token-symbol">$</span> restish example list-images -f body.self -r
+<span class="token-href">/images/jpeg</span>
+<span class="token-href">/images/webp</span>
+<span class="token-href">/images/gif</span></code></pre>
       </div>
     </div>
 
@@ -114,17 +114,17 @@ HTTP/2.0 <span class="token-string">200</span> OK
     <h2>Go from one request to an API-specific command line.</h2>
   </div>
   <div class="restish-card-grid">
-    <a class="restish-card" href="{{ "docs/getting-started/install/" | relURL }}">
-      <h3>Install in One Command</h3>
-      <p>Install with Homebrew, mise, Nix, GitHub releases, or Go, then verify the binary in one minute.</p>
-    </a>
     <a class="restish-card" href="{{ "docs/getting-started/quickstart/" | relURL }}">
-      <h3>Ten-Minute Quickstart</h3>
-      <p>Go from install to a generated API command, profile, and filtered output with one realistic flow.</p>
+      <h3>Start With Quickstart</h3>
+      <p>Install or verify Restish, make a request, register the example API, and filter useful output.</p>
     </a>
-    <a class="restish-card" href="{{ "docs/getting-started/first-request/" | relURL }}">
-      <h3>First Request in Minutes</h3>
-      <p>Use a generic HTTP command first, then layer in headers, bodies, and output control.</p>
+    <a class="restish-card" href="{{ "docs/getting-started/install/" | relURL }}">
+      <h3>Install Options</h3>
+      <p>Use Homebrew, mise, Nix, GitHub releases, Docker, or a source build when you need setup details.</p>
+    </a>
+    <a class="restish-card" href="{{ "docs/getting-started/shell-setup/" | relURL }}">
+      <h3>Shell Setup</h3>
+      <p>Prevent your shell from rewriting query strings, filters, arrays, and shorthand before Restish sees them.</p>
     </a>
     <a class="restish-card" href="{{ "docs/getting-started/connect-to-an-api/" | relURL }}">
       <h3>Turn an API Into a CLI</h3>

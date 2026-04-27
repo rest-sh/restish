@@ -12,7 +12,7 @@ plugins.
 
 ## Start Here
 
-- New to Restish: [Install](./getting-started/install/) -> [Quickstart](./getting-started/quickstart/) -> [Requests](./guides/requests/)
+- New to Restish: [Quickstart](./getting-started/quickstart/) -> [Shell Setup](./getting-started/shell-setup/) -> [Connect to an API](./getting-started/connect-to-an-api/)
 - Already have an OpenAPI-described API: [Connect to an API](./getting-started/connect-to-an-api/) -> [OpenAPI and CLI Integration](./guides/openapi-cli-integration/)
 - Repeating headers, tokens, or environment URLs: [Set Up Profiles](./getting-started/set-up-profiles/) -> [Authentication](./guides/authentication/)
 - Extending Restish: [Install and Use Plugins](./plugins/install-and-use/) -> [Plugin Quickstart](./plugins/quickstart/)

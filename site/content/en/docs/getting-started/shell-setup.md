@@ -73,6 +73,11 @@ restish example <TAB>
 - Prefer generated commands when an API has a spec; completion becomes much
   more useful.
 
+## Next Step
+
+[Connect to an API](../connect-to-an-api/) when you want generated commands,
+completion, profiles, and API-specific help.
+
 ## Related Pages
 
 - [Quickstart](../quickstart/)

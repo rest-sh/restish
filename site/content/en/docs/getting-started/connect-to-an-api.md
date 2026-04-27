@@ -84,6 +84,11 @@ restish --rsh-config ./restish.json example list-images
 An explicit config file is the source of truth for that invocation. It is not
 merged with the global config.
 
+## Next Step
+
+[Set Up Profiles](../set-up-profiles/) when repeated headers, auth, environment
+URLs, or query defaults start making commands noisy.
+
 ## Related Pages
 
 - [API Commands](/docs/concepts/api-commands/)

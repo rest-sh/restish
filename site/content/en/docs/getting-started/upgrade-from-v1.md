@@ -163,7 +163,7 @@ restish api edit
 
 - [Changelog](../changelog/)
 - [Install](../install/)
-- [First Request](../first-request/)
+- [Quickstart](../quickstart/)
 - [Your First API Config](../your-first-config/)
 - [Config](/docs/reference/config/)
 - [Install And Use Plugins](/docs/plugins/install-and-use/)

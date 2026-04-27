@@ -5,17 +5,16 @@ weight: 10
 description: Install Restish, make a request, register the example API, and learn the shortest path to daily use.
 ---
 
-This section gets you from an installed binary to one useful request, then shows
-why API-aware commands and profiles make repeated work calmer.
+This section gets you from first run to a useful API-specific workflow. If you
+do not know what to choose, follow the default path in order.
 
 ## Start Here
 
-1. [Install](./install/) the current binary or build from source.
-2. Follow the [Quickstart](./quickstart/) for the shortest complete path.
-3. Make a slower [First Request](./first-request/) if you want the pieces named.
-4. Run [Shell Setup](./shell-setup/) before using filters, query strings, or shorthand heavily.
-5. [Connect to an API](./connect-to-an-api/) when generated commands are useful.
-6. [Set Up Profiles](./set-up-profiles/) for environments, auth, and defaults.
+1. Follow the [Quickstart](./quickstart/) for the shortest complete path.
+2. Use [Install](./install/) when you need package-manager or source-build details.
+3. Run [Shell Setup](./shell-setup/) before using filters, query strings, or shorthand heavily.
+4. [Connect to an API](./connect-to-an-api/) when generated commands are useful.
+5. [Set Up Profiles](./set-up-profiles/) for environments, auth, and defaults.
 
 ## Common First Wins
 

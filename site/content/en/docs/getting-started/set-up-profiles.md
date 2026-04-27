@@ -82,6 +82,12 @@ client credentials. Keep config files private and prefer environment-variable
 references or external tools when your team does not want secrets in
 `restish.json`.
 
+## Next Step
+
+Use [Requests](/docs/guides/requests/) for the broader daily workflow, or jump
+to [Authentication](/docs/guides/authentication/) when credentials are your next
+task.
+
 ## Related Pages
 
 - [Profiles Concept](/docs/concepts/profiles/)

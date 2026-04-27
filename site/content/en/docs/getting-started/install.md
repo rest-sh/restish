@@ -84,6 +84,11 @@ Restish v2 can migrate default-location v1 config on first run. Read
 [Upgrade From v1](../upgrade-from-v1/) before editing config or replacing
 plugins.
 
+## Next Step
+
+Follow the [Quickstart](../quickstart/) to make your first request and register
+the live example API.
+
 ## Related Pages
 
 - [Quickstart](../quickstart/)
