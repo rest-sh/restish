@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/alecthomas/chroma/v2"
 )
 
 func TestIndentBlockPreservesLines(t *testing.T) {
@@ -115,6 +117,55 @@ func TestReadableFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
 	}
 }
 
+func TestMarkdownRendererHighlightsSchemaFencesWithRestishTheme(t *testing.T) {
+	t.Setenv("GLAMOUR_STYLE", "")
+	if err := SetTheme(ThemeEntries{"key": "#ff0000"}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	defer func() {
+		if err := SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	}()
+
+	renderer, err := NewMarkdownRenderer(80)
+	if err != nil {
+		t.Fatalf("NewMarkdownRenderer: %v", err)
+	}
+	got, err := renderer.Render("```schema\n{\n  name*: (string)\n}\n```\n")
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(got, "\x1b[38;5;196mname") && !strings.Contains(got, "\x1b[38;2;255;0;0mname") {
+		t.Fatalf("expected themed schema key color, got %q", got)
+	}
+	if plain := stripANSITest(got); !strings.Contains(plain, "name*: (string)") {
+		t.Fatalf("expected schema text after rendering, got %q", got)
+	}
+}
+
+func TestSchemaLexerHighlightsUsefulSchemaParts(t *testing.T) {
+	iter, err := SchemaLexer.Tokenise(nil, "{\n  name*: (string format:uri default:about:blank)\n}")
+	if err != nil {
+		t.Fatalf("Tokenise: %v", err)
+	}
+
+	tokens := iter.Tokens()
+	for _, want := range []chroma.Token{
+		{Type: chroma.NameTag, Value: "name"},
+		{Type: chroma.Operator, Value: "*"},
+		{Type: chroma.KeywordType, Value: "string"},
+		{Type: chroma.NameBuiltin, Value: "format:"},
+		{Type: chroma.LiteralString, Value: "uri"},
+		{Type: chroma.NameBuiltin, Value: "default:"},
+		{Type: chroma.LiteralString, Value: "about:blank"},
+	} {
+		if !tokenSliceContains(tokens, want) {
+			t.Fatalf("expected token %s %q in %#v", want.Type, want.Value, tokens)
+		}
+	}
+}
+
 func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
 	t.Setenv("GLAMOUR_STYLE", "notty")
 	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
@@ -170,4 +221,13 @@ func stripANSITest(s string) string {
 		i++
 	}
 	return out.String()
+}
+
+func tokenSliceContains(tokens []chroma.Token, want chroma.Token) bool {
+	for _, tok := range tokens {
+		if tok.Type == want.Type && tok.Value == want.Value {
+			return true
+		}
+	}
+	return false
 }

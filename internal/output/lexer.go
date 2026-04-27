@@ -92,6 +92,74 @@ var ReadableLexer = lexers.Register(chroma.MustNewLexer(
 	},
 ))
 
+// SchemaLexer tokenizes the compact schema language used in generated
+// OpenAPI command help. It intentionally shares theme tokens with readable
+// output so schema blocks embedded in Glamour-rendered help are colored like
+// response bodies.
+var SchemaLexer = lexers.Register(chroma.MustNewLexer(
+	&chroma.Config{
+		Name:    "Restish Schema",
+		Aliases: []string{"schema", "restish-schema", "openapi-schema"},
+	},
+	func() chroma.Rules {
+		return chroma.Rules{
+			"whitespace": {
+				{Pattern: `\s+`, Type: chroma.Text},
+			},
+			"scalar": {
+				{Pattern: `(true|false|null)\b`, Type: chroma.KeywordConstant},
+				{Pattern: `-?(0|[1-9]\d*)(\.\d+[eE](\+|-)?\d+|[eE](\+|-)?\d+|\.\d+)`, Type: chroma.LiteralNumberFloat},
+				{Pattern: `-?(0|[1-9]\d*)`, Type: chroma.LiteralNumberInteger},
+				{Pattern: `"([a-z]+://|/)(\\\\|\\"|[^"])+"`, Type: chroma.LiteralStringSymbol},
+				{Pattern: `"(\\\\|\\"|[^"])*"`, Type: chroma.LiteralStringDouble},
+				{Pattern: `<[^>\n]+>`, Type: chroma.Comment},
+				{Pattern: `(allOf|oneOf|anyOf)\b`, Type: chroma.Keyword},
+				{Pattern: `\(`, Type: chroma.Punctuation, Mutator: chroma.Push("annotation")},
+				{Pattern: `[^{}\[\]:,\n]+`, Type: chroma.Text},
+			},
+			"annotation": {
+				{Pattern: `\)`, Type: chroma.Punctuation, Mutator: chroma.Pop(1)},
+				{Pattern: `\s+`, Type: chroma.Text},
+				{Pattern: `\|`, Type: chroma.Operator},
+				{Pattern: `(boolean|integer|number|string|array|object|any)\b`, Type: chroma.KeywordType},
+				{Pattern: `(format|default|enum|pattern|minLen|maxLen):`, Type: chroma.NameBuiltin},
+				{Pattern: `-?(0|[1-9]\d*)(\.\d+[eE](\+|-)?\d+|[eE](\+|-)?\d+|\.\d+)`, Type: chroma.LiteralNumberFloat},
+				{Pattern: `-?(0|[1-9]\d*)`, Type: chroma.LiteralNumberInteger},
+				{Pattern: `true|false|null\b`, Type: chroma.KeywordConstant},
+				{Pattern: `[^)\s|]+`, Type: chroma.LiteralString},
+			},
+			"schema-key": {
+				{Pattern: `\*`, Type: chroma.Operator},
+				{Pattern: `[^\*:]+`, Type: chroma.NameTag},
+			},
+			"objectrow": {
+				{Pattern: `:`, Type: chroma.Punctuation},
+				{Pattern: `,`, Type: chroma.Punctuation},
+				{Pattern: `\n`, Type: chroma.Punctuation, Mutator: chroma.Pop(1)},
+				{Pattern: `\}`, Type: chroma.EmitterFunc(readableIndentEnd), Mutator: chroma.Pop(2)},
+				chroma.Include("value"),
+			},
+			"object": {
+				chroma.Include("whitespace"),
+				{Pattern: `\}`, Type: chroma.EmitterFunc(readableIndentEnd), Mutator: chroma.Pop(1)},
+				{Pattern: `([^:\n{}\[\]]+)(:)`, Type: chroma.ByGroups(chroma.UsingSelf("schema-key"), chroma.Punctuation), Mutator: chroma.Push("objectrow")},
+			},
+			"arrayvalue": {
+				{Pattern: `,`, Type: chroma.Punctuation},
+				{Pattern: `\]`, Type: chroma.EmitterFunc(readableIndentEnd), Mutator: chroma.Pop(1)},
+				chroma.Include("value"),
+			},
+			"value": {
+				chroma.Include("whitespace"),
+				{Pattern: `\{`, Type: chroma.EmitterFunc(readableIndentStart), Mutator: chroma.Push("object")},
+				{Pattern: `\[`, Type: chroma.EmitterFunc(readableIndentStart), Mutator: chroma.Push("arrayvalue")},
+				chroma.Include("scalar"),
+			},
+			"root": {chroma.Include("value")},
+		}
+	},
+))
+
 // HTTPPreambleLexer tokenizes the status line and headers section of an HTTP
 // response so they can be colored via restishStyle just like the body.
 //

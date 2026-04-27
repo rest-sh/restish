@@ -35,6 +35,7 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.LiteralDate:         "#af87af",        // ISO 8601 dates
 	chroma.LiteralNumberHex:    "#ffd7d7",        // hex binary (0x...)
 	chroma.Keyword:             "#ff5f87",
+	chroma.KeywordType:         "bold #ff5f87",
 	chroma.NameFunction:        "#5fafd7",
 	chroma.NameClass:           "#5fafd7",
 	chroma.NameBuiltin:         "#87afd7",
@@ -84,6 +85,7 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"date":             chroma.LiteralDate,
 	"binary":           chroma.LiteralNumberHex,
 	"keyword":          chroma.Keyword,
+	"type":             chroma.KeywordType,
 	"function":         chroma.NameFunction,
 	"class":            chroma.NameClass,
 	"builtin":          chroma.NameBuiltin,
