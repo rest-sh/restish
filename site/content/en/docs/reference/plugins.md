@@ -9,6 +9,11 @@ Plugins extend Restish without replacing the host runtime. Operators should
 start with install and verification; authors should read manifest and message
 references.
 
+The important split is operator versus author. Operators need to know whether a
+plugin is installed, discoverable, and working. Authors need the manifest and
+message contracts. Keeping those paths separate makes plugins easier to use and
+safer to debug.
+
 ## Operator Commands
 
 ```bash
@@ -29,6 +34,10 @@ restish plugin debug ./restish-csv
 A plugin must be executable, discoverable, and compatible with the v2 protocol.
 When discovery fails, check file permissions, install location, manifest fields,
 and protocol version.
+
+Run `restish plugin debug ./path/to/plugin` when a plugin launches but does not
+behave correctly. Debug output is meant to reveal protocol messages without
+requiring you to attach a debugger to the host CLI.
 
 ## Related Pages
 

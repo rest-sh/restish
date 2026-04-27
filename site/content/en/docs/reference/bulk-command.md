@@ -5,7 +5,10 @@ weight: 40
 description: Reference for the restish-bulk command plugin.
 ---
 
-Reference for the restish-bulk command plugin.
+`restish-bulk` is a command plugin for workflows where a collection needs to be
+pulled down, edited locally, and pushed back in a controlled way. It is useful
+for repeatable content or data maintenance tasks where one request at a time is
+too slow or too error-prone.
 
 ## Examples
 
@@ -17,12 +20,21 @@ restish bulk push
 restish bulk reset
 ```
 
+`init` starts a bulk workspace for a collection. `status` shows local and remote
+state. `pull` refreshes local data. `push` sends local changes. `reset` returns
+the workspace to a clean state.
+
 ## Notes
 
-Bulk is provided by a command plugin. Verify plugin discovery with `restish plugin list` before using it.
+Bulk is provided by a command plugin. Verify plugin discovery with
+`restish plugin list` before using it. Operator setup is covered in
+[Install and Use Plugins](/docs/plugins/install-and-use/); plugin protocol
+details live in the author docs.
 
 ## Related Pages
 
 - [Commands](/docs/reference/commands/)
+- [Bulk Management](/docs/guides/bulk-management/)
+- [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Global Flags](/docs/reference/global-flags/)
 - [Troubleshooting](/docs/guides/troubleshooting/)

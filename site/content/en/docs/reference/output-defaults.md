@@ -8,6 +8,12 @@ description: Reference for default output choices on terminals, redirects, filte
 Restish chooses defaults to be useful interactively and predictable in scripts,
 but an explicit format is better when a script depends on a specific shape.
 
+The defaults are designed around where stdout is going. A terminal should show
+something readable to a human. A pipe or file should usually get a stable
+machine-readable value. Binary image downloads are the exception: when stdout
+is redirected, Restish writes the original image bytes so the saved file opens
+normally.
+
 ## Main Rule
 
 - TTY output defaults to `readable` for structured responses.
@@ -35,7 +41,9 @@ A filter changes what is rendered:
 restish https://api.rest.sh/images -f body.self -r
 ```
 
-Use `-r` for shell-friendly scalar output.
+Use `-r` for shell-friendly scalar output. Once you filter, you are no longer
+asking for the original wire body; you are asking Restish to render the selected
+value. The [Output guide](/docs/guides/output/) covers that processing model.
 
 ## Related Pages
 
