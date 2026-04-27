@@ -1,124 +1,59 @@
 ---
 title: Serve APIs Over MCP
 linkTitle: MCP
-weight: 88
-description: Expose registered Restish APIs as MCP tools so an MCP client can call OpenAPI operations through Restish.
+weight: 105
+description: Expose registered Restish APIs as MCP tools through the restish-mcp command plugin.
 ---
 
-`restish mcp` exposes registered APIs as MCP tools over stdio.
+`restish-mcp` is a command plugin that exposes registered OpenAPI operations as
+MCP tools. Use it when an MCP client should call APIs through Restish profiles,
+auth, TLS, retries, and output normalization.
 
-Use it when you want an MCP client to call real API operations while still
-letting Restish handle:
-
-- API registration
-- auth and profiles
-- TLS and mTLS
-- retries and cache behavior
-
-Use regular Restish commands when you want precise, human-controlled CLI calls.
-Use `restish-mcp` when you want an agent or MCP client to see selected OpenAPI
-operations as tools. They share the same registrations and runtime behavior,
-but they are optimized for different callers.
-
-## What It Needs
-
-Before `restish mcp` is useful, register at least one API with a usable spec:
+## Prerequisites
 
 ```bash
-restish api configure example https://api.rest.sh
-restish api sync example
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish plugin list
+restish mcp --help
 ```
 
-The plugin builds its tools from cached OpenAPI operations.
+The API must be registered and have a usable spec.
 
-## Basic Usage
-
-Serve one API over stdio:
+## Serve Tools
 
 ```bash
-restish mcp example
+restish mcp serve example
 ```
 
-Serve multiple APIs:
+The plugin reads the registered API spec, turns operations into MCP tools, and
+delegates HTTP execution back to Restish.
 
-```bash
-restish mcp example github
-```
+## Hide Operations
 
-When serving more than one API, tool names are namespaced to avoid collisions.
-
-## Useful Flags
-
-Restrict the exposed operations:
-
-```bash
-restish mcp example --operations listImages,getImage
-```
-
-Expose only safe read-only operations:
-
-```bash
-restish mcp example --read-only
-```
-
-Cap large tool results:
-
-```bash
-restish mcp example --max-result-bytes 32768
-```
-
-## How Tool Calls Work
-
-When an MCP client calls a tool, the plugin translates the tool input into an
-HTTP request and delegates execution back to Restish.
-
-That means a tool call still uses the same Restish runtime behavior as a normal
-CLI request:
-
-- registered base URLs
-- profile selection
-- auth injection
-- middleware hooks
-- TLS settings
-
-In practice, `restish mcp` is not a second API client. It is a protocol bridge
-on top of the existing Restish request path.
-
-## Good Fit vs Bad Fit
-
-Use `restish mcp` when:
-
-- you already have a Restish API registration
-- the API has clear OpenAPI `operationId` values
-- you want MCP tools that inherit the same auth and transport config as the CLI
-
-Avoid it when:
-
-- the API does not have a usable spec yet
-- you need custom tool semantics unrelated to API operations
-- you want raw HTTP behavior instead of Restish's normalized request pipeline
-
-## Hiding Operations From MCP
-
-Use the `x-mcp-ignore` extension to exclude specific operations from the MCP
-tool surface without hiding them from the regular CLI:
+Use OpenAPI hints when some operations should not be exposed to MCP clients:
 
 ```yaml
-paths:
-  /internal/debug:
-    get:
-      operationId: debugInternal
-      x-mcp-ignore: true
+x-mcp-ignore: true
 ```
 
-Operations marked with `x-mcp-ignore: true` are skipped when building MCP
-tools but remain available as normal generated CLI commands.
+Use this for destructive, admin-only, or confusing operations.
 
-Use `x-cli-ignore: true` when you want to hide the operation from both the
-CLI and MCP tools entirely.
+## Good Fit
+
+MCP works well for APIs with clear operation IDs, descriptions, schemas, and
+safe auth profiles. It is a poor fit for APIs where operations are destructive
+without confirmation or where the spec hides important side effects.
+
+## Troubleshooting
+
+- Run `restish api sync <name>` after spec changes.
+- Confirm `restish <name> --help` shows generated operations.
+- Use `restish plugin debug` when plugin startup or messages fail.
+- Hide operations in the spec rather than relying on MCP clients to avoid them.
 
 ## Related Pages
 
-- [Connect to an API](/docs/getting-started/connect-to-an-api/)
+- [OpenAPI and CLI Integration](../openapi-cli-integration/)
 - [Command Plugins](/docs/plugins/command-plugins/)
-- [API Commands](/docs/concepts/api-commands/)
+- [Plugin Messages](/docs/reference/plugin-messages/)
+- [Troubleshooting](../troubleshooting/)

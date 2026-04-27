@@ -2,137 +2,73 @@
 title: Streaming
 linkTitle: Streaming
 weight: 90
-description: Work with streaming responses such as SSE and NDJSON in Restish.
+description: Work with SSE and NDJSON streams while keeping output bounded and script-friendly.
 ---
 
-Restish supports streaming workflows, including event-based and line-oriented
-response streams.
+Restish recognizes Server-Sent Events, NDJSON, and JSON Lines. Streaming
+responses are processed one event or line at a time instead of waiting for a
+complete response body.
 
-## Supported Stream Types
+## Server-Sent Events
 
-Restish currently recognizes:
-
-- Server-Sent Events with `text/event-stream`
-- newline-delimited JSON with `application/x-ndjson`
-- JSON Lines with `application/jsonlines`
-
-When one of those content types is detected, Restish switches to a per-item
-pipeline instead of waiting for the whole response body.
-
-## Basic Usage
-
-> **Note:** Streaming examples use placeholder URLs because live SSE and NDJSON
-> endpoints have not yet been added to `api.rest.sh`. Replace the URLs below
-> with a real streaming endpoint when testing.
-
-For SSE:
+Always bound examples you paste into a terminal:
 
 ```bash
-restish https://your-api.example.com/events
+restish https://api.rest.sh/events --rsh-max-events 3
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 
-For NDJSON:
+SSE output includes event metadata and parsed data. Filter the event data when
+you only need fields:
 
 ```bash
-restish https://your-api.example.com/logs
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
 ```
 
-Each event or line is emitted as it arrives.
+## NDJSON
 
-For explicit machine-oriented record output, prefer `ndjson`:
+The `/logs` endpoint emits line-oriented JSON records:
 
 ```bash
-restish https://your-api.example.com/events -o ndjson
+restish https://api.rest.sh/logs --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/logs --rsh-max-events 3 -f body.user.id -r
 ```
 
-That is the Restish equivalent of curl/httpie live-stream calls such as:
+If an endpoint is slow to emit its first record, add a timeout while debugging:
 
 ```bash
-curl -N -H 'Accept: text/event-stream' https://your-api.example.com/events
-http --stream https://your-api.example.com/events Accept:text/event-stream
+restish https://api.rest.sh/logs --rsh-max-events 3 --rsh-timeout 5s
 ```
 
-With Restish, use the same `Accept` header when the server needs it, then let
-the `text/event-stream` response switch the output path into streaming mode:
+## Accept Headers
+
+When a server needs a stream-specific `Accept` header, send it explicitly:
 
 ```bash
-restish -H 'Accept: text/event-stream' https://your-api.example.com/events
-restish -H 'Accept: text/event-stream' https://your-api.example.com/events -o ndjson
+restish -H 'Accept: text/event-stream' https://api.rest.sh/events --rsh-max-events 3
 ```
-
-Think about stream handling in two categories:
-
-- bounded streams, where EOF arrives naturally
-- live streams, where the feed may continue indefinitely
-
-## Filter Each Event
-
-Filtering still works in streaming mode. Each event payload becomes `body` for
-the filter expression:
-
-```bash
-restish https://your-api.example.com/events -f '.body.type'
-restish https://your-api.example.com/events -f '.body.user.id'
-```
-
-This keeps streaming consistent with the rest of the CLI instead of inventing a
-separate query model.
-
-With `-o ndjson`, each filtered result is still one valid JSON value per line:
-
-```bash
-restish https://your-api.example.com/events -o ndjson -f '.body.user.id'
-```
-
-## Limit The Stream
-
-Use `--rsh-max-events` to stop after a bounded number of items:
-
-```bash
-restish https://your-api.example.com/events --rsh-max-events 10
-```
-
-This works for both SSE and NDJSON streams.
-
-## Raw Stream Output
-
-Use `-r` or `--rsh-raw` when you want shell-friendly scalar output from a
-filtered stream:
-
-```bash
-restish https://your-api.example.com/events -f '.body.message' -r
-```
-
-That prints one result per event without JSON string quotes.
 
 ## Document Formats On Live Streams
 
-True streams may be unbounded, so document formats such as `json` are not a
-good fit.
-
-Restish treats `-o json` as a bounded-document request and returns a clear
-error for live streams:
+Document formats such as `json` and `yaml` require one complete document. For
+live streams, prefer `ndjson` or a raw scalar filter:
 
 ```bash
-restish https://your-api.example.com/events -o json
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -r
 ```
 
-Use `-o ndjson` when you want structured streaming JSON instead.
-
-That is the practical reason `json` and live streams do not mix well: one asks
-for a full document, while the other may never finish.
-
-## How SSE Events Are Parsed
-
-For SSE responses:
+## SSE Parsing Notes
 
 - multiple `data:` lines are joined into one event payload
-- a blank line ends the event
-- `id` and `event` fields are currently ignored for output
-- `retry` is parsed as a hint, but automatic reconnect is not implemented
+- a blank line ends an event
+- event metadata is preserved in the normalized event output
+- automatic reconnect is not a replacement for application-level retry logic
 
-## Related Guides
+## Related Pages
 
-- [Filtering](../filtering/)
 - [Output](../output/)
+- [Filtering](../filtering/)
 - [Output Formats](/docs/reference/output-formats/)
+- [Stream Events and Select Fields](/docs/recipes/stream-events-and-select-fields/)

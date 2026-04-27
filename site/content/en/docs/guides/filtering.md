@@ -1,168 +1,81 @@
 ---
 title: Filtering
 linkTitle: Filtering
-weight: 60
-description: Filter and project response data in Restish with shorthand queries and jq.
+weight: 45
+description: Select headers, links, and body fields with shorthand queries or jq filters.
 ---
 
-Restish supports response filtering so users can focus on the fields they care
-about without piping every response through another tool.
+Filtering trims a normalized Restish response before formatting. Use shorthand
+for direct paths and projections; use jq for richer transforms.
 
-Filtering happens after response normalization and before formatting. That means
-your filter runs against a stable document structure rather than raw transport
-objects.
+## Filter Roots
 
-## The Available Roots
-
-Restish filters operate on a normalized response document with these roots:
-
-- `proto`
-- `status`
-- `headers`
-- `links`
-- `body`
-- `@` for the full document
-
-## Two Filter Languages
-
-Restish supports:
-
-- shorthand path syntax for direct field access
-- jq for richer transformations and predicates
-
-By default, filter mode is `auto`:
-
-- if the expression starts with `body`, `headers`, `links`, `status`, `proto`,
-  or `@`, Restish treats it as shorthand
-- otherwise, Restish treats it as jq
-
-## Common Shorthand Filters
+- `headers` for response headers
+- `links` for normalized hypermedia links
+- `body` for decoded response body
 
 ```bash
+restish https://api.rest.sh/ -f headers.Content-Type -r
+restish https://api.rest.sh/images -f links.next -r
 restish https://api.rest.sh/example -f body.basics.profiles
-restish https://api.rest.sh/ -f headers.Content-Type
-restish https://api.rest.sh/images -f links.next
 ```
 
-Shorthand is best when you want direct access to a known field quickly.
-
-More examples:
+## Shorthand Paths
 
 ```bash
-restish https://api.rest.sh/images -f body[0].name
-restish https://api.rest.sh/example -f body.volunteer[0].organization
+restish https://api.rest.sh/images -f body[0].name -r
+restish https://api.rest.sh/images -f body[-1].self -r
+restish https://api.rest.sh/example -f body.volunteer[0].organization -r
 ```
 
-Example output:
-
-```json
-[
-  {
-    "network": "Github",
-    "url": "https://github.com/danielgtaylor"
-  },
-  {
-    "network": "Dev Blog",
-    "url": "https://dev.to/danielgtaylor"
-  },
-  {
-    "network": "LinkedIn",
-    "url": "https://www.linkedin.com/in/danielgtaylor"
-  }
-]
-```
-
-```text
-application/cbor
-```
-
-```text
-https://api.rest.sh/images?cursor=abc123
-```
-
-## Common jq Filters
+## Selection And Projection
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name'
+restish https://api.rest.sh/images -f 'body[format = jpeg].self' -r
+restish https://api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish https://api.rest.sh/example -f 'body..url'
+```
+
+Recursive search and projection are useful when exploring unfamiliar API
+responses.
+
+## jq Filters
+
+Restish auto-detects jq-style filters that start with `.` or use jq operators:
+
+```bash
+restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -r
+restish https://api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
+```
+
+Force a language when a filter is ambiguous:
+
+```bash
+restish https://api.rest.sh/images --rsh-filter-lang shorthand -f 'body.self'
+restish https://api.rest.sh/images --rsh-filter-lang jq -f '.body[] | .self'
+```
+
+## Pagination And Collecting
+
+Default pagination streams items as they arrive. Use `--rsh-collect` when the
+filter needs the whole collection:
+
+```bash
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 ```
 
-Example output:
-
-```text
-Dragonfly macro
-```
-
-```text
-5
-```
-
-jq is the better choice when you need selection, transformation, or aggregation.
-
-More examples:
+## Raw Scalars
 
 ```bash
-restish https://api.rest.sh/images -f '.body | map(.format)'
-restish https://api.rest.sh/images --rsh-collect -f '.body | group_by(.format)'
+restish https://api.rest.sh/images -f '.body[] | .name' -r
 ```
 
-## Raw Output
+Raw mode prints scalar results without JSON string quotes and prints array items
+one per line.
 
-For shell-friendly output, combine a filter with `--rsh-raw`:
+## Related Pages
 
-```bash
-restish https://api.rest.sh/images -f '.body[] | .name' --rsh-raw
-```
-
-That prints simple scalar results without JSON quoting and prints arrays of
-scalars one item per line.
-
-Example output:
-
-```text
-Dragonfly macro
-Origami under blacklight
-Andy Warhol mural in Miami
-Station in Prague
-Chihuly glass in boats
-```
-
-## Choosing Between Shorthand And jq
-
-Use shorthand when:
-
-- you want `body.name`
-- you need a header value
-- you want a pagination link
-- you already know the exact path
-
-Use jq when:
-
-- you need `select(...)`
-- you want `length`
-- you want to reshape arrays or objects
-- you are doing more than direct field access
-
-## Common Mistakes
-
-- forgetting the `body.` prefix when you mean the response body in shorthand
-- using `jq` aggregation without `--rsh-collect` on paginated endpoints
-- expecting filtered output to preserve the original raw response bytes
-
-## Why Filtering Feels Consistent
-
-Because filtering happens after normalization:
-
-- body filters work the same way across formatters
-- protocol metadata stays accessible when you need it
-- sub-value filtering is predictable in scripts
-
-Once you filter down to a sub-value, Restish renders that filtered value rather
-than trying to preserve the original raw response bytes.
-
-## Learn More
-
-- [Output](../output/)
 - [Query Syntax](/docs/reference/query-syntax/)
-- [Shorthand Syntax](/docs/reference/shorthand/)
-- [Get One Field from Every Item](/docs/recipes/get-one-field-from-every-item/)
+- [Output](../output/)
+- [Pagination](../pagination/)
+- [Filter Response Fields](/docs/recipes/filter-response-fields/)

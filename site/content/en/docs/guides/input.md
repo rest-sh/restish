@@ -1,191 +1,105 @@
 ---
 title: Input and Shorthand
 linkTitle: Input and Shorthand
-weight: 40
-description: Build structured request bodies in Restish using shorthand syntax and stdin.
+weight: 30
+description: Build structured request bodies with shorthand, stdin, forms, multipart uploads, and files.
 ---
 
-Restish can turn CLI arguments into structured request bodies, which makes it
-much faster to work with JSON-like input from the terminal.
+Restish shorthand lets you create structured request bodies directly on the
+command line. JSON is the default request encoding, but the same body model can
+be encoded as YAML, form data, multipart, CBOR, and other registered types.
 
-## Example
-
-```bash
-restish post https://api.rest.sh name: restish tags[]: cli tags[]: http enabled: true
-```
-
-That command builds a structured value and then lets the content layer decide
-how to encode it for the request.
-
-## The Main Rules
-
-Restish builds request bodies using four core rules:
-
-1. no args and TTY stdin means no body
-2. stdin alone is parsed as structured input when possible
-3. args alone are joined back into one shorthand expression and parsed
-4. stdin plus args treats stdin as the base document and applies args as a
-   patch
-
-That last behavior is especially useful because it lets you combine generated
-or piped structured data with quick command-line overrides.
-
-## Simple Object Input
+## Object Input
 
 ```bash
-restish post https://api.rest.sh name: Alice age: 30
+restish post https://api.rest.sh/post 'name: Alice, enabled: true' count: 3
 ```
 
-Equivalent body:
-
-```json
-{
-  "name": "Alice",
-  "age": 30
-}
-```
+The `/post` endpoint echoes the parsed body so you can confirm the result.
 
 ## Nested Objects And Arrays
 
 ```bash
-restish post https://api.rest.sh \
-  user.address.city: NYC \
-  user.address.country: USA \
-  tags[]: red \
-  tags[]: blue
+restish post https://api.rest.sh/post \
+  user.name: Alice \
+  user.roles[]: admin \
+  user.roles[]: editor \
+  active: true
 ```
 
-Equivalent body:
+Use quotes when your shell would otherwise treat brackets or spaces specially:
 
-```json
-{
-  "user": {
-    "address": {
-      "city": "NYC",
-      "country": "USA"
-    }
-  },
-  "tags": ["red", "blue"]
-}
+```bash
+restish post https://api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
 ```
 
 ## Strings, Nulls, And Empty Values
 
-Restish coerces common literal-looking values automatically:
-
-- `true` and `false`
-- `null`
-- numbers such as `123` and `1.5`
-
-Quote the value when you want the literal string instead:
+Shorthand coerces common scalar values. Force strings with quotes when the exact
+text matters:
 
 ```bash
-restish post https://api.rest.sh enabled: "true" missing: "null"
+restish post https://api.rest.sh/post 'enabled: "true", missing: "null", blank: ""'
 ```
 
-Generated OpenAPI commands can use request schema information to preserve
-string fields automatically. If the spec says `id` is a string, then:
+## Stdin And Patches
+
+Use stdin for larger payloads:
 
 ```bash
-restish myapi create-item id: 123
+echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post
 ```
 
-sends `"id": "123"` for that generated command. Generic HTTP commands keep the
-normal shorthand coercion rules.
-
-Use `""` or a blank value for an empty string:
+Add shorthand arguments to patch structured stdin before sending:
 
 ```bash
-restish post https://api.rest.sh blank1: blank2: ""
+echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post role: admin
 ```
 
-## Patch Piped Input
+## Form Bodies
+
+Use `-c form` for URL-encoded request bodies:
 
 ```bash
-echo '{"name":"Bob","age":25}' | \
-  restish post https://api.rest.sh name: Alice
+restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
 ```
 
-Equivalent body:
+Representative output:
 
 ```json
 {
-  "name": "Alice",
-  "age": 25
+  "token": "docs-token-alice",
+  "token_type": "Bearer",
+  "user": "alice"
 }
 ```
 
-## When Stdin Is Not Structured
+## Multipart Uploads
 
-If stdin is not parseable as structured shorthand, JSON, or YAML, Restish falls
-back to treating it as a raw string body when no shorthand args are present.
-
-That means simple pass-through workflows still work well:
+Use `-c multipart` for form-style uploads. The example API echoes normal
+fields and reports file metadata when the request contains real file parts:
 
 ```bash
-cat payload.txt | restish post https://api.rest.sh
+restish post -c multipart https://api.rest.sh/uploads \
+  description: docs, \
+  file: @README.md
 ```
 
-## File Input And Forms
+The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size.
 
-One subtle but important rule is that file-reference shorthand is
-content-type-aware.
-
-For structured JSON/YAML bodies, `@file` shorthand loads a file as a value. For
-multipart bodies, `@file` becomes a file part instead:
+## File Loading
 
 ```bash
-restish post -c multipart https://api.example.com/uploads \
-  name: avatar \
-  file: @./avatar.png
+restish post https://api.rest.sh/post payload: @payload.json
+restish post https://api.rest.sh/post note: @message.txt
 ```
 
-That sends a `multipart/form-data` request with a generated boundary, a text
-field named `name`, and a file field named `file`.
+Structured files are parsed when possible. Quote or force string behavior when a
+literal `@` should be sent as text.
 
-Multiple form fields and repeated file fields work through the same shorthand
-shape:
+## Related Pages
 
-```bash
-restish post -c multipart https://api.example.com/uploads \
-  title: report \
-  attachments[]: @./summary.pdf \
-  attachments[]: @./data.csv
-```
-
-Restish only treats `@...` as file input where the selected content type calls
-for it. It does not fetch remote URLs, expand shell globs itself, or run command
-substitutions. Keep paths quoted when your shell might rewrite them before
-Restish sees the argument.
-
-## Shell Quoting
-
-If your shell expands `[]` or `?` before Restish sees the input, either quote
-the arguments or install shell setup:
-
-```bash
-restish setup zsh
-restish post https://api.rest.sh 'tags[]: red' 'tags[]: blue'
-```
-
-## When To Use Shorthand
-
-Shorthand is best when:
-
-- the body is small
-- the shape is mostly object- or array-like
-- you want quick exploratory requests
-- you are patching structured stdin
-
-Prefer files or piped input when:
-
-- the document is large
-- you want to preserve exact formatting
-- the payload is already being produced by another tool
-
-## Learn More
-
+- [Shorthand Reference](/docs/reference/shorthand/)
+- [Content Types](/docs/reference/content-types/)
 - [Requests](../requests/)
-- [Shorthand Syntax](/docs/reference/shorthand/)
-- [Query Syntax](/docs/reference/query-syntax/)
-- [Design Records](/docs/contributing/design-records/)
+- [Patch Piped JSON With Shorthand](/docs/recipes/patch-piped-json-with-shorthand/)

@@ -2,34 +2,39 @@
 title: Design Records
 linkTitle: Design Records
 weight: 20
-description: Contributor-oriented design records that explain the rationale behind Restish v2.
+description: Maintainer-oriented records that preserve Restish v2 design intent, invariants, and user-doc triggers.
 ---
 
-The public docs site is not a mirror of the design records, but the design
-records remain the best source of rationale and internal detail for
-contributors.
+Design records live in `docs/design/`. They explain why Restish is shaped the
+way it is: runtime boundaries, config, auth, TLS, OpenAPI command generation,
+request execution, response normalization, plugins, security, and migration.
 
-Start with:
+## When To Read Them
 
-- `docs/design/README.md`
-- `docs/site-plan.md`
+Read design records when you are changing:
 
-Use the design records when you need:
+- persistent config or profile behavior
+- auth, token storage, external tools, or OAuth flows
+- TLS, mTLS, or signer plugins
+- OpenAPI discovery or generated commands
+- request execution order
+- pagination, streaming, filtering, or output contracts
+- plugin protocol or trust boundaries
+- v1 compatibility and migration behavior
 
-- architectural rationale
-- behavior tradeoffs
-- protocol details that are too deep for end-user docs
-- the source material behind user-facing guide and reference pages
+## User Docs Trigger
 
-Common high-value records:
+If a design record changes user-visible behavior, update the user docs in the
+same work. Design records preserve intent; they do not replace guides,
+recipes, or reference pages.
 
-- CLI architecture
-- config and profiles
-- spec discovery and command generation
-- output, filtering, pagination, and streaming
-- plugin architecture and concrete first-party plugins
+## Reading Order
 
-Related pages:
+Start with `docs/design/README.md`. It groups records into foundations,
+request/API model, response/data flow, workflows/UX, and extensibility.
 
-- [Docs Maintenance](/docs/contributing/docs-maintenance/)
-- [Development Setup](/docs/contributing/development-setup/)
+## Related Pages
+
+- [Docs Maintenance](../docs-maintenance/)
+- [Development Setup](../development-setup/)
+- [How Restish Works](/docs/concepts/how-restish-works/)

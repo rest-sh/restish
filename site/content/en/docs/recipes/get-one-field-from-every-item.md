@@ -1,22 +1,24 @@
 ---
 title: Get One Field From Every Item
-linkTitle: One Field Per Item
-weight: 27
-description: Extract a single field from each item in a response.
+linkTitle: Get One Field
+weight: 35
+description: Print one field per collection item.
 ---
 
-Use a jq filter plus raw output when you want one field per item:
-
 ```bash
-restish https://api.rest.sh/images -f '.body[] | .name' -r
+restish https://api.rest.sh/images -f body.self -r
 ```
 
 Example output:
 
 ```text
-Dragonfly macro
-Origami under blacklight
-Andy Warhol mural in Miami
-Station in Prague
-Chihuly glass in boats
+/images/jpeg
+/images/webp
+/images/gif
+/images/png
+/images/heic
 ```
+
+Use raw mode for shell-friendly scalar output.
+
+Related: [Filtering](/docs/guides/filtering/).

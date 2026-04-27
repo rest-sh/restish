@@ -6,127 +6,63 @@ description: See how Restish turns API descriptions into generated commands.
 ---
 
 API commands are generated from API descriptions, usually OpenAPI documents.
+They replace hand-built URLs with named operations while keeping normal Restish
+request behavior.
 
-They let Restish expose operations as CLI subcommands instead of requiring
-users to type every request manually.
-
-## How They Start
-
-First, you register an API under a short name:
+## Start With A Short Name
 
 ```bash
-restish api configure example https://api.rest.sh
-```
-
-After Restish discovers or loads a usable spec, that short name becomes a
-generated command group:
-
-```bash
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 
-## How Operations Become CLI Commands
+The API name becomes a command group. Operations become subcommands such as
+`list-images`, `get-image`, and `get-status`.
 
-Restish builds generated commands from the API description. In the OpenAPI
-case:
+## What Changes
 
-- operations are grouped under the API short name
-- command names usually come from `operationId`
-- required path and query parameters become positional arguments
-- optional parameters become flags
-- request bodies still use shorthand or stdin like generic commands
-
-That keeps generated commands feeling like native CLI commands instead of a
-separate subsystem.
-
-Generated operation help is focused on the operation by default. Use
-`--help-all` on a generated operation when you need the full set of inherited
-Restish flags:
-
-```bash
-restish example get-image --help
-restish example get-image --help-all
-```
-
-## Example Shape
-
-An operation like:
-
-```yaml
-paths:
-  /images/{format}:
-    get:
-      operationId: getImage
-      x-cli-name: get-image
-```
-
-can turn into a command like:
-
-```bash
-restish example get-image jpeg
-```
-
-instead of a manual URL such as:
+A generic request says exactly where to go:
 
 ```bash
 restish https://api.rest.sh/images/jpeg
 ```
 
-## Flat vs Tag Layout
-
-Generated commands are flat by default:
+A generated command says what operation to run:
 
 ```bash
-restish example create-repo org: myorg repo: myrepo
+restish example get-image jpeg
 ```
 
-If an API is easier to navigate by OpenAPI tags, set `command_layout` to
-`tags`:
+The generated command can provide help, completion, required path parameters,
+optional flags, and profile-aware base URL selection.
+
+## What Stays The Same
+
+Generated commands still support the same Restish behavior:
+
+- profiles and auth
+- TLS options
+- request bodies from shorthand or stdin
+- retries and cache
+- pagination and streaming
+- filtering and output formats
+
+## Command Layout
+
+Restish defaults to a flat command layout. APIs with many operations can opt
+into tag-based layout:
 
 ```bash
 restish api set example command_layout: tags
 ```
 
-Then tagged operations live under tag subcommands:
+API authors can improve the generated surface with `operationId`, tags,
+descriptions, parameter schemas, examples, and Restish-specific `x-cli-*`
+extensions.
 
-```bash
-restish example repos create-repo org: myorg repo: myrepo
-```
+## Related Pages
 
-## Why Generated Commands Feel Better
-
-They improve day-to-day ergonomics by giving you:
-
-- discoverable subcommands
-- generated help text
-- shell completion
-- API-relative parameters instead of repeated full URLs
-- the same profile, auth, TLS, pagination, and output behaviors as generic
-  requests
-
-## CLI Hints From The Spec
-
-OpenAPI extensions can shape the generated CLI. Restish recognizes hints such
-as:
-
-- `x-cli-name`
-- `x-cli-description`
-- `x-cli-aliases`
-- `x-cli-hidden`
-- `x-cli-ignore`
-
-That gives API authors some control over how the generated command surface
-reads in a shell.
-
-## Cached Specs Matter
-
-Generated commands are built from cached specs at startup rather than requiring
-live network discovery every time you run the CLI.
-
-That makes the command tree more predictable and avoids making normal help or
-completion behavior depend on the network.
-
-## Related Guides
-
-- [Connect to an API](../getting-started/connect-to-an-api/)
-- [Requests](../guides/requests/)
+- [Connect to an API](/docs/getting-started/connect-to-an-api/)
+- [OpenAPI and CLI Integration](/docs/guides/openapi-cli-integration/)
+- [API Management](/docs/reference/api-management/)
+- [Commands](/docs/reference/commands/)

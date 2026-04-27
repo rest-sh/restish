@@ -2,13 +2,31 @@
 title: Docs Maintenance
 linkTitle: Docs Maintenance
 weight: 30
-description: Contributor checklist for user-facing documentation, validation steps, and migration status.
+description: Contributor checklist for user-facing documentation, validation steps, live examples, and migration audits.
 ---
 
 Use this page when you are changing user-facing behavior and need to make the
 docs stay honest.
 
-## Docs Checklist
+This page is a maintenance workflow, not the source of truth for product
+behavior. Current behavior comes from the CLI, tests, design records, and live
+example API. When they disagree, update the docs and leave a follow-up in the
+active backlog.
+
+## Before You Edit
+
+Check the nearby docs before changing one page in isolation:
+
+- the section landing page
+- related getting-started pages, guides, recipes, and reference pages
+- plugin operator or author docs if the behavior touches plugins
+- design records under `docs/design/` when architecture or invariants matter
+- old v1 docs under `restish-src/docs/` when example coverage may have been
+  better there
+- `TODO.md` when it is being used as the active docs backlog
+- `docs.md` for documentation-site patterns and style inspiration
+
+## Page Checklist
 
 When a feature changes, check these documentation surfaces:
 
@@ -17,24 +35,51 @@ When a feature changes, check these documentation surfaces:
 - recipe impact
 - reference impact
 - plugin/operator impact
+- plugin/author impact
+- troubleshooting impact
 - design-record impact
 
 Do not assume one page update is enough. Restish docs are intentionally layered.
+
+For each user-facing page, verify:
+
+- the page has one clear mode: tutorial, guide, recipe, reference, or
+  troubleshooting
+- the opening paragraph says what the page helps the reader do
+- operational pages include at least one copyable command
+- commands are paired with representative output when practical
+- interactive examples use the default readable output unless the page is
+  specifically teaching JSON, scripting, redirects, or exact machine-readable
+  response shape
+- prerequisites, auth, config, and private-infrastructure assumptions are
+  explicit
+- generic URL requests and API-aware generated commands are distinguished when
+  that choice matters
+- common failure notes sit near examples users are likely to break
+- related pages send readers to the next useful place
 
 ## Validation Steps
 
 Before sending a docs change:
 
 1. build the site locally
-2. click through the new links
-3. confirm examples are still internally consistent
-4. prefer `api.rest.sh` examples when a live endpoint makes the explanation
+2. check changed links
+3. confirm examples are internally consistent
+4. compare command reference changes with current `restish --help` output
+5. prefer `api.rest.sh` examples when a live endpoint makes the explanation
    stronger
+6. grep changed docs for stale placeholders and stale source notes
 
 Local build:
 
 ```bash
 hugo --source site --quiet
+```
+
+Useful stale-text checks:
+
+```bash
+rg 'api[.]example[.]com|your-api[.]example[.]com|auth[.]example[.]com|upload[.]example[.]com|Source material[:]' site/content/en/docs
 ```
 
 ## Example Validation Guidance
@@ -48,40 +93,56 @@ Prefer examples that can be:
 Not every example can be fully live. When it cannot, keep placeholders clearly
 generic and explain why.
 
-## Migration Status
+Good live example candidates include:
 
-The v2 docs site is no longer a thin skeleton. Most high-value content from the
-older docs and design records has been migrated into:
+- `/` and `/headers` for first requests and request inspection
+- `/anything`, `/get`, `/post`, `/put`, `/patch`, `/delete`, `/head`, and
+  `/options` for generic HTTP behavior
+- `/auth/basic`, `/auth/bearer`, `/auth/api-key-header`, and
+  `/auth/api-key-query` for safe auth examples
+- `/login` and `/uploads` for form and multipart examples
+- `/items` and `/items/{item-id}` for generic CRUD examples
+- `/images`, `/images/{type}`, `/example`, `/types`, and `/books` for the core
+  repeated docs workflows
+- `/events` and `/logs` for streaming examples, with bounded commands such as
+  `--rsh-max-events`
+- `/flaky`, `/slow`, `/status/{code}`, `/cache`, `/cached/{seconds}`, and
+  `/etag/{etag}` for retry, timeout, cache, and status examples
+- `/formats/{format}`, `/problem`, `/gzip`, `/deflate`, `/brotli`, and
+  `/image` for content negotiation and decoding examples
 
-- getting-started pages
-- workflow guides
-- recipes
-- command/reference pages
-- plugin/operator docs
+Use placeholders for:
 
-Remaining work is mostly refinement:
+- private hosts
+- OAuth providers
+- corporate proxies
+- custom CA and mTLS infrastructure
+- destructive workflows that cannot be safely reset
 
-- more example standardization
-- more cross-linking
-- diagrams where they materially help
-- periodic audits against the CLI surface and design docs
+## Migration Audit
 
-## Old Docs Topic Tracking
+The old v1 docs in `restish-src/docs/` are still useful. They contain strong
+example commands and explanations that may be missing from the v2 site. When
+refreshing a page, check the matching old topic and decide whether each piece
+is:
 
-Topics intentionally carried forward into the new site include:
+- migrated into the current page
+- superseded by v2 behavior
+- intentionally retired
+- still missing and tracked in `TODO.md`
+
+High-value old topics to keep auditing:
 
 - bulk workflows
-- OpenAPI CLI integration
-- shorthand input
-- retries, caching, pagination, links, and output behavior
-
-Topics still tracked as ongoing refinement rather than one-time migration:
-
-- command example consistency
-- broader live-example coverage
-- contributor validation workflow
+- OpenAPI CLI integration and extensions
+- shorthand input and query syntax
+- retries, timeouts, caching, and exit statuses
+- pagination and hypermedia links
+- output defaults, raw mode, gron, images, and file downloads
+- configuration and v1-to-v2 migration behavior
 
 ## Related Pages
 
-- [Development Setup](./development-setup/)
-- [Design Records](./design-records/)
+- [Development Setup](../development-setup/)
+- [Design Records](../design-records/)
+- [Example API](/docs/reference/example-api/)

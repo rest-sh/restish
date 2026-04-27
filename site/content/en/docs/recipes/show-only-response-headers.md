@@ -1,24 +1,24 @@
 ---
 title: Show Only Response Headers
-linkTitle: Show Only Headers
-weight: 35
-description: Print just the response headers from a Restish request.
+linkTitle: Show Headers
+weight: 38
+description: Print response headers without the body.
 ---
-
-Use `--rsh-headers` when you only want the normalized response headers:
 
 ```bash
 restish https://api.rest.sh/ --rsh-headers
 ```
 
-This is equivalent to:
-
-```bash
-restish https://api.rest.sh/ -f headers
-```
-
-For shell-friendly access to one header:
+Filter one header as raw text:
 
 ```bash
 restish https://api.rest.sh/ -f headers.Content-Type -r
 ```
+
+Use `/headers` when you want the request headers the server received:
+
+```bash
+restish https://api.rest.sh/headers
+```
+
+Related: [Output](/docs/guides/output/), [Global Flags](/docs/reference/global-flags/).

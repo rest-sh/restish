@@ -1,56 +1,52 @@
 ---
 title: Links and Hypermedia
 linkTitle: Links and Hypermedia
-weight: 75
-description: Inspect normalized links and understand how Restish follows paginated APIs.
+weight: 55
+description: Inspect normalized links from headers and response bodies.
 ---
 
-Restish extracts links from responses and normalizes them into a simple
-relation-to-URL map. That is why pagination and link inspection work across
-several API styles instead of only one.
+Restish normalizes hypermedia links so filters, pagination, and the `links`
+command can use one shape even when APIs expose links differently.
 
-## Built-In Link Sources
+## Recognized Link Sources
 
-Restish currently recognizes:
+Restish can extract links from sources such as:
 
 - HTTP `Link` headers
-- HAL `_links`
-- JSON:API top-level `links`
-- Siren `links`
-- JSON-LD and TSJ `@id`
+- common body link fields
+- HAL-style `_links`
+- JSON:API-style `links`
+- Siren and related REST-ish representations
 
-All discovered links are resolved to absolute URLs before Restish stores them.
+The exact source matters less to users than the normalized result: relation
+names such as `self`, `next`, and `prev` become queryable under `links`.
 
-## Inspect Links Directly
-
-Use the `links` command to fetch a resource and print its discovered links:
+## Inspect Links
 
 ```bash
 restish links https://api.rest.sh/images
-restish links https://api.rest.sh/images next
-restish links https://api.rest.sh/images self next prev
+restish links https://api.rest.sh/images next self
 ```
 
-## Links In Filters
-
-Because links live in the normalized response, you can also access them through
-filters:
+Filter links from a normal request:
 
 ```bash
 restish https://api.rest.sh/images -f links.next -r
 restish https://api.rest.sh/images -f links.self -r
 ```
 
-## Relationship To Pagination
+## Pagination Uses Links
 
-For `GET` requests, Restish can use the normalized `next` link to continue
-fetching pages automatically.
+Automatic pagination follows normalized `next` links. Disable it when you want
+to inspect only the first page:
 
-When an API puts pagination state in the body instead of a link header, use
-per-API pagination config to teach Restish where to look.
+```bash
+restish https://api.rest.sh/images --rsh-no-paginate -f links
+```
 
-## Related Guides
+## Related Pages
 
-- [Pagination](/docs/guides/pagination/)
-- [Filtering](/docs/guides/filtering/)
-- [Inspect Response Links Recipe](/docs/recipes/inspect-response-links/)
+- [Pagination and Links](../pagination/)
+- [Links Command](/docs/reference/links-command/)
+- [Output](/docs/guides/output/)
+- [Example API](/docs/reference/example-api/)

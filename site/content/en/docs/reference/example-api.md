@@ -5,63 +5,153 @@ weight: 15
 description: Canonical api.rest.sh endpoints and commands used throughout the Restish docs.
 ---
 
-The docs use `https://api.rest.sh` as the main example API whenever a concrete,
-working endpoint makes the explanation clearer.
+The docs use `https://api.rest.sh` whenever a live endpoint makes a Restish
+workflow clearer. The API is intentionally broad: it has OpenAPI discovery,
+request echoing, auth fixtures, forms, uploads, streaming, pagination, retries,
+content negotiation, binary responses, redirects, and safe CRUD examples.
 
-That keeps examples consistent across getting started pages, guides, recipes,
-and command references.
-
-## Configure It Once
-
-If you want the shortest commands, register the API under a short name:
+Configure it once when you want short API-aware commands:
 
 ```bash
-restish api configure example https://api.rest.sh
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish example --help
 ```
 
-From there, both generic and API-aware examples in the docs make sense:
+Use full URLs when you want to stay in generic HTTP mode:
 
 ```bash
 restish https://api.rest.sh/
-restish example list-images
-restish example get-image jpeg
+restish https://api.rest.sh/images -o table --rsh-columns name,format,self
 ```
 
-## Canonical Endpoints
+## First Requests And Inspection
 
-- `https://api.rest.sh/` for first requests, headers, and simple generic GET examples.
-- `https://api.rest.sh/images` for pagination, links, table output, and list filtering examples.
-- `https://api.rest.sh/images/<format>` for item-level and raw/binary output examples such as `jpeg`.
-- `https://api.rest.sh/example` for nested response filtering examples.
-- `https://api.rest.sh/types` for shorthand, editing, and schema-oriented examples.
-- `https://api.rest.sh/books` for bulk checkout examples carried over from the older docs.
-
-## Where Each Endpoint Shows Up
-
-| Endpoint | Used In |
+| Endpoint | Use it for |
 | --- | --- |
-| `https://api.rest.sh/` | first request, header inspection, basic generic GET examples |
-| `https://api.rest.sh/images` | pagination, links, filtering, table output, NDJSON output |
-| `https://api.rest.sh/images/<format>` | raw downloads, image rendering, item lookup |
-| `https://api.rest.sh/example` | nested filtering and projection examples |
-| `https://api.rest.sh/types` | edit workflow, shorthand-oriented writable examples |
-| `https://api.rest.sh/books` | bulk-management examples |
+| `/` | Echo a basic request and show headers Restish sends. |
+| `/headers` | Return request headers only. |
+| `/user-agent` | Inspect the `User-Agent` header. |
+| `/response-headers?Name=value` | Make the server set response headers. |
+| `/anything` and `/anything/{path}` | Echo method, URL, path, query, headers, and body. |
+| `/get`, `/post`, `/put`, `/patch`, `/delete`, `/head`, `/options` | Focused generic HTTP verb examples. |
 
-## Why These Resources Show Up Repeatedly
+```bash
+restish https://api.rest.sh/
+restish -H 'X-Demo: docs' 'https://api.rest.sh/anything/docs?active=true'
+```
 
-These endpoints cover the main workflows Restish is designed around:
+## API-Aware Commands
 
-- a root resource for generic requests
-- a collection with links for pagination and hypermedia
-- nested data for filtering and projection
-- structured writable examples for shorthand input
-- a books collection for bulk workflows
+The API publishes an OpenAPI document at `/openapi.json`. After configuration,
+Restish generates commands such as:
+
+```bash
+restish example list-images
+restish example get-image jpeg
+restish example get-types-example
+restish example get-status 404 --rsh-ignore-status-code
+```
+
+Use API-aware commands for repeated work, generated help, shell completion, and
+profile-aware auth. Use generic URLs for quick exploration.
+
+## Request Bodies
+
+| Endpoint | Use it for |
+| --- | --- |
+| `/post`, `/put`, `/patch` | Echo JSON, YAML, CBOR, or stdin request bodies. |
+| `/types` | Schema-oriented examples and edit workflow. |
+| `/login` | URL-encoded form login examples. |
+| `/uploads` | Multipart form echo examples, including file metadata when the client sends file parts. |
+
+```bash
+restish post https://api.rest.sh/post 'name: Alice, enabled: true'
+restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
+```
+
+## Auth Sandbox
+
+The auth endpoints require credentials but return only safe summaries.
+
+| Endpoint | Required auth |
+| --- | --- |
+| `/auth/basic` | HTTP Basic auth |
+| `/auth/bearer` | `Authorization: Bearer ...` |
+| `/auth/api-key-header` | `X-API-Key` header |
+| `/auth/api-key-query` | `api_key` query parameter |
+
+```bash
+restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
+restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
+```
+
+## Collections, Links, And CRUD
+
+| Endpoint | Use it for |
+| --- | --- |
+| `/images` | Pagination, links, table output, filtering, and image lists. |
+| `/images/{type}` | Raw image downloads and terminal image rendering. |
+| `/items` and `/items/{item-id}` | Safe generic CRUD examples. |
+| `/books` and `/books/{book-id}` | Bulk-management workflows. |
+| `/example` | Nested data for filtering and projection examples. |
+
+```bash
+restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/example -f body.basics.profiles
+restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
+```
+
+## Streaming
+
+| Endpoint | Use it for |
+| --- | --- |
+| `/events` | Server-Sent Events with docs-shaped JSON event data. |
+| `/logs` | NDJSON log records. |
+| `/sse/metrics` | Metrics-shaped SSE events. |
+
+Always bound copy-paste stream examples:
+
+```bash
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
+```
+
+## Resilience And HTTP Behavior
+
+| Endpoint | Use it for |
+| --- | --- |
+| `/flaky?failures=2&key=docs` | Retry recovery examples. |
+| `/slow?delay=2s` | Timeout examples. |
+| `/status/{code}` | Exit status and error-body examples. |
+| `/cache`, `/cached/{seconds}`, `/etag/{etag}` | HTTP cache and conditional requests. |
+| `/redirect/{n}`, `/relative-redirect/{n}`, `/absolute-redirect/{n}`, `/redirect-to` | Redirect behavior and verbose transcripts. |
+
+```bash
+restish 'https://api.rest.sh/flaky?failures=1&key=docs' --rsh-retry 2
+restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+```
+
+## Content, Binary, And Utilities
+
+| Endpoint | Use it for |
+| --- | --- |
+| `/formats/{format}` | JSON, YAML, CBOR, and vendor JSON decoding examples. |
+| `/problem` | `application/problem+json` error payloads. |
+| `/gzip`, `/deflate`, `/brotli` | Response decompression examples. |
+| `/image` | Accept-driven image negotiation. |
+| `/bytes/{n}`, `/stream-bytes/{n}`, `/range/{n}`, `/drip` | Raw bytes, ranges, and slow byte streams. |
+| `/xml`, `/html`, `/uuid`, `/ip`, `/base64/encode/{value}`, `/base64/decode/{value}` | Small utility examples. |
+| `/cookies`, `/cookies/set`, `/cookies/delete` | Cookie behavior examples. |
+
+```bash
+restish -H 'Accept: application/json' https://api.rest.sh/formats/json
+restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+```
 
 ## Related Pages
 
-- [First Request](/docs/getting-started/first-request/)
-- [Connect to an API](/docs/getting-started/connect-to-an-api/)
+- [Quickstart](/docs/getting-started/quickstart/)
 - [Requests](/docs/guides/requests/)
-- [Filtering](/docs/guides/filtering/)
-- [Pagination and Links](/docs/guides/pagination/)
-- [Bulk Management](/docs/guides/bulk-management/)
+- [Authentication](/docs/guides/authentication/)
+- [Content Types](/docs/reference/content-types/)
+- [HTTP Commands](/docs/reference/http-commands/)

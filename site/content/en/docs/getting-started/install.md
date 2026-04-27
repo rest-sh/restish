@@ -1,200 +1,92 @@
 ---
 title: Install
 linkTitle: Install
-weight: 10
-description: Install Restish with your preferred package manager, release binary, or source build.
+weight: 20
+description: Install or build Restish and verify that the binary can make a request.
 ---
 
-The recommended install path for most users is Homebrew, but Restish is also
-easy to install with other package managers, GitHub releases, or `go install`.
+Before the first public v2 release, source builds are the reliable path. Package
+manager and container examples describe the intended release channels and should
+be verified when release artifacts are published.
 
-## Homebrew
+## Build From Source
+
+From this repository:
+
+```bash
+go build ./cmd/restish
+./restish --help
+./restish https://api.rest.sh/
+```
+
+To install the binary into your Go bin directory:
+
+```bash
+go install ./cmd/restish
+restish --help
+```
+
+## Planned Release Channels
+
+When v2 artifacts are published, these channels should be available or updated
+before the docs are treated as release-ready.
+
+Homebrew:
 
 ```bash
 brew install restish
 ```
 
-That should install the `restish` binary onto your `PATH`. This is the best
-path for most macOS users and a good default on Linux systems that already use
-Homebrew.
-
-## mise
-
-If you use [mise](https://mise.jdx.dev/), install the latest release with:
+mise:
 
 ```bash
 mise use -g restish@latest
 ```
 
-This is a good choice if you already manage CLIs and runtimes through mise.
-
-## Nixpkgs
-
-If you use Nix, install the package from Nixpkgs:
+Nixpkgs:
 
 ```bash
 nix-env --install --attr nixpkgs.restish
 ```
 
-This is the most natural option when the rest of your machine is already
-managed with Nix.
-
-## GitHub Releases
-
-If you prefer manual installs, download the appropriate binary from the
-[GitHub releases](https://github.com/rest-sh/restish/releases) page and place
-it somewhere on your `PATH`, such as `/usr/local/bin/restish`.
-
-This is a good fallback when you do not want to use a package manager.
-
-## OCI Container Image
-
-For CI jobs, Kubernetes tasks, or other containerized environments, use the
-official image:
+OCI image:
 
 ```bash
-docker run --rm ghcr.io/rest-sh/restish:latest --version
 docker run --rm ghcr.io/rest-sh/restish:latest https://api.rest.sh/
 ```
 
-Stable releases publish multi-arch images for `linux/amd64` and `linux/arm64`
-at `ghcr.io/rest-sh/restish`. Release candidates publish their exact candidate
-tags but do not update `latest`.
-
-The default image contains the `restish` CLI and normal CA certificates. It
-does not bundle optional plugin binaries. For plugin-heavy workflows, build a
-derived image that copies the required `restish-*` plugin binaries into the
-configured plugin directory.
-
-Mount config and secrets explicitly. For example:
-
-```bash
-docker run --rm \
-  -e RSH_CONFIG=/config/restish.json \
-  -e MYAPI_TOKEN \
-  -v "$PWD/restish.json:/config/restish.json:ro" \
-  ghcr.io/rest-sh/restish:latest myapi/items
-```
-
-In Kubernetes, mount `restish.json` from a ConfigMap or Secret, mount token
-material as environment variables or secret files, and set `RSH_CONFIG` to the
-mounted file path.
-
-## `go install`
-
-If you already have a Go toolchain and just want the CLI:
-
-```bash
-go install github.com/rest-sh/restish/v2/cmd/restish@latest
-```
-
-This is convenient for contributors and Go-heavy environments.
+GitHub release binaries should be copied to a directory on your `PATH`.
 
 ## Verify The Install
 
-Make sure the CLI starts cleanly:
-
 ```bash
 restish --help
-```
-
-You should see top-level help text and a successful exit.
-
-If you want a second quick check:
-
-```bash
 restish https://api.rest.sh/
 ```
 
-Example output:
+The request should return an echo-shaped JSON document containing at least
+`method`, `host`, `path`, and `url`.
 
-```readable
-HTTP/2.0 200 OK
-Content-Type: application/cbor
+## Set Up Your Shell
 
-{
-  "message": "Welcome to the Restish example API",
-  "self": "https://api.rest.sh/"
-}
-```
-
-If you see a formatted response like that, the install is working.
-
-Release-channel note: v2 packaging names and channels will be rechecked before
-the v2 release. Until then, install instructions may still point at the stable
-Restish distribution channel.
-
-## Next Step
-
-Once the binary is runnable, go straight to [First Request](../first-request/).
-
-If you are coming from an older Restish install, read
-[Upgrade From v1](../upgrade-from-v1/) before you start editing config files by
-hand.
-
-## Optional Shell Setup
-
-If you plan to use Restish interactively, follow [Shell Setup](../shell-setup/)
-next for `noglob`-style input handling and completion.
-
-## Build From Source
-
-If you prefer to build from source or you are contributing, you can still build
-from the repo root:
+After the binary works, configure your shell so query strings, brackets, and
+shorthand arrays are not rewritten before Restish sees them:
 
 ```bash
-go build ./cmd/restish
+restish setup zsh
 ```
 
-That produces a `restish` binary you can run from the current directory or move
-onto your `PATH`.
+Use `bash` or `fish` instead of `zsh` when that is your shell.
 
-If you want the plugin binaries too, build them separately:
+## Existing v1 Users
 
-```bash
-go build ./cmd/restish-bulk
-go build ./cmd/restish-csv
-go build ./cmd/restish-mcp
-go build ./cmd/restish-pkcs11
-```
+Restish v2 can migrate default-location v1 config on first run. Read
+[Upgrade From v1](../upgrade-from-v1/) before editing config or replacing
+plugins.
 
-## What You Need For Source Builds
+## Related Pages
 
-Building from source assumes:
-
-- a working Go toolchain
-- the Restish repository checked out locally
-
-If you are contributing, this is also the best path because it keeps the docs,
-design records, and current code all in the same workspace.
-
-After a source build, verify with:
-
-```bash
-restish --help
-```
-
-If the binary is not on your `PATH` yet, run it directly from the repo root:
-
-```bash
-./restish --help
-```
-
-You should see top-level help text and a successful exit.
-
-## Which Install Method Should You Choose
-
-- Use Homebrew if you want the fastest mainstream install path.
-- Use mise or Nixpkgs if those already manage the rest of your tools.
-- Use GitHub releases if you want a manual binary install.
-- Use `go install` or a source build if you are contributing or already work in
-  Go.
-
-## Related Guides
-
-- [Getting Started](../)
 - [Quickstart](../quickstart/)
-- [First Request](../first-request/)
-- [Upgrade From v1](../upgrade-from-v1/)
 - [Shell Setup](../shell-setup/)
 - [Development Setup](/docs/contributing/development-setup/)
+- [Upgrade From v1](../upgrade-from-v1/)

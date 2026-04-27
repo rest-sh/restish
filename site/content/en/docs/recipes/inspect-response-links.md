@@ -1,25 +1,24 @@
 ---
 title: Inspect Response Links
-linkTitle: Inspect Response Links
-weight: 50
-description: Inspect hypermedia links exposed by an API response with Restish.
+linkTitle: Inspect Links
+weight: 58
+description: Print normalized hypermedia links from a response.
 ---
-
-Use the `links` command to fetch a resource and print its discovered links:
 
 ```bash
 restish links https://api.rest.sh/images
 ```
 
-To limit output to a few relations:
+Ask for specific relations:
 
 ```bash
 restish links https://api.rest.sh/images next self
 ```
 
-If you want one relation in a shell-friendly form, filter the normalized
-response instead:
+Filter links from a normal request:
 
 ```bash
 restish https://api.rest.sh/images -f links.next -r
 ```
+
+Related: [Links and Hypermedia](/docs/guides/links-and-hypermedia/).

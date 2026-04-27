@@ -1,45 +1,44 @@
 ---
 title: Images in the Terminal
 linkTitle: Images in the Terminal
-weight: 95
-description: View image responses inline in supported terminals or save them unchanged.
+weight: 70
+description: Render image responses in capable terminals or save exact image bytes to files.
 ---
 
-Restish can render `image/*` responses inline when stdout is a terminal.
+Restish can render `image/*` responses in terminals that support image
+protocols, and can save the original bytes when you need a file.
 
-## Basic Usage
+## Render A Known Image
 
 ```bash
-restish https://api.rest.sh/images/png
+restish https://api.rest.sh/images/png -o image
 restish https://api.rest.sh/images/jpeg -o image
 ```
 
-If stdout is a TTY, Restish can select the `image` formatter automatically for
-image content.
-
-## Rendering Behavior
-
-Restish prefers native image display mechanisms when available, then falls back
-to a Unicode half-block renderer. When stdout is not a TTY, image output falls
-back to raw bytes.
-
-In practice that means:
-
-- supported terminals get higher-fidelity inline rendering
-- other terminals still get a readable fallback
-- redirected output stays useful for saving files
-
-## Save The Original Image
-
-To preserve the response bytes exactly:
+## Negotiate An Image
 
 ```bash
-restish https://api.rest.sh/images/png > image.png
-restish https://api.rest.sh/images/png -o raw > image.png
+restish -H 'Accept: image/png' https://api.rest.sh/image -o image
 ```
+
+## Save The Bytes
+
+```bash
+restish https://api.rest.sh/images/png -o raw > image.png
+restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+```
+
+Use `-o raw` when exact bytes matter. Redirecting without `-o raw` may choose a
+structured output default depending on content type and context.
+
+## Terminal Support
+
+Restish prefers native terminal image protocols where available and falls back
+when the terminal cannot render images directly. If rendering fails, save the
+file with `-o raw` and open it with an image viewer.
 
 ## Related Pages
 
-- [Output Guide](/docs/guides/output/)
-- [Output Formats Reference](/docs/reference/output-formats/)
-- [Save a Response Unchanged Recipe](/docs/recipes/save-a-response-unchanged/)
+- [Output](../output/)
+- [Output Formats](/docs/reference/output-formats/)
+- [Example API](/docs/reference/example-api/)

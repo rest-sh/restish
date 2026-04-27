@@ -2,124 +2,82 @@
 title: Retries and Caching
 linkTitle: Retries and Caching
 weight: 80
-description: Learn how Restish handles retries, rate limits, and local HTTP caching.
+description: Control retries, timeouts, HTTP cache behavior, and conditional request examples.
 ---
 
-Restish includes retry behavior and local HTTP caching to make repeated API work
-faster and more resilient.
+Restish retries conservative transient failures and uses a disk-backed HTTP
+cache for cacheable responses.
 
 ## Retry Behavior
 
-Retries are conservative by default:
+Restish retries network errors, `408`, `429`, and `5xx` responses by default.
+It honors `Retry-After` and `X-Retry-In` when present.
 
-- network errors are retried
-- `5xx` responses are retried
-- `408`, `429`, and `5xx` responses are retried
-- `Retry-After` is honored when present; `X-Retry-In` is also supported for
-  v1 compatibility when `Retry-After` is absent
-
-The default retry count is 2. Override it with `--rsh-retry`:
+Use the flaky fixture to see recovery:
 
 ```bash
-restish https://api.rest.sh/images --rsh-retry 5
-restish https://api.rest.sh/images --rsh-retry 0
+restish 'https://api.rest.sh/flaky?failures=1&key=docs-retry' --rsh-retry 2
 ```
 
-Use `0` to disable retries entirely.
+Disable retries for strict single-attempt debugging:
+
+```bash
+restish 'https://api.rest.sh/flaky?failures=1&key=docs-once' --rsh-retry 0
+```
 
 ## Timeouts
 
-Use `--rsh-timeout` when you want to bound how long one request can run:
-
 ```bash
-restish https://api.rest.sh/images --rsh-timeout 15s
-restish https://api.rest.sh/images --rsh-timeout 500ms
+restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 3s
 ```
 
-This is useful when:
+Use timeouts in scripts and CI so slow services fail predictably.
 
-- you are scripting against slow or unreliable services
-- you want CI checks to fail quickly
-- you are debugging retry and latency behavior
-
-Related shell default:
+## Status Fixtures
 
 ```bash
-export RSH_TIMEOUT=15s
+restish https://api.rest.sh/status/429 --rsh-retry 2 --rsh-ignore-status-code
+restish https://api.rest.sh/status/503 --rsh-retry 2 --rsh-ignore-status-code
 ```
+
+`--rsh-ignore-status-code` lets you inspect error bodies while keeping the CLI
+exit code from stopping a shell pipeline.
 
 ## Cache Behavior
 
-Restish uses a disk-backed HTTP response cache. Cacheable responses can be
-reused across repeated requests, which makes routine API exploration and
-read-heavy workflows faster.
-
-By default, cached responses live under Restish's cache directory. You can
-override that location with `RSH_CACHE_DIR`.
-
-By default, cache use participates in the normal request path. To bypass the
-cache for one invocation:
+Bypass cache reads and writes for one command:
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-cache
+restish https://api.rest.sh/cache --rsh-no-cache
 ```
 
-That disables both cache reads and cache writes for that request.
-
-Verbose mode includes cache hits in the same request/response transcript as
-live responses. When a response is served from the local cache, stderr includes
-`* Cache: HIT`:
+Use verbose output to see cache diagnostics:
 
 ```bash
-restish https://api.rest.sh/images -v
+restish https://api.rest.sh/cached/60 -v
 ```
 
-## How Cache And Retry Work Together
-
-The transport is layered so cache hits return immediately, while only real
-network requests participate in retry behavior.
-
-That means:
-
-- cached responses are not retried
-- retry logic only applies to live requests
-- request flow stays predictable
-
-## Inspect And Clear The Cache
-
-Restish exposes cache management commands directly:
+Manage cache files:
 
 ```bash
 restish cache info
 restish cache clear
-restish cache clear myapi
+restish cache clear example
 ```
 
-Use `cache info` to inspect directory, size, and entry count. Use `cache clear`
-to remove everything or just the entries associated with one configured API.
+## Conditional Requests
 
-## Practical Guidance
+Use ETag fixtures when testing conditional behavior:
 
-Leave retries enabled when:
+```bash
+restish https://api.rest.sh/etag/docs
+restish -H 'If-None-Match: "docs"' https://api.rest.sh/etag/docs --rsh-ignore-status-code
+```
 
-- you are talking to remote APIs over the public internet
-- rate limiting or transient failures are common
-- idempotent reads are the main workflow
+## Related Pages
 
-Consider `--rsh-no-cache` when:
-
-- you must force a fresh read
-- you are debugging server behavior
-- you are working with responses that should not be reused
-
-Consider `--rsh-retry 0` when:
-
-- you need strict single-attempt behavior
-- you are debugging request timing or failure modes
-
-## Related Guides
-
-- [Requests](../requests/)
-- [Pagination and Links](../pagination/)
-- [Environment Variables](/docs/reference/environment-variables/)
 - [Cache Command](/docs/reference/cache-command/)
+- [Global Flags](/docs/reference/global-flags/)
+- [Command Behavior](../command-behavior/)
+- [Troubleshooting](../troubleshooting/)

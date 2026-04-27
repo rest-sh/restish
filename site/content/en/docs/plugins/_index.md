@@ -2,43 +2,34 @@
 title: Plugins
 linkTitle: Plugins
 weight: 60
-description: Extend Restish with hook plugins, command plugins, and TLS signer plugins.
+description: Install, operate, debug, and author Restish plugins.
 ---
 
-Plugins are a first-class part of Restish v2. They let you add auth flows,
-middleware, formatters, custom commands, spec loaders, and advanced TLS
-integrations without forking the CLI.
+Plugins are a first-class extension model in Restish v2. They add auth flows,
+middleware, loaders, formatters, command workflows, and TLS signing while
+keeping HTTP execution and output behavior anchored in the host CLI.
 
-## Path
+## Operator Track
 
-`Documentation -> Plugins`
+Start here when you want to use an existing plugin:
 
-Some plugins are primarily for plugin authors, while others expose
-user-facing workflows such as `restish bulk` and `restish mcp`.
+- [Install and Use Plugins](./install-and-use/) for installation, listing, removal, and debugging.
+- [Built-In Example Plugins](./example-plugins/) to find first-party plugin binaries.
+- [TLS Signer Plugins](./tls-signer-plugins/) for hardware-backed or external mTLS signing.
+- [Bulk Management](/docs/guides/bulk-management/) for `restish-bulk`.
+- [MCP](/docs/guides/mcp/) for `restish-mcp`.
 
-## Start Here
+## Author Track
 
-- [Install and Use Plugins](./install-and-use/) if you are operating existing
-  plugins rather than authoring one.
-- [Plugin Quickstart](./quickstart/) for the shortest path to a working plugin.
-- [Hook Plugins](./hook-plugins/) if you want one-shot request or response
-  integration points.
-- [Command Plugins](./command-plugins/) if you need a top-level command with a
-  longer-lived conversation.
-- [TLS Signer Plugins](./tls-signer-plugins/) for hardware-backed or external
-  mutual TLS signing.
-- [Built-In Example Plugins](./example-plugins/) for concrete plugin code that
-  ships in this repository.
+Start here when you are writing a plugin:
 
-## Choosing a Plugin Type
+- [Plugin Quickstart](./quickstart/) for a minimal working plugin.
+- [Hook Plugins](./hook-plugins/) for auth, middleware, loaders, and formatters.
+- [Command Plugins](./command-plugins/) for top-level workflows.
+- [Plugin Manifest](/docs/reference/plugin-manifest/) and [Plugin Messages](/docs/reference/plugin-messages/) for protocol reference.
 
-- Choose a hook plugin for focused request/response behavior.
-- Choose a command plugin for new product surfaces such as `restish mcp`.
-- Choose a TLS signer plugin only when the private key must stay outside the
-  Restish process.
+## Choosing A Type
 
-## User-Facing Built-Ins
-
-- [Bulk Management](/docs/guides/bulk-management/) for API collections checked
-  out to disk.
-- [MCP](/docs/guides/mcp/) for exposing registered APIs as MCP tools.
+- Choose a hook plugin for focused request, response, auth, loader, or formatter behavior.
+- Choose a command plugin for workflows that need their own command and multiple host interactions.
+- Choose a TLS signer plugin when the private key must remain outside Restish.

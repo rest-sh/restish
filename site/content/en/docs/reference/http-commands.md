@@ -5,60 +5,50 @@ weight: 11
 description: Reference for Restish generic HTTP verbs and the bare-URL GET shortcut.
 ---
 
-Restish includes these generic HTTP verbs:
+Generic HTTP commands work without API registration. They still use Restish
+profiles, auth, TLS, retries, cache, filtering, pagination, and output.
 
-- `get`
-- `post`
-- `put`
-- `patch`
-- `delete`
-- `head`
-- `options`
-
-These work without API registration.
-
-## Examples
+## Usage
 
 ```bash
-restish get https://api.rest.sh/
-restish post https://api.rest.sh name: Alice
-restish patch https://api.rest.sh/types string: changed
-restish delete https://your-api.example.com/items/123
-restish head https://api.rest.sh/
-restish options https://api.rest.sh/
+restish [flags] <url>
+restish get [flags] <url>
+restish post [flags] <url> [shorthand ...]
+restish put [flags] <url> [shorthand ...]
+restish patch [flags] <url> [shorthand ...]
+restish delete [flags] <url>
+restish head [flags] <url>
+restish options [flags] <url>
 ```
 
-The `get`, `post`, `patch`, `head`, and `options` examples are runnable
-against the example API. The `delete` example uses a placeholder because
-the public example API does not expose a destructive delete target.
-
-## Bare URL Shortcut
-
-A bare URL is treated as `GET`:
+## Common Examples
 
 ```bash
-restish https://api.rest.sh/
+restish https://api.rest.sh/get
+restish post https://api.rest.sh/post 'name: Alice, enabled: true'
+restish put https://api.rest.sh/put name: Alice
+restish patch https://api.rest.sh/patch enabled: false
+restish delete https://api.rest.sh/delete --rsh-ignore-status-code
+restish head https://api.rest.sh/head
+restish options https://api.rest.sh/options
 ```
 
-This is equivalent to:
+For CRUD examples with a path resource, use `/items/{item-id}`:
 
 ```bash
-restish get https://api.rest.sh/
+restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
+restish patch https://api.rest.sh/items/docs-demo enabled: false
+restish delete https://api.rest.sh/items/docs-demo --rsh-ignore-status-code
 ```
 
-## Shared Behavior
+## Output And Errors
 
-Generic HTTP commands still participate in the normal Restish runtime:
-
-- profiles
-- auth
-- TLS
-- filtering
-- output formats
-- retries and cache
+Non-2xx HTTP statuses produce non-zero exit codes unless
+`--rsh-ignore-status-code` is set. Response output goes to stdout; verbose
+request/response diagnostics go to stderr.
 
 ## Related Pages
 
-- [Commands](../commands/)
-- [Global Flags](../global-flags/)
 - [Requests](/docs/guides/requests/)
+- [Command Behavior](/docs/guides/command-behavior/)
+- [Global Flags](../global-flags/)

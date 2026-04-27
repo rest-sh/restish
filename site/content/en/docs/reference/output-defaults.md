@@ -1,63 +1,42 @@
 ---
 title: Output Defaults
 linkTitle: Output Defaults
-weight: 28
-description: Reference for Restish's default output choices on TTYs, redirects, filters, and raw output.
+weight: 31
+description: Reference for default output choices on terminals, redirects, filters, pagination, and streams.
 ---
 
-Restish changes its default output behavior based on whether stdout is a TTY and
-whether the output is still the original wire payload or a normalized value.
+Restish chooses defaults to be useful interactively and predictable in scripts,
+but explicit `-o` is always better when format matters.
 
 ## Main Rule
 
-- on a terminal, structured output defaults to `readable`
-- off a terminal, structured output defaults to JSON
-- raw bytes are preserved when you explicitly ask for `-o raw`, when you use
-  `-r` without a filter, or when image output is redirected
+- TTY output defaults to `readable` for structured responses.
+- Non-TTY structured output should be machine-friendly.
+- `-o raw` preserves original body bytes.
+- `-o json` and `-o yaml` produce complete documents.
+- `-o ndjson` produces records.
 
-## Why The Defaults Exist
+## Examples
 
-Interactive use usually needs:
+```bash
+restish https://api.rest.sh/images
+restish https://api.rest.sh/images -o json > images.json
+restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+```
 
-- status and headers
-- human-readable formatting
-- context for exploration
+## Filtering
 
-Redirected output usually needs:
+A filter changes what is rendered:
 
-- one stable machine-friendly document
-- fewer surprises in scripts
+```bash
+restish https://api.rest.sh/images -f body.self -r
+```
 
-## Filtering Changes The Contract
-
-Once you filter a response, you are no longer asking for the original wire
-payload. You are asking for a transformed value.
-
-That is why filtered output defaults to structured rendering, not raw bytes.
-
-Use `-r` only when the filtered result is a scalar or a scalar array and you
-want shell-friendly output.
-
-## Document vs Record Output
-
-Think in two families:
-
-- document output: `readable`, `json`, `yaml`
-- record output: `ndjson`
-
-Document formats aim to preserve one coherent result. Record formats emit one
-item or event at a time.
-
-## Common Explicit Choices
-
-- `-o json` for one JSON document
-- `-o yaml` for one YAML document
-- `-o ndjson` for one JSON value per line
-- `-o raw` for exact body bytes
-- `-o table` for arrays of objects
+Use `-r` for shell-friendly scalar output.
 
 ## Related Pages
 
-- [Output Guide](/docs/guides/output/)
+- [Output](/docs/guides/output/)
 - [Output Formats](../output-formats/)
-- [Global Flags](../global-flags/)
+- [Normalized Responses](/docs/concepts/normalized-responses/)

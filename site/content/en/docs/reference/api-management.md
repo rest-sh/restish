@@ -1,232 +1,78 @@
 ---
 title: API Management
 linkTitle: API Management
-weight: 18
-description: Reference for configuring APIs, inspecting cache state, and managing generated command sources.
+weight: 13
+description: Reference for registering APIs, syncing specs, editing config, and inspecting API state.
 ---
 
-Restish has two layers of API management:
+`restish api` manages configured APIs and generated command sources.
 
-- configuration commands under `restish api`
-- operational helpers such as `cache`, `auth-header`, and `cert`
-
-## `restish api`
-
-Use these commands to register and maintain named APIs.
-
-### `api configure`
+## Configure
 
 ```bash
-restish api configure <name> <url>
-restish api configure --allow-cross-origin-spec <name> <url>
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
 
-Registers an API and immediately tries to discover its OpenAPI description.
+Discovers a spec, builds initial config, prompts for setup where needed, and
+saves the API.
 
-This is the usual starting point for API-aware commands.
+## Add
 
-If discovery finds a broken or unsafe spec source, `api configure` reports the
-error instead of writing a misleading config. If no spec is found, Restish still
-registers the API so the short name, profiles, auth, and pagination config can
-be useful.
+```bash
+restish api add example https://api.rest.sh spec_url: https://api.rest.sh/openapi.json
+```
 
-`--allow-cross-origin-spec` permits Link-header spec discovery on another
-origin. Private, loopback, link-local, multicast, and unspecified targets are
-still rejected unless the base API target is also private.
+Adds config quickly and accepts shorthand-style field updates.
 
-Common follow-up checks:
+## Sync
+
+```bash
+restish api sync example
+```
+
+Forces a spec refresh after the API publishes changes.
+
+## List And Show
 
 ```bash
 restish api list
-restish api show <name>
-restish <name> --help
+restish api show example
 ```
 
-If discovery fails, the registration is still useful because the API short name
-can still carry `base_url`, profiles, auth, and pagination config.
-
-### `api sync`
+## Set And Edit
 
 ```bash
-restish api sync <name>
-restish api sync --allow-cross-origin-spec <name>
-```
-
-Forces Restish to re-fetch the cached spec for a named API.
-
-Use this after the upstream API description changes.
-
-`--allow-cross-origin-spec` has the same safety rules as `api configure`.
-
-### `api list`
-
-```bash
-restish api list
-```
-
-Shows configured APIs.
-
-This is the fastest way to confirm that a registration exists.
-
-### `api show`
-
-```bash
-restish api show <name>
-```
-
-Prints the saved config for one API as JSON.
-
-This is useful when you need to confirm which `base_url`, `spec_url`, or
-profiles are actually persisted.
-
-### `api set`
-
-```bash
-restish api set <name> <key> <value>
-restish api set <name> '<path:value>' ['<path:value>' ...]
-```
-
-Makes a narrow config edit using a dot-path key instead of opening the whole
-file.
-
-Typical uses:
-
-```bash
-restish api set github spec_url https://api.github.com/openapi.json
-restish api set github base_url https://github.example.com/api/v3
-restish api set github command_layout tags
-restish api set github 'profiles.default.auth.type: "oauth-client-credentials"'
-restish api set github 'profiles.default.headers[]: "Authorization: Bearer abc"'
-restish api set github 'operation_base: undefined'
-```
-
-Expression semantics:
-
-- `a.b.c: value`: scalar assignment
-- `list[]: value`: append to an array
-- `key: undefined`: delete a key
-
-You can pass multiple expressions in one command; Restish validates and applies
-them together.
-
-This is best for targeted updates. If you are making broad structural changes,
-`api edit` is usually easier.
-
-### `api add`
-
-```bash
-restish api add <name> <url>
-restish api add <name> <url> '<path:value>' ['<path:value>' ...]
-```
-
-Registers a new API quickly and optionally applies shorthand expressions at
-creation time.
-
-```bash
-restish api add github https://api.github.com \
-	'profiles.default.auth.type: "oauth-authorization-code"' \
-	'profiles.default.query[]: "per_page=100"'
-```
-
-### `api edit`
-
-```bash
+restish api set example command_layout: tags
+restish api set example operation_base: /v1
 restish api edit
 ```
 
-Opens `restish.json` in `$VISUAL` or `$EDITOR`.
-
-This is the best path when you need to:
-
-- add several profiles
-- restructure a large API config
-- review comments in JSONC config
-
-### `api delete`
+## Delete
 
 ```bash
-restish api delete <name>
+restish api delete example
 ```
 
-Removes a configured API.
+Removes a configured API. It does not delete remote resources.
 
-### `api clear-auth-cache`
+## Clear Auth Cache
 
 ```bash
-restish api clear-auth-cache <name>
-restish api clear-auth-cache --all <name>
+restish api clear-auth-cache example
 ```
 
-Deletes cached OAuth tokens for a named API.
+Use after OAuth credentials or token state need a fresh flow.
 
-Use this when an OAuth flow changed, a token was revoked, or you want to force
-the next request back through the full token acquisition path.
-
-Use `--all` when you want to clear every cached token for that API across all
-profiles instead of only the active profile.
-
-### `api content-types`
+## Content Types
 
 ```bash
 restish api content-types
 ```
 
-Lists the registered content types and MIME types known to the current Restish
-process.
+Prints registered input and output content types.
 
-This is especially useful when plugin-provided formatter or content-type support
-is installed.
-
-## `auth-header`
-
-```bash
-restish auth-header <api>
-```
-
-Prints the `Authorization` header value Restish would send for the selected API
-and profile.
-
-This is one of the best auth debugging commands because it uses the same auth
-resolution path as a real request.
-
-## Cache Commands
-
-### `cache info`
-
-```bash
-restish cache info
-```
-
-Shows cache directory, total size, entry count, and oldest entry.
-
-### `cache clear`
-
-```bash
-restish cache clear
-restish cache clear <api>
-```
-
-Deletes cached responses globally or for one registered API.
-
-Use the API-specific form when you want to invalidate one API without losing the
-entire cache. API-specific clearing removes cache namespaces for that API across
-all profiles without deleting another API that happens to share the same host.
-
-## `cert`
-
-```bash
-restish cert <uri>
-restish cert --warn-days 14 <uri>
-```
-
-Inspects the TLS certificate chain presented by a server.
-
-Use `--warn-days` when you want certificate-expiry checks in CI or operational
-health checks.
-
-## Related Guides
+## Related Pages
 
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
-- [Authentication](/docs/guides/authentication/)
-- [Retries and Caching](/docs/guides/retries-and-caching/)
-- [TLS](/docs/guides/tls/)
+- [Config](../config/)
+- [Commands](../commands/)

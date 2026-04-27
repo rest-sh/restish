@@ -2,91 +2,80 @@
 title: Command Behavior
 linkTitle: Command Behavior
 weight: 85
-description: Understand Restish exit codes, diagnostics, and stdout versus stderr behavior.
+description: Understand exit codes, redirects, diagnostics, stdout, stderr, and script-friendly behavior.
 ---
 
-Restish is designed to work both interactively and in scripts. That means its
-output channels and exit codes are deliberate parts of the interface.
+Restish is designed for terminals and scripts. Output channels, exit codes, and
+verbose diagnostics are part of the interface.
 
 ## Exit Codes
 
 HTTP status families map to CLI exit codes:
 
-- `2xx -> 0`
-- `3xx -> 3`
-- `4xx -> 4`
-- `5xx -> 5`
+| HTTP status | Exit code |
+| --- | --- |
+| `2xx` | `0` |
+| `3xx` | `3` |
+| `4xx` | `4` |
+| `5xx` | `5` |
+| Network, parse, config, or command errors | `1` |
 
-This is deliberate: HTTP status is part of the command contract, not just text
-printed to the terminal.
+Inspect an error body without failing the shell command:
 
-## Stdout vs Stderr
+```bash
+restish https://api.rest.sh/status/404 --rsh-ignore-status-code
+```
 
-Restish keeps normal command output on stdout and diagnostics on stderr.
+## Stdout And Stderr
 
-Stdout is for response bodies and machine-readable output. Stderr is for
-prompts, warnings, and verbose request and response logs.
+Response output goes to stdout. Diagnostics, verbose request/response metadata,
+progress, and warnings go to stderr.
 
-That separation is what makes filtered output, redirects, and shell pipelines
-work predictably.
+```bash
+restish -v https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg 2> headers.txt
+```
 
 ## Verbose Mode
 
-Use `-v` when you need request and response visibility:
-
 ```bash
-restish https://api.rest.sh/images -v
+restish -v https://api.rest.sh/headers
+restish -vv https://api.rest.sh/headers
 ```
 
-Use `-vv` when you also want more TLS detail.
+`-v` shows request and response headers. `-vv` adds more TLS detail.
 
-Verbose diagnostics are prefixed so they remain easy to separate from response
-output:
+## Redirects
 
-- `>` request line and request headers
-- `<` response status and response headers
-- `*` transport details such as TLS version, cipher suite, and certificates
-- `warning:` recoverable problems or limits that did not stop the command
-- `hint:` an actionable next step, usually after ambiguous input
-- `stderr:` stderr captured from a plugin when it explains a plugin failure
-
-If a response comes from the local HTTP cache, verbose output still prints the
-request and response headers and adds `* Cache: HIT` before the response block.
-
-## Ignore Status Codes
-
-If you care more about capturing the body than about HTTP-derived exit codes,
-use:
+Use redirect fixtures to inspect behavior:
 
 ```bash
-restish https://api.rest.sh/images --rsh-ignore-status-code
+restish https://api.rest.sh/redirect/2 -v
+restish 'https://api.rest.sh/redirect-to?url=/get&status_code=307' -v
 ```
 
-Use this when the body matters more than the exit code, such as when you are
-capturing a structured error response for debugging.
+When auth or custom headers are involved, use verbose mode to confirm what is
+sent after redirects.
+
+## Timeouts
+
+```bash
+restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+```
+
+Timeouts are useful in scripts where a hanging request is worse than a clear
+failure.
 
 ## Silent Mode
 
-If you want only the exit code:
+Use `-S` when only the exit code matters:
 
 ```bash
-restish https://api.rest.sh/images --rsh-silent
-```
-
-This is useful in probes, CI checks, and wrapper scripts where only success or
-failure matters.
-
-## Bare URL Shortcut
-
-A bare URL or API-relative target is treated as `GET`.
-
-```bash
-restish https://api.rest.sh/
-restish myapi/items
+restish -S https://api.rest.sh/status/204
 ```
 
 ## Related Pages
 
-- [Global Flags Reference](/docs/reference/global-flags/)
+- [Global Flags](/docs/reference/global-flags/)
+- [Retries and Caching](../retries-and-caching/)
+- [Troubleshooting](../troubleshooting/)
 - [Output Defaults](/docs/reference/output-defaults/)
-- [Requests Guide](/docs/guides/requests/)

@@ -6,62 +6,40 @@ menu:
     weight: 10
 ---
 
-Restish is a CLI for interacting with REST-ish HTTP APIs. These docs are
-organized around the way people actually adopt the tool:
-
-1. make a request quickly
-2. connect Restish to a real API
-3. shape daily workflows with profiles, auth, filtering, pagination, and plugins
-
-## Path
-
-`Documentation -> Getting Started -> Guides -> Recipes -> Reference -> Plugins -> Contributing`
+Restish is a CLI for REST-ish HTTP APIs. Start with a direct request, then move
+repeated work into API-aware commands, profiles, filters, pagination, and
+plugins.
 
 ## Start Here
 
-- New to Restish:
-  [Install](./getting-started/install/) ->
-  [First Request](./getting-started/first-request/) ->
-  [Connect to an API](./getting-started/connect-to-an-api/)
-- Working across environments:
-  [Set Up Profiles](./getting-started/set-up-profiles/)
-- Building on top of Restish:
-  [Plugin Quickstart](./plugins/quickstart/)
+- New to Restish: [Install](./getting-started/install/) -> [Quickstart](./getting-started/quickstart/) -> [Requests](./guides/requests/)
+- Already have an OpenAPI-described API: [Connect to an API](./getting-started/connect-to-an-api/) -> [OpenAPI and CLI Integration](./guides/openapi-cli-integration/)
+- Repeating headers, tokens, or environment URLs: [Set Up Profiles](./getting-started/set-up-profiles/) -> [Authentication](./guides/authentication/)
+- Extending Restish: [Install and Use Plugins](./plugins/install-and-use/) -> [Plugin Quickstart](./plugins/quickstart/)
 
-## Common Entry Points
+## Common Workflows
 
-- If you already know HTTP and just want a better CLI, start with
-  [First Request](./getting-started/first-request/).
-- If you already have an OpenAPI-described API, start with
-  [Connect to an API](./getting-started/connect-to-an-api/).
-- If you are trying to replace repeated headers, tokens, or staging URLs, start
-  with [Set Up Profiles](./getting-started/set-up-profiles/).
-- If you want the exact example API used across these docs, see
-  [Example API](./reference/example-api/).
+- [Make requests](./guides/requests/) with generic HTTP verbs or generated commands.
+- [Send request bodies](./guides/input/) with shorthand, stdin, forms, and multipart uploads.
+- [Shape output](./guides/output/) with formats, filters, tables, raw bytes, and files.
+- [Follow pagination and links](./guides/pagination/) across collections.
+- [Stream events](./guides/streaming/) from SSE and NDJSON endpoints.
+- [Troubleshoot behavior](./guides/troubleshooting/) with symptom-driven fixes.
 
-## Common Tasks
+## Popular Reference
 
-- [Authenticate to an API](./guides/authentication/)
-- [Filter response fields](./recipes/filter-response-fields/)
-- [Show only response headers](./recipes/show-only-response-headers/)
-- [Count items across all pages](./recipes/count-items-across-all-pages/)
-- [Inspect response links](./recipes/inspect-response-links/)
-- [Troubleshoot setup or request issues](./guides/troubleshooting/)
+- [Example API](./reference/example-api/) lists the live `api.rest.sh` endpoints used throughout the docs.
+- [Commands](./reference/commands/) maps the top-level command surface.
+- [Global Flags](./reference/global-flags/) explains request, output, auth, TLS, pagination, cache, and retry flags.
+- [Config](./reference/config/) and [Profiles](./reference/profiles/) document persistent settings.
+- [Shorthand](./reference/shorthand/) and [Query Syntax](./reference/query-syntax/) cover structured input and filtering.
 
 ## Sections
 
-- **Getting Started** gets you successful quickly.
-- **Guides** explain the main workflows.
-- **Recipes** answer search-shaped questions.
-- **Reference** is factual and scannable.
-- **Plugins** is a first-class section, not an afterthought.
-
-## Suggested Reading Order
-
-For most users:
-
-1. [Install](./getting-started/install/)
-2. [First Request](./getting-started/first-request/)
-3. [Connect to an API](./getting-started/connect-to-an-api/)
-4. [Set Up Profiles](./getting-started/set-up-profiles/)
-5. [Requests Guide](./guides/requests/)
+- **Getting Started** gets first-time users to a useful request quickly.
+- **Concepts** explains the mental model behind the workflows.
+- **Guides** cover multi-step daily work.
+- **Recipes** give command-first answers to narrow tasks.
+- **Reference** is factual lookup for commands, config, formats, and protocols.
+- **Plugins** separates operator docs from author docs.
+- **Contributing** preserves maintainer workflow and design intent.

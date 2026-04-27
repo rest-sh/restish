@@ -1,23 +1,16 @@
 ---
 title: Patch Piped JSON With Shorthand
 linkTitle: Patch Piped JSON
-weight: 26
-description: Treat piped structured input as the base document and apply shorthand overrides on top.
+weight: 25
+description: Use stdin as a base document and override fields with shorthand.
 ---
 
-When stdin already contains structured JSON, you can patch it with shorthand
-arguments:
-
 ```bash
-echo '{"name":"Alice","role":"user"}' | \
-  restish post https://api.rest.sh role: admin
+echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post role: admin
 ```
 
-Equivalent body:
+The sent body has `role` changed to `admin` before encoding.
 
-```json
-{
-  "name": "Alice",
-  "role": "admin"
-}
-```
+Use this when generated data needs a small command-line override.
+
+Related: [Input and Shorthand](/docs/guides/input/), [Shorthand](/docs/reference/shorthand/).

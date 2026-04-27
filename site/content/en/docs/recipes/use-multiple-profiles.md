@@ -1,50 +1,31 @@
 ---
 title: Use Multiple Profiles
-linkTitle: Use Multiple Profiles
-weight: 20
-description: Switch between environments or credentials with Restish profiles.
+linkTitle: Multiple Profiles
+weight: 70
+description: Switch request defaults with profile names.
 ---
 
-Profiles are the clean way to move between dev, staging, and production
-environments without rewriting every command.
+Config shape:
 
-Example config:
-
-```json
+```jsonc
 {
   "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
+    "example": {
+      "base_url": "https://api.rest.sh",
       "profiles": {
-        "default": {
-          "query": ["per_page=50"]
-        },
-        "staging": {
-          "base_url": "https://staging-api.example.com",
-          "query": ["per_page=20"]
-        },
-        "ci": {
-          "auth": {
-            "type": "oauth-client-credentials",
-            "params": {
-              "client_id": "ci-client"
-            }
-          }
-        }
+        "default": {},
+        "json": { "headers": ["Accept: application/json"] },
+        "debug": { "query": ["trace=docs"] }
       }
     }
   }
 }
 ```
 
-Use a profile for one command:
+Use a profile:
 
 ```bash
-restish -p staging get myapi/items
-restish -p ci get myapi/items
+restish -p json example list-images
 ```
 
-Or set `RSH_PROFILE` in your shell when you want a persistent default.
-
-This pattern keeps one API definition while letting base URLs, auth, headers,
-and query defaults vary cleanly by environment.
+Related: [Set Up Profiles](/docs/getting-started/set-up-profiles/), [Profiles](/docs/reference/profiles/).

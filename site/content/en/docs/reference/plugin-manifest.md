@@ -1,66 +1,42 @@
 ---
 title: Plugin Manifest
 linkTitle: Plugin Manifest
-weight: 42
-description: Reference for the manifest metadata Restish expects from plugins.
+weight: 61
+description: Reference for Restish plugin manifest fields.
 ---
 
-Every Restish plugin must expose a manifest. Restish fetches it by invoking the
-plugin with `--rsh-plugin-manifest`.
+A plugin manifest tells Restish what a plugin is, what protocol version it uses,
+and which hooks or command surfaces it provides.
 
-The manifest may be returned as CBOR or JSON.
-
-## Required Fields
-
-- `name`: plugin name
-- `restish_api_version`: plugin protocol version
-
-## Optional Fields
-
-- `version`: plugin version string. Strongly recommended for discovery and debugging.
-- `description`: short human-readable summary. Strongly recommended for `plugin list`.
-- `hooks`: declared plugin hook types
-- `formatter_names`: output format names provided by a formatter plugin
-- `loader_content_types`: content types handled by a loader plugin
-
-## Example
+## Core Fields
 
 ```json
 {
-  "name": "hello-format",
+  "name": "restish-csv",
   "version": "0.1.0",
-  "description": "Example formatter plugin",
+  "description": "Render array responses as CSV",
   "restish_api_version": 2,
-  "hooks": ["formatter"],
-  "formatter_names": ["hello"]
+  "hooks": ["formatter"]
 }
 ```
 
-## Hook Names
+| Field | Meaning |
+| --- | --- |
+| `name` | Stable plugin name. |
+| `version` | Plugin version. |
+| `description` | Human-facing summary. |
+| `restish_api_version` | Host/plugin protocol version. |
+| `hooks` | Hook families such as `auth`, `request`, `response`, `loader`, `formatter`, `command`, or `tls-signer`. |
 
-Current hook names include:
+## Guidance
 
-- `auth`
-- `request-middleware`
-- `response-middleware`
-- `loader`
-- `formatter`
-- `command`
-- `tls-signer`
-
-## Compatibility Rules
-
-`restish_api_version` tells Restish which plugin protocol version the plugin
-expects.
-
-- missing or invalid values are rejected
-- newer versions may still load with a warning
-- version mismatches are an important debugging clue when a plugin seems to be
-  discovered but not behaving correctly
+- Keep names stable; config may refer to them.
+- Use the narrowest hook set that solves the job.
+- Rebuild v1 plugins for the v2 protocol.
+- Keep operator docs separate from manifest internals.
 
 ## Related Pages
 
-- [Install and Use Plugins](/docs/plugins/install-and-use/)
-- [Plugin Reference](../plugins/)
-- [Plugin Message Reference](../plugin-messages/)
-- [Plugin Quickstart](/docs/plugins/quickstart/)
+- [Plugin Messages](../plugin-messages/)
+- [Hook Plugins](/docs/plugins/hook-plugins/)
+- [Command Plugins](/docs/plugins/command-plugins/)

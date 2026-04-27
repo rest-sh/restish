@@ -1,19 +1,20 @@
 ---
 title: Ignore a 404 but Keep the Body
-linkTitle: Ignore a 404
-weight: 45
-description: Keep the response body even when the HTTP status would normally produce a failing exit code.
+linkTitle: Ignore 404
+weight: 50
+description: Inspect an error response without a failing exit code.
 ---
 
-Use `--rsh-ignore-status-code` when you want the response body but do not want
-the command to fail because of the HTTP status:
-
 ```bash
-restish https://api.rest.sh/missing --rsh-ignore-status-code
+restish https://api.rest.sh/status/404 --rsh-ignore-status-code
 ```
 
-This is especially useful when:
+Use this when an error body is expected data for your script.
 
-- the server returns structured error JSON you want to inspect
-- you are debugging an API integration
-- you are capturing the body inside a script
+For problem details:
+
+```bash
+restish https://api.rest.sh/problem --rsh-ignore-status-code
+```
+
+Related: [Command Behavior](/docs/guides/command-behavior/).

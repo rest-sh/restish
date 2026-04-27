@@ -2,23 +2,28 @@
 title: Core Concepts
 linkTitle: Core Concepts
 weight: 20
-description: Learn the mental model behind profiles, generated API commands, normalized responses, and plugins.
+description: Understand the model behind generic requests, API commands, profiles, normalized responses, and plugins.
 ---
 
-These pages explain how Restish is organized so the day-to-day guides make more
-sense.
+Concept pages explain why Restish behaves consistently across direct URLs,
+generated API commands, profiles, output formats, pagination, and plugins.
 
-## Start With These
+## Start Here
 
-- [How Restish Works](./how-restish-works/) for the big-picture mental model.
-- [API Commands](./api-commands/) to understand generic verbs versus
-  generated operations.
-- [Profiles](./profiles/) for layered configuration and API-specific defaults.
+- [How Restish Works](./how-restish-works/) for the end-to-end request model.
+- [API Commands](./api-commands/) for generic URLs versus generated operations.
+- [Profiles](./profiles/) for layered request defaults.
+- [Normalized Responses](./normalized-responses/) for `headers`, `links`, and `body` filter roots.
 - [Plugins](./plugins/) for the extension model.
 
-## What You Will Learn
+## Use Concepts When
 
-- when to use direct HTTP requests versus named API commands
-- how Restish discovers specs and turns them into CLI subcommands
-- where configuration lives and how profiles change request behavior
-- how plugins fit into the main request lifecycle
+- you understand one command but want the larger mental model
+- a guide mentions behavior that spans several commands
+- you are deciding between generic requests, API-aware commands, profiles, and plugins
+
+## Related Pages
+
+- [Requests](/docs/guides/requests/)
+- [Output](/docs/guides/output/)
+- [Design Records](/docs/contributing/design-records/)

@@ -1,14 +1,13 @@
 ---
 title: Edit Command
-linkTitle: Edit Command
-weight: 12
-description: Reference for the fetch-edit-update workflow exposed by restish edit.
+linkTitle: Edit
+weight: 40
+description: Fetch a resource, edit it locally, and send it back.
 ---
 
-`restish edit <uri> [patch ...]` turns the fetch-edit-update cycle into one
-command.
+Fetch a resource, edit it locally, and send it back.
 
-## Common Forms
+## Examples
 
 ```bash
 restish edit https://api.rest.sh/types
@@ -17,13 +16,12 @@ restish edit --dry-run https://api.rest.sh/types string: changed
 restish edit -y https://api.rest.sh/types string: changed
 ```
 
-## Important Flags
+## Notes
 
-- `--edit-format`: `json` or `yaml`
-- `--dry-run`: show the diff without sending the update
-- `-y`, `--rsh-yes`: skip the confirmation prompt
+Use `--dry-run` before writing and `-y` only when the update is already reviewed.
 
 ## Related Pages
 
-- [Edit Workflow](/docs/guides/edit-workflow/)
-- [Input and Shorthand](/docs/guides/input/)
+- [Commands](/docs/reference/commands/)
+- [Global Flags](/docs/reference/global-flags/)
+- [Troubleshooting](/docs/guides/troubleshooting/)

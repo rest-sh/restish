@@ -1,39 +1,26 @@
 ---
 title: Theme Command
-linkTitle: Theme Command
-weight: 33
-description: Reference for installing terminal readable-output themes.
+linkTitle: Theme
+weight: 40
+description: Manage readable output highlighting themes.
 ---
 
-The `theme` command installs style settings used by Restish's readable terminal
-output.
+Manage readable output highlighting themes.
 
-## Syntax
+## Examples
 
 ```bash
-restish theme set <url-or-user/repo> [name]
+restish theme list
+restish theme show
+restish theme set
 ```
 
-Use a full URL when a theme file is hosted directly. Use `user/repo` when the
-theme lives in a GitHub repository supported by the theme loader.
+## Notes
 
-The optional `name` selects a named theme from sources that contain more than
-one theme.
-
-## Config
-
-Installed theme entries are stored in top-level `theme` in `restish.json`.
-
-```jsonc
-{
-  "theme": {
-    "string": "green",
-    "number": "cyan"
-  }
-}
-```
+Theme support affects human-readable terminal output, not JSON or raw machine formats.
 
 ## Related Pages
 
-- [Config](../config/)
-- [Output Formats](../output-formats/)
+- [Commands](/docs/reference/commands/)
+- [Global Flags](/docs/reference/global-flags/)
+- [Troubleshooting](/docs/guides/troubleshooting/)

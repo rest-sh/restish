@@ -2,52 +2,28 @@
 title: Call a JSON API
 linkTitle: Call a JSON API
 weight: 10
-description: A quick recipe for calling a JSON API with Restish.
+description: Ask an API for JSON while keeping interactive output readable.
 ---
 
-Use a generic request when you just want to talk to an endpoint immediately.
+```bash
+restish -H 'Accept: application/json' https://api.rest.sh/get
+```
+
+Representative output:
+
+```readable
+method: "GET"
+path: "/get"
+```
+
+Add query params with `-q`:
 
 ```bash
-restish https://api.rest.sh/
+restish -H 'Accept: application/json' -q active=true https://api.rest.sh/get
 ```
 
-If you need a header:
+Add `-o json` when the next command needs a JSON document.
 
-```bash
-restish get \
-  -H 'Accept: application/json' \
-  https://api.rest.sh/images
-```
+For repeated headers or auth, put them in a profile instead of repeating them.
 
-If you need bearer auth repeatedly, put it in a profile instead of repeating
-the header by hand each time.
-
-Example config:
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.rest.sh",
-      "profiles": {
-        "default": {
-          "headers": ["Accept: application/json"],
-          "auth": {
-            "type": "http-basic",
-            "params": {
-              "username": "alice"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Then call the API with either style:
-
-```bash
-restish myapi/images
-restish myapi list-images
-```
+Related: [Requests](/docs/guides/requests/), [Content Types](/docs/reference/content-types/).

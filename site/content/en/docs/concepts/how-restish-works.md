@@ -5,93 +5,81 @@ weight: 10
 description: Understand the core model behind generic requests, API commands, profiles, and normalized responses.
 ---
 
-Restish combines two modes:
+Restish has two entry points into one request pipeline: generic HTTP commands
+for immediate access, and API-aware commands generated from OpenAPI for repeated
+work.
 
-- generic HTTP commands for immediate access
-- API-aware commands generated from API descriptions
+## The Request Pipeline
 
-Under the hood, Restish v2 centers around a single CLI object that owns config,
-I/O, registries, spec loading, output formatting, and plugins.
-
-## Why This Matters To Users
-
-That architecture gives users a consistent mental model:
-
-- profiles decide how requests are configured
-- APIs can add generated commands
-- responses go through a normalized output path
-- plugins extend behavior without changing the core workflow
-
-## The Basic Flow
-
-From a user's perspective, most work follows the same pattern:
-
-1. choose a target, either a full URL or a configured API name
-2. apply profile settings such as base URL, auth, headers, and TLS
-3. make the request
-4. normalize the response
-5. optionally paginate, filter, or stream it
-6. render the final output
-
-That is why the same flags and habits carry across so many parts of the CLI.
-
-## Generic Requests vs API Commands
-
-Generic requests are best when you want to move fast:
-
-```bash
-restish https://api.rest.sh/images
+```mermaid
+flowchart LR
+  A[Command or URL] --> B[Config and profile]
+  B --> C[Auth and TLS]
+  C --> D[Body encoding]
+  D --> E[HTTP transport]
+  E --> F[Decode and normalize]
+  F --> G[Links, pagination, or streaming]
+  G --> H[Filter]
+  H --> I[Format output]
 ```
 
-API commands are better once Restish knows the API description:
+The same flags and habits work across the pipeline because Restish keeps the
+runtime centralized: config, I/O, content types, spec loading, auth, link
+parsing, formatters, and plugins are owned by the CLI runtime.
+
+## Generic Requests
+
+Generic requests need no setup:
 
 ```bash
-restish myapi users list
+restish https://api.rest.sh/anything/demo
+restish post https://api.rest.sh/post 'name: Alice, enabled: true'
 ```
 
-The underlying request pipeline is still the same. The difference is how much
-help Restish can provide before the request is sent.
+Use them for exploration, odd jobs, and APIs without a useful description.
 
-## Profiles Tie The Experience Together
+## API Commands
 
-Profiles are the main place where repeated behavior lives:
+API commands start with registration:
 
-- base URL overrides
-- default headers and query parameters
-- auth configuration
-- TLS signer or certificate choices
+```bash
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish example list-images
+```
 
-That means switching environments is usually a profile choice, not a complete
-rewrite of every command.
+Generated commands add discoverability, completion, parameter help, and a stable
+short name. They still use the same request pipeline.
 
-## Normalized Responses Make Output Predictable
+## Profiles
 
-Restish does not send raw HTTP responses directly to each formatter. It
-normalizes them first into a stable response shape that includes protocol
-details, headers, links, and body data.
+Profiles hold repeated choices: base URLs, headers, query params, auth, and TLS
+settings. Switching profiles changes the request setup without changing the
+command shape.
 
-That is why filtering, output formats, pagination, and links all feel like
-parts of one system instead of unrelated features.
+```bash
+restish -p staging myapi list-users
+```
 
-## Plugins Extend Specific Seams
+## Normalized Responses
 
-Plugins do not replace the CLI model. They plug into specific parts of it:
+Restish decodes responses into a stable shape before filtering and formatting.
+That is why filters can address `headers`, `links`, and `body` consistently:
 
-- auth
-- request middleware
-- response middleware
-- spec loading
-- formatting
-- custom top-level commands
-- TLS signing
+```bash
+restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/example -f body.basics.profiles
+```
 
-That lets Restish grow without making every feature a core built-in behavior.
+## Plugins
 
-## Learn More
+Plugins extend specific parts of the runtime: auth, request/response middleware,
+loaders, formatters, top-level commands, and TLS signing. Good plugins delegate
+HTTP and output back to Restish so user expectations stay consistent.
+
+## Related Pages
 
 - [API Commands](../api-commands/)
 - [Profiles](../profiles/)
-- [Plugins](../plugins/)
-
-Contributor-oriented design details live in the
-[design records](/docs/contributing/design-records/).
+- [Normalized Responses](../normalized-responses/)
+- [Requests](/docs/guides/requests/)
+- [Request Execution Design](/docs/contributing/design-records/)

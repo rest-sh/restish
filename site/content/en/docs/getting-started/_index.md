@@ -2,55 +2,35 @@
 title: Getting Started
 linkTitle: Getting Started
 weight: 10
-description: Install Restish, make your first successful request, and learn the shortest path to API-aware daily use.
+description: Install Restish, make a request, register the example API, and learn the shortest path to daily use.
 ---
 
-This section is the fastest path from zero to productive use.
+This section gets you from an installed binary to one useful request, then shows
+why API-aware commands and profiles make repeated work calmer.
 
-The goal is not to teach every feature up front. The goal is to get you to one
-successful request quickly, then show how Restish becomes more useful when you
-connect it to a real API and stop repeating the same headers, base URLs, and
-auth by hand.
+## Start Here
 
-## Path
+1. [Install](./install/) the current binary or build from source.
+2. Follow the [Quickstart](./quickstart/) for the shortest complete path.
+3. Make a slower [First Request](./first-request/) if you want the pieces named.
+4. Run [Shell Setup](./shell-setup/) before using filters, query strings, or shorthand heavily.
+5. [Connect to an API](./connect-to-an-api/) when generated commands are useful.
+6. [Set Up Profiles](./set-up-profiles/) for environments, auth, and defaults.
 
-`Documentation -> Getting Started`
+## Common First Wins
 
-## Ten-Minute Quickstart
+- See what Restish sends: `restish https://api.rest.sh/`
+- Register the docs API: `restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'`
+- Use a generated command: `restish example list-images`
+- Filter a response: `restish https://api.rest.sh/images -f body.self -r`
 
-If you want the shortest end-to-end path, follow
-[Quickstart](./quickstart/). It takes you through:
+## Existing v1 Users
 
-1. installing Restish
-2. making one direct request
-3. registering the example API
-4. using a generated command
-5. switching profiles
-6. filtering output for shell use
+If you already have Restish v1 config or plugins, read [Upgrade From v1](./upgrade-from-v1/) before editing config. The migration docs are kept out of the new-user happy path, but they are still important for existing setups.
 
-## Recommended Path
+## Related Pages
 
-1. [Install](./install/) the CLI and verify the binary.
-2. Make your [first request](./first-request/) with a generic HTTP command.
-3. [Set up your shell](./shell-setup/) for completions and day-to-day comfort.
-4. [Connect to an API](./connect-to-an-api/) when you are ready for generated
-   commands and richer workflows.
-5. [Set Up Profiles](./set-up-profiles/) so repeated environments and auth stop
-   leaking into every command.
-6. [Your First API Config](./your-first-config/) if you want the smallest
-   complete mental model before the full config reference.
-
-## Outcome
-
-By the end, you should be able to make direct HTTP requests, understand the
-difference between generic and API-aware commands, and know where profiles,
-auth, and generated commands fit into the picture.
-
-## If You Only Have Five Minutes
-
-Use this short path:
-
-1. [Install](./install/)
-2. [First Request](./first-request/)
-3. [Connect to an API](./connect-to-an-api/)
-4. [Set Up Profiles](./set-up-profiles/)
+- [Requests](/docs/guides/requests/)
+- [Authentication](/docs/guides/authentication/)
+- [Output](/docs/guides/output/)
+- [Example API](/docs/reference/example-api/)

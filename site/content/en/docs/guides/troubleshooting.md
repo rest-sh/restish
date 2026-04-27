@@ -1,313 +1,252 @@
 ---
 title: Troubleshooting
 linkTitle: Troubleshooting
-weight: 98
-description: Diagnose the most common Restish setup, request, auth, discovery, and plugin problems.
+weight: 110
+description: Diagnose common Restish setup, request, auth, output, pagination, spec, TLS, and plugin problems.
 ---
 
-This page collects the failure modes people hit most often when first adopting
-Restish.
+Use this page when the command ran but the result was surprising, or when the
+command did not run because shell, config, auth, TLS, or plugin setup got in the
+way.
 
-## The Shell Is Rewriting My Input
+## The Shell Rewrites My URL Or Filter
 
-Symptoms:
+**Symptom:** A command with `?`, `&`, `[0]`, `[]`, or `*` fails before Restish
+sends a request.
 
-- `?`, `[]`, or `*` behave strangely
-- shorthand arguments disappear or expand
-- filter expressions are altered before Restish sees them
+**Likely cause:** Your shell expanded the characters.
 
-Fix:
+**How to confirm:** Quote the URL or filter and retry.
+
+**Fix:**
 
 ```bash
 restish setup zsh
-source ~/.zshrc
+restish 'https://api.rest.sh/images?format=jpeg&limit=1'
+restish https://api.rest.sh/images -f 'body[0].self'
 ```
 
-Or quote the affected arguments manually.
+**Prevention:** Quote complex arguments in scripts and run `restish setup <shell>` for interactive use.
 
-Related page:
-
-- [Shell Setup](/docs/getting-started/shell-setup/)
-
-## API Registration Worked, But No Generated Commands Appeared
-
-Symptoms:
-
-- `restish api configure myapi ...` succeeds
-- `restish myapi --help` does not show operations
-
-Check:
-
-```bash
-restish api show myapi
-restish api sync myapi
-```
-
-Common causes:
-
-- the API does not advertise its spec
-- the spec is not at a common fallback path
-- the spec is invalid or not OpenAPI-compatible
-- `spec_url` was never set explicitly for a non-standard API
-
-Fix:
-
-Set `spec_url` in config if you know exactly where the spec lives.
+**Related docs:** [Shell Setup](/docs/getting-started/shell-setup/), [Query Syntax](/docs/reference/query-syntax/).
 
 ## I Expected JSON But Got Readable Output
 
-On a terminal, structured output defaults to the human-oriented `readable`
-format.
+**Symptom:** Output is human-readable instead of JSON.
 
-If you want JSON:
+**Likely cause:** TTY output defaults to `readable`.
+
+**How to confirm:** Run with an explicit format.
+
+**Fix:**
 
 ```bash
 restish https://api.rest.sh/images -o json
 ```
 
-If you redirect to a file or pipe, structured output defaults to JSON already.
+**Prevention:** Use `-o json` in scripts and redirects when the format matters.
 
-## I Need To Compare A Request With Curl
+**Related docs:** [Output](/docs/guides/output/), [Output Defaults](/docs/reference/output-defaults/).
 
-Restish does not currently print a full curl reproduction command because
-profile auth, hook plugins, TLS signer plugins, retries, and generated-command
-defaults can change the request after CLI parsing. Use `-v` to inspect the
-method, final URL, and redacted headers, then copy the non-secret parts into
-curl manually:
+## Content Negotiation Returned A Different Format
+
+**Symptom:** The server returns CBOR, YAML, or another structured media type
+instead of JSON.
+
+**Likely cause:** Restish sends an `Accept` header listing all registered
+content types with quality values.
+
+**How to confirm:** Inspect the request with `/headers` or verbose mode.
+
+**Fix:**
 
 ```bash
-restish https://api.rest.sh/images -v
+restish -H 'Accept: application/json' https://api.rest.sh/formats/json
+restish -v https://api.rest.sh/headers
 ```
 
-If you need byte-for-byte wire debugging, use curl directly for that check and
-then bring the confirmed headers or body back into Restish.
+**Prevention:** Set an `Accept` header in a profile for APIs that negotiate aggressively.
 
-## A Server Requires Exact Header Casing
+**Related docs:** [Content Types](/docs/reference/content-types/), [Profiles](/docs/reference/profiles/).
 
-HTTP header names are case-insensitive. Restish uses Go's standard HTTP
-transport, which canonicalizes header names and may use HTTP/2 where header
-names are lowercase on the wire.
+## Auth Fails
 
-If a broken HTTP/1.1 server requires exact outbound header casing, Restish
-cannot currently guarantee that casing without replacing the transport. Use
-curl or a small purpose-built helper for that endpoint, or fix the server/proxy
-to treat header names case-insensitively.
+**Symptom:** The API returns `401` or `403`.
 
-## The Command Failed Because of HTTP Status, But I Still Need the Body
+**Likely cause:** Missing credential, wrong profile, expired token, or auth on a
+public operation where it should have been suppressed.
 
-Use:
+**How to confirm:** Test against the safe auth fixtures.
+
+**Fix:**
 
 ```bash
-restish https://api.rest.sh/images --rsh-ignore-status-code
+restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
+restish auth-header example
+restish -v -p token https://api.rest.sh/auth/bearer
 ```
 
-That preserves the output but forces a zero exit code.
+**Prevention:** Put auth in profiles and keep public/private operation security accurate in OpenAPI.
 
-## My Response Looks Stale
+**Related docs:** [Authentication](/docs/guides/authentication/), [Profiles](/docs/reference/profiles/).
 
-Restish uses a local HTTP cache when the response is cacheable.
+## Generated Commands Are Missing
 
-Force a fresh request:
+**Symptom:** `restish myapi --help` does not show expected operations.
+
+**Likely cause:** Spec discovery failed, the cached spec is stale, operation
+names changed, or operations are hidden/ignored.
+
+**How to confirm:**
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-cache
+restish api show myapi
+restish api sync myapi
+restish myapi --help
 ```
 
-Inspect or clear the cache:
+**Fix:** Set `spec_url`, sync the API, or update the OpenAPI document.
+
+**Prevention:** Publish `/openapi.json` or service-description links and keep operation IDs stable.
+
+**Related docs:** [API Setup and Discovery](/docs/guides/api-setup-and-discovery/), [OpenAPI and CLI Integration](/docs/guides/openapi-cli-integration/).
+
+## Pagination Changed My Output Shape
+
+**Symptom:** A paginated endpoint behaves differently from a one-page endpoint.
+
+**Likely cause:** Restish follows `next` links and may stream items unless a
+document format or collect mode requires buffering.
+
+**How to confirm:**
 
 ```bash
-restish cache info
-restish cache clear
-restish cache clear myapi
-```
-
-## OAuth or Prompted Auth Seems Wrong
-
-Useful checks:
-
-```bash
-restish auth-header myapi
-restish api clear-auth-cache myapi
-restish -p debug myapi/items -v
-```
-
-Those help answer:
-
-- which profile is active
-- whether a token is cached
-- whether the final `Authorization` header is what you expect
-
-## Pagination Changed the Shape of My Output
-
-If you are counting, sorting, aggregating, or filtering across the whole
-result, collect first:
-
-```bash
+restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 ```
 
-If you want item-by-item processing, prefer:
+**Fix:** Use `--rsh-no-paginate`, `--rsh-max-pages`, `--rsh-max-items`, or `--rsh-collect` explicitly.
+
+**Prevention:** Choose document output for whole results and record output for item streams.
+
+**Related docs:** [Pagination](/docs/guides/pagination/), [Output](/docs/guides/output/).
+
+## Live Stream Output Never Finishes
+
+**Symptom:** A stream keeps running or `-o json` is not useful.
+
+**Likely cause:** SSE and NDJSON streams may be unbounded, while JSON is a
+document format.
+
+**How to confirm:** Add a max event count.
+
+**Fix:**
 
 ```bash
-restish https://api.rest.sh/images -o ndjson
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -r
 ```
 
-## Plugins Are Not Being Discovered
+**Prevention:** Use `--rsh-max-events` in examples and scripts unless EOF is expected.
 
-Checks:
+**Related docs:** [Streaming](/docs/guides/streaming/), [Output Formats](/docs/reference/output-formats/).
+
+## The Body Is Hidden Because Status Failed
+
+**Symptom:** A non-2xx response fails the command and interrupts a script.
+
+**Likely cause:** HTTP status families map to exit codes.
+
+**How to confirm:** Use a status fixture.
+
+**Fix:**
+
+```bash
+restish https://api.rest.sh/status/404 --rsh-ignore-status-code
+restish https://api.rest.sh/problem --rsh-ignore-status-code
+```
+
+**Prevention:** Use `--rsh-ignore-status-code` when error bodies are expected data.
+
+**Related docs:** [Command Behavior](/docs/guides/command-behavior/).
+
+## Cache Looks Stale
+
+**Symptom:** A response does not reflect the latest server state.
+
+**Likely cause:** A cacheable response was served from the local HTTP cache.
+
+**How to confirm:** Run with verbose mode or bypass cache.
+
+**Fix:**
+
+```bash
+restish https://api.rest.sh/cache --rsh-no-cache
+restish cache info
+restish cache clear
+```
+
+**Prevention:** Use `--rsh-no-cache` while debugging server state.
+
+**Related docs:** [Retries and Caching](/docs/guides/retries-and-caching/), [Cache Command](/docs/reference/cache-command/).
+
+## TLS Or mTLS Fails
+
+**Symptom:** Certificate verification, custom CA, client certificate, or TLS
+signer setup fails.
+
+**Likely cause:** Unknown CA, wrong client cert/key pair, missing hardware token,
+or plugin configuration error.
+
+**How to confirm:**
+
+```bash
+restish cert https://api.rest.sh
+restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
+```
+
+**Fix:** Use the correct CA, client certificate, key, or TLS signer parameters.
+Avoid `--rsh-insecure` except for short debugging.
+
+**Prevention:** Store TLS settings in profiles for repeated use.
+
+**Related docs:** [TLS](/docs/guides/tls/), [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/).
+
+## Plugins Are Not Discovered Or Fail
+
+**Symptom:** A plugin command or output format is unavailable, or a plugin exits with protocol errors.
+
+**Likely cause:** The plugin is not installed, not executable, not in a discovered
+location, or is using an incompatible protocol.
+
+**How to confirm:**
 
 ```bash
 restish plugin list
-restish plugin debug restish-my-plugin
+restish plugin debug ./path/to/plugin
 ```
 
-Common causes:
+**Fix:** Install the plugin, fix permissions, rebuild for v2, or inspect decoded messages with `plugin debug`.
 
-- the executable is not named `restish-<name>`
-- the binary was built but not installed into the Restish plugin directory
-- the manifest is invalid
+**Prevention:** Keep operator docs separate from author protocol docs and verify plugin discovery after installation.
 
-## TLS or mTLS Requests Fail
+**Related docs:** [Install and Use Plugins](/docs/plugins/install-and-use/), [Plugin Messages](/docs/reference/plugin-messages/).
 
-Work through this in order:
+## A CRUD Example Changed Shared State
 
-1. verify the server cert with `restish cert <uri>`
-2. add `--rsh-ca-cert` if you need a custom CA
-3. confirm whether you should be using `--rsh-client-key` or a TLS signer
-4. retry with `-vv` when you need more TLS detail
+**Symptom:** `/items` examples produce data different from the docs.
 
-Use `--rsh-insecure` only as a temporary debugging step.
+**Likely cause:** The CRUD fixture is resettable but stateful enough for examples
+to interact.
 
-For PKCS#11-backed client keys, install the `restish-pkcs11` TLS signer plugin
-and pass signer params instead of a private-key file:
+**How to confirm:**
 
 ```bash
-restish https://api.example.com \
-  --rsh-tls-signer pkcs11 \
-  --rsh-tls-signer-param module=/path/to/opensc-pkcs11.so \
-  --rsh-tls-signer-param label=my-cert
+restish https://api.rest.sh/items
 ```
 
-## Two Operations Produce the Same Command Name
+**Fix:** Use unique IDs for create/update/delete examples, such as `docs-$USER` or a timestamp.
 
-Symptoms:
+**Prevention:** Recipes that mutate `/items` should create their own item and clean it up.
 
-- `restish myapi --help` shows a command name that collides with another operation
-- one operation's help shows the wrong description
-
-Cause:
-
-Two operations share the same `operationId`, or their names generate the same
-kebab-case command slug.
-
-Fix:
-
-Use `x-cli-name` on one or both operations to assign distinct names:
-
-```yaml
-paths:
-  /items:
-    get:
-      operationId: listItems
-      x-cli-name: list-all-items
-  /items/active:
-    get:
-      operationId: listItems   # duplicate
-      x-cli-name: list-active-items
-```
-
-## Enum Values Do Not Appear in Shell Completion
-
-Symptoms:
-
-- tab-completing a flag shows no values even though the OpenAPI spec defines an enum
-
-Common causes:
-
-- the spec uses `type: array` with `items.enum` instead of a top-level `enum`
-- the parameter schema is nested under `$ref` and not fully resolved
-- the enum is on a request body field, not a query or path parameter
-
-Fix:
-
-Check that the parameter schema has a direct `enum` array at the top level.
-Run `restish api sync myapi` to refresh the cached spec after updating it.
-
-## Corporate HTTP Proxy
-
-If your network requires an HTTP proxy, set the standard environment variables
-before running Restish:
-
-```bash
-export HTTPS_PROXY=https://proxy.corp.example.com:8080
-export HTTP_PROXY=http://proxy.corp.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,.corp.example.com
-```
-
-Restish uses Go's standard `net/http` transport, which respects these variables
-automatically. If your proxy requires mTLS or a custom CA, combine the proxy
-env var with `--rsh-ca-cert`.
-
-## A New Operation I Added Does Not Show Up
-
-Symptoms:
-
-- you updated an OpenAPI spec that Restish caches
-- the new operation's command is missing from `restish myapi --help`
-
-Fix:
-
-```bash
-restish api sync myapi
-```
-
-Restish builds generated commands from the cached spec at startup. `api sync`
-re-fetches and re-caches the spec so the new operation appears on the next run.
-
-## Spec Changes Do Not Take Effect After a Local Edit
-
-If you are using `spec_files` to load a local spec file and your edits are not
-showing up:
-
-```bash
-restish api sync myapi
-```
-
-The same cache applies to local file specs. Sync forces a reload and cache
-refresh.
-
-## Config Migrated from v1 — Where Did My APIs Go?
-
-Restish v2 reads config from a new path (`restish.json` in
-`$RSH_CONFIG_DIR` or the platform default config directory). On the first v2
-run, if no v2 `restish.json` exists, Restish checks the legacy v1 config
-location and migrates `apis.json` and `config.json` into v2 config.
-
-If APIs are missing, first check whether you selected an explicit config file.
-`--rsh-config` and `RSH_CONFIG` are exact file selections: if the selected file
-does not exist, Restish errors instead of falling back to global config or
-running v1 migration.
-
-To inspect a legacy v1 config manually:
-
-```bash
-cat ~/.restish/apis.json 2>/dev/null || echo "not found"
-```
-
-Recovery steps:
-
-1. run without `--rsh-config` once to let default-location migration happen, or
-   create the selected file intentionally
-2. check the generated `restish.json` and `.bak.v1` backup
-3. run `restish api sync <name>` if a migrated API needs a fresh spec cache
-
-See the [Upgrade from v1](/docs/getting-started/upgrade-from-v1/) guide for a
-complete list of breaking changes.
-
-## Related Pages
-
-- [Shell Setup](/docs/getting-started/shell-setup/)
-- [Authentication](/docs/guides/authentication/)
-- [Retries and Caching](/docs/guides/retries-and-caching/)
-- [TLS](/docs/guides/tls/)
-- [Pagination and Links](/docs/guides/pagination/)
+**Related docs:** [Create, Patch, and Delete an Item](/docs/recipes/create-patch-and-delete-an-item-safely/).

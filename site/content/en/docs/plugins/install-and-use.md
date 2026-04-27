@@ -1,69 +1,61 @@
 ---
 title: Install and Use Plugins
 linkTitle: Install and Use
-weight: 12
-description: Install existing Restish plugins, confirm discovery, and learn the operator workflow separate from plugin authoring.
+weight: 10
+description: Install, list, remove, configure, verify, and debug Restish plugins.
 ---
 
-This page is for plugin operators, not plugin authors.
+This is the operator path for using plugins that already exist.
 
-Use it when you already have a built plugin binary and want it to show up in
-Restish.
-
-## How Discovery Works
-
-Restish discovers executable files named `restish-<name>` only from the
-installed plugin directory, usually `~/.config/restish/plugins/`. Binaries on
-`PATH` are ignored for plugin discovery; install plugins explicitly so the
-operator-controlled plugin directory is the trust boundary.
-
-## Install a Local Plugin Binary
-
-```bash
-restish plugin install ./restish-my-plugin
-```
-
-Then confirm discovery:
+## List Plugins
 
 ```bash
 restish plugin list
 ```
 
-## Remove a Plugin
+Run this first when an output format, command, auth method, or TLS signer is
+missing.
+
+## Install A Plugin
 
 ```bash
-restish plugin remove restish-my-plugin
+restish plugin install ./restish-csv
 ```
 
-## Debug a Plugin
+The plugin must be executable and compatible with the v2 plugin protocol.
 
-When a plugin is discovered but not behaving correctly:
+## Remove A Plugin
 
 ```bash
-restish plugin debug restish-my-plugin
+restish plugin remove restish-csv
 ```
 
-That prints decoded plugin traffic and is the fastest way to inspect manifest
-or protocol issues.
+## Verify Behavior
 
-## What Appears After Install
+Formatter example:
 
-The user-facing result depends on the plugin type:
+```bash
+restish https://api.rest.sh/images -o csv
+```
 
-- formatter hooks add new names to `-o <format>`
-- command plugins add new top-level commands such as `restish bulk`
-- TLS signer plugins become available to `--rsh-tls-signer`
+Command plugin example:
 
-## Examples
+```bash
+restish bulk --help
+restish mcp --help
+```
 
-- `restish bulk ...`
-- `restish mcp ...`
-- `restish https://api.rest.sh/images -o csv`
+## Debug A Plugin
 
+```bash
+restish plugin debug ./restish-csv
+```
+
+Debug mode prints decoded protocol messages to stderr. Use it when a plugin is
+discovered but does not behave as expected.
 
 ## Related Pages
 
-- [Plugins Reference](/docs/reference/plugins/)
-- [Plugin Quickstart](../quickstart/)
-- [Bulk Management](/docs/guides/bulk-management/)
-- [MCP](/docs/guides/mcp/)
+- [Plugin Command](/docs/reference/plugin-command/)
+- [Example Plugins](../example-plugins/)
+- [Troubleshooting](/docs/guides/troubleshooting/)

@@ -1,21 +1,22 @@
 ---
 title: Convert Array Output to CSV
 linkTitle: Convert to CSV
-weight: 75
-description: Use the csv formatter plugin when you want array-shaped results as CSV.
+weight: 82
+description: Use the csv formatter plugin for array-shaped responses.
 ---
 
-If the `restish-csv` formatter plugin is installed, array-shaped results can be
-rendered as CSV:
+Verify the formatter plugin is installed:
+
+```bash
+restish plugin list
+```
+
+Render images as CSV:
 
 ```bash
 restish https://api.rest.sh/images -o csv
 ```
 
-This is most useful for arrays of similarly shaped objects.
+This works best for arrays of similarly shaped objects.
 
-Confirm plugin discovery first if needed:
-
-```bash
-restish plugin list
-```
+Related: [Install and Use Plugins](/docs/plugins/install-and-use/), [Output Formats](/docs/reference/output-formats/).

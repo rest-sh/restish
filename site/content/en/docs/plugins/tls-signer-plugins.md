@@ -1,53 +1,36 @@
 ---
 title: TLS Signer Plugins
 linkTitle: TLS Signer Plugins
-weight: 40
-description: Use external signing plugins for hardware-backed or non-exportable client keys.
+weight: 50
+description: Use or author plugins that sign mTLS handshakes without exposing private keys to Restish.
 ---
 
-TLS signer plugins support advanced mutual TLS workflows where the private key
-must remain outside the Restish process.
+TLS signer plugins are for mTLS environments where the client private key lives
+in hardware, a secure service, or another process.
 
-## When You Need One
+## Operator Example
 
-Use a TLS signer plugin when:
+```bash
+restish \
+  --rsh-tls-signer pkcs11 \
+  --rsh-tls-signer-param module=/usr/local/lib/opensc-pkcs11.so \
+  https://mtls.internal.test/items
+```
 
-- the private key lives in a hardware token
-- the key is managed by PKCS#11
-- the signing operation must happen in another process
+Prerequisites: the signer plugin is installed, the client certificate is
+available, and the target API requires mTLS.
 
-If you have an ordinary PEM certificate and key file, use the built-in
-`--rsh-client-cert` and `--rsh-client-key` flags instead.
-
-## How They Fit Into Restish
-
-TLS signer selection is part of the same request configuration model as the
-rest of Restish:
-
-- set `tls_signer` and `tls_signer_params` in a profile
-- or use `--rsh-tls-signer` and `--rsh-tls-signer-param` for one request
-
-That means you do not need a separate mTLS config system just because the key
-material is external.
-
-## PKCS#11 Example
-
-The first-party `restish-pkcs11` plugin is the main example of this model.
-
-Profile-based configuration:
+## Profile Shape
 
 ```jsonc
 {
   "apis": {
-    "corp": {
-      "base_url": "https://api.example.com",
+    "secure": {
+      "base_url": "https://mtls.internal.test",
       "profiles": {
         "default": {
-          "tls_signer": "restish-pkcs11",
-          "tls_signer_params": {
-            "module": "/usr/local/lib/opensc-pkcs11.so",
-            "token_label": "YubiKey"
-          }
+          "tls_signer": "pkcs11",
+          "tls_signer_params": ["module=/usr/local/lib/opensc-pkcs11.so"]
         }
       }
     }
@@ -55,35 +38,16 @@ Profile-based configuration:
 }
 ```
 
-One-off command-line override:
-
-```bash
-restish \
-  --rsh-tls-signer restish-pkcs11 \
-  --rsh-tls-signer-param module=/usr/local/lib/opensc-pkcs11.so \
-  --rsh-tls-signer-param token_label=YubiKey \
-  https://api.example.com/items
-```
-
 ## Troubleshooting
-
-If a TLS signer setup fails, check these first:
-
-- the plugin binary is installed and discoverable
-- the signer name matches the plugin name Restish sees
-- the module path is correct
-- the token label or selector matches the real hardware token
-- the certificate actually chains to what the server expects
-
-Useful companion commands:
 
 ```bash
 restish plugin list
-restish cert https://api.example.com
-restish -vv https://api.example.com/items
+restish cert https://mtls.internal.test
+restish -vv https://mtls.internal.test/items
 ```
 
-Primary sources:
+## Related Pages
 
-- [`docs/design/021-tls-signer-plugins.md`](/docs/contributing/design-records/)
-- [`docs/design/022-restish-pkcs11-plugin.md`](/docs/contributing/design-records/)
+- [TLS](/docs/guides/tls/)
+- [Use mTLS With a TLS Signer](/docs/recipes/use-mtls-with-a-tls-signer/)
+- [Plugin Manifest](/docs/reference/plugin-manifest/)

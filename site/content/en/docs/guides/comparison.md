@@ -1,90 +1,59 @@
 ---
 title: Restish vs curl and HTTPie
-linkTitle: Comparison
-weight: 12
-description: Understand where Restish fits compared with lower-level HTTP CLIs and why API-aware commands change the daily workflow.
+linkTitle: Restish vs curl and HTTPie
+weight: 5
+description: Decide when Restish, curl, or HTTPie is the best tool for an API job.
 ---
 
-Restish is not trying to replace every use of `curl`. It is trying to make the
-common API workflow faster and more repeatable once you move past one-off raw
-HTTP calls.
+Restish is not a replacement for every HTTP tool. It is strongest when repeated
+API work benefits from generated commands, profiles, auth, output shaping,
+pagination, and plugins.
 
-## Where `curl` Still Wins
+## Use curl When
 
-Use `curl` when you want:
-
-- the lowest-level wire control
-- a tool that already exists on nearly every machine
-- ad hoc shell one-liners with no API-aware setup at all
-
-`curl` is still the baseline tool for raw HTTP debugging.
-
-## Where HTTPie Still Wins
-
-Use HTTPie when you want:
-
-- a friendly one-off HTTP client
-- a command style centered on immediate request construction
-- a lighter mental model than API registration and generated commands
-
-HTTPie is a strong fit when you care about human-friendly ad hoc requests but
-not about turning an API description into a daily command surface.
-
-## Where Restish Is Better
-
-Restish becomes more valuable when one or more of these are true:
-
-- you talk to the same API repeatedly
-- the API has a usable OpenAPI description
-- you want generated command names instead of manually rebuilding URLs
-- you want profiles for environment, auth, and headers
-- you want filtering, pagination, links, retries, caching, and output formats
-  to feel like one system instead of separate tools
-
-The main difference is that Restish has two modes of value:
-
-1. a better direct HTTP client
-2. a generated CLI for named APIs
-
-That second mode is the differentiator.
-
-## The Before And After
-
-With a lower-level HTTP client, repeated use often looks like:
+- you need the lowest-level HTTP behavior possible
+- a tiny portable script must run on machines without Restish
+- you are reproducing vendor support instructions exactly
 
 ```bash
-curl -H 'Authorization: Bearer ...' \
-  'https://api.rest.sh/images?per_page=100'
+curl -H 'Accept: application/json' 'https://api.rest.sh/images?format=jpeg'
 ```
 
-With Restish before API setup:
+## Use HTTPie When
+
+- you want a friendly generic HTTP client
+- you do not need generated API commands
+- you like HTTPie's request syntax for ad hoc work
 
 ```bash
-restish -H 'Authorization: Bearer ...' \
-  -q per_page=100 \
-  https://api.rest.sh/images
+http https://api.rest.sh/images Accept:application/json
 ```
 
-With Restish after API setup and profiles:
+## Use Restish When
+
+- the API has OpenAPI and you want generated commands
+- you repeat profiles, auth, headers, TLS, filters, or pagination
+- you need normalized links and body filtering
+- plugins should extend the workflow
 
 ```bash
-restish api configure example https://api.rest.sh
-restish example list-images
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish example list-images -f body.self -r
 ```
 
-That is the product shift Restish is designed around: repeated API work should
-look like using the API's CLI, not like rebuilding the same request shape from
-scratch.
+## Side-By-Side
 
-## Quick Decision Rule
+```bash
+curl -H 'Accept: application/json' 'https://api.rest.sh/images?format=jpeg'
+restish -H 'Accept: application/json' 'https://api.rest.sh/images?format=jpeg'
+restish example list-images -o table --rsh-columns name,format,self
+```
 
-- Use `curl` for raw wire-level work.
-- Use HTTPie for friendly ad hoc HTTP.
-- Use Restish when API work is becoming repeatable enough to deserve names,
-  profiles, generated commands, and richer response handling.
+The first two are generic HTTP. The last one uses the API description to expose
+a named command.
 
 ## Related Pages
 
 - [Quickstart](/docs/getting-started/quickstart/)
-- [Connect to an API](/docs/getting-started/connect-to-an-api/)
-- [Requests](/docs/guides/requests/)
+- [Requests](../requests/)
+- [API Commands](/docs/concepts/api-commands/)

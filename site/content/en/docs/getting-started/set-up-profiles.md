@@ -1,45 +1,36 @@
 ---
 title: Set Up Profiles
 linkTitle: Set Up Profiles
-weight: 50
-description: Set up profiles so Restish can switch between environments, auth contexts, and defaults cleanly.
+weight: 45
+description: Use profiles to switch environments, auth contexts, headers, query defaults, and TLS settings.
 ---
 
-Once you have an API registered, profiles are the feature that makes Restish
-feel practical every day.
+Profiles are named request defaults under an API. Use them when a command should
+stay readable even though the target environment, auth, headers, query params,
+or TLS settings change.
 
-Use profiles when you want one API definition but different:
-
-- environments such as `staging` and `production`
-- auth contexts such as personal and CI credentials
-- default headers or query params
-- TLS signer settings
-
-## Why Do This Early
-
-Without profiles, repeated API work tends to look like this:
+## Start With One API
 
 ```bash
-restish https://api.rest.sh/images -H 'Accept: application/json'
-restish https://api.rest.sh/images -H 'X-Debug: true'
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api edit
 ```
 
-With profiles, the repeated context moves into config and the command becomes
-about the request itself instead of the environment setup.
-
-## Example
+Add profiles under the API:
 
 ```jsonc
 {
   "apis": {
-    "billing": {
+    "example": {
       "base_url": "https://api.rest.sh",
       "profiles": {
-        "default": {
+        "default": {},
+        "json": {
           "headers": ["Accept: application/json"]
         },
         "debug": {
-          "headers": ["Accept: application/json", "X-Debug: true"]
+          "headers": ["Accept: application/json", "X-Debug: true"],
+          "query": ["trace=docs"]
         }
       }
     }
@@ -47,68 +38,53 @@ about the request itself instead of the environment setup.
 }
 ```
 
-Then choose a profile with:
+Use a profile with `-p`:
 
 ```bash
-restish -p debug get billing/images
-restish -p default get billing/images
+restish -p json example list-images
+restish -p debug https://api.rest.sh/anything/profile-demo
 ```
-
-Example effect:
-
-- `default` sends `Accept: application/json`
-- `debug` sends `Accept: application/json` and `X-Debug: true`
 
 ## What Profiles Can Hold
 
-Profiles live under one API and can include:
+Profiles can provide:
 
-- `base_url`
-- `headers`
-- `query`
-- `auth`
-- `tls_signer`
-- `tls_signer_params`
+- `base_url` overrides for environments
+- default `headers`
+- default `query` parameters
+- `auth` settings
+- TLS settings such as client certs, custom CA, or TLS signer plugin
+- operation-base and server-variable overrides where configured
 
-That makes them the right place for environment-specific defaults.
+Command-line flags still win for the current invocation. Profiles are defaults,
+not a prison.
 
-## A Practical Workflow
+## A Practical Pattern
 
-1. register the API with `restish api configure <name> <url>`
-2. open the config with `restish api edit`
-3. add a `profiles` map under that API
-4. run requests with `-p <profile>`
+Use profiles for stable contexts:
 
-If you prefer to keep one profile active for a while, set:
+- `default` for the environment most people use
+- `staging` for pre-production
+- `prod-readonly` for production commands with safer auth
+- `debug` for extra headers or query params used during investigation
 
-```bash
-export RSH_PROFILE=debug
-```
-
-## Keep The Command Line In Charge
-
-Profiles are defaults, not hard locks. Command-line flags still win for one
-invocation.
-
-That means you can keep a stable profile and still override a detail when you
-need to:
+Then keep commands small:
 
 ```bash
-restish -p debug get billing/images -q format=jpeg
+restish -p staging myapi list-users
+restish -p prod-readonly myapi get-user 123
 ```
 
-## Good First Profiles To Create
+## Secrets
 
-- `default`
-- `debug`
-- `ci`
+Profiles can contain secrets, especially for basic auth, API keys, and OAuth
+client credentials. Keep config files private and prefer environment-variable
+references or external tools when your team does not want secrets in
+`restish.json`.
 
-That small set usually covers local use, pre-production testing, and
-automation.
+## Related Pages
 
-## What To Read Next
-
-- [Your First API Config](../your-first-config/)
-- [Profiles Concept Guide](/docs/concepts/profiles/)
-- [Authentication Guide](/docs/guides/authentication/)
-- [Use Multiple Profiles Recipe](/docs/recipes/use-multiple-profiles/)
+- [Profiles Concept](/docs/concepts/profiles/)
+- [Profiles Reference](/docs/reference/profiles/)
+- [Config Reference](/docs/reference/config/)
+- [Authentication](/docs/guides/authentication/)

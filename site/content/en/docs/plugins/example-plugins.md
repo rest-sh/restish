@@ -1,44 +1,32 @@
 ---
 title: Built-In Example Plugins
 linkTitle: Example Plugins
-weight: 50
-description: Reference for the first-party plugin binaries and test fixtures in this repository.
+weight: 20
+description: Map first-party plugin binaries and fixtures to user and author goals.
 ---
 
-This repository includes several plugin implementations that are useful both as
-real features and as reference code for plugin authors.
+The repository includes plugin binaries that are both useful tools and reference
+implementations.
 
-## First-Party Plugin Binaries
+## Operator-Facing Plugins
 
-- `cmd/restish-csv/main.go`: formatter hook plugin that renders array-shaped
-  results as CSV
-- `cmd/restish-mcp/main.go`: command plugin that exposes registered APIs over
-  MCP
-- `cmd/restish-pkcs11/main.go`: TLS signer plugin for PKCS#11-backed client-key
-  signing
-- `cmd/restish-bulk/main.go`: command plugin for Git-like bulk resource
-  management
+| Plugin | Path | Use it for |
+| --- | --- | --- |
+| `restish-csv` | `cmd/restish-csv/main.go` | Render array responses as CSV. |
+| `restish-bulk` | `cmd/restish-bulk/main.go` | Manage API collections as local files. |
+| `restish-mcp` | `cmd/restish-mcp/main.go` | Serve registered APIs as MCP tools. |
+| `restish-pkcs11` | `cmd/restish-pkcs11/main.go` | Sign mTLS handshakes with PKCS#11-backed keys. |
 
-## Small Test Fixtures
+## Author Fixtures
 
-- `internal/cli/testdata/cmdplugin/main.go`: very small command-plugin fixture
-- `internal/cli/testdata/hookplugin/main.go`: small hook-plugin fixture used in
-  tests
-
-## How To Use This Page
-
-If you are writing:
-
-- a formatter plugin, start with `restish-csv`
-- a command plugin, start with `restish-mcp` or the tiny cmdplugin fixture
-- a TLS signer plugin, start with `restish-pkcs11`
-
-These examples are useful because they show the real host/plugin boundary
-rather than only isolated snippets.
+| Fixture | Path | Use it for |
+| --- | --- | --- |
+| Tiny command plugin | `internal/cli/testdata/cmdplugin/main.go` | Minimal command protocol behavior. |
+| Tiny hook plugin | `internal/cli/testdata/hookplugin/main.go` | Minimal hook behavior in tests. |
 
 ## Related Pages
 
-- [Plugin Quickstart](./quickstart/)
-- [Hook Plugins](./hook-plugins/)
-- [Command Plugins](./command-plugins/)
-- [TLS Signer Plugins](./tls-signer-plugins/)
+- [Install and Use Plugins](../install-and-use/)
+- [Hook Plugins](../hook-plugins/)
+- [Command Plugins](../command-plugins/)
+- [TLS Signer Plugins](../tls-signer-plugins/)

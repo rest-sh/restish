@@ -2,63 +2,66 @@
 title: Authentication
 linkTitle: Authentication
 weight: 20
-description: Configure auth in Restish using profiles and API-aware settings.
+description: Configure Restish auth with profiles, generated API setup, safe auth fixtures, OAuth, and external tools.
 ---
 
-Restish v2 supports profile-driven authentication so repeated requests do not
-require copying tokens and headers into every command.
+Auth belongs with the request context. In Restish that usually means a profile,
+so tokens, API keys, and environment-specific credentials do not get copied into
+every command.
 
-Auth is configured under a profile, not directly on every command. That keeps
-auth aligned with the same environment boundaries as base URLs, headers, and
-other request defaults.
+## Safe Auth Fixtures
 
-## Credential Storage Model
+The example API has endpoints that require auth and return only a safe summary.
+They are useful for learning and testing.
 
-Restish may store auth-related secrets on disk:
+### Bearer Token
 
-- profile auth params in `restish.json` (for example passwords or client secrets)
-- OAuth tokens in the CBOR token cache file (default `tokens.cbor` in the config directory)
-- approved `external-tool` command hashes in `external-tool-approvals.json`
+```bash
+restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
+```
 
-Keep your config directory private. Restish writes config files with private
-permissions, warns if the config file becomes group/world-readable, and rejects
-token or external-tool approval cache files with loose permissions.
+Representative output:
 
-## Start With The Principle
+```readable
+authenticated: true
+scheme: "bearer"
+subject: "docs-token"
+```
 
-In Restish, auth is part of request setup, not a separate mode. That means:
+### API Key Header
 
-- you usually configure it once under a profile
-- the same request command can work across environments by switching profiles
-- auth participates in the normal request pipeline instead of living in an ad hoc wrapper script
+```bash
+restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
+```
 
-## Built-In Auth Types
+### API Key Query Param
 
-Restish currently includes built-in support for:
+```bash
+restish 'https://api.rest.sh/auth/api-key-query?api_key=docs-key'
+```
 
-- basic auth
-- OAuth2 client credentials
-- OAuth2 authorization code
-- OAuth2 device code
-- external-tool
+### Basic Auth
 
-If you need something more specialized, the auth hook/plugin model leaves room
-for extension without turning every auth system into a core feature.
+```bash
+restish -H 'Authorization: Basic YWxpY2U6c2VjcmV0' https://api.rest.sh/auth/basic
+```
 
-## Basic Auth Example
+For real APIs, put these values in a profile or use an auth method instead of
+repeating headers in shell history.
 
-```json
+## Configure Auth In A Profile
+
+```jsonc
 {
   "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
+    "example": {
+      "base_url": "https://api.rest.sh",
       "profiles": {
-        "default": {
+        "token": {
           "auth": {
-            "type": "http-basic",
+            "type": "bearer",
             "params": {
-              "username": "alice",
-              "password": "s3cr3t"
+              "token": "env:RESTISH_DOCS_TOKEN"
             }
           }
         }
@@ -68,440 +71,102 @@ for extension without turning every auth system into a core feature.
 }
 ```
 
-With that config, this command:
+Then call the API:
 
 ```bash
-restish myapi/items
+RESTISH_DOCS_TOKEN=docs-token restish -p token example get-echo
 ```
 
-sends an `Authorization: Basic ...` header automatically.
+## Prompt-Driven Setup
 
-That is the simplest useful pattern:
-
-1. register an API
-2. add auth under the profile
-3. use ordinary Restish commands from there on
-
-## API Keys
-
-OpenAPI `apiKey` security schemes are set up as profile headers or query
-parameters. You can let `api configure` prompt for the key, or pre-answer the
-prompt:
+When an OpenAPI spec declares security schemes, `api configure` can prompt for
+values or accept preanswers:
 
 ```bash
-restish api configure myapi api.example.com prompt.api_key: env:MYAPI_TOKEN
+restish api configure example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
 ```
 
-For a header-based API key scheme named `X-API-Key`, Restish writes a persistent
-profile header such as `X-API-Key: env:MYAPI_TOKEN`. For a query API key, it
-writes a persistent profile query parameter instead.
-
-That persistent header/query storage is an implementation detail of the profile
-model. Requests still behave like API-key auth: Restish applies the stored
-profile value during request preparation, and late-resolved values such as
-`env:MYAPI_TOKEN` are read when the request runs.
-
-## Prompting For Secrets
-
-You do not have to store every secret in config.
-
-If a required secret such as a password is omitted:
-
-```json
-{
-  "type": "http-basic",
-  "params": {
-    "username": "alice"
-  }
-}
-```
-
-Restish prompts for it when the request is made.
-
-That gives you a useful middle ground:
-
-- stable profile config in the file
-- sensitive values entered interactively when needed
-
-This is usually better than copying full auth headers into shell history.
-
-You can also point an auth param at a late-resolved source:
-
-```json
-{
-  "type": "oauth-client-credentials",
-  "params": {
-    "client_id": "ci-client",
-    "client_secret": "env:MYAPI_CLIENT_SECRET",
-    "token_url": "https://issuer.example.com/oauth/token"
-  }
-}
-```
-
-Supported prefixes are:
-
-- `env:NAME` reads an environment variable when the request runs
-- `command:...` runs a local command and uses stdout, trimmed of trailing newlines
-
-Resolved values are not written back to config. Command stderr is bounded in
-errors and common secret assignments are redacted.
-
-## Shared Auth Profiles
-
-Use top-level `auth_profiles` when several API registrations should use the
-same auth context:
-
-```json
-{
-  "auth_profiles": {
-    "work": {
-      "type": "oauth-client-credentials",
-      "params": {
-        "client_id": "ci-client",
-        "client_secret": "env:MYAPI_CLIENT_SECRET",
-        "issuer_url": "https://issuer.example.com"
-      }
-    }
-  },
-  "apis": {
-    "orders": {
-      "base_url": "https://orders.example.com",
-      "profiles": {
-        "default": {"auth_ref": "work"}
-      }
-    },
-    "billing": {
-      "base_url": "https://billing.example.com",
-      "profiles": {
-        "default": {"auth_ref": "work"}
-      }
-    }
-  }
-}
-```
-
-`auth_ref` and inline `auth` are mutually exclusive. OAuth tokens for shared
-auth profiles are shared when the token-affecting params match. Clear them with:
-
-```bash
-restish api clear-auth-cache --auth-profile work
-```
-
-## OAuth Notes
-
-For token-based flows, Restish treats auth as request-time behavior:
-
-- the selected profile chooses the auth context
-- tokens are cached per `api:profile`, or per shared `auth_profiles` entry when
-  a profile uses `auth_ref`
-- the handler mutates the outbound request just before send
-
-This keeps auth composable with the rest of the request pipeline instead of
-hiding it inside the transport layer.
-
-For users, the main effect is that OAuth-backed requests still feel like normal
-Restish commands once the profile is configured.
-
-### OAuth Client Credentials Example
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "ci": {
-          "auth": {
-            "type": "oauth-client-credentials",
-            "params": {
-              "client_id": "ci-client",
-              "client_secret": "secret",
-              "auth_method": "client_secret_basic",
-              "token_url": "https://issuer.example.com/oauth/token",
-              "scopes": "items.read items.write",
-              "audience": "https://api.example.com/"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### OAuth Authorization Code Example
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "auth": {
-            "type": "oauth-authorization-code",
-            "params": {
-              "client_id": "desktop-app",
-              "authorize_url": "https://issuer.example.com/authorize",
-              "token_url": "https://issuer.example.com/oauth/token",
-              "scopes": "openid profile items.read",
-              "organization": "acme"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Once configured, both still look like ordinary Restish requests:
-
-```bash
-restish -p ci myapi/items
-restish -p default myapi/items
-```
-
-For authorization-code profiles, register the local redirect URL with your
-provider as `http://localhost:8484/` unless you set a different `redirect_port`.
-Restish includes the trailing slash in the OAuth `redirect_uri`.
-
-### OAuth Auth Method And Extra Endpoint Params
-
-OAuth token requests default to `client_secret_post`. If your IdP requires HTTP
-Basic client authentication instead, set:
-
-```json
-{
-  "type": "oauth-client-credentials",
-  "params": {
-    "client_id": "ci-client",
-    "client_secret": "secret",
-    "auth_method": "client_secret_basic"
-  }
-}
-```
-
-Any additional auth params not consumed directly by Restish are forwarded to
-the OAuth endpoints. This is useful for IdP-specific fields such as:
-
-- `audience`
-- `resource`
-- `organization`
-
-Endpoint parameters such as `authorize_url`, `token_url`, and
-`device_authorization_url` must be absolute URLs. If your provider publishes
-standard discovery metadata, set `issuer_url` and let Restish derive the
-standard endpoint URLs when possible:
-
-```json
-{
-  "type": "oauth-client-credentials",
-  "params": {
-    "client_id": "ci-client",
-    "client_secret": "env:MYAPI_CLIENT_SECRET",
-    "issuer_url": "https://issuer.example.com"
-  }
-}
-```
-
-### OAuth Device Code Example
-
-Use device code when the machine running Restish cannot complete a browser
-callback flow locally.
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "remote": {
-          "auth": {
-            "type": "oauth-device-code",
-            "params": {
-              "client_id": "device-client",
-              "device_authorization_url": "https://issuer.example.com/oauth/device",
-              "token_url": "https://issuer.example.com/oauth/token",
-              "scopes": "openid profile items.read"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-At request time, Restish prints the verification URL and user code, then polls
-the token endpoint until login completes.
-
-### Headless Authorization Code Fallback
-
-If you still prefer authorization code flow on a remote machine, disable
-automatic browser launch and paste the code manually:
-
-```bash
-restish --rsh-no-browser -p default myapi/items
-```
-
-When a TTY is attached, Restish prints the authorization URL and prompts for
-the pasted code instead of trying to open a local browser. During normal browser
-launches, the full authorization URL is only printed when browser launch fails
-or verbose output is enabled.
-
-## External Tool Example
-
-Use `external-tool` when authentication has to be delegated to an existing
-script, signer, or local credential helper.
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "auth": {
-            "type": "external-tool",
-            "params": {
-              "commandline": "./scripts/sign-request.sh",
-              "omitbody": "true"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-At request time, Restish sends the outbound request to the tool as JSON on
-stdin. The tool can return updated headers, an updated URI, or both.
-The first time Restish sees a new `commandline` value, it prompts once and
-stores the approved command hash in the config directory.
-
-If a helper already prints a bearer token, opt into token-output mode:
-
-```json
-{
-  "type": "external-tool",
-  "params": {
-    "commandline": "my-token-helper",
-    "output": "bearer-token"
-  }
-}
-```
-
-In that mode, Restish trims stdout and sends it as
-`Authorization: Bearer <token>`.
-
-This is useful when:
-
-- the auth system already exists as a script or local helper
-- credentials must stay outside the Restish config file
-- you need custom signing logic but do not need a full plugin
-
-The tool receives the full outbound request, including any headers already
-added earlier in request preparation. Treat it as trusted code.
-
-Remote OpenAPI specs cannot install or approve external commands
-automatically. A spec can suggest an auth shape through `x-cli-config`, but the
-local `commandline` value and its first-run approval must come from the user or
-a trusted setup script.
-
-OAuth discovery, authorization, device, and token HTTP requests use the same
-TLS trust flags as ordinary requests, including `--rsh-ca-cert`,
-`--rsh-tls-min-version`, and `--rsh-insecure`.
-
-## A Common Pattern
-
-It is common to keep multiple auth contexts under one API:
-
-```json
-{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "auth": {
-            "type": "oauth-authorization-code"
-          }
-        },
-        "ci": {
-          "auth": {
-            "type": "oauth-client-credentials",
-            "params": {
-              "client_id": "ci-client"
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Then switch with:
-
-```bash
-restish -p default get myapi/items
-restish -p ci get myapi/items
-```
+API keys may be stored as profile headers or query params under the hood, but
+the setup flow should present them as API keys.
 
 ## Inspect The Final Header
 
-If you want to see exactly what `Authorization` header Restish would send, use:
+For configured API auth, inspect the computed `Authorization` value without
+making the full request:
 
 ```bash
-restish auth-header myapi
+restish auth-header example
 ```
 
-That command uses the same auth resolution path as a real request, which makes
-it helpful for debugging config and shell integrations.
-
-It is especially useful when you are trying to answer:
-
-- which profile is active
-- whether Restish is prompting for a missing secret
-- whether an OAuth token is already cached
-
-If you want to force a fresh token acquisition path, clear the cached token:
+Use verbose mode when the question is about the whole request:
 
 ```bash
-restish api clear-auth-cache myapi
-restish api clear-auth-cache --all myapi
+restish -v -p token https://api.rest.sh/auth/bearer
 ```
 
-## Choosing Auth Per Environment
+## OAuth
 
-Because auth lives under profiles, switching environments also switches auth
-cleanly:
+OAuth examples require your provider, redirect settings, client ID, and client
+secret, so the docs use placeholder issuer hosts. Keep those examples out of
+shell history when they contain secrets.
 
-- `default` might use personal credentials
-- `ci` might use client credentials
-- `enterprise` might use a different issuer or host entirely
+Client credentials shape:
 
-Use `--rsh-profile` or `RSH_PROFILE` to choose the active profile.
+```jsonc
+{
+  "auth": {
+    "type": "oauth-client-credentials",
+    "params": {
+      "token_url": "https://issuer.test/oauth/token",
+      "client_id": "env:CLIENT_ID",
+      "client_secret": "env:CLIENT_SECRET",
+      "audience": "https://api.vendor.test/"
+    }
+  }
+}
+```
 
-## When To Reach For Plugins
+Authorization code shape:
 
-If your auth system is not covered by the built-in handlers or `external-tool`,
-use an auth plugin instead of trying to bolt custom header logic onto every
-command.
+```jsonc
+{
+  "auth": {
+    "type": "oauth-authorization-code",
+    "params": {
+      "authorize_url": "https://issuer.test/authorize",
+      "token_url": "https://issuer.test/oauth/token",
+      "client_id": "env:CLIENT_ID",
+      "scopes": ["read:items"]
+    }
+  }
+}
+```
 
-That keeps authentication in the same request-time extension seam as the
-built-in auth types.
+Use `--rsh-no-browser` for headless sessions when the flow supports a manual
+browser step.
 
-Provider-specific OAuth token exchange is a good plugin fit when the standard
-OAuth handlers are too small. The plugin can own the provider-specific exchange
-and return ordinary request updates, while Restish keeps the rest of the
-request pipeline unchanged.
+## External Tool Auth
 
-## Learn More
+Use `external-tool` when another program owns credentials or signing:
 
-- [Design Records](/docs/contributing/design-records/)
-- [Profiles](../concepts/profiles/)
-- [Set Up Profiles](/docs/getting-started/set-up-profiles/)
-- [Plugin Quickstart](/docs/plugins/quickstart/)
+```jsonc
+{
+  "auth": {
+    "type": "external-tool",
+    "params": {
+      "command": ["./scripts/sign-request"]
+    }
+  }
+}
+```
+
+Restish records approved command hashes so a changed executable must be trusted
+again.
+
+## Related Pages
+
+- [Profiles](/docs/reference/profiles/)
+- [Config](/docs/reference/config/)
+- [Inspect the Auth Header](/docs/recipes/inspect-the-auth-header/)
+- [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
+- [Security Design](/docs/contributing/design-records/)

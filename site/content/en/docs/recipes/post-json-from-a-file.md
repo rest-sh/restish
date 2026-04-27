@@ -1,21 +1,26 @@
 ---
 title: Post JSON From a File
 linkTitle: Post JSON From a File
-weight: 25
-description: Send a JSON request body to an API from a file instead of inline shorthand.
+weight: 20
+description: Send a JSON request body from stdin.
 ---
 
-If the body already exists on disk, pipe it to Restish:
-
 ```bash
-cat payload.json | restish post https://api.rest.sh
+cat payload.json | restish post https://api.rest.sh/post
 ```
 
-If you want to keep the command explicit about JSON, set the content type too:
+Example `payload.json`:
 
-```bash
-cat payload.json | restish post -c json https://api.rest.sh
+```json
+{"name":"Alice","enabled":true}
 ```
 
-This is a better fit than shorthand when the body is large or already produced
-by another tool.
+The `/post` fixture echoes the parsed body so you can verify what was sent.
+
+Variant with explicit content type:
+
+```bash
+cat payload.json | restish post -c json https://api.rest.sh/post
+```
+
+Related: [Input and Shorthand](/docs/guides/input/).

@@ -1,24 +1,23 @@
 ---
 title: Use External-Tool Auth
-linkTitle: External Tool Auth
+linkTitle: External-Tool Auth
 weight: 74
-description: Delegate request auth to a local helper script instead of storing secrets directly in Restish config.
+description: Delegate request auth to a local helper executable.
 ---
 
-Example config:
+Config shape:
 
 ```jsonc
 {
   "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
+    "vendor": {
+      "base_url": "https://api.vendor.test",
       "profiles": {
         "default": {
           "auth": {
             "type": "external-tool",
             "params": {
-              "commandline": "./scripts/sign-request.sh",
-              "omitbody": "true"
+              "command": ["./scripts/sign-request"]
             }
           }
         }
@@ -28,39 +27,9 @@ Example config:
 }
 ```
 
-Then make requests normally:
+Restish approves external tools by command hash. If the helper changes, you
+must approve it again.
 
-```bash
-restish myapi/items
-```
+Use this when another program owns credentials, signing, or token refresh.
 
-The default protocol sends request metadata as JSON on stdin and expects JSON
-request updates on stdout:
-
-```json
-{"headers":{"Authorization":["Bearer token-from-helper"]}}
-```
-
-For helpers that only print a token, use bearer-token output mode:
-
-```jsonc
-{
-  "type": "external-tool",
-  "params": {
-    "commandline": "./scripts/token.sh",
-    "output": "bearer-token"
-  }
-}
-```
-
-Restish trims stdout and sends `Authorization: Bearer <token>`.
-
-The first time a configured command runs, Restish asks you to approve it and
-stores the approved command hash next to the config. Tool stderr is still shown
-to you; if the tool fails, Restish includes only a bounded, redacted stderr
-excerpt in the returned error.
-
-Remote OpenAPI specs cannot approve or install these commands for you. Treat
-the `commandline` value like local executable code: configure it from a trusted
-setup script or by editing your own Restish config, then approve it on first
-use.
+Related: [Authentication](/docs/guides/authentication/), [Security Design](/docs/contributing/design-records/).

@@ -1,25 +1,20 @@
 ---
 title: Save a Response Unchanged
-linkTitle: Save a Response Unchanged
+linkTitle: Save Unchanged
 weight: 40
-description: Save the original response body bytes to disk with Restish.
+description: Save original response bytes instead of formatted output.
 ---
 
-Use raw output when you want the original response body bytes on disk.
-
 ```bash
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish https://api.rest.sh/bytes/64 -o raw > sample.bin
 ```
 
-That works because the endpoint returns image bytes and Restish preserves the
-original wire payload in that case.
-
-If you want to make the intent explicit:
+For an image:
 
 ```bash
 restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
 ```
 
-Do not add filters if you need byte-for-byte preservation. Filters operate on
-the normalized decoded response, so the result is no longer the original wire
-payload.
+Use `-o raw` whenever byte fidelity matters.
+
+Related: [Output](/docs/guides/output/).

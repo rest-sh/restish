@@ -1,20 +1,15 @@
 ---
-title: Shell Completion and Setup
+title: Completions
 linkTitle: Completions
-weight: 28
-description: Install Restish shell completion and understand how completion differs from shell setup.
+weight: 35
+description: Generate shell completions and use generated API command completion effectively.
 ---
 
-Restish uses two shell-facing features that solve different problems:
-
-- `setup` protects Restish input from shell globbing
-- `completion` teaches the shell what commands and flags exist
-
-You usually want both.
+Completion helps most after Restish knows about your APIs. It can complete
+built-in commands, global flags, generated API commands, and many generated
+operation parameters.
 
 ## Generate Completion Scripts
-
-Restish exposes Cobra's built-in completion support:
 
 ```bash
 restish completion zsh
@@ -23,55 +18,37 @@ restish completion fish
 restish completion powershell
 ```
 
-## Practical Installation Pattern
+Install the output according to your shell's completion mechanism.
 
-- Zsh: install the generated script in a directory on your `fpath`
-- Bash: source the script from your shell startup files or completion
-  directory
-- Fish: write it into `~/.config/fish/completions/`
-- PowerShell: load it from your PowerShell profile
+## Configure Shell Safety Too
 
-If you installed Restish through Homebrew, make sure your shell is also loading
-Homebrew's completion path.
-
-## Why Completion Matters More After API Setup
-
-Completion is most valuable once you register APIs:
-
-```bash
-restish api configure example https://api.rest.sh
-restish example <TAB>
-```
-
-At that point completion can surface:
-
-- generated operation names
-- generated flags
-- enum-backed values when the spec provides them
-
-## Setup vs Completion
-
-Use `setup` when the shell is rewriting your input:
+Completion does not prevent glob expansion. Run setup for interactive use:
 
 ```bash
 restish setup zsh
 ```
 
-Use `completion` when the shell does not know what commands and flags are
-available:
+## Generated API Completion
 
 ```bash
-restish completion zsh
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish example <TAB>
+restish example get-image <TAB>
 ```
 
-## Recommended Habit
+Good OpenAPI schemas improve completion for enum values, path parameters, and
+flags.
 
-1. run `restish setup <shell>`
-2. install the matching completion script
+## Refresh After Spec Changes
 
-That gives you both safer input handling and better discovery.
+```bash
+restish api sync example
+```
+
+Then start a new shell or refresh completion if your shell caches command trees.
 
 ## Related Pages
 
 - [Shell Setup](/docs/getting-started/shell-setup/)
-- [Connect to an API](/docs/getting-started/connect-to-an-api/)
+- [OpenAPI and CLI Integration](../openapi-cli-integration/)
+- [Setup Command](/docs/reference/setup-command/)

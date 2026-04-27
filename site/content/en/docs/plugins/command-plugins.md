@@ -1,178 +1,57 @@
 ---
 title: Command Plugins
 linkTitle: Command Plugins
-weight: 30
-description: Add new top-level Restish workflows with long-lived command plugins.
+weight: 40
+description: Author top-level Restish workflows that exchange messages with the host.
 ---
 
-Command plugins add top-level commands such as `restish bulk` and keep running
-while they exchange messages with the host.
+Command plugins add root commands such as `bulk` and `mcp`. They can perform
+multi-step workflows while delegating HTTP, config, prompts, and output back to
+Restish.
 
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant R as Restish
-  participant P as Command Plugin
-  U->>R: run plugin command
-  R->>P: init
-  P->>R: http-request / api-spec / progress
-  R->>P: http-response / api-spec-response
-  P->>R: done
-```
+## When To Use One
 
-Choose a command plugin when your feature needs:
+Use a command plugin when a feature needs:
 
 - a top-level command
-- multiple HTTP requests in one workflow
-- progress updates while work is running
-- optional passthrough stdin/stdout for interactive sessions
+- multiple HTTP requests
+- progress messages
+- prompts or confirmations
+- access to registered APIs and profiles
 
-If a single request and a single reply are enough, prefer a
-[hook plugin](../hook-plugins/).
+Use a hook plugin for one request/response/auth/formatting task.
 
-## Startup Flow
+## Delegated HTTP
 
-Command plugins declare the `command` hook in their manifest. At CLI startup
-Restish invokes the plugin with `--rsh-plugin-commands` and reads command
-declarations such as:
+Command plugins should usually ask Restish to make requests:
 
 ```json
 {
-  "commands": [
-    {
-      "name": "bulk",
-      "short": "Client-side bulk resource management",
-      "long": "Manage many API resources as files",
-      "passthrough_stdio": false
-    }
-  ]
+  "type": "http-request",
+  "request": {
+    "method": "GET",
+    "uri": "https://api.rest.sh/items"
+  }
 }
 ```
 
-Each declaration becomes a root command on the host CLI.
+That preserves host profiles, auth, TLS signer behavior, retries, cache,
+pagination, and output normalization.
 
-When the user runs that command, Restish starts the plugin and sends:
+## Lifecycle
 
-```json
-{
-  "type": "init",
-  "command": "bulk",
-  "args": ["init", "https://api.example.com/all-items"]
-}
-```
+1. The plugin declares commands during startup discovery.
+2. Restish starts the plugin when the user runs the contributed command.
+3. The plugin sends requests such as `http-request`, `api-spec`, `prompt`, or `response`.
+4. The plugin sends `done` with an exit code.
 
-## Messages From Plugin To Restish
+## Real Examples
 
-The current command-plugin protocol includes:
-
-- `http-request`: ask Restish to perform an HTTP request
-- `api-spec`: ask Restish to resolve a registered API spec
-- `list-apis` and `list-profiles`: inspect host configuration
-- `config-read`: read effective API/profile/plugin config
-- `prompt` and `confirm`: ask the user for input
-- `response`: ask Restish to format and print a normalized response
-- `stdout-data` and `stderr-data`: write raw terminal output
-- `progress`, `spinner`, `log`, and `warn`: print status messages on stderr
-- `done`: finish with an exit code
-
-## Messages From Restish To Plugin
-
-Restish replies with:
-
-- `http-response`
-- `api-spec-response`
-- `list-apis-response`
-- `list-profiles-response`
-- `config-read-response`
-- `prompt-response`
-- `confirm-response`
-- `stdin-data` and `stdin-close` when passthrough stdio is enabled
-
-## Why Delegated HTTP Matters
-
-Command plugins should usually ask Restish to make HTTP requests instead of
-building a second HTTP client stack themselves.
-
-That keeps plugin workflows aligned with the normal host behavior:
-
-- profile and base URL resolution
-- authentication
-- TLS signer integration
-- retries and caching
-- normalized response handling
-
-That is why user-facing command plugins such as `restish bulk` and
-`restish mcp` can feel like part of the main CLI instead of separate tools with
-their own auth and transport stacks.
-
-## Minimal Go Example
-
-```go
-package main
-
-import (
-	"github.com/rest-sh/restish/v2/plugin"
-)
-
-func main() {
-	plugin.Run(
-		plugin.Manifest{
-			Name:              "hello-command",
-			Version:           "0.1.0",
-			Description:       "Example command plugin",
-			RestishAPIVersion: 2,
-			Hooks:             []string{"command"},
-		},
-		[]plugin.CommandDecl{{
-			Name:  "hello-plugin",
-			Short: "Print a hello message",
-		}},
-		func(command string, args []string, client *plugin.CommandClient) error {
-			_ = client.Progress("running hello-plugin")
-			if err := client.WriteStdout([]byte("hello from command plugin\n")); err != nil {
-				return err
-			}
-			return nil
-		},
-	)
-}
-```
-
-## Real User Examples
-
-Command plugins are not only for authors. The current repository includes
-first-party command plugins that expose actual user workflows:
-
-- `restish bulk ...` for local bulk resource management
-- `restish mcp ...` for serving registered APIs over MCP
-
-Those are good reference points for deciding whether a feature should be a
-command plugin at all.
-
-## Pitfalls
-
-- The host disables its own flag parsing for contributed commands. The plugin
-  is responsible for its own subcommands, flags, and help text.
-- `done` is required. If the plugin exits without it, Restish treats that as a
-  failed command.
-- Use delegated `http-request` whenever you want Restish auth, retries, cache,
-  or normalization behavior.
-- Use raw `stdout-data` and `stderr-data` only when the plugin truly owns the
-  terminal output for that step.
-
-## When Not To Use A Command Plugin
-
-Prefer a hook plugin instead when:
-
-- one request and one reply are enough
-- you only need auth, middleware, loader, or formatter behavior
-- the feature does not need its own top-level command surface
+- `restish-bulk` manages API collections as local files.
+- `restish-mcp` exposes registered API operations as MCP tools.
 
 ## Related Pages
 
-- [Hook Plugins](../hook-plugins/)
-- [Install and Use Plugins](/docs/plugins/install-and-use/)
-- [Plugin Manifest](../reference/plugin-manifest/)
-- [Plugin Message Reference](../reference/plugin-messages/)
-- [Plugin Quickstart](/docs/plugins/quickstart/)
-- [Design Record 020](/docs/contributing/design-records/)
+- [Plugin Messages](/docs/reference/plugin-messages/)
+- [Bulk Management](/docs/guides/bulk-management/)
+- [MCP](/docs/guides/mcp/)

@@ -1,137 +1,91 @@
 ---
 title: Global Flags
 linkTitle: Global Flags
-weight: 15
-description: Reference for the flags shared across most Restish commands.
+weight: 12
+description: Reference for flags shared across most Restish commands.
 ---
 
-Most Restish commands share the same global flags. That is one reason the tool
-feels consistent whether you are making a generic request, calling a generated
-API command, or using a plugin-backed workflow.
-
-Command-line flags override environment variables and config-file defaults.
+Global flags apply across generic requests, generated API commands, utilities,
+and many plugin-delegated requests.
 
 ## Request Construction
 
-- `-H`, `--rsh-header`: add a request header in `Name: Value` format; manually setting `Accept` overrides Restish's generated content-negotiation header
-- `-q`, `--rsh-query`: add a request query parameter in `key=value` format
-- `-c`, `--rsh-content-type`: choose the request body content type
-- `-s`, `--rsh-server`: override the scheme and host for a request; when the override includes a path, that path is prefixed to outgoing request paths
-- `-p`, `--rsh-profile`: choose the active API profile
-- `-t`, `--rsh-timeout`: set the request timeout, for example `30s`
-
-Related env vars:
-
-- `RSH_PROFILE`
-- `RSH_TIMEOUT`
-
-Examples:
-
 ```bash
-restish -H 'Accept: application/json' https://api.rest.sh/
-restish post -c yaml https://api.rest.sh/types string: hello
-restish --rsh-server https://staging.example.com myapi users list
-restish --rsh-server https://staging.example.com/v2 myapi users list
+restish -H 'Accept: application/json' https://api.rest.sh/headers
+restish -q api_key=docs-key https://api.rest.sh/auth/api-key-query
+restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
+restish --rsh-server https://api.rest.sh example list-images
+restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 ```
+
+Flags: `-H/--rsh-header`, `-q/--rsh-query`, `-c/--rsh-content-type`,
+`-s/--rsh-server`, `-t/--rsh-timeout`, `--rsh-max-body-size`,
+`--rsh-ignore-status-code`.
 
 ## Output And Filtering
 
-- `-o`, `--rsh-output-format`: choose a formatter such as `json`, `ndjson`, `yaml`, or `table`
-- `-f`, `--rsh-filter`: filter the normalized response with shorthand or jq
-- `--rsh-filter-lang`: force `shorthand` or `jq`
-- `-r`, `--rsh-raw`: with no filter, write the original response body bytes; with a filter, make scalar output shell-friendly
-- `--rsh-columns`: pick columns for `-o table`
-- `--rsh-sort-by`: sort table rows by a column
-- `--rsh-headers`: shorthand for `-f headers`
-- `-S`, `--rsh-silent`: suppress output entirely
-- `-v`, `--rsh-verbose`: print request and response diagnostics to stderr
+```bash
+restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -o table --rsh-columns name,format,self
+restish https://api.rest.sh/images -o ndjson -f body.self
+restish https://api.rest.sh/images --rsh-sort-by name -o table
+restish https://api.rest.sh/ --rsh-headers
+restish -S https://api.rest.sh/status/204
+```
 
-Default behavior worth remembering:
+Flags: `-f/--rsh-filter`, `--rsh-filter-lang`, `-o/--rsh-output-format`,
+`-r/--rsh-raw`, `--rsh-columns`, `--rsh-sort-by`, `--rsh-headers`,
+`-S/--rsh-silent`.
 
-- TTY structured output defaults to `readable`
-- non-TTY structured output defaults to JSON
-- `--rsh-headers` is shorthand for `-f headers`
-
-Examples:
+## Auth And Profiles
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | .name' -r
-restish https://api.rest.sh/images -o ndjson -f 'body.self'
-restish https://api.rest.sh/images -o table --rsh-columns name,format,self
-restish https://api.rest.sh/images -v
+restish -p json example list-images
+restish --rsh-no-browser api configure example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
+
+Flags: `-p/--rsh-profile`, `--rsh-no-browser`.
+
+## TLS
+
+```bash
+restish --rsh-ca-cert ./corp-ca.pem https://service.internal.test/items
+restish --rsh-client-cert ./client.pem --rsh-client-key ./client-key.pem https://mtls.internal.test/items
+restish --rsh-insecure https://service.internal.test/items
+restish --rsh-tls-min-version TLS1.3 https://api.rest.sh
+```
+
+Flags: `--rsh-ca-cert`, `--rsh-client-cert`, `--rsh-client-key`,
+`--rsh-insecure`, `--rsh-tls-min-version`, `--rsh-tls-signer`,
+`--rsh-tls-signer-param`.
 
 ## Pagination And Streaming
 
-- `--rsh-no-paginate`: disable automatic pagination
-- `--rsh-max-pages`: cap the number of pages fetched
-- `--rsh-max-items`: cap the number of collected items
-- `--rsh-collect`: collect all pages before filtering and formatting
-- `--rsh-max-events`: cap SSE events or NDJSON lines processed
-
-These matter most for collection endpoints, SSE streams, and NDJSON streams.
-
-Examples:
-
 ```bash
+restish https://api.rest.sh/images --rsh-no-paginate
 restish https://api.rest.sh/images --rsh-max-pages 3
+restish https://api.rest.sh/images --rsh-max-items 100
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
-restish https://api.rest.sh/images -o ndjson --rsh-max-items 100
-restish https://your-api.example.com/events --rsh-max-events 10 -o ndjson
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 
-## Resilience And Status Handling
-
-- `--rsh-retry`: set retry count, `0` to disable; when omitted Restish retries twice
-- `--rsh-no-cache`: bypass cache reads and writes
-- `--rsh-ignore-status-code`: always exit `0` regardless of HTTP status
-- `--rsh-max-body-size`: cap response body size in MiB
-- `--rsh-no-browser`: disable automatic browser launch for interactive auth flows
-
-Related env vars:
-
-- `RSH_RETRY`
-- `RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE`: plugin shutdown grace period, such as `250ms` or `2s`
-
-Examples:
+## Cache And Retry
 
 ```bash
-restish https://api.rest.sh/images --rsh-retry 5
-restish https://api.rest.sh/images --rsh-no-cache
-restish https://api.rest.sh/missing --rsh-ignore-status-code
+restish 'https://api.rest.sh/flaky?failures=1&key=flags' --rsh-retry 2
+restish https://api.rest.sh/cache --rsh-no-cache
 ```
 
-## TLS And mTLS
-
-- `--rsh-insecure`: disable certificate verification
-- `--rsh-ca-cert`: trust an additional PEM CA bundle
-- `--rsh-client-cert`: path to a PEM client certificate
-- `--rsh-client-key`: path to a PEM private key
-- `--rsh-tls-min-version`: require `TLS1.2` or `TLS1.3`
-- `--rsh-tls-signer`: choose a TLS signer plugin
-- `--rsh-tls-signer-param`: pass plugin-specific `key=value` parameters
-
-Example:
+## General
 
 ```bash
-restish \
-  --rsh-ca-cert ./corp-ca.pem \
-  --rsh-client-cert ./client.pem \
-  --rsh-client-key ./client.key \
-  https://internal.example.com/items
+restish -v https://api.rest.sh/headers
+restish -vv https://api.rest.sh/headers
+restish --rsh-config ./restish.json api list
 ```
 
-## Default Behavior Worth Remembering
+## Related Pages
 
-- bare URLs are treated as `GET`
-- TTY output defaults to `readable`
-- non-TTY structured output defaults to JSON
-- `2xx` exits with `0`, `3xx` with `3`, `4xx` with `4`, and `5xx` with `5`
-
-See also:
-
-- [Commands](../commands/)
-- [Environment Variables](../environment-variables/)
-- [Output Defaults](../output-defaults/)
-- [Output Formats](../output-formats/)
-- [Command Behavior Guide](/docs/guides/command-behavior/)
+- [Requests](/docs/guides/requests/)
+- [Output](/docs/guides/output/)
+- [Config](../config/)

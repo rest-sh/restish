@@ -1,20 +1,19 @@
 ---
 title: Re-sync a Changed API Spec
 linkTitle: Re-sync Spec
-weight: 73
-description: Force Restish to refresh the cached API description when the upstream spec has changed.
+weight: 80
+description: Refresh cached OpenAPI commands after the server spec changes.
 ---
 
-If the API description changed and your generated commands are stale:
-
 ```bash
-restish api sync myapi
+restish api sync example
+restish api show example
+restish example --help
 ```
 
-Follow with:
+Use this after new operations, renamed operation IDs, changed tags, or updated
+Restish `x-cli-*` extensions are published.
 
-```bash
-restish myapi --help
-```
+If commands still do not appear, confirm `spec_url` and inspect the API setup.
 
-to confirm that the generated command surface reflects the new spec.
+Related: [API Setup and Discovery](/docs/guides/api-setup-and-discovery/), [API Management](/docs/reference/api-management/).

@@ -1,101 +1,40 @@
 ---
 title: Plugins
 linkTitle: Plugins
-weight: 40
-description: Understand the three plugin types in Restish and when to use each one.
+weight: 50
+description: Understand how plugins extend Restish without replacing the core request model.
 ---
 
-Restish v2 supports three plugin shapes:
+Plugins are extension points around the Restish runtime. They can add auth,
+request and response middleware, spec loaders, formatters, top-level commands,
+and TLS signing.
 
-- hook plugins for request-time extensions
-- command plugins for long-lived workflows
-- TLS signer plugins for external client-key signing
+## Operator vs Author
 
-Plugins are a major part of the v2 story, so this docs site gives them a
-dedicated top-level section instead of hiding them inside contributor material.
+Operators install, configure, run, verify, and debug plugins. They should start
+with [Install and Use Plugins](/docs/plugins/install-and-use/).
 
-## How Plugins Are Discovered
+Authors implement plugin protocols and should start with [Plugin Quickstart](/docs/plugins/quickstart/).
 
-Restish discovers plugins as executables named `restish-<name>`.
+Keeping these paths separate matters: a user should not need protocol internals
+to use `restish-csv`, `restish-bulk`, `restish-mcp`, or `restish-pkcs11`.
 
-Discovery only checks the configured plugin directory, usually
-`~/.config/restish/plugins/`. Binaries on `PATH` are ignored. Install plugins
-with `restish plugin install` or copy them into that directory so plugin
-execution has one explicit, operator-controlled trust boundary.
+## Plugin Types
 
-## Hook Plugins
+- Hook plugins are short-lived integrations for auth, middleware, loaders, and formatters.
+- Command plugins add top-level workflows such as `restish bulk` and `restish mcp`.
+- TLS signer plugins keep private keys outside the Restish process for mTLS.
 
-Hook plugins are the smallest integration point. They are short-lived and best
-for focused request-time behavior such as:
+## Design Principle
 
-- auth
-- request middleware
-- response middleware
-- custom spec loaders
-- custom output formatters
+Plugins should delegate HTTP, auth, TLS, retries, cache, and output back to
+Restish whenever they want normal user behavior. That keeps plugin workflows
+from becoming separate tools with surprising config and security rules.
 
-Choose a hook plugin when one request in and one reply out is the right model.
+## Related Pages
 
-## Command Plugins
-
-Command plugins add longer-lived top-level commands such as `restish mcp ...`.
-
-They are a better fit when the plugin needs:
-
-- multiple round trips
-- delegated HTTP calls back through Restish
-- progress or terminal interactions
-- a richer workflow than a single request-time hook
-
-## TLS Signer Plugins
-
-TLS signer plugins are the specialized path for mutual TLS when the private key
-must stay outside the Restish process.
-
-This is the plugin type to choose for HSMs, hardware-backed keys, or external
-signing systems.
-
-## Why There Are Multiple Plugin Types
-
-The split is intentional. Each plugin type has different lifecycle and trust
-requirements:
-
-- hook plugins stay simple
-- command plugins support conversations
-- TLS signer plugins isolate private-key operations
-
-That separation keeps each protocol clearer than a single all-purpose plugin
-model would be.
-
-## User-Facing Plugin Commands
-
-Restish exposes a few plugin management commands directly:
-
-```bash
-restish plugin list
-restish plugin install ./restish-myplugin
-restish plugin remove restish-myplugin
-restish plugin debug myplugin
-```
-
-Use `plugin debug` when you need to inspect a plugin's CBOR traffic and runtime
-behavior.
-
-## Config And Trust Boundaries
-
-Plugins are additive to the main CLI model, not replacements for it. Restish
-still owns:
-
-- the main request pipeline
-- config loading
-- profile behavior
-- output selection
-
-Plugins extend specific seams where out-of-process behavior is the better fit.
-
-## Related Guides
-
-- [Plugin Quickstart](../plugins/quickstart/)
-- [Hook Plugins](../plugins/hook-plugins/)
-- [Command Plugins](../plugins/command-plugins/)
-- [TLS Signer Plugins](../plugins/tls-signer-plugins/)
+- [Plugins](/docs/plugins/)
+- [Hook Plugins](/docs/plugins/hook-plugins/)
+- [Command Plugins](/docs/plugins/command-plugins/)
+- [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/)
+- [Plugin Reference](/docs/reference/plugins/)

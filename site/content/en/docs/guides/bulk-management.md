@@ -1,163 +1,76 @@
 ---
 title: Bulk Management
 linkTitle: Bulk Management
-weight: 85
-description: Check out API resources to disk, review local and remote changes, and push updates in bulk.
+weight: 100
+description: Manage API collections as local files with the restish-bulk command plugin.
 ---
 
-`restish bulk` gives you a Git-like workflow for APIs that expose versioned
-resources.
+`restish bulk` is a command-plugin workflow for checking out many API resources
+to disk, editing them locally, and pushing changes back through Restish.
 
-It is best for collections where you want to:
+## Prerequisites
 
-- pull many resources to disk
-- review and edit them locally
-- compare local and remote changes
-- push updates back in batches
+- The `restish-bulk` plugin binary is installed and discoverable.
+- The target API exposes collection and item URLs.
+- You understand the API's update semantics before pushing changes.
 
-## When To Use It
-
-Bulk mode fits APIs that look roughly like this:
-
-```text
-GET    /books           -> list items with a URL and version
-GET    /books/{id}      -> fetch one item
-PUT    /books/{id}      -> create or replace one item
-DELETE /books/{id}      -> delete one item
-```
-
-The easiest path is when the list response already exposes a resource URL and a
-version field such as `url` and `etag`.
-
-## First Checkout
-
-The docs example API includes a books collection designed for this workflow.
+Verify discovery:
 
 ```bash
-mkdir books
-cd books
+restish plugin list
+restish bulk --help
+```
+
+## Initialize A Checkout
+
+The example API has a books collection used for bulk examples:
+
+```bash
 restish bulk init https://api.rest.sh/books
 ```
 
-That creates a working checkout in the current directory and stores metadata
-under `.rshbulk/`.
+The plugin fetches the collection through Restish, writes resources to disk, and
+keeps metadata needed for later status, pull, reset, and push operations.
 
-## See What Was Checked Out
-
-List all tracked files:
-
-```bash
-restish bulk list
-```
-
-Filter the list with a match expression:
-
-```bash
-restish bulk list --match 'rating_average >= 4.8'
-restish bulk list --match 'author.lower contains brian'
-```
-
-You can also project each matched file with a shorthand filter:
-
-```bash
-restish bulk list \
-  --match 'rating_average > 4.7' \
-  -f 'recent_ratings[0].rating'
-```
-
-## Review Local And Remote Changes
-
-Check the current status:
+## Daily Workflow
 
 ```bash
 restish bulk status
-```
-
-This compares:
-
-- local edits in your checkout
-- remote changes since the last sync
-
-See diffs for local changes:
-
-```bash
-restish bulk diff
-restish bulk diff the-book.json
-```
-
-See diffs for remote updates before pulling them:
-
-```bash
-restish bulk diff --remote
-```
-
-## Edit, Reset, Pull, Push
-
-A typical flow looks like:
-
-```bash
-# edit or add files in the checkout
-restish bulk status
-restish bulk diff
+restish bulk pull
 restish bulk push
 ```
 
-If you want to undo a local change:
+Use `status` before `push` so you know which local files changed and whether
+remote updates exist.
+
+## Reset Local Changes
 
 ```bash
-restish bulk reset the-book.json
+restish bulk reset
+restish bulk reset path/to/item.json
 ```
 
-If the server changed while you were working:
+Reset discards local changes. Use it intentionally.
+
+## Matching Resources
+
+Bulk operations can select resources with match expressions when the plugin
+supports the workflow:
 
 ```bash
-restish bulk pull
+restish bulk status --match 'rating_average >= 4.8'
 ```
 
-`pull` updates remote state without overwriting local edits. `push` applies your
-local adds, edits, and deletions back to the server.
+## Shape Mismatches
 
-For large checkouts, `init`, `pull`, and `push` fetch or update resources with
-four workers by default. Use `--jobs` to tune concurrency for slower servers or
-larger collections:
-
-```bash
-restish bulk pull --jobs 8
-restish bulk push --jobs 2
-```
-
-## Non-Standard List Responses
-
-If the list response does not already expose the fields Restish expects, shape
-it during `init`.
-
-The plugin recognizes these field names automatically:
-
-- resource URL: `url`, `uri`, `self`, `link`
-- resource version: `version`, `etag`, `last_modified`, `lastModified`,
-  `modified`
-
-If your API uses different names, reshape the response with `-f` and build the
-URL with `--url-template`:
-
-```bash
-restish bulk init https://api.example.com/items \
-  -f 'body.items.{owner, id, version: unique_hash}' \
-  --url-template '/items/{owner}/{id}'
-```
-
-## Important Limits
-
-- New resources are expected to use client-generated identifiers and `PUT`
-  semantics.
-- Bulk mode is best for document-like resources you are comfortable storing on
-  disk.
-- The plugin owns checkout state in the current directory, so it is best used
-  in a dedicated folder per collection.
+If your API uses different collection fields than the plugin expects, reshape
+responses with filters or configure the plugin according to its help output.
+Keep the HTTP work delegated to Restish so profiles, auth, retries, cache, and
+TLS behavior stay consistent.
 
 ## Related Pages
 
-- [Bulk Command Reference](/docs/reference/bulk-command/)
-- [Example API](/docs/reference/example-api/)
+- [Bulk Command](/docs/reference/bulk-command/)
 - [Command Plugins](/docs/plugins/command-plugins/)
-- [Requests](/docs/guides/requests/)
+- [Install and Use Plugins](/docs/plugins/install-and-use/)
+- [Example API](/docs/reference/example-api/)

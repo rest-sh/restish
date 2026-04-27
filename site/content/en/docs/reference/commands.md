@@ -2,117 +2,66 @@
 title: Commands
 linkTitle: Commands
 weight: 10
-description: Reference index for Restish top-level commands, generated API commands, and plugin-backed command surfaces.
+description: Reference index for Restish built-in commands, generic HTTP verbs, generated API commands, and plugin commands.
 ---
 
-Restish has three major command styles:
-
-- generic HTTP commands such as `get`, `post`, `put`, `patch`, and `delete`
-- API-aware commands that appear under a configured API name
-- plugin-backed commands such as `bulk` and `mcp`
-
-## Path
-
-`Documentation -> Reference -> Commands`
-
-## Top-Level Built-In Commands
-
-These commands are part of the main Restish binary:
-
-- `get`, `post`, `put`, `patch`, `delete`: generic HTTP requests
-- `edit`: fetch-edit-update workflow for writable resources
-- `links`: fetch a resource and print normalized hypermedia links
-- `cert`: inspect a server TLS certificate chain
-- `auth-header`: print the resolved `Authorization` header for a configured API
-- `api`: manage API registrations and cached specs
-- `cache`: inspect or clear the HTTP response cache
-- `theme`: install readable-output themes
-- `setup`: configure shell `noglob`-style behavior
-- `plugin`: inspect, install, remove, or debug plugins
-
-Dedicated references:
-
-- [Generic HTTP Commands](../reference/http-commands/)
-- [Edit Command](../reference/edit-command/)
-- [Links Command](../reference/links-command/)
-- [Cache Commands](../reference/cache-command/)
-- [Cert Command](../reference/cert-command/)
-- [Auth Header Command](../reference/auth-header-command/)
-- [Setup Command](../reference/setup-command/)
-- [Plugin Commands](../reference/plugin-command/)
+Restish commands fall into a few groups.
 
 ## Generic HTTP Commands
 
-Use these when you want to make a direct request quickly:
-
 ```bash
 restish https://api.rest.sh/
-restish post https://api.rest.sh name: daniel active: true
+restish get https://api.rest.sh/get
+restish post https://api.rest.sh/post name: Alice
+restish put https://api.rest.sh/put name: Alice
+restish patch https://api.rest.sh/patch enabled: false
+restish delete https://api.rest.sh/delete --rsh-ignore-status-code
+restish head https://api.rest.sh/head
+restish options https://api.rest.sh/options
 ```
 
-These commands work without any API registration step.
+A bare URL is a generic GET.
 
-## API Management Commands
+## Configuration And Setup
 
-Use `api` commands to register, inspect, and manage APIs described by OpenAPI
-or other supported loaders.
+- `api`: manage registered APIs and specs
+- `cache`: inspect and clear HTTP response cache
+- `setup`: write shell wrappers for safer interactive use
+- `theme`: manage readable-output highlighting theme
 
-Common workflow:
+## Utilities
 
-```bash
-restish api configure example https://api.rest.sh
-restish api list
-restish example --help
-```
-
-After configuration, Restish generates subcommands under the API name.
+- `auth-header`: print the Authorization header for a configured API
+- `cert`: inspect server TLS certificate chains
+- `edit`: fetch, edit, and update a resource
+- `links`: print normalized hypermedia links
+- `completion`: generate shell completion scripts
 
 ## Generated API Commands
 
-After an API is configured, its short name becomes a top-level command group:
+After configuration, an API name becomes a command group:
 
 ```bash
-restish api configure example https://api.rest.sh
+restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 restish example list-images
+restish example get-image jpeg
 ```
-
-Generated commands are built from the cached API spec at startup, which keeps
-help and completion available without a live network lookup every time.
 
 ## Plugin Commands
 
-Plugins can contribute new top-level command surfaces. For example, the MCP
-plugin adds `restish mcp ...`, and the bulk plugin adds `restish bulk ...`.
+Installed command plugins can add root commands such as `bulk` and `mcp`.
+Manage plugin installation and discovery with:
 
-See the [plugin quickstart](/docs/plugins/quickstart/) and
-[plugin reference](/docs/reference/plugins/) for the extension model.
+```bash
+restish plugin list
+restish plugin install ./restish-csv
+restish plugin debug ./restish-csv
+```
 
-## High-Value Commands To Learn Early
+## Related Pages
 
-- `restish https://api.rest.sh/`
-- `restish api configure example https://api.rest.sh`
-- `restish example --help`
-- `restish auth-header example`
-- `restish cache info`
-- `restish links https://api.rest.sh/images`
-- `restish edit https://api.rest.sh/types`
-
-## Common Global Behavior
-
-Most commands participate in the same shared runtime:
-
-- profiles can inject base URLs, auth settings, TLS options, and defaults
-- output can be reformatted with `-o`
-- filters can project or transform structured responses
-- retries, caching, and pagination apply where relevant
-- plugins can intercept requests, responses, auth, loading, and formatting
-
-## Finding Detailed Help
-
-- Run `restish --help` for top-level command discovery.
-- Run `restish <command> --help` for command-specific flags and examples.
-- Run `restish <api-name> --help` after configuring an API to discover
-  generated operations.
-- Use the [guides](/docs/guides/) for workflows and the
-  [reference section](/docs/reference/) for factual details.
+- [HTTP Commands](../http-commands/)
+- [API Management](../api-management/)
+- [Global Flags](../global-flags/)
+- [Plugins](../plugins/)

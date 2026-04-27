@@ -1,20 +1,19 @@
 ---
 title: Stream Events and Select Fields
-linkTitle: Stream Events and Select Fields
+linkTitle: Stream Fields
 weight: 60
-description: Stream SSE or NDJSON responses and extract just the fields you care about.
+description: Read a bounded stream and print selected event fields.
 ---
 
-For SSE or NDJSON endpoints, stream the response and filter each event:
-
 ```bash
-restish https://api.example.com/events -f '.body.type' -r
-restish https://api.example.com/events -o ndjson -f '.body.user.id'
-restish https://api.example.com/logs -f '.body.user.id' -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
 ```
 
-Use `--rsh-max-events` when you want only the first few items:
+Use NDJSON output for structured event records:
 
 ```bash
-restish https://api.example.com/events --rsh-max-events 10 -f '.body.message' -r
+restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
+
+Related: [Streaming](/docs/guides/streaming/).

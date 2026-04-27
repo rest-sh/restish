@@ -1,54 +1,37 @@
 ---
 title: Plugins
 linkTitle: Plugins
-weight: 40
-description: Reference for plugin manifests, hooks, and protocol-level behavior in Restish.
+weight: 60
+description: Reference for plugin discovery, installation, operating model, and plugin categories.
 ---
 
-Use plugins when Restish's built-in request, output, auth, or TLS behavior is
-not enough but you still want to stay inside the Restish workflow model.
+Plugins extend Restish without replacing the host runtime. Operators should
+start with install and verification; authors should read manifest and message
+references.
 
-## Discovery
-
-Restish discovers plugins from:
-
-1. the installed plugin directory, usually `~/.config/restish/plugins/`
-
-Each candidate is invoked with `--rsh-plugin-manifest`, and Restish uses the
-returned manifest to decide how the plugin participates.
-
-## Plugin Categories
-
-### Hook Plugins
-
-Best for one-shot extension points such as auth, middleware, loaders, and
-formatters.
-
-### Command Plugins
-
-Best for longer-lived workflows that deserve their own top-level command, such
-as `restish bulk` or `restish mcp`.
-
-### TLS Signer Plugins
-
-Best for mutual TLS setups where the private key must remain outside the
-Restish process.
-
-## User-Facing Plugin Commands
+## Operator Commands
 
 ```bash
 restish plugin list
-restish plugin install ./restish-my-plugin
-restish plugin remove restish-my-plugin
-restish plugin debug restish-my-plugin
+restish plugin install ./restish-csv
+restish plugin remove restish-csv
+restish plugin debug ./restish-csv
 ```
 
-Those commands let you inspect discovered plugins, copy a local plugin into the
-default plugin directory, remove an installed plugin, or debug CBOR traffic.
+## Plugin Categories
 
-## Where To Go Next
+- Hook plugins: auth, request middleware, response middleware, loaders, formatters.
+- Command plugins: top-level workflows such as `bulk` and `mcp`.
+- TLS signer plugins: external client-certificate signing.
+
+## Discovery Expectations
+
+A plugin must be executable, discoverable, and compatible with the v2 protocol.
+When discovery fails, check file permissions, install location, manifest fields,
+and protocol version.
+
+## Related Pages
 
 - [Install and Use Plugins](/docs/plugins/install-and-use/)
-- [Plugins Section](/docs/plugins/)
-- [Plugin Manifest Reference](../plugin-manifest/)
-- [Plugin Message Reference](../plugin-messages/)
+- [Plugin Manifest](../plugin-manifest/)
+- [Plugin Messages](../plugin-messages/)

@@ -1,107 +1,75 @@
 ---
 title: TLS
 linkTitle: TLS
-weight: 30
-description: Configure custom trust, client certificates, and advanced TLS behavior in Restish.
+weight: 95
+description: Configure custom trust, mTLS certificates, TLS signer plugins, and certificate inspection.
 ---
 
-Restish supports standard HTTPS verification, custom CA trust, mutual TLS, and
-advanced client-certificate workflows.
+Restish verifies TLS certificates by default. Custom CA and mTLS examples
+require your own certificate infrastructure, so this page uses private hostnames
+for those parts.
 
-## Secure By Default
+## Inspect A Server Certificate
 
-Ordinary HTTPS verification is enabled by default. Most users should not need
-to set any TLS flags for public APIs with standard certificates.
+```bash
+restish cert https://api.rest.sh
+restish cert --warn-days 14 https://api.rest.sh
+```
 
 ## Trust A Custom CA
 
-For internal PKI or private certificate authorities, point Restish at a PEM
-bundle:
+Use this when your organization uses a private CA:
 
 ```bash
-restish --rsh-ca-cert ./corp-ca.pem https://internal.example.com/items
+restish --rsh-ca-cert ./corp-ca.pem https://service.internal.test/items
+restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 ```
 
-> **Note:** Custom CA and mTLS examples use placeholder URLs because they
-> require your own certificate infrastructure. Replace `internal.example.com`
-> with your actual API host and provide your own PEM material.
+Prerequisite: `corp-ca.pem` must contain the PEM-encoded CA certificate that
+signed the server certificate.
 
-This keeps verification enabled while extending the trust store for that
-request.
-
-## Mutual TLS With Certificate Files
-
-For file-based mTLS, provide both the client certificate and its private key:
+## Mutual TLS With Files
 
 ```bash
-restish get \
+restish \
   --rsh-client-cert ./client.pem \
-  --rsh-client-key ./client.key \
-  --rsh-ca-cert ./ca.pem \
-  https://internal.example.com/items
+  --rsh-client-key ./client-key.pem \
+  https://mtls.internal.test/items
 ```
 
-These options also fit naturally into profile-based workflows when you need
-repeatable configuration.
-
-Use file-based mTLS when you have ordinary PEM material on disk. Use a TLS
-signer plugin when the private key must stay outside the Restish process.
+Keep private keys out of shared repos and shell history.
 
 ## TLS Signer Plugins
 
-When the private key must stay outside the Restish process, use a TLS signer
-plugin instead of a local key file.
+Use a TLS signer plugin when the private key cannot leave hardware or another
+security boundary:
 
-Relevant flags:
-
-- `--rsh-tls-signer`
-- `--rsh-tls-signer-param key=value`
-
-This is the advanced path for hardware-backed keys, HSMs, or external signing
-systems.
+```bash
+restish \
+  --rsh-tls-signer pkcs11 \
+  --rsh-tls-signer-param module=/usr/local/lib/opensc-pkcs11.so \
+  https://mtls.internal.test/items
+```
 
 ## Minimum TLS Version
 
-If you need to restrict protocol negotiation:
-
 ```bash
-restish --rsh-tls-min-version TLS1.2 https://internal.example.com/items
-restish --rsh-tls-min-version TLS1.3 https://internal.example.com/items
+restish --rsh-tls-min-version TLS1.2 https://api.rest.sh
+restish --rsh-tls-min-version TLS1.3 https://api.rest.sh
 ```
 
 ## Temporary Insecure Mode
 
-`--rsh-insecure` disables certificate verification:
-
 ```bash
-restish --rsh-insecure https://internal.example.com/items
+restish --rsh-insecure https://service.internal.test/items
 ```
 
-Use this only for temporary debugging. Restish warns when verification is
-disabled because the connection is no longer meaningfully authenticated.
+Use this only for short debugging sessions. Prefer `--rsh-ca-cert` for durable
+configuration.
 
-## Inspect Server Certificates
+## Related Pages
 
-Use the `cert` command to inspect the presented certificate chain:
-
-```bash
-restish cert https://internal.example.com
-restish cert --rsh-ca-cert ./corp-ca.pem https://internal.example.com
-restish cert --warn-days 14 https://internal.example.com
-```
-
-This is useful for checking issuers, names, expiry windows, and the exact trust
-context Restish itself would use.
-
-## Common Failure Modes
-
-- server signed by a private CA you have not trusted yet
-- wrong client certificate or private key
-- using file-based mTLS when the key actually lives in hardware
-- minimum TLS version set higher than the server supports
-
-## Related Guides
-
-- [Authentication](../authentication/)
-- [TLS Signer Plugins](../plugins/tls-signer-plugins/)
 - [Cert Command](/docs/reference/cert-command/)
+- [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/)
+- [Use a Custom CA](/docs/recipes/use-a-custom-ca/)
+- [Use mTLS With a TLS Signer](/docs/recipes/use-mtls-with-a-tls-signer/)
