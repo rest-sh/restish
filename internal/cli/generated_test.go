@@ -539,6 +539,15 @@ func TestGeneratedCommandHelpFocusesOperationAndHelpAllShowsGlobals(t *testing.T
 	if !strings.Contains(focused, "--help-all") {
 		t.Fatalf("focused help should point to --help-all, got:\n%s", focused)
 	}
+	if got := strings.Count(focused, "--help-all"); got != 1 {
+		t.Fatalf("focused help should show --help-all once, got %d occurrences:\n%s", got, focused)
+	}
+	generalIdx := strings.Index(focused, "General Options")
+	helpAllIdx := strings.Index(focused, "--help-all")
+	optionsIdx := strings.Index(focused, "\nOptions\n")
+	if generalIdx < 0 || optionsIdx < 0 || helpAllIdx < generalIdx || helpAllIdx > optionsIdx {
+		t.Fatalf("focused help should group --help-all under General Options before operation options:\n%s", focused)
+	}
 
 	c, out = env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-item", "--help-all"}); err != nil {

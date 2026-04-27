@@ -74,6 +74,7 @@ var defaultFlagGroups = map[string]string{
 
 	"rsh-verbose": flagGroupGeneral,
 	"help":        flagGroupGeneral,
+	"help-all":    flagGroupGeneral,
 	"version":     flagGroupGeneral,
 }
 
@@ -118,9 +119,7 @@ Examples:
 {{.Example}}{{end}}{{if .HasAvailableLocalFlags}}{{with rshFlagUsages .LocalFlags}}
 
 Flags:
-{{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasAvailableInheritedFlags}}
-
-Use "{{.CommandPath}} --help-all" to show global Restish flags.{{end}}
+{{. | trimTrailingWhitespaces}}{{end}}{{end}}
 `
 
 func setupGroupedUsage(root *cobra.Command) {
