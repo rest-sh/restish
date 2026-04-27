@@ -32,7 +32,7 @@ Response output goes to stdout. Diagnostics, verbose request/response metadata,
 progress, and warnings go to stderr.
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg 2> headers.txt
+restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> headers.txt
 ```
 
 ## Verbose Mode

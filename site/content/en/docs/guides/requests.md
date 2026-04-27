@@ -64,13 +64,13 @@ Register an API when repeated work deserves generated help and completion:
 ```bash
 restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images
-restish example get-image jpeg -o raw > dragonfly.jpg
+restish example get-image jpeg > dragonfly.jpg
 ```
 
 Generated commands still support normal request flags:
 
 ```bash
-restish -H 'Accept: application/json' example list-images -f body.self -r
+restish example list-images -f body.self -r
 ```
 
 ## Override The Server Temporarily

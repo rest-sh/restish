@@ -51,6 +51,8 @@ For each user-facing page, verify:
 - interactive examples use the default readable output unless the page is
   specifically teaching JSON, scripting, redirects, or exact machine-readable
   response shape
+- examples omit flags that Restish handles by default; for example, image
+  responses redirect as original bytes without an output flag
 - prerequisites, auth, config, and private-infrastructure assumptions are
   explicit
 - generic URL requests and API-aware generated commands are distinguished when

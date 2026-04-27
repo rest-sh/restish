@@ -145,7 +145,7 @@ restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 
 ```bash
 restish -H 'Accept: application/json' https://api.rest.sh/formats/json
-restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
 ## Related Pages

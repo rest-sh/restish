@@ -113,7 +113,7 @@ Call an operation by name instead of hand-building the URL:
 
 ```bash
 restish example list-images -o table --rsh-columns name,format,self
-restish example get-image jpeg -o raw > dragonfly.jpg
+restish example get-image jpeg > dragonfly.jpg
 ```
 
 Generated commands are still normal Restish requests. Profiles, auth, TLS,

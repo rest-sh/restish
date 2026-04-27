@@ -45,12 +45,13 @@ restish example list-images -f body.self -r
 
 ```bash
 curl -H 'Accept: application/json' 'https://api.rest.sh/images?format=jpeg'
-restish -H 'Accept: application/json' 'https://api.rest.sh/images?format=jpeg'
+restish 'https://api.rest.sh/images?format=jpeg'
 restish example list-images -o table --rsh-columns name,format,self
 ```
 
-The first two are generic HTTP. The last one uses the API description to expose
-a named command.
+The first two are generic HTTP. Restish sends a useful `Accept` header by
+default, so the generic Restish command stays shorter. The last command uses
+the API description to expose a named command.
 
 ## Related Pages
 

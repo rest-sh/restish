@@ -24,18 +24,18 @@ restish -H 'Accept: image/png' https://api.rest.sh/image -o image
 ## Save The Bytes
 
 ```bash
-restish https://api.rest.sh/images/png -o raw > image.png
-restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+restish https://api.rest.sh/images/png > image.png
+restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
-Use `-o raw` when exact bytes matter. Redirecting without `-o raw` may choose a
-structured output default depending on content type and context.
+Image responses redirect as original bytes by default, so no output flag is
+needed when saving them to a file.
 
 ## Terminal Support
 
 Restish prefers native terminal image protocols where available and falls back
-when the terminal cannot render images directly. If rendering fails, save the
-file with `-o raw` and open it with an image viewer.
+when the terminal cannot render images directly. If rendering fails, redirect
+the response to a file and open it with an image viewer.
 
 ## Related Pages
 

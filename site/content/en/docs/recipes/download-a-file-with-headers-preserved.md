@@ -6,7 +6,7 @@ description: Save raw bytes while capturing verbose headers separately.
 ---
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg 2> dragonfly.headers.txt
+restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 ```
 
 The body goes to stdout and verbose metadata goes to stderr, so the saved file

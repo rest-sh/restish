@@ -6,13 +6,14 @@ description: Reference for default output choices on terminals, redirects, filte
 ---
 
 Restish chooses defaults to be useful interactively and predictable in scripts,
-but explicit `-o` is always better when format matters.
+but an explicit format is better when a script depends on a specific shape.
 
 ## Main Rule
 
 - TTY output defaults to `readable` for structured responses.
-- Non-TTY structured output should be machine-friendly.
-- `-o raw` preserves original body bytes.
+- Non-TTY structured output defaults to JSON.
+- Redirected image responses are written as original bytes.
+- `--rsh-raw` preserves original body bytes for generic byte streams.
 - `-o json` and `-o yaml` produce complete documents.
 - `-o ndjson` produces records.
 
@@ -20,8 +21,9 @@ but explicit `-o` is always better when format matters.
 
 ```bash
 restish https://api.rest.sh/images
-restish https://api.rest.sh/images -o json > images.json
-restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
+restish https://api.rest.sh/images > images.json
+restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 

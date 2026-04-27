@@ -36,10 +36,11 @@ format for streaming or shell pipelines.
 
 ## Document vs Record Output
 
-Use document output when the next program expects one complete value:
+Use document output when the next program expects one complete value. Redirected
+structured output defaults to JSON, so this does not need `-o json`:
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -o json > images.json
+restish https://api.rest.sh/images --rsh-collect > images.json
 ```
 
 Use record output when you want one item per line:
@@ -64,17 +65,22 @@ JSON quotes.
 
 ## Raw Bytes And Files
 
-Use `-o raw` when exact bytes matter:
+Image responses redirect as original bytes by default:
 
 ```bash
-restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
-restish https://api.rest.sh/bytes/64 -o raw > sample.bin
+restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+```
+
+For generic byte streams, use raw output explicitly:
+
+```bash
+restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg 2> dragonfly.headers.txt
+restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 ```
 
 ## Images In The Terminal
@@ -86,7 +92,7 @@ restish https://api.rest.sh/images/png -o image
 restish -H 'Accept: image/png' https://api.rest.sh/image -o image
 ```
 
-Use `-o raw` to save the image instead.
+Redirect the response to save the image instead.
 
 ## Greppable Output
 

@@ -27,8 +27,14 @@ restish https://api.rest.sh/images -o readable
 restish https://api.rest.sh/images --rsh-collect -o json
 restish https://api.rest.sh/images -o yaml
 restish https://api.rest.sh/example -o gron
-restish https://api.rest.sh/images/jpeg -o raw > dragonfly.jpg
 restish https://api.rest.sh/images/png -o image
+```
+
+For file redirects, image responses already write original bytes:
+
+```bash
+restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
 
 ## Record Formats

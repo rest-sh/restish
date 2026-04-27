@@ -29,7 +29,7 @@ restish example --help
 
 ```bash
 restish example list-images
-restish example get-image jpeg -o raw > dragonfly.jpg
+restish example get-image jpeg > dragonfly.jpg
 restish example get-status 404 --rsh-ignore-status-code
 ```
 
