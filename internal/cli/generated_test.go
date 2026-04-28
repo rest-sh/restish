@@ -428,6 +428,79 @@ func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T)
 	}
 }
 
+func TestGeneratedCommandOAuthScopeSecurityLeavesProfileAuthBehavior(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/me/messages", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Scope API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "GraphOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://login.example.com/authorize",
+            "tokenUrl": "https://login.example.com/token",
+            "scopes": {
+              "Mail.Read": "Read mail",
+              "User.Read": "Read users"
+            }
+          }
+        }
+      },
+      "ApiKey": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}
+    }
+  },
+  "security": [{"GraphOAuth": ["User.Read"]}],
+  "paths": {
+    "/me/messages": {
+      "get": {
+        "operationId": "listMessages",
+        "security": [
+          {"GraphOAuth": ["Mail.Read"]},
+          {"ApiKey": []}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Headers: []string{"Authorization: Bearer configured-token"},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-messages"}); err != nil {
+		t.Fatalf("list-messages failed: %v", err)
+	}
+	if gotAuth != "Bearer configured-token" {
+		t.Fatalf("Authorization = %q, want configured profile auth", gotAuth)
+	}
+}
+
 func readBaseURLFromConfig(t *testing.T, path string) string {
 	t.Helper()
 	cfg, err := config.Load(path)
@@ -1158,6 +1231,64 @@ func TestGeneratedCommandAnyOfQueryParamUsesStringFlag(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandODataQueryParameterNames(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "OData API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "parameters": [
+          {"name": "$select", "in": "query", "schema": {"type": "string"}},
+          {"name": "$filter", "in": "query", "schema": {"type": "string"}},
+          {"name": "$top", "in": "query", "schema": {"type": "integer"}},
+          {"name": "$orderby", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{
+		"restish", "tapi", "list-users",
+		"--select", "id,displayName",
+		"--filter", "startswith(displayName,'A')",
+		"--top", "25",
+		"--orderby", "displayName desc",
+	}); err != nil {
+		t.Fatalf("list-users failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	for key, want := range map[string]string{
+		"$select":  "id,displayName",
+		"$filter":  "startswith(displayName,'A')",
+		"$top":     "25",
+		"$orderby": "displayName desc",
+	} {
+		if got := values.Get(key); got != want {
+			t.Fatalf("%s = %q, want %q; raw=%q", key, got, want, gotQuery)
+		}
+	}
+}
+
 func TestGeneratedCommandUsesRequestBodyMediaType(t *testing.T) {
 	var gotContentType, gotBody string
 	mux := http.NewServeMux()
@@ -1201,6 +1332,83 @@ func TestGeneratedCommandUsesRequestBodyMediaType(t *testing.T) {
 	}
 	if gotBody != "name=Widget" {
 		t.Fatalf("body = %q, want form body", gotBody)
+	}
+}
+
+func TestGeneratedCommandFormRequestBodyNestedArrays(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/charges", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Stripe-ish API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/charges": {
+      "post": {
+        "operationId": "createCharge",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {"type": "integer"},
+                  "capture": {"type": "boolean"},
+                  "expand": {"type": "array", "items": {"type": "string"}},
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{
+		"restish", "tapi", "create-charge",
+		"amount:", "2000,",
+		"capture:", "false,",
+		"expand:", "[customer,invoice],",
+		"metadata.order_id:", "ord_123",
+	}); err != nil {
+		t.Fatalf("create-charge failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/x-www-form-urlencoded") {
+		t.Fatalf("Content-Type = %q, want form", gotContentType)
+	}
+	values, err := url.ParseQuery(gotBody)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotBody, err)
+	}
+	if got := values.Get("amount"); got != "2000" {
+		t.Fatalf("amount = %q, want 2000", got)
+	}
+	if got := values.Get("capture"); got != "false" {
+		t.Fatalf("capture = %q, want false", got)
+	}
+	if got := values["expand[]"]; strings.Join(got, ",") != "customer,invoice" {
+		t.Fatalf("expand[] = %#v, want customer and invoice", got)
+	}
+	if got := values.Get("metadata[order_id]"); got != "ord_123" {
+		t.Fatalf("metadata[order_id] = %q, want ord_123; body=%q", got, gotBody)
 	}
 }
 
@@ -1466,6 +1674,56 @@ func TestGeneratedCommandVendorJSONRequestBody(t *testing.T) {
 	}
 	if gotBody != `{"name":"restish"}` {
 		t.Fatalf("body = %q, want JSON body", gotBody)
+	}
+}
+
+func TestGeneratedCommandHelpShowsNonJSONResponseMedia(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Diff API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/repos/{owner}/{repo}/compare/{basehead}": {
+      "get": {
+        "operationId": "compareCommits",
+        "parameters": [
+          {"name": "owner", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "repo", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "basehead", "in": "path", "required": true, "x-multi-segment": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Diff",
+            "content": {
+              "application/vnd.github.diff": {},
+              "application/vnd.github.patch": {},
+              "text/plain": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "compare-commits", "--help"}); err != nil {
+		t.Fatalf("compare-commits --help failed: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Response 200 (application/vnd.github.diff):",
+		"Response has no body",
+		"compare-commits <owner> <repo> <basehead>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("help missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -1837,6 +2095,46 @@ func TestGeneratedCommandSameNamePathAndQueryParams(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandMultiSegmentPathParamIsEscaped(t *testing.T) {
+	var gotRequestURI string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/octocat/hello-world/compare/", func(w http.ResponseWriter, r *http.Request) {
+		gotRequestURI = r.RequestURI
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "GitHub-ish API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/repos/{owner}/{repo}/compare/{basehead}": {
+      "get": {
+        "operationId": "compareCommits",
+        "parameters": [
+          {"name": "owner", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "repo", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "basehead", "in": "path", "required": true, "x-multi-segment": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "compare-commits", "octocat", "hello-world", "main...feature/slashy"}); err != nil {
+		t.Fatalf("compare-commits failed: %v", err)
+	}
+	if !strings.Contains(gotRequestURI, "/repos/octocat/hello-world/compare/main...feature%2Fslashy") {
+		t.Fatalf("RequestURI = %q, want slash escaped in x-multi-segment path param", gotRequestURI)
+	}
+}
+
 func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
 	var getHits, postHits atomic.Int32
 	mux := http.NewServeMux()
@@ -1893,6 +2191,53 @@ func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
 	}
 	if getHits.Load() != 1 || postHits.Load() != 1 {
 		t.Fatalf("expected both commands to remain callable, got GET=%d POST=%d", getHits.Load(), postHits.Load())
+	}
+}
+
+func TestGeneratedCommandLargePublicSpecShapeSmoke(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		var paths strings.Builder
+		for i := 0; i < 150; i++ {
+			if i > 0 {
+				paths.WriteString(",")
+			}
+			fmt.Fprintf(&paths, `"/resources/%03d": {
+      "get": {
+        "operationId": "getResource%03d",
+        "tags": ["resources"],
+        "parameters": [],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }`, i, i)
+		}
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Large API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {%s}
+}`, baseURL, paths.String())
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("large spec help failed: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"get-resource000", "get-resource149", "resources"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("large spec help missing %q:\n%s", want, got)
+		}
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-resource149"}); err != nil {
+		t.Fatalf("large spec generated command failed: %v", err)
 	}
 }
 
