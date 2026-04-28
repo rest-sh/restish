@@ -791,7 +791,7 @@ body.td-home .td-navbar__search .td-search-input {
 .restish-button--primary {
   background: var(--restish-pink);
   color: #fff;
-  box-shadow: 0 14px 24px rgba(255, 77, 189, 0.24);
+  box-shadow: 0 10px 24px rgba(255, 77, 189, 0.24);
 }
 
 .td-content a.restish-button--primary,
@@ -836,12 +836,12 @@ body.td-home .td-navbar__search .td-search-input {
 
 .restish-glow {
   position: absolute;
-  bottom: -15px;
-  left: 20px;
+  bottom: -30px;
+  left: 30px;
   right: -15px;
-  height: 270px;
+  top: 30px;
   pointer-events: none;
-  filter: blur(12px);
+  filter: blur(15px);
 }
 
 .restish-glow::before {
@@ -857,7 +857,7 @@ body.td-home .td-navbar__search .td-search-input {
   position: absolute;
   inset: 0;
   /* concentrated hot pink → teal corner sweep */
-  background: conic-gradient(from 180deg at 100% 100%,
+  background: conic-gradient(from 180deg at 100% 96%,
     transparent 0deg,
     transparent 97deg,
     rgba(45, 212, 191, 1) 100deg,
@@ -865,7 +865,21 @@ body.td-home .td-navbar__search .td-search-input {
     transparent 172deg,
     transparent 360deg
   ),
-  conic-gradient(from 180deg at 100% 100%,
+  conic-gradient(from 180deg at 98% 95%,
+      transparent 0deg,
+      transparent 70deg,
+      rgba(45, 212, 191, 1) 75deg,
+      rgba(45, 212, 191, 0.5) 85deg,
+      transparent 86deg,
+      transparent 360deg),
+  conic-gradient(from 0deg at 97.5% 95%,
+      transparent 0deg,
+      transparent 5deg,
+      rgba(45, 212, 191, 1) 6deg,
+      rgba(45, 212, 191, 0.5) 15deg,
+      transparent 16deg,
+      transparent 360deg),
+  conic-gradient(from 180deg at 100% 96%,
     transparent 0deg,
     transparent 92deg,
     rgba(255, 77, 189, 0.8) 93deg,
@@ -875,7 +889,7 @@ body.td-home .td-navbar__search .td-search-input {
     transparent 175deg,
     transparent 360deg
   ),
-  radial-gradient(ellipse at 70% 70%, rgba(255, 77, 189, 1), transparent 40%);
+  radial-gradient(ellipse at 70% 75%, rgba(255, 77, 189, 1), transparent 35%);
 }
 
 .restish-window {
@@ -885,7 +899,7 @@ body.td-home .td-navbar__search .td-search-input {
   border: 1px solid rgba(15, 23, 42, 0.18);
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 26px 60px rgba(15, 23, 42, 0.16);
+  // box-shadow: 0 26px 60px rgba(15, 23, 42, 0.16);
 }
 
 
