@@ -212,6 +212,7 @@ func buildResponseHelp(op *v3.Operation) []OperationResponseHelp {
 		if group.description == "" {
 			group.description = strings.TrimSpace(resp.Description)
 		}
+		group.addHeaders(resp)
 	}
 
 	var success []OperationResponseHelp
@@ -244,9 +245,27 @@ func buildResponseHelp(op *v3.Operation) []OperationResponseHelp {
 type responseHelpGroup struct {
 	codes       []string
 	mediaType   string
+	headers     []string
+	headerSeen  map[string]bool
 	schema      *base.Schema
 	noBody      bool
 	description string
+}
+
+func (g *responseHelpGroup) addHeaders(resp *v3.Response) {
+	if resp == nil || resp.Headers == nil {
+		return
+	}
+	if g.headerSeen == nil {
+		g.headerSeen = map[string]bool{}
+	}
+	for name := range resp.Headers.KeysFromOldest() {
+		if g.headerSeen[name] {
+			continue
+		}
+		g.headerSeen[name] = true
+		g.headers = append(g.headers, name)
+	}
 }
 
 func (g *responseHelpGroup) hasSuccess() bool {
@@ -265,6 +284,7 @@ func (g *responseHelpGroup) toHelp() OperationResponseHelp {
 	help := OperationResponseHelp{
 		Codes:       append([]string(nil), g.codes...),
 		MediaType:   g.mediaType,
+		Headers:     append([]string(nil), g.headers...),
 		NoBody:      g.noBody,
 		Description: g.description,
 	}
@@ -660,6 +680,29 @@ func (r schemaHelpRenderer) renderScalar(s *base.Schema) string {
 	}
 	if s.MaxLength != nil && *s.MaxLength > 0 {
 		tags = append(tags, fmt.Sprintf("maxLen:%d", *s.MaxLength))
+	}
+	if s.Minimum != nil {
+		label := "min"
+		if s.ExclusiveMinimum != nil && s.ExclusiveMinimum.IsA() && s.ExclusiveMinimum.A {
+			label = "exclusiveMin"
+		}
+		tags = append(tags, fmt.Sprintf("%s:%v", label, *s.Minimum))
+	}
+	if s.ExclusiveMinimum != nil && s.ExclusiveMinimum.IsB() {
+		tags = append(tags, fmt.Sprintf("exclusiveMin:%v", s.ExclusiveMinimum.B))
+	}
+	if s.Maximum != nil {
+		label := "max"
+		if s.ExclusiveMaximum != nil && s.ExclusiveMaximum.IsA() && s.ExclusiveMaximum.A {
+			label = "exclusiveMax"
+		}
+		tags = append(tags, fmt.Sprintf("%s:%v", label, *s.Maximum))
+	}
+	if s.ExclusiveMaximum != nil && s.ExclusiveMaximum.IsB() {
+		tags = append(tags, fmt.Sprintf("exclusiveMax:%v", s.ExclusiveMaximum.B))
+	}
+	if s.MultipleOf != nil {
+		tags = append(tags, fmt.Sprintf("multiple:%v", *s.MultipleOf))
 	}
 	typ := schemaType(s.Type)
 	if len(s.Type) > 1 {

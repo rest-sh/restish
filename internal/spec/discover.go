@@ -35,6 +35,13 @@ var lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) 
 	return net.DefaultResolver.LookupIPAddr(ctx, host)
 }
 
+type discoveryResult struct {
+	spec     *APISpec
+	ttl      time.Duration
+	err      error
+	priority int // 0 = explicit SpecURL (preferred for errors); 1 = heuristic probes
+}
+
 // DiscoverConfig holds parameters for spec discovery for a single API.
 type DiscoverConfig struct {
 	// APIName is the registered short name (used as the cache key).
@@ -233,15 +240,8 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	type result struct {
-		spec     *APISpec
-		ttl      time.Duration
-		err      error
-		priority int // 0 = explicit SpecURL (preferred for errors); 1 = heuristic probes
-	}
-
 	// Use a large buffer so goroutines never block on send.
-	ch := make(chan result, 16)
+	ch := make(chan discoveryResult, 16)
 	var wg sync.WaitGroup
 	tr := effectiveTransport(cfg)
 
@@ -255,7 +255,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 					return
 				}
 				select {
-				case ch <- result{err: err, priority: priority}:
+				case ch <- discoveryResult{err: err, priority: priority}:
 				case <-ctx.Done():
 				}
 				return
@@ -267,7 +267,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 				Transport:        tr,
 			})
 			select {
-			case ch <- result{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
+			case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
 			case <-ctx.Done():
 			}
 		}()
@@ -283,6 +283,11 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 			}
 			return ct, body, ttl, err
 		})
+		go func() {
+			wg.Wait()
+			close(ch)
+		}()
+		return collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
 	}
 
 	// Probe base URL: extract Link headers and try the body itself.
@@ -319,6 +324,10 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		close(ch)
 	}()
 
+	return collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
+}
+
+func collectDiscoveryResults(ctx context.Context, cancel context.CancelFunc, ch <-chan discoveryResult, baseURL string) (*APISpec, time.Duration, error) {
 	// Collect errors, preferring lower-priority values (0 = SpecURL is most
 	// authoritative). Same-priority errors are joined so all causes are visible.
 	bestErrPriority := math.MaxInt
@@ -345,7 +354,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
-	return nil, 0, fmt.Errorf("%w at %s", ErrNoSpecFound, cfg.BaseURL)
+	return nil, 0, fmt.Errorf("%w at %s", ErrNoSpecFound, baseURL)
 }
 
 // fetchBytes performs a GET and returns content-type, body, cache TTL, and error.

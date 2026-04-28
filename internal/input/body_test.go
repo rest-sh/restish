@@ -118,6 +118,16 @@ func TestBody_StdinPassthrough(t *testing.T) {
 	}
 }
 
+func TestBody_StdinPlainTextPassthrough(t *testing.T) {
+	body, err := input.Body(strings.NewReader("This is not JSON!"), false, nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body != "This is not JSON!" {
+		t.Fatalf("body = %#v, want plain text string", body)
+	}
+}
+
 func TestBody_StdinPlusArgsPatch(t *testing.T) {
 	// Stdin JSON is the base; shorthand args patch on top.
 	args := []string{"name:", "Alice"}

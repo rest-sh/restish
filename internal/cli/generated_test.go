@@ -926,6 +926,50 @@ func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) 
 	}
 }
 
+func TestGeneratedCommandHelpShowsResponseHeaders(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Headers", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {
+          "200": {
+            "description": "A paged array of items",
+            "headers": {
+              "Next": {
+                "description": "A link to the next page of responses",
+                "schema": {"type": "string"}
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "Headers: Next") {
+		t.Fatalf("expected response header names in help, got:\n%s", got)
+	}
+}
+
 func TestGeneratedCommandHelpBoundsRecursiveSchemas(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
@@ -988,7 +1032,9 @@ func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
         "properties": {
           "id": {"type": "string", "format": "uuid", "default": "00000000-0000-0000-0000-000000000000"},
           "state": {"type": "string", "enum": ["new", "done"]},
-          "kind": {"type": "string", "const": "item"}
+          "kind": {"type": "string", "const": "item"},
+          "score": {"type": "number", "minimum": 5, "maximum": 10, "multipleOf": 0.5},
+          "age": {"type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 120}
         }
       },
       "Extra": {
@@ -1061,6 +1107,11 @@ func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
 		"default:00000000-0000-0000-0000-000000000000",
 		"enum:new,done",
 		"const:item",
+		"min:5",
+		"max:10",
+		"multiple:0.5",
+		"exclusiveMin:0",
+		"exclusiveMax:120",
 		`"name": "Alpha"`,
 		"<any>: (integer)",
 	} {

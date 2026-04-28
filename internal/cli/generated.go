@@ -564,6 +564,11 @@ func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, 
 			b.WriteString(resp.Description)
 			b.WriteString("\n\n")
 		}
+		if len(resp.Headers) > 0 {
+			b.WriteString("Headers: ")
+			b.WriteString(strings.Join(resp.Headers, ", "))
+			b.WriteString("\n\n")
+		}
 		if resp.NoBody && resp.Schema == "" {
 			b.WriteString("Response has no body")
 			continue

@@ -2,6 +2,7 @@ package content_test
 
 import (
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andybalholm/brotli"
 	"github.com/rest-sh/restish/v2/internal/content"
 )
 
@@ -167,6 +169,58 @@ func TestGzipDecompression(t *testing.T) {
 	}
 	if string(data) != `{"compressed":true}` {
 		t.Errorf("decompressed: %q", data)
+	}
+}
+
+func TestBuiltInDecompressors(t *testing.T) {
+	encoders := map[string]func(string) []byte{
+		"gzip": func(s string) []byte {
+			var buf bytes.Buffer
+			w := gzip.NewWriter(&buf)
+			_, _ = w.Write([]byte(s))
+			_ = w.Close()
+			return buf.Bytes()
+		},
+		"deflate": func(s string) []byte {
+			var buf bytes.Buffer
+			w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+			if err != nil {
+				t.Fatalf("flate writer: %v", err)
+			}
+			_, _ = w.Write([]byte(s))
+			_ = w.Close()
+			return buf.Bytes()
+		},
+		"br": func(s string) []byte {
+			var buf bytes.Buffer
+			w := brotli.NewWriter(&buf)
+			_, _ = w.Write([]byte(s))
+			_ = w.Close()
+			return buf.Bytes()
+		},
+	}
+
+	for encoding, encode := range encoders {
+		t.Run(encoding, func(t *testing.T) {
+			rc, err := reg.Decompress(encoding, bytes.NewReader(encode("hello world")))
+			if err != nil {
+				t.Fatalf("decompress %s: %v", encoding, err)
+			}
+			defer rc.Close()
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatalf("read %s: %v", encoding, err)
+			}
+			if string(data) != "hello world" {
+				t.Fatalf("%s decoded %q, want hello world", encoding, data)
+			}
+		})
+	}
+}
+
+func TestEncodeUnknownContentTypeErrors(t *testing.T) {
+	if _, err := reg.Encode("application/unknown", map[string]any{"foo": 1}); err == nil {
+		t.Fatal("expected unknown request content type to fail")
 	}
 }
 

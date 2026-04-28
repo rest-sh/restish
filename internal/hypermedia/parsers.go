@@ -80,10 +80,23 @@ func splitLinkHeaderValues(value string) []string {
 type HALParser struct{}
 
 func (HALParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Link {
-	m, ok := body.(map[string]any)
-	if !ok {
+	switch typed := body.(type) {
+	case map[string]any:
+		return halLinksFromMap(baseURL, typed)
+	case []any:
+		var result []Link
+		for _, item := range typed {
+			if m, ok := item.(map[string]any); ok {
+				result = append(result, halLinksFromMap(baseURL, m)...)
+			}
+		}
+		return result
+	default:
 		return nil
 	}
+}
+
+func halLinksFromMap(baseURL *url.URL, m map[string]any) []Link {
 	linksRaw, ok := m["_links"]
 	if !ok {
 		return nil
@@ -123,10 +136,39 @@ func (TSJParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Link {
 		return nil
 	}
 	id, ok := m["@id"].(string)
-	if !ok || id == "" {
-		return nil
+	if ok && id != "" {
+		return []Link{{Rel: "self", URI: resolve(baseURL, id)}}
 	}
-	return []Link{{Rel: "self", URI: resolve(baseURL, id)}}
+	var result []Link
+	collectSimpleJSONLinks(baseURL, body, "", &result)
+	return result
+}
+
+func collectSimpleJSONLinks(baseURL *url.URL, body any, relPrefix string, result *[]Link) {
+	switch typed := body.(type) {
+	case map[string]any:
+		if self, ok := typed["self"].(string); ok && self != "" {
+			rel := relPrefix
+			if rel == "" {
+				rel = "self"
+			}
+			*result = append(*result, Link{Rel: rel, URI: resolve(baseURL, self)})
+		}
+		for key, value := range typed {
+			if key == "self" || key == "links" || key == "_links" || key == "data" {
+				continue
+			}
+			collectSimpleJSONLinks(baseURL, value, key, result)
+		}
+	case []any:
+		rel := "item"
+		if relPrefix != "" {
+			rel = relPrefix + "-item"
+		}
+		for _, item := range typed {
+			collectSimpleJSONLinks(baseURL, item, rel, result)
+		}
+	}
 }
 
 // ─── JSON:API ─────────────────────────────────────────────────────────────────
@@ -147,28 +189,44 @@ func (JSONAPIParser) ParseLinks(baseURL *url.URL, _ http.Header, body any) []Lin
 			return nil
 		}
 	}
-	linksRaw, ok := m["links"]
-	if !ok {
-		return nil
-	}
-	links, ok := linksRaw.(map[string]any)
-	if !ok {
-		return nil
-	}
 	var result []Link
+	if links, ok := m["links"].(map[string]any); ok {
+		appendJSONAPILinks(baseURL, links, "", &result)
+	}
+	appendJSONAPIResourceLinks(baseURL, m["data"], &result)
+	return result
+}
+
+func appendJSONAPIResourceLinks(baseURL *url.URL, data any, result *[]Link) {
+	switch typed := data.(type) {
+	case map[string]any:
+		if links, ok := typed["links"].(map[string]any); ok {
+			appendJSONAPILinks(baseURL, links, "item", result)
+		}
+	case []any:
+		for _, item := range typed {
+			appendJSONAPIResourceLinks(baseURL, item, result)
+		}
+	}
+}
+
+func appendJSONAPILinks(baseURL *url.URL, links map[string]any, selfRel string, result *[]Link) {
 	for rel, v := range links {
+		outRel := rel
+		if rel == "self" && selfRel != "" {
+			outRel = selfRel
+		}
 		switch lv := v.(type) {
 		case string:
 			if lv != "" {
-				result = append(result, Link{Rel: rel, URI: resolve(baseURL, lv)})
+				*result = append(*result, Link{Rel: outRel, URI: resolve(baseURL, lv)})
 			}
 		case map[string]any:
 			if href, ok := lv["href"].(string); ok && href != "" {
-				result = append(result, Link{Rel: rel, URI: resolve(baseURL, href)})
+				*result = append(*result, Link{Rel: outRel, URI: resolve(baseURL, href)})
 			}
 		}
 	}
-	return result
 }
 
 // ─── Siren ────────────────────────────────────────────────────────────────────

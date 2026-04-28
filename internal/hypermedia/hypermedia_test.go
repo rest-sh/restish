@@ -96,6 +96,29 @@ func TestHALParser(t *testing.T) {
 	}
 }
 
+func TestHALParserArray(t *testing.T) {
+	body := []any{
+		map[string]any{
+			"_links": map[string]any{
+				"self": map[string]any{"href": "/one"},
+			},
+		},
+		map[string]any{
+			"_links": map[string]any{
+				"self": map[string]any{"href": "/two"},
+			},
+		},
+	}
+	p := hypermedia.HALParser{}
+	links := p.ParseLinks(base, nil, body)
+	if len(links) != 2 {
+		t.Fatalf("expected two HAL item links, got %#v", links)
+	}
+	if links[0].URI != "https://api.example.com/one" || links[1].URI != "https://api.example.com/two" {
+		t.Fatalf("unexpected HAL array links: %#v", links)
+	}
+}
+
 func TestHALParserNoLinks(t *testing.T) {
 	body := map[string]any{"items": []any{}}
 	p := hypermedia.HALParser{}
@@ -125,6 +148,36 @@ func TestTSJParser(t *testing.T) {
 	}
 }
 
+func TestTSJParserSimpleSelfLinks(t *testing.T) {
+	body := map[string]any{
+		"self": "/self",
+		"things": []any{
+			map[string]any{"self": "/foo", "name": "Foo"},
+			map[string]any{"self": "/bar", "name": "Bar"},
+		},
+		"other": map[string]any{
+			"self": map[string]any{"foo": "bar"},
+		},
+	}
+	p := hypermedia.TSJParser{}
+	links := p.ParseLinks(base, nil, body)
+	got := map[string][]string{}
+	for _, l := range links {
+		got[l.Rel] = append(got[l.Rel], l.URI)
+	}
+	if got["self"][0] != "https://api.example.com/self" {
+		t.Fatalf("self link = %#v", got["self"])
+	}
+	if len(got["things-item"]) != 2 ||
+		got["things-item"][0] != "https://api.example.com/foo" ||
+		got["things-item"][1] != "https://api.example.com/bar" {
+		t.Fatalf("things-item links = %#v", got["things-item"])
+	}
+	if _, ok := got["other"]; ok {
+		t.Fatalf("unexpected non-string self link from other: %#v", got)
+	}
+}
+
 // ─── JSON:API tests ───────────────────────────────────────────────────────────
 
 func TestJSONAPIParser(t *testing.T) {
@@ -146,6 +199,28 @@ func TestJSONAPIParser(t *testing.T) {
 	}
 	if got["next"] != "https://api.example.com/items?page=2" {
 		t.Errorf("next: got %q", got["next"])
+	}
+}
+
+func TestJSONAPIParserResourceItemLinks(t *testing.T) {
+	body := map[string]any{
+		"data": []any{
+			map[string]any{
+				"type": "items",
+				"id":   "1",
+				"links": map[string]any{
+					"self": map[string]any{"href": "/items/1"},
+				},
+			},
+		},
+	}
+	p := hypermedia.JSONAPIParser{}
+	links := p.ParseLinks(base, nil, body)
+	if len(links) != 1 {
+		t.Fatalf("expected one resource item link, got %#v", links)
+	}
+	if links[0].Rel != "item" || links[0].URI != "https://api.example.com/items/1" {
+		t.Fatalf("resource item link = %#v", links[0])
 	}
 }
 

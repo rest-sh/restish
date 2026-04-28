@@ -60,6 +60,7 @@ type OperationBodyHelp struct {
 type OperationResponseHelp struct {
 	Codes       []string
 	MediaType   string
+	Headers     []string
 	Schema      string
 	Example     string
 	NoBody      bool
