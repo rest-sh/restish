@@ -96,6 +96,16 @@ This becomes:
 restish myapi get-item alpha acct-123 --page 2
 ```
 
+Path-level parameters are merged into each operation under that path, and an
+operation-level parameter with the same `in` and `name` overrides the path-level
+one. Parameters with the same name but different locations, such as a path
+`id` and a query `id`, stay separate. Parameters without a schema are treated
+as strings.
+
+The generated flag name may be normalized for the shell, but Restish preserves
+the original OpenAPI parameter name on the wire. That matters for parameters
+such as `$select`, `$filter`, dotted vendor names, and case-sensitive headers.
+
 Model repeatable optional flags as arrays:
 
 ```yaml
@@ -154,6 +164,26 @@ arguments, but many servers, proxies, and caches treat those requests
 inconsistently. Prefer body-bearing methods such as `POST`, `PUT`, or `PATCH`
 when you control the API design.
 
+## Schemas And Generated Bodies
+
+Restish uses OpenAPI schemas for help, completions, example generation, and a
+small amount of generated-command body coercion. For example, if a request body
+property is declared as `type: string`, `id: 123` is sent as `"123"` for that
+generated command.
+
+Schemas are not full request validators by default. Unknown body fields are
+allowed unless Restish grows an explicit validation mode. Schema constructs
+such as `oneOf`, `anyOf`, `allOf`, `nullable`, `enum`, `const`, defaults,
+examples, read-only/write-only fields, additional properties, and recursive
+references are used for help and bounded example bodies.
+
+Use `--rsh-generate-body` on a generated command to print an example body and
+exit:
+
+```bash
+restish myapi create-item --rsh-generate-body
+```
+
 ## Server URLs
 
 Restish honors OpenAPI `servers` at document, path, and operation level.
@@ -177,6 +207,12 @@ values when provided, then OpenAPI defaults:
 Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
 `https://api.example.com/root/v2`.
+
+Absolute server URLs are used only when they match the configured API origin.
+If a same-origin server points outside the configured base path, Restish keeps
+the selected API profile and resolves the generated operation to that path. If
+no OpenAPI server matches the configured origin, Restish falls back to
+`base_url` instead of sending configured credentials to another host.
 
 Use `operation_base` when the API registration needs an explicit request-path
 override independent of the OpenAPI document:
@@ -216,6 +252,11 @@ An operation with `security: []` is treated as public and generated commands do
 not attach configured profile auth. Full per-operation scheme matching for APIs
 with multiple auth schemes is planned before v2 release; until then, choose the
 profile that matches the operation you are calling.
+
+Non-empty OpenAPI security requirements, including OAuth scopes and alternative
+schemes, do not yet select or reject profiles per operation. They are useful for
+setup and future diagnostics, but the selected Restish profile still supplies
+auth at request time unless the operation explicitly declares `security: []`.
 
 Never put secrets in the OpenAPI document. Use prompts, environment references,
 or external tools.

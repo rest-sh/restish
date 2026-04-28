@@ -89,6 +89,12 @@ restish api configure example https://api.rest.sh 'prompt.api_key: env:DOCS_API_
 API keys may be stored as profile headers or query params under the hood, but
 the setup flow should present them as API keys.
 
+Generated OpenAPI commands currently treat operation-level `security: []` as a
+public no-auth marker. For every non-empty security requirement, including
+OAuth scopes, alternatives, and combined schemes, Restish uses the selected
+profile's auth through the normal request pipeline. Full per-operation scheme
+matching is a planned v2 release-readiness item.
+
 ## Inspect The Final Header
 
 For configured API auth, inspect the computed `Authorization` value without

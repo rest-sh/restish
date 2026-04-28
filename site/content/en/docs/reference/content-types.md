@@ -22,7 +22,7 @@ restish api content-types
 ```
 
 Typical built-ins include `json`, `yaml`, `cbor`, `msgpack`, `ion`, `form`,
-`multipart`, and `text`.
+`multipart`, `text`, and `binary`.
 
 ## Request Encoding
 
@@ -36,6 +36,9 @@ restish post -c multipart https://api.rest.sh/uploads description: docs, file: @
 Use `json` for most API bodies, `form` for older login/token endpoints, and
 `multipart` when a request includes file parts. The [Input guide](/docs/guides/input/)
 shows how shorthand, stdin, and files become request bodies.
+
+Use `binary` or an explicit binary media type when the request should preserve
+raw bytes from stdin or a file instead of encoding a structured value.
 
 ## Response Decoding
 
