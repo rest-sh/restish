@@ -125,8 +125,7 @@ func (c *CommandClient) readLoop() {
 				c.StdinCloseHandler()
 			}
 		default:
-			c.failPending(fmt.Errorf("plugin: unexpected message %q waiting for http-response", msgType))
-			return
+			continue
 		}
 	}
 }

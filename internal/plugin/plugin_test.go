@@ -2,13 +2,18 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 // writeScript writes an executable shell script (or .bat on Windows) to dir
@@ -202,13 +207,9 @@ func TestLoadManifest_FutureVersion_WarnsButLoads(t *testing.T) {
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	p := writeScript(t, dir, "restish-future", script)
 
-	// Redirect warnings so they don't clutter test output.
 	var warnBuf bytes.Buffer
-	old := errorWriter
-	errorWriter = &warnBuf
-	defer func() { errorWriter = old }()
 
-	got, err := LoadManifest(p)
+	got, err := loadManifest(p, &warnBuf)
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}
@@ -261,6 +262,51 @@ func TestDiscover_SkipsBrokenPlugins(t *testing.T) {
 	}
 	if len(errs) == 0 {
 		t.Error("expected errFn to be called for broken plugin")
+	}
+}
+
+func TestDiscover_IgnoresNonRestishExecutables(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "invoked")
+	writeScript(t, dir, "not-a-plugin", fmt.Sprintf("#!/bin/sh\necho invoked > %q\nexit 1", marker))
+
+	var errs []string
+	plugins := Discover(dir, func(p string, err error) {
+		errs = append(errs, err.Error())
+	}, "", nil)
+	if len(plugins) != 0 {
+		t.Fatalf("expected 0 plugins, got %d", len(plugins))
+	}
+	if len(errs) != 0 {
+		t.Fatalf("expected non-restish executable not to be probed, got errors: %v", errs)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("expected non-restish executable not to run, stat err = %v", err)
+	}
+}
+
+func TestDiscover_FutureVersionWarningUsesStderrWriter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	m := Manifest{
+		Name:              "future",
+		RestishAPIVersion: CurrentPluginAPIVersion + 1,
+	}
+	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
+	writeScript(t, dir, "restish-future", script)
+
+	var warnings bytes.Buffer
+	plugins := Discover(dir, nil, "", &warnings)
+	if len(plugins) != 1 {
+		t.Fatalf("expected future-version plugin to load, got %d plugins", len(plugins))
+	}
+	if got := warnings.String(); !strings.Contains(got, "declares restish_api_version") {
+		t.Fatalf("expected future-version warning through Discover writer, got %q", got)
 	}
 }
 
@@ -419,5 +465,32 @@ func TestHookTimeout(t *testing.T) {
 				t.Errorf("HookTimeout(%q) = %v, want %v", tt.hook, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestStartFormatterStreamContextCancellationKillsProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := writeScript(t, dir, "restish-format-block", "#!/bin/sh\nsleep 30\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := StartFormatterStream(ctx, path, io.Discard, pluginwire.FormatterRequest{
+		Type:   "formatter",
+		Format: "block",
+		Event:  "start",
+	})
+	if err != nil {
+		t.Fatalf("StartFormatterStream: %v", err)
+	}
+	cancel()
+
+	start := time.Now()
+	if err := stream.Close(); err == nil {
+		t.Fatal("expected killed formatter to return an error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("formatter close waited too long after context cancellation: %v", elapsed)
 	}
 }

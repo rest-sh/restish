@@ -20,7 +20,7 @@ type ConfigPatchOperation struct {
 // SaveAPIConfig updates a single API entry in the JSONC config file while
 // preserving surrounding comments and formatting when possible.
 func SaveAPIConfig(path, apiName string, apiCfg *APIConfig) error {
-	return patchConfig(path, func(data []byte) ([]byte, error) {
+	return patchConfig(path, true, func(data []byte) ([]byte, error) {
 		return jsoncSetPath(data, []string{"apis", apiName}, apiCfg)
 	})
 }
@@ -28,7 +28,7 @@ func SaveAPIConfig(path, apiName string, apiCfg *APIConfig) error {
 // DeleteAPIConfig removes a single API entry from the JSONC config file while
 // preserving surrounding comments and formatting when possible.
 func DeleteAPIConfig(path, apiName string) error {
-	return patchConfig(path, func(data []byte) ([]byte, error) {
+	return patchConfig(path, false, func(data []byte) ([]byte, error) {
 		return jsoncDeletePath(data, []string{"apis", apiName})
 	})
 }
@@ -36,7 +36,7 @@ func DeleteAPIConfig(path, apiName string) error {
 // SaveConfigValue updates a single object path inside the JSONC config file
 // while preserving surrounding comments and formatting when possible.
 func SaveConfigValue(path string, objectPath []string, value any) error {
-	return patchConfig(path, func(data []byte) ([]byte, error) {
+	return patchConfig(path, true, func(data []byte) ([]byte, error) {
 		return jsoncSetPath(data, objectPath, value)
 	})
 }
@@ -47,7 +47,7 @@ func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
 	if len(ops) == 0 {
 		return nil
 	}
-	return patchConfig(path, func(data []byte) ([]byte, error) {
+	return patchConfig(path, true, func(data []byte) ([]byte, error) {
 		var err error
 		for _, op := range ops {
 			if len(op.Path) == 0 {
@@ -66,7 +66,7 @@ func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
 	})
 }
 
-func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
+func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, error)) error {
 	lock, err := lockConfigFile(path)
 	if err != nil {
 		return err
@@ -76,9 +76,13 @@ func patchConfig(path string, patch func([]byte) ([]byte, error)) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			if !createIfMissing {
+				return nil
+			}
+			data = []byte("{}\n")
+		} else {
+			return fmt.Errorf("config: cannot read %s: %w", path, err)
 		}
-		return fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
 
 	patched, err := patch(data)

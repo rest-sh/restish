@@ -229,7 +229,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 	o.Help = buildOperationHelp(op, o.RequestMediaType)
 	o.RequestSchemaTypes = buildRequestSchemaTypes(op, o.RequestMediaType)
 
-	merged := mergeParameters(pathParams, op.Parameters)
+	merged := MergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {
 		if p == nil {
 			continue
@@ -391,9 +391,9 @@ func validateConfiguredServerVariables(servers []*v3.Server, values map[string]s
 	return nil
 }
 
-// mergeParameters merges path-level and operation-level parameters.
+// MergeParameters merges path-level and operation-level parameters.
 // Operation-level parameters override path-level ones with the same (in, name).
-func mergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter {
+func MergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter {
 	if len(pathLevel) == 0 {
 		return operationLevel
 	}

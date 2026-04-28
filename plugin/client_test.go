@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"io"
 	"testing"
 )
 
@@ -53,5 +54,47 @@ func TestCommandClientWriteStderrWritesStderrDataMessage(t *testing.T) {
 	}
 	if msg.Type != MsgTypeStderrData || string(msg.Data) != "oops" {
 		t.Fatalf("message = %#v", msg)
+	}
+}
+
+func TestCommandClientDoSkipsUnknownMessages(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	errCh := make(chan error, 1)
+	go func() {
+		resp, err := client.Do(&HTTPRequestMsg{URI: "https://api.example.com/items"})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if resp.Status != 200 || resp.Body != "ok" {
+			t.Errorf("unexpected response: %#v", resp)
+		}
+		errCh <- nil
+	}()
+
+	var req HTTPRequestMsg
+	if err := NewDecoder(pluginToHostR).ReadMessage(&req); err != nil {
+		t.Fatalf("read request: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, map[string]any{"type": "future-message"}); err != nil {
+		t.Fatalf("write unknown message: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, HTTPResponseMsg{
+		Type:      MsgTypeHTTPResponse,
+		RequestID: req.RequestID,
+		Status:    200,
+		Body:      "ok",
+	}); err != nil {
+		t.Fatalf("write response: %v", err)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("Do: %v", err)
 	}
 }

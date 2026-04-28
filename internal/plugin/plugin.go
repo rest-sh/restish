@@ -25,10 +25,6 @@ import (
 // features that this host cannot handle; a warning is emitted during discovery.
 const CurrentPluginAPIVersion = 2
 
-// errorWriter receives plugin-discovery warnings. Defaults to os.Stderr;
-// tests may redirect it to suppress or capture output.
-var errorWriter io.Writer = os.Stderr
-
 // Manifest is an alias for the canonical plugin.Manifest defined in the public
 // plugin package. Using the same type eliminates the dual-maintenance risk that
 // arose when the two structs diverged.
@@ -63,7 +59,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 				m := entry.Manifest
 				return &m, nil
 			}
-			m, err := LoadManifest(path)
+			m, err := loadManifest(path, stderr)
 			if err != nil {
 				return nil, err
 			}
@@ -71,7 +67,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 			cacheUpdated = true
 			return m, nil
 		}
-		return LoadManifest(path)
+		return loadManifest(path, stderr)
 	}
 
 	add := func(path string) {
@@ -101,7 +97,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 					continue
 				}
 				full := filepath.Join(pluginDir, e.Name())
-				if isExecutable(full) {
+				if isPluginExecutableName(e.Name()) && isExecutable(full) {
 					add(full)
 				}
 			}
@@ -118,6 +114,16 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 // LoadManifest calls path with plugin.StartupFlagManifest and parses the CBOR (or
 // JSON fallback) manifest from stdout.
 func LoadManifest(path string) (*Manifest, error) {
+	return loadManifest(path, os.Stderr)
+}
+
+// LoadManifestWithWarnings is like LoadManifest, but sends compatibility
+// warnings to warningWriter. Pass nil to suppress warnings.
+func LoadManifestWithWarnings(path string, warningWriter io.Writer) (*Manifest, error) {
+	return loadManifest(path, warningWriter)
+}
+
+func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -146,8 +152,10 @@ func LoadManifest(path string) (*Manifest, error) {
 	}
 	if m.RestishAPIVersion > CurrentPluginAPIVersion {
 		// Warn but still load: the plugin may work for the features it actually uses.
-		fmt.Fprintf(errorWriter, "warning: plugin %s declares restish_api_version %d but this host only supports %d; some features may not work\n",
-			filepath.Base(path), m.RestishAPIVersion, CurrentPluginAPIVersion)
+		if warningWriter != nil {
+			fmt.Fprintf(warningWriter, "warning: plugin %s declares restish_api_version %d but this host only supports %d; some features may not work\n",
+				filepath.Base(path), m.RestishAPIVersion, CurrentPluginAPIVersion)
+		}
 	}
 
 	return &m, nil
@@ -163,6 +171,10 @@ func DefaultPluginDir() string {
 // when users wipe their config directory.
 func DefaultManifestCachePath() string {
 	return configpkg.NewPaths().PluginManifestCache()
+}
+
+func isPluginExecutableName(name string) bool {
+	return strings.HasPrefix(strings.TrimSuffix(name, ".exe"), "restish-")
 }
 
 // isExecutable reports whether path is a regular executable file.

@@ -445,7 +445,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
   "rsh-profile": "prod"
 }`)
 
-	t.Setenv("RSH_CONFIG_DIR", filepath.Join(home, ".config", "restish"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	path := config.DefaultPath()
 	cfg, err := config.Load(path)
 	if err != nil {
@@ -613,7 +613,6 @@ func TestLoad_MigratesLegacyFullURLOperationBaseWithWarning(t *testing.T) {
   }
 }`)
 
-	t.Setenv("RSH_CONFIG_DIR", filepath.Join(home, ".config", "restish-v2"))
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -652,7 +651,7 @@ func TestLoad_MigratesLegacyLinuxConfig(t *testing.T) {
   }
 }`)
 
-	t.Setenv("RSH_CONFIG_DIR", legacyDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	path := config.DefaultPath()
 	cfg, err := config.Load(path)
 	if err != nil {
@@ -679,7 +678,7 @@ func TestLoad_ExistingV2ConfigWinsOverLegacyMigration(t *testing.T) {
   }
 }`)
 
-	t.Setenv("RSH_CONFIG_DIR", legacyDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	path := config.DefaultPath()
 	writeFile(t, path, `{
   "apis": {
@@ -704,5 +703,35 @@ func TestLoad_ExistingV2ConfigWinsOverLegacyMigration(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1", "apis.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected no backup when restish.json already exists, got %v", err)
+	}
+}
+
+func TestLoad_RSHConfigDirSkipsLegacyMigration(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "legacy": {
+    "base": "https://legacy.example.com"
+  }
+}`)
+
+	overrideDir := filepath.Join(home, "isolated")
+	t.Setenv("RSH_CONFIG_DIR", overrideDir)
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Migration != nil {
+		t.Fatalf("expected no migration for explicit RSH_CONFIG_DIR, got %+v", cfg.Migration)
+	}
+	if len(cfg.APIs) != 0 {
+		t.Fatalf("expected empty config for isolated override, got %#v", cfg.APIs)
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1", "apis.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected legacy backup not to be created, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(overrideDir, "restish.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected explicit override load not to create config file, got %v", err)
 	}
 }

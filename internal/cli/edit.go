@@ -16,7 +16,6 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/rest-sh/restish/v2/internal/output"
-	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
 )
@@ -210,7 +209,10 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		updateOpts.Headers = append(updateOpts.Headers, "If-Unmodified-Since: "+lastModified)
 	}
 
-	updateResp, err := request.Do(requestContext(cmd), updateMethod, rawURL, bytes.NewReader(encoded), updateOpts)
+	updatePrepared := *prepared
+	updatePrepared.bodyRaw = encoded
+	updatePrepared.opts = updateOpts
+	updateResp, err := c.sendPreparedRequest(requestContext(cmd), updateMethod, &updatePrepared)
 	if err != nil {
 		return fmt.Errorf("network error for %s %s: %w", updateMethod, rawURL, err)
 	}

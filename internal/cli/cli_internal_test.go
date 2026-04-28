@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -26,6 +31,60 @@ func TestExplicitConfigSidecarAndCachePaths(t *testing.T) {
 	}
 	if got := c.cacheDir(); !strings.Contains(got, "configs") {
 		t.Fatalf("cacheDir() = %q, want config-scoped cache dir", got)
+	}
+}
+
+func TestSaveExternalToolApprovalsConcurrentLeavesValidFile(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "restish.json")
+	c := &CLI{hooks: testHooks{ConfigPath: cfgPath}}
+
+	var wg sync.WaitGroup
+	for _, approvals := range []map[string]bool{
+		{"sha256:a": true},
+		{"sha256:b": true},
+		{"sha256:c": true},
+	} {
+		wg.Add(1)
+		go func(approvals map[string]bool) {
+			defer wg.Done()
+			if err := c.saveExternalToolApprovals(approvals); err != nil {
+				t.Errorf("saveExternalToolApprovals: %v", err)
+			}
+		}(approvals)
+	}
+	wg.Wait()
+
+	data, err := os.ReadFile(c.externalToolApprovalsPath())
+	if err != nil {
+		t.Fatalf("read approvals: %v", err)
+	}
+	var stored externalToolApprovals
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatalf("approvals file is not valid JSON: %v\n%s", err, data)
+	}
+	if len(stored.Approved) != 1 {
+		t.Fatalf("expected one complete approval set from final writer, got %#v", stored.Approved)
+	}
+	matches, err := filepath.Glob(c.externalToolApprovalsPath() + ".*.tmp")
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected temp files to be cleaned up, got %v", matches)
+	}
+}
+
+func TestIsSignalCancellationRequiresSignalCause(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errors.New("ordinary cancellation"))
+	if isSignalCancellation(context.Canceled, ctx) {
+		t.Fatal("ordinary context cancellation should not map to signal exit")
+	}
+
+	sigCtx, signalCancel := context.WithCancelCause(context.Background())
+	signalCancel(signalCancelError{signal: os.Interrupt})
+	if !isSignalCancellation(context.Canceled, sigCtx) {
+		t.Fatal("signal cancellation should map to signal exit")
 	}
 }
 

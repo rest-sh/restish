@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +11,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 )
 
 func installFakeEditor(t *testing.T, replacement string) string {
@@ -150,6 +154,77 @@ func TestEditCommandUpdateUsesProfileHeaders(t *testing.T) {
 	}
 	if putAuth != "Bearer cfg-token" {
 		t.Fatalf("PUT Authorization = %q", putAuth)
+	}
+}
+
+type editRetryAuthHandler struct {
+	calls atomic.Int32
+}
+
+func (h *editRetryAuthHandler) Parameters() []authpkg.Param { return nil }
+
+func (h *editRetryAuthHandler) Authenticate(_ context.Context, req *http.Request, ac authpkg.AuthContext) error {
+	h.calls.Add(1)
+	if ac.Force {
+		req.Header.Set("Authorization", "Bearer fresh-token")
+	} else {
+		req.Header.Set("Authorization", "Bearer stale-token")
+	}
+	return nil
+}
+
+func (h *editRetryAuthHandler) SupportsForce() {}
+
+func TestEditCommandUpdateRetriesUnauthorizedWithFreshAuth(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+
+	var putAttempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			putAttempts.Add(1)
+			if r.Header.Get("Authorization") != "Bearer fresh-token" {
+				http.Error(w, "stale token", http.StatusUnauthorized)
+				return
+			}
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := fmt.Sprintf(`{
+		"apis": {
+			"myapi": {
+				"base_url": %q,
+				"profiles": {
+					"default": {
+						"auth": {"type": "edit-retry"}
+					}
+				}
+			}
+		}
+	}`, srv.URL)
+	handler := &editRetryAuthHandler{}
+	c, out, _ := newTestCLI(t)
+	c.AddAuthHandler("edit-retry", handler)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	if err := c.Run([]string{"restish", "edit", "-y", "myapi/item", "name:", "after"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := putAttempts.Load(); got != 2 {
+		t.Fatalf("PUT attempts = %d, want 2", got)
+	}
+	if got := handler.calls.Load(); got != 3 {
+		t.Fatalf("auth calls = %d, want 3 (GET, stale PUT, fresh retry)", got)
+	}
+	if !strings.Contains(out.String(), `"after"`) {
+		t.Fatalf("expected retried update response, got %q", out.String())
 	}
 }
 

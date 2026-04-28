@@ -950,6 +950,24 @@ func TestAPIAddWithShorthand(t *testing.T) {
 	}
 }
 
+func TestAPIAddCreatesMissingConfigFile(t *testing.T) {
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "add", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api add: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url after add: got %q", got)
+	}
+}
+
 func TestAPIAddNormalizesSchemelessURL(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 

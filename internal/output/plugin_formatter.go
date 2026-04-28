@@ -1,6 +1,7 @@
 package output
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -14,12 +15,13 @@ import (
 type PluginFormatter struct {
 	PluginPath string
 	FormatName string
+	Context    context.Context
 }
 
 // Format sends the response to the plugin using the formatter session protocol
 // and copies the plugin's raw output to w.
 func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	stream, err := plugin.StartFormatterStream(f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Color:  color,
@@ -52,7 +54,7 @@ func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error 
 // FormatValue renders a body/sub-value through a short formatter session,
 // without implying that the value is a full HTTP response.
 func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error {
-	stream, err := plugin.StartFormatterStream(f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:     "formatter",
 		Format:   f.FormatName,
 		Color:    color,
@@ -89,7 +91,7 @@ func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error 
 
 // StartValueStream starts a long-lived formatter plugin session.
 func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
-	stream, err := plugin.StartFormatterStream(f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Color:  color,
@@ -109,6 +111,13 @@ func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bo
 		formatName: f.FormatName,
 		stream:     stream,
 	}, nil
+}
+
+func (f *PluginFormatter) context() context.Context {
+	if f.Context != nil {
+		return f.Context
+	}
+	return context.Background()
 }
 
 type pluginFormatterStream struct {

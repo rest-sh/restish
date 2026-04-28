@@ -117,7 +117,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	syncErr := &commandPluginWriter{w: cmd.ErrOrStderr()}
 	cmd.SetErr(syncErr)
 
-	proc := exec.Command(pluginPath, append(terminalContextFlags(c), args...)...)
+	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
 	proc.Stderr = cmd.ErrOrStderr()
 
 	stdinPipe, err := proc.StdinPipe()
@@ -134,7 +134,17 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		_ = stdoutPipe.Close()
 		return fmt.Errorf("command plugin: start: %w", err)
 	}
+	cancelWatchDone := make(chan struct{})
+	go func() {
+		select {
+		case <-cmd.Context().Done():
+			_ = stdinPipe.Close()
+			_ = stdoutPipe.Close()
+		case <-cancelWatchDone:
+		}
+	}()
 	cleanupStartFailure := func(cause error) error {
+		close(cancelWatchDone)
 		_ = stdinPipe.Close()
 		_ = stdoutPipe.Close()
 		if proc.Process != nil {
@@ -170,7 +180,9 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	for {
 		raw, err := dec.ReadRaw()
 		if err != nil {
-			if isEOFLike(err) {
+			if ctxErr := cmd.Context().Err(); ctxErr != nil {
+				loopErr = ctxErr
+			} else if isEOFLike(err) {
 				loopErr = fmt.Errorf("command plugin %s: process died unexpectedly", filepath.Base(pluginPath))
 			} else {
 				loopErr = fmt.Errorf("command plugin %s: read message: %w", filepath.Base(pluginPath), err)
@@ -189,6 +201,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		}
 	}
 
+	close(cancelWatchDone)
 	close(stopCh)
 	if loopErr != nil {
 		_ = stdinPipe.Close()

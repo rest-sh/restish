@@ -90,6 +90,55 @@ func TestToolsFromSpecFilteringAndNamespacing(t *testing.T) {
 	}
 }
 
+func TestToolsFromSpecIncludesPathLevelParameters(t *testing.T) {
+	s := loadTestSpec(t, "demo", `{
+	  "openapi": "3.1.0",
+	  "info": {"title": "Demo", "version": "1.0.0"},
+	  "paths": {
+	    "/items/{id}": {
+	      "parameters": [
+	        {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
+	        {"name": "verbose", "in": "query", "schema": {"type": "boolean"}}
+	      ],
+	      "get": {
+	        "operationId": "getItem",
+	        "parameters": [
+	          {"name": "verbose", "in": "query", "schema": {"type": "string"}}
+	        ]
+	      }
+	    }
+	  }
+	}`)
+
+	tools, err := toolsFromSpec("demo", false, s, Options{})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+	tool := tools[0]
+	props := tool.InputSchema["properties"].(map[string]any)
+	if _, ok := props["id"]; !ok {
+		t.Fatalf("expected path-level id parameter in schema: %#v", props)
+	}
+	required := tool.InputSchema["required"].([]string)
+	if len(required) != 1 || required[0] != "id" {
+		t.Fatalf("required = %#v, want [id]", required)
+	}
+	if got := props["verbose"].(map[string]any)["type"]; got != "string" {
+		t.Fatalf("operation-level verbose parameter should override path-level schema, got %#v", got)
+	}
+
+	req, err := tool.Request(map[string]any{"id": "a/b", "verbose": "yes"})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if req.URI != "demo/items/a%2Fb?verbose=yes" {
+		t.Fatalf("URI = %q, want demo/items/a%%2Fb?verbose=yes", req.URI)
+	}
+}
+
 func TestParseArgsRejectsRemovedHTTPFlag(t *testing.T) {
 	if _, err := ParseArgs([]string{"--http", ":3000", "demo"}); err == nil {
 		t.Fatal("expected removed --http flag to be rejected by flag parser")

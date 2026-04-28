@@ -197,6 +197,9 @@ func Load(path string) (*Config, error) {
 		if filepath.Clean(path) != filepath.Clean(DefaultPath()) {
 			return &Config{}, nil
 		}
+		if os.Getenv("RSH_CONFIG_DIR") != "" {
+			return &Config{}, nil
+		}
 		return loadOrMigrate(path)
 	}
 	if err != nil {

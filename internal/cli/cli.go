@@ -27,6 +27,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var errSignalCanceled = errors.New("signal canceled")
+
+type signalCancelError struct {
+	signal os.Signal
+}
+
+func (e signalCancelError) Error() string {
+	if e.signal == nil {
+		return errSignalCanceled.Error()
+	}
+	return fmt.Sprintf("%s: %s", errSignalCanceled, e.signal)
+}
+
+func (e signalCancelError) Is(target error) bool {
+	return target == errSignalCanceled
+}
+
 // Version is the current build version, set at build time via -ldflags.
 var Version = "2.0.0-dev"
 
@@ -251,8 +268,8 @@ func (c *CLI) Run(args []string) error {
 	// Install a signal-aware context so that Ctrl-C / SIGTERM propagates to all
 	// in-flight requests and spec discovery without needing explicit signal
 	// handling elsewhere.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := signalAwareContext()
+	defer cancel()
 
 	c.requestClosers = nil
 	defer c.closeRequestClosers()
@@ -313,6 +330,7 @@ func (c *CLI) Run(args []string) error {
 			c.formatters[name] = &output.PluginFormatter{
 				PluginPath: p.Path,
 				FormatName: name,
+				Context:    ctx,
 			}
 		}
 		if len(p.Manifest.LoaderContentTypes) > 0 {
@@ -378,10 +396,36 @@ func (c *CLI) Run(args []string) error {
 	err = root.ExecuteContext(ctx)
 	// When the context was cancelled by a signal (SIGINT/SIGTERM), return
 	// ExitCodeError{130} so main exits with 130 without printing any extra message.
-	if err != nil && errors.Is(err, context.Canceled) && ctx.Err() != nil {
+	if isSignalCancellation(err, ctx) {
 		return &ExitCodeError{Code: 130}
 	}
 	return err
+}
+
+func signalAwareContext() (context.Context, context.CancelFunc) {
+	ctx, cancelCause := context.WithCancelCause(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		select {
+		case sig := <-sigCh:
+			cancelCause(signalCancelError{signal: sig})
+		case <-done:
+		}
+	}()
+	cancel := func() {
+		signal.Stop(sigCh)
+		close(done)
+		cancelCause(nil)
+	}
+	return ctx, cancel
+}
+
+func isSignalCancellation(err error, ctx context.Context) bool {
+	return err != nil &&
+		errors.Is(err, context.Canceled) &&
+		errors.Is(context.Cause(ctx), errSignalCanceled)
 }
 
 func profileNameFromArgs(args []string) string {

@@ -200,7 +200,7 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 			if len(opts.Operations) > 0 && !opts.Operations[item.Op.OperationId] {
 				continue
 			}
-			tool, err := buildTool(apiName, multiAPI, path, item.Method, item.Op)
+			tool, err := buildTool(apiName, multiAPI, path, item.Method, pathItem.Parameters, item.Op)
 			if err != nil {
 				return nil, err
 			}
@@ -210,7 +210,7 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 	return tools, nil
 }
 
-func buildTool(apiName string, multiAPI bool, path, method string, op *v3high.Operation) (*Tool, error) {
+func buildTool(apiName string, multiAPI bool, path, method string, pathParams []*v3high.Parameter, op *v3high.Operation) (*Tool, error) {
 	name := op.OperationId
 	if multiAPI {
 		name = apiName + "__" + name
@@ -226,7 +226,7 @@ func buildTool(apiName string, multiAPI bool, path, method string, op *v3high.Op
 	properties := map[string]any{}
 	var required []string
 	var params []Param
-	for _, p := range op.Parameters {
+	for _, p := range spec.MergeParameters(pathParams, op.Parameters) {
 		params = append(params, Param{
 			Name:        p.Name,
 			In:          p.In,
@@ -532,9 +532,6 @@ func includeEnvelope(resp *HTTPResponse) bool {
 	}
 	if resp.Status == 201 && resp.Headers != nil {
 		if _, ok := resp.Headers["Location"]; ok {
-			return true
-		}
-		if _, ok := resp.Headers["location"]; ok {
 			return true
 		}
 	}

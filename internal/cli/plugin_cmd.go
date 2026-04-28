@@ -101,7 +101,7 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 	}
 	// Make it executable.
 	_ = os.Chmod(dest, 0o755)
-	if _, err := plugin.LoadManifest(dest); err != nil {
+	if _, err := plugin.LoadManifestWithWarnings(dest, diagnosticPrefixWriter(c.Stderr)); err != nil {
 		_ = os.Remove(dest)
 		return fmt.Errorf("install: %w", err)
 	}

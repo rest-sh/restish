@@ -236,6 +236,40 @@ func TestDo_HeaderTimeout(t *testing.T) {
 	}
 }
 
+func TestDo_HeaderTimeoutDoesNotWaitForNonCooperativeTransport(t *testing.T) {
+	release := make(chan struct{})
+	closed := make(chan struct{})
+	started := make(chan struct{})
+
+	start := time.Now()
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		Timeout: 20 * time.Millisecond,
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			close(started)
+			<-release
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{},
+				Body:       closeNotifyBody{closed: closed},
+			}, nil
+		}),
+	})
+	elapsed := time.Since(start)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("err = %v, want %v", err, context.DeadlineExceeded)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("timeout waited for non-cooperative transport, elapsed = %v", elapsed)
+	}
+	<-started
+	close(release)
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("late response body was not closed")
+	}
+}
+
 func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -283,4 +317,17 @@ type readerFunc func([]byte) (int, error)
 
 func (f readerFunc) Read(p []byte) (int, error) {
 	return f(p)
+}
+
+type closeNotifyBody struct {
+	closed chan struct{}
+}
+
+func (b closeNotifyBody) Read([]byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (b closeNotifyBody) Close() error {
+	close(b.closed)
+	return nil
 }

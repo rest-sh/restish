@@ -503,6 +503,33 @@ func TestSaveConfigValue_PreservesCommentsOnDisk(t *testing.T) {
 	}
 }
 
+func TestSaveConfigValue_CreatesMissingConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "restish.json")
+
+	if err := SaveConfigValue(path, []string{"apis", "myapi", "base_url"}, "https://api.example.com"); err != nil {
+		t.Fatalf("SaveConfigValue: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url = %q, want https://api.example.com", got)
+	}
+}
+
+func TestDeleteAPIConfig_MissingFileIsNoop(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restish.json")
+
+	if err := DeleteAPIConfig(path, "missing"); err != nil {
+		t.Fatalf("DeleteAPIConfig: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected missing config file to remain missing, stat err = %v", err)
+	}
+}
+
 func TestDeleteAPIConfig_PreservesOtherCommentsOnDisk(t *testing.T) {
 	path := writeJSONCConfig(t, `{
   "apis": {

@@ -309,6 +309,15 @@ func doWithHeaderTimeout(client *http.Client, req *http.Request, timeout time.Du
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
+	drainLateResult := func() {
+		go func() {
+			result := <-resultCh
+			if result.resp != nil && result.resp.Body != nil {
+				_ = result.resp.Body.Close()
+			}
+		}()
+	}
+
 	select {
 	case result := <-resultCh:
 		return result.resp, result.err
@@ -316,24 +325,13 @@ func doWithHeaderTimeout(client *http.Client, req *http.Request, timeout time.Du
 		if cancel != nil {
 			cancel(context.Cause(req.Context()))
 		}
-		result := <-resultCh
-		if result.err == nil {
-			if result.resp != nil && result.resp.Body != nil {
-				_ = result.resp.Body.Close()
-			}
-			return nil, req.Context().Err()
-		}
-		return nil, result.err
+		drainLateResult()
+		return nil, req.Context().Err()
 	case <-timer.C:
 		if cancel != nil {
 			cancel(context.DeadlineExceeded)
 		}
-		result := <-resultCh
-		if result.err == nil {
-			if result.resp != nil && result.resp.Body != nil {
-				_ = result.resp.Body.Close()
-			}
-		}
+		drainLateResult()
 		return nil, context.DeadlineExceeded
 	}
 }

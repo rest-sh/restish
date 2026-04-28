@@ -65,8 +65,11 @@ type FormatterStream struct {
 // StartFormatterStream starts a formatter plugin subprocess, wires its stdout
 // to w, sends the initial request, and returns a handle that can send
 // additional stream messages before Close waits for plugin exit.
-func StartFormatterStream(path string, w io.Writer, in any) (*FormatterStream, error) {
-	cmd := exec.Command(path)
+func StartFormatterStream(ctx context.Context, path string, w io.Writer, in any) (*FormatterStream, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cmd := exec.CommandContext(ctx, path)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("hook %s: stdin: %w", filepath.Base(path), err)
