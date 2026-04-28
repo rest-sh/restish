@@ -133,8 +133,9 @@ can grow deliberately.
 ## Request Bodies
 
 Generated commands use the normal Restish body syntax. JSON and form bodies use
-shorthand assignments, multipart bodies can include fields and file references,
-and `application/octet-stream` sends raw string or file input:
+shorthand assignments, multipart bodies can include fields, repeated file-array
+fields, and `encoding.contentType` per-part metadata, and
+`application/octet-stream` sends raw string or file input:
 
 ```bash
 restish myapi upload-item name: alice, file: @photo.jpg

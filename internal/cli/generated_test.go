@@ -1232,8 +1232,18 @@ func TestGeneratedCommandMultipartRequestBody(t *testing.T) {
                 "type": "object",
                 "properties": {
                   "name": {"type": "string"},
-                  "file": {"type": "string", "format": "binary"}
+                  "meta": {"type": "object", "properties": {"role": {"type": "string"}}},
+                  "file": {"type": "string", "format": "binary"},
+                  "files": {
+                    "type": "array",
+                    "items": {"type": "string", "format": "binary"}
+                  }
                 }
+              },
+              "encoding": {
+                "meta": {"contentType": "application/json"},
+                "file": {"contentType": "text/plain"},
+                "files": {"contentType": "text/plain"}
               }
             }
           }
@@ -1247,7 +1257,13 @@ func TestGeneratedCommandMultipartRequestBody(t *testing.T) {
 
 	uploadPath := filepath.Join("testdata", "upload.txt")
 	c := env.newCLI()
-	if err := c.Run([]string{"restish", "tapi", "upload-item", "name:", "alice,", "file:", "@" + uploadPath}); err != nil {
+	if err := c.Run([]string{
+		"restish", "tapi", "upload-item",
+		"name:", "alice,",
+		"meta.role:", "avatar,",
+		"file:", "@" + uploadPath + ",",
+		"files:", "[@" + uploadPath + ",@" + uploadPath + "]",
+	}); err != nil {
 		t.Fatalf("upload-item failed: %v", err)
 	}
 
@@ -1259,8 +1275,9 @@ func TestGeneratedCommandMultipartRequestBody(t *testing.T) {
 		t.Fatalf("Content-Type = %q, want multipart/form-data", gotContentType)
 	}
 	reader := multipart.NewReader(bytes.NewReader(gotBody), params["boundary"])
-	parts := map[string]string{}
-	filenames := map[string]string{}
+	parts := map[string][]string{}
+	filenames := map[string][]string{}
+	partContentTypes := map[string][]string{}
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -1273,17 +1290,34 @@ func TestGeneratedCommandMultipartRequestBody(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read part: %v", err)
 		}
-		parts[part.FormName()] = string(content)
-		filenames[part.FormName()] = part.FileName()
+		name := part.FormName()
+		parts[name] = append(parts[name], string(content))
+		filenames[name] = append(filenames[name], part.FileName())
+		partContentTypes[name] = append(partContentTypes[name], part.Header.Get("Content-Type"))
 	}
-	if parts["name"] != "alice" {
-		t.Fatalf("name part = %q, want alice", parts["name"])
+	if got := parts["name"]; len(got) != 1 || got[0] != "alice" {
+		t.Fatalf("name part = %#v, want alice", got)
 	}
-	if parts["file"] != "hello from upload\n" {
-		t.Fatalf("file part = %q", parts["file"])
+	if got := parts["meta"]; len(got) != 1 || got[0] != `{"role":"avatar"}` {
+		t.Fatalf("meta part = %#v", got)
 	}
-	if filenames["file"] != "upload.txt" {
-		t.Fatalf("file name = %q, want upload.txt", filenames["file"])
+	if got := partContentTypes["meta"]; len(got) != 1 || got[0] != "application/json" {
+		t.Fatalf("meta content type = %#v, want application/json", got)
+	}
+	if got := parts["file"]; len(got) != 1 || got[0] != "hello from upload\n" {
+		t.Fatalf("file part = %#v", got)
+	}
+	if got := filenames["file"]; len(got) != 1 || got[0] != "upload.txt" {
+		t.Fatalf("file name = %#v, want upload.txt", got)
+	}
+	if got := partContentTypes["file"]; len(got) != 1 || got[0] != "text/plain" {
+		t.Fatalf("file content type = %#v, want text/plain", got)
+	}
+	if got := parts["files"]; len(got) != 2 || got[0] != "hello from upload\n" || got[1] != "hello from upload\n" {
+		t.Fatalf("files parts = %#v", got)
+	}
+	if got := filenames["files"]; len(got) != 2 || got[0] != "upload.txt" || got[1] != "upload.txt" {
+		t.Fatalf("files names = %#v, want repeated upload.txt", got)
 	}
 }
 

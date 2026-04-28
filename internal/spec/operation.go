@@ -96,8 +96,11 @@ type Operation struct {
 	// RequestSchemaTypes maps dotted request-body property paths to simple
 	// OpenAPI schema types for generated-command shorthand coercion.
 	RequestSchemaTypes map[string]string
-	XCLI               OperationXCLI
-	Help               OperationHelp
+	// RequestMultipartContentTypes maps multipart/form-data property names to
+	// per-part Content-Type values from the OpenAPI encoding object.
+	RequestMultipartContentTypes map[string]string
+	XCLI                         OperationXCLI
+	Help                         OperationHelp
 }
 
 // OperationSet is the extracted operation list plus API-level metadata needed
@@ -239,6 +242,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 	}
 	o.Help = buildOperationHelp(op, o.RequestMediaType)
 	o.RequestSchemaTypes = buildRequestSchemaTypes(op, o.RequestMediaType)
+	o.RequestMultipartContentTypes = buildRequestMultipartContentTypes(op, o.RequestMediaType)
 
 	merged := MergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {

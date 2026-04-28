@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/content"
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/input"
 	"github.com/rest-sh/restish/v2/internal/output"
@@ -93,6 +94,19 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 // noAuth strips authentication when following a redirect to a different host,
 // preventing credentialed SSRF via a compromised response-middleware plugin.
 func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodySchemaTypes ...map[string]string) error {
+	var opts requestBodyOptions
+	if len(bodySchemaTypes) > 0 {
+		opts.schemaTypes = bodySchemaTypes[0]
+	}
+	return c.runHTTPInternalWithBodyOptions(cmd, method, args, followMode, extraHeaders, noAuth, firstPartyHost, contentTypeOverride, opts)
+}
+
+type requestBodyOptions struct {
+	schemaTypes               map[string]string
+	multipartPartContentTypes map[string]string
+}
+
+func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -114,13 +128,12 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	var schemaTypes map[string]string
-	if len(bodySchemaTypes) > 0 {
-		schemaTypes = bodySchemaTypes[0]
-	}
-	bodyVal, err := input.BodyWithSchemaTypes(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, schemaTypes)
+	bodyVal, err := input.BodyWithSchemaTypes(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, bodyOpts.schemaTypes)
 	if err != nil {
 		return fmt.Errorf("building request body: %w", err)
+	}
+	if len(bodyOpts.multipartPartContentTypes) > 0 && strings.HasPrefix(strings.ToLower(opts.ContentType), "multipart/form-data") {
+		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}
 	}
 
 	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts)

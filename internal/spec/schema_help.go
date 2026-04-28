@@ -88,6 +88,30 @@ func buildRequestSchemaTypes(op *v3.Operation, requestMediaType string) map[stri
 	return types
 }
 
+func buildRequestMultipartContentTypes(op *v3.Operation, requestMediaType string) map[string]string {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
+		return nil
+	}
+	if !strings.HasPrefix(strings.ToLower(requestMediaType), "multipart/form-data") {
+		return nil
+	}
+	mt := op.RequestBody.Content.GetOrZero(requestMediaType)
+	if mt == nil || mt.Encoding == nil {
+		return nil
+	}
+	out := map[string]string{}
+	for name, enc := range mt.Encoding.FromOldest() {
+		if enc == nil || strings.TrimSpace(enc.ContentType) == "" {
+			continue
+		}
+		out[name] = strings.TrimSpace(enc.ContentType)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func collectRequestSchemaTypes(s *base.Schema, prefix string, out map[string]string, seen map[uint64]bool, depth int) {
 	if s == nil || depth > schemaHelpMaxDepth || skipSchemaForMode(s, schemaHelpWrite) {
 		return

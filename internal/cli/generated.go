@@ -365,7 +365,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
 		},
 	}
 	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
@@ -628,6 +628,7 @@ func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
 	apiName, opPath, method, requestMediaType string,
 	requestSchemaTypes map[string]string,
+	requestMultipartContentTypes map[string]string,
 	noAuth bool,
 	required, optional []*paramInfo,
 	args []string,
@@ -682,7 +683,10 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
-	return c.runHTTPInternal(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestSchemaTypes)
+	return c.runHTTPInternalWithBodyOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
+		schemaTypes:               requestSchemaTypes,
+		multipartPartContentTypes: requestMultipartContentTypes,
+	})
 }
 
 func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {

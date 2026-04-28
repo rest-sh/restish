@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/textproto"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,6 +18,13 @@ import (
 	"github.com/shamaton/msgpack/v2"
 	"go.yaml.in/yaml/v3"
 )
+
+// MultipartBody carries a structured multipart/form-data body plus optional
+// per-field Content-Type metadata from an OpenAPI encoding object.
+type MultipartBody struct {
+	Value        any
+	ContentTypes map[string]string
+}
 
 // Default returns a Registry pre-loaded with JSON, YAML, CBOR, msgpack, Ion,
 // plain text, and gzip/deflate/brotli encodings.
@@ -262,9 +270,17 @@ func addFormValues(values url.Values, prefix string, v any) error {
 }
 
 func marshalMultipart(v any) ([]byte, string, error) {
+	opts := multipartOptions{}
+	if body, ok := v.(MultipartBody); ok {
+		v = body.Value
+		opts.contentTypes = body.ContentTypes
+	} else if body, ok := v.(*MultipartBody); ok && body != nil {
+		v = body.Value
+		opts.contentTypes = body.ContentTypes
+	}
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	if err := addMultipartParts(writer, "", v); err != nil {
+	if err := addMultipartParts(writer, "", v, opts); err != nil {
 		writer.Close()
 		return nil, "", err
 	}
@@ -274,16 +290,23 @@ func marshalMultipart(v any) ([]byte, string, error) {
 	return body.Bytes(), writer.FormDataContentType(), nil
 }
 
-func addMultipartParts(writer *multipart.Writer, prefix string, v any) error {
+type multipartOptions struct {
+	contentTypes map[string]string
+}
+
+func addMultipartParts(writer *multipart.Writer, prefix string, v any, opts multipartOptions) error {
 	switch typed := v.(type) {
 	case map[string]any:
+		if prefix != "" && opts.contentTypes[prefix] != "" {
+			return writeMultipartField(writer, prefix, typed, opts.contentTypes[prefix])
+		}
 		keys := sortedKeys(typed)
 		for _, key := range keys {
 			name := key
 			if prefix != "" {
 				name = prefix + "[" + key + "]"
 			}
-			if err := addMultipartParts(writer, name, typed[key]); err != nil {
+			if err := addMultipartParts(writer, name, typed[key], opts); err != nil {
 				return err
 			}
 		}
@@ -293,7 +316,7 @@ func addMultipartParts(writer *multipart.Writer, prefix string, v any) error {
 			if name == "" {
 				return fmt.Errorf("multipart bodies must be an object")
 			}
-			if err := addMultipartParts(writer, name+"[]", item); err != nil {
+			if err := addMultipartParts(writer, name, item, opts); err != nil {
 				return err
 			}
 		}
@@ -301,17 +324,51 @@ func addMultipartParts(writer *multipart.Writer, prefix string, v any) error {
 		if prefix == "" {
 			return fmt.Errorf("multipart bodies must be an object")
 		}
-		return writer.WriteField(prefix, "")
+		return writeMultipartField(writer, prefix, nil, opts.contentTypes[prefix])
 	default:
 		if prefix == "" {
 			return fmt.Errorf("multipart bodies must be an object")
 		}
 		if filePath, ok := multipartFilePath(v); ok {
-			return addMultipartFile(writer, prefix, filePath)
+			return addMultipartFile(writer, prefix, filePath, opts.contentTypes[prefix])
 		}
-		return writer.WriteField(prefix, fmt.Sprint(v))
+		return writeMultipartField(writer, prefix, v, opts.contentTypes[prefix])
 	}
 	return nil
+}
+
+func writeMultipartField(writer *multipart.Writer, fieldName string, value any, contentType string) error {
+	data, err := multipartFieldBytes(value, contentType)
+	if err != nil {
+		return err
+	}
+	if contentType == "" {
+		return writer.WriteField(fieldName, string(data))
+	}
+	part, err := writer.CreatePart(multipartPartHeader(fieldName, "", contentType))
+	if err != nil {
+		return err
+	}
+	_, err = part.Write(data)
+	return err
+}
+
+func multipartFieldBytes(value any, contentType string) ([]byte, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(strings.Split(contentType, ";")[0]), "application/json") ||
+		strings.HasSuffix(strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0])), "+json") {
+		return json.Marshal(value)
+	}
+	switch typed := value.(type) {
+	case []byte:
+		return typed, nil
+	case string:
+		return []byte(typed), nil
+	default:
+		return []byte(fmt.Sprint(value)), nil
+	}
 }
 
 func multipartFilePath(v any) (string, bool) {
@@ -327,19 +384,41 @@ func multipartFilePath(v any) (string, bool) {
 	return path, true
 }
 
-func addMultipartFile(writer *multipart.Writer, fieldName, path string) error {
+func addMultipartFile(writer *multipart.Writer, fieldName, path, contentType string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	part, err := writer.CreateFormFile(fieldName, filepath.Base(path))
+	var part io.Writer
+	if contentType == "" {
+		part, err = writer.CreateFormFile(fieldName, filepath.Base(path))
+	} else {
+		part, err = writer.CreatePart(multipartPartHeader(fieldName, filepath.Base(path), contentType))
+	}
 	if err != nil {
 		return err
 	}
 	_, err = io.Copy(part, file)
 	return err
+}
+
+func multipartPartHeader(fieldName, fileName, contentType string) textproto.MIMEHeader {
+	header := make(textproto.MIMEHeader)
+	disposition := fmt.Sprintf(`form-data; name="%s"`, escapeMultipartQuote(fieldName))
+	if fileName != "" {
+		disposition += fmt.Sprintf(`; filename="%s"`, escapeMultipartQuote(fileName))
+	}
+	header.Set("Content-Disposition", disposition)
+	if contentType != "" {
+		header.Set("Content-Type", contentType)
+	}
+	return header
+}
+
+func escapeMultipartQuote(s string) string {
+	return strings.NewReplacer("\\", "\\\\", `"`, "\\\"").Replace(s)
 }
 
 func sortedKeys(m map[string]any) []string {
