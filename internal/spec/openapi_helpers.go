@@ -13,7 +13,8 @@ type MethodOp struct {
 }
 
 // PathItemMethods returns all HTTP method/operation pairs for a path item
-// in the conventional order GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+// in the conventional order GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS,
+// TRACE.
 // Callers should check Op for nil before use.
 func PathItemMethods(item *v3.PathItem) []MethodOp {
 	if item == nil {
@@ -27,6 +28,7 @@ func PathItemMethods(item *v3.PathItem) []MethodOp {
 		{"DELETE", item.Delete},
 		{"HEAD", item.Head},
 		{"OPTIONS", item.Options},
+		{"TRACE", item.Trace},
 	}
 }
 

@@ -564,3 +564,188 @@ paths:
 		t.Fatalf("operations = %#v, want none", ops)
 	}
 }
+
+func TestOpenAPITraceOperationsAreExtracted(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Trace Operation
+  version: "1.0.0"
+paths:
+  /diagnostics:
+    trace:
+      operationId: traceDiagnostics
+      responses:
+        "204":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if ops[0].Method != "TRACE" || ops[0].ID != "traceDiagnostics" {
+		t.Fatalf("operation = %#v, want TRACE traceDiagnostics", ops[0])
+	}
+}
+
+func TestOpenAPIIgnoresReservedHeaderParameters(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Reserved Headers
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: Content-Type
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Trace
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if len(ops[0].Parameters) != 1 || ops[0].Parameters[0].Name != "X-Trace" {
+		t.Fatalf("parameters = %#v, want only X-Trace", ops[0].Parameters)
+	}
+}
+
+func TestOpenAPIComponentParameterRefsAndOperationOverride(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Component Parameters
+  version: "1.0.0"
+paths:
+  /items:
+    parameters:
+      - $ref: "#/components/parameters/Limit"
+    get:
+      operationId: listItems
+      parameters:
+        - name: limit
+          in: query
+          required: true
+          description: Operation-level limit
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Path-level limit
+      schema:
+        type: string`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if len(ops[0].Parameters) != 1 {
+		t.Fatalf("parameters = %#v, want one overridden limit param", ops[0].Parameters)
+	}
+	got := ops[0].Parameters[0]
+	if got.Name != "limit" || got.In != "query" || !got.Required || got.Type != "integer" || got.Desc != "Operation-level limit" {
+		t.Fatalf("limit parameter = %#v, want operation-level integer required parameter", got)
+	}
+}
+
+func TestOpenAPICallbacksAndLinksDoNotCreateExtraOperations(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Callback Metadata
+  version: "1.0.0"
+paths:
+  /subscriptions:
+    post:
+      operationId: createSubscription
+      callbacks:
+        onEvent:
+          "{$request.body#/callbackUrl}":
+            post:
+              operationId: callbackEvent
+              responses:
+                "200":
+                  description: OK
+      responses:
+        "201":
+          description: Created
+          links:
+            getSubscription:
+              operationId: getSubscription
+              parameters:
+                id: "$response.body#/id"
+  /subscriptions/{id}:
+    get:
+      operationId: getSubscription
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("operations = %#v, want only concrete path operations", ops)
+	}
+	ids := map[string]bool{}
+	for _, op := range ops {
+		ids[op.ID] = true
+	}
+	if ids["callbackEvent"] {
+		t.Fatalf("callback operation should not be generated as a request command: %#v", ops)
+	}
+	if !ids["createSubscription"] || !ids["getSubscription"] {
+		t.Fatalf("operations = %#v, want createSubscription and getSubscription", ops)
+	}
+}

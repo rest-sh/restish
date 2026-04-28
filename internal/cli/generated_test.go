@@ -1419,6 +1419,140 @@ func TestGeneratedCommandGETRequestBody(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandVendorJSONRequestBody(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/vnd.github+json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Vendor JSON API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/repos": {
+      "post": {
+        "operationId": "createRepo",
+        "requestBody": {
+          "content": {
+            "application/vnd.github+json": {
+              "schema": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}}
+              }
+            }
+          }
+        },
+        "responses": {"201": {"description": "Created"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-repo", "name:", "restish"}); err != nil {
+		t.Fatalf("create-repo failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/vnd.github+json") {
+		t.Fatalf("Content-Type = %q, want vendor +json", gotContentType)
+	}
+	if gotBody != `{"name":"restish"}` {
+		t.Fatalf("body = %q, want JSON body", gotBody)
+	}
+}
+
+func TestGeneratedCommandTraceOperation(t *testing.T) {
+	var gotMethod string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Trace API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/diagnostics": {
+      "trace": {
+        "operationId": "traceDiagnostics",
+        "responses": {"204": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "trace-diagnostics"}); err != nil {
+		t.Fatalf("trace-diagnostics failed: %v", err)
+	}
+	if gotMethod != http.MethodTrace {
+		t.Fatalf("method = %q, want TRACE", gotMethod)
+	}
+}
+
+func TestGeneratedCommandIgnoresReservedHeaderParameters(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Reserved Header API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "parameters": [
+          {"name": "Authorization", "in": "header", "required": true, "schema": {"type": "string"}},
+          {"name": "Accept", "in": "header", "schema": {"type": "string"}},
+          {"name": "Content-Type", "in": "header", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.APIs["tapi"].Profiles = map[string]*config.ProfileConfig{
+		"default": {Headers: []string{"Authorization: Bearer profile-token"}},
+	}
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items should not require reserved header args: %v", err)
+	}
+	if gotAuth != "Bearer profile-token" {
+		t.Fatalf("Authorization = %q, want profile auth header", gotAuth)
+	}
+}
+
 func TestGeneratedCommandUsesPathItemParameters(t *testing.T) {
 	var lastPath string
 	mux := http.NewServeMux()
@@ -2170,7 +2304,7 @@ func TestGeneratedCommandProfileBaseURLUsesSharedSpec(t *testing.T) {
 func TestGeneratedCommandPercentEscapesPathAndQueryArgs(t *testing.T) {
 	var gotRequestURI string
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users/%@domain.com", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
 		gotRequestURI = r.RequestURI
 		w.WriteHeader(200)
 	})
@@ -2222,11 +2356,11 @@ func TestGeneratedCommandPercentEscapesPathAndQueryArgs(t *testing.T) {
 	c.Stderr = io.Discard
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = cacheDir
-	if err := c.Run([]string{"restish", "pct", "get-user", "%@domain.com", "--filter", "%@domain.com"}); err != nil {
+	if err := c.Run([]string{"restish", "pct", "get-user", "%@domain.com/a?b#c", "--filter", "%@domain.com"}); err != nil {
 		t.Fatalf("get-user: %v", err)
 	}
-	if !strings.Contains(gotRequestURI, "/users/%25@domain.com") {
-		t.Fatalf("RequestURI = %q, want escaped percent in path", gotRequestURI)
+	if !strings.Contains(gotRequestURI, "/users/%25@domain.com%2Fa%3Fb%23c") {
+		t.Fatalf("RequestURI = %q, want escaped generic syntax in path", gotRequestURI)
 	}
 	if !strings.Contains(gotRequestURI, "filter=%25%40domain.com") {
 		t.Fatalf("RequestURI = %q, want escaped percent and at in query", gotRequestURI)

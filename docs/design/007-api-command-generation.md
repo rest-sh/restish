@@ -158,6 +158,12 @@ options optional.
 
 Optional query, header, and cookie parameters become flags.
 
+OpenAPI says header parameters named `Accept`, `Content-Type`, or
+`Authorization` are ignored. Generated commands follow that rule so content
+negotiation, request body encoding, and auth remain controlled by Restish
+flags, profiles, and security handling instead of being modeled as ordinary
+operation parameters.
+
 ### Missing Path Parameters
 
 If the path template references `{petId}` but the operation does not declare a

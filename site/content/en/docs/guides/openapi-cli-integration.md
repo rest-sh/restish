@@ -126,16 +126,22 @@ commands:
 For query parameters with `allowReserved: true`, reserved URL characters are
 kept unescaped in the generated query value.
 
+OpenAPI header parameters named `Accept`, `Content-Type`, or `Authorization`
+are ignored by generated commands. Configure response negotiation, request body
+content type, and authentication through Restish flags, profiles, or OpenAPI
+security schemes instead.
+
 Unsupported styles are not silently ignored. Generated command help calls them
 out so the API author can choose a supported style or the Restish implementation
 can grow deliberately.
 
 ## Request Bodies
 
-Generated commands use the normal Restish body syntax. JSON and form bodies use
-shorthand assignments, multipart bodies can include fields, repeated file-array
-fields, and `encoding.contentType` per-part metadata, and
-`application/octet-stream` sends raw string or file input:
+Generated commands use the normal Restish body syntax. JSON and `+json` media
+types use shorthand assignments, form bodies use form encoding, multipart
+bodies can include fields, repeated file-array fields, and
+`encoding.contentType` per-part metadata, and `application/octet-stream` sends
+raw string or file input:
 
 ```bash
 restish myapi upload-item name: alice, file: @photo.jpg

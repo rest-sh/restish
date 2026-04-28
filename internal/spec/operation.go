@@ -249,6 +249,9 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		if p == nil {
 			continue
 		}
+		if isIgnoredOpenAPIHeaderParameter(p) {
+			continue
+		}
 		var enum []string
 		var paramType, itemType, defaultValue, schemaHelp string
 		var hasDefault bool
@@ -299,6 +302,15 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		})
 	}
 	return o
+}
+
+func isIgnoredOpenAPIHeaderParameter(p *v3.Parameter) bool {
+	if p == nil || !strings.EqualFold(p.In, "header") {
+		return false
+	}
+	return strings.EqualFold(p.Name, "Accept") ||
+		strings.EqualFold(p.Name, "Content-Type") ||
+		strings.EqualFold(p.Name, "Authorization")
 }
 
 // deriveBasePath computes the path prefix to prepend to all operation paths.
