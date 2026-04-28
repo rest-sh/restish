@@ -30,19 +30,21 @@ type ParamXCLI struct {
 
 // Param is a single request parameter (path, query, header, or cookie).
 type Param struct {
-	Name       string
-	In         string // "path", "query", "header", "cookie"
-	Desc       string
-	Schema     string
-	Required   bool
-	Type       string
-	ItemType   string
-	Default    string
-	HasDefault bool
-	Style      string
-	Explode    *bool
-	Enum       []string
-	XCLI       ParamXCLI
+	Name             string
+	In               string // "path", "query", "header", "cookie"
+	Desc             string
+	Schema           string
+	Required         bool
+	Type             string
+	ItemType         string
+	Default          string
+	HasDefault       bool
+	Style            string
+	Explode          *bool
+	AllowReserved    bool
+	ContentMediaType string
+	Enum             []string
+	XCLI             ParamXCLI
 }
 
 // OperationBodyHelp is a compact request/response body example extracted from
@@ -267,18 +269,20 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			}
 		}
 		o.Parameters = append(o.Parameters, Param{
-			Name:       p.Name,
-			In:         p.In,
-			Desc:       p.Description,
-			Schema:     schemaHelp,
-			Required:   p.Required != nil && *p.Required,
-			Type:       paramType,
-			ItemType:   itemType,
-			Default:    defaultValue,
-			HasDefault: hasDefault,
-			Style:      p.Style,
-			Explode:    p.Explode,
-			Enum:       enum,
+			Name:             p.Name,
+			In:               p.In,
+			Desc:             p.Description,
+			Schema:           schemaHelp,
+			Required:         p.Required != nil && *p.Required,
+			Type:             paramType,
+			ItemType:         itemType,
+			Default:          defaultValue,
+			HasDefault:       hasDefault,
+			Style:            p.Style,
+			Explode:          p.Explode,
+			AllowReserved:    p.AllowReserved,
+			ContentMediaType: preferredParameterContentMediaType(p),
+			Enum:             enum,
 			XCLI: ParamXCLI{
 				Ignore:      ParamExtBool(p, "x-cli-ignore"),
 				Hidden:      ParamExtBool(p, "x-cli-hidden"),
@@ -510,6 +514,27 @@ func preferredRequestMediaType(op *v3.Operation) string {
 	}
 	var names []string
 	for name := range op.RequestBody.Content.FromOldest() {
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	for _, name := range names {
+		mt := strings.ToLower(strings.TrimSpace(strings.Split(name, ";")[0]))
+		if mt == "application/json" || strings.HasSuffix(mt, "+json") {
+			return name
+		}
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
+func preferredParameterContentMediaType(p *v3.Parameter) string {
+	if p == nil || p.Content == nil {
+		return ""
+	}
+	var names []string
+	for name := range p.Content.FromOldest() {
 		names = append(names, name)
 	}
 	if len(names) == 0 {

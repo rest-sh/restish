@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -174,20 +177,22 @@ func newGeneratedTagCommand(name, tag string) *cobra.Command {
 
 // paramInfo holds the information we need about a single parameter.
 type paramInfo struct {
-	name         string // original API parameter name
-	flagName     string // kebab-case flag name
-	in           string // "path", "query", "header", "cookie"
-	required     bool
-	hidden       bool
-	desc         string
-	schema       string
-	typ          string
-	itemType     string
-	defaultValue string
-	hasDefault   bool
-	style        string
-	explode      *bool
-	enum         []string // allowed values from OpenAPI schema enum, if present
+	name             string // original API parameter name
+	flagName         string // kebab-case flag name
+	in               string // "path", "query", "header", "cookie"
+	required         bool
+	hidden           bool
+	desc             string
+	schema           string
+	typ              string
+	itemType         string
+	defaultValue     string
+	hasDefault       bool
+	style            string
+	explode          *bool
+	allowReserved    bool
+	contentMediaType string
+	enum             []string // allowed values from OpenAPI schema enum, if present
 }
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
@@ -220,21 +225,24 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		if p.XCLI.Description != "" {
 			desc = p.XCLI.Description
 		}
+		desc = appendGeneratedParamSupportNote(desc, p)
 		allParams[paramKey(p.In, p.Name)] = &paramInfo{
-			name:         p.Name,
-			flagName:     flagName,
-			in:           p.In,
-			required:     p.Required,
-			hidden:       p.XCLI.Hidden,
-			desc:         desc,
-			schema:       p.Schema,
-			typ:          p.Type,
-			itemType:     p.ItemType,
-			defaultValue: p.Default,
-			hasDefault:   p.HasDefault,
-			style:        p.Style,
-			explode:      p.Explode,
-			enum:         p.Enum,
+			name:             p.Name,
+			flagName:         flagName,
+			in:               p.In,
+			required:         p.Required,
+			hidden:           p.XCLI.Hidden,
+			desc:             desc,
+			schema:           p.Schema,
+			typ:              p.Type,
+			itemType:         p.ItemType,
+			defaultValue:     p.Default,
+			hasDefault:       p.HasDefault,
+			style:            p.Style,
+			explode:          p.Explode,
+			allowReserved:    p.AllowReserved,
+			contentMediaType: p.ContentMediaType,
+			enum:             p.Enum,
 		}
 	}
 
@@ -387,6 +395,37 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 
 func paramKey(in, name string) string {
 	return in + "\x00" + name
+}
+
+func appendGeneratedParamSupportNote(desc string, p spec.Param) string {
+	var note string
+	if p.ContentMediaType != "" && !isJSONMediaType(p.ContentMediaType) {
+		note = fmt.Sprintf("parameter content type %s is sent as raw text", p.ContentMediaType)
+	} else if p.Style != "" && !supportedGeneratedParamStyle(p.In, p.Style) {
+		note = fmt.Sprintf("OpenAPI style %q is not fully supported; using default serialization", p.Style)
+	}
+	if note == "" {
+		return desc
+	}
+	if desc == "" {
+		return note
+	}
+	return desc + " (" + note + ")"
+}
+
+func supportedGeneratedParamStyle(in, style string) bool {
+	switch in {
+	case "path":
+		return style == "simple" || style == "label" || style == "matrix"
+	case "query":
+		return style == "form" || style == "spaceDelimited" || style == "pipeDelimited" || style == "deepObject"
+	case "header":
+		return style == "simple"
+	case "cookie":
+		return style == "form"
+	default:
+		return true
+	}
 }
 
 func generatedOperationArgs(required int, hasBody bool) func(*cobra.Command, []string) error {
@@ -566,13 +605,17 @@ func (c *CLI) runGeneratedOp(
 ) error {
 	// Substitute required params into the path, query string, and headers.
 	path := opPath
-	q := url.Values{}
+	var query []generatedQueryParam
 	var extraHeaders []string
 	bodyArgStart := len(required)
 
 	for i, p := range required {
 		val := args[i]
-		path, extraHeaders = addGeneratedParam(path, q, extraHeaders, p, []string{val})
+		var err error
+		path, query, extraHeaders, err = addGeneratedParam(path, query, extraHeaders, p, []string{val})
+		if err != nil {
+			return err
+		}
 	}
 
 	// Collect optional param flags.
@@ -584,7 +627,10 @@ func (c *CLI) runGeneratedOp(
 		if err != nil {
 			return err
 		}
-		path, extraHeaders = addGeneratedParam(path, q, extraHeaders, p, values)
+		path, query, extraHeaders, err = addGeneratedParam(path, query, extraHeaders, p, values)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Build the raw URL. When operation_base is set, resolve its absolute path
@@ -600,7 +646,7 @@ func (c *CLI) runGeneratedOp(
 	} else {
 		rawURL = apiName + path
 	}
-	if qs := q.Encode(); qs != "" {
+	if qs := encodeGeneratedQuery(query); qs != "" {
 		rawURL += "?" + qs
 	}
 
@@ -649,41 +695,392 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 	}
 }
 
-func addGeneratedParam(path string, q url.Values, extraHeaders []string, p *paramInfo, values []string) (string, []string) {
+type generatedQueryParam struct {
+	name          string
+	value         string
+	allowReserved bool
+}
+
+func addGeneratedParam(path string, q []generatedQueryParam, extraHeaders []string, p *paramInfo, values []string) (string, []generatedQueryParam, []string, error) {
 	if len(values) == 0 {
-		return path, extraHeaders
+		return path, q, extraHeaders, nil
 	}
 	switch p.in {
 	case "path":
-		path = strings.ReplaceAll(path, "{"+p.name+"}", url.PathEscape(values[0]))
-	case "query":
-		for _, val := range serializeGeneratedParamValues(p, values) {
-			q.Add(p.name, val)
+		serialized, err := serializeGeneratedPathParam(p, values)
+		if err != nil {
+			return path, q, extraHeaders, err
 		}
+		path = strings.ReplaceAll(path, "{"+p.name+"}", serialized)
+	case "query":
+		parts, err := serializeGeneratedQueryParam(p, values)
+		if err != nil {
+			return path, q, extraHeaders, err
+		}
+		q = append(q, parts...)
 	case "header":
-		extraHeaders = append(extraHeaders, p.name+": "+strings.Join(serializeGeneratedParamValues(p, values), ","))
+		headerValues, err := serializeGeneratedHeaderParam(p, values)
+		if err != nil {
+			return path, q, extraHeaders, err
+		}
+		for _, value := range headerValues {
+			extraHeaders = append(extraHeaders, p.name+": "+value)
+		}
 	case "cookie":
-		extraHeaders = append(extraHeaders, "Cookie: "+p.name+"="+url.QueryEscape(strings.Join(serializeGeneratedParamValues(p, values), ",")))
+		cookies, err := serializeGeneratedCookieParam(p, values)
+		if err != nil {
+			return path, q, extraHeaders, err
+		}
+		if len(cookies) > 0 {
+			extraHeaders = append(extraHeaders, "Cookie: "+strings.Join(cookies, "; "))
+		}
 	}
-	return path, extraHeaders
+	return path, q, extraHeaders, nil
 }
 
-func serializeGeneratedParamValues(p *paramInfo, values []string) []string {
-	if p.typ != "array" {
-		return values[:1]
+func serializeGeneratedPathParam(p *paramInfo, values []string) (string, error) {
+	if p.contentMediaType != "" {
+		encoded, err := serializeGeneratedContentParam(p, values)
+		if err != nil {
+			return "", err
+		}
+		return url.PathEscape(encoded), nil
 	}
-	style := p.style
-	if style == "" {
-		style = "form"
+	style := defaultParamStyle(p)
+	explode := paramExplode(p)
+	switch style {
+	case "label":
+		return "." + pathDelimitedParamValue(p, values, ".", explode), nil
+	case "matrix":
+		switch {
+		case p.typ == "array" && explode:
+			parts := normalizeGeneratedArrayValues(values)
+			var b strings.Builder
+			for _, value := range parts {
+				b.WriteString(";")
+				b.WriteString(url.PathEscape(p.name))
+				b.WriteString("=")
+				b.WriteString(url.PathEscape(value))
+			}
+			return b.String(), nil
+		case p.typ == "object" && explode:
+			fields, err := generatedObjectFields(values)
+			if err != nil {
+				return "", err
+			}
+			var b strings.Builder
+			for _, field := range fields {
+				b.WriteString(";")
+				b.WriteString(url.PathEscape(field.key))
+				b.WriteString("=")
+				b.WriteString(url.PathEscape(field.value))
+			}
+			return b.String(), nil
+		default:
+			return ";" + url.PathEscape(p.name) + "=" + pathDelimitedParamValue(p, values, ",", false), nil
+		}
+	default:
+		return pathDelimitedParamValue(p, values, ",", explode), nil
 	}
-	explode := true
+}
+
+func serializeGeneratedQueryParam(p *paramInfo, values []string) ([]generatedQueryParam, error) {
+	if p.contentMediaType != "" {
+		encoded, err := serializeGeneratedContentParam(p, values)
+		if err != nil {
+			return nil, err
+		}
+		return []generatedQueryParam{{name: p.name, value: encoded, allowReserved: p.allowReserved}}, nil
+	}
+	style := defaultParamStyle(p)
+	explode := paramExplode(p)
+	switch {
+	case p.typ == "array":
+		parts := normalizeGeneratedArrayValues(values)
+		switch style {
+		case "spaceDelimited":
+			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, " "), allowReserved: p.allowReserved}}, nil
+		case "pipeDelimited":
+			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, "|"), allowReserved: p.allowReserved}}, nil
+		default:
+			if explode {
+				out := make([]generatedQueryParam, 0, len(parts))
+				for _, part := range parts {
+					out = append(out, generatedQueryParam{name: p.name, value: part, allowReserved: p.allowReserved})
+				}
+				return out, nil
+			}
+			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, ","), allowReserved: p.allowReserved}}, nil
+		}
+	case p.typ == "object":
+		fields, err := generatedObjectFields(values)
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case style == "deepObject":
+			out := make([]generatedQueryParam, 0, len(fields))
+			for _, field := range fields {
+				out = append(out, generatedQueryParam{name: p.name + "[" + field.key + "]", value: field.value, allowReserved: p.allowReserved})
+			}
+			return out, nil
+		case explode:
+			out := make([]generatedQueryParam, 0, len(fields))
+			for _, field := range fields {
+				out = append(out, generatedQueryParam{name: field.key, value: field.value, allowReserved: p.allowReserved})
+			}
+			return out, nil
+		default:
+			return []generatedQueryParam{{name: p.name, value: commaDelimitedObject(fields), allowReserved: p.allowReserved}}, nil
+		}
+	default:
+		return []generatedQueryParam{{name: p.name, value: values[0], allowReserved: p.allowReserved}}, nil
+	}
+}
+
+func serializeGeneratedHeaderParam(p *paramInfo, values []string) ([]string, error) {
+	if p.contentMediaType != "" {
+		encoded, err := serializeGeneratedContentParam(p, values)
+		if err != nil {
+			return nil, err
+		}
+		return []string{encoded}, nil
+	}
+	if p.typ == "object" {
+		fields, err := generatedObjectFields(values)
+		if err != nil {
+			return nil, err
+		}
+		if paramExplode(p) {
+			parts := make([]string, 0, len(fields))
+			for _, field := range fields {
+				parts = append(parts, field.key+"="+field.value)
+			}
+			return []string{strings.Join(parts, ",")}, nil
+		}
+		return []string{commaDelimitedObject(fields)}, nil
+	}
+	if p.typ == "array" {
+		return []string{strings.Join(normalizeGeneratedArrayValues(values), ",")}, nil
+	}
+	return []string{values[0]}, nil
+}
+
+func serializeGeneratedCookieParam(p *paramInfo, values []string) ([]string, error) {
+	if p.contentMediaType != "" {
+		encoded, err := serializeGeneratedContentParam(p, values)
+		if err != nil {
+			return nil, err
+		}
+		return []string{p.name + "=" + url.QueryEscape(encoded)}, nil
+	}
+	if p.typ == "object" {
+		fields, err := generatedObjectFields(values)
+		if err != nil {
+			return nil, err
+		}
+		if paramExplode(p) {
+			out := make([]string, 0, len(fields))
+			for _, field := range fields {
+				out = append(out, url.QueryEscape(field.key)+"="+url.QueryEscape(field.value))
+			}
+			return out, nil
+		}
+		return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(commaDelimitedObject(fields))}, nil
+	}
+	if p.typ == "array" {
+		parts := normalizeGeneratedArrayValues(values)
+		if paramExplode(p) {
+			out := make([]string, 0, len(parts))
+			for _, value := range parts {
+				out = append(out, url.QueryEscape(p.name)+"="+url.QueryEscape(value))
+			}
+			return out, nil
+		}
+		return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(strings.Join(parts, ","))}, nil
+	}
+	return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(values[0])}, nil
+}
+
+func defaultParamStyle(p *paramInfo) string {
+	if p.style != "" {
+		return p.style
+	}
+	switch p.in {
+	case "query", "cookie":
+		return "form"
+	case "path", "header":
+		return "simple"
+	default:
+		return "form"
+	}
+}
+
+func paramExplode(p *paramInfo) bool {
 	if p.explode != nil {
-		explode = *p.explode
+		return *p.explode
 	}
-	if p.in == "query" && style == "form" && explode {
-		return values
+	return defaultParamStyle(p) == "form"
+}
+
+func pathDelimitedParamValue(p *paramInfo, values []string, delimiter string, explode bool) string {
+	switch p.typ {
+	case "array":
+		parts := normalizeGeneratedArrayValues(values)
+		escaped := make([]string, 0, len(parts))
+		for _, value := range parts {
+			escaped = append(escaped, url.PathEscape(value))
+		}
+		return strings.Join(escaped, delimiter)
+	case "object":
+		fields, err := generatedObjectFields(values)
+		if err != nil {
+			return url.PathEscape(strings.Join(values, " "))
+		}
+		parts := make([]string, 0, len(fields)*2)
+		for _, field := range fields {
+			if explode {
+				parts = append(parts, url.PathEscape(field.key)+"="+url.PathEscape(field.value))
+				continue
+			}
+			parts = append(parts, url.PathEscape(field.key), url.PathEscape(field.value))
+		}
+		return strings.Join(parts, delimiter)
+	default:
+		return url.PathEscape(values[0])
 	}
-	return []string{strings.Join(values, ",")}
+}
+
+func normalizeGeneratedArrayValues(values []string) []string {
+	if len(values) == 1 {
+		parts := splitEscapedComma(values[0])
+		if len(parts) > 1 {
+			return parts
+		}
+	}
+	return values
+}
+
+func splitEscapedComma(value string) []string {
+	var parts []string
+	var b strings.Builder
+	escaped := false
+	for _, r := range value {
+		if escaped {
+			b.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		if r == ',' {
+			parts = append(parts, strings.TrimSpace(b.String()))
+			b.Reset()
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if escaped {
+		b.WriteRune('\\')
+	}
+	parts = append(parts, strings.TrimSpace(b.String()))
+	return parts
+}
+
+type objectField struct {
+	key   string
+	value string
+}
+
+func generatedObjectFields(values []string) ([]objectField, error) {
+	parsed, err := shorthand.Unmarshal(strings.Join(values, " "), shorthand.ParseOptions{EnableObjectDetection: true}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("parse structured parameter: %w", err)
+	}
+	fields := map[string]string{}
+	switch v := parsed.(type) {
+	case map[string]any:
+		for key, value := range v {
+			fields[key] = fmt.Sprint(value)
+		}
+	case map[any]any:
+		for key, value := range v {
+			fields[fmt.Sprint(key)] = fmt.Sprint(value)
+		}
+	default:
+		return nil, fmt.Errorf("structured parameter must be an object, got %T", parsed)
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]objectField, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, objectField{key: key, value: fields[key]})
+	}
+	return out, nil
+}
+
+func commaDelimitedObject(fields []objectField) string {
+	parts := make([]string, 0, len(fields)*2)
+	for _, field := range fields {
+		parts = append(parts, field.key, field.value)
+	}
+	return strings.Join(parts, ",")
+}
+
+func serializeGeneratedContentParam(p *paramInfo, values []string) (string, error) {
+	if !isJSONMediaType(p.contentMediaType) {
+		return strings.Join(values, " "), nil
+	}
+	var value any
+	if len(values) == 1 {
+		if err := json.Unmarshal([]byte(values[0]), &value); err == nil {
+			data, _ := json.Marshal(value)
+			return string(data), nil
+		}
+	}
+	parsed, err := shorthand.Unmarshal(strings.Join(values, " "), shorthand.ParseOptions{EnableObjectDetection: true}, nil)
+	if err != nil {
+		return "", fmt.Errorf("parse JSON parameter: %w", err)
+	}
+	data, jerr := json.Marshal(parsed)
+	if jerr != nil {
+		return "", jerr
+	}
+	return string(data), nil
+}
+
+func isJSONMediaType(mediaType string) bool {
+	mt := strings.ToLower(strings.TrimSpace(strings.Split(mediaType, ";")[0]))
+	return mt == "application/json" || strings.HasSuffix(mt, "+json")
+}
+
+func encodeGeneratedQuery(parts []generatedQueryParam) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, url.QueryEscape(part.name)+"="+encodeGeneratedQueryValue(part.value, part.allowReserved))
+	}
+	return strings.Join(out, "&")
+}
+
+const openAPIReservedChars = ":/?#[]@!$&'()*+,;="
+
+func encodeGeneratedQueryValue(value string, allowReserved bool) string {
+	encoded := url.QueryEscape(value)
+	if !allowReserved {
+		return encoded
+	}
+	for _, r := range openAPIReservedChars {
+		encoded = strings.ReplaceAll(encoded, url.QueryEscape(string(r)), string(r))
+	}
+	return encoded
 }
 
 // extractPathParamNames returns path parameter names in left-to-right order

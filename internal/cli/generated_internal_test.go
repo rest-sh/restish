@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -140,4 +141,121 @@ paths:
 	if !strings.Contains(errOut.String(), "warning: skipping") {
 		t.Errorf("expected skipping warning for missing path param, got: %q", errOut.String())
 	}
+}
+
+func TestGeneratedQueryParamSerialization(t *testing.T) {
+	t.Run("form arrays and reserved values", func(t *testing.T) {
+		p := &paramInfo{name: "tag", in: "query", typ: "array", style: "form", explode: boolPtr(true), allowReserved: true}
+		parts, err := serializeGeneratedQueryParam(p, []string{"red/blue", "green"})
+		if err != nil {
+			t.Fatalf("serialize: %v", err)
+		}
+		got := encodeGeneratedQuery(parts)
+		if got != "tag=red/blue&tag=green" {
+			t.Fatalf("query = %q, want repeated reserved values", got)
+		}
+
+		p.explode = boolPtr(false)
+		parts, err = serializeGeneratedQueryParam(p, []string{"red", "blue"})
+		if err != nil {
+			t.Fatalf("serialize: %v", err)
+		}
+		got = encodeGeneratedQuery(parts)
+		if got != "tag=red,blue" {
+			t.Fatalf("query = %q, want comma-joined reserved array", got)
+		}
+	})
+
+	t.Run("space pipe and deep object", func(t *testing.T) {
+		space := &paramInfo{name: "ids", in: "query", typ: "array", style: "spaceDelimited"}
+		parts, err := serializeGeneratedQueryParam(space, []string{"a", "b"})
+		if err != nil {
+			t.Fatalf("space serialize: %v", err)
+		}
+		if got := encodeGeneratedQuery(parts); got != "ids=a+b" {
+			t.Fatalf("space query = %q, want ids=a+b", got)
+		}
+
+		pipe := &paramInfo{name: "ids", in: "query", typ: "array", style: "pipeDelimited"}
+		parts, err = serializeGeneratedQueryParam(pipe, []string{"a", "b"})
+		if err != nil {
+			t.Fatalf("pipe serialize: %v", err)
+		}
+		if got := encodeGeneratedQuery(parts); got != "ids=a%7Cb" {
+			t.Fatalf("pipe query = %q, want ids=a%%7Cb", got)
+		}
+
+		obj := &paramInfo{name: "filter", in: "query", typ: "object", style: "deepObject"}
+		parts, err = serializeGeneratedQueryParam(obj, []string{"limit:", "10,", "q:", "cats"})
+		if err != nil {
+			t.Fatalf("object serialize: %v", err)
+		}
+		got := encodeGeneratedQuery(parts)
+		if got != "filter%5Blimit%5D=10&filter%5Bq%5D=cats" {
+			t.Fatalf("deep object query = %q", got)
+		}
+	})
+}
+
+func TestGeneratedPathHeaderCookieAndContentParamSerialization(t *testing.T) {
+	matrix := &paramInfo{name: "id", in: "path", typ: "array", style: "matrix", explode: boolPtr(true)}
+	gotPath, err := serializeGeneratedPathParam(matrix, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("matrix serialize: %v", err)
+	}
+	if gotPath != ";id=a;id=b" {
+		t.Fatalf("matrix path = %q, want ;id=a;id=b", gotPath)
+	}
+
+	label := &paramInfo{name: "filter", in: "path", typ: "object", style: "label", explode: boolPtr(true)}
+	gotPath, err = serializeGeneratedPathParam(label, []string{"limit:", "10,", "q:", "cats"})
+	if err != nil {
+		t.Fatalf("label serialize: %v", err)
+	}
+	if gotPath != ".limit=10.q=cats" {
+		t.Fatalf("label path = %q, want .limit=10.q=cats", gotPath)
+	}
+
+	header := &paramInfo{name: "X-IDs", in: "header", typ: "array"}
+	gotHeaders, err := serializeGeneratedHeaderParam(header, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("header serialize: %v", err)
+	}
+	if !reflect.DeepEqual(gotHeaders, []string{"a,b"}) {
+		t.Fatalf("headers = %#v, want a,b", gotHeaders)
+	}
+
+	cookie := &paramInfo{name: "session", in: "cookie", typ: "array", style: "form", explode: boolPtr(true)}
+	gotCookies, err := serializeGeneratedCookieParam(cookie, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("cookie serialize: %v", err)
+	}
+	if !reflect.DeepEqual(gotCookies, []string{"session=a", "session=b"}) {
+		t.Fatalf("cookies = %#v", gotCookies)
+	}
+
+	content := &paramInfo{name: "filter", in: "query", contentMediaType: "application/json"}
+	parts, err := serializeGeneratedQueryParam(content, []string{"limit:", "10,", "q:", "cats"})
+	if err != nil {
+		t.Fatalf("content serialize: %v", err)
+	}
+	if got := encodeGeneratedQuery(parts); got != "filter=%7B%22limit%22%3A10%2C%22q%22%3A%22cats%22%7D" {
+		t.Fatalf("content query = %q", got)
+	}
+}
+
+func TestAppendGeneratedParamSupportNote(t *testing.T) {
+	got := appendGeneratedParamSupportNote("Filter value", spec.Param{In: "query", Style: "deepSpaceObject"})
+	if !strings.Contains(got, `OpenAPI style "deepSpaceObject" is not fully supported`) {
+		t.Fatalf("expected unsupported style note, got %q", got)
+	}
+
+	got = appendGeneratedParamSupportNote("", spec.Param{ContentMediaType: "text/plain"})
+	if got != "parameter content type text/plain is sent as raw text" {
+		t.Fatalf("content note = %q", got)
+	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
