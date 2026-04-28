@@ -110,6 +110,12 @@ numeric-looking IDs and amounts are not sent as JSON numbers. Generic HTTP
 commands keep the raw shorthand parser semantics, and generated commands do not
 reject unknown body fields by default.
 
+This coercion is intentionally bounded. It applies to generated-command request
+body values with simple object-property paths, including dotted nested paths,
+and exists to preserve common OpenAPI string fields after shorthand parsing. It
+is not a hidden validation pass, does not make unknown body fields invalid, and
+does not replace the content registry's final serialization behavior.
+
 ## Array And Object Semantics
 
 Shorthand must support:
@@ -194,6 +200,11 @@ This is particularly important for:
 
 - `application/x-www-form-urlencoded`
 - `multipart/form-data`
+- `application/octet-stream` and other raw binary request media
+
+Generated OpenAPI commands use the same rule. Shorthand builds a logical value;
+the selected media encoder decides whether that value becomes JSON, URL-encoded
+fields, multipart fields and files, or raw bytes.
 
 ## Reuse Outside Request Bodies
 

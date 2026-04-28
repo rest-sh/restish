@@ -61,8 +61,8 @@ following from this corpus:
 - public Go API and plugin author contracts
 - operator-facing diagnostics, prompts, shell setup, and exit behavior
 - regression-test categories for v1 examples, binary fidelity, pagination
-  stdout/stderr separation, OAuth security boundaries, plugin protocols, and
-  deterministic filesystem behavior
+  stdout/stderr separation, OpenAPI edge cases, OAuth security boundaries,
+  plugin protocols, and deterministic filesystem behavior
 
 If an implementation detail is important to interoperability, security,
 compatibility, or user expectations, it should live in one of these records
@@ -89,6 +89,7 @@ were a recurring source of remediation work.
 - [005-tls-and-cert-handling.md](./005-tls-and-cert-handling.md) - TLS configuration, mTLS options, custom CAs, and certificate inspection.
 - [006-spec-discovery-and-loading.md](./006-spec-discovery-and-loading.md) - Secure spec discovery, loader contracts, caching, revalidation, and failure reporting.
 - [007-api-command-generation.md](./007-api-command-generation.md) - Config-backed API registration, OpenAPI-to-command mapping, naming, parameter handling, and compatibility aliases.
+- [034-openapi-implementation-contract.md](./034-openapi-implementation-contract.md) - Implementation-grade OpenAPI 3.x behavior matrix for loading, command generation, parameters, servers, schemas, auth, media types, caching, and tests.
 - [008-shorthand-input.md](./008-shorthand-input.md) - Building request bodies from CLI arguments and stdin using shorthand syntax.
 - [029-request-execution-pipeline.md](./029-request-execution-pipeline.md) - End-to-end request planning, execution order, cancellation, transport layering, normalization, filtering, and rendering.
 

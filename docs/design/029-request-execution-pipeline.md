@@ -60,6 +60,13 @@ the invocation came from:
 Built-in commands always win over API short names and plugin commands. This
 avoids accidental shadowing and keeps the command tree deterministic.
 
+For generated OpenAPI commands, command resolution also identifies the cached
+operation model entry from design 034. The pipeline should not need parser
+library objects at execution time; it receives an already-normalized operation
+plan containing the method, operation-relative path, parameter bindings, request
+body media choices, no-auth flag, and help-derived metadata needed for
+diagnostics.
+
 ## 2. Request Planning
 
 Planning produces a typed request plan that should contain at least:
@@ -75,6 +82,19 @@ Planning produces a typed request plan that should contain at least:
 - pagination options
 - caching/retry/timeout options
 - execution mode hints such as "stream expected" or "edit workflow"
+
+For generated commands, planning also resolves OpenAPI-specific inputs into the
+same request-plan fields used by generic commands:
+
+- path parameters become substituted URL path segments;
+- query parameters become query entries using the operation serialization rule;
+- header parameters become request headers unless reserved by OpenAPI;
+- cookie parameters become the outbound Cookie header;
+- request-body arguments and stdin become the ordinary body source;
+- operation `security: []` becomes a no-auth execution hint.
+
+After this step, execution should not care whether the request came from a
+generated command or a generic HTTP verb.
 
 The plan is where Restish resolves precedence. The design rule is:
 
@@ -100,6 +120,12 @@ That includes:
 - appending persistent and invocation headers
 - constructing the request body from shorthand, stdin, files, or raw input
 - deriving content negotiation headers from the content registry
+
+OpenAPI server resolution and `operation_base` handling should already have
+produced an API-relative or absolute-safe path before preparation. Preparation
+still owns final URL joining and path cleaning so relative same-origin escapes
+from generated operations cannot bypass profile selection or request-pipeline
+policy.
 
 Preparation is also where override semantics become concrete. Explicit CLI
 headers and environment-derived headers are user intent, not additional hints.

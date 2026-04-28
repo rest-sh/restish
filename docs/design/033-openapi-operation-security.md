@@ -45,8 +45,11 @@ request pipeline.
 
 Generated operations carry `NoAuth` when the OpenAPI operation declares
 `security: []`. In that case request execution suppresses profile auth for that
-operation. Other OpenAPI `security` values are parsed only indirectly through
-setup/config prompts and are not currently enforced per operation.
+operation. Other OpenAPI `security` values, including alternatives, combined
+requirements, and OAuth scopes, are preserved only as metadata or parsed
+indirectly through setup/config prompts. They are not currently enforced per
+operation, and they do not change which selected profile is used for the
+request.
 
 Startup command registration must stay offline. Any security matching must use
 cached operation metadata and local config only.
@@ -81,6 +84,10 @@ one selected profile must satisfy both schemes or Restish should fail before
 the request with a diagnostic naming the missing scheme.
 
 For `security: []`, Restish sends no profile auth even when a profile is active.
+
+Until the full policy below is implemented, every non-empty OpenAPI security
+requirement behaves like an ordinary generated command: the selected
+Restish profile supplies auth through the shared request pipeline.
 
 ## Proposed Design
 
@@ -157,6 +164,8 @@ request pipeline's responsibility.
 The OpenAPI CLI integration guide should say that v2 currently supports
 `security: []` as no-auth and that full per-operation scheme matching is a
 planned v2 release-readiness item until this design is implemented.
+Design 034 records this current narrow contract alongside the broader OpenAPI
+implementation matrix.
 
 ## Open Questions
 

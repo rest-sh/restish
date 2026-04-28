@@ -72,6 +72,7 @@ The built-in registry currently includes at least:
 - `form`
 - `multipart`
 - `text`
+- `binary`
 
 Built-in encodings include:
 
@@ -264,6 +265,28 @@ The same rule applies to any encoder whose final wire header includes generated
 parameters. The logical content family drives body construction, while the
 concrete header is produced late enough to include runtime-generated values.
 
+## Form And Multipart Request Semantics
+
+OpenAPI-generated commands and generic HTTP commands share the same form
+encoders.
+
+For `application/x-www-form-urlencoded`, object values are encoded as field
+names and scalar values. Nested object fields use stable bracketed keys such as
+`metadata[color]`, and arrays are represented by repeated values such as
+`tags[]=red&tags[]=blue` unless a more specific OpenAPI parameter serialization
+rule owns the location.
+
+For `multipart/form-data`, scalar fields become text parts and file or binary
+values become file parts. Array file fields are represented by repeated parts
+with the same field name, because that is what common multipart APIs expect for
+multi-file uploads. Generated OpenAPI commands pass `encoding.contentType`
+metadata into the multipart encoder so individual parts can carry the media
+type declared by the spec.
+
+For `application/octet-stream` and other binary request media, Restish preserves
+raw bytes from files or stdin rather than re-encoding them as structured text.
+Unknown binary responses follow the same preservation rule.
+
 ## Compression And Body Limits
 
 Transport decompression happens before content decoding, which means the body
@@ -343,6 +366,8 @@ Too much downstream complexity for filters and formatters.
 ## Relationship To Other Designs
 
 - Design 008 relies on this model for request-body encoding.
+- Design 034 defines the OpenAPI media-type cases that generated commands map
+  into this registry.
 - Design 009 relies on this model for response normalization.
 - Design 012 relies on this model for stream item decoding where applicable.
 - Design 030 relies on this model not to corrupt binary payloads.

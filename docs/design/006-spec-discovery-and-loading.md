@@ -109,6 +109,36 @@ parser-library-specific types. The rest of the product should consume a stable
 operation model rather than whichever concrete parser the loader happened to
 use.
 
+### Built-In OpenAPI Loader Contract
+
+The built-in OpenAPI loader accepts OpenAPI 3.0 and 3.1 documents encoded as
+JSON or YAML. It should recognize conventional OpenAPI media types, plain
+structured media types, and documents whose top-level `openapi` key appears
+after other keys.
+
+The loader must receive origin metadata, not just bytes. The metadata includes:
+
+- source URL for network specs;
+- local path for file specs;
+- request context;
+- HTTP transport;
+- whether cross-origin external references are allowed.
+
+OpenAPI `$ref` resolution is part of loading because command generation needs a
+fully usable operation model. Supported references include local relative files,
+full `file://` URIs, same-origin remote URIs, and cross-origin remote URIs only
+when explicitly enabled and permitted by design 030. Reference fetches inherit
+the discovery timeout, context, size-limit, redirect, and private-host safety
+rules.
+
+External references may appear in Path Items, parameters, request schemas,
+response schemas, and shared component schemas. Missing or blocked references
+should identify the failing reference and source document in diagnostics.
+
+Webhooks-only documents, documents without paths, and empty Path Items are valid
+inputs that generate no request commands. They must not panic loader,
+generation, MCP tool export, or help registration paths.
+
 ## Loader Selection
 
 Loaders are registered in priority order. Sources include:
@@ -152,6 +182,11 @@ requests, parse the raw bytes lazily on demand.
 OpenAPI server variables are intentionally part of operation-cache identity.
 Changing `server_variables` in API config, or profile-level overrides, can change
 generated operation paths even when the raw spec bytes are unchanged.
+
+The operation cache is the normal startup path for large APIs. Command tree
+construction should not invoke the OpenAPI parser or fetch external references
+when valid operation metadata exists. Cold parsing belongs to explicit sync,
+configuration, and cache-refresh paths.
 
 ## Cache Validity
 
@@ -231,6 +266,8 @@ Faster in some cases, but much more brittle across parser and binary changes.
 ## Relationship To Other Designs
 
 - Design 007 consumes the canonical operation model produced here.
+- Design 034 defines the OpenAPI-specific loading and operation extraction
+  contract in reimplementation detail.
 - Design 018 and 019 define plugin loader behavior.
 - Design 029 defines how config and discovery interact during command execution.
 - Design 030 defines the remote-input safety rules for discovery.

@@ -9,6 +9,10 @@ Cobra commands with predictable names, arguments, flags, and help output.
 The key design point is that generated commands should feel native while still
 being traceable back to the source API description.
 
+Design 034 is the detailed OpenAPI compatibility contract. This record explains
+where generated commands fit in the CLI architecture; design 034 defines the
+full OpenAPI 3.x feature matrix that tests and reimplementations should follow.
+
 ## Goals
 
 - let users work with APIs by name instead of memorizing raw URLs
@@ -86,6 +90,10 @@ Empty or nil path items in an OpenAPI document are ignored safely. They should
 not panic command generation, MCP tool generation, or any plugin-facing
 operation export path.
 
+Generated request commands are only produced for ordinary Path Item operations
+using OpenAPI HTTP methods. Webhooks, callbacks, and response links are not
+registered as ordinary request commands in v2.
+
 An operation that explicitly declares `security: []` is generated as a no-auth
 operation. Request execution should suppress configured profile auth for that
 operation so public health, status, and discovery endpoints do not run external
@@ -146,6 +154,10 @@ Parameters come from multiple OpenAPI scopes:
 The generator must merge these scopes according to OpenAPI rules before building
 the command interface.
 
+The merge key is `(in, name)`. Operation-level parameters override path-item
+parameters with the same key, while same-named parameters in different
+locations remain distinct.
+
 ### Positional Arguments
 
 Required path parameters are positional arguments in path order.
@@ -157,6 +169,10 @@ options optional.
 ### Flags
 
 Optional query, header, and cookie parameters become flags.
+
+Parameters without a schema fall back to string handling. The original OpenAPI
+parameter name is preserved on the wire even when the CLI-facing argument or
+flag name is normalized or changed by `x-cli-name`.
 
 OpenAPI says header parameters named `Accept`, `Content-Type`, or
 `Authorization` are ignored. Generated commands follow that rule so content
@@ -171,6 +187,21 @@ matching path parameter after scope merge, generation should fail for that
 operation with a diagnostic. Leaving the literal template token in the URL is
 not acceptable.
 
+### Serialization
+
+Generated commands honor OpenAPI parameter serialization rules where practical:
+
+- query `form`, `spaceDelimited`, `pipeDelimited`, `deepObject`, and
+  `allowReserved`;
+- path `simple`, `label`, and `matrix`;
+- header `simple`;
+- cookie `form`;
+- JSON parameter `content`.
+
+Unsupported styles should warn or be visible in help and then use the closest
+safe default for the parameter location. Required path substitutions must never
+be corrupted by fallback behavior.
+
 ## Request Body Mapping
 
 If the operation supports a request body, the generated command uses the same
@@ -182,6 +213,13 @@ body-construction model as the generic HTTP commands:
 
 Generated commands should not invent a separate body grammar.
 
+Generated command request-body media support follows the content registry. JSON
+and structured `+json` are preferred when no explicit content type is selected.
+Form URL encoding, multipart forms, and raw binary bodies are also first-class
+OpenAPI request-body modes when the operation advertises them. Multipart parts
+may carry per-part content types from OpenAPI `encoding.contentType`, and array
+file fields are encoded as repeated parts with the same field name.
+
 Generated commands may use request-body schema metadata to preserve OpenAPI
 string semantics after shorthand parsing. For example, if a generated operation
 has a JSON object request schema where `id` is `type: string`, then
@@ -191,6 +229,11 @@ generated commands and is intentionally shallow: it covers simple object
 properties and dotted nested object paths without adding default-on request-body
 validation. Unknown fields are still accepted unless a future explicit
 validation mode is enabled.
+
+OpenAPI schema constructs such as `oneOf`, `anyOf`, `allOf`, nullable/type
+arrays, enum, const, defaults, examples, read-only/write-only, additional
+properties, and recursive references are used for help and bounded example
+generation. They are not full request validators by default.
 
 Generated operation commands also expose `--rsh-generate-body` for request-body
 operations. The flag prints an example body derived from OpenAPI examples,
@@ -237,6 +280,11 @@ validation or help, but they are never expanded into every possible URL. This is
 a security boundary: an untrusted spec must not be able to allocate a Cartesian
 product during command generation or silently redirect authenticated requests to
 another origin.
+
+Relative OpenAPI server URLs are resolved against the configured API
+`base_url`. Absolute server URLs are used only when they match the configured
+origin; otherwise Restish falls back to the configured base URL to avoid
+spec-driven credential exfiltration.
 
 ## Help And Discoverability
 
@@ -332,6 +380,11 @@ Generated command registration at startup uses cached or local spec data only.
 Live network fetching belongs to explicit management commands, not routine root
 tree construction.
 
+For large OpenAPI documents, startup should prefer the cached operation model
+from design 006 and avoid parser work. Benchmarks should cover cold extraction
+and cached startup/execution with at least a 1,000-operation synthetic spec so
+scripted shell loops remain practical.
+
 ## Compatibility
 
 Because generated commands are one of the most visible v1-to-v2 behaviors, the
@@ -360,6 +413,7 @@ Would make help, completion, and discovery less coherent.
 ## Relationship To Other Designs
 
 - Design 006 defines the source spec/loading model.
+- Design 034 defines the detailed OpenAPI feature and regression-test matrix.
 - Design 008 defines request-body shorthand used by generated commands.
 - Design 017 defines command resolution and completion expectations.
 - Design 029 defines how generated commands enter the shared request pipeline.
