@@ -220,7 +220,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		if p.XCLI.Description != "" {
 			desc = p.XCLI.Description
 		}
-		allParams[p.Name] = &paramInfo{
+		allParams[paramKey(p.In, p.Name)] = &paramInfo{
 			name:         p.Name,
 			flagName:     flagName,
 			in:           p.In,
@@ -238,10 +238,11 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 	}
 
-	// Required: path params (in path order) then required query params.
+	// Required positional args are path params in path-template order, followed
+	// by required non-path params in spec order. Optional params become flags.
 	var required []*paramInfo
 	for _, name := range pathParamOrder {
-		pi, ok := allParams[name]
+		pi, ok := allParams[paramKey("path", name)]
 		if !ok {
 			opID := op.ID
 			if opID == "" {
@@ -251,31 +252,20 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 		required = append(required, pi)
 	}
-	for _, p := range op.Parameters {
-		if p.In == "query" && p.Required {
-			if pi := allParams[p.Name]; pi != nil {
-				required = append(required, pi)
-			}
-		}
-	}
-
-	// Optional: non-required, non-path params.
 	var optional []*paramInfo
 	for _, p := range op.Parameters {
 		if p.In == "path" {
 			continue
 		}
-		if p.In == "header" || p.In == "cookie" {
-			if pi := allParams[p.Name]; pi != nil {
-				optional = append(optional, pi)
-			}
+		pi := allParams[paramKey(p.In, p.Name)]
+		if pi == nil {
 			continue
 		}
-		if !p.Required {
-			if pi := allParams[p.Name]; pi != nil {
-				optional = append(optional, pi)
-			}
+		if p.Required {
+			required = append(required, pi)
+			continue
 		}
+		optional = append(optional, pi)
 	}
 
 	// Build Use string.
@@ -368,9 +358,6 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		default:
 			cmd.Flags().String(p.flagName, p.defaultValue, p.desc)
 		}
-		if p.required {
-			_ = cmd.MarkFlagRequired(p.flagName)
-		}
 		if p.hidden {
 			_ = cmd.Flags().MarkHidden(p.flagName)
 		}
@@ -396,6 +383,10 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	}
 
 	return cmd, nil
+}
+
+func paramKey(in, name string) string {
+	return in + "\x00" + name
 }
 
 func generatedOperationArgs(required int, hasBody bool) func(*cobra.Command, []string) error {

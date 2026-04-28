@@ -86,6 +86,121 @@ paths:
 	}
 }
 
+func TestOperationsUsesEffectivePathAndOperationServers(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: /doc
+paths:
+  /items:
+    servers:
+      - url: /path
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+  /widgets:
+    servers:
+      - url: /path
+    get:
+      operationId: listWidgets
+      servers:
+        - url: /op
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("len(ops) = %d, want 2", len(ops))
+	}
+	paths := map[string]string{}
+	for _, op := range ops {
+		paths[op.ID] = op.Path
+	}
+	if got := paths["listItems"]; got != "/path/items" {
+		t.Fatalf("listItems path = %q, want /path/items", got)
+	}
+	if got := paths["listWidgets"]; got != "/op/widgets" {
+		t.Fatalf("listWidgets path = %q, want /op/widgets", got)
+	}
+}
+
+func TestOperationsResolvesRelativeServerURLAgainstAPIBase(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: "{version}"
+    variables:
+      version:
+        default: v2
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/v2/items" {
+		t.Fatalf("operation path = %q, want /v2/items", got)
+	}
+}
+
+func TestOperationsOperationBaseIgnoresRelativeServerURL(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: v2
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root", "/")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/items" {
+		t.Fatalf("operation path = %q, want /items when operation_base is set", got)
+	}
+}
+
 func TestOperationsRejectsUnknownConfiguredServerVariable(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

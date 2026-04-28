@@ -1000,7 +1000,7 @@ func TestGeneratedCommandUsesPathItemParameters(t *testing.T) {
 	}
 }
 
-func TestGeneratedCommandRequiredHeaderIsRequiredFlag(t *testing.T) {
+func TestGeneratedCommandRequiredHeaderIsRequiredArgument(t *testing.T) {
 	var authHeader string
 	mux := http.NewServeMux()
 	mux.HandleFunc("/secure", func(w http.ResponseWriter, r *http.Request) {
@@ -1037,15 +1037,154 @@ func TestGeneratedCommandRequiredHeaderIsRequiredFlag(t *testing.T) {
 
 	c1 := env.newCLI()
 	if err := c1.Run([]string{"restish", "tapi", "get-secure"}); err == nil {
-		t.Fatal("expected missing required header flag to error")
+		t.Fatal("expected missing required header argument to error")
 	}
 
 	c2 := env.newCLI()
-	if err := c2.Run([]string{"restish", "tapi", "get-secure", "--x-auth", "secret"}); err != nil {
-		t.Fatalf("get-secure with required header failed: %v", err)
+	if err := c2.Run([]string{"restish", "tapi", "get-secure", "secret"}); err != nil {
+		t.Fatalf("get-secure with required header argument failed: %v", err)
 	}
 	if authHeader != "secret" {
 		t.Fatalf("expected X-Auth header to be sent, got %q", authHeader)
+	}
+}
+
+func TestGeneratedCommandRequiredQueryIsRequiredArgument(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/reports", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/reports": {
+      "get": {
+        "operationId": "listReports",
+        "parameters": [
+          {"name": "account", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c1 := env.newCLI()
+	if err := c1.Run([]string{"restish", "tapi", "list-reports"}); err == nil {
+		t.Fatal("expected missing required query argument to error")
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "list-reports", "acme"}); err != nil {
+		t.Fatalf("list-reports with required query argument failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("account"); got != "acme" {
+		t.Fatalf("account = %q, want acme", got)
+	}
+}
+
+func TestGeneratedCommandRequiredCookieIsRequiredArgument(t *testing.T) {
+	var sessionValue string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/session", func(w http.ResponseWriter, r *http.Request) {
+		if cookie, err := r.Cookie("session"); err == nil {
+			sessionValue = cookie.Value
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "parameters": [
+          {"name": "session", "in": "cookie", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c1 := env.newCLI()
+	if err := c1.Run([]string{"restish", "tapi", "get-session"}); err == nil {
+		t.Fatal("expected missing required cookie argument to error")
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "get-session", "abc123"}); err != nil {
+		t.Fatalf("get-session with required cookie argument failed: %v", err)
+	}
+	if sessionValue != "abc123" {
+		t.Fatalf("session cookie = %q, want abc123", sessionValue)
+	}
+}
+
+func TestGeneratedCommandSameNamePathAndQueryParams(t *testing.T) {
+	var gotPath, gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items/path-id", func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "id", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-item", "path-id", "--id", "query-id"}); err != nil {
+		t.Fatalf("get-item failed: %v", err)
+	}
+	if gotPath != "/items/path-id" {
+		t.Fatalf("path = %q, want /items/path-id", gotPath)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("id"); got != "query-id" {
+		t.Fatalf("query id = %q, want query-id", got)
 	}
 }
 
@@ -1140,6 +1279,126 @@ func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
 	}
 	if lastPath != "/v1/items" {
 		t.Fatalf("expected servers base path to be applied, got %q", lastPath)
+	}
+}
+
+func TestGeneratedCommandsRespectPathAndOperationServers(t *testing.T) {
+	var pathHit, operationHit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/path-base/items", func(w http.ResponseWriter, r *http.Request) {
+		pathHit = true
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/op-base/widgets", func(w http.ResponseWriter, r *http.Request) {
+		operationHit = true
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return `{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": "/doc-base"}],
+  "paths": {
+    "/items": {
+      "servers": [{"url": "/path-base"}],
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/widgets": {
+      "servers": [{"url": "/path-base"}],
+      "get": {
+        "operationId": "listWidgets",
+        "servers": [{"url": "/op-base"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-widgets"}); err != nil {
+		t.Fatalf("list-widgets failed: %v", err)
+	}
+	if !pathHit {
+		t.Fatal("path-level server base was not used")
+	}
+	if !operationHit {
+		t.Fatal("operation-level server base was not used")
+	}
+}
+
+func TestGeneratedCommandsResolveRelativeServerURLAgainstAPIBase(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": "{version}", "variables": {"version": {"default": "v2"}}}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	mux.HandleFunc("/root/v2/items", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL + "/root", SpecURL: srv.URL + "/openapi.json"},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	if lastPath != "/root/v2/items" {
+		t.Fatalf("expected relative server URL to resolve against API base path, got %q", lastPath)
 	}
 }
 

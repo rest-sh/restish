@@ -150,13 +150,13 @@ the command interface.
 
 Required path parameters are positional arguments in path order.
 
+Required query, header, and cookie parameters are also positional arguments,
+after path parameters, in merged spec order. This keeps command-line flags and
+options optional.
+
 ### Flags
 
-Query, header, and cookie parameters become flags unless there is a documented
-reason to make them positional.
-
-Required non-path parameters should still be represented as required flags,
-rather than silently becoming optional.
+Optional query, header, and cookie parameters become flags.
 
 ### Missing Path Parameters
 

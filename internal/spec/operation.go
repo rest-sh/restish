@@ -169,11 +169,6 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 		return nil, err
 	}
 
-	basePath, err := deriveBasePath(opts.BaseURL, opts.OperationBase, model.Model.Servers, opts.ServerVariables)
-	if err != nil {
-		return nil, fmt.Errorf("derive base path: %w", err)
-	}
-
 	// Use a non-nil empty slice so callers can distinguish "no paths in spec"
 	// (nil return) from "paths exist but all were filtered" (empty non-nil slice).
 	ops := make([]Operation, 0)
@@ -185,13 +180,24 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 			continue
 		}
 		pathHidden := PathItemExtBool(pathItem, "x-cli-hidden")
-		fullPath := joinOperationPath(basePath, rawPath)
 
 		pathParams := pathItem.Parameters
 		for _, mo := range PathItemMethods(pathItem) {
 			if mo.Op == nil {
 				continue
 			}
+			servers := model.Model.Servers
+			if len(pathItem.Servers) > 0 {
+				servers = pathItem.Servers
+			}
+			if len(mo.Op.Servers) > 0 {
+				servers = mo.Op.Servers
+			}
+			basePath, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
+			if err != nil {
+				return nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
+			}
+			fullPath := joinOperationPath(basePath, rawPath)
 			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op)
 			if op.XCLI.Ignore {
 				continue
@@ -287,7 +293,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 // deriveBasePath computes the path prefix to prepend to all operation paths.
 // When operationBase is set, no prefix is needed (the URL prefix is resolved
 // from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
-// inspected for a URL that shares the same scheme+host as baseURL.
+// inspected for a URL that resolves to the same scheme+host as baseURL.
 func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, error) {
 	if operationBase != "" || len(servers) == 0 {
 		return "", nil
@@ -300,34 +306,71 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 	if err != nil {
 		return "", err
 	}
-	prefix := fmt.Sprintf("%s://%s", location.Scheme, location.Host)
+	resolutionBase := serverResolutionBase(location)
 
 	for _, server := range servers {
 		if server == nil {
 			continue
 		}
-		// Relative paths (starting with "/") always apply.
-		if strings.HasPrefix(server.URL, "/") {
-			return strings.TrimSuffix(resolveServerURLVariables(server, serverVariables), "/"), nil
-		}
-
-		// Absolute URL: resolve each server variable once, using explicit local
-		// config values where present and OpenAPI defaults otherwise. Enum
-		// values are intentionally not expanded; remote specs must not be able
-		// to create a Cartesian-product allocation during command generation.
+		// Resolve each server variable once, using explicit local config values
+		// where present and OpenAPI defaults otherwise. Enum values are
+		// intentionally not expanded; remote specs must not be able to create a
+		// Cartesian-product allocation during command generation.
 		endpoint := resolveServerURLVariables(server, serverVariables)
-		if !strings.HasPrefix(endpoint, prefix) {
-			continue
-		}
 		parsed, err := url.Parse(endpoint)
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimSuffix(parsed.Path, "/"), nil
+		resolved := resolutionBase.ResolveReference(parsed)
+		if resolved.Scheme != location.Scheme || resolved.Host != location.Host {
+			continue
+		}
+		if isRelativeServerURL(endpoint) {
+			return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), nil
+		}
+		return strings.TrimSuffix(resolved.Path, "/"), nil
 	}
 
 	// No matching server found — fall back to the path of the base URL.
 	return strings.TrimSuffix(location.Path, "/"), nil
+}
+
+func serverResolutionBase(location *url.URL) *url.URL {
+	base := *location
+	base.RawQuery = ""
+	base.Fragment = ""
+	if base.Path == "" {
+		base.Path = "/"
+	}
+	if !strings.HasSuffix(base.Path, "/") {
+		base.Path += "/"
+	}
+	return &base
+}
+
+func isRelativeServerURL(endpoint string) bool {
+	if endpoint == "" {
+		return true
+	}
+	if strings.HasPrefix(endpoint, "/") || strings.HasPrefix(endpoint, "//") {
+		return false
+	}
+	u, err := url.Parse(endpoint)
+	return err == nil && !u.IsAbs()
+}
+
+func relativeServerBasePath(basePath, resolvedPath string) string {
+	basePath = strings.TrimRight(basePath, "/")
+	if basePath == "" {
+		return resolvedPath
+	}
+	if resolvedPath == basePath {
+		return ""
+	}
+	if strings.HasPrefix(resolvedPath, basePath+"/") {
+		return strings.TrimPrefix(resolvedPath, basePath)
+	}
+	return resolvedPath
 }
 
 // resolveServerURLVariables returns one concrete URL string for a server by
