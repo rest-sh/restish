@@ -25,6 +25,10 @@ scripts that already make a normal request.
 
 Use `links` when you only need relations such as `self`, `next`, or `prev`.
 Use normal requests plus filters when you need body data and link data together.
+Restish extracts links from HTTP `Link` headers and supported body formats such
+as HAL, JSON:API, Siren, JSON-LD/TSJ, and simple `self` fields. The command
+prints Restish's normalized relation map, so repeated raw links with the same
+relation name are collapsed to one URI.
 The discovery rules are explained in [Links and Hypermedia](/docs/guides/links-and-hypermedia/).
 
 ## Related Pages

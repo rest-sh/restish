@@ -174,8 +174,9 @@ generated command.
 Schemas are not full request validators by default. Unknown body fields are
 allowed unless Restish grows an explicit validation mode. Schema constructs
 such as `oneOf`, `anyOf`, `allOf`, `nullable`, `enum`, `const`, defaults,
-examples, read-only/write-only fields, additional properties, and recursive
-references are used for help and bounded example bodies.
+examples, numeric constraints, read-only/write-only fields, additional
+properties, and recursive references are used for help and bounded example
+bodies.
 
 Use `--rsh-generate-body` on a generated command to print an example body and
 exit:
@@ -183,6 +184,11 @@ exit:
 ```bash
 restish myapi create-item --rsh-generate-body
 ```
+
+Generated operation help also shows response media types and response header
+names when the spec defines them. That makes pagination headers, rate-limit
+headers, and empty-body responses visible without reading the raw OpenAPI
+document.
 
 ## Server URLs
 

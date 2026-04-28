@@ -26,7 +26,9 @@ restish api sync example
 ```
 
 Use this when discovery is unavailable or the API publishes its spec at a
-non-standard path.
+non-standard path. Once `spec_url` is configured, Restish treats it as the
+authoritative source for that API. `api sync` fetches that URL directly instead
+of falling back to well-known discovery probes.
 
 ## Inspect And Edit Config
 
@@ -69,6 +71,13 @@ restish example --help
 
 Sync when the API publishes new operations, changes operation names, or updates
 OpenAPI extensions that shape the CLI.
+
+If the API moves its OpenAPI document, update `spec_url` before syncing:
+
+```bash
+restish api set example spec_url: https://api.rest.sh/openapi.json
+restish api sync example
+```
 
 ## Related Pages
 

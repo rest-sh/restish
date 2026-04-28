@@ -299,10 +299,13 @@ This is why generated commands are registered into the normal root tree instead
 of living behind a special sub-interpreter.
 
 Generated operation help is operation-focused by default: it shows the operation
-usage, local parameters, schemas, and examples without repeating every inherited
-Restish flag. `--help-all` on a generated operation shows the full Cobra help,
-including global request, output, auth, TLS, pagination, cache, and config
-flags.
+usage, local parameters, response media and header names, schemas, schema
+constraints, and examples without repeating every inherited Restish flag.
+Schema constraints shown in help include enum/default/example information and
+bounded numeric annotations such as minimum, maximum, exclusive bounds, and
+multiple-of constraints where present. `--help-all` on a generated operation
+shows the full Cobra help, including global request, output, auth, TLS,
+pagination, cache, and config flags.
 
 ## Name-Collision Policy
 

@@ -55,6 +55,12 @@ The ordered strategy is:
 The exact probe list may evolve, but explicit operator intent should always win
 over heuristics.
 
+An explicit `spec_url` is authoritative once it is configured. Refresh flows
+such as `api sync` fetch that URL directly and do not race it against
+well-known paths or body/link discovery probes. This matters when an API serves
+an older or different spec from a heuristic endpoint: changing `spec_url` must
+change the source Restish trusts.
+
 ## Discovery Safety Rules
 
 Discovery touches untrusted remote content and can induce more network traffic,
@@ -163,7 +169,8 @@ The cache entry should include at least:
 
 - fetched raw bytes
 - content type
-- source URL or origin metadata
+- source URL or origin metadata, including whether it came from explicit
+  `spec_url`, local `spec_files`, or heuristic discovery
 - fetch time
 - Restish version or cache schema version
 
@@ -195,6 +202,12 @@ A cache entry is valid when:
 - it is within TTL or otherwise still acceptable for the command
 - it matches the expected cache/schema version
 - it is not older than an explicitly configured local source file
+- it matches the configured authoritative source identity
+
+A cache entry fetched from heuristic discovery must not satisfy a later
+configuration with explicit `spec_url`, even if both describe the same API base.
+Likewise, changing `spec_url` invalidates the previous raw-spec and operation
+metadata caches for that API.
 
 Local `spec_files` must win over stale cached network content. If the user
 edited a local file, Restish should not continue serving a cached older
@@ -229,7 +242,8 @@ Examples:
 - `api configure <name> <url> [setup-expression ...]` may consume
   `prompt.*` expressions as prompt preanswers, then apply ordinary config
   shorthand expressions as final overrides before saving
-- `api sync` should refresh from the authoritative source
+- `api sync` should refresh from the authoritative source; when `spec_url` is
+  configured, that means fetching exactly `spec_url`
 - `api set` and `api edit` should invalidate cached specs when fields that
   affect discovery or operation generation change, including `base_url`,
   `spec_url`, `spec_files`, `operation_base`, and OpenAPI server variables

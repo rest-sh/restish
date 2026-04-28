@@ -76,6 +76,11 @@ restish https://api.rest.sh/deflate
 restish https://api.rest.sh/brotli
 ```
 
+Restish advertises and decodes supported response encodings through
+`Accept-Encoding` and `Content-Encoding`. Built-in decoding covers gzip,
+deflate, and Brotli before response content-type decoding, filtering, or output
+formatting runs.
+
 ## Plugins
 
 Loader plugins can add spec content types. Formatter plugins can add output

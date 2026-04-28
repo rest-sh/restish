@@ -13,13 +13,16 @@ command can use one shape even when APIs expose links differently.
 Restish can extract links from sources such as:
 
 - HTTP `Link` headers
-- common body link fields
-- HAL-style `_links`
-- JSON:API-style `links`
-- Siren and related REST-ish representations
+- HAL-style `_links`, including arrays of HAL resources
+- JSON:API-style top-level `links` and resource `links.self`
+- Siren links
+- JSON-LD or TSJ `@id`
+- simple REST-ish `self` fields on top-level objects or nested array items
 
 The exact source matters less to users than the normalized result: relation
 names such as `self`, `next`, and `prev` become queryable under `links`.
+Nested array item links use relation names based on the field, such as
+`things-item`.
 
 ## Inspect Links
 

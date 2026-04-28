@@ -80,6 +80,11 @@ Built-in encodings include:
 - `gzip`
 - `deflate`
 
+Each built-in encoding must be a real decompressor, not only an advertised
+token. Responses encoded with Brotli, gzip, or deflate should decode to the
+same logical body shape as the uncompressed response before content-type
+selection, filtering, or output formatting runs.
+
 ## Media-Type Matching Rules
 
 Media-type matching must handle:

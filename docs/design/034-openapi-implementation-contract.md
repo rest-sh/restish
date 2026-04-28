@@ -99,7 +99,7 @@ objects. At minimum it carries:
 - operation path after server resolution;
 - merged parameters;
 - request body media alternatives and schemas;
-- response media and schemas for help;
+- response media, schemas, and response header names for help;
 - examples and schema-derived example-body data;
 - explicit no-auth state and future security policy metadata;
 - original source location or stable operation key for diagnostics.
@@ -250,7 +250,8 @@ Schema support should cover OpenAPI 3.0 and 3.1 shapes including:
 - `nullable`;
 - `enum` and `const`;
 - `default`, `example`, and `examples`;
-- `format`, `pattern`, `minimum`, `maximum`, and related annotations;
+- `format`, `pattern`, `minimum`, `maximum`, exclusive bounds, `multipleOf`,
+  and related annotations;
 - `readOnly` and `writeOnly`, interpreted relative to request or response use;
 - object `properties`, `required`, and `additionalProperties`;
 - array `items`;
@@ -258,10 +259,11 @@ Schema support should cover OpenAPI 3.0 and 3.1 shapes including:
 - `oneOf`, `anyOf`, and `allOf`.
 
 `allOf` should be merged enough for help and example generation, with later
-constraints combined rather than losing earlier object properties. `oneOf` and
-`anyOf` should be represented in help and use a deterministic first viable
-branch for example generation. Discriminators should be surfaced when useful,
-but lack of discriminator enforcement must not block command generation.
+constraints combined rather than losing earlier object properties or numeric
+annotations. `oneOf` and `anyOf` should be represented in help and use a
+deterministic first viable branch for example generation. Discriminators should
+be surfaced when useful, but lack of discriminator enforcement must not block
+command generation.
 
 For generated-command JSON bodies, schema-guided coercion may turn shorthand
 values back into strings when the request schema says a property is `type:
@@ -358,9 +360,11 @@ OpenAPI tests should include focused fixtures for:
 - request media selection across JSON, form, multipart, binary, and non-JSON
   bodies;
 - multipart per-part `encoding.contentType`;
-- response media in help, including operations with no body schema;
+- response media and response header names in help, including operations with
+  no body schema;
 - `oneOf`, `anyOf`, `allOf`, nullable, type arrays, examples, defaults, enums,
-  consts, read/write-only fields, additional properties, and recursive refs;
+  consts, numeric constraints, read/write-only fields, additional properties,
+  and recursive refs;
 - external local, `file://`, same-origin remote, and blocked cross-origin refs;
 - external Path Item and parameter refs;
 - multiple security schemes, `security: []`, OAuth scopes, alternatives, and

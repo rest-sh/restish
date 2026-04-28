@@ -45,14 +45,22 @@ Hypermedia parsing normalizes discovered links into a simple `rel -> uri` map.
 Built-in parsers currently recognize:
 
 - HTTP `Link` headers
-- HAL `_links`
+- HAL `_links` on a resource object or on each resource in a top-level array
 - JSON-LD or TSJ `@id`
-- JSON:API top-level `links`
+- simple REST-ish `self` string fields on top-level objects or nested array
+  items
+- JSON:API top-level `links` and resource-object `links`
 - Siren `links`
 
 All discovered links are resolved to absolute URLs before being stored. This
 lets downstream behavior treat links uniformly regardless of how they were
 represented on the wire.
+
+Parser-specific relation naming should be predictable. For simple body fields,
+a top-level `self` string contributes `self`; nested array item `self` links use
+`<field>-item`, for example `things-item`. JSON:API resource-object `self`
+links contribute `item` when there is no more specific top-level relation.
+Malformed body links are ignored rather than causing the whole response to fail.
 
 The HTTP `Link` header parser always runs for bounded responses. Body-based
 hypermedia parsers may be lazy, because parsing structured bodies solely to
@@ -82,8 +90,11 @@ The normalized relation model is intentionally simple:
 
 - relation name -> absolute URI
 
-This sacrifices some fidelity from richer hypermedia formats, but it is the
-right abstraction for:
+This sacrifices some fidelity from richer hypermedia formats, including
+multiple distinct targets with the same relation name. Parser layers may observe
+multiple links, but the normalized map exposed to users and pagination keeps one
+URI per relation with deterministic merge behavior. It is the right abstraction
+for:
 
 - pagination
 - `links` command output

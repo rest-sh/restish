@@ -67,6 +67,10 @@ The output is the normalized relation map:
 
 This is a deliberate product choice. The command shows Restish's interpreted
 link model, not the raw wire representation from headers or body documents.
+Supported sources are the same parser set used by pagination: HTTP `Link`
+headers, HAL, JSON:API, Siren, JSON-LD/TSJ identifiers, and simple REST-ish
+`self` fields. Because the output is a map, repeated relation names collapse to
+one deterministic URI rather than preserving every raw link object.
 
 That makes it the right companion for debugging:
 

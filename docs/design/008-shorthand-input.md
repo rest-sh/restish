@@ -62,6 +62,10 @@ When stdin provides the base body, Restish should:
 - allow shorthand patching only when the base value can be represented as a
   mutable structured value
 
+With stdin only and no shorthand arguments, non-structured text is still a
+valid request body. It should be sent as a plain string/text value instead of
+failing because no JSON or YAML parser accepted it.
+
 If stdin is binary and the selected content-type path does not support a safe
 structured patch workflow, Restish should not pretend shorthand patching is
 possible.

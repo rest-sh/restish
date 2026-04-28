@@ -50,6 +50,13 @@ Use stdin for larger payloads:
 echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post
 ```
 
+When stdin is not structured JSON or YAML, Restish preserves it as a plain text
+request body:
+
+```bash
+printf 'hello from stdin' | restish post -c text https://api.rest.sh/post
+```
+
 Add shorthand arguments to patch structured stdin before sending:
 
 ```bash
