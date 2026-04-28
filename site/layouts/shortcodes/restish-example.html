@@ -1,0 +1,31 @@
+{{- $command := trim .Inner "\n\r\t " -}}
+{{- $command = replaceRE "\\s*\\\\\\s*\\r?\\n\\s*" " " $command -}}
+{{- $command = replaceRE "\\r?\\n\\s*" " " $command -}}
+{{- $id := printf "restish-example-%d" .Ordinal -}}
+<div class="restish-playground" data-restish-playground>
+  <div class="restish-playground__bar">
+    <div>
+      <span class="restish-playground__eyebrow">Browser preview</span>
+      <p class="restish-playground__hint">Edit the command and run it from your browser against the live docs API.</p>
+    </div>
+    <div class="restish-playground__actions">
+      <span class="restish-playground__state" data-restish-state>Ready</span>
+      <button class="restish-playground__button" type="button" data-restish-run aria-controls="{{ $id }}-output">
+        <i class="fas fa-play" aria-hidden="true"></i>
+        <span>Run</span>
+      </button>
+      <button class="restish-playground__icon-button" type="button" data-restish-reset title="Reset command" aria-label="Reset command">
+        <i class="fas fa-rotate-left" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+  <label class="visually-hidden" for="{{ $id }}-command">Restish command</label>
+  <div class="restish-playground__terminal-line">
+    <span class="restish-playground__prompt" aria-hidden="true">$</span>
+    <textarea id="{{ $id }}-command" class="restish-playground__command" spellcheck="false" rows="1" wrap="off" data-restish-command>{{ $command }}</textarea>
+  </div>
+  <pre id="{{ $id }}-output" class="restish-playground__output" aria-live="polite" hidden><code class="language-readable" data-restish-output></code></pre>
+  <noscript>
+    <p class="restish-playground__noscript">Enable JavaScript to run this example in the browser.</p>
+  </noscript>
+</div>

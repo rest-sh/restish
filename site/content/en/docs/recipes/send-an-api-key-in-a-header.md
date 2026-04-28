@@ -9,9 +9,9 @@ Header-based API keys are common because they keep credentials out of URLs,
 logs, and browser history. Use `-H` for a one-off request, then move the header
 into a profile when it becomes part of normal work.
 
-```bash
+{{< restish-example >}}
 restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
-```
+{{< /restish-example >}}
 
 For repeated use, put the header in a [profile](/docs/reference/profiles/) or
 use API configure prompts. The safe fixture accepts `docs-key` and echoes a

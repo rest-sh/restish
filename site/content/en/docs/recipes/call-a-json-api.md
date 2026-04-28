@@ -10,9 +10,9 @@ Some APIs can return more than one representation. Restish sends a broad
 the clearest format for the task. The command still uses readable terminal
 output, so the first result is easy to scan.
 
-```bash
+{{< restish-example >}}
 restish -H 'Accept: application/json' https://api.rest.sh/get
-```
+{{< /restish-example >}}
 
 Representative output:
 
@@ -23,9 +23,9 @@ path: "/get"
 
 Add query params with `-q`:
 
-```bash
+{{< restish-example >}}
 restish -H 'Accept: application/json' -q active=true https://api.rest.sh/get
-```
+{{< /restish-example >}}
 
 `-H` changes the HTTP request. `-q` adds query parameters without making you
 quote a full URL. If the next command needs a JSON document, add `-o json`; for

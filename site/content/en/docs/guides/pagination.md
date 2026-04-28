@@ -10,18 +10,21 @@ Use limits and collect mode to make the behavior explicit.
 
 ## Automatic Pagination
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images -f body.self -r
-```
+{{< /restish-example >}}
 
 When a response exposes a `next` link, Restish follows it until there are no
 more pages or a configured limit is reached.
 
 ## Inspect One Page
 
+{{< restish-example >}}
+restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
+{{< /restish-example >}}
+
 ```bash
 restish https://api.rest.sh/images --rsh-no-paginate
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
 ```
 
 Use this when you want to understand the server's paging model before collecting
@@ -29,9 +32,12 @@ more data.
 
 ## Limit Pagination
 
+{{< restish-example >}}
+restish https://api.rest.sh/images --rsh-max-items 100
+{{< /restish-example >}}
+
 ```bash
 restish https://api.rest.sh/images --rsh-max-pages 3
-restish https://api.rest.sh/images --rsh-max-items 100
 ```
 
 `--rsh-max-pages` protects you from unexpectedly large collections.
@@ -41,8 +47,11 @@ restish https://api.rest.sh/images --rsh-max-items 100
 
 Some filters need the whole collection:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+{{< /restish-example >}}
+
+```bash
 restish https://api.rest.sh/images --rsh-collect -f '.body | map(.self)'
 ```
 
@@ -51,9 +60,12 @@ memory.
 
 ## Links Command
 
+{{< restish-example >}}
+restish links https://api.rest.sh/images next
+{{< /restish-example >}}
+
 ```bash
 restish links https://api.rest.sh/images
-restish links https://api.rest.sh/images next
 ```
 
 The `links` command is useful when you only want the normalized hypermedia link

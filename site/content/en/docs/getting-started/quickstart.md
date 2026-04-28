@@ -35,19 +35,12 @@ See [Install](../install/) for the full list of install options.
 
 Start with a full URL. No config is required.
 
-```bash
-restish https://api.rest.sh/
-```
+{{< restish-example >}}
+restish api.rest.sh/uuid
+{{< /restish-example >}}
 
 In an interactive terminal, Restish renders structured responses in its
-readable format by default. You should see an echo response with fields such as:
-
-```readable
-method: "GET"
-host: "api.rest.sh"
-path: "/"
-url: "https://api.rest.sh/"
-```
+readable format by default.
 
 That is generic HTTP mode: Restish sends a request, normalizes the response,
 and renders it.
@@ -72,9 +65,9 @@ Use the explicit verb when it makes a command easier to read in scripts.
 
 Use the header fixture when you want to see what the server received:
 
-```bash
+{{< restish-example >}}
 restish -H 'X-Demo: quickstart' https://api.rest.sh/headers
-```
+{{< /restish-example >}}
 
 The response includes the `X-Demo` header alongside Restish defaults such as
 `Accept`, `Accept-Encoding`, and `User-Agent`.
@@ -84,9 +77,9 @@ The response includes the `X-Demo` header alongside Restish defaults such as
 For JSON APIs, Restish shorthand is the quickest way to build a structured
 body:
 
-```bash
+{{< restish-example >}}
 restish post https://api.rest.sh/post 'name: Alice, active: true'
-```
+{{< /restish-example >}}
 
 The `/post` fixture echoes the parsed body so you can confirm what was sent.
 
@@ -111,8 +104,11 @@ You should see generated commands such as `list-images`, `get-image`,
 
 Call an operation by name instead of hand-building the URL:
 
-```bash
+{{< restish-example >}}
 restish example list-images -o table --rsh-columns name,format,self
+{{< /restish-example >}}
+
+```bash
 restish example get-image jpeg > dragonfly.jpg
 ```
 
@@ -136,11 +132,11 @@ Add a profile under the `example` API:
       "base_url": "https://api.rest.sh",
       "profiles": {
         "json": {
-          "headers": ["Accept: application/json"]
-        }
-      }
-    }
-  }
+          "headers": ["Accept: application/json"],
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -154,9 +150,9 @@ restish -p json example list-images
 
 When you only need one field, filter it and use raw output:
 
-```bash
+{{< restish-example >}}
 restish example list-images -f body.self -r
-```
+{{< /restish-example >}}
 
 Example output:
 
@@ -173,15 +169,15 @@ Example output:
 TTY output defaults to `readable`, which is the format you will usually use
 interactively. Use `-o json` when the next tool expects a JSON document:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images -o json
-```
+{{< /restish-example >}}
 
 Use `-r` with a scalar filter when shell scripts need plain text:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images -f body.self -r
-```
+{{< /restish-example >}}
 
 ## What You Learned
 

@@ -10,15 +10,15 @@ webhook-style endpoints. Prefer headers when the API supports them, because
 query strings are more likely to appear in logs. Use this form when the API
 contract requires it.
 
-```bash
+{{< restish-example >}}
 restish -q api_key=docs-key https://api.rest.sh/auth/api-key-query
-```
+{{< /restish-example >}}
 
 Quoted URL form:
 
-```bash
+{{< restish-example >}}
 restish 'https://api.rest.sh/auth/api-key-query?api_key=docs-key'
-```
+{{< /restish-example >}}
 
 The `-q` form is easier to compose with generated commands and avoids shell
 quoting issues. If you write the query string directly, quote the URL so your

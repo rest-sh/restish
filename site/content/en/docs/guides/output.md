@@ -22,11 +22,23 @@ flowchart LR
 
 ## Choose A Format
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images
+{{< /restish-example >}}
+
+{{< restish-example >}}
 restish https://api.rest.sh/images -o json
+{{< /restish-example >}}
+
+{{< restish-example >}}
 restish https://api.rest.sh/images -o yaml
+{{< /restish-example >}}
+
+{{< restish-example >}}
 restish https://api.rest.sh/images -o table --rsh-columns name,format,self
+{{< /restish-example >}}
+
+```bash
 restish https://api.rest.sh/images -o ndjson -f body.self
 ```
 
@@ -45,17 +57,20 @@ restish https://api.rest.sh/images --rsh-collect > images.json
 
 Use record output when you want one item per line:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images -o ndjson -f body.self
-```
+{{< /restish-example >}}
 
 This distinction matters for pagination and live streams. A live stream may
 never finish, so `-o ndjson` is the right shape for structured stream output.
 
 ## Filters Change What Gets Rendered
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/example -f body.basics.profiles
+{{< /restish-example >}}
+
+```bash
 restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -r
 restish https://api.rest.sh/ -f headers.Content-Type -r
 ```

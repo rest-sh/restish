@@ -9,9 +9,9 @@ Older login and token endpoints often expect `application/x-www-form-urlencoded`
 instead of JSON. `-c form` chooses that request encoding while still letting you
 use Restish shorthand for the fields.
 
-```bash
+{{< restish-example >}}
 restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
-```
+{{< /restish-example >}}
 
 Representative output:
 

@@ -5,32 +5,35 @@
         <h1>A CLI for any <span>REST</span>-ish API.</h1>
         <p class="restish-hero__lead">Discover operations, auth, and schemas from the server. No local clients to build or update.</p>
         <div class="restish-hero__actions">
-          <a class="restish-button restish-button--primary" href="{{ "docs/getting-started/quickstart/" | relURL }}">Get started <span aria-hidden="true">-&gt;</span></a>
-          <code><span class="token-symbol">$</span> brew install restish</code>
+          <a class="restish-button restish-button--primary" href="{{ "docs/getting-started/quickstart/" | relURL }}">Get started <span aria-hidden="true">&rarr;</span></a>
+          <code><span class="token-symbol">$</span> brew install rest-sh/tap/restish</code>
         </div>
       </div>
 
-      <div class="restish-window" aria-label="Restish command output example">
+      <div class="restish-window-wrap">
+        <div class="restish-glow" aria-hidden="true"></div>
+        <div class="restish-window" aria-label="Restish command output example">
         <div class="restish-window__chrome" aria-hidden="true">
           <span class="restish-dot restish-dot--pink"></span>
           <span class="restish-dot restish-dot--amber"></span>
           <span class="restish-dot restish-dot--green"></span>
         </div>
-        <pre><code><span class="token-symbol">$</span> restish https://api.rest.sh/
-<span class="token-url">method:</span> <span class="token-string">"GET"</span>
-<span class="token-url">host:</span> <span class="token-string">"api.rest.sh"</span>
-<span class="token-url">path:</span> <span class="token-string">"/"</span>
-<span class="token-url">url:</span> <span class="token-string">"https://api.rest.sh/"</span>
+        <pre><code><span class="token-symbol">$</span> restish my-api get-user 1843
+HTTP/2.0 <span class="token-string">200</span> OK
+<span class="token-url">Content-Type:</span> application/json
+<span class="token-url">Date:</span> <script type="text/javascript">
+  document.write(new Date().toUTCString());
+</script>
 
-<span class="token-symbol">$</span> restish api configure example \
-  https://api.rest.sh \
-  'prompt.api_key: docs-key'
-<span class="token-url">configured:</span> <span class="token-string">"example"</span>
-
-<span class="token-symbol">$</span> restish example list-images -f body.self -r
-<span class="token-href">/images/jpeg</span>
-<span class="token-href">/images/webp</span>
-<span class="token-href">/images/gif</span></code></pre>
+{
+  <span class="token-url">"id"</span>: <span class="token-number">1843</span>,
+  <span class="token-url">"active"</span>: <span class="token-bool">true</span>,
+  <span class="token-url">"name"</span>: <span class="token-string">"Ada Lovelace"</span>,
+  <span class="token-url">"email"</span>: <span class="token-string">"ada@example.com"</span>,
+  <span class="token-url">"created_at"</span>: <span class="token-date">"2026-04-18T19:15:30Z"</span>,
+  <span class="token-url">"link"</span>: <span class="token-href">"https://api.example.com/users/1843"</span>
+}</code></pre>
+        </div>
       </div>
     </div>
 

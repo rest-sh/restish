@@ -9,21 +9,21 @@ Headers explain how the server wants the response handled: content type,
 caching, pagination links, rate limits, and more. Use `--rsh-headers` when you
 care about that metadata and do not need the body.
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/ --rsh-headers
-```
+{{< /restish-example >}}
 
 Filter one header as raw text:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/ -f headers.Content-Type -r
-```
+{{< /restish-example >}}
 
 Use `/headers` when you want the request headers the server received:
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/headers
-```
+{{< /restish-example >}}
 
 The first two commands inspect response headers. The `/headers` fixture is
 different: it echoes the request headers the server received, which is useful

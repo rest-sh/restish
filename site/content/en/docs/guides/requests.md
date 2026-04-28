@@ -10,40 +10,47 @@ and API-aware commands generated from an API description for repeated work.
 
 ## Start With A Generic Request
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/get
+{{< /restish-example >}}
+
+{{< restish-example >}}
 restish post https://api.rest.sh/post 'name: Alice, enabled: true'
-```
+{{< /restish-example >}}
 
 Use generic requests when you are exploring, debugging, or calling an endpoint
 that has no useful spec.
 
 ## Add Headers And Query Params
 
-```bash
+{{< restish-example >}}
 restish \
   -H 'Accept: application/json' \
   -H 'X-Demo: requests' \
   -q search=dragonfly \
   https://api.rest.sh/anything/search
-```
+{{< /restish-example >}}
 
 The `/anything` fixture echoes method, path, query, headers, raw body, and
 parsed body so you can inspect the exact request shape.
 
 Use quoted URLs when you include query strings directly:
 
-```bash
+{{< restish-example >}}
 restish 'https://api.rest.sh/anything/search?search=dragonfly&active=true'
-```
+{{< /restish-example >}}
 
 ## Send Request Bodies
 
 For small structured bodies, use shorthand:
 
-```bash
+{{< restish-example >}}
 restish post https://api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
-```
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish -c form post https://api.rest.sh/post 'username: alice, password: secret'
+{{< /restish-example >}}
 
 For generated or larger bodies, pipe stdin:
 
@@ -69,9 +76,9 @@ restish example get-image jpeg > dragonfly.jpg
 
 Generated commands still support normal request flags:
 
-```bash
+{{< restish-example >}}
 restish example list-images -f body.self -r
-```
+{{< /restish-example >}}
 
 ## Override The Server Temporarily
 
@@ -86,9 +93,9 @@ If you keep using the override, create a profile instead.
 
 ## Debug A Request
 
-```bash
-restish -v --rsh-ignore-status-code https://api.rest.sh/status/404
-```
+{{< restish-example >}}
+restish --rsh-ignore-status-code https://api.rest.sh/status/404
+{{< /restish-example >}}
 
 Verbose output goes to stderr so stdout can remain useful for response data.
 Use `/anything` or `/headers` when you need the server to echo what it received.

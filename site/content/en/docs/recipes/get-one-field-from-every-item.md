@@ -9,9 +9,9 @@ This is the most common shell pattern: call a list endpoint, select one field
 from each item, and print the result without JSON quotes. It is useful for
 loops, copy-paste, and quick checks.
 
-```bash
+{{< restish-example >}}
 restish https://api.rest.sh/images -f body.self -r
-```
+{{< /restish-example >}}
 
 Example output:
 
