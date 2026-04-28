@@ -201,6 +201,130 @@ paths:
 	}
 }
 
+func TestOperationsRelativeServerURLWithTrailingSlashBase(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: v2
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root/", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/v2/items" {
+		t.Fatalf("operation path = %q, want /v2/items", got)
+	}
+}
+
+func TestOperationsAbsoluteServerOutsideBasePathUsesRelativeEscape(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/v2
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/../v2/items" {
+		t.Fatalf("operation path = %q, want /../v2/items", got)
+	}
+}
+
+func TestOperationsRootRelativeServerOutsideBasePathUsesRelativeEscape(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: /v1
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/../v1/items" {
+		t.Fatalf("operation path = %q, want /../v1/items", got)
+	}
+}
+
+func TestOperationsAbsoluteNonMatchingServerFallsBackToAPIBase(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://other.example.com/v2
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com/root", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/items" {
+		t.Fatalf("operation path = %q, want /items", got)
+	}
+}
+
 func TestOperationsRejectsUnknownConfiguredServerVariable(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
@@ -378,5 +502,65 @@ components:
 	}
 	if len(ops[0].Parameters) != 1 {
 		t.Fatalf("parameters = %#v", ops[0].Parameters)
+	}
+}
+
+func TestOpenAPI31PatchVersionLoads(t *testing.T) {
+	raw := `openapi: "3.1.1"
+info:
+  title: Patch Version
+  version: "1.0.0"
+paths: {}`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("expected loaded spec")
+	}
+}
+
+func TestOpenAPIWebhooksWithoutPathsProducesNoOperations(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Webhooks Only
+  version: "1.0.0"
+webhooks:
+  itemCreated:
+    post:
+      operationId: itemCreated
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 0 {
+		t.Fatalf("operations = %#v, want none", ops)
+	}
+}
+
+func TestOpenAPIEmptyPathItemsAreIgnored(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Empty Path Items
+  version: "1.0.0"
+paths:
+  /empty: {}`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 0 {
+		t.Fatalf("operations = %#v, want none", ops)
 	}
 }

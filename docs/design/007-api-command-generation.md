@@ -213,6 +213,16 @@ https://example.com/my-api/v2-beta1` plus `operation_base: /` makes operation
 `https://example.com/my-api/v2-beta1/my-op`. Relative paths such as `v1` and
 full URLs are rejected.
 
+When an OpenAPI server URL resolves outside the configured `base_url` path but
+stays on the same origin, generated commands preserve API-profile selection by
+expressing the operation path as a deliberate relative escape from `base_url`.
+For example, `base_url: https://example.com/root` plus `servers:
+[{url: /v1}]` generates an operation path equivalent to `../v1/<operation>`.
+The short-name URL expansion cleans that path before execution, so the request
+goes to `https://example.com/v1/<operation>` while still using the configured
+API profile. If no OpenAPI server matches the configured origin, Restish falls
+back to the configured API base URL.
+
 OpenAPI server URL variables are resolved with one bounded value per variable.
 Restish first uses explicit local config values from API-level
 `server_variables`, then profile-level `server_variables` overrides, and finally
@@ -300,7 +310,7 @@ paths:
 Restish should generate a command roughly shaped like:
 
 ```bash
-restish petstore pet <pet-id> --tenant acme --include owner
+restish petstore pet <pet-id> acme --include owner
 ```
 
 which resolves through the normal request pipeline to:

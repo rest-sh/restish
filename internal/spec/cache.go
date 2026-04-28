@@ -29,8 +29,11 @@ type cacheEntry struct {
 }
 
 type cachedRaw struct {
-	ContentType string `cbor:"content_type,omitempty"`
-	Raw         []byte `cbor:"raw,omitempty"`
+	ContentType      string `cbor:"content_type,omitempty"`
+	Raw              []byte `cbor:"raw,omitempty"`
+	SourceURL        string `cbor:"source_url,omitempty"`
+	LocalPath        string `cbor:"local_path,omitempty"`
+	AllowCrossOrigin bool   `cbor:"allow_cross_origin,omitempty"`
 }
 
 type opsBlob struct {
@@ -133,6 +136,18 @@ func (e *cacheEntry) raw() []byte {
 	return e.Spec.Raw
 }
 
+func (e *cacheEntry) loadOptions() LoadOptions {
+	if e == nil {
+		return LoadOptions{}
+	}
+	e.normalize()
+	return LoadOptions{
+		SourceURL:        e.Spec.SourceURL,
+		LocalPath:        e.Spec.LocalPath,
+		AllowCrossOrigin: e.Spec.AllowCrossOrigin,
+	}
+}
+
 // LoadFromCache reads the cached spec for apiName, re-parses it using loaders,
 // and returns the result. Returns nil, nil when the cache is empty or expired.
 func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loaders []Loader) (*APISpec, error) {
@@ -143,7 +158,7 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {
 		return nil, nil
 	}
-	return load(entry.contentType(), entry.raw(), loaders)
+	return loadWithOptions(entry.contentType(), entry.raw(), loaders, entry.loadOptions())
 }
 
 // LoadOperationsFromCache reads extracted operations for a cached spec without

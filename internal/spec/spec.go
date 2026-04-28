@@ -2,6 +2,8 @@
 package spec
 
 import (
+	"context"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +24,16 @@ type Loader interface {
 	Priority() int
 }
 
+// LoadOptions carries source metadata needed by loaders that resolve external
+// references. Plain loaders may ignore it.
+type LoadOptions struct {
+	Context          context.Context
+	SourceURL        string
+	LocalPath        string
+	AllowCrossOrigin bool
+	Transport        http.RoundTripper
+}
+
 // APISpec is a parsed API specification.
 type APISpec struct {
 	// ContentType is the MIME type the spec was fetched with.
@@ -30,6 +42,11 @@ type APISpec struct {
 	Raw []byte
 	// Document is the libopenapi parsed representation.
 	Document libopenapi.Document
+	// SourceURL/LocalPath capture where the spec came from so external refs can
+	// be resolved consistently when the raw spec is cached and reparsed.
+	SourceURL        string
+	LocalPath        string
+	AllowCrossOrigin bool
 
 	// modelOnce guards lazy construction of the V3 model.
 	modelOnce   sync.Once
@@ -130,11 +147,15 @@ func DefaultLoaders() []Loader {
 // Loaders that set ContentType or Raw in the returned spec retain their values;
 // the caller-supplied contentType and body are only used as fallbacks.
 func load(contentType string, body []byte, loaders []Loader) (*APISpec, error) {
+	return loadWithOptions(contentType, body, loaders, LoadOptions{})
+}
+
+func loadWithOptions(contentType string, body []byte, loaders []Loader, opts LoadOptions) (*APISpec, error) {
 	best := pickLoader(contentType, body, loaders)
 	if best == nil {
 		return nil, nil
 	}
-	spec, err := best.Load(body)
+	spec, err := loadWithLoaderOptions(best, body, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +165,25 @@ func load(contentType string, body []byte, loaders []Loader) (*APISpec, error) {
 	if len(spec.Raw) == 0 {
 		spec.Raw = body
 	}
+	if spec.SourceURL == "" {
+		spec.SourceURL = opts.SourceURL
+	}
+	if spec.LocalPath == "" {
+		spec.LocalPath = opts.LocalPath
+	}
+	spec.AllowCrossOrigin = opts.AllowCrossOrigin
 	return spec, nil
+}
+
+func loadWithLoaderOptions(loader Loader, body []byte, opts LoadOptions) (*APISpec, error) {
+	switch l := loader.(type) {
+	case OpenAPILoader:
+		return l.LoadWithOptions(body, opts)
+	case *OpenAPILoader:
+		return l.LoadWithOptions(body, opts)
+	default:
+		return loader.Load(body)
+	}
 }
 
 // pickLoader returns the highest-priority loader that detects the content, or nil.

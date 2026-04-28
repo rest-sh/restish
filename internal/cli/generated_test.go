@@ -225,6 +225,96 @@ func TestGeneratedAPIHelpUsesSpecDescriptionFromOperationCache(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandUsesOperationCacheForExternalRefsOffline(t *testing.T) {
+	var paramsAvailable atomic.Bool
+	paramsAvailable.Store(true)
+	var paramsHits atomic.Int32
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	root := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "External Ref API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [
+          {"$ref": "./params.json#/components/parameters/ID"}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL)
+	params := `{
+  "components": {
+    "parameters": {
+      "ID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string"}
+      }
+    }
+  }
+}`
+
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, root)
+	})
+	mux.HandleFunc("/params.json", func(w http.ResponseWriter, r *http.Request) {
+		paramsHits.Add(1)
+		if !paramsAvailable.Load() {
+			http.Error(w, "params unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, params)
+	})
+	mux.HandleFunc("/items/abc", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+	env := &generatedEnv{cfgFile: cfgFile, cacheDir: cacheDir}
+
+	syncCLI := env.newCLI()
+	if err := syncCLI.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if got := paramsHits.Load(); got == 0 {
+		t.Fatal("expected api sync to fetch external params")
+	}
+
+	paramsAvailable.Store(false)
+	hitsAfterSync := paramsHits.Load()
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-item", "abc"}); err != nil {
+		t.Fatalf("generated command from operation cache: %v", err)
+	}
+	if got := paramsHits.Load(); got != hitsAfterSync {
+		t.Fatalf("generated command refetched external params %d additional times", got-hitsAfterSync)
+	}
+}
+
 // TestGeneratedCommandKebabCase verifies that operationId "listItems" becomes
 // the command name "list-items".
 func TestGeneratedCommandKebabCase(t *testing.T) {
@@ -259,7 +349,7 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
 				Profiles: map[string]*config.ProfileConfig{
 					"default": {
-						Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "secret"}},
+						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
 					},
 				},
 			},
@@ -275,6 +365,62 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	}
 	if gotAuth != "" {
 		t.Fatalf("Authorization = %q, want empty for security: [] operation", gotAuth)
+	}
+}
+
+func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/secure", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {"type": "http", "scheme": "bearer"}
+    }
+  },
+  "security": [{"BearerAuth": []}],
+  "paths": {
+    "/secure": {
+      "get": {
+        "operationId": "getSecure",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-secure"}); err != nil {
+		t.Fatalf("get-secure failed: %v", err)
+	}
+	if !strings.HasPrefix(gotAuth, "Basic ") {
+		t.Fatalf("Authorization = %q, want Basic auth", gotAuth)
 	}
 }
 
@@ -1049,6 +1195,58 @@ func TestGeneratedCommandRequiredHeaderIsRequiredArgument(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandRequiredNonPathParamsAppearInHelp(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/tenants/{tenant}/reports": {
+      "get": {
+        "operationId": "getReport",
+        "parameters": [
+          {"name": "tenant", "in": "path", "required": true, "description": "Tenant ID", "schema": {"type": "string"}},
+          {"name": "account", "in": "query", "required": true, "description": "Account ID", "schema": {"type": "string"}},
+          {"name": "X-Auth", "in": "header", "required": true, "description": "Auth token", "schema": {"type": "string"}},
+          {"name": "session", "in": "cookie", "required": true, "description": "Session token", "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "description": "Page number", "schema": {"type": "integer"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-report", "--help"}); err != nil {
+		t.Fatalf("get-report --help: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Usage:",
+		"get-report <tenant> <account> <x-auth> <session>",
+		"Arguments:",
+		"tenant",
+		"Tenant ID",
+		"account",
+		"Account ID",
+		"x-auth",
+		"Auth token",
+		"session",
+		"Session token",
+		"--page",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("help missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestGeneratedCommandRequiredQueryIsRequiredArgument(t *testing.T) {
 	var gotQuery string
 	mux := http.NewServeMux()
@@ -1399,6 +1597,73 @@ func TestGeneratedCommandsResolveRelativeServerURLAgainstAPIBase(t *testing.T) {
 	}
 	if lastPath != "/root/v2/items" {
 		t.Fatalf("expected relative server URL to resolve against API base path, got %q", lastPath)
+	}
+}
+
+func TestGeneratedCommandsResolveRootRelativeServerURLEscapingAPIBase(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": "/v1"}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	mux.HandleFunc("/v1/items", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/root/v1/items", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("server URL should escape API base path, got %s", r.URL.Path)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL + "/root", SpecURL: srv.URL + "/openapi.json"},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	if lastPath != "/v1/items" {
+		t.Fatalf("expected root-relative server URL to escape API base path, got %q", lastPath)
 	}
 }
 

@@ -167,8 +167,11 @@ func (s *APISpec) OperationsWithOptions(opts OperationOptions) ([]Operation, err
 // buildOperations performs the actual extraction without caching.
 func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 	model, err := s.V3Model()
-	if err != nil || model == nil || model.Model.Paths == nil {
+	if err != nil || model == nil {
 		return nil, err
+	}
+	if model.Model.Paths == nil {
+		return []Operation{}, nil
 	}
 
 	// Use a non-nil empty slice so callers can distinguish "no paths in spec"
@@ -329,14 +332,11 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 		if resolved.Scheme != location.Scheme || resolved.Host != location.Host {
 			continue
 		}
-		if isRelativeServerURL(endpoint) {
-			return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), nil
-		}
-		return strings.TrimSuffix(resolved.Path, "/"), nil
+		return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), nil
 	}
 
-	// No matching server found — fall back to the path of the base URL.
-	return strings.TrimSuffix(location.Path, "/"), nil
+	// No matching server found — fall back to the configured API base URL.
+	return "", nil
 }
 
 func serverResolutionBase(location *url.URL) *url.URL {
@@ -352,17 +352,6 @@ func serverResolutionBase(location *url.URL) *url.URL {
 	return &base
 }
 
-func isRelativeServerURL(endpoint string) bool {
-	if endpoint == "" {
-		return true
-	}
-	if strings.HasPrefix(endpoint, "/") || strings.HasPrefix(endpoint, "//") {
-		return false
-	}
-	u, err := url.Parse(endpoint)
-	return err == nil && !u.IsAbs()
-}
-
 func relativeServerBasePath(basePath, resolvedPath string) string {
 	basePath = strings.TrimRight(basePath, "/")
 	if basePath == "" {
@@ -374,7 +363,33 @@ func relativeServerBasePath(basePath, resolvedPath string) string {
 	if strings.HasPrefix(resolvedPath, basePath+"/") {
 		return strings.TrimPrefix(resolvedPath, basePath)
 	}
-	return resolvedPath
+	return relativeEscapedServerBasePath(basePath, resolvedPath)
+}
+
+func relativeEscapedServerBasePath(basePath, resolvedPath string) string {
+	baseSegments := pathSegments(basePath)
+	resolvedSegments := pathSegments(resolvedPath)
+	common := 0
+	for common < len(baseSegments) && common < len(resolvedSegments) && baseSegments[common] == resolvedSegments[common] {
+		common++
+	}
+	parts := make([]string, 0, len(baseSegments)-common+len(resolvedSegments)-common)
+	for i := common; i < len(baseSegments); i++ {
+		parts = append(parts, "..")
+	}
+	parts = append(parts, resolvedSegments[common:]...)
+	if len(parts) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(parts, "/")
+}
+
+func pathSegments(p string) []string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
 }
 
 // resolveServerURLVariables returns one concrete URL string for a server by

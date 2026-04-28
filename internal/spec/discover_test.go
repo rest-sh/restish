@@ -3,9 +3,11 @@ package spec
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -356,6 +358,199 @@ func TestLoadSpecFiles_NetworkSource(t *testing.T) {
 	}
 }
 
+func TestLoadSpecFilesResolvesRelativeExternalRefs(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	paramsPath := filepath.Join(dir, "params.yaml")
+	root := `openapi: "3.1.0"
+info:
+  title: Local Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	if err := os.WriteFile(rootPath, []byte(root), 0o644); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(paramsPath, []byte(params), 0o644); err != nil {
+		t.Fatalf("write params: %v", err)
+	}
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{rootPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from external ref, got %#v", ops)
+	}
+}
+
+func TestLoadSpecFilesResolvesFullFileURIExternalRefs(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	paramsPath := filepath.Join(dir, "params.yaml")
+	paramsURI := (&url.URL{Scheme: "file", Path: paramsPath}).String()
+	root := fmt.Sprintf(`openapi: "3.1.0"
+info:
+  title: File URI Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: %q
+      responses:
+        "200":
+          description: OK`, paramsURI+"#/components/parameters/ID")
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	if err := os.WriteFile(rootPath, []byte(root), 0o644); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(paramsPath, []byte(params), 0o644); err != nil {
+		t.Fatalf("write params: %v", err)
+	}
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{rootPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from file URI ref, got %#v", ops)
+	}
+}
+
+func TestLoadSpecFilesResolvesExternalRequestAndResponseSchemas(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	schemasPath := filepath.Join(dir, "schemas.yaml")
+	root := `openapi: "3.1.0"
+info:
+  title: Local Schema Refs
+  version: "1.0.0"
+paths:
+  /items:
+    post:
+      operationId: createItem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas.yaml#/components/schemas/CreateItem"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas.yaml#/components/schemas/Item"`
+	schemas := `components:
+  schemas:
+    CreateItem:
+      type: object
+      properties:
+        name:
+          type: string
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string`
+	if err := os.WriteFile(rootPath, []byte(root), 0o644); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(schemasPath, []byte(schemas), 0o644); err != nil {
+		t.Fatalf("write schemas: %v", err)
+	}
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{rootPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if ops[0].Help.Request == nil || !strings.Contains(ops[0].Help.Request.Example, "name") {
+		t.Fatalf("expected request help from external schema, got %#v", ops[0].Help.Request)
+	}
+	if len(ops[0].Help.Responses) != 1 || !strings.Contains(ops[0].Help.Responses[0].Example, "id") {
+		t.Fatalf("expected response help from external schema, got %#v", ops[0].Help.Responses)
+	}
+}
+
+func TestLoadSpecFilesResolvesExternalPathItemRefs(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	pathsPath := filepath.Join(dir, "paths.yaml")
+	root := `openapi: "3.1.0"
+info:
+  title: Path Item Refs
+  version: "1.0.0"
+paths:
+  /items:
+    $ref: "./paths.yaml#/paths/~1items"`
+	paths := `paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	if err := os.WriteFile(rootPath, []byte(root), 0o644); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(pathsPath, []byte(paths), 0o644); err != nil {
+		t.Fatalf("write paths: %v", err)
+	}
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{rootPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "listItems" {
+		t.Fatalf("expected listItems from external Path Item ref, got %#v", ops)
+	}
+}
+
 // ---- Discover ------------------------------------------------------------
 
 func TestDiscover_ExplicitSpecURL(t *testing.T) {
@@ -379,6 +574,155 @@ func TestDiscover_ExplicitSpecURL(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil spec")
+	}
+}
+
+func TestDiscoverResolvesSameOriginRemoteExternalRefs(t *testing.T) {
+	root := `openapi: "3.1.0"
+info:
+  title: Remote Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/specs/openapi.yaml":
+			return httpResponse(200, "application/yaml", root, nil), nil
+		case "https://api.example.com/specs/params.yaml":
+			return httpResponse(200, "application/yaml", params, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	loaded, err := Discover(context.Background(), DiscoverConfig{
+		APIName:   "remote-refs",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/specs/openapi.yaml",
+		Transport: tr,
+	}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from same-origin remote ref, got %#v", ops)
+	}
+}
+
+func TestDiscoverBlocksCrossOriginRemoteExternalRefsByDefault(t *testing.T) {
+	root := `openapi: "3.1.0"
+info:
+  title: Remote Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "https://spec.example.com/params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	var crossOriginHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.yaml":
+			return httpResponse(200, "application/yaml", root, nil), nil
+		case "https://spec.example.com/params.yaml":
+			crossOriginHits.Add(1)
+			return httpResponse(200, "application/yaml", `components: {}`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	_, err := Discover(context.Background(), DiscoverConfig{
+		APIName:   "remote-refs",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/openapi.yaml",
+		Transport: tr,
+	}, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected discover to fail when external ref is cross-origin")
+	}
+	if got := crossOriginHits.Load(); got != 0 {
+		t.Fatalf("cross-origin ref was fetched %d times; expected it to be blocked first", got)
+	}
+}
+
+func TestDiscoverAllowsCrossOriginRemoteExternalRefsWithOptIn(t *testing.T) {
+	root := `openapi: "3.1.0"
+info:
+  title: Remote Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "https://spec.example.com/params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	var crossOriginHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.yaml":
+			return httpResponse(200, "application/yaml", root, nil), nil
+		case "https://spec.example.com/params.yaml":
+			crossOriginHits.Add(1)
+			return httpResponse(200, "application/yaml", params, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	loaded, err := Discover(context.Background(), DiscoverConfig{
+		APIName:          "remote-refs",
+		BaseURL:          "https://api.example.com",
+		SpecURL:          "https://api.example.com/openapi.yaml",
+		Transport:        tr,
+		AllowCrossOrigin: true,
+	}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from cross-origin remote ref, got %#v", ops)
+	}
+	if got := crossOriginHits.Load(); got == 0 {
+		t.Fatal("expected cross-origin ref to be fetched with opt-in")
 	}
 }
 
@@ -644,6 +988,70 @@ func TestDiscover_Cache(t *testing.T) {
 	}
 }
 
+func TestDiscoverCachesOperationsResolvedFromRemoteExternalRefs(t *testing.T) {
+	root := `openapi: "3.1.0"
+info:
+  title: Cached Remote Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	var paramsHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/specs/openapi.yaml":
+			return httpResponse(200, "application/yaml", root, nil), nil
+		case "https://api.example.com/specs/params.yaml":
+			paramsHits.Add(1)
+			return httpResponse(200, "application/yaml", params, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "cached-remote-refs",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/specs/openapi.yaml",
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+		Transport: tr,
+	}
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if _, err := loaded.Operations("https://api.example.com", ""); err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if got := paramsHits.Load(); got == 0 {
+		t.Fatal("expected params ref to be fetched while priming operation cache")
+	}
+
+	set, ok := LoadOperationSetFromCache(cacheDir, "cached-remote-refs", "v2.0.0", nil, "https://api.example.com", "")
+	if !ok {
+		t.Fatal("expected cached operation set")
+	}
+	if !operationHasParam(set.Operations, "getItem", "path", "id") {
+		t.Fatalf("expected cached getItem path id parameter from remote ref, got %#v", set.Operations)
+	}
+}
+
 func TestDiscover_SpecFiles(t *testing.T) {
 	dir := t.TempDir()
 	specPath := filepath.Join(dir, "spec.yaml")
@@ -772,4 +1180,18 @@ func TestDiscover_SpecURLErrorBeatsHeuristicError(t *testing.T) {
 	if !strings.Contains(err.Error(), "404") {
 		t.Errorf("expected SpecURL's 404 to dominate error, got: %v", err)
 	}
+}
+
+func operationHasParam(ops []Operation, operationID, in, name string) bool {
+	for _, op := range ops {
+		if op.ID != operationID {
+			continue
+		}
+		for _, param := range op.Parameters {
+			if param.In == in && param.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }

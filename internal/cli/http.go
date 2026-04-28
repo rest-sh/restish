@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	urlpath "path"
 	"sort"
 	"strconv"
 	"strings"
@@ -818,6 +819,7 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 		if rest != "" {
 			expanded += "/" + rest
 		}
+		expanded = cleanExpandedAPIURL(expanded)
 		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true, nil
 	}
 
@@ -857,6 +859,22 @@ func profileForName(api *config.APIConfig, profileName string) *config.ProfileCo
 		return nil
 	}
 	return api.Profiles[profileName]
+}
+
+func cleanExpandedAPIURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	if u.Path == "" {
+		return rawURL
+	}
+	cleaned := urlpath.Clean(u.Path)
+	if strings.HasSuffix(u.Path, "/") && cleaned != "/" {
+		cleaned += "/"
+	}
+	u.Path = cleaned
+	return u.String()
 }
 
 func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) ([]string, error) {

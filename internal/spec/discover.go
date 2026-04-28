@@ -88,7 +88,10 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 			if specFilesChangedSince(cfg.SpecFiles, entry.FetchedAt) {
 				goto loadFresh
 			}
-			if spec, err := load(entry.contentType(), entry.raw(), loaders); err == nil && spec != nil {
+			opts := entry.loadOptions()
+			opts.Context = ctx
+			opts.Transport = effectiveTransport(cfg)
+			if spec, err := loadWithOptions(entry.contentType(), entry.raw(), loaders, opts); err == nil && spec != nil {
 				return spec, nil
 			}
 		}
@@ -109,8 +112,11 @@ loadFresh:
 				FetchedAt: time.Now(),
 				ExpiresAt: time.Now().Add(24 * time.Hour),
 				Spec: cachedRaw{
-					ContentType: spec.ContentType,
-					Raw:         spec.Raw,
+					ContentType:      spec.ContentType,
+					Raw:              spec.Raw,
+					SourceURL:        spec.SourceURL,
+					LocalPath:        spec.LocalPath,
+					AllowCrossOrigin: spec.AllowCrossOrigin,
 				},
 			}
 			if set.Operations != nil {
@@ -142,8 +148,11 @@ loadFresh:
 			FetchedAt: time.Now(),
 			ExpiresAt: expiresAt,
 			Spec: cachedRaw{
-				ContentType: spec.ContentType,
-				Raw:         spec.Raw,
+				ContentType:      spec.ContentType,
+				Raw:              spec.Raw,
+				SourceURL:        spec.SourceURL,
+				LocalPath:        spec.LocalPath,
+				AllowCrossOrigin: spec.AllowCrossOrigin,
 			},
 		}
 		if set.Operations != nil {
@@ -163,7 +172,11 @@ func specFilesChangedSince(specFiles []string, fetchedAt time.Time) bool {
 		if !isLocalPath(src) {
 			continue
 		}
-		info, err := os.Stat(strings.TrimPrefix(src, "file://"))
+		path, err := localPathFromSource(src)
+		if err != nil {
+			return true
+		}
+		info, err := os.Stat(path)
 		if err != nil || info.ModTime().After(fetchedAt) {
 			return true
 		}
@@ -186,8 +199,9 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	// Use a large buffer so goroutines never block on send.
 	ch := make(chan result, 16)
 	var wg sync.WaitGroup
+	tr := effectiveTransport(cfg)
 
-	launch := func(priority int, fn func() (string, []byte, time.Duration, error)) {
+	launch := func(priority int, sourceURL string, fn func() (string, []byte, time.Duration, error)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -202,7 +216,12 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 				}
 				return
 			}
-			spec, loadErr := load(ct, body, loaders)
+			spec, loadErr := loadWithOptions(ct, body, loaders, LoadOptions{
+				Context:          ctx,
+				SourceURL:        sourceURL,
+				AllowCrossOrigin: cfg.AllowCrossOrigin,
+				Transport:        tr,
+			})
 			select {
 			case ch <- result{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
 			case <-ctx.Done():
@@ -210,12 +229,10 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		}()
 	}
 
-	tr := effectiveTransport(cfg)
-
 	// Explicit spec URL (priority 0 — most authoritative error source).
 	if cfg.SpecURL != "" {
 		u := cfg.SpecURL
-		launch(0, func() (string, []byte, time.Duration, error) {
+		launch(0, u, func() (string, []byte, time.Duration, error) {
 			ct, body, ttl, err := fetchBytes(ctx, u, tr)
 			if errors.Is(err, errNoSpecCandidate) {
 				return "", nil, 0, fmt.Errorf("GET %s: 404 Not Found", u)
@@ -226,7 +243,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 
 	// Probe base URL: extract Link headers and try the body itself.
 	baseURL := cfg.BaseURL
-	launch(1, func() (string, []byte, time.Duration, error) {
+	launch(1, baseURL, func() (string, []byte, time.Duration, error) {
 		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr, cfg.AllowCrossOrigin)
 		if err != nil {
 			return "", nil, 0, err
@@ -237,7 +254,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		// counter is still ≥1 when the inner wg.Add(1) is called.
 		for _, lu := range linkURLs {
 			u := lu
-			launch(1, func() (string, []byte, time.Duration, error) {
+			launch(1, u, func() (string, []byte, time.Duration, error) {
 				return fetchBytes(ctx, u, tr)
 			})
 		}
@@ -247,7 +264,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	// Well-known paths.
 	for _, path := range []string{"/openapi.json", "/openapi.yaml"} {
 		u := joinURL(cfg.BaseURL, path)
-		launch(1, func() (string, []byte, time.Duration, error) {
+		launch(1, u, func() (string, []byte, time.Duration, error) {
 			return fetchBytes(ctx, u, tr)
 		})
 	}
@@ -463,15 +480,23 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 		var ct string
 		var data []byte
 		var err error
+		var opts LoadOptions
 		if isLocalPath(src) {
 			ct, data, err = readLocalFile(src)
+			if localPath, pathErr := localPathFromSource(src); pathErr == nil {
+				opts.LocalPath = localPath
+			}
 		} else {
 			ct, data, _, err = fetchBytes(ctx, src, tr)
+			opts.SourceURL = src
+			opts.AllowCrossOrigin = cfg.AllowCrossOrigin
 		}
 		if err != nil {
 			return nil, fmt.Errorf("spec file %q: %w", src, err)
 		}
-		return load(ct, data, loaders)
+		opts.Context = ctx
+		opts.Transport = tr
+		return loadWithOptions(ct, data, loaders, opts)
 	}
 
 	var merged map[string]any
@@ -526,8 +551,10 @@ func isLocalPath(s string) bool {
 // readLocalFile reads a local spec file, stripping any leading "file://" prefix.
 // The content-type is inferred from the file extension.
 func readLocalFile(path string) (contentType string, data []byte, err error) {
-	path = strings.TrimPrefix(path, "file://")
-	path = filepath.Clean(path)
+	path, err = localPathFromSource(path)
+	if err != nil {
+		return "", nil, err
+	}
 	data, err = os.ReadFile(path)
 	if err != nil {
 		return "", nil, err
@@ -539,6 +566,20 @@ func readLocalFile(path string) (contentType string, data []byte, err error) {
 		contentType = "application/yaml"
 	}
 	return contentType, data, nil
+}
+
+func localPathFromSource(src string) (string, error) {
+	if strings.HasPrefix(src, "file://") {
+		u, err := url.Parse(src)
+		if err != nil {
+			return "", err
+		}
+		if u.Host != "" && u.Host != "localhost" {
+			return "", fmt.Errorf("unsupported file URL host %q", u.Host)
+		}
+		return filepath.Clean(u.Path), nil
+	}
+	return filepath.Clean(src), nil
 }
 
 // deepMerge recursively merges overlay into base. overlay values take
