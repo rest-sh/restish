@@ -92,6 +92,30 @@ func Default() *Registry {
 	})
 
 	r.AddContentType(&ContentType{
+		Name:      "binary",
+		MIMETypes: []string{"application/octet-stream"},
+		Quality:   0.1,
+		Marshal: func(v any) ([]byte, error) {
+			switch t := v.(type) {
+			case nil:
+				return nil, nil
+			case []byte:
+				return t, nil
+			case string:
+				return []byte(t), nil
+			default:
+				return json.Marshal(v)
+			}
+		},
+		Unmarshal: func(data []byte) (any, error) {
+			if b, ok := Printable(data); ok {
+				return string(b), nil
+			}
+			return data, nil
+		},
+	})
+
+	r.AddContentType(&ContentType{
 		Name:      "ion",
 		MIMETypes: []string{"application/ion", "text/ion"},
 		Suffixes:  []string{"+ion"},

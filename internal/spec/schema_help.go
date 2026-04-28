@@ -406,6 +406,9 @@ func genSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool,
 			return v
 		}
 	}
+	if v, ok := decodeYAMLNode(s.Const); ok {
+		return v
+	}
 	if v, ok := decodeYAMLNode(s.Default); ok {
 		return v
 	}
@@ -607,6 +610,11 @@ func (r schemaHelpRenderer) renderScalar(s *base.Schema) string {
 	if s.Default != nil {
 		if v, ok := decodeYAMLNode(s.Default); ok {
 			tags = append(tags, "default:"+fmt.Sprint(v))
+		}
+	}
+	if s.Const != nil {
+		if v, ok := decodeYAMLNode(s.Const); ok {
+			tags = append(tags, "const:"+fmt.Sprint(v))
 		}
 	}
 	if len(s.Enum) > 0 {

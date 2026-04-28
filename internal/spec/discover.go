@@ -85,6 +85,9 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 	// 1. Cache check (synchronous, no network).
 	if cfg.CacheDir != "" && !cfg.ForceRefresh {
 		if entry, ok := readCache(cfg.CacheDir, cfg.APIName, cfg.Version); ok {
+			if !cacheSourceMatches(cfg, entry) {
+				goto loadFresh
+			}
 			if specFilesChangedSince(cfg.SpecFiles, entry.FetchedAt) {
 				goto loadFresh
 			}
@@ -114,6 +117,7 @@ loadFresh:
 				Spec: cachedRaw{
 					ContentType:      spec.ContentType,
 					Raw:              spec.Raw,
+					DiscoveryBaseURL: cfg.BaseURL,
 					SourceURL:        spec.SourceURL,
 					LocalPath:        spec.LocalPath,
 					AllowCrossOrigin: spec.AllowCrossOrigin,
@@ -150,6 +154,7 @@ loadFresh:
 			Spec: cachedRaw{
 				ContentType:      spec.ContentType,
 				Raw:              spec.Raw,
+				DiscoveryBaseURL: cfg.BaseURL,
 				SourceURL:        spec.SourceURL,
 				LocalPath:        spec.LocalPath,
 				AllowCrossOrigin: spec.AllowCrossOrigin,
@@ -162,6 +167,45 @@ loadFresh:
 	}
 
 	return spec, nil
+}
+
+func cacheSourceMatches(cfg DiscoverConfig, entry *cacheEntry) bool {
+	if entry == nil {
+		return false
+	}
+	entry.normalize()
+	if entry.Spec.DiscoveryBaseURL != "" && entry.Spec.DiscoveryBaseURL != cfg.BaseURL {
+		return false
+	}
+	if len(cfg.SpecFiles) > 0 {
+		return cacheSpecFilesMatch(cfg.SpecFiles, entry)
+	}
+	if cfg.SpecURL != "" {
+		return entry.Spec.SourceURL == cfg.SpecURL
+	}
+	return true
+}
+
+func cacheSpecFilesMatch(specFiles []string, entry *cacheEntry) bool {
+	if len(specFiles) == 0 {
+		return true
+	}
+	if entry == nil {
+		return false
+	}
+	entry.normalize()
+	if len(specFiles) != 1 {
+		return false
+	}
+	src := specFiles[0]
+	if isLocalPath(src) {
+		path, err := localPathFromSource(src)
+		if err != nil {
+			return false
+		}
+		return entry.Spec.LocalPath == path
+	}
+	return entry.Spec.SourceURL == src
 }
 
 func specFilesChangedSince(specFiles []string, fetchedAt time.Time) bool {

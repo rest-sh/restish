@@ -121,6 +121,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			cmd.Aliases = append(cmd.Aliases, originalName)
 		}
 		collisionScope[cmd.Name()] = true
+		cmd.Aliases = c.filterGeneratedAliases(apiName, cmd, collisionScope)
 		if useTagLayout && tagCommandName != "" {
 			tagCommands[tagCommandName].AddCommand(cmd)
 			continue
@@ -143,6 +144,25 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	}
 
 	return apiCmd
+}
+
+func (c *CLI) filterGeneratedAliases(apiName string, cmd *cobra.Command, collisionScope map[string]bool) []string {
+	if len(cmd.Aliases) == 0 {
+		return nil
+	}
+	aliases := make([]string, 0, len(cmd.Aliases))
+	for _, alias := range cmd.Aliases {
+		if alias == "" {
+			continue
+		}
+		if collisionScope[alias] {
+			c.warnf("command alias collision for API %q: dropping alias %q on %q", apiName, alias, cmd.Name())
+			continue
+		}
+		collisionScope[alias] = true
+		aliases = append(aliases, alias)
+	}
+	return aliases
 }
 
 func generatedTagCommandName(tag string, namesByTag map[string]string, existing map[string]*cobra.Command) string {
@@ -211,6 +231,17 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 
 	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
 	pathParamOrder := extractPathParamNames(op.Path)
+	seenPathParams := map[string]bool{}
+	for _, name := range pathParamOrder {
+		if seenPathParams[name] {
+			opID := op.ID
+			if opID == "" {
+				opID = op.Method + " " + op.Path
+			}
+			return nil, fmt.Errorf("operation %q repeats path parameter %q", opID, name)
+		}
+		seenPathParams[name] = true
+	}
 
 	allParams := make(map[string]*paramInfo)
 	for _, p := range op.Parameters {
@@ -489,7 +520,7 @@ func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, 
 		appendSection("Option Schema:")
 		b.WriteString("```schema\n{\n")
 		for _, p := range optional {
-			if p.schema == "" {
+			if p.schema == "" || p.hidden {
 				continue
 			}
 			b.WriteString("  --" + p.flagName + ": " + indentSchemaContinuation(p.schema, "  ") + "\n")
@@ -554,7 +585,7 @@ func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, 
 
 func hasParamSchemas(params []*paramInfo) bool {
 	for _, p := range params {
-		if p.schema != "" {
+		if p.schema != "" && !p.hidden {
 			return true
 		}
 	}

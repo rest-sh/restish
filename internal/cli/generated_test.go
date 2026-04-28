@@ -1,9 +1,13 @@
 package cli_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -895,6 +899,104 @@ func TestGeneratedCommandHelpBoundsRecursiveSchemas(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Composite", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "schemas": {
+      "Base": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid", "default": "00000000-0000-0000-0000-000000000000"},
+          "state": {"type": "string", "enum": ["new", "done"]},
+          "kind": {"type": "string", "const": "item"}
+        }
+      },
+      "Extra": {
+        "type": "object",
+        "additionalProperties": {"type": "integer"}
+      }
+    }
+  },
+  "paths": {
+    "/items": {
+      "post": {
+        "operationId": "createComposite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/Base"},
+                  {"type": "object", "properties": {"name": {"type": "string", "examples": ["Alpha"]}}}
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {"$ref": "#/components/schemas/Base"},
+                    {"$ref": "#/components/schemas/Extra"}
+                  ],
+                  "discriminator": {"propertyName": "kind"}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {"type": "object", "properties": {"queued": {"type": "boolean"}}},
+                    {"$ref": "#/components/schemas/Extra"}
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-composite", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"allOf{",
+		"oneOf{",
+		"anyOf{",
+		"format:uuid",
+		"default:00000000-0000-0000-0000-000000000000",
+		"enum:new,done",
+		"const:item",
+		`"name": "Alpha"`,
+		"<any>: (integer)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected help to contain %q, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestGeneratedCommandMissingOperationIDFallsBackToMethodAndPath(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {
@@ -1099,6 +1201,187 @@ func TestGeneratedCommandUsesRequestBodyMediaType(t *testing.T) {
 	}
 	if gotBody != "name=Widget" {
 		t.Fatalf("body = %q, want form body", gotBody)
+	}
+}
+
+func TestGeneratedCommandMultipartRequestBody(t *testing.T) {
+	var gotContentType string
+	var gotBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/upload": {
+      "post": {
+        "operationId": "uploadItem",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "file": {"type": "string", "format": "binary"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	uploadPath := filepath.Join("testdata", "upload.txt")
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "upload-item", "name:", "alice,", "file:", "@" + uploadPath}); err != nil {
+		t.Fatalf("upload-item failed: %v", err)
+	}
+
+	mediaType, params, err := mime.ParseMediaType(gotContentType)
+	if err != nil {
+		t.Fatalf("parse Content-Type: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("Content-Type = %q, want multipart/form-data", gotContentType)
+	}
+	reader := multipart.NewReader(bytes.NewReader(gotBody), params["boundary"])
+	parts := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		content, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		parts[part.FormName()] = string(content)
+		filenames[part.FormName()] = part.FileName()
+	}
+	if parts["name"] != "alice" {
+		t.Fatalf("name part = %q, want alice", parts["name"])
+	}
+	if parts["file"] != "hello from upload\n" {
+		t.Fatalf("file part = %q", parts["file"])
+	}
+	if filenames["file"] != "upload.txt" {
+		t.Fatalf("file name = %q, want upload.txt", filenames["file"])
+	}
+}
+
+func TestGeneratedCommandOctetStreamRequestBody(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/blob", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/blob": {
+      "post": {
+        "operationId": "putBlob",
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {"type": "string", "format": "binary"}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "put-blob", "raw-bytes"}); err != nil {
+		t.Fatalf("put-blob failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/octet-stream") {
+		t.Fatalf("Content-Type = %q, want application/octet-stream", gotContentType)
+	}
+	if gotBody != "raw-bytes" {
+		t.Fatalf("body = %q, want raw-bytes", gotBody)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "put-blob", "@" + filepath.Join("testdata", "upload.txt")}); err != nil {
+		t.Fatalf("put-blob file failed: %v", err)
+	}
+	if gotBody != "hello from upload\n" {
+		t.Fatalf("file body = %q", gotBody)
+	}
+}
+
+func TestGeneratedCommandGETRequestBody(t *testing.T) {
+	var gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/search": {
+      "get": {
+        "operationId": "searchWithBody",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"type": "object", "properties": {"q": {"type": "string"}}}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "search-with-body", "q:", "widgets"}); err != nil {
+		t.Fatalf("search-with-body failed: %v", err)
+	}
+	if gotBody != `{"q":"widgets"}` {
+		t.Fatalf("body = %q, want JSON body", gotBody)
 	}
 }
 

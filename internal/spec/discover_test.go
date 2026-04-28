@@ -1052,6 +1052,95 @@ paths:
 	}
 }
 
+func TestDiscoverCacheInvalidatesWhenSpecURLChanges(t *testing.T) {
+	specA := `{"openapi":"3.1.0","info":{"title":"A","version":"1.0.0"},"paths":{}}`
+	specB := `{"openapi":"3.1.0","info":{"title":"B","version":"1.0.0"},"paths":{}}`
+	var specBHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/a.json":
+			return httpResponse(200, "application/json", specA, nil), nil
+		case "https://api.example.com/b.json":
+			specBHits.Add(1)
+			return httpResponse(200, "application/json", specB, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "source-change",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/a.json",
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	cfg.SpecURL = "https://api.example.com/b.json"
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	info, err := loaded.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Title != "B" {
+		t.Fatalf("cached stale spec title = %q, want B", info.Title)
+	}
+	if got := specBHits.Load(); got == 0 {
+		t.Fatal("expected changed spec_url to fetch fresh spec")
+	}
+}
+
+func TestDiscoverCacheInvalidatesWhenBaseURLChanges(t *testing.T) {
+	specA := `{"openapi":"3.1.0","info":{"title":"A","version":"1.0.0"},"paths":{}}`
+	specB := `{"openapi":"3.1.0","info":{"title":"B","version":"1.0.0"},"paths":{}}`
+	var apiBHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://a.example.com/openapi.json":
+			return httpResponse(200, "application/json", specA, nil), nil
+		case "https://b.example.com/openapi.json":
+			apiBHits.Add(1)
+			return httpResponse(200, "application/json", specB, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "base-change",
+		BaseURL:   "https://a.example.com",
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	cfg.BaseURL = "https://b.example.com"
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	info, err := loaded.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Title != "B" {
+		t.Fatalf("cached stale spec title = %q, want B", info.Title)
+	}
+	if got := apiBHits.Load(); got == 0 {
+		t.Fatal("expected changed base_url to fetch fresh spec")
+	}
+}
+
 func TestDiscover_SpecFiles(t *testing.T) {
 	dir := t.TempDir()
 	specPath := filepath.Join(dir, "spec.yaml")
@@ -1073,6 +1162,50 @@ paths: {}`
 	}
 	if result == nil {
 		t.Fatal("expected non-nil spec")
+	}
+}
+
+func TestDiscoverCacheInvalidatesWhenSpecFilePathChanges(t *testing.T) {
+	dir := t.TempDir()
+	specAPath := filepath.Join(dir, "a.yaml")
+	specBPath := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(specAPath, []byte(`openapi: "3.1.0"
+info:
+  title: A
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write A: %v", err)
+	}
+	if err := os.WriteFile(specBPath, []byte(`openapi: "3.1.0"
+info:
+  title: B
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write B: %v", err)
+	}
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "file-change",
+		BaseURL:   "https://api.example.com",
+		SpecFiles: []string{specAPath},
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	cfg.SpecFiles = []string{specBPath}
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	info, err := loaded.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Title != "B" {
+		t.Fatalf("cached stale spec title = %q, want B", info.Title)
 	}
 }
 

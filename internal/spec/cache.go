@@ -31,6 +31,7 @@ type cacheEntry struct {
 type cachedRaw struct {
 	ContentType      string `cbor:"content_type,omitempty"`
 	Raw              []byte `cbor:"raw,omitempty"`
+	DiscoveryBaseURL string `cbor:"discovery_base_url,omitempty"`
 	SourceURL        string `cbor:"source_url,omitempty"`
 	LocalPath        string `cbor:"local_path,omitempty"`
 	AllowCrossOrigin bool   `cbor:"allow_cross_origin,omitempty"`
@@ -155,6 +156,9 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 	if !ok {
 		return nil, nil
 	}
+	if !cacheSpecFilesMatch(specFiles, entry) {
+		return nil, nil
+	}
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {
 		return nil, nil
 	}
@@ -184,6 +188,9 @@ func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []st
 func LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version string, specFiles []string, opts OperationOptions) (OperationSet, bool) {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
+		return OperationSet{}, false
+	}
+	if !cacheSpecFilesMatch(specFiles, entry) {
 		return OperationSet{}, false
 	}
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {

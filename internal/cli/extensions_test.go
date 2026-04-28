@@ -342,3 +342,51 @@ func TestExtensionXCLIParamIgnoreRemovesFlag(t *testing.T) {
 		t.Fatal("expected ignored parameter flag to be unavailable")
 	}
 }
+
+func TestExtensionXCLIParamHiddenHidesFlagButAllowsUse(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Ext API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "parameters": [
+          {
+            "name": "debug",
+            "in": "query",
+            "schema": {"type": "string"},
+            "x-cli-hidden": true
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	_ = c.Run([]string{"restish", "tapi", "list-items", "--help"})
+	if strings.Contains(out.String(), "debug") {
+		t.Fatalf("expected hidden parameter to be absent from help, got:\n%s", out.String())
+	}
+
+	c2 := env.newCLI()
+	if err := c2.Run([]string{"restish", "tapi", "list-items", "--debug", "true"}); err != nil {
+		t.Fatalf("expected hidden parameter flag to be usable: %v", err)
+	}
+	if gotQuery != "debug=true" {
+		t.Fatalf("query = %q, want debug=true", gotQuery)
+	}
+}

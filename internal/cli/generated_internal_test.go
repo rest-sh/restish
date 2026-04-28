@@ -113,6 +113,51 @@ paths:
 	}
 }
 
+func TestBuildAPICommand_AliasCollisionWarnsAndDropsAlias(t *testing.T) {
+	specBody := `
+openapi: "3.1.0"
+info:
+  title: AliasCollision
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      x-cli-aliases: [shared]
+      responses:
+        "200": {}
+  /widgets:
+    get:
+      operationId: listWidgets
+      x-cli-aliases: [shared]
+      responses:
+        "200": {}
+`
+	s := buildSpecWithPaths(t, specBody)
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	apiCmd := c.buildAPICommand("myapi", &config.APIConfig{BaseURL: "https://api.example.com"}, s)
+	if apiCmd == nil {
+		t.Fatal("expected non-nil API command")
+	}
+	sharedCount := 0
+	for _, sub := range apiCmd.Commands() {
+		for _, alias := range sub.Aliases {
+			if alias == "shared" {
+				sharedCount++
+			}
+		}
+	}
+	if sharedCount != 1 {
+		t.Fatalf("shared alias count = %d, want 1", sharedCount)
+	}
+	if !strings.Contains(errOut.String(), "alias collision") {
+		t.Errorf("expected alias collision warning, got: %q", errOut.String())
+	}
+}
+
 func TestBuildAPICommand_MissingPathParamErrors(t *testing.T) {
 	// Path references {petId} but no parameter is declared.
 	specBody := `
@@ -140,6 +185,73 @@ paths:
 	// The operation should have been skipped with a warning.
 	if !strings.Contains(errOut.String(), "warning: skipping") {
 		t.Errorf("expected skipping warning for missing path param, got: %q", errOut.String())
+	}
+}
+
+func TestBuildAPICommand_DuplicatePathTemplateParamErrors(t *testing.T) {
+	specBody := `
+openapi: "3.1.0"
+info:
+  title: DuplicatePathParam
+  version: "1.0.0"
+paths:
+  /pets/{id}/aliases/{id}:
+    get:
+      operationId: getPetAlias
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200": {}
+`
+	s := buildSpecWithPaths(t, specBody)
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	apiCmd := c.buildAPICommand("myapi", &config.APIConfig{BaseURL: "https://api.example.com"}, s)
+	if apiCmd == nil {
+		t.Fatal("expected non-nil API command group")
+	}
+	if !strings.Contains(errOut.String(), "repeats path parameter") {
+		t.Errorf("expected duplicate path parameter warning, got: %q", errOut.String())
+	}
+}
+
+func TestBuildAPICommand_PathParamXCLIIgnoreErrors(t *testing.T) {
+	specBody := `
+openapi: "3.1.0"
+info:
+  title: IgnoredPathParam
+  version: "1.0.0"
+paths:
+  /pets/{id}:
+    get:
+      operationId: getPet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          x-cli-ignore: true
+          schema:
+            type: string
+      responses:
+        "200": {}
+`
+	s := buildSpecWithPaths(t, specBody)
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	apiCmd := c.buildAPICommand("myapi", &config.APIConfig{BaseURL: "https://api.example.com"}, s)
+	if apiCmd == nil {
+		t.Fatal("expected non-nil API command group")
+	}
+	if !strings.Contains(errOut.String(), "references missing path parameter") {
+		t.Errorf("expected ignored path parameter warning, got: %q", errOut.String())
 	}
 }
 

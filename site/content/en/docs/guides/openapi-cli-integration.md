@@ -130,6 +130,23 @@ Unsupported styles are not silently ignored. Generated command help calls them
 out so the API author can choose a supported style or the Restish implementation
 can grow deliberately.
 
+## Request Bodies
+
+Generated commands use the normal Restish body syntax. JSON and form bodies use
+shorthand assignments, multipart bodies can include fields and file references,
+and `application/octet-stream` sends raw string or file input:
+
+```bash
+restish myapi upload-item name: alice, file: @photo.jpg
+restish myapi put-blob @payload.bin
+```
+
+OpenAPI allows request bodies on methods such as `GET` and `DELETE`. Restish
+will send them when the spec defines a request body and the user supplies body
+arguments, but many servers, proxies, and caches treat those requests
+inconsistently. Prefer body-bearing methods such as `POST`, `PUT`, or `PATCH`
+when you control the API design.
+
 ## Server URLs
 
 Restish honors OpenAPI `servers` at document, path, and operation level.
