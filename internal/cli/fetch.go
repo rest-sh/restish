@@ -28,7 +28,7 @@ func (c *CLI) FetchResponse(ctx context.Context, method, rawURL, profileName str
 		opts.Headers = rawHeaders
 	}
 
-	prepared, err := c.prepareRequest(rawURL, profileName, opts, nil, nil, false, authHandlerOptions{})
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, nil, nil, false, authHandlerOptions{}, nil)
 	if err != nil {
 		return nil, err
 	}

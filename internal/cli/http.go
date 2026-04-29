@@ -104,6 +104,7 @@ func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, 
 type requestBodyOptions struct {
 	schemaTypes               map[string]string
 	multipartPartContentTypes map[string]string
+	operationAuth             *operationAuthPolicy
 }
 
 func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
@@ -136,7 +137,7 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}
 	}
 
-	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts)
+	prepared, err := c.prepareRequest(rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)
 	if err != nil {
 		return err
 	}

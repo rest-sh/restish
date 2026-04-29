@@ -428,11 +428,9 @@ func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T)
 	}
 }
 
-func TestGeneratedCommandOAuthScopeSecurityLeavesProfileAuthBehavior(t *testing.T) {
-	var gotAuth string
+func TestGeneratedCommandOAuthScopeAlternativesRequireCredentialBindings(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/me/messages", func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `[]`)
 	})
@@ -493,11 +491,102 @@ func TestGeneratedCommandOAuthScopeSecurityLeavesProfileAuthBehavior(t *testing.
 	}
 
 	c := env.newCLI()
-	if err := c.Run([]string{"restish", "tapi", "list-messages"}); err != nil {
-		t.Fatalf("list-messages failed: %v", err)
+	err := c.Run([]string{"restish", "tapi", "list-messages"})
+	if err == nil {
+		t.Fatal("expected missing credential binding error")
 	}
-	if gotAuth != "Bearer configured-token" {
-		t.Fatalf("Authorization = %q, want configured profile auth", gotAuth)
+	if !strings.Contains(err.Error(), "missing credential bindings") ||
+		!strings.Contains(err.Error(), "GraphOAuth") ||
+		!strings.Contains(err.Error(), "ApiKey") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
+	got := map[string]http.Header{}
+	mux := http.NewServeMux()
+	for _, path := range []string{"/user", "/admin", "/partner", "/signed", "/public"} {
+		path := path
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			got[path] = r.Header.Clone()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{}`)
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Security API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "UserOAuth": {"type": "oauth2", "flows": {"authorizationCode": {"authorizationUrl": "https://auth.example.com/authorize", "tokenUrl": "https://auth.example.com/token", "scopes": {"items:read": "Read items"}}}},
+      "AdminOAuth": {"type": "oauth2", "flows": {"clientCredentials": {"tokenUrl": "https://auth.example.com/token", "scopes": {"admin:read": "Read admin"}}}},
+      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
+    }
+  },
+  "security": [{"UserOAuth": ["items:read"]}],
+  "paths": {
+    "/user": {"get": {"operationId": "userItems", "responses": {"200": {"description": "OK"}}}},
+    "/admin": {"get": {"operationId": "adminUsers", "security": [{"AdminOAuth": ["admin:read"]}], "responses": {"200": {"description": "OK"}}}},
+    "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/signed": {"get": {"operationId": "signedReport", "security": [{"UserOAuth": ["items:read"], "PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/public": {"get": {"operationId": "status", "security": [], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "profile"}},
+						Credentials: map[string]*config.CredentialConfig{
+							"UserOAuth": {
+								Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-User-Key", "value": "user"}},
+								Satisfies: []string{"items:read"},
+							},
+							"AdminOAuth": {
+								Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Admin-Key", "value": "admin"}},
+								Satisfies: []string{"admin:read"},
+							},
+							"PartnerKey": {
+								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "partner"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	for _, command := range []string{"user-items", "admin-users", "partner-report", "signed-report", "status"} {
+		if err := c.Run([]string{"restish", "tapi", command}); err != nil {
+			t.Fatalf("%s failed: %v", command, err)
+		}
+	}
+
+	if got["/user"].Get("X-User-Key") != "user" || got["/user"].Get("X-Profile-Key") != "" {
+		t.Fatalf("/user headers = %#v", got["/user"])
+	}
+	if got["/admin"].Get("X-Admin-Key") != "admin" || got["/admin"].Get("X-User-Key") != "" {
+		t.Fatalf("/admin headers = %#v", got["/admin"])
+	}
+	if got["/partner"].Get("X-Partner-Key") != "partner" || got["/partner"].Get("X-Profile-Key") != "" {
+		t.Fatalf("/partner headers = %#v", got["/partner"])
+	}
+	if got["/signed"].Get("X-User-Key") != "user" || got["/signed"].Get("X-Partner-Key") != "partner" {
+		t.Fatalf("/signed headers = %#v", got["/signed"])
+	}
+	if got["/public"].Get("X-Profile-Key") != "" || got["/public"].Get("X-User-Key") != "" || got["/public"].Get("X-Partner-Key") != "" {
+		t.Fatalf("/public headers = %#v", got["/public"])
 	}
 }
 

@@ -29,6 +29,7 @@ func (c *CLI) prepareRequest(
 	extraHeaders []string,
 	noAuth bool,
 	authOpts authHandlerOptions,
+	operationAuth *operationAuthPolicy,
 ) (*preparedRequest, error) {
 	opts = cloneRequestOptions(opts)
 	if len(extraHeaders) > 0 {
@@ -38,6 +39,21 @@ func (c *CLI) prepareRequest(
 	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts, authOpts)
 	if err != nil {
 		return nil, err
+	}
+	if !noAuth && operationAuth != nil && apiName != "" {
+		prof := c.cfg.APIs[apiName].Profiles[profileName]
+		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, operationAuth)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			callbacks, err := c.operationAuthCallbacks(apiName, profileName, selected, authOpts)
+			if err != nil {
+				return nil, err
+			}
+			opts.OnRequest = callbacks.OnRequest
+			opts.OnUnauthorized = callbacks.OnUnauthorized
+		}
 	}
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {

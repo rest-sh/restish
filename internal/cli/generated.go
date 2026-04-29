@@ -365,7 +365,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, required, optional, args, baseURL, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args, baseURL, operationBase)
 		},
 	}
 	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
@@ -635,6 +635,8 @@ func (c *CLI) runGeneratedOp(
 	requestSchemaTypes map[string]string,
 	requestMultipartContentTypes map[string]string,
 	noAuth bool,
+	optionalAuth bool,
+	credentialAlternatives []spec.CredentialAlternative,
 	required, optional []*paramInfo,
 	args []string,
 	baseURL string,
@@ -691,6 +693,10 @@ func (c *CLI) runGeneratedOp(
 	return c.runHTTPInternalWithBodyOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
+		operationAuth: &operationAuthPolicy{
+			OptionalAuth:           optionalAuth,
+			CredentialAlternatives: credentialAlternatives,
+		},
 	})
 }
 
