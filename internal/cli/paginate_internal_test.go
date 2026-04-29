@@ -112,6 +112,43 @@ func TestPaginatedReadableFramePreservesWrapperObject(t *testing.T) {
 	}
 }
 
+func TestValueStreamBaseForExplicitFilterOmitsResponsePreamble(t *testing.T) {
+	base := &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  http.StatusOK,
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Links:   map[string]any{"next": "https://api.example.com/items?page=2"},
+		Body:    []any{float64(1)},
+	}
+
+	got := valueStreamBaseForFilter(base, GlobalFlags{Filter: "body"})
+	if got == base {
+		t.Fatal("expected filtered value stream base to be copied")
+	}
+	if got.Proto != "" || got.Status != 0 || len(got.Headers) != 0 {
+		t.Fatalf("filtered base kept response preamble fields: %#v", got)
+	}
+	if !reflect.DeepEqual(got.Body, base.Body) || !reflect.DeepEqual(got.Links, base.Links) {
+		t.Fatalf("filtered base should preserve value context, got %#v want body=%#v links=%#v", got, base.Body, base.Links)
+	}
+	if base.Proto == "" || base.Status == 0 || len(base.Headers) == 0 {
+		t.Fatalf("original base was mutated: %#v", base)
+	}
+}
+
+func TestValueStreamBaseWithoutExplicitFilterKeepsResponsePreamble(t *testing.T) {
+	base := &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  http.StatusOK,
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    []any{float64(1)},
+	}
+
+	if got := valueStreamBaseForFilter(base, GlobalFlags{}); got != base {
+		t.Fatalf("expected unfiltered value stream base to be preserved, got %#v", got)
+	}
+}
+
 func TestPaginationItemCapacity(t *testing.T) {
 	tests := []struct {
 		name           string

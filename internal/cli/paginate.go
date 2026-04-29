@@ -225,10 +225,11 @@ func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {
 }
 
 func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {
-	fmtName := globalFlagsFromContext(requestContext(cmd)).OutputFormat
+	gf := globalFlagsFromContext(requestContext(cmd))
+	fmtName := gf.OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 	if !tty || (fmtName != "" && fmtName != "readable") {
-		return c.newValueRenderer(cmd, base)
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
 	}
 
 	formatter, err := c.selectFormatter(cmd, fmtName, tty)
@@ -237,19 +238,30 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 	}
 	framed, ok := formatter.(output.FramedValueStreamFormatter)
 	if !ok {
-		return c.newValueRenderer(cmd, base)
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
 	}
 
 	frame, ok := paginatedReadableFrame(base.Body, pagCfg)
 	if !ok {
-		return c.newValueRenderer(cmd, base)
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
 	}
 
-	stream, err := framed.StartFramedValueStream(c.Stdout, base, output.ColorEnabled(c.Stdout), frame)
+	stream, err := framed.StartFramedValueStream(c.Stdout, valueStreamBaseForFilter(base, gf), output.ColorEnabled(c.Stdout), frame)
 	if err != nil {
 		return nil, err
 	}
 	return valueStreamRenderer{stream: stream}, nil
+}
+
+func valueStreamBaseForFilter(base *output.Response, gf GlobalFlags) *output.Response {
+	if base == nil || !explicitOutputFilter(gf) {
+		return base
+	}
+	filteredBase := *base
+	filteredBase.Proto = ""
+	filteredBase.Status = 0
+	filteredBase.Headers = nil
+	return &filteredBase
 }
 
 func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) (bool, error) {

@@ -24,7 +24,7 @@ type indentDepthKey struct{}
 
 // ReadableLexer is a custom chroma lexer for Restish readable output.
 // It extends JSON tokenization with special-case patterns for:
-//   - ISO 8601 dates         → LiteralDate
+//   - ISO 8601 / HTTP dates  → LiteralDate
 //   - URLs                   → LiteralStringSymbol
 //   - Hex binary ("0x…")    → LiteralNumberHex
 //   - Nested bracket pairs   → alternating IndentLevel0/1/2 token types
@@ -48,6 +48,8 @@ var ReadableLexer = lexers.Register(chroma.MustNewLexer(
 				{Pattern: `"?0x[0-9a-f]+(\\.\\.\\.)?"?`, Type: chroma.LiteralNumberHex},
 				// ISO 8601 date or datetime (with or without surrounding quotes).
 				{Pattern: `"?[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:+\-.]+Z?)?"?`, Type: chroma.LiteralDate},
+				// HTTP-date / RFC 1123 date (with or without surrounding quotes).
+				{Pattern: `"?[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"?`, Type: chroma.LiteralDate},
 				{Pattern: `-?(0|[1-9]\d*)(\.\d+[eE](\+|-)?\d+|[eE](\+|-)?\d+|\.\d+)`, Type: chroma.LiteralNumberFloat},
 				{Pattern: `-?(0|[1-9]\d*)`, Type: chroma.LiteralNumberInteger},
 				// URL string (http/https/etc. or root-relative /).
@@ -192,6 +194,8 @@ var HTTPPreambleLexer = lexers.Register(chroma.MustNewLexer(
 			// headers matches header name: value lines; status code patterns are absent.
 			"headers": {
 				{Pattern: `([\w][\w-]*)(:)`, Type: chroma.ByGroups(chroma.NameTag, chroma.Punctuation)},
+				{Pattern: `[ \t]+`, Type: chroma.Text},
+				{Pattern: `[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT`, Type: chroma.LiteralDate},
 				{Pattern: `[^\n]+`, Type: chroma.Text},
 				{Pattern: `\n`, Type: chroma.Text},
 			},

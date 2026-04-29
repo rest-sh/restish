@@ -15,11 +15,19 @@
     header: {
       pattern: /^[A-Z][a-zA-Z0-9-]+:.*/m,
       inside: {
-        property: /[A-Z][a-zA-Z0-9-]+(?=:)/
+        property: /[A-Z][a-zA-Z0-9-]+(?=:)/,
+        httpdate: {
+          alias: "date",
+          pattern: /"?(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"?/
+        }
       }
     },
     property: /^\s+['"]?[a-z0-9-_$]+['"]?(?=:)/im,
     date: /"?20[0-9]{2}-[01][0-9]-[0-9]{2}(T[0-9:+-.]+Z?)?"?/,
+    httpdate: {
+      alias: "date",
+      pattern: /"?(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"?/
+    },
     uri: /"([a-z]+:\/\/|\/).*"/,
     string: {
       pattern: /"(?:\\.|[^\\"\r\n])*"(?!\s*:)/,

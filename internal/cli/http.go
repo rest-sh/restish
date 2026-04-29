@@ -257,7 +257,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	fmtName := gf.OutputFormat
 	filterExpr := gf.Filter
-	explicitFilter := filterExpr != "" || gf.HeadersShorthand
+	explicitFilter := explicitOutputFilter(gf)
 	filterLang := gf.FilterLang
 	headersOnly := gf.HeadersShorthand
 	tty := output.IsTerminal(c.Stdout)
@@ -347,6 +347,10 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+}
+
+func explicitOutputFilter(gf GlobalFlags) bool {
+	return gf.Filter != "" || gf.HeadersShorthand
 }
 
 func filterNeedsLinks(filterExpr string) bool {

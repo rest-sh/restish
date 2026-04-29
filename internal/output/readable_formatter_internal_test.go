@@ -166,6 +166,32 @@ func TestSchemaLexerHighlightsUsefulSchemaParts(t *testing.T) {
 	}
 }
 
+func TestReadableLexerHighlightsHTTPDate(t *testing.T) {
+	iter, err := ReadableLexer.Tokenise(nil, `{"date":"Wed, 29 Apr 2026 05:02:53 GMT"}`)
+	if err != nil {
+		t.Fatalf("Tokenise: %v", err)
+	}
+
+	tokens := iter.Tokens()
+	want := chroma.Token{Type: chroma.LiteralDate, Value: `"Wed, 29 Apr 2026 05:02:53 GMT"`}
+	if !tokenSliceContains(tokens, want) {
+		t.Fatalf("expected HTTP date token %s %q in %#v", want.Type, want.Value, tokens)
+	}
+}
+
+func TestHTTPPreambleLexerHighlightsDateHeader(t *testing.T) {
+	iter, err := HTTPPreambleLexer.Tokenise(nil, "HTTP/1.1 200 OK\nDate: Wed, 29 Apr 2026 05:02:53 GMT\n")
+	if err != nil {
+		t.Fatalf("Tokenise: %v", err)
+	}
+
+	tokens := iter.Tokens()
+	want := chroma.Token{Type: chroma.LiteralDate, Value: "Wed, 29 Apr 2026 05:02:53 GMT"}
+	if !tokenSliceContains(tokens, want) {
+		t.Fatalf("expected HTTP date header token %s %q in %#v", want.Type, want.Value, tokens)
+	}
+}
+
 func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
 	t.Setenv("GLAMOUR_STYLE", "notty")
 	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
