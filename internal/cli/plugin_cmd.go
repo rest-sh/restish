@@ -26,7 +26,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const maxPluginDebugCaptureBytes = 64 << 20
+const (
+	maxPluginDebugCaptureBytes       = 64 << 20
+	defaultPluginDownloadMaxBytes    = 128 << 20
+	defaultPluginArchiveMemberBytes  = 128 << 20
+	defaultPluginArchiveExtractBytes = 256 << 20
+)
+
+type pluginInstallSizeLimits struct {
+	DownloadBytes       int64
+	ArchiveMemberBytes  int64
+	ArchiveExtractBytes int64
+}
+
+var pluginInstallLimits = pluginInstallSizeLimits{
+	DownloadBytes:       defaultPluginDownloadMaxBytes,
+	ArchiveMemberBytes:  defaultPluginArchiveMemberBytes,
+	ArchiveExtractBytes: defaultPluginArchiveExtractBytes,
+}
 
 // addPluginCommand registers the "plugin" subcommand tree on root.
 func (c *CLI) addPluginCommand(root *cobra.Command) {
@@ -350,7 +367,7 @@ func materializePluginDownload(r io.Reader, sourceURL, tempDir, pluginName strin
 	case strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz"):
 		return extractPluginTarGz(r, tempDir, pluginName)
 	case strings.HasSuffix(lower, ".zip"):
-		return extractPluginZip(r, tempDir, pluginName)
+		return extractPluginZip(limitReader(r, pluginInstallLimits.DownloadBytes), tempDir, pluginName)
 	default:
 		if pluginName == "" {
 			pluginName = name
@@ -366,7 +383,7 @@ func materializePluginDownload(r io.Reader, sourceURL, tempDir, pluginName strin
 		if err != nil {
 			return "", fmt.Errorf("install: create %s: %w", dest, err)
 		}
-		if _, err := io.Copy(out, r); err != nil {
+		if _, err := copyPluginBytes(out, r, pluginInstallLimits.DownloadBytes); err != nil {
 			_ = out.Close()
 			return "", fmt.Errorf("install: write %s: %w", dest, err)
 		}
@@ -386,7 +403,11 @@ func downloadName(sourceURL string) string {
 }
 
 func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error) {
-	gz, err := gzip.NewReader(r)
+	data, err := readPluginBytes(r, pluginInstallLimits.DownloadBytes)
+	if err != nil {
+		return "", fmt.Errorf("install: read tar.gz: %w", err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("install: read tar.gz: %w", err)
 	}
@@ -394,6 +415,7 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 
 	tr := tar.NewReader(gz)
 	var candidates []string
+	var extracted int64
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -408,15 +430,23 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 		if !isWantedPluginArchiveEntry(h.Name, pluginName) {
 			continue
 		}
+		if h.Size > pluginInstallLimits.ArchiveMemberBytes {
+			return "", fmt.Errorf("install: extract %s: plugin archive member exceeds limit of %d bytes", h.Name, pluginInstallLimits.ArchiveMemberBytes)
+		}
+		if extracted+h.Size > pluginInstallLimits.ArchiveExtractBytes {
+			return "", fmt.Errorf("install: extract %s: plugin archive exceeds extracted limit of %d bytes", h.Name, pluginInstallLimits.ArchiveExtractBytes)
+		}
 		dest := filepath.Join(tempDir, filepath.Base(h.Name))
 		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			return "", fmt.Errorf("install: extract %s: %w", h.Name, err)
 		}
-		if _, err := io.Copy(out, tr); err != nil {
+		n, err := copyPluginBytes(out, tr, pluginInstallLimits.ArchiveMemberBytes)
+		if err != nil {
 			_ = out.Close()
 			return "", fmt.Errorf("install: extract %s: %w", h.Name, err)
 		}
+		extracted += n
 		if err := out.Close(); err != nil {
 			return "", err
 		}
@@ -426,7 +456,7 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 }
 
 func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
-	data, err := io.ReadAll(r)
+	data, err := readPluginBytes(r, pluginInstallLimits.DownloadBytes)
 	if err != nil {
 		return "", fmt.Errorf("install: read zip: %w", err)
 	}
@@ -435,9 +465,16 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 		return "", fmt.Errorf("install: read zip: %w", err)
 	}
 	var candidates []string
+	var extracted int64
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || !isWantedPluginArchiveEntry(f.Name, pluginName) {
 			continue
+		}
+		if f.UncompressedSize64 > uint64(pluginInstallLimits.ArchiveMemberBytes) {
+			return "", fmt.Errorf("install: extract %s: plugin archive member exceeds limit of %d bytes", f.Name, pluginInstallLimits.ArchiveMemberBytes)
+		}
+		if extracted+int64(f.UncompressedSize64) > pluginInstallLimits.ArchiveExtractBytes {
+			return "", fmt.Errorf("install: extract %s: plugin archive exceeds extracted limit of %d bytes", f.Name, pluginInstallLimits.ArchiveExtractBytes)
 		}
 		in, err := f.Open()
 		if err != nil {
@@ -449,18 +486,52 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 			_ = in.Close()
 			return "", fmt.Errorf("install: extract %s: %w", f.Name, err)
 		}
-		_, copyErr := io.Copy(out, in)
+		n, copyErr := copyPluginBytes(out, in, pluginInstallLimits.ArchiveMemberBytes)
 		closeErr := out.Close()
 		_ = in.Close()
 		if copyErr != nil {
 			return "", fmt.Errorf("install: extract %s: %w", f.Name, copyErr)
 		}
+		extracted += n
 		if closeErr != nil {
 			return "", closeErr
 		}
 		candidates = append(candidates, dest)
 	}
 	return selectExtractedPlugin(candidates, pluginName)
+}
+
+func limitReader(r io.Reader, limit int64) io.Reader {
+	if limit <= 0 {
+		return r
+	}
+	return io.LimitReader(r, limit+1)
+}
+
+func readPluginBytes(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(limitReader(r, limit))
+	if err != nil {
+		return nil, err
+	}
+	if limit > 0 && int64(len(data)) > limit {
+		return nil, fmt.Errorf("plugin download exceeds limit of %d bytes", limit)
+	}
+	return data, nil
+}
+
+func copyPluginBytes(dst io.Writer, src io.Reader, limit int64) (int64, error) {
+	if limit <= 0 {
+		return io.Copy(dst, src)
+	}
+	lr := &io.LimitedReader{R: src, N: limit + 1}
+	n, err := io.Copy(dst, lr)
+	if err != nil {
+		return n, err
+	}
+	if n > limit {
+		return n, fmt.Errorf("plugin download exceeds limit of %d bytes", limit)
+	}
+	return n, nil
 }
 
 func isWantedPluginArchiveEntry(name, pluginName string) bool {
