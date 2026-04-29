@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -171,5 +173,72 @@ func TestPullPersistsMetadataAfterCompletedFileWhenLaterFileFails(t *testing.T) 
 	}
 	if _, err := os.Stat(filepath.Join(metaDir, "one.json")); err != nil {
 		t.Fatalf("expected cached body for one.json: %v", err)
+	}
+}
+
+func TestPushFileRejectsVersionConflictWithoutValidator(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":"item"}`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	var requests atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			requests.Add(1)
+			return nil, fmt.Errorf("request should not be sent")
+		},
+	}
+	a := &app{client: client}
+
+	_, _, err := a.pushFile(changedFile{
+		Status: statusModified,
+		File: &File{
+			Path:          "item.json",
+			URL:           "https://api.example.com/items/item",
+			VersionLocal:  "v1",
+			VersionRemote: "v2",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected version conflict")
+	}
+	if !strings.Contains(err.Error(), "remote version changed") {
+		t.Fatalf("expected version conflict error, got %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("request count = %d, want 0", got)
+	}
+}
+
+func TestDeleteFileRejectsVersionConflictWithoutValidator(t *testing.T) {
+	var requests atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			requests.Add(1)
+			return nil, fmt.Errorf("request should not be sent")
+		},
+	}
+	a := &app{client: client}
+
+	_, _, err := a.pushFile(changedFile{
+		Status: statusRemoved,
+		File: &File{
+			Path:          "item.json",
+			URL:           "https://api.example.com/items/item",
+			VersionLocal:  "v1",
+			VersionRemote: "v2",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected version conflict")
+	}
+	if !strings.Contains(err.Error(), "remote version changed") {
+		t.Fatalf("expected version conflict error, got %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("request count = %d, want 0", got)
 	}
 }

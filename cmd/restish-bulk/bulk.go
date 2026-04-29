@@ -628,11 +628,9 @@ func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		headers := map[string]string{}
-		if f.ETag != "" {
-			headers["If-Match"] = f.ETag
-		} else if f.LastModified != "" {
-			headers["If-Unmodified-Since"] = f.LastModified
+		headers := preconditionHeaders(f)
+		if len(headers) == 0 && versionConflictWithoutValidator(f) {
+			return nil, nil, versionConflictError("uploading", f)
 		}
 		resp, err := a.client.request("PUT", f.URL, headers, payload)
 		if err != nil {
@@ -655,11 +653,9 @@ func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
 		}
 		return remoteBody, localHash, nil
 	case statusRemoved:
-		headers := map[string]string{}
-		if f.ETag != "" {
-			headers["If-Match"] = f.ETag
-		} else if f.LastModified != "" {
-			headers["If-Unmodified-Since"] = f.LastModified
+		headers := preconditionHeaders(f)
+		if len(headers) == 0 && versionConflictWithoutValidator(f) {
+			return nil, nil, versionConflictError("deleting", f)
 		}
 		resp, err := a.client.request("DELETE", f.URL, headers, nil)
 		if err != nil {
@@ -675,6 +671,33 @@ func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
 		return nil, nil, nil
 	}
 	return nil, nil, nil
+}
+
+func preconditionHeaders(f *File) map[string]string {
+	headers := map[string]string{}
+	if f == nil {
+		return headers
+	}
+	if f.ETag != "" {
+		headers["If-Match"] = f.ETag
+	} else if f.LastModified != "" {
+		headers["If-Unmodified-Since"] = f.LastModified
+	}
+	return headers
+}
+
+func versionConflictWithoutValidator(f *File) bool {
+	if f == nil {
+		return false
+	}
+	if f.VersionLocal == "" && f.VersionRemote == "" {
+		return false
+	}
+	return f.VersionLocal != f.VersionRemote
+}
+
+func versionConflictError(action string, f *File) error {
+	return fmt.Errorf("conflict %s %s: remote version changed from %q to %q and no ETag/Last-Modified validator is available; pull and review before pushing", action, f.Path, f.VersionLocal, f.VersionRemote)
 }
 
 func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile, error) {
