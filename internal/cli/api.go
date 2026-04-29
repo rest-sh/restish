@@ -275,18 +275,31 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		AllowCrossOriginSpec: allowCrossOrigin,
 	}
 	if apiSpec != nil {
+		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
+		c.printAPIDiscovery(apiName, baseURL, discovery)
 		xcli, _ := spec.ReadXCLIConfig(apiSpec)
+		fallbackXCLI := false
 		if xcli == nil {
 			// No x-cli-config extension — try to derive auth from the spec's
 			// declared security schemes.
 			xcli = spec.FallbackXCLIConfig(apiSpec)
+			fallbackXCLI = true
 		}
 		if xcli != nil {
 			xcli = xcli.Normalize()
-			if err := c.promptXCLIConfig(requestContext(cmd), xcli, promptAnswers); err != nil {
-				return err
+			if !fallbackXCLI {
+				if err := c.promptXCLIConfig(requestContext(cmd), xcli, promptAnswers); err != nil {
+					return err
+				}
 			}
 			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
+			if fallbackXCLI {
+				if err := c.configureFallbackAuth(requestContext(cmd), apiCfg, discovery, promptAnswers); err != nil {
+					return err
+				}
+			} else {
+				c.printAuthCoverage("default", discovery, configuredCredentials(apiCfg, "default"))
+			}
 		}
 	}
 	if len(setupExprs) > 0 {
@@ -319,17 +332,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
 	}
-	if count := configuredCredentialCount(apiCfg); count > 0 {
-		fmt.Fprintf(c.Stdout, "Auth coverage for profile \"default\": %d credential(s) configured\n", count)
-	}
 	return nil
-}
-
-func configuredCredentialCount(apiCfg *config.APIConfig) int {
-	if apiCfg == nil || apiCfg.Profiles == nil || apiCfg.Profiles["default"] == nil {
-		return 0
-	}
-	return len(apiCfg.Profiles["default"].Credentials)
 }
 
 func normalizeAPIBaseURL(raw string) (string, error) {
@@ -340,29 +343,46 @@ func normalizeAPIBaseURL(raw string) (string, error) {
 	return normalized, nil
 }
 
-type configurePromptAnswers map[string]map[string]string
+type configurePromptAnswers struct {
+	profiles    map[string]map[string]string
+	credentials map[string]map[string]map[string]string
+}
 
 func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, []setExpression, error) {
 	if len(args) == 0 {
-		return nil, nil, nil
+		return configurePromptAnswers{}, nil, nil
 	}
-	answers := configurePromptAnswers{}
+	answers := configurePromptAnswers{
+		profiles:    map[string]map[string]string{},
+		credentials: map[string]map[string]map[string]string{},
+	}
 	var patchArgs []string
 	for _, arg := range args {
 		key, raw, appendOp, err := parseShorthandAssignment(arg)
 		if err != nil {
-			return nil, nil, err
+			return configurePromptAnswers{}, nil, err
 		}
 		if !strings.HasPrefix(key, "prompt.") {
 			patchArgs = append(patchArgs, arg)
 			continue
 		}
 		if appendOp {
-			return nil, nil, fmt.Errorf("invalid shorthand %q: prompt answers cannot use append", arg)
+			return configurePromptAnswers{}, nil, fmt.Errorf("invalid shorthand %q: prompt answers cannot use append", arg)
 		}
 		trimmed := strings.TrimPrefix(key, "prompt.")
 		if trimmed == "" {
-			return nil, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
+			return configurePromptAnswers{}, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
+		}
+		value, err := parseConfigCLIValue(raw)
+		if err != nil {
+			return configurePromptAnswers{}, nil, err
+		}
+		valueString, ok := value.(string)
+		if !ok {
+			return configurePromptAnswers{}, nil, fmt.Errorf("invalid prompt answer %q: value must be a string", arg)
+		}
+		if parseCredentialPromptAnswer(answers, trimmed, valueString) {
+			continue
 		}
 		profileName := "default"
 		promptName := trimmed
@@ -371,45 +391,100 @@ func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, [
 			promptName = rest
 		}
 		if profileName == "" || promptName == "" {
-			return nil, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
+			return configurePromptAnswers{}, nil, fmt.Errorf("invalid prompt answer %q: expected prompt.<name> or prompt.<profile>.<name>", arg)
 		}
-		if answers[profileName] == nil {
-			answers[profileName] = map[string]string{}
+		if answers.profiles[profileName] == nil {
+			answers.profiles[profileName] = map[string]string{}
 		}
-		value, err := parseConfigCLIValue(raw)
-		if err != nil {
-			return nil, nil, err
-		}
-		valueString, ok := value.(string)
-		if !ok {
-			return nil, nil, fmt.Errorf("invalid prompt answer %q: value must be a string", arg)
-		}
-		answers[profileName][promptName] = valueString
+		answers.profiles[profileName][promptName] = valueString
 	}
 	exprs, err := parseAPISetExpressions(patchArgs)
 	if err != nil {
-		return nil, nil, err
+		return configurePromptAnswers{}, nil, err
 	}
 	return answers, exprs, nil
 }
 
+func parseCredentialPromptAnswer(answers configurePromptAnswers, trimmed, value string) bool {
+	if rest, ok := strings.CutPrefix(trimmed, "credentials."); ok {
+		credentialID, promptName, ok := strings.Cut(rest, ".")
+		if !ok || credentialID == "" || promptName == "" {
+			return false
+		}
+		setCredentialPromptAnswer(answers, "default", credentialID, promptName, value)
+		return true
+	}
+	profileName, rest, ok := strings.Cut(trimmed, ".credentials.")
+	if !ok || profileName == "" {
+		return false
+	}
+	credentialID, promptName, ok := strings.Cut(rest, ".")
+	if !ok || credentialID == "" || promptName == "" {
+		return false
+	}
+	setCredentialPromptAnswer(answers, profileName, credentialID, promptName, value)
+	return true
+}
+
+func setCredentialPromptAnswer(answers configurePromptAnswers, profileName, credentialID, promptName, value string) {
+	if answers.credentials[profileName] == nil {
+		answers.credentials[profileName] = map[string]map[string]string{}
+	}
+	if answers.credentials[profileName][credentialID] == nil {
+		answers.credentials[profileName][credentialID] = map[string]string{}
+	}
+	answers.credentials[profileName][credentialID][promptName] = value
+}
+
 func (a configurePromptAnswers) answer(profileName, name string) (string, bool) {
-	if len(a) == 0 {
+	if len(a.profiles) == 0 {
 		return "", false
 	}
-	if profileAnswers := a[profileName]; profileAnswers != nil {
+	if profileAnswers := a.profiles[profileName]; profileAnswers != nil {
 		if value, ok := profileAnswers[name]; ok {
 			return value, true
 		}
 	}
 	if profileName != "default" {
-		if profileAnswers := a["default"]; profileAnswers != nil {
+		if profileAnswers := a.profiles["default"]; profileAnswers != nil {
 			if value, ok := profileAnswers[name]; ok {
 				return value, true
 			}
 		}
 	}
 	return "", false
+}
+
+func (a configurePromptAnswers) answerCredential(profileName, credentialID, name string) (string, bool) {
+	if profileAnswers := a.credentials[profileName]; profileAnswers != nil {
+		if credentialAnswers := profileAnswers[credentialID]; credentialAnswers != nil {
+			if value, ok := credentialAnswers[name]; ok {
+				return value, true
+			}
+		}
+	}
+	if profileName != "default" {
+		if profileAnswers := a.credentials["default"]; profileAnswers != nil {
+			if credentialAnswers := profileAnswers[credentialID]; credentialAnswers != nil {
+				if value, ok := credentialAnswers[name]; ok {
+					return value, true
+				}
+			}
+		}
+	}
+	return a.answer(profileName, name)
+}
+
+func (a configurePromptAnswers) hasCredentialAnswer(profileName, credentialID string) bool {
+	if profileAnswers := a.credentials[profileName]; profileAnswers != nil && len(profileAnswers[credentialID]) > 0 {
+		return true
+	}
+	if profileName != "default" {
+		if profileAnswers := a.credentials["default"]; profileAnswers != nil && len(profileAnswers[credentialID]) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig, answers configurePromptAnswers) error {

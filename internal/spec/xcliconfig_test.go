@@ -403,9 +403,9 @@ info:
 paths: {}
 components:
   securitySchemes:
-    bearer:
-      type: http
-      scheme: bearer`
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.com/.well-known/openid-configuration`
 	doc := loadDoc(t, raw)
 	cfg := FallbackXCLIConfig(doc)
 	if cfg != nil {

@@ -224,6 +224,9 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 			authType = "http-basic"
 			p["username"] = ""
 			p["password"] = ""
+		case "bearer":
+			authType = "bearer"
+			p["token"] = ""
 		default:
 			return nil
 		}

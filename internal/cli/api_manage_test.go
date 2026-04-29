@@ -1237,6 +1237,63 @@ func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
 	}
 }
 
+func TestAPIConfigureFallbackHTTPBasicPromptsCredentials(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {"type": "http", "scheme": "basic"}
+    }
+  },
+  "security": [{"basicAuth": []}],
+  "paths": {}
+}`
+
+	c, _, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("alice\nsecret\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "Username:") || !strings.Contains(stderr.String(), "Password:") {
+		t.Fatalf("expected basic auth prompts, got stderr %q", stderr.String())
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	prof := written.APIs["myapi"].Profiles["default"]
+	if prof.Auth == nil || prof.Auth.Type != "http-basic" || prof.Auth.Params["username"] != "alice" || prof.Auth.Params["password"] != "secret" {
+		t.Fatalf("basic fallback auth = %#v", prof.Auth)
+	}
+	if prof.Credentials["basicAuth"] == nil || prof.Credentials["basicAuth"].Auth.Params["username"] != "alice" {
+		t.Fatalf("basic fallback credential = %#v", prof.Credentials)
+	}
+}
+
 func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
@@ -1284,7 +1341,7 @@ func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
 
 	if err := c.Run([]string{
 		"restish", "api", "configure", "myapi", "api.example.com",
-		`prompt.value: partner-secret`,
+		`prompt.credentials.PartnerKey.value: partner-secret`,
 	}); err != nil {
 		t.Fatalf("api configure: %v", err)
 	}
@@ -1297,11 +1354,131 @@ func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
 		t.Fatalf("reload config: %v", err)
 	}
 	creds := written.APIs["myapi"].Profiles["default"].Credentials
-	if creds["UserOAuth"] == nil || creds["UserOAuth"].Auth == nil || creds["UserOAuth"].Auth.Type != "oauth-client-credentials" {
-		t.Fatalf("UserOAuth credential = %#v", creds["UserOAuth"])
+	if creds["UserOAuth"] != nil {
+		t.Fatalf("expected UserOAuth to be skipped without an answer, got %#v", creds["UserOAuth"])
 	}
 	if creds["PartnerKey"] == nil || creds["PartnerKey"].Auth == nil || creds["PartnerKey"].Auth.Params["value"] != "partner-secret" {
 		t.Fatalf("PartnerKey credential = %#v", creds["PartnerKey"])
+	}
+}
+
+func TestAPIConfigureFallbackAuthDiscoveryFlow(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Example API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "UserOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {
+              "items:read": "Read items",
+              "items:write": "Write items"
+            }
+          }
+        }
+      },
+      "AdminOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/admin/authorize",
+            "tokenUrl": "https://auth.example.com/admin/token",
+            "scopes": {"admin:read": "Read admin"}
+          }
+        }
+      },
+      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
+    }
+  },
+  "security": [{"UserOAuth": ["items:read", "items:write"]}],
+  "paths": {
+    "/items": {"get": {"operationId": "list-items", "responses": {"200": {"description": "OK"}}}},
+    "/admin": {"get": {"operationId": "get-admin", "security": [{"AdminOAuth": ["admin:read"]}], "responses": {"200": {"description": "OK"}}}},
+    "/partner": {"get": {"operationId": "get-partner", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/either": {"get": {"operationId": "get-either", "security": [{"UserOAuth": ["items:read"]}, {"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/public": {"get": {"operationId": "get-public", "security": [], "responses": {"200": {"description": "OK"}}}}
+  }
+}`
+
+	c, out, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("y\nuser-client\n\ny\nadmin-client\n\nn\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "example", "api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	outText := out.String()
+	for _, want := range []string{
+		"Discovered Example API",
+		"This API declares 3 auth scheme(s)",
+		"UserOAuth",
+		"global default",
+		"configured: AdminOAuth, UserOAuth",
+		"skipped:    PartnerKey",
+		"callable:   3/4 secured operations",
+	} {
+		if !strings.Contains(outText, want) {
+			t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)
+		}
+	}
+	errText := stderr.String()
+	for _, want := range []string{
+		"Configure UserOAuth? [Y/n]",
+		"Client ID:",
+		"Scopes [items:read items:write]:",
+		"Configure AdminOAuth? [y/N]",
+		"Configure PartnerKey? [y/N]",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, errText)
+		}
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	prof := written.APIs["example"].Profiles["default"]
+	if prof.Auth == nil || prof.Auth.Type != "oauth-authorization-code" || prof.Auth.Params["client_id"] != "user-client" {
+		t.Fatalf("profile auth = %#v", prof.Auth)
+	}
+	user := prof.Credentials["UserOAuth"]
+	if user == nil || user.Auth == nil || user.Auth.Params["client_id"] != "user-client" {
+		t.Fatalf("UserOAuth = %#v", user)
+	}
+	if got := user.Satisfies; !reflect.DeepEqual(got, []string{"items:read", "items:write"}) {
+		t.Fatalf("UserOAuth satisfies = %#v", got)
+	}
+	admin := prof.Credentials["AdminOAuth"]
+	if admin == nil || admin.Auth == nil || admin.Auth.Params["client_id"] != "admin-client" {
+		t.Fatalf("AdminOAuth = %#v", admin)
+	}
+	if prof.Credentials["PartnerKey"] != nil {
+		t.Fatalf("expected PartnerKey to be skipped, got %#v", prof.Credentials["PartnerKey"])
 	}
 }
 

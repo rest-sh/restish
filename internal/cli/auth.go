@@ -66,6 +66,8 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	switch ac.Type {
 	case "api-key":
 		return &auth.APIKey{}, nil
+	case "bearer":
+		return &auth.Bearer{}, nil
 	case "http-basic":
 		return &auth.HTTPBasic{Prompter: func(prompt string) (string, error) {
 			return c.Secret(context.Background(), prompt)
@@ -96,7 +98,7 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	case "external-tool":
 		return &auth.ExternalTool{Stderr: c.Stderr}, nil
 	default:
-		return nil, fmt.Errorf("unknown auth type %q; supported: api-key, http-basic, oauth-client-credentials, oauth-authorization-code, oauth-device-code, external-tool", ac.Type)
+		return nil, fmt.Errorf("unknown auth type %q; supported: api-key, bearer, http-basic, oauth-client-credentials, oauth-authorization-code, oauth-device-code, external-tool", ac.Type)
 	}
 }
 
