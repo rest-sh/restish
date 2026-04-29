@@ -600,6 +600,111 @@ paths:
 	}
 }
 
+func TestLoadSpecFilesMultiFileResolvesLocalExternalRefsBeforeMerge(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	overlayPath := filepath.Join(dir, "overlay.yaml")
+	paramsPath := filepath.Join(dir, "params.yaml")
+	root := `openapi: "3.1.0"
+info:
+  title: Multi Local Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	overlay := `info:
+  title: Multi Local Refs Overlay`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	for path, data := range map[string]string{
+		rootPath:    root,
+		overlayPath: overlay,
+		paramsPath:  params,
+	} {
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{rootPath, overlayPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from multi-file external ref, got %#v", ops)
+	}
+}
+
+func TestLoadSpecFilesMultiFileResolvesRemoteExternalRefsBeforeMerge(t *testing.T) {
+	root := `openapi: "3.1.0"
+info:
+  title: Multi Remote Refs
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+      responses:
+        "200":
+          description: OK`
+	overlay := `info:
+  title: Multi Remote Refs Overlay`
+	params := `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/specs/openapi.yaml":
+			return httpResponse(200, "application/yaml", root, nil), nil
+		case "https://api.example.com/specs/overlay.yaml":
+			return httpResponse(200, "application/yaml", overlay, nil), nil
+		case "https://api.example.com/specs/params.yaml":
+			return httpResponse(200, "application/yaml", params, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+
+	loaded, err := loadSpecFiles(context.Background(), DiscoverConfig{
+		BaseURL:   "https://api.example.com",
+		SpecFiles: []string{"https://api.example.com/specs/openapi.yaml", "https://api.example.com/specs/overlay.yaml"},
+		Transport: tr,
+	}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if !operationHasParam(ops, "getItem", "path", "id") {
+		t.Fatalf("expected getItem path id parameter from multi-file remote external ref, got %#v", ops)
+	}
+}
+
 // ---- Discover ------------------------------------------------------------
 
 func TestDiscover_ExplicitSpecURL(t *testing.T) {

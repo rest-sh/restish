@@ -559,12 +559,22 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 		var ct string
 		var data []byte
 		var err error
+		opts := LoadOptions{Context: ctx, Transport: tr}
 
 		if isLocalPath(src) {
 			ct, data, err = readLocalFile(src)
+			if localPath, pathErr := localPathFromSource(src); pathErr == nil {
+				opts.LocalPath = localPath
+			}
 		} else {
 			ct, data, _, err = fetchBytes(ctx, src, tr)
+			opts.SourceURL = src
+			opts.AllowCrossOrigin = cfg.AllowCrossOrigin
 		}
+		if err != nil {
+			return nil, fmt.Errorf("spec file %q: %w", src, err)
+		}
+		data, err = resolveOpenAPIExternalRefs(data, opts)
 		if err != nil {
 			return nil, fmt.Errorf("spec file %q: %w", src, err)
 		}
