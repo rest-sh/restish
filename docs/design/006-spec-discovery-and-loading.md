@@ -132,8 +132,9 @@ The loader must receive origin metadata, not just bytes. The metadata includes:
 
 OpenAPI `$ref` resolution is part of loading because command generation needs a
 fully usable operation model. Supported references include local relative files,
-full `file://` URIs, same-origin remote URIs, and cross-origin remote URIs only
-when explicitly enabled and permitted by design 030. Reference fetches inherit
+full `file://` URIs from local specs, same-origin remote URIs, and cross-origin
+remote URIs only when explicitly enabled and permitted by design 030. Remote
+specs must not be able to read local filesystem refs. Reference fetches inherit
 the discovery timeout, context, size-limit, redirect, and private-host safety
 rules.
 

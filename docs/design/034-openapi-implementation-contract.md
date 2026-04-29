@@ -57,15 +57,16 @@ OpenAPI loading resolves references before command extraction. Supported
 external reference forms include:
 
 - relative local file references from local specs;
-- full `file://` references;
+- full `file://` references from local specs;
 - same-origin `http` and `https` references from remote specs;
 - cross-origin `http` and `https` references only when explicitly allowed and
   permitted by the trust-boundary rules in design 030.
 
 Remote reference fetches use the same context, timeout, redirect, size-limit,
-and private-host safeguards as spec discovery. Local reference resolution must
-stay beneath the user-selected local source rules where possible and should
-surface the path that failed when a file is missing or malformed.
+and private-host safeguards as spec discovery. Remote specs must not be allowed
+to read local relative or `file://` refs. Local reference resolution must stay
+beneath the user-selected local source rules where possible and should surface
+the path that failed when a file is missing or malformed.
 
 External references are valid anywhere the parser accepts references that affect
 command generation, including Path Items, parameters, request schemas, response
