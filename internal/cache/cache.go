@@ -40,7 +40,7 @@ func New(dir string, maxBytes int64, namespace string) (*DiskCache, error) {
 	if namespace == "" {
 		namespace = "_"
 	}
-	return &DiskCache{dir: dir, namespace: namespace, maxBytes: maxBytes}, nil
+	return &DiskCache{dir: dir, namespace: cachePathComponent(namespace), maxBytes: maxBytes}, nil
 }
 
 // filePath derives the cache file path for a given URL key.
@@ -52,7 +52,14 @@ func (c *DiskCache) filePath(key string) string {
 		host = u.Host
 	}
 	h := sha256.Sum256([]byte(key))
-	return filepath.Join(c.dir, host, c.namespace, fmt.Sprintf("%x.cache", h))
+	return filepath.Join(c.dir, cachePathComponent(host), c.namespace, fmt.Sprintf("%x.cache", h))
+}
+
+func cachePathComponent(raw string) string {
+	if raw == "" {
+		return "_"
+	}
+	return url.QueryEscape(raw)
 }
 
 // Get returns the cached bytes for key, if present, and updates the file's
@@ -205,8 +212,14 @@ func (c *DiskCache) Clear(host string) error {
 		}
 		return nil
 	}
-	target := filepath.Join(c.dir, host)
+	target := filepath.Join(c.dir, cachePathComponent(host))
 	if _, err := os.Stat(target); err != nil {
+		if errors.Is(err, os.ErrNotExist) && cachePathComponent(host) != host {
+			legacy := filepath.Join(c.dir, host)
+			if _, legacyErr := os.Stat(legacy); legacyErr == nil {
+				return os.RemoveAll(legacy)
+			}
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("no cached entries for host %q", host)
 		}
@@ -227,6 +240,7 @@ func (c *DiskCache) ClearNamespaces(namespaces []string) error {
 	for _, namespace := range namespaces {
 		if namespace != "" {
 			want[namespace] = true
+			want[cachePathComponent(namespace)] = true
 		}
 	}
 	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
@@ -246,11 +260,12 @@ func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
 	if prefix == "" {
 		return nil
 	}
+	encodedPrefix := cachePathComponent(prefix)
 	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return nil
 		}
-		if strings.HasPrefix(info.Name(), prefix) {
+		if strings.HasPrefix(info.Name(), prefix) || strings.HasPrefix(info.Name(), encodedPrefix) {
 			_ = os.RemoveAll(path)
 			return filepath.SkipDir
 		}

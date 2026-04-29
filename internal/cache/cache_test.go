@@ -1,6 +1,9 @@
 package cache
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -215,6 +218,64 @@ func TestNamespaceIsolatesProfiles(t *testing.T) {
 	}
 	if got, ok := authed.Get(key); !ok || string(got) != "authed" {
 		t.Fatalf("admin namespace got %q, hit=%v", got, ok)
+	}
+}
+
+func TestNamespacePathComponentsAreFilesystemSafe(t *testing.T) {
+	dir := t.TempDir()
+	c, err := New(dir, DefaultMaxBytes, `my:api/default*prod?`)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	c.Set("https://api.example.com:8443/items", []byte("cached"))
+
+	var files []string
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || path == dir {
+			return err
+		}
+		base := filepath.Base(path)
+		if strings.ContainsAny(base, `<>:"/\|?*`) {
+			t.Fatalf("unsafe cache path component %q under %s", base, path)
+		}
+		if !info.IsDir() {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk cache: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected one cache file, got %d: %v", len(files), files)
+	}
+}
+
+func TestClearNamespacePrefixUsesRawNamespace(t *testing.T) {
+	dir := t.TempDir()
+	c, err := New(dir, DefaultMaxBytes, "myapi:default")
+	if err != nil {
+		t.Fatalf("New default: %v", err)
+	}
+	other, err := New(dir, DefaultMaxBytes, "other:default")
+	if err != nil {
+		t.Fatalf("New other: %v", err)
+	}
+	key := "https://api.example.com/items"
+	c.Set(key, []byte("mine"))
+	other.Set(key, []byte("other"))
+
+	clearer, err := New(dir, DefaultMaxBytes, "")
+	if err != nil {
+		t.Fatalf("New clearer: %v", err)
+	}
+	if err := clearer.ClearNamespacePrefix("myapi:"); err != nil {
+		t.Fatalf("ClearNamespacePrefix: %v", err)
+	}
+	if _, ok := c.Get(key); ok {
+		t.Fatal("expected myapi namespace to be cleared")
+	}
+	if got, ok := other.Get(key); !ok || string(got) != "other" {
+		t.Fatalf("expected other namespace to remain, got %q hit=%v", got, ok)
 	}
 }
 
