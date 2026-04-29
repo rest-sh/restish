@@ -359,7 +359,7 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	}
 }
 
-func TestSSEErrorStatusMapsToExitCodeAfterStreaming(t *testing.T) {
+func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -375,8 +375,8 @@ func TestSSEErrorStatusMapsToExitCodeAfterStreaming(t *testing.T) {
 	if exitCode(err) != 4 {
 		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
 	}
-	if !strings.Contains(out.String(), "missing") {
-		t.Fatalf("expected streamed body before exit, got %q", out.String())
+	if out.Len() != 0 {
+		t.Fatalf("expected no stream output before status error, got %q", out.String())
 	}
 }
 

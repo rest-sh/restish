@@ -160,6 +160,10 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
+			_ = httpResp.Body.Close()
+			return err
+		}
 		var streamErr error
 		switch kind {
 		case "sse":
@@ -169,9 +173,6 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 		}
 		if streamErr != nil {
 			return streamErr
-		}
-		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
-			return err
 		}
 		return nil
 	}

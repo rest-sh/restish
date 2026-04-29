@@ -56,6 +56,7 @@ func main() {
 				ToolIndex:      indexTools(tools),
 				Exec:           client.do,
 				MaxResultBytes: cfg.Options.MaxResultBytes,
+				RequestTimeout: cfg.Options.RequestTimeout,
 			}
 			if server.MaxResultBytes <= 0 {
 				server.MaxResultBytes = DefaultMaxResultBytes
@@ -160,6 +161,9 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 	}
 	if req.ContentType != "" {
 		msg.ContentType = req.ContentType
+	}
+	if req.Timeout > 0 {
+		msg.Timeout = req.Timeout
 	}
 	if err := c.writeMessage(msg); err != nil {
 		return nil, err

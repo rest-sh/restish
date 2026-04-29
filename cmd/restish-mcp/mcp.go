@@ -33,6 +33,7 @@ type HTTPRequest struct {
 	Headers     map[string]string
 	Body        any
 	ContentType string
+	Timeout     int
 }
 
 type HTTPResponse struct {
@@ -76,6 +77,7 @@ type Options struct {
 	Operations     map[string]bool
 	ReadOnly       bool
 	MaxResultBytes int
+	RequestTimeout int
 }
 
 type Server struct {
@@ -83,6 +85,7 @@ type Server struct {
 	ToolIndex      map[string]*Tool
 	Exec           HTTPExecutor
 	MaxResultBytes int
+	RequestTimeout int
 }
 
 type rpcRequest struct {
@@ -118,6 +121,7 @@ func Run(stdin io.Reader, stdout io.Writer, fetchSpec SpecFetcher, exec HTTPExec
 		ToolIndex:      indexTools(tools),
 		Exec:           exec,
 		MaxResultBytes: cfg.Options.MaxResultBytes,
+		RequestTimeout: cfg.Options.RequestTimeout,
 	}
 	if server.MaxResultBytes <= 0 {
 		server.MaxResultBytes = DefaultMaxResultBytes
@@ -135,9 +139,11 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 	fs.SetOutput(io.Discard)
 	var operations string
 	var maxResultBytes int
+	var requestTimeout int
 	var readOnly bool
 	fs.StringVar(&operations, "operations", "", "Comma-separated operationId allowlist")
 	fs.IntVar(&maxResultBytes, "max-result-bytes", DefaultMaxResultBytes, "Maximum tool result payload size")
+	fs.IntVar(&requestTimeout, "request-timeout", 60, "Per-tool HTTP request timeout in seconds (0 disables)")
 	fs.BoolVar(&readOnly, "read-only", false, "Expose only GET/HEAD operations")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -159,6 +165,7 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 			Operations:     ops,
 			ReadOnly:       readOnly,
 			MaxResultBytes: maxResultBytes,
+			RequestTimeout: requestTimeout,
 		},
 	}, nil
 }
@@ -528,6 +535,9 @@ func (s *Server) callTool(tool *Tool, args map[string]any) (map[string]any, erro
 	}
 	if s.Exec == nil {
 		return nil, errors.New("no HTTP executor configured")
+	}
+	if s.RequestTimeout > 0 {
+		req.Timeout = s.RequestTimeout
 	}
 	resp, err := s.Exec(req)
 	if err != nil {

@@ -181,6 +181,34 @@ func TestParseArgsRejectsRemovedHTTPFlag(t *testing.T) {
 	}
 }
 
+func TestParseArgsRequestTimeout(t *testing.T) {
+	cfg, err := ParseArgs([]string{"--request-timeout", "7", "demo"})
+	if err != nil {
+		t.Fatalf("ParseArgs: %v", err)
+	}
+	if got := cfg.Options.RequestTimeout; got != 7 {
+		t.Fatalf("RequestTimeout = %d, want 7", got)
+	}
+}
+
+func TestPluginClientSendsHTTPRequestTimeout(t *testing.T) {
+	var out bytes.Buffer
+	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &out)
+	client.httpRespCh <- plugin.HTTPResponseMsg{Type: plugin.MsgTypeHTTPResponse, RequestID: "1", Status: 200}
+
+	if _, err := client.do(&HTTPRequest{Method: "GET", URI: "demo/items", Timeout: 9}); err != nil {
+		t.Fatalf("do: %v", err)
+	}
+
+	var msg plugin.HTTPRequestMsg
+	if err := plugin.ReadMessage(&out, &msg); err != nil {
+		t.Fatalf("decode request message: %v", err)
+	}
+	if got := msg.Timeout; got != 9 {
+		t.Fatalf("Timeout = %d, want 9", got)
+	}
+}
+
 func TestRunServeToolCall(t *testing.T) {
 	spec := loadTestSpec(t, "demo", `{
 	  "openapi": "3.1.0",
@@ -229,6 +257,9 @@ func TestRunServeToolCall(t *testing.T) {
 	}, func(req *HTTPRequest) (*HTTPResponse, error) {
 		if req.URI != "demo/items/42" {
 			t.Fatalf("unexpected request URI: %s", req.URI)
+		}
+		if req.Timeout != 60 {
+			t.Fatalf("request timeout = %d, want default 60", req.Timeout)
 		}
 		return &HTTPResponse{
 			Status: 200,
