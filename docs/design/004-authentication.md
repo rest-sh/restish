@@ -47,7 +47,7 @@ This placement is important because it lets auth cooperate with:
 
 - profile selection
 - per-request overrides
-- `auth-header`
+- `api auth inspect`
 - retries and one-shot 401 recovery
 
 without teaching the transport layer about individual auth schemes.
@@ -137,7 +137,7 @@ of strings." A handler should conceptually receive:
 - token store
 - prompter
 - logger
-- execution mode such as "normal request", "`auth-header` inspection", or
+- execution mode such as "normal request", "`api auth inspect` inspection", or
   "force refresh on retry"
 
 And it should return:
@@ -330,13 +330,20 @@ The design allows:
 Anything beyond one controlled retry should be left to the normal retry design,
 not embedded in auth handlers.
 
-## `auth-header` Command
+## Auth Inspection
 
-`restish auth-header <api>` reuses the same auth resolution path as real
-requests but stops after producing the final auth header value.
+`restish api auth inspect <api>` reuses the same auth resolution path as real
+requests but stops after producing the auth mutations that would be applied.
+The command lives under API management because v2 auth can be credential-specific
+and operation-specific.
 
-This is important because it gives operators and scripts a supported way to
-inspect what Restish would send without duplicating auth logic elsewhere.
+Default output is redacted and human-oriented. Explicit raw-output flags may
+print selected values for scripts, such as the `Authorization` header value.
+Raw modes must be opt-in because they can print secrets to stdout.
+
+The v1/v2-draft top-level `restish auth-header <api>` command is removed for
+v2. It was too narrow for API keys, combined credentials, and operation-selected
+auth.
 
 ## Security Rules
 
