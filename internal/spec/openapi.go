@@ -161,7 +161,26 @@ func openAPIRemoteURLHandler(opts LoadOptions) func(string) (*http.Response, err
 }
 
 func sameOrigin(a, b *url.URL) bool {
-	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Host, b.Host)
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		effectivePort(a) == effectivePort(b)
+}
+
+func effectivePort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
 }
 
 type openAPIRefSource struct {
@@ -307,6 +326,9 @@ func (r *openAPIRefResolver) resolveRefRoot(root string, source openAPIRefSource
 	if u, err := url.Parse(root); err == nil && u.Scheme != "" {
 		switch u.Scheme {
 		case "file":
+			if source.localPath == "" {
+				return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q uses local file access from remote source %q", root, source.url)
+			}
 			path, err := localPathFromSource(u.String())
 			if err != nil {
 				return "", openAPIRefSource{}, err

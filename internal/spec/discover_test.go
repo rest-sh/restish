@@ -241,6 +241,55 @@ func TestFilterDiscoveredSpecLinksAllowsPrivateTargetFromPrivateBase(t *testing.
 	}
 }
 
+func TestFilterDiscoveredSpecLinksRequiresSameOriginByDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		base string
+		link string
+		want bool
+	}{
+		{
+			name: "same origin accepted",
+			base: "https://api.example.com/v1",
+			link: "https://api.example.com/openapi.json",
+			want: true,
+		},
+		{
+			name: "explicit default port accepted",
+			base: "https://api.example.com/v1",
+			link: "https://api.example.com:443/openapi.json",
+			want: true,
+		},
+		{
+			name: "scheme downgrade rejected",
+			base: "https://api.example.com/v1",
+			link: "http://api.example.com/openapi.json",
+			want: false,
+		},
+		{
+			name: "different port rejected",
+			base: "https://api.example.com/v1",
+			link: "https://api.example.com:8443/openapi.json",
+			want: false,
+		},
+		{
+			name: "different host rejected",
+			base: "https://api.example.com/v1",
+			link: "https://spec.example.com/openapi.json",
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			links := filterDiscoveredSpecLinks(tc.base, []string{tc.link}, false)
+			if got := len(links) == 1; got != tc.want {
+				t.Fatalf("accepted = %v, want %v; links=%v", got, tc.want, links)
+			}
+		})
+	}
+}
+
 // ---- cacheTTL ------------------------------------------------------------
 
 func TestCacheTTL_MaxAge(t *testing.T) {
@@ -666,6 +715,60 @@ paths:
 	}
 	if got := crossOriginHits.Load(); got != 0 {
 		t.Fatalf("cross-origin ref was fetched %d times; expected it to be blocked first", got)
+	}
+}
+
+func TestDiscoverBlocksRemoteSpecFileURIRefs(t *testing.T) {
+	dir := t.TempDir()
+	paramsPath := filepath.Join(dir, "params.yaml")
+	paramsURI := (&url.URL{Scheme: "file", Path: paramsPath}).String()
+	if err := os.WriteFile(paramsPath, []byte(`components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string`), 0o644); err != nil {
+		t.Fatalf("write params: %v", err)
+	}
+
+	root := fmt.Sprintf(`openapi: "3.1.0"
+info:
+  title: Remote File Ref
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - $ref: %q
+      responses:
+        "200":
+          description: OK`, paramsURI+"#/components/parameters/ID")
+	var specHits atomic.Int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.yaml" {
+			specHits.Add(1)
+			return httpResponse(200, "application/yaml", root, nil), nil
+		}
+		return httpResponse(404, "text/plain", "not found", nil), nil
+	})
+
+	_, err := Discover(context.Background(), DiscoverConfig{
+		APIName:   "remote-file-ref",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/openapi.yaml",
+		Transport: tr,
+	}, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected remote file URI ref to be rejected")
+	}
+	if !strings.Contains(err.Error(), "local file access from remote source") {
+		t.Fatalf("expected local file access error, got %v", err)
+	}
+	if got := specHits.Load(); got != 1 {
+		t.Fatalf("spec fetched %d times, want 1", got)
 	}
 }
 

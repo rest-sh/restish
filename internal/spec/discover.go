@@ -454,7 +454,7 @@ func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin 
 			continue
 		}
 		if !allowCrossOrigin {
-			if !strings.EqualFold(u.Hostname(), base.Hostname()) {
+			if !sameOrigin(base, u) {
 				continue
 			}
 		} else if isDisallowedCrossOriginHost(base.Hostname(), u.Hostname()) {
