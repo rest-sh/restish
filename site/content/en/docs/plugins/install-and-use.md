@@ -18,11 +18,43 @@ missing.
 
 ## Install A Plugin
 
+Install from the official Restish GitHub releases:
+
+```bash
+restish plugin install rest-sh/restish:csv
+```
+
+The part after `:` is expanded to a plugin binary name, so `:csv` means
+`restish-csv`. Restish downloads the latest release asset for your OS and CPU,
+extracts it, verifies the plugin manifest, and copies the binary into your
+plugin directory.
+
+Install a system-installed plugin from `PATH`:
+
+```bash
+brew install rest-sh/tap/restish-csv
+restish plugin install restish-csv
+```
+
+Use the same pattern for `restish-bulk`, `restish-mcp`, and
+`restish-pkcs11`.
+
+Install directly from a URL when your team publishes archives somewhere else:
+
+```bash
+restish plugin install https://downloads.example.com/restish-csv_darwin_arm64.tar.gz
+```
+
+For local development builds, install the binary directly:
+
 ```bash
 restish plugin install ./restish-csv
 ```
 
-The plugin must be executable and compatible with the v2 plugin protocol.
+The plugin must be executable and compatible with the v2 plugin protocol. Every
+install path verifies the plugin manifest before keeping the binary. Restish
+loads plugins only after they are installed into Restish's configured plugin
+directory; it does not scan every executable on `PATH`.
 
 ## Remove A Plugin
 

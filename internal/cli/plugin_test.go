@@ -1,6 +1,11 @@
 package cli_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -336,6 +341,153 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 	if !strings.Contains(errOut.String(), "trusted executables") {
 		t.Fatalf("expected trust warning, got:\n%s", errOut.String())
 	}
+}
+
+func TestPluginInstallFromPath(t *testing.T) {
+	skipNoPlugin(t)
+
+	pathDir := t.TempDir()
+	pathPlugin := filepath.Join(pathDir, "restish-testplugin")
+	if runtime.GOOS == "windows" {
+		pathPlugin += ".exe"
+	}
+	data, err := os.ReadFile(testPluginBin)
+	if err != nil {
+		t.Fatalf("read plugin: %v", err)
+	}
+	if err := os.WriteFile(pathPlugin, data, 0o755); err != nil {
+		t.Fatalf("write path plugin: %v", err)
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", pathDir)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	if err := c.Run([]string{"restish", "plugin", "install", "restish-testplugin"}); err != nil {
+		t.Fatalf("plugin install from PATH: %v", err)
+	}
+	if !strings.Contains(out.String(), "Installed plugin restish-testplugin") {
+		t.Fatalf("expected install output, got:\n%s", out.String())
+	}
+
+	installed := filepath.Join(pluginsParent, "plugins", filepath.Base(pathPlugin))
+	if _, err := os.Stat(installed); err != nil {
+		t.Fatalf("expected installed plugin at %s: %v", installed, err)
+	}
+}
+
+func TestPluginInstallFromGitHubShorthand(t *testing.T) {
+	skipNoPlugin(t)
+
+	assetName := "restish-testplugin_v1.2.3_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archive := tarGzPlugin(t, testPluginBin, "restish-testplugin")
+	var sawGitHubAPI, sawDownload bool
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "api.github.com" && r.URL.Path == "/repos/acme/tools/releases/latest":
+			sawGitHubAPI = true
+			body := `{"assets":[{"name":"` + assetName + `","browser_download_url":"https://downloads.example/` + assetName + `"}]}`
+			return testHTTPResponse(200, "application/json", []byte(body)), nil
+		case r.URL.Host == "downloads.example" && r.URL.Path == "/"+assetName:
+			sawDownload = true
+			return testHTTPResponse(200, "application/gzip", archive), nil
+		default:
+			return testHTTPResponse(404, "text/plain", []byte("not found")), nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "plugin", "install", "acme/tools:testplugin"}); err != nil {
+		t.Fatalf("plugin install from github shorthand: %v", err)
+	}
+	if !sawGitHubAPI || !sawDownload {
+		t.Fatalf("expected GitHub API and download calls, got api=%v download=%v", sawGitHubAPI, sawDownload)
+	}
+	if !strings.Contains(out.String(), "Installed plugin restish-testplugin") {
+		t.Fatalf("expected install output, got:\n%s", out.String())
+	}
+	installed := filepath.Join(pluginsParent, "plugins", "restish-testplugin")
+	if runtime.GOOS == "windows" {
+		installed += ".exe"
+	}
+	if _, err := os.Stat(installed); err != nil {
+		t.Fatalf("expected installed plugin at %s: %v", installed, err)
+	}
+}
+
+func TestPluginInstallFromURLArchive(t *testing.T) {
+	skipNoPlugin(t)
+
+	archiveName := "restish-testplugin_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archive := tarGzPlugin(t, testPluginBin, "restish-testplugin")
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "downloads.example" && r.URL.Path == "/"+archiveName {
+			return testHTTPResponse(200, "application/gzip", archive), nil
+		}
+		return testHTTPResponse(404, "text/plain", []byte("not found")), nil
+	})
+
+	if err := c.Run([]string{"restish", "plugin", "install", "https://downloads.example/" + archiveName}); err != nil {
+		t.Fatalf("plugin install from URL archive: %v", err)
+	}
+	if !strings.Contains(out.String(), "Installed plugin restish-testplugin") {
+		t.Fatalf("expected install output, got:\n%s", out.String())
+	}
+}
+
+func tarGzPlugin(t *testing.T, source, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read plugin: %v", err)
+	}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(name, ".exe") {
+		name += ".exe"
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: name,
+		Mode: 0o755,
+		Size: int64(len(data)),
+	}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		t.Fatalf("write tar data: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func testHTTPResponse(status int, contentType string, body []byte) *http.Response {
+	resp := &http.Response{
+		StatusCode: status,
+		Status:     http.StatusText(status),
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	}
+	if contentType != "" {
+		resp.Header.Set("Content-Type", contentType)
+	}
+	return resp
 }
 
 // TestPluginListShowsNameVersionHooks verifies that "plugin list" prints

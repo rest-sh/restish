@@ -19,6 +19,7 @@ safer to debug.
 ```bash
 restish plugin list
 restish plugin install ./restish-csv
+restish plugin install rest-sh/restish:csv
 restish plugin remove restish-csv
 restish plugin debug ./restish-csv
 ```

@@ -5,9 +5,37 @@ weight: 20
 description: Install or build Restish and verify that the binary can make a request.
 ---
 
-Before the first public v2 release, source builds are the reliable path. Package
-manager and container examples describe the intended release channels and should
-be verified when release artifacts are published.
+Use Homebrew when you want the managed install path. Use GitHub release
+archives, the OCI image, or a source build when those fit your environment
+better.
+
+## Homebrew
+
+```bash
+brew install rest-sh/tap/restish
+restish --version
+```
+
+Existing v1 users who need the legacy binary can install the keg-only v1 formula
+from the same tap:
+
+```bash
+brew install rest-sh/tap/restish@1
+```
+
+## GitHub Release Archives
+
+Download the archive for your OS and CPU from GitHub Releases, unpack it, and
+put the `restish` binary on your `PATH`.
+
+Release archives are published for macOS, Linux, and Windows on `amd64` and
+`arm64`.
+
+## OCI Image
+
+```bash
+docker run --rm ghcr.io/rest-sh/restish:latest https://api.rest.sh/
+```
 
 ## Build From Source
 
@@ -22,40 +50,9 @@ go build ./cmd/restish
 To install the binary into your Go bin directory:
 
 ```bash
-go install ./cmd/restish
+go install github.com/rest-sh/restish/v2/cmd/restish@latest
 restish --help
 ```
-
-## Planned Release Channels
-
-When v2 artifacts are published, these channels should be available or updated
-before the docs are treated as release-ready.
-
-Homebrew:
-
-```bash
-brew install restish
-```
-
-mise:
-
-```bash
-mise use -g restish@latest
-```
-
-Nixpkgs:
-
-```bash
-nix-env --install --attr nixpkgs.restish
-```
-
-OCI image:
-
-```bash
-docker run --rm ghcr.io/rest-sh/restish:latest https://api.rest.sh/
-```
-
-GitHub release binaries should be copied to a directory on your `PATH`.
 
 ## Verify The Install
 

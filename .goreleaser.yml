@@ -1,0 +1,310 @@
+version: 2
+
+project_name: restish
+
+release:
+  github:
+    owner: rest-sh
+    name: restish
+  prerelease: auto
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: restish
+    main: ./cmd/restish
+    binary: restish
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/rest-sh/restish/v2/internal/cli.Version={{ .Version }}
+
+  - id: restish-bulk
+    main: ./cmd/restish-bulk
+    binary: restish-bulk
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+  - id: restish-csv
+    main: ./cmd/restish-csv
+    binary: restish-csv
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+  - id: restish-mcp
+    main: ./cmd/restish-mcp
+    binary: restish-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+  - id: restish-pkcs11-darwin-amd64
+    main: ./cmd/restish-pkcs11
+    binary: restish-pkcs11
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=o64-clang
+      - CXX=o64-clang++
+
+  - id: restish-pkcs11-darwin-arm64
+    main: ./cmd/restish-pkcs11
+    binary: restish-pkcs11
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CC=oa64-clang
+      - CXX=oa64-clang++
+
+  - id: restish-pkcs11-linux-amd64
+    main: ./cmd/restish-pkcs11
+    binary: restish-pkcs11
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+
+  - id: restish-pkcs11-linux-arm64
+    main: ./cmd/restish-pkcs11
+    binary: restish-pkcs11
+    goos:
+      - linux
+    goarch:
+      - arm64
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
+
+  - id: restish-pkcs11-windows-amd64
+    main: ./cmd/restish-pkcs11
+    binary: restish-pkcs11
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-w64-mingw32-gcc
+      - CXX=x86_64-w64-mingw32-g++
+
+archives:
+  - id: restish
+    ids:
+      - restish
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+  - id: restish-bulk
+    ids:
+      - restish-bulk
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+  - id: restish-csv
+    ids:
+      - restish-csv
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+  - id: restish-mcp
+    ids:
+      - restish-mcp
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+  - id: restish-pkcs11
+    ids:
+      - restish-pkcs11-darwin-amd64
+      - restish-pkcs11-darwin-arm64
+      - restish-pkcs11-linux-amd64
+      - restish-pkcs11-linux-arm64
+      - restish-pkcs11-windows-amd64
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+brews:
+  - name: restish
+    ids:
+      - restish
+    homepage: https://rest.sh/
+    description: CLI for interacting with REST-ish HTTP APIs
+    license: MIT
+    directory: Formula
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Restish Releaser
+      email: release@rest.sh
+    commit_msg_template: "Update restish to {{ .Tag }}"
+    test: |
+      system "#{bin}/restish", "--version"
+
+  - name: restish-bulk
+    ids:
+      - restish-bulk
+    homepage: https://rest.sh/
+    description: Restish plugin for Git-like bulk resource management
+    license: MIT
+    directory: Formula
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Restish Releaser
+      email: release@rest.sh
+    commit_msg_template: "Update restish-bulk to {{ .Tag }}"
+    caveats: |
+      Restish loads plugins from its configured plugin directory.
+      To enable this plugin for Restish:
+
+        restish plugin install #{opt_bin}/restish-bulk
+    test: |
+      system "#{bin}/restish-bulk", "--rsh-plugin-manifest"
+
+  - name: restish-csv
+    ids:
+      - restish-csv
+    homepage: https://rest.sh/
+    description: Restish plugin for CSV output formatting
+    license: MIT
+    directory: Formula
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Restish Releaser
+      email: release@rest.sh
+    commit_msg_template: "Update restish-csv to {{ .Tag }}"
+    caveats: |
+      Restish loads plugins from its configured plugin directory.
+      To enable this plugin for Restish:
+
+        restish plugin install #{opt_bin}/restish-csv
+    test: |
+      system "#{bin}/restish-csv", "--rsh-plugin-manifest"
+
+  - name: restish-mcp
+    ids:
+      - restish-mcp
+    homepage: https://rest.sh/
+    description: Restish plugin for exposing APIs as MCP tools
+    license: MIT
+    directory: Formula
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Restish Releaser
+      email: release@rest.sh
+    commit_msg_template: "Update restish-mcp to {{ .Tag }}"
+    caveats: |
+      Restish loads plugins from its configured plugin directory.
+      To enable this plugin for Restish:
+
+        restish plugin install #{opt_bin}/restish-mcp
+    test: |
+      system "#{bin}/restish-mcp", "--rsh-plugin-manifest"
+
+  - name: restish-pkcs11
+    ids:
+      - restish-pkcs11
+    homepage: https://rest.sh/
+    description: Restish TLS signer plugin for PKCS#11 devices
+    license: MIT
+    directory: Formula
+    repository:
+      owner: rest-sh
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Restish Releaser
+      email: release@rest.sh
+    commit_msg_template: "Update restish-pkcs11 to {{ .Tag }}"
+    caveats: |
+      Restish loads plugins from its configured plugin directory.
+      To enable this plugin for Restish:
+
+        restish plugin install #{opt_bin}/restish-pkcs11
+
+      This plugin talks to a PKCS#11 module provided by your token or smart-card
+      tooling, such as OpenSC.
+    test: |
+      system "#{bin}/restish-pkcs11", "--rsh-plugin-manifest"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

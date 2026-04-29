@@ -15,15 +15,14 @@ generated command, and filter output for shell use.
 
 You need a `restish` binary on your `PATH`.
 
-Before the first public v2 release, the most reliable path is a source build
-from this repository:
+Homebrew is the shortest install path:
 
 ```bash
-go install ./cmd/restish
+brew install rest-sh/tap/restish
 restish --help
 ```
 
-If you installed a release package, verify the binary instead:
+If you installed from another source, verify the binary before continuing:
 
 ```bash
 restish --help
