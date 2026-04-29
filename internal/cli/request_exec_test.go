@@ -108,6 +108,11 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 							"Cookie: session=abc",
 							"X-Profile: kept",
 						},
+						Query: []string{
+							"api_key=secret",
+							"token=secret",
+							"view=summary",
+						},
 						Auth: &config.AuthConfig{
 							Type: "test",
 							Params: map[string]string{
@@ -134,6 +139,9 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 	}
 	if !strings.Contains(headers, "X-Profile: kept") {
 		t.Fatalf("expected non-sensitive header to remain:\n%s", headers)
+	}
+	if got, want := strings.Join(prepared.opts.Query, ","), "view=summary"; got != want {
+		t.Fatalf("query = %q, want %q", got, want)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, prepared.rawURL, nil)

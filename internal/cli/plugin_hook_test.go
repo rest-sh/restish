@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -289,6 +290,53 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "first") {
 		t.Errorf("expected first-target response to be replaced, got:\n%s", out.String())
+	}
+}
+
+func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t *testing.T) {
+	installHookPlugin(t)
+
+	var gotQuery string
+	follow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"from":"follow"}`)
+	}))
+	t.Cleanup(follow.Close)
+
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "follow:"+follow.URL)
+
+	first := hookJSONServer(t, 200, `{"from":"first"}`)
+	c, _, _ := newTestCLI(t)
+	cfgPath := c.Hooks().ConfigPath
+	if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf(`{
+  "apis": {
+    "follow": {
+      "base_url": %q,
+      "profiles": {
+        "default": {
+          "query": ["api_key=secret", "view=summary"]
+        }
+      }
+    }
+  }
+}`, follow.URL)), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("api_key"); got != "" {
+		t.Fatalf("api_key query leaked to follow target: %q", got)
+	}
+	if got := values.Get("view"); got != "summary" {
+		t.Fatalf("non-sensitive query = %q, want summary (raw %q)", got, gotQuery)
 	}
 }
 

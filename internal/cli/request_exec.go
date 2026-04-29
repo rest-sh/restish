@@ -56,6 +56,7 @@ func (c *CLI) prepareRequest(
 			}
 		}
 		opts.Headers = filtered
+		opts.Query = filterCredentialQueryParams(opts.Query)
 	}
 
 	if opts.OnRequest != nil || requestOptionHeadersContainCredentials(opts.Headers) {
@@ -96,6 +97,28 @@ func (c *CLI) prepareRequest(
 		body:    body,
 		bodyRaw: bodyRaw,
 	}, nil
+}
+
+func filterCredentialQueryParams(query []string) []string {
+	if len(query) == 0 {
+		return query
+	}
+	filtered := query[:0]
+	for _, kv := range query {
+		name, _, ok := strings.Cut(kv, "=")
+		if !ok {
+			filtered = append(filtered, kv)
+			continue
+		}
+		decoded, err := url.QueryUnescape(name)
+		if err == nil {
+			name = decoded
+		}
+		if !isSensitiveQueryParam(name) {
+			filtered = append(filtered, kv)
+		}
+	}
+	return filtered
 }
 
 func requestOptionHeadersContainCredentials(headers []string) bool {
