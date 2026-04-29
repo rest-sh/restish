@@ -6,7 +6,9 @@ import (
 	"sort"
 	"strings"
 
+	base "github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	"github.com/pb33f/libopenapi/orderedmap"
 )
 
 // OperationXCLI holds x-cli-* extension values extracted from an operation.
@@ -74,6 +76,19 @@ type OperationHelp struct {
 	Examples  []string
 }
 
+// CredentialRequirement is a loader-neutral authentication requirement.
+type CredentialRequirement struct {
+	ID       string   // stable local ID, usually the OpenAPI security scheme name
+	Ref      string   // canonical source ref or URI
+	Kind     string   // oauth2, api-key, http-basic, http-bearer, openid, mtls, unknown
+	Needs    []string // scopes, roles, or other requirement values
+	Source   string   // loader identity, e.g. openapi
+	External bool     // true when the source used a URI-style reference
+}
+
+// CredentialAlternative is one AND-set within OpenAPI's OR-list security model.
+type CredentialAlternative []CredentialRequirement
+
 // Operation is a single HTTP operation extracted from a spec, expressed in
 // format-neutral terms so command generators need not import libopenapi.
 type Operation struct {
@@ -93,6 +108,12 @@ type Operation struct {
 	BodyRequired bool
 	// NoAuth is true when the operation explicitly declares security: [].
 	NoAuth bool
+	// OptionalAuth is true when an operation allows anonymous calls alongside
+	// one or more credential alternatives.
+	OptionalAuth bool
+	// CredentialAlternatives is the OR-list of AND credential requirements
+	// derived from the effective OpenAPI security requirement.
+	CredentialAlternatives []CredentialAlternative
 	// MCPIgnore is true when x-mcp-ignore is set.
 	MCPIgnore bool
 	// RequestMediaType is the deterministic preferred content type from
@@ -211,7 +232,7 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 				return nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
 			}
 			fullPath := joinOperationPath(basePath, rawPath)
-			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op)
+			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components))
 			if op.XCLI.Ignore {
 				continue
 			}
@@ -225,7 +246,11 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 }
 
 // extractOperation converts a single libopenapi operation to the neutral form.
-func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation) Operation {
+func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation, docSecurity []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme) Operation {
+	effectiveSecurity := docSecurity
+	if op.Security != nil {
+		effectiveSecurity = op.Security
+	}
 	o := Operation{
 		ID:               op.OperationId,
 		Method:           method,
@@ -236,7 +261,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		Tags:             op.Tags,
 		HasBody:          op.RequestBody != nil,
 		BodyRequired:     op.RequestBody != nil && op.RequestBody.Required != nil && *op.RequestBody.Required,
-		NoAuth:           op.Security != nil && len(op.Security) == 0,
+		NoAuth:           effectiveSecurity != nil && len(effectiveSecurity) == 0,
 		MCPIgnore:        OpExtBool(op, "x-mcp-ignore"),
 		RequestMediaType: preferredRequestMediaType(op),
 		XCLI: OperationXCLI{
@@ -250,6 +275,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 	o.Help = buildOperationHelp(op, o.RequestMediaType)
 	o.RequestSchemaTypes = buildRequestSchemaTypes(op, o.RequestMediaType)
 	o.RequestMultipartContentTypes = buildRequestMultipartContentTypes(op, o.RequestMediaType)
+	o.OptionalAuth, o.CredentialAlternatives = credentialAlternatives(effectiveSecurity, schemes)
 
 	merged := MergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {
@@ -309,6 +335,107 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		})
 	}
 	return o
+}
+
+func securitySchemes(components *v3.Components) map[string]*v3.SecurityScheme {
+	if components == nil || components.SecuritySchemes == nil {
+		return nil
+	}
+	out := map[string]*v3.SecurityScheme{}
+	for name, scheme := range components.SecuritySchemes.FromOldest() {
+		out[name] = scheme
+	}
+	return out
+}
+
+func credentialAlternatives(requirements []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme) (bool, []CredentialAlternative) {
+	if requirements == nil || len(requirements) == 0 {
+		return false, nil
+	}
+	var optional bool
+	alternatives := make([]CredentialAlternative, 0, len(requirements))
+	for _, requirement := range requirements {
+		if requirement == nil || requirement.Requirements == nil {
+			optional = true
+			continue
+		}
+		requirementCount := orderedmap.Len(requirement.Requirements)
+		if requirementCount == 0 {
+			optional = true
+			continue
+		}
+		alternative := make(CredentialAlternative, 0, requirementCount)
+		for id, needs := range requirement.Requirements.FromOldest() {
+			scheme := schemes[id]
+			requirement := CredentialRequirement{
+				ID:       id,
+				Ref:      credentialRequirementRef(id, scheme),
+				Kind:     credentialRequirementKind(scheme),
+				Needs:    append([]string(nil), needs...),
+				Source:   "openapi",
+				External: credentialRequirementExternal(id, scheme),
+			}
+			sort.Strings(requirement.Needs)
+			alternative = append(alternative, requirement)
+		}
+		if len(alternative) == 0 {
+			optional = true
+			continue
+		}
+		alternatives = append(alternatives, alternative)
+	}
+	return optional, alternatives
+}
+
+func credentialRequirementRef(id string, scheme *v3.SecurityScheme) string {
+	if scheme != nil && scheme.Reference != "" {
+		return scheme.Reference
+	}
+	if isAbsoluteURI(id) {
+		return id
+	}
+	return "#/components/securitySchemes/" + jsonPointerEscape(id)
+}
+
+func credentialRequirementKind(scheme *v3.SecurityScheme) string {
+	if scheme == nil {
+		return "unknown"
+	}
+	switch scheme.Type {
+	case "apiKey":
+		return "api-key"
+	case "oauth2":
+		return "oauth2"
+	case "openIdConnect":
+		return "openid"
+	case "mutualTLS":
+		return "mtls"
+	case "http":
+		switch strings.ToLower(scheme.Scheme) {
+		case "basic":
+			return "http-basic"
+		case "bearer":
+			return "http-bearer"
+		default:
+			return "http"
+		}
+	default:
+		return "unknown"
+	}
+}
+
+func credentialRequirementExternal(id string, scheme *v3.SecurityScheme) bool {
+	return isAbsoluteURI(id) || (scheme != nil && isAbsoluteURI(scheme.Reference))
+}
+
+func isAbsoluteURI(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.IsAbs()
+}
+
+func jsonPointerEscape(value string) string {
+	value = strings.ReplaceAll(value, "~", "~0")
+	return strings.ReplaceAll(value, "/", "~1")
 }
 
 func isIgnoredOpenAPIHeaderParameter(p *v3.Parameter) bool {

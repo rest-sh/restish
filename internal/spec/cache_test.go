@@ -3,6 +3,7 @@ package spec
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -181,6 +182,44 @@ func TestLoadOperationsFromCache(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "getItem" || got[0].Path != "/items/{id}" {
 		t.Fatalf("unexpected operations: %#v", got)
+	}
+}
+
+func TestLoadOperationsFromCachePreservesCredentialMetadata(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"security":[{"ApiKey":[]}],"components":{"securitySchemes":{"ApiKey":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+		},
+	}
+	entry.upsertOperations("https://api.example.com", "", ops)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	got, ok := LoadOperationsFromCache(dir, "testapi", "v2", nil, "https://api.example.com", "")
+	if !ok {
+		t.Fatal("expected operations cache hit")
+	}
+	want := []CredentialAlternative{{
+		{ID: "ApiKey", Ref: "#/components/securitySchemes/ApiKey", Kind: "api-key", Source: "openapi"},
+	}}
+	if !reflect.DeepEqual(got[0].CredentialAlternatives, want) {
+		t.Fatalf("credential alternatives:\ngot  %#v\nwant %#v", got[0].CredentialAlternatives, want)
 	}
 }
 

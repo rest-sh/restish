@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,174 @@ paths:
 	if got := ops[0].Path; got != "/v1/items" {
 		t.Fatalf("operation path = %q, want /v1/items", got)
 	}
+}
+
+func TestOperationsExtractsEffectiveCredentialRequirements(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+security:
+  - UserOAuth: [items:read]
+components:
+  securitySchemes:
+    UserOAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.com/authorize
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            items:read: Read items
+            items:write: Write items
+    AdminOAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            admin:read: Read admin data
+    PartnerKey:
+      type: apiKey
+      in: header
+      name: X-Partner-Key
+    BasicAuth:
+      type: http
+      scheme: basic
+    BearerAuth:
+      type: http
+      scheme: bearer
+    OIDC:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.example.com/.well-known/openid-configuration
+    ClientCert:
+      type: mutualTLS
+    urn:example:auth:TenantKey:
+      type: apiKey
+      in: header
+      name: X-Tenant-Key
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+  /admin:
+    get:
+      operationId: adminUsers
+      security:
+        - AdminOAuth: [admin:read]
+      responses:
+        "200":
+          description: OK
+  /public:
+    get:
+      operationId: status
+      security: []
+      responses:
+        "200":
+          description: OK
+  /optional:
+    get:
+      operationId: optionalPartner
+      security:
+        - {}
+        - PartnerKey: []
+      responses:
+        "200":
+          description: OK
+  /either:
+    get:
+      operationId: partnerReport
+      security:
+        - UserOAuth: [items:read]
+        - PartnerKey: []
+      responses:
+        "200":
+          description: OK
+  /signed:
+    get:
+      operationId: signedReport
+      security:
+        - UserOAuth: [items:read]
+          PartnerKey: []
+      responses:
+        "200":
+          description: OK
+  /roles:
+    get:
+      operationId: roleReport
+      security:
+        - BasicAuth: [admin, reports]
+      responses:
+        "200":
+          description: OK
+  /uri:
+    get:
+      operationId: tenantReport
+      security:
+        - urn:example:auth:TenantKey: [tenant:read]
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations("https://api.example.com", "")
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+
+	inherited := operationByID(t, ops, "listItems")
+	requireCredential(t, inherited, [][]CredentialRequirement{{
+		{ID: "UserOAuth", Ref: "#/components/securitySchemes/UserOAuth", Kind: "oauth2", Needs: []string{"items:read"}, Source: "openapi"},
+	}})
+
+	override := operationByID(t, ops, "adminUsers")
+	requireCredential(t, override, [][]CredentialRequirement{{
+		{ID: "AdminOAuth", Ref: "#/components/securitySchemes/AdminOAuth", Kind: "oauth2", Needs: []string{"admin:read"}, Source: "openapi"},
+	}})
+
+	public := operationByID(t, ops, "status")
+	if !public.NoAuth {
+		t.Fatal("status NoAuth = false, want true")
+	}
+	if len(public.CredentialAlternatives) != 0 {
+		t.Fatalf("status alternatives = %#v, want none", public.CredentialAlternatives)
+	}
+
+	optional := operationByID(t, ops, "optionalPartner")
+	if !optional.OptionalAuth {
+		t.Fatal("optionalPartner OptionalAuth = false, want true")
+	}
+	requireCredential(t, optional, [][]CredentialRequirement{{
+		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"},
+	}})
+
+	either := operationByID(t, ops, "partnerReport")
+	requireCredential(t, either, [][]CredentialRequirement{
+		{{ID: "UserOAuth", Ref: "#/components/securitySchemes/UserOAuth", Kind: "oauth2", Needs: []string{"items:read"}, Source: "openapi"}},
+		{{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"}},
+	})
+
+	combined := operationByID(t, ops, "signedReport")
+	requireCredential(t, combined, [][]CredentialRequirement{{
+		{ID: "UserOAuth", Ref: "#/components/securitySchemes/UserOAuth", Kind: "oauth2", Needs: []string{"items:read"}, Source: "openapi"},
+		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"},
+	}})
+
+	roles := operationByID(t, ops, "roleReport")
+	requireCredential(t, roles, [][]CredentialRequirement{{
+		{ID: "BasicAuth", Ref: "#/components/securitySchemes/BasicAuth", Kind: "http-basic", Needs: []string{"admin", "reports"}, Source: "openapi"},
+	}})
+
+	uri := operationByID(t, ops, "tenantReport")
+	requireCredential(t, uri, [][]CredentialRequirement{{
+		{ID: "urn:example:auth:TenantKey", Ref: "urn:example:auth:TenantKey", Kind: "api-key", Needs: []string{"tenant:read"}, Source: "openapi", External: true},
+	}})
 }
 
 func TestOperationsUsesConfiguredServerVariables(t *testing.T) {
@@ -291,6 +460,28 @@ paths:
 	}
 	if got := ops[0].Path; got != "/../v1/items" {
 		t.Fatalf("operation path = %q, want /../v1/items", got)
+	}
+}
+
+func operationByID(t *testing.T, ops []Operation, id string) Operation {
+	t.Helper()
+	for _, op := range ops {
+		if op.ID == id {
+			return op
+		}
+	}
+	t.Fatalf("operation %q not found in %#v", id, ops)
+	return Operation{}
+}
+
+func requireCredential(t *testing.T, op Operation, want [][]CredentialRequirement) {
+	t.Helper()
+	var got [][]CredentialRequirement
+	for _, alternative := range op.CredentialAlternatives {
+		got = append(got, []CredentialRequirement(alternative))
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s credential alternatives:\ngot  %#v\nwant %#v", op.ID, got, want)
 	}
 }
 
