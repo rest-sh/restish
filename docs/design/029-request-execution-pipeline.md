@@ -226,6 +226,11 @@ For stream responses, Restish switches to the streaming model from design 012:
 - per-item filtering and record rendering can begin immediately
 - document-only formats may reject the request or require bounded completion
 
+Immediate rendering is a client-side contract once records or events arrive.
+It does not imply Restish can bypass buffering by an origin server, CDN, reverse
+proxy, compression layer, or any response path that withholds headers/body until
+the stream-shaped response is complete.
+
 Response middleware hooks conceptually operate on normalized responses. If the
 middleware system ever needs to support true stream interception, that should be
 designed as a separate stream middleware contract rather than hidden inside the

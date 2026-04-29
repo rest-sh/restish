@@ -31,7 +31,8 @@ explicit.
 Restish currently recognizes two stream shapes:
 
 - Server-Sent Events via `text/event-stream`
-- newline-delimited JSON via `application/x-ndjson` and `application/jsonlines`
+- newline-delimited JSON via `application/x-ndjson`,
+  `application/ndjson`, `application/jsonl`, and `application/jsonlines`
 
 Streaming classification happens after headers arrive. This matters because
 streaming requests must not depend on whole-request `http.Client.Timeout`; they
@@ -71,6 +72,13 @@ If stdout is buffered for throughput, the stream path must flush at record or
 event boundaries. Streaming should improve latency for users watching output
 and should not leave piped consumers waiting for an arbitrary buffer to fill.
 
+This guarantee starts once bytes reach Restish. A client cannot recover
+low-latency behavior when an origin, CDN, reverse proxy, or compression layer
+buffers the response until the full body is complete. Streaming examples and
+tests should distinguish client-side flushing from server-side delivery by
+using an endpoint that writes headers promptly, flushes each record or event,
+and avoids a precomputed `Content-Length` for open-ended streams.
+
 ## SSE Semantics
 
 SSE support should preserve the usual event framing rules:
@@ -92,6 +100,11 @@ Otherwise the event falls back to a plain string.
 
 This is intentionally permissive because real-world newline-delimited streams
 are not always perfectly homogeneous.
+
+The streaming path uses the same recognized media types that the content
+registry advertises for bounded NDJSON bodies. Bounded normalization may decode
+the complete body into an array of records, but once the response is classified
+as a stream the body must not be read to EOF before rendering the first line.
 
 ## Output Contracts
 
@@ -198,6 +211,11 @@ restish get https://api.example.com/events --rsh-max-events 2
 ### Buffer The Entire Stream Before Output
 
 Defeats the purpose of streaming.
+
+This remains true even for finite stream-shaped responses. A response with
+`application/x-ndjson` and a small `Content-Length` may be technically bounded,
+but the stream path should still prefer line-at-a-time rendering when the
+server delivers lines incrementally.
 
 ### Pretend Document Formats Are Stream-Safe
 

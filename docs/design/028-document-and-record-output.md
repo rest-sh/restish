@@ -29,6 +29,11 @@ Restish currently has several competing goals:
 - formatter plugins should be able to render paginated and streaming output
   without the host buffering everything unnecessarily
 
+For stream-shaped responses, "immediately" means once the server or intermediary
+has delivered a complete event or record to the client. Restish should not add
+its own full-response buffering, but it cannot make an upstream-buffered
+response appear incremental.
+
 The old pagination split was too coarse:
 
 - non-collect mode streamed one item at a time

@@ -69,6 +69,7 @@ The built-in registry currently includes at least:
 - `cbor`
 - `msgpack`
 - `ion`
+- `ndjson`
 - `form`
 - `multipart`
 - `text`
@@ -222,7 +223,7 @@ advertising duplicates.
 A representative built-in header conceptually looks like:
 
 ```text
-application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, application/yaml;q=0.5, text/*;q=0.2
+application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, text/event-stream;q=0.2, text/*;q=0.2
 ```
 
 Quality ordering should be stable and deliberate.
@@ -315,8 +316,15 @@ different execution shape:
 - unknown-content fallbacks still preserve bytes or text without inventing
   structure
 
-This document therefore defines the registry contract, while design 012 defines
-how stream-oriented consumers invoke that contract incrementally.
+NDJSON/JSONL is both a registered content type and a streaming classification
+input. As a bounded body, Restish can decode `application/x-ndjson`,
+`application/ndjson`, `application/jsonl`, and `application/jsonlines` into a
+JSON-safe array of records. As a stream, Restish should consume the same media
+types one line at a time and render each record as it arrives.
+
+This document therefore defines the registry contract and the concrete media
+types Restish advertises, while design 012 defines how stream-oriented
+consumers invoke that contract incrementally.
 
 ## Examples
 
