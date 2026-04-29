@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -45,6 +46,29 @@ func Default() *Registry {
 				return nil, err
 			}
 			return v, nil
+		},
+	})
+
+	r.AddContentType(&ContentType{
+		Name:      "ndjson",
+		MIMETypes: []string{"application/x-ndjson", "application/ndjson", "application/jsonl", "application/jsonlines"},
+		Quality:   0.5,
+		Marshal:   marshalNDJSON,
+		Unmarshal: func(data []byte) (any, error) {
+			lines := bytes.Split(data, []byte{'\n'})
+			out := make([]any, 0, len(lines))
+			for _, line := range lines {
+				line = bytes.TrimSpace(line)
+				if len(line) == 0 {
+					continue
+				}
+				var v any
+				if err := json.Unmarshal(line, &v); err != nil {
+					return nil, err
+				}
+				out = append(out, v)
+			}
+			return out, nil
 		},
 	})
 
@@ -219,6 +243,26 @@ func Default() *Registry {
 	})
 
 	return r
+}
+
+func marshalNDJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	rv := reflect.ValueOf(v)
+	if rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
+		if _, ok := v.([]byte); !ok {
+			for i := 0; i < rv.Len(); i++ {
+				if err := enc.Encode(rv.Index(i).Interface()); err != nil {
+					return nil, err
+				}
+			}
+			return buf.Bytes(), nil
+		}
+	}
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func marshalForm(v any) ([]byte, error) {

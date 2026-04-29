@@ -112,6 +112,9 @@ func TestAcceptHeader(t *testing.T) {
 	if iCBOR > iJSON {
 		t.Errorf("cbor should appear before json in Accept header: %q", h)
 	}
+	if !strings.Contains(h, "application/x-ndjson") {
+		t.Fatalf("Accept header missing application/x-ndjson: %q", h)
+	}
 	iSSE := strings.Index(h, "text/event-stream")
 	if iSSE == -1 {
 		t.Fatalf("text/event-stream missing from Accept header: %q", h)
@@ -126,6 +129,34 @@ func TestAcceptHeader(t *testing.T) {
 	}
 	if iText < iJSON {
 		t.Errorf("text/* should appear after json in Accept header: %q", h)
+	}
+}
+
+func TestDecodeNDJSON(t *testing.T) {
+	out, err := reg.Decode("application/x-ndjson", []byte("{\"n\":1}\n{\"n\":2}\n"))
+	if err != nil {
+		t.Fatalf("Decode(application/x-ndjson): %v", err)
+	}
+	items, ok := out.([]any)
+	if !ok {
+		t.Fatalf("decoded NDJSON type = %T, want []any", out)
+	}
+	if len(items) != 2 {
+		t.Fatalf("decoded NDJSON length = %d, want 2", len(items))
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok || first["n"] != float64(1) {
+		t.Fatalf("first NDJSON item = %#v", items[0])
+	}
+}
+
+func TestEncodeNDJSON(t *testing.T) {
+	data, err := reg.Encode("application/x-ndjson", []map[string]int{{"n": 1}, {"n": 2}})
+	if err != nil {
+		t.Fatalf("Encode(application/x-ndjson): %v", err)
+	}
+	if got, want := string(data), "{\"n\":1}\n{\"n\":2}\n"; got != want {
+		t.Fatalf("encoded NDJSON = %q, want %q", got, want)
 	}
 }
 

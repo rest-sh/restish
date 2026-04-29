@@ -16,9 +16,11 @@ import (
 )
 
 const (
-	mimeSSE    = "text/event-stream"
-	mimeNDJSON = "application/x-ndjson"
-	mimeJSONL  = "application/jsonlines"
+	mimeSSE       = "text/event-stream"
+	mimeNDJSON    = "application/x-ndjson"
+	mimeNDJSONAlt = "application/ndjson"
+	mimeJSONLAlt  = "application/jsonl"
+	mimeJSONL     = "application/jsonlines"
 )
 
 // streamingContentType returns the stream kind ("sse" or "ndjson") when ct
@@ -28,7 +30,7 @@ func streamingContentType(ct string) string {
 	switch base {
 	case mimeSSE:
 		return "sse"
-	case mimeNDJSON, mimeJSONL:
+	case mimeNDJSON, mimeNDJSONAlt, mimeJSONLAlt, mimeJSONL:
 		return "ndjson"
 	}
 	return ""

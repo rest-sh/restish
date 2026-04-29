@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/rest-sh/restish/v2/internal/cli"
 )
@@ -80,6 +83,91 @@ func TestNDJSONThreeLines(t *testing.T) {
 		t.Errorf("expected 3 output lines, got %d:\n%s", len(lines), got)
 	}
 }
+
+func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
+	firstLineWritten := make(chan struct{})
+	finishResponse := make(chan struct{})
+	var finishOnce sync.Once
+	finish := func() {
+		finishOnce.Do(func() { close(finishResponse) })
+	}
+	defer finish()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("response writer does not implement http.Flusher")
+		}
+		fmt.Fprintln(w, `{"n":1}`)
+		flusher.Flush()
+		close(firstLineWritten)
+		<-finishResponse
+		fmt.Fprintln(w, `{"n":2}`)
+		flusher.Flush()
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	out := &signalWriter{needle: []byte(`"n":1`), seen: make(chan struct{})}
+	c, _, _ := newTestCLI(t)
+	c.Stdout = out
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- c.Run([]string{"restish", "get", srv.URL + "/stream"})
+	}()
+
+	select {
+	case <-firstLineWritten:
+	case <-time.After(time.Second):
+		t.Fatal("server did not write first stream line")
+	}
+
+	select {
+	case <-out.seen:
+	case err := <-errCh:
+		t.Fatalf("command finished before response completed: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("first NDJSON line was not rendered before response completed")
+	}
+
+	finish()
+	if err := <-errCh; err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, `"n":2`) {
+		t.Fatalf("expected second line after response completed, got:\n%s", got)
+	}
+}
+
+type signalWriter struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	needle []byte
+	seen   chan struct{}
+	once   sync.Once
+}
+
+func (w *signalWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	if bytes.Contains(w.buf.Bytes(), w.needle) {
+		w.once.Do(func() { close(w.seen) })
+	}
+	return n, err
+}
+
+func (w *signalWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+var _ io.Writer = (*signalWriter)(nil)
 
 // TestSSEMaxEvents verifies that --rsh-max-events 2 stops after 2 SSE events.
 func TestSSEMaxEvents(t *testing.T) {
