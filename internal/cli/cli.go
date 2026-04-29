@@ -567,7 +567,7 @@ func (c *CLI) closeRequestClosers() {
 // CLI itself. When the first non-flag argument is one of these, the fast-path
 // skips API-name detection and loads all configured APIs.
 var builtinCommands = map[string]bool{
-	"api": true, "auth-header": true, "cache": true, "cert": true, "completion": true,
+	"api": true, "cache": true, "cert": true, "completion": true,
 	"delete": true, "edit": true, "get": true, "head": true,
 	"help": true, "links": true, "options": true, "patch": true,
 	"plugin": true, "post": true, "put": true, "setup": true,

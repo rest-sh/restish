@@ -28,7 +28,7 @@ func TestAPIAddBuiltinNameRejected(t *testing.T) {
 
 // TestIsBuiltinCommandName verifies the helper covers the expected set of names.
 func TestIsBuiltinCommandName(t *testing.T) {
-	builtins := []string{"api", "auth-header", "cache", "cert", "completion", "delete", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "setup", "theme"}
+	builtins := []string{"api", "cache", "cert", "completion", "delete", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "setup", "theme"}
 	for _, name := range builtins {
 		if !isBuiltinCommandName(name) {
 			t.Errorf("isBuiltinCommandName(%q) = false, want true", name)

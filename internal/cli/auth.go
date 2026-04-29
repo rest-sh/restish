@@ -46,66 +46,6 @@ func (p cliPrompter) PromptSecret(prompt string) (string, error) {
 	return p.cli.Secret(context.Background(), prompt)
 }
 
-// addAuthHeaderCommand registers the "auth-header" command on root.
-func (c *CLI) addAuthHeaderCommand(root *cobra.Command) {
-	root.AddCommand(&cobra.Command{
-		Use:     "auth-header <api>",
-		Short:   "Print the Authorization header value for a registered API",
-		GroupID: rootGroupUtility,
-		Args:    cobra.ExactArgs(1),
-		RunE:    c.runAuthHeader,
-	})
-}
-
-// runAuthHeader resolves auth for the named API and prints the Authorization
-// header value.
-func (c *CLI) runAuthHeader(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q; run \"restish api list\" to see configured APIs", apiName)
-	}
-	api := c.cfg.APIs[apiName]
-
-	profileName := c.profileFromCmd(cmd)
-
-	if api.Profiles == nil || api.Profiles[profileName] == nil {
-		return fmt.Errorf("API %q has no profile %q; configured profiles: %s", apiName, profileName, profileNames(api.Profiles))
-	}
-	prof := api.Profiles[profileName]
-	resolvedAuth, err := c.resolveProfileAuth(apiName, profileName, prof)
-	if err != nil {
-		return err
-	}
-	if resolvedAuth.Config == nil {
-		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
-	}
-
-	authOpts, err := c.authHandlerOptionsFromCmd(cmd)
-	if err != nil {
-		return err
-	}
-	handler, err := c.authHandlerFor(resolvedAuth.Config, authOpts)
-	if err != nil {
-		return err
-	}
-
-	params, err := c.buildAuthParams(resolvedAuth.Config.Params)
-	if err != nil {
-		return err
-	}
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	if err := handler.Authenticate(requestContext(cmd), req, c.authContext(requestContext(cmd), apiName, profileName, params, resolvedAuth.CacheKey, false)); err != nil {
-		return fmt.Errorf("building auth header: %w", err)
-	}
-
-	authVal := req.Header.Get("Authorization")
-	if authVal == "" {
-		return fmt.Errorf("auth handler did not set an Authorization header")
-	}
-	fmt.Fprintln(c.Stdout, authVal)
-	return nil
-}
-
 // authHandlerFor returns the Handler for the given AuthConfig.
 // Custom handlers registered via CLI.AddAuthHandler take precedence over
 // built-in handlers.

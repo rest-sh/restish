@@ -32,6 +32,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	clearAuthCmd.Flags().Bool("all", false, "Delete cached auth tokens for every profile of the named API")
 	clearAuthCmd.Flags().Bool("auth-profile", false, "Treat name as a shared auth profile instead of an API")
 	apiCmd.AddCommand(clearAuthCmd)
+	apiCmd.AddCommand(c.newAPIAuthCommand())
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all configured APIs",

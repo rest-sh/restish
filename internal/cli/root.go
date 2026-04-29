@@ -61,7 +61,6 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addHTTPCommands(root)
 	c.addEditCommand(root)
 	c.addCertCommand(root)
-	c.addAuthHeaderCommand(root)
 	c.addAPICommand(root)
 	c.addCacheCommand(root)
 	c.addSetupCommand(root)

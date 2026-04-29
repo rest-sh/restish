@@ -208,9 +208,7 @@ func TestAPIKeyAuthVerboseRedactsSecret(t *testing.T) {
 	}
 }
 
-// TestAuthHeaderCommand verifies that "restish auth-header <api>" prints the
-// Authorization header value for the named API's active profile.
-func TestAuthHeaderCommand(t *testing.T) {
+func TestAPIAuthInspectRawHeader(t *testing.T) {
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -229,27 +227,28 @@ func TestAuthHeaderCommand(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
-	if err := c.Run([]string{"restish", "auth-header", "myapi"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--raw-header", "Authorization"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("carol:pass123"))
 	got := strings.TrimSpace(out.String())
 	if got != want {
-		t.Errorf("auth-header output: got %q, want %q", got, want)
+		t.Errorf("raw header output: got %q, want %q", got, want)
 	}
 }
 
-// TestAuthHeaderCommandUnknownAPI verifies that auth-header returns an error
-// for an unregistered API name.
-func TestAuthHeaderCommandUnknownAPI(t *testing.T) {
+func TestAuthHeaderCommandRemoved(t *testing.T) {
 	cfg := `{"apis": {}}`
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
 	err := c.Run([]string{"restish", "auth-header", "noapi"})
 	if err == nil {
-		t.Fatal("expected error for unknown API, got nil")
+		t.Fatal("expected top-level auth-header to be removed")
+	}
+	if strings.Contains(err.Error(), "unknown API") {
+		t.Fatalf("auth-header command still appears registered: %v", err)
 	}
 }
 
