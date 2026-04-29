@@ -94,6 +94,120 @@ func TestBasicAuthPasswordPrompt(t *testing.T) {
 	}
 }
 
+func TestAPIKeyAuthHeader(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "api-key",
+							"params": {"in": "header", "name": "X-API-Key", "value": "secret-key"}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := rr.Last().Header.Get("X-API-Key"); got != "secret-key" {
+		t.Errorf("X-API-Key: got %q, want secret-key", got)
+	}
+}
+
+func TestAPIKeyAuthQuery(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "api-key",
+							"params": {"in": "query", "name": "api_key", "value": "secret-key"}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items?page=1"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	query := rr.Last().URL.Query()
+	if got := query.Get("api_key"); got != "secret-key" {
+		t.Errorf("api_key: got %q, want secret-key", got)
+	}
+	if got := query.Get("page"); got != "1" {
+		t.Errorf("page: got %q, want 1", got)
+	}
+}
+
+func TestAPIKeyAuthVerboseRedactsSecret(t *testing.T) {
+	c, _, errBuf := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       http.NoBody,
+			Request:    r,
+		}, nil
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "api-key",
+							"params": {"in": "header", "name": "X-API-Key", "value": "secret-key"}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "-v", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stderr := errBuf.String()
+	if strings.Contains(stderr, "secret-key") {
+		t.Fatalf("verbose output leaked API key:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "> X-Api-Key: <redacted>") {
+		t.Fatalf("expected redacted API key header, got:\n%s", stderr)
+	}
+}
+
 // TestAuthHeaderCommand verifies that "restish auth-header <api>" prints the
 // Authorization header value for the named API's active profile.
 func TestAuthHeaderCommand(t *testing.T) {
@@ -161,7 +275,7 @@ func TestUnknownAuthTypeListsSupportedValues(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unknown auth type error")
 	}
-	for _, want := range []string{"http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code", "external-tool"} {
+	for _, want := range []string{"api-key", "http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code", "external-tool"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected supported auth type %q in error, got %v", want, err)
 		}
