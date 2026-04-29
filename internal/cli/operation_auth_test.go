@@ -131,6 +131,60 @@ func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialMissing(t *testing.
 	}
 }
 
+func TestPlanOperationAuthOverrideValidation(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"PartnerKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "secret"}},
+			},
+		},
+	}
+	basePolicy := []spec.CredentialAlternative{
+		{{ID: "UserOAuth", Needs: []string{"items:read"}}},
+		{{ID: "PartnerKey"}},
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, &operationAuthPolicy{
+		CredentialAlternatives: basePolicy,
+		Override:               "PartnerKey",
+	})
+	if err != nil {
+		t.Fatalf("valid override: %v", err)
+	}
+	if !handled || len(selected) != 1 || selected[0].requirement.ID != "PartnerKey" {
+		t.Fatalf("selected = %#v handled=%v, want PartnerKey", selected, handled)
+	}
+
+	_, _, err = c.planOperationAuth("svc", "default", prof, &operationAuthPolicy{
+		CredentialAlternatives: basePolicy,
+		Override:               "UserOAuth+PartnerKey",
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not match this operation") {
+		t.Fatalf("expected invalid combination error, got %v", err)
+	}
+
+	_, _, err = c.planOperationAuth("svc", "default", prof, &operationAuthPolicy{
+		CredentialAlternatives: basePolicy,
+		Override:               "UserOAuth",
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires missing credential bindings") {
+		t.Fatalf("expected missing binding error, got %v", err)
+	}
+
+	selected, handled, err = c.planOperationAuth("svc", "default", prof, &operationAuthPolicy{
+		OptionalAuth:           true,
+		CredentialAlternatives: basePolicy,
+		Override:               "anonymous",
+	})
+	if err != nil {
+		t.Fatalf("anonymous override: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want anonymous", selected, handled)
+	}
+}
+
 func TestPlanOperationAuthRejectsCredentialMutationConflict(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{

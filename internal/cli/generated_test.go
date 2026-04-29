@@ -370,6 +370,13 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	if gotAuth != "" {
 		t.Fatalf("Authorization = %q, want empty for security: [] operation", gotAuth)
 	}
+	err := c.Run([]string{"restish", "tapi", "get-public", "--rsh-security", "PartnerKey"})
+	if err == nil {
+		t.Fatal("expected --rsh-security to be rejected for security: [] operation")
+	}
+	if !strings.Contains(err.Error(), "security: []") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T) {
@@ -505,7 +512,7 @@ func TestGeneratedCommandOAuthScopeAlternativesRequireCredentialBindings(t *test
 func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 	got := map[string]http.Header{}
 	mux := http.NewServeMux()
-	for _, path := range []string{"/user", "/admin", "/partner", "/signed", "/public"} {
+	for _, path := range []string{"/user", "/admin", "/partner", "/either", "/signed", "/public"} {
 		path := path
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 			got[path] = r.Header.Clone()
@@ -532,6 +539,7 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
     "/user": {"get": {"operationId": "userItems", "responses": {"200": {"description": "OK"}}}},
     "/admin": {"get": {"operationId": "adminUsers", "security": [{"AdminOAuth": ["admin:read"]}], "responses": {"200": {"description": "OK"}}}},
     "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/either": {"get": {"operationId": "eitherReport", "security": [{"UserOAuth": ["items:read"]}, {"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
     "/signed": {"get": {"operationId": "signedReport", "security": [{"UserOAuth": ["items:read"], "PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
     "/public": {"get": {"operationId": "status", "security": [], "responses": {"200": {"description": "OK"}}}}
   }
@@ -572,6 +580,9 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 			t.Fatalf("%s failed: %v", command, err)
 		}
 	}
+	if err := c.Run([]string{"restish", "tapi", "either-report", "--rsh-security", "PartnerKey"}); err != nil {
+		t.Fatalf("either-report failed: %v", err)
+	}
 
 	if got["/user"].Get("X-User-Key") != "user" || got["/user"].Get("X-Profile-Key") != "" {
 		t.Fatalf("/user headers = %#v", got["/user"])
@@ -581,6 +592,9 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 	}
 	if got["/partner"].Get("X-Partner-Key") != "partner" || got["/partner"].Get("X-Profile-Key") != "" {
 		t.Fatalf("/partner headers = %#v", got["/partner"])
+	}
+	if got["/either"].Get("X-Partner-Key") != "partner" || got["/either"].Get("X-User-Key") != "" {
+		t.Fatalf("/either headers = %#v", got["/either"])
 	}
 	if got["/signed"].Get("X-User-Key") != "user" || got["/signed"].Get("X-Partner-Key") != "partner" {
 		t.Fatalf("/signed headers = %#v", got["/signed"])

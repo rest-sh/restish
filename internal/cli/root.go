@@ -18,6 +18,8 @@ const (
 	rootGroupHelp    = "help"
 )
 
+const securityCompletionAnnotation = "restish.securityCompletions"
+
 func (c *CLI) newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "restish",
@@ -119,6 +121,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
 	pf.StringP("rsh-timeout", "t", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
+	pf.String("rsh-security", "", `Generated operation security override, e.g. "PartnerKey" or "UserOAuth+PartnerKey"`)
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
 	pf.Bool("rsh-no-browser", false, "Disable automatic browser launch for interactive auth flows")
 	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)")
@@ -170,6 +173,20 @@ func (c *CLI) registerFlagCompletions(root *cobra.Command) {
 		}
 		sort.Strings(names)
 		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	_ = root.RegisterFlagCompletionFunc("rsh-security", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		for current := cmd; current != nil; current = current.Parent() {
+			if current.Annotations == nil {
+				continue
+			}
+			raw := current.Annotations[securityCompletionAnnotation]
+			if raw == "" {
+				continue
+			}
+			return strings.Split(raw, "\n"), cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	})
 
 	// -c / --rsh-content-type: dynamic list from registered content types.

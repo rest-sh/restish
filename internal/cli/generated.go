@@ -368,6 +368,11 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args, baseURL, operationBase)
 		},
 	}
+	if candidates := securityOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
+		cmd.Annotations = map[string]string{
+			securityCompletionAnnotation: strings.Join(candidates, "\n"),
+		}
+	}
 	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
 	cmd.SetUsageTemplate(generatedOperationUsageTemplate)
 	if !op.HasBody {
@@ -420,7 +425,6 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 	}
-
 	return cmd, nil
 }
 
@@ -690,12 +694,14 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	bodyArgs := args[bodyArgStart:]
+	gf := globalFlagsFromContext(requestContext(cmd))
 	return c.runHTTPInternalWithBodyOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
 			CredentialAlternatives: credentialAlternatives,
+			Override:               gf.Security,
 		},
 	})
 }

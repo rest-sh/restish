@@ -40,6 +40,9 @@ func (c *CLI) prepareRequest(
 	if err != nil {
 		return nil, err
 	}
+	if noAuth && operationAuth != nil && strings.TrimSpace(operationAuth.Override) != "" {
+		return nil, fmt.Errorf("security override %q is not valid for an operation with security: []", operationAuth.Override)
+	}
 	if !noAuth && operationAuth != nil && apiName != "" {
 		prof := c.cfg.APIs[apiName].Profiles[profileName]
 		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, operationAuth)
