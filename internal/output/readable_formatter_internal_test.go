@@ -16,6 +16,93 @@ func TestIndentBlockPreservesLines(t *testing.T) {
 	}
 }
 
+func TestReadableFramedValueStreamHighlightsFrameAndNestedItemDepth(t *testing.T) {
+	var out bytes.Buffer
+	stream, err := (&ReadableFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
+		ItemIndent:  "  ",
+		CloseIndent: "",
+	})
+	if err != nil {
+		t.Fatalf("StartFramedValueStream: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 1}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var wantOpenArray bytes.Buffer
+	if err := highlightToken(&wantOpenArray, chroma.Token{Type: IndentLevel0, Value: "["}); err != nil {
+		t.Fatalf("highlightToken([): %v", err)
+	}
+	var wantItemObject bytes.Buffer
+	if err := highlightToken(&wantItemObject, chroma.Token{Type: IndentLevel1, Value: "{"}); err != nil {
+		t.Fatalf("highlightToken({): %v", err)
+	}
+	var wantCloseArray bytes.Buffer
+	if err := highlightToken(&wantCloseArray, chroma.Token{Type: IndentLevel0, Value: "]"}); err != nil {
+		t.Fatalf("highlightToken(]): %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{wantOpenArray.String(), wantItemObject.String(), wantCloseArray.String()} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected highlighted token %q in output %q", want, got)
+		}
+	}
+	if plain := stripANSITest(got); strings.TrimSpace(plain) != "[\n  {\n    \"id\": 1\n  }\n]" {
+		t.Fatalf("unexpected plain framed output: %q", plain)
+	}
+}
+
+func TestReadableFramedValueStreamHighlightsWrappedArrayDepth(t *testing.T) {
+	var out bytes.Buffer
+	stream, err := (&ReadableFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
+		Prefix:      "{\n  \"data\": ",
+		Suffix:      "\n}",
+		ItemIndent:  "    ",
+		CloseIndent: "  ",
+	})
+	if err != nil {
+		t.Fatalf("StartFramedValueStream: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 1}); err != nil {
+		t.Fatalf("WriteValue: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	var wantArray bytes.Buffer
+	if err := highlightToken(&wantArray, chroma.Token{Type: IndentLevel1, Value: "["}); err != nil {
+		t.Fatalf("highlightToken([): %v", err)
+	}
+	var wantItemObject bytes.Buffer
+	if err := highlightToken(&wantItemObject, chroma.Token{Type: IndentLevel2, Value: "{"}); err != nil {
+		t.Fatalf("highlightToken({): %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{wantArray.String(), wantItemObject.String()} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected highlighted token %q in output %q", want, got)
+		}
+	}
+}
+
+func TestShiftedIndentTokenCyclesBracketDepth(t *testing.T) {
+	if got := shiftedIndentToken(IndentLevel0, 1); got != IndentLevel1 {
+		t.Fatalf("shiftedIndentToken(0, 1) = %v, want %v", got, IndentLevel1)
+	}
+	if got := shiftedIndentToken(IndentLevel2, 1); got != IndentLevel0 {
+		t.Fatalf("shiftedIndentToken(2, 1) = %v, want %v", got, IndentLevel0)
+	}
+	if got := shiftedIndentToken(chroma.NameTag, 1); got != chroma.NameTag {
+		t.Fatalf("shiftedIndentToken(non-indent) = %v, want %v", got, chroma.NameTag)
+	}
+}
+
 func TestReadableFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",

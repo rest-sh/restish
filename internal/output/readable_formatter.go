@@ -144,7 +144,10 @@ type readableFramedValueStream struct {
 
 func (s *readableFramedValueStream) WriteValue(value any) error {
 	if !s.started {
-		if _, err := io.WriteString(s.w, s.frame.Prefix+"["); err != nil {
+		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("["); err != nil {
 			return err
 		}
 		s.started = true
@@ -168,7 +171,7 @@ func (s *readableFramedValueStream) WriteValue(value any) error {
 
 	item = indentBlock(item, s.frame.ItemIndent)
 	if s.color {
-		return highlight(s.w, ReadableLexer, item)
+		return highlightReadableWithDepth(s.w, item, s.itemDepth())
 	}
 	_, err = s.w.Write(item)
 	return err
@@ -176,21 +179,71 @@ func (s *readableFramedValueStream) WriteValue(value any) error {
 
 func (s *readableFramedValueStream) Close() error {
 	if !s.started {
-		if _, err := io.WriteString(s.w, s.frame.Prefix+"[]"+s.frame.Suffix+"\n"); err != nil {
+		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("["); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("]"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(s.w, s.frame.Suffix+"\n"); err != nil {
 			return err
 		}
 		return nil
 	}
 
 	if s.wroteItem {
-		if _, err := io.WriteString(s.w, "\n"+s.frame.CloseIndent+"]"+s.frame.Suffix+"\n"); err != nil {
+		if _, err := io.WriteString(s.w, "\n"+s.frame.CloseIndent); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("]"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(s.w, s.frame.Suffix+"\n"); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	_, err := io.WriteString(s.w, "]"+s.frame.Suffix+"\n")
+	if err := s.writeFrameBracket("]"); err != nil {
+		return err
+	}
+	_, err := io.WriteString(s.w, s.frame.Suffix+"\n")
 	return err
+}
+
+func (s *readableFramedValueStream) writeFrameBracket(bracket string) error {
+	if !s.color {
+		_, err := io.WriteString(s.w, bracket)
+		return err
+	}
+	return highlightToken(s.w, chroma.Token{
+		Type:  shiftedIndentToken(IndentLevel0, s.arrayDepth()),
+		Value: bracket,
+	})
+}
+
+func (s *readableFramedValueStream) arrayDepth() int {
+	return indentDepth(s.frame.CloseIndent)
+}
+
+func (s *readableFramedValueStream) itemDepth() int {
+	return s.arrayDepth() + 1
+}
+
+func indentDepth(indent string) int {
+	spaces := 0
+	for _, r := range indent {
+		switch r {
+		case ' ':
+			spaces++
+		case '\t':
+			spaces += 2
+		}
+	}
+	return spaces / 2
 }
 
 func indentBlock(data []byte, indent string) []byte {
@@ -252,6 +305,50 @@ func highlight(w io.Writer, lexer chroma.Lexer, data []byte) error {
 	}
 
 	return formatter.Format(w, restishStyle, iter)
+}
+
+func highlightReadableWithDepth(w io.Writer, data []byte, depth int) error {
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		_, err := w.Write(data)
+		return err
+	}
+
+	iter, err := ReadableLexer.Tokenise(nil, string(data))
+	if err != nil {
+		_, werr := w.Write(data)
+		return werr
+	}
+
+	return formatter.Format(w, restishStyle, indentShiftIterator(iter, depth))
+}
+
+func indentShiftIterator(iter chroma.Iterator, depth int) chroma.Iterator {
+	return func() chroma.Token {
+		tok := iter()
+		if tok == chroma.EOF {
+			return tok
+		}
+		tok.Type = shiftedIndentToken(tok.Type, depth)
+		return tok
+	}
+}
+
+func shiftedIndentToken(tok chroma.TokenType, depth int) chroma.TokenType {
+	if tok < IndentLevel0 || tok > IndentLevel2 {
+		return tok
+	}
+	offset := int(tok - IndentLevel0)
+	return IndentLevel0 + chroma.TokenType((offset+depth)%3)
+}
+
+func highlightToken(w io.Writer, token chroma.Token) error {
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		_, err := io.WriteString(w, token.Value)
+		return err
+	}
+	return formatter.Format(w, restishStyle, chroma.Literator(token))
 }
 
 // HighlightWithLexer renders data with the provided chroma lexer and the

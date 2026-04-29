@@ -312,6 +312,25 @@ func TestPaginationStreamingFilterUsesFormatter(t *testing.T) {
 	}
 }
 
+func TestPaginationExplicitReadableFilterOmitsResponsePreamble(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "readable"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
+		t.Fatalf("explicit filtered pagination output included response preamble:\n%s", got)
+	}
+	for _, want := range []string{`"id": 1`, `"id": 2`, `"id": 3`, `"id": 4`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in filtered readable output, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestPaginationJSONOutputIsValidJSON(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
