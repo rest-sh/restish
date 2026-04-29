@@ -25,9 +25,10 @@ type XCLIConfig struct {
 
 // XCLIProfile holds pre-populated configuration for a single API profile.
 type XCLIProfile struct {
-	Headers []string  `json:"headers,omitempty" yaml:"headers,omitempty"`
-	Query   []string  `json:"query,omitempty" yaml:"query,omitempty"`
-	Auth    *XCLIAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Headers     []string                   `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Query       []string                   `json:"query,omitempty" yaml:"query,omitempty"`
+	Auth        *XCLIAuth                  `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Credentials map[string]*XCLICredential `json:"credentials,omitempty" yaml:"credentials,omitempty"`
 
 	// Security, when non-empty, is the name of a security scheme in the spec's
 	// components/securitySchemes. It is resolved to an Auth type and default
@@ -48,6 +49,19 @@ type XCLIProfile struct {
 	// PromptedParams marks Params entries that came directly from prompt input.
 	// Prompt answers are literal values and are not expanded a second time.
 	PromptedParams map[string]bool `json:"-" yaml:"-"`
+}
+
+// XCLICredential holds pre-populated configuration for one named operation
+// credential requirement.
+type XCLICredential struct {
+	Auth      *XCLIAuth                `json:"auth,omitempty" yaml:"auth,omitempty"`
+	AuthRef   string                   `json:"auth_ref,omitempty" yaml:"auth_ref,omitempty"`
+	Satisfies []string                 `json:"satisfies,omitempty" yaml:"satisfies,omitempty"`
+	Prompt    map[string]XCLIPromptVar `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+	Params    map[string]string        `json:"params,omitempty" yaml:"params,omitempty"`
+
+	PromptValues   map[string]string `json:"-" yaml:"-"`
+	PromptedParams map[string]bool   `json:"-" yaml:"-"`
 }
 
 // XCLIPromptVar describes a single configuration-time prompt from the legacy
@@ -114,15 +128,18 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 	}
 
 	// Try preferred scheme names first, then fall back to first in map.
+	var chosenName string
 	var chosenScheme *v3high.SecurityScheme
 	for _, name := range preferredNames {
 		if s := schemes.GetOrZero(name); s != nil {
+			chosenName = name
 			chosenScheme = s
 			break
 		}
 	}
 	if chosenScheme == nil {
-		for _, v := range schemes.FromOldest() {
+		for name, v := range schemes.FromOldest() {
+			chosenName = name
 			chosenScheme = v
 			break
 		}
@@ -131,16 +148,28 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 		return nil
 	}
 
-	profile := &XCLIProfile{}
-	xcliAuth := SchemeToXCLIAuth(chosenScheme, nil)
-	if xcliAuth != nil {
-		profile.Auth = xcliAuth
-	} else {
-		apiKeyProfile := SchemeToXCLIAPIKeyProfile(chosenScheme)
-		if apiKeyProfile == nil {
-			return nil
+	profile := &XCLIProfile{
+		Security: chosenName,
+		Credentials: map[string]*XCLICredential{
+			chosenName: {},
+		},
+	}
+	if chosenScheme.Type == "apiKey" {
+		description := "API key"
+		if chosenScheme.Description != "" {
+			description = chosenScheme.Description
 		}
+		profile.Prompt = map[string]XCLIPromptVar{
+			"value": {Description: description},
+		}
+		profile.Params = map[string]string{"value": ""}
+	} else if xcliAuth := SchemeToXCLIAuth(chosenScheme, nil); xcliAuth != nil {
+		profile.Auth = xcliAuth
+		profile.Credentials[chosenName] = &XCLICredential{Auth: xcliAuth}
+	} else if apiKeyProfile := SchemeToXCLIAPIKeyProfile(chosenScheme); apiKeyProfile != nil {
 		profile = apiKeyProfile
+	} else {
+		return nil
 	}
 
 	return &XCLIConfig{
@@ -158,6 +187,14 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 	var authType string
 
 	switch scheme.Type {
+	case "apiKey":
+		if scheme.Name == "" {
+			return nil
+		}
+		authType = "api-key"
+		p["in"] = scheme.In
+		p["name"] = scheme.Name
+		p["value"] = ""
 	case "http":
 		switch scheme.Scheme {
 		case "basic":
@@ -177,18 +214,35 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 			p["client_id"] = ""
 			p["authorize_url"] = ac.AuthorizationUrl
 			p["token_url"] = ac.TokenUrl
+			if scheme.OAuth2MetadataUrl != "" {
+				p["oauth2_metadata_url"] = scheme.OAuth2MetadataUrl
+			}
 		} else if scheme.Flows.ClientCredentials != nil {
 			cc := scheme.Flows.ClientCredentials
 			authType = "oauth-client-credentials"
 			p["client_id"] = ""
 			p["client_secret"] = ""
 			p["token_url"] = cc.TokenUrl
+			if scheme.OAuth2MetadataUrl != "" {
+				p["oauth2_metadata_url"] = scheme.OAuth2MetadataUrl
+			}
+		} else if scheme.Flows.Device != nil {
+			device := scheme.Flows.Device
+			authType = "oauth-device-code"
+			p["client_id"] = ""
+			p["token_url"] = device.TokenUrl
+			if device.AuthorizationUrl != "" {
+				p["device_authorization_url"] = device.AuthorizationUrl
+			}
+			if scheme.OAuth2MetadataUrl != "" {
+				p["oauth2_metadata_url"] = scheme.OAuth2MetadataUrl
+			}
 		} else {
 			return nil
 		}
 	default:
-		// apiKey, openIdConnect, and any future types are not natively
-		// supported; the caller can always configure auth manually.
+		// openIdConnect and future types are not natively supported; the caller
+		// can always configure auth manually.
 		return nil
 	}
 
@@ -236,15 +290,15 @@ func (xcli *XCLIConfig) Normalize() *XCLIConfig {
 		Profiles: make(map[string]*XCLIProfile, len(xcli.Profiles)),
 	}
 	for name, profile := range xcli.Profiles {
-		out.Profiles[name] = cloneXCLIProfile(profile)
+		out.Profiles[name] = normalizeXCLIProfile(cloneXCLIProfile(profile))
 	}
 	if len(out.Profiles) == 0 && xcli.hasLegacyDefaultProfile() {
-		out.Profiles["default"] = &XCLIProfile{
+		out.Profiles["default"] = normalizeXCLIProfile(&XCLIProfile{
 			Headers:  sortedLegacyHeaders(xcli.Headers),
 			Security: xcli.Security,
 			Params:   cloneStringMap(xcli.Params),
 			Prompt:   clonePromptMap(xcli.Prompt),
-		}
+		})
 	}
 	return out
 }
@@ -265,6 +319,7 @@ func cloneXCLIProfile(src *XCLIProfile) *XCLIProfile {
 		Prompt:         clonePromptMap(src.Prompt),
 		PromptValues:   cloneStringMap(src.PromptValues),
 		PromptedParams: cloneBoolMap(src.PromptedParams),
+		Credentials:    cloneXCLICredentialMap(src.Credentials),
 	}
 	if src.Auth != nil {
 		dst.Auth = &XCLIAuth{
@@ -273,6 +328,50 @@ func cloneXCLIProfile(src *XCLIProfile) *XCLIProfile {
 		}
 	}
 	return dst
+}
+
+func normalizeXCLIProfile(profile *XCLIProfile) *XCLIProfile {
+	if profile == nil {
+		return &XCLIProfile{}
+	}
+	if profile.Security == "" {
+		return profile
+	}
+	if profile.Credentials == nil {
+		profile.Credentials = map[string]*XCLICredential{}
+	}
+	if profile.Credentials[profile.Security] == nil {
+		profile.Credentials[profile.Security] = &XCLICredential{
+			Auth: cloneXCLIAuth(profile.Auth),
+		}
+	}
+	return profile
+}
+
+func cloneXCLICredentialMap(src map[string]*XCLICredential) map[string]*XCLICredential {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]*XCLICredential, len(src))
+	for k, v := range src {
+		dst[k] = cloneXCLICredential(v)
+	}
+	return dst
+}
+
+func cloneXCLICredential(src *XCLICredential) *XCLICredential {
+	if src == nil {
+		return &XCLICredential{}
+	}
+	return &XCLICredential{
+		Auth:           cloneXCLIAuth(src.Auth),
+		AuthRef:        src.AuthRef,
+		Satisfies:      append([]string(nil), src.Satisfies...),
+		Prompt:         clonePromptMap(src.Prompt),
+		Params:         cloneStringMap(src.Params),
+		PromptValues:   cloneStringMap(src.PromptValues),
+		PromptedParams: cloneBoolMap(src.PromptedParams),
+	}
 }
 
 func cloneBoolMap(src map[string]bool) map[string]bool {
@@ -416,11 +515,64 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 		for i, q := range xp.Query {
 			rp.Query[i] = ExpandParams(q, expansionParams)
 		}
+		if len(xp.Credentials) > 0 {
+			rp.Credentials = make(map[string]*XCLICredential, len(xp.Credentials))
+			for credentialID, credential := range xp.Credentials {
+				rp.Credentials[credentialID] = resolveXCLICredential(credentialID, credential, schemeMap, expansionParams)
+			}
+		}
 
 		resolved.Profiles[name] = rp
 	}
 
 	return resolved
+}
+
+func resolveXCLICredential(id string, credential *XCLICredential, schemeMap map[string]*v3high.SecurityScheme, profileExpansionParams map[string]string) *XCLICredential {
+	if credential == nil {
+		return &XCLICredential{}
+	}
+	expansionParams := cloneStringMap(profileExpansionParams)
+	if expansionParams == nil {
+		expansionParams = map[string]string{}
+	}
+	for k, v := range credential.Params {
+		expansionParams[k] = ExpandParams(v, expansionParams)
+	}
+	for k, v := range credential.PromptValues {
+		expansionParams[k] = v
+	}
+	resolvedParams := expandXCLIParams(credential.Params, expansionParams, credential.PromptedParams)
+
+	auth := cloneXCLIAuth(credential.Auth)
+	if auth != nil && len(auth.Params) > 0 {
+		auth.Params = expandStringMap(auth.Params, expansionParams)
+	}
+	if auth == nil {
+		if scheme, ok := schemeMap[id]; ok {
+			schemeParams := cloneStringMap(profileExpansionParams)
+			if schemeParams == nil {
+				schemeParams = map[string]string{}
+			}
+			for k, v := range resolvedParams {
+				schemeParams[k] = v
+			}
+			auth = SchemeToXCLIAuth(scheme, schemeParams)
+		}
+	}
+	if auth != nil && len(resolvedParams) > 0 {
+		params := cloneStringMap(resolvedParams)
+		for k, v := range auth.Params {
+			params[k] = v
+		}
+		auth.Params = params
+	}
+
+	return &XCLICredential{
+		Auth:      auth,
+		AuthRef:   credential.AuthRef,
+		Satisfies: append([]string(nil), credential.Satisfies...),
+	}
 }
 
 func expandXCLIParams(params map[string]string, expansionParams map[string]string, prompted map[string]bool) map[string]string {

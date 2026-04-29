@@ -344,6 +344,9 @@ func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
 	if got := prof.Headers; len(got) != 1 || got[0] != "X-Org: acme" {
 		t.Fatalf("headers = %#v", got)
 	}
+	if prof.Credentials["default"] == nil || prof.Credentials["default"].Auth == nil {
+		t.Fatalf("expected legacy x-cli-config security to also write credential binding, got %#v", prof.Credentials)
+	}
 }
 
 func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
@@ -404,6 +407,78 @@ func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
 	}
 	if got := written.APIs["myapi"].Profiles["default"].Headers; len(got) != 1 || got[0] != "X-Env: prod" {
 		t.Fatalf("headers = %#v", got)
+	}
+}
+
+func TestAPIConfigureXCLIConfigCredentialPrompt(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "credentials": {
+          "PartnerKey": {
+            "auth": {
+              "type": "api-key",
+              "params": {"in": "header", "name": "X-Partner-Key", "value": "{partner_key}"}
+            },
+            "prompt": {
+              "partner_key": {"description": "Partner API key"}
+            },
+            "satisfies": ["reports:read"]
+          }
+        }
+      }
+    }
+  },
+  "paths": {}
+}`
+
+	c, _, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("secret-key\n")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "Partner API key") {
+		t.Fatalf("expected credential prompt, got stderr %q", stderr.String())
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	credential := written.APIs["myapi"].Profiles["default"].Credentials["PartnerKey"]
+	if credential == nil || credential.Auth == nil {
+		t.Fatalf("credential = %#v", credential)
+	}
+	if credential.Auth.Params["value"] != "secret-key" {
+		t.Fatalf("auth params = %#v", credential.Auth.Params)
+	}
+	if got := credential.Satisfies; !reflect.DeepEqual(got, []string{"reports:read"}) {
+		t.Fatalf("satisfies = %#v", got)
 	}
 }
 

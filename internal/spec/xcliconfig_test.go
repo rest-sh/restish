@@ -107,6 +107,45 @@ paths: {}`)
 	}
 }
 
+func TestReadXCLIConfig_ProfileCredentials(t *testing.T) {
+	raw := []byte(`
+x-cli-config:
+  profiles:
+    default:
+      credentials:
+        PartnerKey:
+          auth:
+            type: api-key
+            params:
+              in: header
+              name: X-Partner-Key
+              value: "{partner_key}"
+          satisfies: ["reports:read"]
+          prompt:
+            partner_key:
+              description: Partner API key
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}`)
+	spec := &APISpec{Raw: raw}
+	cfg, err := ReadXCLIConfig(spec)
+	if err != nil {
+		t.Fatalf("ReadXCLIConfig: %v", err)
+	}
+	credential := cfg.Profiles["default"].Credentials["PartnerKey"]
+	if credential == nil {
+		t.Fatal("expected PartnerKey credential")
+	}
+	if credential.Auth == nil || credential.Auth.Type != "api-key" {
+		t.Fatalf("credential auth = %#v", credential.Auth)
+	}
+	if credential.Prompt["partner_key"].Description != "Partner API key" {
+		t.Fatalf("prompt = %#v", credential.Prompt)
+	}
+}
+
 // ---- SchemeToXCLIAuth ------------------------------------------------------
 
 func TestSchemeToXCLIAuth_HTTPBasic(t *testing.T) {
@@ -212,7 +251,44 @@ components:
 	}
 }
 
-func TestSchemeToXCLIAuth_UnsupportedType(t *testing.T) {
+func TestSchemeToXCLIAuth_OAuthDeviceAndMetadataURL(t *testing.T) {
+	raw := `
+openapi: "3.2.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  securitySchemes:
+    device:
+      type: oauth2
+      oauth2MetadataUrl: https://auth.example.com/.well-known/oauth-authorization-server
+      flows:
+        device:
+          tokenUrl: https://auth.example.com/oauth/token
+          scopes: {}`
+	doc := loadDoc(t, raw)
+	model, err := doc.V3Model()
+	if err != nil || model == nil {
+		t.Fatalf("BuildV3Model: %v", err)
+	}
+	scheme := model.Model.Components.SecuritySchemes.GetOrZero("device")
+	if scheme == nil {
+		t.Fatal("scheme not found")
+	}
+	auth := SchemeToXCLIAuth(scheme, nil)
+	if auth == nil {
+		t.Fatal("expected non-nil auth")
+	}
+	if auth.Type != "oauth-device-code" {
+		t.Fatalf("Type = %q, want oauth-device-code", auth.Type)
+	}
+	if auth.Params["oauth2_metadata_url"] != "https://auth.example.com/.well-known/oauth-authorization-server" {
+		t.Fatalf("Params = %#v", auth.Params)
+	}
+}
+
+func TestSchemeToXCLIAuth_APIKey(t *testing.T) {
 	raw := `
 openapi: "3.1.0"
 info:
@@ -235,8 +311,14 @@ components:
 		t.Fatal("scheme not found")
 	}
 	auth := SchemeToXCLIAuth(scheme, nil)
-	if auth != nil {
-		t.Errorf("expected nil for unsupported scheme type, got %v", auth)
+	if auth == nil {
+		t.Fatal("expected non-nil auth")
+	}
+	if auth.Type != "api-key" {
+		t.Fatalf("Type = %q, want api-key", auth.Type)
+	}
+	if auth.Params["in"] != "header" || auth.Params["name"] != "X-API-Key" {
+		t.Fatalf("Params = %#v", auth.Params)
 	}
 }
 
@@ -354,11 +436,16 @@ components:
 	if profile == nil {
 		t.Fatal("expected default profile")
 	}
-	if len(profile.Headers) != 1 || profile.Headers[0] != "X-API-Key: {api_key}" {
-		t.Fatalf("headers = %#v", profile.Headers)
+	if profile.Security != "apikey" {
+		t.Fatalf("Security = %q, want apikey", profile.Security)
 	}
-	if profile.Prompt["api_key"].Description != "Tenant API key" {
-		t.Fatalf("prompt = %#v", profile.Prompt["api_key"])
+	if profile.Prompt["value"].Description != "Tenant API key" {
+		t.Fatalf("prompt = %#v", profile.Prompt["value"])
+	}
+	resolved := cfg.Resolve(doc)
+	auth := resolved.Profiles["default"].Credentials["apikey"].Auth
+	if auth == nil || auth.Type != "api-key" || auth.Params["in"] != "header" || auth.Params["name"] != "X-API-Key" {
+		t.Fatalf("credential auth = %#v", auth)
 	}
 }
 
@@ -381,11 +468,13 @@ components:
 		t.Fatal("expected non-nil fallback config")
 	}
 	profile := cfg.Profiles["default"]
-	profile.PromptValues = map[string]string{"api_key": "secret"}
+	profile.PromptValues = map[string]string{"value": "secret"}
+	profile.PromptedParams = map[string]bool{"value": true}
+	profile.Params["value"] = "secret"
 	resolved := cfg.Resolve(doc)
-	got := resolved.Profiles["default"].Query
-	if len(got) != 1 || got[0] != "apiKey=secret" {
-		t.Fatalf("query = %#v, want apiKey=secret", got)
+	auth := resolved.Profiles["default"].Credentials["apikey"].Auth
+	if auth == nil || auth.Type != "api-key" || auth.Params["in"] != "query" || auth.Params["name"] != "apiKey" || auth.Params["value"] != "secret" {
+		t.Fatalf("credential auth = %#v", auth)
 	}
 }
 
@@ -417,6 +506,48 @@ components:
 	}
 	if p.Auth == nil || p.Auth.Type != "http-basic" {
 		t.Errorf("expected http-basic auth, got %v", p.Auth)
+	}
+	if p.Credentials["basic"] == nil || p.Credentials["basic"].Auth == nil || p.Credentials["basic"].Auth.Type != "http-basic" {
+		t.Fatalf("expected legacy security to normalize into credential, got %#v", p.Credentials)
+	}
+}
+
+func TestResolve_CredentialAuthExpansion(t *testing.T) {
+	xcli := &XCLIConfig{
+		Profiles: map[string]*XCLIProfile{
+			"default": {
+				Credentials: map[string]*XCLICredential{
+					"PartnerKey": {
+						Auth: &XCLIAuth{
+							Type: "api-key",
+							Params: map[string]string{
+								"in":    "header",
+								"name":  "X-Partner-Key",
+								"value": "{partner_key}",
+							},
+						},
+						Prompt: map[string]XCLIPromptVar{
+							"partner_key": {Description: "Partner API key"},
+						},
+						PromptValues:   map[string]string{"partner_key": "secret"},
+						PromptedParams: map[string]bool{"partner_key": true},
+						Params:         map[string]string{"partner_key": "secret"},
+						Satisfies:      []string{"reports:read"},
+					},
+				},
+			},
+		},
+	}
+	resolved := xcli.Resolve(nil)
+	credential := resolved.Profiles["default"].Credentials["PartnerKey"]
+	if credential == nil || credential.Auth == nil {
+		t.Fatalf("credential = %#v", credential)
+	}
+	if credential.Auth.Params["value"] != "secret" {
+		t.Fatalf("auth params = %#v", credential.Auth.Params)
+	}
+	if len(credential.Satisfies) != 1 || credential.Satisfies[0] != "reports:read" {
+		t.Fatalf("satisfies = %#v", credential.Satisfies)
 	}
 }
 

@@ -413,44 +413,68 @@ func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig, answe
 
 	for _, profileName := range profileNames {
 		profile := xcli.Profiles[profileName]
-		if profile == nil || len(profile.Prompt) == 0 {
+		if profile == nil {
 			continue
 		}
-		if profile.Params == nil {
-			profile.Params = map[string]string{}
+		if err := c.promptXCLIParams(ctx, profileName, profile.Prompt, &profile.Params, &profile.PromptValues, &profile.PromptedParams, answers); err != nil {
+			return err
 		}
-		if profile.PromptValues == nil {
-			profile.PromptValues = map[string]string{}
+		var credentialIDs []string
+		for id := range profile.Credentials {
+			credentialIDs = append(credentialIDs, id)
 		}
-		if profile.PromptedParams == nil {
-			profile.PromptedParams = map[string]bool{}
+		sort.Strings(credentialIDs)
+		for _, id := range credentialIDs {
+			credential := profile.Credentials[id]
+			if credential == nil {
+				continue
+			}
+			if err := c.promptXCLIParams(ctx, profileName, credential.Prompt, &credential.Params, &credential.PromptValues, &credential.PromptedParams, answers); err != nil {
+				return err
+			}
 		}
-		promptNames := make([]string, 0, len(profile.Prompt))
-		for name := range profile.Prompt {
-			promptNames = append(promptNames, name)
-		}
-		sort.Strings(promptNames)
+	}
+	return nil
+}
 
-		for _, name := range promptNames {
-			var value string
-			if answer, ok := answers.answer(profileName, name); ok {
-				var err error
-				value, err = validateXCLIPromptValue(name, strings.TrimSpace(answer), profile.Prompt[name])
-				if err != nil {
-					return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
-				}
-			} else {
-				var err error
-				value, err = c.readXCLIPrompt(ctx, profileName, name, profile.Prompt[name])
-				if err != nil {
-					return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
-				}
+func (c *CLI) promptXCLIParams(ctx context.Context, profileName string, prompts map[string]spec.XCLIPromptVar, params *map[string]string, promptValues *map[string]string, promptedParams *map[string]bool, answers configurePromptAnswers) error {
+	if len(prompts) == 0 {
+		return nil
+	}
+	if *params == nil {
+		*params = map[string]string{}
+	}
+	if *promptValues == nil {
+		*promptValues = map[string]string{}
+	}
+	if *promptedParams == nil {
+		*promptedParams = map[string]bool{}
+	}
+	promptNames := make([]string, 0, len(prompts))
+	for name := range prompts {
+		promptNames = append(promptNames, name)
+	}
+	sort.Strings(promptNames)
+
+	for _, name := range promptNames {
+		var value string
+		if answer, ok := answers.answer(profileName, name); ok {
+			var err error
+			value, err = validateXCLIPromptValue(name, strings.TrimSpace(answer), prompts[name])
+			if err != nil {
+				return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
 			}
-			profile.PromptValues[name] = value
-			if !profile.Prompt[name].Exclude {
-				profile.Params[name] = value
-				profile.PromptedParams[name] = true
+		} else {
+			var err error
+			value, err = c.readXCLIPrompt(ctx, profileName, name, prompts[name])
+			if err != nil {
+				return fmt.Errorf("x-cli-config prompt %q: %w", name, err)
 			}
+		}
+		(*promptValues)[name] = value
+		if !prompts[name].Exclude {
+			(*params)[name] = value
+			(*promptedParams)[name] = true
 		}
 	}
 	return nil
@@ -573,6 +597,32 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 			prof.Auth = &config.AuthConfig{
 				Type:   xp.Auth.Type,
 				Params: xp.Auth.Params,
+			}
+		}
+		if len(xp.Credentials) > 0 {
+			prof.Credentials = make(map[string]*config.CredentialConfig, len(xp.Credentials))
+			for credentialID, xc := range xp.Credentials {
+				if xc == nil {
+					continue
+				}
+				credential := &config.CredentialConfig{
+					AuthRef:   xc.AuthRef,
+					Satisfies: append([]string(nil), xc.Satisfies...),
+				}
+				if xc.Auth != nil {
+					if xc.Auth.Type == "external-tool" {
+						c.warnf("x-cli-config: auth type %q is not permitted; skipping credential %q in profile %q", xc.Auth.Type, credentialID, name)
+						continue
+					}
+					credential.Auth = &config.AuthConfig{
+						Type:   xc.Auth.Type,
+						Params: xc.Auth.Params,
+					}
+				}
+				prof.Credentials[credentialID] = credential
+			}
+			if len(prof.Credentials) == 0 {
+				prof.Credentials = nil
 			}
 		}
 		apiCfg.Profiles[name] = prof
