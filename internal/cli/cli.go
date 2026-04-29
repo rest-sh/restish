@@ -592,19 +592,20 @@ func isBuiltinCommandName(name string) bool {
 // value-taking flags consume the next token as their value unless it starts
 // with "-"; bool/count flags do not consume the API name.
 func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
+	if generatedAPICommandTreeRequested(args) {
+		return sortedAPINames(cfg)
+	}
+
 	// Scan past the program name and any leading flags.
 	toks := args[1:]
 	for len(toks) > 0 {
 		t := toks[0]
 		toks = toks[1:]
 		if !strings.HasPrefix(t, "-") {
-			// First positional: if it's a known built-in, break and load all.
-			if !builtinCommands[t] {
-				if _, ok := cfg.APIs[t]; ok {
-					return []string{t}
-				}
+			if _, ok := cfg.APIs[t]; ok {
+				return []string{t}
 			}
-			break
+			return nil
 		}
 		// Flag token: --flag=value is self-contained; otherwise only flags
 		// that actually take values consume the following token.
@@ -613,6 +614,20 @@ func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 		}
 	}
 
+	return sortedAPINames(cfg)
+}
+
+func generatedAPICommandTreeRequested(args []string) bool {
+	for _, arg := range args[1:] {
+		switch arg {
+		case "--help", "-h", "help", "__complete", "__completeNoDesc":
+			return true
+		}
+	}
+	return false
+}
+
+func sortedAPINames(cfg *config.Config) []string {
 	names := make([]string, 0, len(cfg.APIs))
 	for name := range cfg.APIs {
 		names = append(names, name)

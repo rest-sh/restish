@@ -150,11 +150,10 @@ func TestGeneratedAPINames_BuiltinVerb(t *testing.T) {
 	}
 	c := &CLI{}
 
-	// Built-in verb first → load all APIs.
+	// Built-in verb first → no generated APIs are needed.
 	got := c.generatedAPINames([]string{"restish", "get", "myapi/items"}, cfg)
-	want := []string{"myapi", "otherapi"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("builtin verb: got %v, want %v", got, want)
+	if len(got) != 0 {
+		t.Errorf("builtin verb: got %v, want none", got)
 	}
 }
 
@@ -166,10 +165,10 @@ func TestGeneratedAPINames_UnknownArg(t *testing.T) {
 	}
 	c := &CLI{}
 
-	// First positional is not a configured API → load all.
+	// First positional is not a configured API → no generated API is needed.
 	got := c.generatedAPINames([]string{"restish", "unknown"}, cfg)
-	if !reflect.DeepEqual(got, []string{"myapi"}) {
-		t.Errorf("unknown arg: got %v, want [myapi]", got)
+	if len(got) != 0 {
+		t.Errorf("unknown arg: got %v, want none", got)
 	}
 }
 
@@ -187,5 +186,27 @@ func TestGeneratedAPINames_NoArgs(t *testing.T) {
 	want := []string{"aaa", "bbb"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("no args: got %v, want %v", got, want)
+	}
+}
+
+func TestGeneratedAPINames_HelpAndCompletionLoadAll(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"aaa": {BaseURL: "https://a.example.com"},
+			"bbb": {BaseURL: "https://b.example.com"},
+		},
+	}
+	c := &CLI{}
+	want := []string{"aaa", "bbb"}
+
+	for _, args := range [][]string{
+		{"restish", "--help"},
+		{"restish", "help", "aaa"},
+		{"restish", "__complete", ""},
+	} {
+		got := c.generatedAPINames(args, cfg)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: got %v, want %v", args, got, want)
+		}
 	}
 }

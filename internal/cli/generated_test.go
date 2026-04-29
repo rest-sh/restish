@@ -570,6 +570,50 @@ func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
 	}
 }
 
+func TestBuiltinRequestDoesNotLoadGeneratedAPIs(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
+	if err := os.WriteFile(specPath, []byte(`openapi: "3.1.0"
+info:
+  title: Local
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"local": {
+				BaseURL:   "https://api.example.com",
+				SpecFiles: []string{specPath},
+			},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	loader := &countingLoader{}
+	c.AddLoader(loader)
+
+	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("get URL: %v", err)
+	}
+	if got := loader.detects.Load(); got != 0 {
+		t.Fatalf("loader Detect called %d times, want 0 for built-in request", got)
+	}
+}
+
 // TestGeneratedCommandRequiredPathParam verifies that a required path param is
 // a positional arg, is substituted in the URL, and that omitting it errors.
 func TestGeneratedCommandRequiredPathParam(t *testing.T) {
