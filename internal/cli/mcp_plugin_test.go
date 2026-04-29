@@ -59,35 +59,40 @@ func TestMCPServeToolCall(t *testing.T) {
 	pluginsParent := installMCPPlugin(t)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
-		  "openapi": "3.1.0",
-		  "info": {"title": "Demo", "version": "1.0.0"},
-		  "paths": {
-		    "/items/{id}": {
-		      "get": {
-		        "operationId": "getItem",
-		        "summary": "Get an item",
-		        "parameters": [
-		          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
-		        ]
-		      }
-		    },
-		    "/hidden": {
-		      "get": {
-		        "operationId": "hiddenCli",
-		        "x-cli-ignore": true
-		      }
-		    },
-		    "/mcp-hidden": {
-		      "get": {
-		        "operationId": "hiddenMcp",
-		        "x-mcp-ignore": true
-		      }
-		    }
-		  }
-		}`)
+	mux.HandleFunc("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		fmt.Fprint(w, `openapi: "3.1.0"
+info:
+  title: Demo
+  version: "1.0.0"
+paths:
+  /items/{id}:
+    get:
+      operationId: getItem
+      summary: Get an item
+      parameters:
+        - $ref: "./params.yaml#/components/parameters/ID"
+  /hidden:
+    get:
+      operationId: hiddenCli
+      x-cli-ignore: true
+  /mcp-hidden:
+    get:
+      operationId: hiddenMcp
+      x-mcp-ignore: true
+`)
+	})
+	mux.HandleFunc("/params.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		fmt.Fprint(w, `components:
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+`)
 	})
 	mux.HandleFunc("/items/42", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -97,7 +102,7 @@ func TestMCPServeToolCall(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cfgPath := filepath.Join(pluginsParent, "restish.json")
-	cfg := fmt.Sprintf(`{"apis":{"demo":{"base_url":%q,"spec_url":%q}}}`, srv.URL, srv.URL+"/openapi.json")
+	cfg := fmt.Sprintf(`{"apis":{"demo":{"base_url":%q,"spec_url":%q}}}`, srv.URL, srv.URL+"/openapi.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -124,11 +129,11 @@ func TestMCPServeToolCall(t *testing.T) {
 		},
 	})
 
-	c2, out, _ := newTestCLI(t)
+	c2, out, errOut := newTestCLI(t)
 	c2.Hooks().ConfigPath = cfgPath
 	c2.Stdin = stdin
 	if err := c2.Run([]string{"restish", "mcp", "demo"}); err != nil {
-		t.Fatalf("mcp: %v", err)
+		t.Fatalf("mcp: %v\nstdout:\n%s\nstderr:\n%s", err, out.String(), errOut.String())
 	}
 
 	responses := readMCPResponses(t, out.Bytes())

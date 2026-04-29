@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pb33f/libopenapi"
+	"github.com/rest-sh/restish/v2/plugin"
 )
 
 func loadTestSpec(t *testing.T, name, raw string) *APISpec {
@@ -136,6 +137,41 @@ func TestToolsFromSpecIncludesPathLevelParameters(t *testing.T) {
 	}
 	if req.URI != "demo/items/a%2Fb?verbose=yes" {
 		t.Fatalf("URI = %q, want demo/items/a%%2Fb?verbose=yes", req.URI)
+	}
+}
+
+func TestToolsFromSpecPrefersHostResolvedOperations(t *testing.T) {
+	s := &APISpec{
+		Name: "demo",
+		Operations: []plugin.APIOperation{
+			{
+				ID:      "getItem",
+				Method:  "GET",
+				Path:    "/v2/items/{id}",
+				Summary: "Get an item",
+				Parameters: []plugin.APIParam{
+					{Name: "id", In: "path", Required: true, Type: "string"},
+					{Name: "include", In: "query", Type: "boolean"},
+				},
+			},
+			{ID: "hiddenMcp", Method: "GET", Path: "/hidden", MCPIgnore: true},
+			{ID: "createItem", Method: "POST", Path: "/v2/items"},
+		},
+	}
+
+	tools, err := toolsFromSpec("demo", false, s, Options{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name != "getItem" {
+		t.Fatalf("expected only getItem, got %#v", tools)
+	}
+	req, err := tools[0].Request(map[string]any{"id": "a/b", "include": true})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if req.URI != "demo/v2/items/a%2Fb?include=true" {
+		t.Fatalf("URI = %q, want demo/v2/items/a%%2Fb?include=true", req.URI)
 	}
 }
 

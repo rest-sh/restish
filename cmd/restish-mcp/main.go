@@ -194,6 +194,14 @@ func (c *pluginClient) fetchSpecSync(name string) (*APISpec, error) {
 	if reply.Error != "" {
 		return nil, fmt.Errorf("%s", reply.Error)
 	}
+	if len(reply.Operations) > 0 {
+		return &APISpec{
+			Name:        name,
+			ContentType: reply.ContentType,
+			Raw:         reply.Raw,
+			Operations:  reply.Operations,
+		}, nil
+	}
 	if len(reply.Raw) == 0 {
 		return nil, fmt.Errorf("api %q returned an empty spec", name)
 	}

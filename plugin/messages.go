@@ -90,11 +90,40 @@ type APISpecMsg struct {
 
 // APISpecResponseMsg is the host reply to an APISpecMsg.
 type APISpecResponseMsg struct {
-	Type        string `cbor:"type"`
-	Name        string `cbor:"name"`
-	ContentType string `cbor:"content_type,omitempty"`
-	Raw         []byte `cbor:"raw,omitempty"`
-	Error       string `cbor:"error,omitempty"`
+	Type        string         `cbor:"type"`
+	Name        string         `cbor:"name"`
+	ContentType string         `cbor:"content_type,omitempty"`
+	Raw         []byte         `cbor:"raw,omitempty"`
+	Operations  []APIOperation `cbor:"operations,omitempty"`
+	Error       string         `cbor:"error,omitempty"`
+}
+
+// APIOperation is the host's resolved, config-aware representation of one
+// OpenAPI HTTP operation. It mirrors the generated-command model so command
+// plugins do not need to re-parse raw OpenAPI specs.
+type APIOperation struct {
+	ID               string     `cbor:"id"`
+	Method           string     `cbor:"method"`
+	Path             string     `cbor:"path"`
+	Summary          string     `cbor:"summary,omitempty"`
+	Description      string     `cbor:"description,omitempty"`
+	Deprecated       bool       `cbor:"deprecated,omitempty"`
+	Parameters       []APIParam `cbor:"parameters,omitempty"`
+	HasBody          bool       `cbor:"has_body,omitempty"`
+	BodyRequired     bool       `cbor:"body_required,omitempty"`
+	RequestMediaType string     `cbor:"request_media_type,omitempty"`
+	MCPIgnore        bool       `cbor:"mcp_ignore,omitempty"`
+}
+
+// APIParam is a resolved operation parameter for APIOperation.
+type APIParam struct {
+	Name        string   `cbor:"name"`
+	In          string   `cbor:"in"`
+	Required    bool     `cbor:"required,omitempty"`
+	Description string   `cbor:"description,omitempty"`
+	Type        string   `cbor:"type,omitempty"`
+	ItemType    string   `cbor:"item_type,omitempty"`
+	Enum        []string `cbor:"enum,omitempty"`
 }
 
 // ListAPIsMsg asks the host for the list of configured API names.

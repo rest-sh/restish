@@ -592,13 +592,64 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, writer *commandPluginWrit
 			Error: fmt.Sprintf("no spec available for %q", msg.Name),
 		})
 	}
+	opSet, err := s.OperationSetWithOptions(spec.OperationOptions{
+		BaseURL:         apiCfg.BaseURL,
+		OperationBase:   apiCfg.OperationBase,
+		ServerVariables: effectiveServerVariables(apiCfg, "default"),
+	})
+	if err != nil {
+		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
+			Type:  pluginwire.MsgTypeAPISpecResponse,
+			Name:  msg.Name,
+			Error: err.Error(),
+		})
+	}
 
 	return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 		Type:        pluginwire.MsgTypeAPISpecResponse,
 		Name:        msg.Name,
 		ContentType: s.ContentType,
 		Raw:         s.Raw,
+		Operations:  pluginOperationsFromSpec(opSet.Operations),
 	})
+}
+
+func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
+	if ops == nil {
+		return nil
+	}
+	out := make([]pluginwire.APIOperation, 0, len(ops))
+	for _, op := range ops {
+		params := make([]pluginwire.APIParam, 0, len(op.Parameters))
+		for _, p := range op.Parameters {
+			if p.XCLI.Ignore {
+				continue
+			}
+			params = append(params, pluginwire.APIParam{
+				Name:        p.Name,
+				In:          p.In,
+				Required:    p.Required,
+				Description: p.Desc,
+				Type:        p.Type,
+				ItemType:    p.ItemType,
+				Enum:        append([]string(nil), p.Enum...),
+			})
+		}
+		out = append(out, pluginwire.APIOperation{
+			ID:               op.ID,
+			Method:           op.Method,
+			Path:             op.Path,
+			Summary:          op.Summary,
+			Description:      op.Description,
+			Deprecated:       op.Deprecated,
+			Parameters:       params,
+			HasBody:          op.HasBody,
+			BodyRequired:     op.BodyRequired,
+			RequestMediaType: op.RequestMediaType,
+			MCPIgnore:        op.MCPIgnore,
+		})
+	}
+	return out
 }
 
 func (c *CLI) handlePluginPrompt(ctx context.Context, writer *commandPluginWriter, msg pluginwire.PromptMsg) error {
