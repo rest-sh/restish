@@ -65,6 +65,12 @@ func TestMCPServeToolCall(t *testing.T) {
 info:
   title: Demo
   version: "1.0.0"
+servers:
+  - url: /{version}
+    variables:
+      version:
+        default: v1
+        enum: [v1, v2]
 paths:
   /items/{id}:
     get:
@@ -94,7 +100,7 @@ paths:
         type: string
 `)
 	})
-	mux.HandleFunc("/items/42", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v2/items/42", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"id":"42","name":"example"}`)
 	})
@@ -102,7 +108,7 @@ paths:
 	t.Cleanup(srv.Close)
 
 	cfgPath := filepath.Join(pluginsParent, "restish.json")
-	cfg := fmt.Sprintf(`{"apis":{"demo":{"base_url":%q,"spec_url":%q}}}`, srv.URL, srv.URL+"/openapi.yaml")
+	cfg := fmt.Sprintf(`{"apis":{"demo":{"base_url":%q,"spec_url":%q,"server_variables":{"version":"v2"}}}}`, srv.URL, srv.URL+"/openapi.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +137,7 @@ paths:
 
 	c2, out, errOut := newTestCLI(t)
 	c2.Hooks().ConfigPath = cfgPath
+	c2.Hooks().SpecCachePath = filepath.Join(pluginsParent, "specs")
 	c2.Stdin = stdin
 	if err := c2.Run([]string{"restish", "mcp", "demo"}); err != nil {
 		t.Fatalf("mcp: %v\nstdout:\n%s\nstderr:\n%s", err, out.String(), errOut.String())
