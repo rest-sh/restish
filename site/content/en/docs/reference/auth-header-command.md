@@ -1,28 +1,28 @@
 ---
-title: Auth Header Command
-linkTitle: Auth Header
+title: API Auth Inspect
+linkTitle: API Auth Inspect
 weight: 40
-description: Print the Authorization header value for a configured API.
+description: Inspect configured API auth without sending the target request.
 ---
 
-`auth-header` answers a narrow debugging question: "what `Authorization` header
-would Restish send for this API and profile?" It resolves configured auth
-without making the target API request, which keeps credential debugging separate
-from server behavior.
+`restish api auth inspect` answers the credential debugging question previously
+handled by the removed top-level `auth-header` command. It resolves configured
+auth without making the target API request, and it can inspect API-key headers
+or a named operation credential as well as `Authorization`.
 
 ## Examples
 
 ```bash
-restish auth-header example
-restish -p staging auth-header example
+restish api auth inspect example
+restish -p staging api auth inspect example --raw-header Authorization
+restish api auth inspect example --rsh-credential PartnerKey
 ```
 
 ## Notes
 
-Use this to confirm profile auth before debugging a `401` or `403`. If no
-Authorization header is configured, the command reports that clearly. For
-headers outside `Authorization`, use verbose mode against a safe endpoint such
-as `https://api.rest.sh/headers`.
+Use this to confirm profile auth before debugging a `401` or `403`. Human output
+redacts sensitive values. Use `--raw-header Authorization` for scripts that
+previously called `restish auth-header`.
 
 ## Related Pages
 

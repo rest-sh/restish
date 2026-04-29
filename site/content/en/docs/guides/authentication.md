@@ -86,22 +86,55 @@ values or accept preanswers:
 restish api configure example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
 ```
 
-API keys may be stored as profile headers or query params under the hood, but
-the setup flow should present them as API keys.
+Generated OpenAPI commands use the operation's effective `security` policy.
+For one global scheme, profile-level `auth` remains enough. For APIs with
+several schemes, configure named credential bindings under the active profile:
 
-Generated OpenAPI commands currently treat operation-level `security: []` as a
-public no-auth marker. For every non-empty security requirement, including
-OAuth scopes, alternatives, and combined schemes, Restish uses the selected
-profile's auth through the normal request pipeline. Full per-operation scheme
-matching is a planned v2 release-readiness item.
+```jsonc
+{
+  "profiles": {
+    "default": {
+      "credentials": {
+        "UserOAuth": {
+          "auth_ref": "work-user-oauth",
+          "satisfies": ["items:read"]
+        },
+        "PartnerKey": {
+          "auth": {
+            "type": "api-key",
+            "params": {
+              "in": "header",
+              "name": "X-Partner-Key",
+              "value": "env:PARTNER_KEY"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+`security: []` operations are public and suppress profile auth, auth hooks, and
+sensitive credential headers/query values. Optional anonymous alternatives use
+configured credentials when available and anonymous access as the fallback.
+
+Choose a specific allowed alternative with `--rsh-security`:
+
+```bash
+restish example partner-report --rsh-security PartnerKey
+restish example signed-report --rsh-security UserOAuth+PartnerKey
+```
 
 ## Inspect The Final Header
 
-For configured API auth, inspect the computed `Authorization` value without
-making the full request:
+For configured API auth, inspect the computed auth material without making the
+full request:
 
 ```bash
-restish auth-header example
+restish api auth inspect example
+restish api auth inspect example --raw-header Authorization
+restish api auth inspect example --rsh-credential PartnerKey
 ```
 
 Use verbose mode when the question is about the whole request:

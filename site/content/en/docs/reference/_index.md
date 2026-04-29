@@ -14,7 +14,7 @@ single task, use recipes.
 - [HTTP Commands](./http-commands/) covers generic verbs and bare URL GET.
 - [Global Flags](./global-flags/) lists shared request, output, auth, TLS, pagination, cache, retry, and config flags.
 - [API Management](./api-management/) covers `restish api ...`.
-- [Auth Header](./auth-header-command/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.
+- [API Auth Inspect](./auth-header-command/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.
 
 ## Data And Configuration Reference
 

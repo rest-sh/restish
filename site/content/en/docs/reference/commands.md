@@ -31,11 +31,12 @@ A bare URL is a generic GET.
 
 ## Utilities
 
-- `auth-header`: print the Authorization header for a configured API
 - `cert`: inspect server TLS certificate chains
 - `edit`: fetch, edit, and update a resource
 - `links`: print normalized hypermedia links
 - `completion`: generate shell completion scripts
+
+Use `api auth inspect` to inspect configured API auth material.
 
 ## Generated API Commands
 

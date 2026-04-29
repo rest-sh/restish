@@ -82,9 +82,15 @@ public operation where it should have been suppressed.
 
 ```bash
 restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
-restish auth-header example
+restish api auth inspect example --raw-header Authorization
+restish api auth list example
 restish -v -p token https://api.rest.sh/auth/bearer
 ```
+
+For generated OpenAPI commands, errors mentioning missing credential bindings
+mean the selected profile does not have a `credentials.<id>` entry for that
+operation. Errors mentioning missing requirement values mean the binding's
+`satisfies` list does not include the required scope or role.
 
 **Prevention:** Put auth in profiles and keep public/private operation security accurate in OpenAPI.
 

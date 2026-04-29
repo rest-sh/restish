@@ -10,7 +10,7 @@ Before debugging a real API request, confirm what Restish would put in the
 `Authorization` header for the selected API and profile.
 
 ```bash
-restish auth-header example
+restish api auth inspect example --raw-header Authorization
 ```
 
 Then verify a bearer token against the safe fixture:
@@ -19,9 +19,9 @@ Then verify a bearer token against the safe fixture:
 restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
 ```
 
-`auth-header` is focused on the credential header and avoids making the target
-API call. Use verbose mode when you need to inspect all request headers. See
-[Authentication](/docs/guides/authentication/) for the full profile and auth
-model.
+`api auth inspect` avoids making the target API call. Omit `--raw-header` for
+redacted human-readable output, or add `--rsh-credential PartnerKey` to inspect
+a named OpenAPI credential binding. Use verbose mode when you need to inspect
+the whole request.
 
-Related: [Authentication](/docs/guides/authentication/), [Auth Header Command](/docs/reference/auth-header-command/).
+Related: [Authentication](/docs/guides/authentication/), [API Auth Inspect](/docs/reference/auth-header-command/).

@@ -80,6 +80,9 @@ The current design set intentionally changes v1 in at least these areas:
 - more explicit pipeline planning for pagination and streaming
 - retirement of the v1 interactive `api configure <name>` prompt flow in favor
   of `restish.json`, `api add`, `api set`, and `api edit`
+- removal of the v1/v2-draft top-level `auth-header` command in favor of
+  `restish api auth inspect <api> --raw-header Authorization`, because v2 auth
+  can be credential-specific and may not use the `Authorization` header
 
 Those are acceptable breaks, but they require migration documentation and
 operator guidance.

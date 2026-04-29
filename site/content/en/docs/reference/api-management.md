@@ -63,6 +63,21 @@ restish api clear-auth-cache example
 
 Use after OAuth credentials or token state need a fresh flow.
 
+## Auth
+
+```bash
+restish api auth list example
+restish api auth add example PartnerKey
+restish api auth remove example PartnerKey
+restish api auth inspect example
+restish api auth inspect example --rsh-credential PartnerKey
+restish api auth inspect example --raw-header Authorization
+```
+
+`api auth` manages profile credential bindings for generated OpenAPI
+operations. `inspect` replaces the removed top-level `auth-header` command and
+also works for non-Authorization credentials such as API-key headers.
+
 ## Content Types
 
 ```bash

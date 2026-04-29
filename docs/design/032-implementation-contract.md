@@ -89,7 +89,7 @@ permissions are warning-only, not fatal.
 ## Command Surface And Precedence
 
 Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
-`api`, `auth-header`, `cache`, `cert`, `edit`, `links`, `plugin`, `setup`,
+`api`, `cache`, `cert`, `edit`, `links`, `plugin`, `setup`,
 `theme`, `completion`, and `help`.
 
 Generated API commands are registered under API short names when cached spec

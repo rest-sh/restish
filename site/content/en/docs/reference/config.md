@@ -66,8 +66,36 @@ Common fields:
 
 ## Profiles And Auth
 
-Profiles can hold `base_url`, `headers`, `query`, `auth`, TLS fields, and plugin
-settings. Auth params may contain secrets, so keep config permissions private.
+Profiles can hold `base_url`, `headers`, `query`, `auth`, `auth_ref`, TLS
+fields, `server_variables`, and operation credential bindings. Auth params may
+contain secrets, so keep config permissions private.
+
+Credential bindings live under a profile and are keyed by the OpenAPI security
+scheme or normalized credential requirement ID:
+
+```jsonc
+{
+  "credentials": {
+    "PartnerKey": {
+      "auth": {
+        "type": "api-key",
+        "params": {
+          "in": "header",
+          "name": "X-Partner-Key",
+          "value": "env:PARTNER_KEY"
+        }
+      }
+    },
+    "UserOAuth": {
+      "auth_ref": "work-user-oauth",
+      "satisfies": ["items:read"]
+    }
+  }
+}
+```
+
+Each binding may use inline `auth` or `auth_ref`, not both. `satisfies` declares
+the scopes or role values this local credential is allowed to cover.
 
 ## Editing
 

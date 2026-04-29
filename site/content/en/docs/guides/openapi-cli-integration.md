@@ -250,19 +250,21 @@ start from the operation cache without refetching secondary reference files.
 
 ## Auth Setup Hints
 
-Prefer standard OpenAPI security schemes first. Restish can derive basic auth,
-bearer auth, API keys, and OAuth setup from the spec. Use `x-cli-config` only
-for Restish-specific prompting and defaults.
+Prefer standard OpenAPI security schemes first. Restish derives basic auth,
+API keys, and supported OAuth setup from the spec. Use `x-cli-config` only for
+Restish-specific prompting and defaults.
 
-An operation with `security: []` is treated as public and generated commands do
-not attach configured profile auth. Full per-operation scheme matching for APIs
-with multiple auth schemes is planned before v2 release; until then, choose the
-profile that matches the operation you are calling.
+Generated commands honor operation-level security:
 
-Non-empty OpenAPI security requirements, including OAuth scopes and alternative
-schemes, do not yet select or reject profiles per operation. They are useful for
-setup and future diagnostics, but the selected Restish profile still supplies
-auth at request time unless the operation explicitly declares `security: []`.
+- `security: []` is public and sends no configured auth.
+- A single effective requirement can use profile-level `auth` for compatibility.
+- Multiple alternatives or combined requirements use
+  `profiles.<name>.credentials.<credential-id>` bindings.
+- `--rsh-security PartnerKey` or `--rsh-security UserOAuth+PartnerKey` selects
+  one allowed alternative for an operation.
+
+OpenAPI scope and role arrays are matched against credential `satisfies` values.
+When a required binding is missing, Restish fails before sending the request.
 
 Never put secrets in the OpenAPI document. Use prompts, environment references,
 or external tools.

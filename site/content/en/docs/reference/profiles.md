@@ -38,6 +38,8 @@ profiles are the common case.
 | `headers` | Default request headers. |
 | `query` | Default query params. |
 | `auth` | Auth type and params. |
+| `auth_ref` | Shared top-level auth profile reference. |
+| `credentials` | Operation credential bindings for generated OpenAPI commands. |
 | `ca_cert`, `client_cert`, `client_key` | TLS file settings. |
 | `tls_signer`, `tls_signer_params` | TLS signer plugin settings. |
 | `operation_base` | Profile-specific operation path prefix. |
@@ -61,6 +63,22 @@ Auth params can reference environment variables where supported:
   "auth": {
     "type": "bearer",
     "params": { "token": "env:DOCS_TOKEN" }
+  }
+}
+```
+
+For generated APIs with several OpenAPI security schemes, put each operation
+credential under `credentials`:
+
+```jsonc
+{
+  "credentials": {
+    "PartnerKey": {
+      "auth": {
+        "type": "api-key",
+        "params": {"in": "header", "name": "X-Partner-Key", "value": "env:PARTNER_KEY"}
+      }
+    }
   }
 }
 ```

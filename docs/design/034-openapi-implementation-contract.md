@@ -301,18 +301,29 @@ to another origin by declaring a different server URL.
 
 ## Security Policy
 
-The current v2 release-readiness contract is intentionally narrow:
+OpenAPI security is normalized during operation extraction into Restish
+credential alternatives:
 
-- operation-level `security: []` means no profile auth or auth plugins run for
-  that generated command;
-- document-level or operation-level non-empty `security` metadata is preserved
-  for future policy, help, and tests, but does not yet select or reject
-  profiles per operation.
+- operation-level `security` overrides document-level `security`;
+- document-level security applies when an operation omits `security`;
+- `security: []` means no profile auth, auth hooks, credential headers, or
+  credential query params are sent for that generated command;
+- an empty requirement object (`{}`) means anonymous access is allowed as an
+  alternative, not forced no-auth;
+- each non-empty Security Requirement object is one AND-set of credential
+  requirements, and the surrounding array is an OR-list.
 
-Design 033 defines the future operation-specific auth policy. Until that policy
-is implemented, generated commands with OAuth scopes, multiple alternatives, or
-combined requirements continue to use the selected profile exactly like generic
-requests unless the operation explicitly opts out with `security: []`.
+Generated command execution matches those alternatives against the active
+profile. A single effective credential requirement may use profile-level `auth`
+or `auth_ref` for compatibility. Multiple alternatives or combined requirements
+require explicit `profiles.<name>.credentials.<id>` bindings. Requirement
+values such as OAuth scopes or role strings are matched against a binding's
+`satisfies` list.
+
+`--rsh-security` selects one allowed alternative by credential ID set, for
+example `PartnerKey` or `UserOAuth+PartnerKey`. Overrides are rejected for
+`security: []`, invalid combinations, and profiles that do not satisfy the
+selected alternative.
 
 ## Startup Performance And Caching
 
