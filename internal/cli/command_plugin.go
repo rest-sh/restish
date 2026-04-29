@@ -349,7 +349,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
-		return false, c.handlePluginAPISpec(writer, msg)
+		return false, c.handlePluginAPISpec(cmd.Context(), writer, msg)
 	case pluginwire.MsgTypeListAPIs:
 		return false, c.handlePluginListAPIs(writer)
 	case pluginwire.MsgTypeListProfiles:
@@ -551,7 +551,7 @@ func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg pluginwire.ResponseMs
 	return c.formatResponse(cmd, resp)
 }
 
-func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {
+func (c *CLI) handlePluginAPISpec(ctx context.Context, writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {
 	if msg.Name == "" {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 			Type:  pluginwire.MsgTypeAPISpecResponse,
@@ -565,8 +565,9 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.AP
 			Error: fmt.Sprintf("unknown API %q", msg.Name),
 		})
 	}
+	apiCfg := c.cfg.APIs[msg.Name]
 
-	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, nil, c.loaders)
+	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 			Type:  pluginwire.MsgTypeAPISpecResponse,
@@ -575,7 +576,7 @@ func (c *CLI) handlePluginAPISpec(writer *commandPluginWriter, msg pluginwire.AP
 		})
 	}
 	if s == nil {
-		s, err = c.discoverSpec(context.Background(), msg.Name)
+		s, err = c.discoverSpec(ctx, msg.Name)
 		if err != nil {
 			return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 				Type:  pluginwire.MsgTypeAPISpecResponse,
