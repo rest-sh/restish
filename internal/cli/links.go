@@ -76,5 +76,5 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Fprintln(c.Stdout, string(data))
-	return nil
+	return c.statusError(cmd, resp.Status)
 }

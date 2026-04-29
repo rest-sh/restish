@@ -98,3 +98,41 @@ func TestLinksCommandFilterRel(t *testing.T) {
 		t.Errorf("expected next relation, got: %v", got)
 	}
 }
+
+func TestLinksCommandReturnsStatusError(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 500,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+			Request:    r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "links", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected links to return a status error")
+	}
+	if strings.TrimSpace(out.String()) != "null" {
+		t.Fatalf("expected links output before status error, got:\n%s", out.String())
+	}
+}
+
+func TestLinksCommandIgnoreStatusCode(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"missing"}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "--rsh-ignore-status-code"}); err != nil {
+		t.Fatalf("links with ignore status: %v", err)
+	}
+}
