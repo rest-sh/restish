@@ -709,7 +709,11 @@ func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []strin
 // pagination.items_path, pagination.next_path,
 // profiles.<name>.base_url, profiles.<name>.auth.type,
 // profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer,
-// profiles.<name>.server_variables.<name>.
+// profiles.<name>.server_variables.<name>,
+// profiles.<name>.credentials.<id>.auth_ref,
+// profiles.<name>.credentials.<id>.satisfies,
+// profiles.<name>.credentials.<id>.auth.type,
+// profiles.<name>.credentials.<id>.auth.params.<param>.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 
@@ -878,14 +882,19 @@ const (
 	apiKeyProfileAuthRef
 	apiKeyProfileAuthType
 	apiKeyProfileAuthParam
+	apiKeyProfileCredentialAuthRef
+	apiKeyProfileCredentialAuthType
+	apiKeyProfileCredentialAuthParam
+	apiKeyProfileCredentialSatisfies
 )
 
 type resolvedAPIConfigKey struct {
-	kind        apiConfigKeyKind
-	jsonPath    []string
-	profileName string
-	paramName   string
-	varName     string
+	kind         apiConfigKeyKind
+	jsonPath     []string
+	profileName  string
+	credentialID string
+	paramName    string
+	varName      string
 }
 
 func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
@@ -998,11 +1007,65 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 			default:
 				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q; supported: type, params.<param>", subParts[1])
 			}
+		case "credentials":
+			if len(subParts) < 3 {
+				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.<field>", key)
+			}
+			credentialID := subParts[1]
+			credentialRest := subParts[2]
+			if credentialID == "" || credentialRest == "" {
+				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.<field>", key)
+			}
+			credentialParts := strings.SplitN(credentialRest, ".", 3)
+			switch credentialParts[0] {
+			case "auth_ref":
+				return resolvedAPIConfigKey{
+					kind:         apiKeyProfileCredentialAuthRef,
+					jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth_ref"),
+					profileName:  profileName,
+					credentialID: credentialID,
+				}, nil
+			case "satisfies":
+				return resolvedAPIConfigKey{
+					kind:         apiKeyProfileCredentialSatisfies,
+					jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "satisfies"),
+					profileName:  profileName,
+					credentialID: credentialID,
+				}, nil
+			case "auth":
+				if len(credentialParts) < 2 {
+					return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.auth.<field>", key)
+				}
+				switch credentialParts[1] {
+				case "type":
+					return resolvedAPIConfigKey{
+						kind:         apiKeyProfileCredentialAuthType,
+						jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth", "type"),
+						profileName:  profileName,
+						credentialID: credentialID,
+					}, nil
+				case "params":
+					if len(credentialParts) < 3 {
+						return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.auth.params.<param>", key)
+					}
+					return resolvedAPIConfigKey{
+						kind:         apiKeyProfileCredentialAuthParam,
+						jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth", "params", credentialParts[2]),
+						profileName:  profileName,
+						credentialID: credentialID,
+						paramName:    credentialParts[2],
+					}, nil
+				default:
+					return resolvedAPIConfigKey{}, fmt.Errorf("unsupported credential auth field %q; supported: type, params.<param>", credentialParts[1])
+				}
+			default:
+				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported credential field %q; supported: auth_ref, satisfies, auth.type, auth.params.<param>", credentialParts[0])
+			}
 		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>", parts[2])
+			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>, credentials.<id>.auth_ref, credentials.<id>.satisfies, credentials.<id>.auth.type, credentials.<id>.auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, command_layout, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, command_layout, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>, profiles.<name>.credentials.<id>.auth_ref, profiles.<name>.credentials.<id>.satisfies, profiles.<name>.credentials.<id>.auth.type, profiles.<name>.credentials.<id>.auth.params.<param>", key)
 	}
 }
 
@@ -1075,6 +1138,17 @@ func ensureProfile(apiCfg *config.APIConfig, profileName string) *config.Profile
 	return apiCfg.Profiles[profileName]
 }
 
+func ensureCredential(apiCfg *config.APIConfig, profileName, credentialID string) *config.CredentialConfig {
+	prof := ensureProfile(apiCfg, profileName)
+	if prof.Credentials == nil {
+		prof.Credentials = make(map[string]*config.CredentialConfig)
+	}
+	if prof.Credentials[credentialID] == nil {
+		prof.Credentials[credentialID] = &config.CredentialConfig{}
+	}
+	return prof.Credentials[credentialID]
+}
+
 func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) error {
 	switch resolved.kind {
 	case apiKeyBaseURL:
@@ -1126,6 +1200,26 @@ func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) err
 	case apiKeyProfileAuthParam:
 		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil && p.Auth.Params != nil {
 			delete(p.Auth.Params, resolved.paramName)
+		}
+	case apiKeyProfileCredentialAuthRef:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
+			p.Credentials[resolved.credentialID].AuthRef = ""
+		}
+	case apiKeyProfileCredentialAuthType:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
+			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil {
+				credential.Auth.Type = ""
+			}
+		}
+	case apiKeyProfileCredentialAuthParam:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
+			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil && credential.Auth.Params != nil {
+				delete(credential.Auth.Params, resolved.paramName)
+			}
+		}
+	case apiKeyProfileCredentialSatisfies:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
+			p.Credentials[resolved.credentialID].Satisfies = nil
 		}
 	default:
 		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
@@ -1304,6 +1398,59 @@ func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConf
 			prof.Auth.Params = map[string]string{}
 		}
 		prof.Auth.Params[resolved.paramName] = v
+	case apiKeyProfileCredentialAuthRef:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref must be a string", resolved.profileName, resolved.credentialID)
+		}
+		if v != "" && (c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[v] == nil) {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref: unknown auth profile %q", resolved.profileName, resolved.credentialID, v)
+		}
+		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
+		if credential.Auth != nil && v != "" {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref cannot be set while auth is configured", resolved.profileName, resolved.credentialID)
+		}
+		credential.AuthRef = v
+	case apiKeyProfileCredentialAuthType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth.type must be a string", resolved.profileName, resolved.credentialID)
+		}
+		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
+		if credential.AuthRef != "" {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth cannot be set while auth_ref is configured", resolved.profileName, resolved.credentialID)
+		}
+		if credential.Auth == nil {
+			credential.Auth = &config.AuthConfig{}
+		}
+		candidate := &config.AuthConfig{Type: v, Params: map[string]string{}}
+		if _, err := c.authHandlerFor(candidate, authHandlerOptions{}); err != nil {
+			return fmt.Errorf("invalid credentials.%s.auth.type %q: %w", resolved.credentialID, v, err)
+		}
+		credential.Auth.Type = v
+	case apiKeyProfileCredentialAuthParam:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth.params.%s must be a string", resolved.profileName, resolved.credentialID, resolved.paramName)
+		}
+		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
+		if credential.AuthRef != "" {
+			return fmt.Errorf("profiles.%s.credentials.%s.auth cannot be set while auth_ref is configured", resolved.profileName, resolved.credentialID)
+		}
+		if credential.Auth == nil {
+			credential.Auth = &config.AuthConfig{}
+		}
+		if credential.Auth.Params == nil {
+			credential.Auth.Params = map[string]string{}
+		}
+		credential.Auth.Params[resolved.paramName] = v
+	case apiKeyProfileCredentialSatisfies:
+		arr, err := anyToStringSlice(value)
+		if err != nil {
+			return fmt.Errorf("profiles.%s.credentials.%s.satisfies must be a string array", resolved.profileName, resolved.credentialID)
+		}
+		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
+		credential.Satisfies = arr
 	default:
 		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
 	}
@@ -1391,6 +1538,30 @@ func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any
 			return p.Auth.Params[resolved.paramName], nil
 		}
 		return "", nil
+	case apiKeyProfileCredentialAuthRef:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
+			return p.Credentials[resolved.credentialID].AuthRef, nil
+		}
+		return "", nil
+	case apiKeyProfileCredentialAuthType:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
+			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil {
+				return credential.Auth.Type, nil
+			}
+		}
+		return "", nil
+	case apiKeyProfileCredentialAuthParam:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
+			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil && credential.Auth.Params != nil {
+				return credential.Auth.Params[resolved.paramName], nil
+			}
+		}
+		return "", nil
+	case apiKeyProfileCredentialSatisfies:
+		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
+			return p.Credentials[resolved.credentialID].Satisfies, nil
+		}
+		return []string{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported field")
 	}

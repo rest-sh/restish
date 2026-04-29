@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -622,6 +623,46 @@ func TestAPISetCreatesNestedJSONCPath(t *testing.T) {
 	}
 	if got := written.APIs["myapi"].Profiles["default"].Auth.Params["token"]; got != "secret" {
 		t.Fatalf("token after set: got %q, want secret", got)
+	}
+}
+
+func TestAPISetCreatesCredentialPath(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "auth_profiles": {
+    "shared": {
+      "type": "oauth-client-credentials"
+    }
+  },
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com"
+    }
+  }
+}`)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{
+		"restish", "api", "set", "myapi",
+		"profiles.default.credentials.UserOAuth.auth_ref: shared",
+		`profiles.default.credentials.UserOAuth.satisfies: ["items:read","items:write"]`,
+	}); err != nil {
+		t.Fatalf("api set credential: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	credential := written.APIs["myapi"].Profiles["default"].Credentials["UserOAuth"]
+	if credential == nil {
+		t.Fatal("expected UserOAuth credential")
+	}
+	if credential.AuthRef != "shared" {
+		t.Fatalf("AuthRef = %q, want shared", credential.AuthRef)
+	}
+	if got, want := credential.Satisfies, []string{"items:read", "items:write"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Satisfies = %#v, want %#v", got, want)
 	}
 }
 

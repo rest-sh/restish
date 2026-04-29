@@ -112,6 +112,21 @@ type ProfileConfig struct {
 	Auth *AuthConfig `json:"auth,omitempty"`
 	// AuthRef names a top-level auth_profiles entry to use for this profile.
 	AuthRef string `json:"auth_ref,omitempty"`
+	// Credentials maps operation credential requirement IDs to auth
+	// configurations that satisfy them.
+	Credentials map[string]*CredentialConfig `json:"credentials,omitempty"`
+}
+
+// CredentialConfig binds a local auth configuration to a generated operation
+// credential requirement.
+type CredentialConfig struct {
+	// Auth holds inline authentication configuration for this credential.
+	Auth *AuthConfig `json:"auth,omitempty"`
+	// AuthRef names a top-level auth_profiles entry to use for this credential.
+	AuthRef string `json:"auth_ref,omitempty"`
+	// Satisfies lists requirement values, such as OAuth scopes or non-OAuth
+	// roles, that this credential is intended to satisfy.
+	Satisfies []string `json:"satisfies,omitempty"`
 }
 
 // AuthConfig holds authentication configuration for a profile.
@@ -281,6 +296,27 @@ func Validate(cfg *Config) error {
 			if prof.AuthRef != "" {
 				if cfg.AuthProfiles == nil || cfg.AuthProfiles[prof.AuthRef] == nil {
 					return fmt.Errorf("apis.%s.profiles.%s.auth_ref: unknown auth profile %q", name, profileName, prof.AuthRef)
+				}
+			}
+			for credentialID, credential := range prof.Credentials {
+				if credentialID == "" {
+					return fmt.Errorf("apis.%s.profiles.%s.credentials: credential id must not be empty", name, profileName)
+				}
+				if credential == nil {
+					continue
+				}
+				if credential.Auth != nil && credential.AuthRef != "" {
+					return fmt.Errorf("apis.%s.profiles.%s.credentials.%s: auth and auth_ref are mutually exclusive", name, profileName, credentialID)
+				}
+				if credential.AuthRef != "" {
+					if cfg.AuthProfiles == nil || cfg.AuthProfiles[credential.AuthRef] == nil {
+						return fmt.Errorf("apis.%s.profiles.%s.credentials.%s.auth_ref: unknown auth profile %q", name, profileName, credentialID, credential.AuthRef)
+					}
+				}
+				for _, need := range credential.Satisfies {
+					if strings.TrimSpace(need) == "" {
+						return fmt.Errorf("apis.%s.profiles.%s.credentials.%s.satisfies: values must not be empty", name, profileName, credentialID)
+					}
 				}
 			}
 		}
