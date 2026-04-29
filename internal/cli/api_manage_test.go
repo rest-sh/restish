@@ -1219,7 +1219,7 @@ func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
 
 	if err := c.Run([]string{
 		"restish", "api", "configure", "myapi", "api.example.com",
-		`prompt.api_key: secret-key`,
+		`prompt.value: secret-key`,
 	}); err != nil {
 		t.Fatalf("api configure: %v", err)
 	}
@@ -1229,11 +1229,79 @@ func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
 		t.Fatalf("reload config: %v", err)
 	}
 	prof := written.APIs["myapi"].Profiles["default"]
-	if prof.Auth != nil {
-		t.Fatalf("api key fallback should persist as header/query, got auth %#v", prof.Auth)
+	if prof.Auth == nil || prof.Auth.Type != "api-key" || prof.Auth.Params["value"] != "secret-key" {
+		t.Fatalf("api key fallback auth = %#v", prof.Auth)
 	}
-	if !containsString(prof.Headers, "X-API-Key: secret-key") {
-		t.Fatalf("expected API key header, got %#v", prof.Headers)
+	if prof.Credentials["key"] == nil || prof.Credentials["key"].Auth == nil || prof.Credentials["key"].Auth.Type != "api-key" {
+		t.Fatalf("api key fallback credential = %#v", prof.Credentials)
+	}
+}
+
+func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "UserOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {"items:read": "Read items"}
+          }
+        }
+      },
+      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
+    }
+  },
+  "security": [{"UserOAuth": ["items:read"]}, {"PartnerKey": []}],
+  "paths": {}
+}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{
+		"restish", "api", "configure", "myapi", "api.example.com",
+		`prompt.value: partner-secret`,
+	}); err != nil {
+		t.Fatalf("api configure: %v", err)
+	}
+	if !strings.Contains(out.String(), "Auth coverage") {
+		t.Fatalf("expected coverage summary, got %q", out.String())
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	creds := written.APIs["myapi"].Profiles["default"].Credentials
+	if creds["UserOAuth"] == nil || creds["UserOAuth"].Auth == nil || creds["UserOAuth"].Auth.Type != "oauth-client-credentials" {
+		t.Fatalf("UserOAuth credential = %#v", creds["UserOAuth"])
+	}
+	if creds["PartnerKey"] == nil || creds["PartnerKey"].Auth == nil || creds["PartnerKey"].Auth.Params["value"] != "partner-secret" {
+		t.Fatalf("PartnerKey credential = %#v", creds["PartnerKey"])
 	}
 }
 

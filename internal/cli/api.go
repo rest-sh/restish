@@ -318,7 +318,17 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
 	}
+	if count := configuredCredentialCount(apiCfg); count > 0 {
+		fmt.Fprintf(c.Stdout, "Auth coverage for profile \"default\": %d credential(s) configured\n", count)
+	}
 	return nil
+}
+
+func configuredCredentialCount(apiCfg *config.APIConfig) int {
+	if apiCfg == nil || apiCfg.Profiles == nil || apiCfg.Profiles["default"] == nil {
+		return 0
+	}
+	return len(apiCfg.Profiles["default"].Credentials)
 }
 
 func normalizeAPIBaseURL(raw string) (string, error) {

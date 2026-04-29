@@ -171,6 +171,29 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 	} else {
 		return nil
 	}
+	for name, scheme := range schemes.FromOldest() {
+		if SchemeToXCLIAuth(scheme, nil) == nil {
+			continue
+		}
+		if profile.Credentials == nil {
+			profile.Credentials = map[string]*XCLICredential{}
+		}
+		if profile.Credentials[name] != nil {
+			continue
+		}
+		credential := &XCLICredential{}
+		if scheme.Type == "apiKey" {
+			description := "API key"
+			if scheme.Description != "" {
+				description = scheme.Description
+			}
+			credential.Prompt = map[string]XCLIPromptVar{
+				"value": {Description: description},
+			}
+			credential.Params = map[string]string{"value": ""}
+		}
+		profile.Credentials[name] = credential
+	}
 
 	return &XCLIConfig{
 		Profiles: map[string]*XCLIProfile{
