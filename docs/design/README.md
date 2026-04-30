@@ -113,7 +113,7 @@ were a recurring source of remediation work.
 - [033-openapi-operation-security.md](./033-openapi-operation-security.md) - Operation-specific OpenAPI security policy, profile scheme declarations, and the path from current `security: []` support to full enforcement.
 - [035-v2-product-surface-decisions.md](./035-v2-product-surface-decisions.md) - Accepted v2 command-surface decisions for setup, bootstrap, help, plugin/MCP trust, and embeddability.
 - [036-javascript-implementation-follow-up.md](./036-javascript-implementation-follow-up.md) - Planned follow-up review for docs-site JavaScript after removing the v1 tree and WASM prototype.
-- [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) - Implemented v2 command/control surface cleanup for config, auth cache, flags, MCP, and shell setup before release.
+- [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) - Accepted v2 command/control surface decision, framed as a v1-to-v2 update for config, auth cache, flags, MCP, and shell setup.
 
 **Extensibility**
 

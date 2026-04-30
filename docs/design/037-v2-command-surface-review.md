@@ -1,165 +1,122 @@
-# V2 Command Surface Review
+# V2 Command Surface Decision
 
 Status: accepted and implemented for the first Restish v2 release.
 
-## Product Frame
+## Problem
 
-Problem:
-Restish v2 has a strong request surface, but the command/control surface still
-mixes user jobs with internal concepts. Because v2 has not shipped, this is the
-right moment to make breaking command-shape changes that reduce support burden
-and make the tool easier to explain.
+Restish v2 is a successor to v1, not a new tool with no history. The command
+surface should preserve the parts of v1 that made Restish useful: direct HTTP
+requests, API-aware generated commands, shorthand input, good output defaults,
+and shell-friendly diagnostics.
 
-Users:
+At the same time, v1 mixed several control-plane jobs under `api` because the
+original tool grew organically. API registration, whole-config editing,
+credential inspection, auth cache cleanup, content-type introspection, shell
+integration, and plugin commands were all available, but the vocabulary did not
+always match the user's task.
 
-- first-time users making one request without config
-- daily users who want API-specific commands generated from OpenAPI
-- API integrators managing profiles, auth, specs, and output defaults
-- plugin operators installing trusted workflow extensions
-- maintainers who need a command tree that is easy to document and test
+V2 should use the redesign window to keep the request model familiar while
+making the control surface easier to explain, document, test, and extend.
 
-Job:
-Users should be able to make a request, connect an API, call generated
-operations, manage configuration/auth/cache/plugins, and diagnose problems
-without learning implementation vocabulary.
+## Goals
 
-Previous workaround:
-Users had to infer that `api edit` edited the whole config file, that
-`api clear-auth-cache` was auth management rather than API registration
-management, that global flags were fully discoverable through `--help-all`, and
-that plugin commands such as `mcp` could use their own action vocabulary.
+- Preserve the fast path: `restish https://example.com` and HTTP verb commands
+  still work without setup.
+- Keep registered APIs as top-level command groups so generated OpenAPI
+  operations feel like native CLIs.
+- Separate API registration, local configuration, auth state, cache state,
+  shell integration, and plugins into predictable command families.
+- Make long-running services and workflow extensions use explicit verbs.
+- Keep global Restish request controls discoverable without overwhelming every
+  generated command help page.
+- Treat this document as the stable v2 design decision, not as a changelog.
 
-Pain:
-The pain is discoverability and vocabulary more than missing capability.
-Commands that work correctly can still be hard to remember, hard to document,
-or misleading when their object/action shape does not match the user job.
+## Non-Goals
 
-Outcome:
-The v2 surface should be explainable as:
+- Do not force generated API calls under `restish api call`.
+- Do not remove the `--rsh-*` namespace for Restish-owned request and output
+  flags.
+- Do not preserve every v1 command name when a new object/action shape is
+  clearer before the first v2 release.
+- Do not make this document a full command reference. User-facing reference
+  pages own exact examples and help text.
 
-1. generic HTTP requests work with no setup
-2. connected APIs become top-level native commands
-3. `api` manages API registrations and generated-command inputs
-4. `config` manages local Restish configuration
-5. `api auth` manages API credentials and auth cache
-6. workflow extensions use explicit verbs such as `serve`
+## V1 Baseline
 
-Evidence:
-The current command tree is assembled in `internal/cli/root.go`,
-`internal/cli/api.go`, `internal/cli/generated.go`, plugin command files, and
-the shipped plugin entry points. `internal/cli/command_surface_test.go` captures
-the current map so intentional moves are visible in tests instead of hidden in
-help-output drift.
+V1 exposed three important command categories.
 
-## Previous Command Surface
-
-The previous built-in surface was:
+Generic HTTP requests were immediate:
 
 ```text
-restish
-  <url-or-api-short-name> [...]
-  get|GET <url>
-  head|HEAD <url>
-  options|OPTIONS <url>
-  post|POST <url> [body...]
-  put|PUT <url> [body...]
-  patch|PATCH <url> [body...]
-  delete|DELETE <url>
-
-  api
-    connect <name> <url> [setup-expression ...]
-    list
-    show <name>
-    set <name> <key> <value> | <name> <path:value>
-    edit
-    sync <name>
-    remove <name>
-    clear-auth-cache <name>
-    content-types
-    auth
-      list <api>
-      add <api> <credential-id>
-      remove <api> <credential-id>
-      inspect <api>
-
-  cache
-    info
-    clear [api]
-
-  plugin
-    list
-    install <source>
-    remove <name>
-    debug <name> [args...]
-
-  completion
-    bash
-    zsh
-    fish
-    powershell
-    install <shell>
-
-  setup <shell>
-  theme
-    set <url-or-user/repo> [name]
-
-  cert <uri>
-  doctor
-    api <name>
-    plugin <name>
-    migrate-v1
-  edit <uri> [patch ...]
-  links <uri> [rel...]
-  version
-  help
+restish <url>
+restish get|head|options|post|put|patch|delete <url> [...]
 ```
 
-Generated APIs add:
+API-aware commands were generated from registered OpenAPI descriptions:
 
 ```text
-restish <api>
-  <operation> [required args...] [body...] [operation flags]
-  <tag> <operation> ...  # when command_layout: tags
+restish <api-name> <operation> [required args...] [body...] [operation flags]
+restish <api-name> <tag> <operation> ...  # when operations are grouped
 ```
 
-Shipped command plugins add optional top-level commands:
+The control plane lived mostly under `api`, plus several top-level utilities:
 
 ```text
-restish bulk
-  init URL
-  list|ls
-  status|st
-  diff|di [file...]
-  reset|re [file...]
-  pull|pl
-  push|ps
-
-restish mcp <api...>
+restish api show <name>
+restish api edit
+restish api sync <name>
+restish api clear-auth-cache <name>
+restish api content-types
+restish api auth inspect <api-or-uri>
+restish cert <uri>
+restish edit <uri> [patch ...]
+restish links <uri> [rel...]
+restish completion <shell>
+restish bulk ...
 ```
 
-## Product Decision
+That baseline proved the product model: Restish is both a generic HTTP client
+and an API-specific CLI generator. The weak point was vocabulary. Whole-config
+editing looked like an API operation. Auth cache cleanup looked like API
+registration cleanup. Runtime content-type introspection was nested below API
+management. Shell integration and plugin processes did not have a consistent
+object/action home.
 
-Keep Restish's core request model:
+## Product Principles
 
-- bare URL means GET
-- HTTP verbs remain top-level
-- registered API names remain top-level command groups
-- generated operation flags use ordinary API parameter names
-- Restish-owned request/global flags keep the `--rsh-*` namespace
+The v2 command tree follows these rules.
 
-The control plane changed before v2 ships:
+1. Request execution stays direct.
+   Bare URLs and HTTP verbs are first-class commands because they are the
+   daily path and the easiest way to try Restish.
 
-1. Add `restish config` and move whole-config work there.
-2. Move auth cache clearing under `api auth`.
-3. Add a first-class global flag reference command.
-4. Make the MCP command action explicit with `mcp serve`.
-5. Rehome shell setup under a clearer shell/completion workflow.
+2. Connected APIs become native command groups.
+   A configured API name at the root should feel like installing a small
+   purpose-built CLI for that API.
 
-These are intentional breaking changes. v2 should document the new commands
-directly instead of preserving aliases that make the first stable surface
-larger and less clear.
+3. `api` manages API registrations and generated-command inputs.
+   It owns connecting, listing, inspecting, syncing, removing, API-scoped
+   settings, and API auth configuration.
 
-## Implemented Target Surface
+4. `config` manages local Restish configuration.
+   Whole-file editing, config path discovery, redacted config display,
+   arbitrary config setting, and theme configuration belong here.
+
+5. Auth state lives under `api auth`.
+   Credentials and token cache recovery are part of API authentication, not
+   general API registration management.
+
+6. Runtime utilities are top-level when they describe Restish itself.
+   `content-types`, `flags`, `doctor`, `version`, `cert`, `edit`, and `links`
+   are not API registrations, so they should not be hidden under `api`.
+
+7. Long-running plugin actions use explicit verbs.
+   A command such as `mcp` should expose `serve` rather than doing long-running
+   work from the object command itself.
+
+## V2 Command Surface
+
+The accepted v2 surface is:
 
 ```text
 restish <url-or-api-short-name> [...]
@@ -182,7 +139,7 @@ restish api
 
 restish config
   path
-  show
+  show [--json]
   edit
   set <path:value>
   theme set <source> [name]
@@ -192,6 +149,15 @@ restish cache
   clear [api]
 
 restish content-types
+
+restish flags
+  request
+  output
+  auth
+  tls
+  pagination
+  cache
+  general
 
 restish plugin
   list
@@ -209,15 +175,26 @@ restish doctor [api|plugin|migrate-v1]
 restish cert <uri>
 restish links <uri> [rel...]
 restish edit <uri> [patch ...]
-restish flags
 restish version
 ```
 
-## Exact Changes To Make
+Generated APIs continue to add:
 
-### 1. Add `config` As The Configuration Object
+```text
+restish <api>
+  <operation> [required args...] [body...] [operation flags]
+  <tag> <operation> ...  # when command_layout: tags
+```
 
-Add:
+Shipped command plugins may add their own top-level commands, but their
+subcommands should follow the same object/action rule. For example, `bulk`
+keeps its established verbs because they describe a resource checkout workflow.
+
+## Decisions
+
+### Configuration Is A First-Class Object
+
+V2 adds `restish config` for configuration work:
 
 ```text
 restish config path
@@ -227,49 +204,45 @@ restish config set <path:value>
 restish config theme set <source> [name]
 ```
 
-Changed:
+This replaces the v1 habit of putting whole-config work under `api`. The
+distinction matters because the v2 config file contains APIs, profiles,
+plugins, output defaults, theme settings, and other local state. Users should
+not have to learn that `api edit` opens the entire Restish config.
 
-- `api edit` becomes `config edit`
-- `api set` remains only for API-scoped settings
-- `theme set` becomes `config theme set`
-- `api show <name>` becomes `api inspect <name>`
+`api set` remains for API-scoped settings. `config set` is for arbitrary local
+configuration. `config show --json` redacts sensitive values so it is safer to
+use in bug reports and support conversations.
 
-Rationale:
-`api edit` currently edits the whole config file, not one API. A top-level
-`config` object gives users a predictable place for local state and lets `api`
-stay focused on registrations, specs, profiles, and generated commands.
+### API Inspection Uses `inspect`
 
-Tradeoff:
-This adds a new top-level command, but it removes conceptual overload from
-`api` and `theme`.
-
-### 2. Move Auth Cache Under `api auth`
-
-Add:
+V2 uses:
 
 ```text
-restish api auth clear-cache <api> [--all-profiles]
-restish api auth clear-cache --auth-profile <name>
+restish api inspect <name>
 ```
 
-Remove:
+The word `inspect` is already used for credential and diagnostic workflows. It
+signals "show me the effective details for this object" without implying that
+the output is a raw serialization of the stored config file.
+
+### Auth Cache Recovery Lives With Auth
+
+V2 uses:
 
 ```text
-restish api clear-auth-cache <name>
+restish api auth clear-cache <api>
+restish api auth clear-cache <api> --all-profiles
+restish api auth clear-cache <api> --auth-profile <name>
 ```
 
-Rationale:
-OAuth token cache state is auth state. Keeping it beside `api auth list`,
-`api auth add`, and `api auth inspect` makes the recovery workflow easier to
-find.
+OAuth token cache state is authentication state. Keeping cache recovery beside
+`api auth list`, `api auth add`, and `api auth inspect` makes the workflow
+findable from `restish api auth --help` and avoids overloading the top-level
+`api` object with credential internals.
 
-Tradeoff:
-The new command is longer, but it is semantically placed and easier to
-discover from `restish api auth --help`.
+### Global Flag Discovery Gets Its Own Command
 
-### 3. Add `flags`
-
-Add:
+V2 adds:
 
 ```text
 restish flags
@@ -279,120 +252,136 @@ restish flags auth
 restish flags tls
 restish flags pagination
 restish flags cache
+restish flags general
 ```
 
-Rationale:
-The current `--help-all` mechanism is useful but hidden. A command gives users
-a memorable way to discover the full global surface while allowing root and
-generated operation help to stay focused.
+Global Restish flags are powerful, but generated operation help should stay
+focused on API parameters. `restish flags` gives users a memorable in-CLI
+reference for the full `--rsh-*` surface while allowing ordinary help output to
+remain readable.
 
-Tradeoff:
-This duplicates some docs content, but it puts the reference exactly where CLI
-users look first.
+### MCP Uses An Explicit Service Verb
 
-### 4. Change MCP To `mcp serve`
-
-Add:
+V2 uses:
 
 ```text
 restish mcp serve <api...>
 ```
 
-Reserve:
+MCP starts a long-running protocol server. `serve` says that directly and
+leaves room for future MCP-specific inspection or debugging commands without
+changing the family shape.
+
+### Shell Setup Belongs Under `shell`
+
+V2 uses:
 
 ```text
-restish mcp inspect <api...>
+restish shell setup <shell>
 ```
 
-Remove:
+Shell setup installs integration such as the noglob alias and optional
+completion. The top-level word `setup` sounds like whole-tool setup or API
+setup, so v2 gives the workflow an explicit object.
+
+`completion` remains the low-level command family for printing or installing
+Cobra shell completions.
+
+### Content Types Are A Runtime Utility
+
+V2 uses:
 
 ```text
-restish mcp <api...>
+restish content-types
 ```
 
-Rationale:
-MCP starts a long-running protocol server. Naming the action `serve` is clearer
-than making the object command do work directly, and it leaves room for MCP
-inspection/debugging commands.
+The content-type registry describes what the current Restish runtime can encode
+or decode. It is not a property of a single API registration, so it is a
+top-level utility command.
 
-Tradeoff:
-One extra word in MCP client config, in exchange for a more extensible command
-family.
+## Compatibility And Migration
 
-### 5. Rehome Shell Setup
+Because these decisions land before the first stable v2 release, v2 does not
+need to ship aliases for command names that were not selected for the stable
+surface. The user-facing migration story should compare v1 and v2 directly.
 
-Implemented target:
+Important v1-to-v2 command moves:
 
-```text
-restish shell setup <shell> [--completion]
-```
+| V1 command or habit | V2 command |
+| --- | --- |
+| `api show <name>` | `api inspect <name>` |
+| `api edit` | `config edit` |
+| `api clear-auth-cache <name>` | `api auth clear-cache <name>` |
+| `api content-types` | `content-types` |
+| top-level shell/setup guidance | `shell setup <shell>` plus `completion ...` |
+| direct plugin service command | explicit service verb such as `mcp serve` |
 
-Removed before release:
+The request path is intentionally stable:
 
-```text
-restish setup <shell>
-```
-
-Rationale:
-`setup` sounds like whole-tool setup or API setup. The actual job is shell
-integration: noglob alias plus optional completion.
-
-Tradeoff:
-`restish setup zsh` was short and quickstart-friendly, but the clearer
-object/action shape is worth the extra word before v2 ships.
+- bare URLs still perform GET
+- HTTP verb commands remain at the root
+- generated API commands remain at the root under the API name
+- Restish-owned flags retain the `--rsh-*` namespace
 
 ## Rejected Alternatives
 
 Do not move generated API calls under `restish api call`.
-Generated commands are the product's differentiator: connected APIs should feel
-like native CLIs.
+Generated commands are the product's differentiator. Connected APIs should feel
+like native CLIs, not like records inside an API-management subsystem.
 
-Do not remove `--rsh-*` globally.
-The prefix protects Restish request controls from generated operation parameter
-flags. Short aliases such as `-H`, `-f`, `-o`, `-p`, and `-t` already cover the
-daily path.
+Do not keep every old command name as a documented alias.
+Aliases are valuable after a stable release, but the first v2 surface should be
+smaller, clearer, and easier to teach. Compatibility docs can map v1 habits to
+the v2 names instead.
 
-Do not keep old names as documented aliases for v2's first stable release.
-Aliases are useful after a release, but v2 is still unreleased and should avoid
-shipping avoidable surface area.
+Do not make `flags` a docs-only page.
+The full global flag surface changes with the binary. An in-CLI reference keeps
+the source of truth close to the implementation and helps users who are working
+offline or inside terminals.
 
-## Validation Plan
+Do not hide plugin services behind object commands.
+Long-running processes should be obvious in scripts, editor configs, and MCP
+client settings.
 
-Tests:
+## Testing Plan
 
-- keep `internal/cli/command_surface_test.go` updated with every intentional
-  command move
-- add focused tests for each new command family before removing old commands
-- assert old command names fail once the final v2 breaking change lands
-- cover help output for root, `api`, `api auth`, `config`, `flags`, `mcp`, and
-  generated operation help
+The command surface is product behavior and should be protected by tests.
 
-Docs/help:
+- `internal/cli/command_surface_test.go` maps built-in command families and
+  verifies removed or non-canonical names do not remain accidentally available.
+- Config command tests cover `config path`, `config show`, JSON redaction, and
+  `config set`.
+- MCP tests cover `mcp serve` and reject running the service directly from
+  `mcp <api...>`.
+- Help tests should cover root, `api`, `api auth`, `config`, `flags`, `mcp`,
+  and a generated API operation.
+- Full CLI/plugin changes should pass `go test -tags=integration ./...` before
+  release.
 
-- update `site/content/en/docs/reference/commands.md`
-- update API management, global flags, shell setup, completion, MCP, and config
-  docs
-- ensure quickstart uses `api connect`, `config edit`, `api auth clear-cache`,
-  `mcp serve`, and the chosen shell setup command consistently
+## Documentation Impact
 
-Manual checks:
+User docs should present v2 commands directly, then include a migration guide
+for v1 users. Pages that commonly mention these workflows include:
 
-- `restish --help`
-- `restish flags`
-- `restish api --help`
-- `restish api auth --help`
-- `restish config --help`
-- `restish mcp serve example`
-- one generated API command help page with and without `--help-all`
+- quickstart and API connection guides
+- command reference
+- config and profile docs
+- auth troubleshooting
+- global flags reference
+- shell setup and completion docs
+- MCP/plugin operator docs
+- upgrade-from-v1 guide
+
+Docs should explain the chosen v2 model directly. Upgrading users need a
+concise v1-to-v2 map.
 
 ## Outcome
 
-The implemented v2 surface uses `api inspect`, `config edit`, `config theme
-set`, `api auth clear-cache`, `flags`, `mcp serve`, and `shell setup`.
-`content-types` moved to a top-level utility command because it describes the
-runtime registry rather than API registration state.
+The implemented v2 surface follows this decision. `api` owns API registration
+and API-auth configuration, `config` owns local configuration, `flags` exposes
+global Restish controls, `content-types` is a top-level runtime utility, MCP
+uses `serve`, and shell integration lives under `shell setup`.
 
-`config set` accepts the same key/value and shorthand `path:value` syntax used
-by `api set`, but it does not support append expressions for arbitrary paths.
-`flags` prints plain text grouped like command help; JSON output can be added
-later if a docs-generation or shell-tooling use case appears.
+The resulting command tree keeps the v1 request experience familiar while
+making the control plane more explicit and easier to document before v2 becomes
+stable.
