@@ -15,11 +15,13 @@ import (
 )
 
 type preparedRequest struct {
-	rawURL  string
-	apiName string
-	opts    request.Options
-	body    io.Reader
-	bodyRaw []byte
+	rawURL   string
+	apiName  string
+	opts     request.Options
+	body     io.Reader
+	bodyRaw  []byte
+	closer   io.Closer
+	closerID uint64
 }
 
 func (c *CLI) prepareRequest(
@@ -86,8 +88,11 @@ func (c *CLI) prepareRequest(
 	// Build the transport once so follow-up requests can reuse the same
 	// connection pool via the returned opts value.
 	opts.Transport = request.BuildTransport(opts)
+	var transportCloser io.Closer
+	var transportCloserID uint64
 	if closer, ok := opts.Transport.(io.Closer); ok {
-		c.registerRequestCloser(closer)
+		transportCloser = closer
+		transportCloserID = c.registerRequestCloser(closer)
 	}
 
 	// Chain request-middleware plugins after auth.
@@ -111,11 +116,13 @@ func (c *CLI) prepareRequest(
 	}
 
 	return &preparedRequest{
-		rawURL:  rawURL,
-		apiName: apiName,
-		opts:    opts,
-		body:    body,
-		bodyRaw: bodyRaw,
+		rawURL:   rawURL,
+		apiName:  apiName,
+		opts:     opts,
+		body:     body,
+		bodyRaw:  bodyRaw,
+		closer:   transportCloser,
+		closerID: transportCloserID,
 	}, nil
 }
 
@@ -216,12 +223,13 @@ func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *
 }
 
 func (c *CLI) closePreparedTransport(prepared *preparedRequest) {
-	if prepared == nil || prepared.opts.Transport == nil {
+	if prepared == nil || prepared.closer == nil {
 		return
 	}
-	if closer, ok := prepared.opts.Transport.(io.Closer); ok {
-		_ = closer.Close()
-	}
+	_ = prepared.closer.Close()
+	c.unregisterRequestCloser(prepared.closerID)
+	prepared.closer = nil
+	prepared.closerID = 0
 }
 
 func (c *CLI) normalizeHTTPResponse(httpResp *http.Response, maxBodyBytes int64) (*output.Response, error) {

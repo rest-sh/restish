@@ -29,6 +29,15 @@ func (h testAuthHandler) Authenticate(_ context.Context, req *http.Request, ac a
 
 func (testAuthHandler) SupportsForce() {}
 
+type countingCloser struct {
+	closes int
+}
+
+func (c *countingCloser) Close() error {
+	c.closes++
+	return nil
+}
+
 func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	c := New()
 	c.cfg = &config.Config{
@@ -94,6 +103,25 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	}
 	if got, want := string(body), `{"name":"Alice"}`; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestClosePreparedTransportUnregistersRequestCloser(t *testing.T) {
+	c := New()
+	closer := &countingCloser{}
+	closerID := c.registerRequestCloser(closer)
+
+	c.closePreparedTransport(&preparedRequest{closer: closer, closerID: closerID})
+	if closer.closes != 1 {
+		t.Fatalf("Close calls = %d, want 1", closer.closes)
+	}
+	if len(c.requestClosers) != 0 {
+		t.Fatalf("requestClosers length = %d, want 0", len(c.requestClosers))
+	}
+
+	c.closeRequestClosers()
+	if closer.closes != 1 {
+		t.Fatalf("closeRequestClosers closed unregistered closer again: %d", closer.closes)
 	}
 }
 
