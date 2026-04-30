@@ -49,6 +49,37 @@ func TestVerboseOutputToStderr(t *testing.T) {
 	}
 }
 
+func TestVerboseOutputSortsHeaders(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"X-Zeta":       []string{"last"},
+				"Content-Type": []string{"application/json"},
+				"X-Alpha":      []string{"first"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"msg":"hi"}`)),
+			Request: r,
+		}, nil
+	})
+
+	if err := c.Run([]string{
+		"restish", "get", "-v",
+		"-H", "X-Zeta: last",
+		"-H", "X-Alpha: first",
+		"https://api.example.com/hello",
+	}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	stderr := errOut.String()
+	assertLineOrder(t, stderr, "> X-Alpha: first", "> X-Zeta: last")
+	assertLineOrder(t, stderr, "< Content-Type: application/json", "< X-Alpha: first", "< X-Zeta: last")
+}
+
 // TestNonVerboseOutputClean verifies that without -v, stderr is empty for
 // a successful request.
 func TestNonVerboseOutputClean(t *testing.T) {
@@ -303,5 +334,20 @@ func TestVerboseTLSDetailsNotAtLevel1(t *testing.T) {
 	stderr := errOut.String()
 	if strings.Contains(stderr, "TLS 1.3") {
 		t.Errorf("unexpected TLS details at -v level:\n%s", stderr)
+	}
+}
+
+func assertLineOrder(t *testing.T, text string, lines ...string) {
+	t.Helper()
+	previous := -1
+	for _, line := range lines {
+		index := strings.Index(text, line)
+		if index < 0 {
+			t.Fatalf("expected %q in output:\n%s", line, text)
+		}
+		if index <= previous {
+			t.Fatalf("expected %q after previous line in output:\n%s", line, text)
+		}
+		previous = index
 	}
 }

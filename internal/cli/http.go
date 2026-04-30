@@ -578,7 +578,8 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 		return
 	}
 	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, redactedRequestURL(req.URL))
-	for k, vs := range req.Header {
+	for _, k := range sortedHeaderKeys(req.Header) {
+		vs := req.Header[k]
 		for _, v := range vs {
 			if isSensitiveHeader(k) {
 				v = "<redacted>"
@@ -592,7 +593,8 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 		fmt.Fprintln(c.Stderr, "* Cache: HIT")
 	}
 	fmt.Fprintf(c.Stderr, "< %s %d %s\n", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode))
-	for k, vs := range resp.Header {
+	for _, k := range sortedHeaderKeys(resp.Header) {
+		vs := resp.Header[k]
 		for _, v := range vs {
 			if isSensitiveHeader(k) {
 				v = "<redacted>"
@@ -624,6 +626,15 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 			fmt.Fprintf(c.Stderr, "* %s Expiry: %s (%s)\n", label, cert.NotAfter.Format(time.RFC3339), relativeExpiry(cert.NotAfter))
 		}
 	}
+}
+
+func sortedHeaderKeys(headers http.Header) []string {
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 const verboseBodyLimit = 4096
