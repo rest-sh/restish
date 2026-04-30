@@ -1,0 +1,5 @@
+interface:
+  display_name: "Restish Product"
+  short_description: "Shape Restish features around user value"
+  default_prompt: "Use $rsh-product to shape a Restish CLI feature from product goals through UX checks."
+
