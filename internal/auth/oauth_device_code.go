@@ -58,10 +58,29 @@ func (h *DeviceCode) authenticateRequest(req *http.Request, params map[string]st
 
 func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string, force bool) (string, error) {
 	cacheKey := params["_cache_key"]
-	if !force && h.Cache != nil && cacheKey != "" {
+	if h.Cache != nil && cacheKey != "" {
 		cached, err := h.Cache.Get(cacheKey)
-		if err == nil && cached != nil && !cached.IsExpired() {
-			return cached.AccessToken, nil
+		if err == nil && cached != nil {
+			if !force && !cached.IsExpired() {
+				return cached.AccessToken, nil
+			}
+			if cached.RefreshToken != "" {
+				tokenURL, err := h.resolveTokenURL(ctx, params)
+				if err != nil {
+					return "", err
+				}
+				refreshed, err := h.doRefresh(ctx, params, tokenURL, cached.RefreshToken)
+				if err == nil {
+					_ = h.Cache.Set(cacheKey, refreshed)
+					return refreshed.AccessToken, nil
+				}
+				if h.Stderr != nil {
+					fmt.Fprintf(h.Stderr, "OAuth refresh failed: %v\n", err)
+				}
+				if !isTokenEndpointErrorCode(err, "invalid_grant") {
+					return "", err
+				}
+			}
 		}
 	}
 
@@ -77,6 +96,34 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 		_ = h.Cache.Set(cacheKey, token)
 	}
 	return token.AccessToken, nil
+}
+
+func (h *DeviceCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
+	return refreshOAuthToken(ctx, h.HTTPClient, params, tokenURL, refreshToken)
+}
+
+func (h *DeviceCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
+	if tokenURL := params["token_url"]; tokenURL != "" {
+		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+			return "", err
+		}
+		return tokenURL, nil
+	}
+	issuer := params["issuer_url"]
+	if issuer == "" {
+		return "", fmt.Errorf("oauth-device-code: token_url or issuer_url is required for token refresh")
+	}
+	oidc, err := DiscoverOIDC(ctx, h.HTTPClient, issuer)
+	if err != nil {
+		return "", err
+	}
+	if err := validateOIDCEndpoints(issuer, oidc); err != nil {
+		return "", err
+	}
+	if oidc.TokenEndpoint == "" {
+		return "", fmt.Errorf("oauth-device-code: issuer discovery did not provide token_endpoint")
+	}
+	return oidc.TokenEndpoint, nil
 }
 
 func (h *DeviceCode) resolveEndpoints(ctx context.Context, params map[string]string) (string, string, error) {

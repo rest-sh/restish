@@ -135,18 +135,6 @@ func (c *CommandClient) deliverHTTPResponse(reply HTTPResponseMsg) {
 		if ch, ok := c.pending.Load(reply.RequestID); ok {
 			ch.(chan commandReply) <- commandReply{resp: reply}
 		}
-		return
-	}
-
-	var only chan commandReply
-	count := 0
-	c.pending.Range(func(_, value any) bool {
-		only = value.(chan commandReply)
-		count++
-		return count < 2
-	})
-	if count == 1 {
-		only <- commandReply{resp: reply}
 	}
 }
 

@@ -67,6 +67,7 @@ func (c *CLI) prepareRequest(
 	// a compromised plugin from issuing credentialed requests to arbitrary hosts.
 	if noAuth {
 		opts.OnRequest = nil
+		opts.OnUnauthorized = nil
 		filtered := opts.Headers[:0]
 		for _, h := range opts.Headers {
 			name, _, _ := strings.Cut(h, ":")
@@ -204,7 +205,13 @@ func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *
 
 	retryOpts := cloneRequestOptions(prepared.opts)
 	retryOpts.Transport = prepared.opts.Transport
-	retryOpts.OnRequest = retryOpts.OnUnauthorized
+	onUnauthorized := retryOpts.OnUnauthorized
+	retryOpts.OnRequest = func(req *http.Request) error {
+		if err := onUnauthorized(req); err != nil {
+			return err
+		}
+		return c.runRequestMiddlewarePlugins(req)
+	}
 	return request.Do(ctx, method, prepared.rawURL, bodyReader(), retryOpts)
 }
 

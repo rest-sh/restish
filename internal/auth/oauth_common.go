@@ -399,13 +399,32 @@ func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 		"authorize_url": true,
 		"cache_key":     true,
 		"issuer_url":    true,
-		"redirect_port": true,
-		"token_url":     true,
+		// TODO(openapi-3.2): use oauth2_metadata_url for RFC 8414 metadata
+		// discovery in place of, or alongside, issuer_url.
+		"oauth2_metadata_url": true,
+		"redirect_port":       true,
+		"token_url":           true,
 	}) {
 		if form.Get(key) == "" {
 			form.Set(key, value)
 		}
 	}
+}
+
+func refreshOAuthToken(ctx context.Context, client *http.Client, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {params["client_id"]},
+	}
+	token, err := FetchToken(ctx, client, tokenURL, form, params)
+	if err != nil {
+		return CachedToken{}, err
+	}
+	if token.RefreshToken == "" {
+		token.RefreshToken = refreshToken
+	}
+	return token, nil
 }
 
 func extraOAuthParams(params map[string]string, reserved map[string]bool) map[string]string {

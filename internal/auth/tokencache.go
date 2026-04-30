@@ -50,6 +50,11 @@ func NewTokenCache(path string) *TokenCache {
 func (c *TokenCache) Get(key string) (*CachedToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	lock, err := configpkg.LockSiblingFile(c.path)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Close()
 	m, err := c.load()
 	if err != nil {
 		return nil, err

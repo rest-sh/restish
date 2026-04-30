@@ -381,8 +381,12 @@ func authMutationKey(ac *config.AuthConfig) string {
 		default:
 			return ""
 		}
-	case "http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code":
+	case "bearer", "http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code":
 		return "header:authorization"
+	case "external-tool":
+		// External tools may return complete header/query mutations, so the
+		// mutation target is not knowable from config alone.
+		return ""
 	default:
 		return ""
 	}
@@ -392,14 +396,14 @@ func uniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
-	out := values[:0]
-	var prev string
-	for i, value := range values {
-		if i > 0 && value == prev {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
 			continue
 		}
+		seen[value] = struct{}{}
 		out = append(out, value)
-		prev = value
 	}
 	return out
 }

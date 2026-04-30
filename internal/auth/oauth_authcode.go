@@ -200,19 +200,7 @@ func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[str
 }
 
 func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
-	form := url.Values{
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {refreshToken},
-		"client_id":     {params["client_id"]},
-	}
-	token, err := FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
-	if err != nil {
-		return CachedToken{}, err
-	}
-	if token.RefreshToken == "" {
-		token.RefreshToken = refreshToken
-	}
-	return token, nil
+	return refreshOAuthToken(ctx, h.HTTPClient, params, tokenURL, refreshToken)
 }
 
 func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string]string, authorizeURL, tokenURL string) (CachedToken, error) {
@@ -236,49 +224,6 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		port = defaultRedirectPort
 	}
 	redirectURI := "http://localhost:" + port + "/"
-
-	// Start local callback server.
-	ln, err := net.Listen("tcp", "localhost:"+port)
-	if err != nil {
-		return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
-	}
-
-	codeCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" && r.URL.Path != "/callback" {
-			http.NotFound(w, r)
-			return
-		}
-
-		q := r.URL.Query()
-		if q.Get("state") != state {
-			http.Error(w, "state mismatch", http.StatusBadRequest)
-			trySendErr(errCh, fmt.Errorf("state mismatch in callback"))
-			return
-		}
-		code := q.Get("code")
-		if code == "" {
-			http.Error(w, "missing code", http.StatusBadRequest)
-			trySendErr(errCh, fmt.Errorf("no code in callback"))
-			return
-		}
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, "<html><body><h2>Authentication successful</h2><p>You can close this tab.</p></body></html>")
-		codeCh <- code
-	})}
-
-	go func() {
-		if e := srv.Serve(ln); e != nil && e != http.ErrServerClosed {
-			trySendErr(errCh, e)
-		}
-	}()
-	defer func() {
-		ctx2, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx2)
-	}()
 
 	// Build authorization URL.
 	q := url.Values{
@@ -341,6 +286,45 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		}
 		code = strings.TrimSpace(promptCode)
 	} else {
+		codeCh := make(chan string, 1)
+		errCh := make(chan error, 1)
+		ln, err := net.Listen("tcp", "localhost:"+port)
+		if err != nil {
+			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
+		}
+		srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/" && r.URL.Path != "/callback" {
+				http.NotFound(w, r)
+				return
+			}
+
+			q := r.URL.Query()
+			if q.Get("state") != state {
+				http.Error(w, "state mismatch", http.StatusBadRequest)
+				trySendErr(errCh, fmt.Errorf("state mismatch in callback"))
+				return
+			}
+			code := q.Get("code")
+			if code == "" {
+				http.Error(w, "missing code", http.StatusBadRequest)
+				trySendErr(errCh, fmt.Errorf("no code in callback"))
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, "<html><body><h2>Authentication successful</h2><p>You can close this tab.</p></body></html>")
+			codeCh <- code
+		})}
+		go func() {
+			if e := srv.Serve(ln); e != nil && e != http.ErrServerClosed {
+				trySendErr(errCh, e)
+			}
+		}()
+		defer func() {
+			ctx2, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(ctx2)
+		}()
+
 		select {
 		case code = <-codeCh:
 		case err = <-errCh:

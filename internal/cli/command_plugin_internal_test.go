@@ -94,8 +94,8 @@ func TestRunCommandPluginReturnsOnContextCancellation(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("runCommandPlugin error = %v, want context canceled", err)
+		if err == nil || !strings.Contains(err.Error(), "command plugin restish-block canceled") {
+			t.Fatalf("runCommandPlugin error = %v, want plugin cancellation message", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("runCommandPlugin did not return after context cancellation")

@@ -207,6 +207,51 @@ func TestPlanOperationAuthRejectsCredentialMutationConflict(t *testing.T) {
 	}
 }
 
+func TestPlanOperationAuthRejectsBearerAuthorizationConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		auth *config.AuthConfig
+	}{
+		{
+			name: "http-basic",
+			auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{
+				"username": "u",
+				"password": "p",
+			}},
+		},
+		{
+			name: "oauth2",
+			auth: &config.AuthConfig{Type: "oauth-client-credentials", Params: map[string]string{
+				"client_id":     "id",
+				"client_secret": "secret",
+				"token_url":     "https://auth.example.com/token",
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &CLI{}
+			prof := &config.ProfileConfig{
+				Credentials: map[string]*config.CredentialConfig{
+					"Bearer": {Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "abc"}}},
+					"Other":  {Auth: tc.auth},
+				},
+			}
+			policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{{
+				{ID: "Bearer"},
+				{ID: "Other"},
+			}}}
+
+			_, _, err := c.planOperationAuth("svc", "default", prof, policy)
+			if err == nil {
+				t.Fatal("expected credential mutation conflict")
+			}
+			if !strings.Contains(err.Error(), "both write header:authorization") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestOperationAuthCallbacksForceCapableUnauthorizedRetry(t *testing.T) {
 	c := New()
 	handler := &forceRecordingAuth{}

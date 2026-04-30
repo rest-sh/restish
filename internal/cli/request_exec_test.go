@@ -27,6 +27,8 @@ func (h testAuthHandler) Authenticate(_ context.Context, req *http.Request, ac a
 	return h.OnRequest(req, ac.Params)
 }
 
+func (testAuthHandler) SupportsForce() {}
+
 func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	c := New()
 	c.cfg = &config.Config{
@@ -156,6 +158,9 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "" {
 		t.Fatalf("Authorization header = %q, want empty", got)
+	}
+	if prepared.opts.OnUnauthorized != nil {
+		t.Fatal("OnUnauthorized should be nil when noAuth strips credentials")
 	}
 }
 

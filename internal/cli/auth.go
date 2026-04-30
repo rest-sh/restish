@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -233,14 +234,16 @@ func (c *CLI) resolveAuthParam(value string) (string, error) {
 }
 
 func (c *CLI) runSecretCommand(commandLine string) (string, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
+	shell, flag := os.Getenv("SHELL"), "-c"
+	if runtime.GOOS == "windows" {
+		shell, flag = "cmd", "/c"
+	} else if shell == "" {
 		shell = "/bin/sh"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, shell, "-c", commandLine)
+	cmd := exec.CommandContext(ctx, shell, flag, commandLine)
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &stderr, limit: 4096}
 	out, err := cmd.Output()
@@ -344,7 +347,7 @@ func redactDiagnosticAssignment(value, marker string) string {
 				end++
 			}
 			value = value[:start] + "***" + value[end:]
-			lower = strings.ToLower(value)
+			lower = lower[:start] + "***" + lower[end:]
 			searchFrom = start + len("***")
 		}
 	}

@@ -32,6 +32,34 @@ func TestWriteAndReadCache(t *testing.T) {
 	}
 }
 
+func TestWriteCacheUsesAtomicReplacement(t *testing.T) {
+	dir := t.TempDir()
+	entry := &cacheEntry{
+		Version:     "v2",
+		FetchedAt:   time.Now(),
+		ExpiresAt:   time.Now().Add(time.Hour),
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "spec-*.tmp"))
+	if err != nil {
+		t.Fatalf("Glob: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary cache files left behind: %v", matches)
+	}
+	info, err := os.Stat(filepath.Join(dir, "testapi.cbor"))
+	if err != nil {
+		t.Fatalf("stat cache: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("cache mode = %v, want 0600", got)
+	}
+}
+
 func TestWriteCacheRejectsUnsafeAPIName(t *testing.T) {
 	entry := &cacheEntry{
 		Version:     "v2",

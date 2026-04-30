@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -118,7 +119,8 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	cmd.SetErr(syncErr)
 
 	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
-	proc.Stderr = cmd.ErrOrStderr()
+	var pluginStderr bytes.Buffer
+	proc.Stderr = io.MultiWriter(cmd.ErrOrStderr(), &limitedWriter{w: &pluginStderr, limit: 4096})
 
 	stdinPipe, err := proc.StdinPipe()
 	if err != nil {
@@ -181,7 +183,11 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		raw, err := dec.ReadRaw()
 		if err != nil {
 			if ctxErr := cmd.Context().Err(); ctxErr != nil {
-				loopErr = ctxErr
+				if excerpt := strings.TrimSpace(pluginStderr.String()); excerpt != "" {
+					loopErr = fmt.Errorf("command plugin %s canceled: stderr: %s", filepath.Base(pluginPath), redactDiagnosticSecretText(excerpt))
+				} else {
+					loopErr = fmt.Errorf("command plugin %s canceled", filepath.Base(pluginPath))
+				}
 			} else if isEOFLike(err) {
 				loopErr = fmt.Errorf("command plugin %s: process died unexpectedly", filepath.Base(pluginPath))
 			} else {
