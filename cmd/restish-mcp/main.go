@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/rest-sh/restish/v2/plugin"
@@ -48,8 +49,15 @@ func main() {
 	cfg, err := ParseArgs(args)
 	if err == nil {
 		var tools []*Tool
-		tools, err = LoadTools(client.fetchSpecSync, cfg.APINames, cfg.Options)
+		var stats ToolLoadStats
+		tools, stats, err = LoadToolsWithStats(client.fetchSpecSync, cfg.APINames, cfg.Options)
 		if err == nil {
+			if stats.HiddenWriteOperations > 0 {
+				_ = plugin.WriteMessage(os.Stdout, plugin.StderrDataMsg{
+					Type: plugin.MsgTypeStderrData,
+					Data: []byte(fmt.Sprintf("mcp: hid %d write operation(s); pass --allow-write-tools to expose POST, PUT, PATCH, and DELETE\n", stats.HiddenWriteOperations)),
+				})
+			}
 			go client.readLoop()
 			server := &Server{
 				Tools:          tools,
@@ -172,9 +180,15 @@ func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {
 		reply plugin.HTTPResponseMsg
 		ok    bool
 	)
+	var timeout <-chan time.Time
+	if d := mcpTimeoutDuration(req.Timeout); d > 0 {
+		timeout = time.After(d)
+	}
 	select {
 	case reply, ok = <-replyCh:
 	case reply, ok = <-c.httpRespCh:
+	case <-timeout:
+		return nil, fmt.Errorf("HTTP request %s timed out after %ds", requestID, req.Timeout)
 	}
 	if !ok {
 		return nil, io.EOF

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/pb33f/libopenapi"
@@ -79,6 +80,10 @@ type Options struct {
 	AllowWriteTools bool
 	MaxResultBytes  int
 	RequestTimeout  int
+}
+
+type ToolLoadStats struct {
+	HiddenWriteOperations int
 }
 
 type Server struct {
@@ -175,33 +180,47 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 }
 
 func LoadTools(fetchSpec SpecFetcher, apiNames []string, opts Options) ([]*Tool, error) {
+	tools, _, err := LoadToolsWithStats(fetchSpec, apiNames, opts)
+	return tools, err
+}
+
+func LoadToolsWithStats(fetchSpec SpecFetcher, apiNames []string, opts Options) ([]*Tool, ToolLoadStats, error) {
 	multiAPI := len(apiNames) > 1
 	var tools []*Tool
+	var stats ToolLoadStats
 	for _, apiName := range apiNames {
 		s, err := fetchSpec(apiName)
 		if err != nil {
-			return nil, err
+			return nil, stats, err
 		}
-		apiTools, err := toolsFromSpec(apiName, multiAPI, s, opts)
+		apiTools, apiStats, err := toolsFromSpecWithStats(apiName, multiAPI, s, opts)
 		if err != nil {
-			return nil, err
+			return nil, stats, err
 		}
 		tools = append(tools, apiTools...)
+		stats.HiddenWriteOperations += apiStats.HiddenWriteOperations
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-	return tools, nil
+	return tools, stats, nil
 }
 
 func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*Tool, error) {
+	tools, _, err := toolsFromSpecWithStats(apiName, multiAPI, s, opts)
+	return tools, err
+}
+
+func toolsFromSpecWithStats(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*Tool, ToolLoadStats, error) {
 	if len(s.Operations) > 0 {
-		return toolsFromOperations(apiName, multiAPI, s.Operations, opts), nil
+		tools, stats := toolsFromOperations(apiName, multiAPI, s.Operations, opts)
+		return tools, stats, nil
 	}
 	model, err := s.Document.BuildV3Model()
 	if err != nil || model == nil || model.Model.Paths == nil {
-		return nil, fmt.Errorf("building OpenAPI model for %q: %w", apiName, err)
+		return nil, ToolLoadStats{}, fmt.Errorf("building OpenAPI model for %q: %w", apiName, err)
 	}
 
 	var tools []*Tool
+	var stats ToolLoadStats
 	for path, pathItem := range model.Model.Paths.PathItems.FromOldest() {
 		for _, item := range spec.PathItemMethods(pathItem) {
 			if item.Op == nil || item.Op.OperationId == "" {
@@ -211,6 +230,9 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 				continue
 			}
 			if !mcpMethodAllowed(item.Method, opts) {
+				if mcpWriteMethod(item.Method) && !opts.AllowWriteTools {
+					stats.HiddenWriteOperations++
+				}
 				continue
 			}
 			if len(opts.Operations) > 0 && !opts.Operations[item.Op.OperationId] {
@@ -218,21 +240,25 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 			}
 			tool, err := buildTool(apiName, multiAPI, path, item.Method, pathItem.Parameters, item.Op)
 			if err != nil {
-				return nil, err
+				return nil, stats, err
 			}
 			tools = append(tools, tool)
 		}
 	}
-	return tools, nil
+	return tools, stats, nil
 }
 
-func toolsFromOperations(apiName string, multiAPI bool, ops []plugin.APIOperation, opts Options) []*Tool {
+func toolsFromOperations(apiName string, multiAPI bool, ops []plugin.APIOperation, opts Options) ([]*Tool, ToolLoadStats) {
 	var tools []*Tool
+	var stats ToolLoadStats
 	for _, op := range ops {
 		if op.ID == "" || op.MCPIgnore {
 			continue
 		}
 		if !mcpMethodAllowed(op.Method, opts) {
+			if mcpWriteMethod(op.Method) && !opts.AllowWriteTools {
+				stats.HiddenWriteOperations++
+			}
 			continue
 		}
 		if len(opts.Operations) > 0 && !opts.Operations[op.ID] {
@@ -240,7 +266,7 @@ func toolsFromOperations(apiName string, multiAPI bool, ops []plugin.APIOperatio
 		}
 		tools = append(tools, buildToolFromOperation(apiName, multiAPI, op))
 	}
-	return tools
+	return tools, stats
 }
 
 func mcpMethodAllowed(method string, opts Options) bool {
@@ -251,12 +277,26 @@ func mcpMethodAllowed(method string, opts Options) bool {
 	if opts.AllowWriteTools {
 		return true
 	}
-	switch upper {
-	case "POST", "PUT", "PATCH", "DELETE":
+	if mcpWriteMethod(upper) {
 		return false
-	default:
-		return true
 	}
+	return true
+}
+
+func mcpWriteMethod(method string) bool {
+	switch strings.ToUpper(method) {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpTimeoutDuration(seconds int) time.Duration {
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperation) *Tool {

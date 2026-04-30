@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/rest-sh/restish/v2/plugin"
@@ -119,6 +120,14 @@ func TestToolsFromSpecSkipsWriteOperationsByDefault(t *testing.T) {
 	}
 	if strings.Join(names, ",") != "listItems,optionsItems" {
 		t.Fatalf("tools = %v, want listItems and optionsItems", names)
+	}
+
+	_, stats, err := toolsFromSpecWithStats("demo", false, s, Options{})
+	if err != nil {
+		t.Fatalf("toolsFromSpecWithStats: %v", err)
+	}
+	if stats.HiddenWriteOperations != 4 {
+		t.Fatalf("HiddenWriteOperations = %d, want 4", stats.HiddenWriteOperations)
 	}
 }
 
@@ -258,6 +267,23 @@ func TestPluginClientSendsHTTPRequestTimeout(t *testing.T) {
 	}
 	if got := msg.Timeout; got != 9 {
 		t.Fatalf("Timeout = %d, want 9", got)
+	}
+}
+
+func TestPluginClientHTTPRequestTimesOutLocally(t *testing.T) {
+	var out bytes.Buffer
+	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &out)
+
+	start := time.Now()
+	_, err := client.do(&HTTPRequest{Method: "GET", URI: "demo/items", Timeout: 1})
+	if err == nil {
+		t.Fatal("expected local timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out after 1s") {
+		t.Fatalf("unexpected timeout error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("local timeout took too long: %v", elapsed)
 	}
 }
 
