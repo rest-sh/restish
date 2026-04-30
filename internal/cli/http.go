@@ -70,7 +70,10 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 			Aliases: []string{method},
 			Short:   v.short,
 			GroupID: rootGroupHTTP,
-			Args:    cobra.MinimumNArgs(1),
+			Annotations: map[string]string{
+				requestHelpAnnotation: "true",
+			},
+			Args: cobra.MinimumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.runHTTP(cmd, method, args)
 			},

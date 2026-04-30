@@ -9,6 +9,7 @@ import (
 )
 
 const rshFlagGroupAnnotation = "restish-flag-group"
+const requestHelpAnnotation = "restish-request-help"
 
 const (
 	flagGroupRequest   = "Request Options"
@@ -78,6 +79,11 @@ var defaultFlagGroups = map[string]string{
 	"version":     flagGroupGeneral,
 }
 
+var defaultInheritedHelpFlags = map[string]bool{
+	"rsh-config":  true,
+	"rsh-verbose": true,
+}
+
 const groupedUsageTemplate = `Usage:{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
@@ -98,7 +104,7 @@ Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCo
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}{{with rshFlagUsages .LocalFlags}}
 
 Flags:
-{{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasAvailableInheritedFlags}}{{with rshFlagUsages .InheritedFlags}}
+{{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasAvailableInheritedFlags}}{{with rshInheritedFlagUsages . .InheritedFlags}}
 
 Global Flags:
 {{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasHelpSubCommands}}
@@ -125,6 +131,7 @@ Flags:
 func setupGroupedUsage(root *cobra.Command) {
 	addHelpTemplateFuncsOnce.Do(func() {
 		cobra.AddTemplateFunc("rshFlagUsages", groupedFlagUsages)
+		cobra.AddTemplateFunc("rshInheritedFlagUsages", groupedInheritedFlagUsages)
 	})
 	root.SetUsageTemplate(groupedUsageTemplate)
 }
@@ -182,4 +189,41 @@ func flagGroupFor(flag *pflag.Flag) string {
 		return group
 	}
 	return flagGroupUngrouped
+}
+
+func groupedInheritedFlagUsages(cmd *cobra.Command, flags *pflag.FlagSet) string {
+	if flags == nil {
+		return ""
+	}
+	if showAllInheritedFlags(cmd) {
+		return groupedFlagUsages(flags)
+	}
+	filtered := pflag.NewFlagSet("", pflag.ContinueOnError)
+	filtered.SortFlags = flags.SortFlags
+	flags.VisitAll(func(flag *pflag.Flag) {
+		if flag.Hidden || !defaultInheritedHelpFlags[flag.Name] {
+			return
+		}
+		filtered.AddFlag(flag)
+	})
+	if !filtered.HasAvailableFlags() {
+		return ""
+	}
+	return groupedFlagUsages(filtered)
+}
+
+func showAllInheritedFlags(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	if helpAll, err := cmd.Flags().GetBool("help-all"); err == nil && helpAll {
+		return true
+	}
+	if cmd.Parent() == nil {
+		return true
+	}
+	if cmd.Annotations != nil && cmd.Annotations[requestHelpAnnotation] == "true" {
+		return true
+	}
+	return false
 }

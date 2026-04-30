@@ -69,6 +69,57 @@ func TestHelp(t *testing.T) {
 	}
 }
 
+func TestHelpHidesRequestFlagsForNonRequestCommands(t *testing.T) {
+	for _, args := range [][]string{
+		{"restish", "setup", "--help"},
+		{"restish", "plugin", "--help"},
+		{"restish", "cache", "--help"},
+		{"restish", "api", "list", "--help"},
+		{"restish", "api", "remove", "--help"},
+		{"restish", "theme", "--help"},
+	} {
+		c, out, _ := newTestCLI(t)
+		if err := c.Run(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		got := out.String()
+		for _, hidden := range []string{"--rsh-header", "--rsh-output-format", "--rsh-no-paginate", "--rsh-insecure"} {
+			if strings.Contains(got, hidden) {
+				t.Fatalf("%v should omit request global %s by default:\n%s", args, hidden, got)
+			}
+		}
+		for _, visible := range []string{"--rsh-config", "--rsh-verbose"} {
+			if !strings.Contains(got, visible) {
+				t.Fatalf("%v should keep core global %s visible:\n%s", args, visible, got)
+			}
+		}
+	}
+}
+
+func TestRequestHelpShowsRequestFlagsAndHelpAllExpandsNonRequestHelp(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "get", "--help"}); err != nil {
+		t.Fatalf("get --help: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"--rsh-header", "--rsh-output-format", "--rsh-no-paginate"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("request help should show %s:\n%s", want, got)
+		}
+	}
+
+	c, out, _ = newTestCLI(t)
+	if err := c.Run([]string{"restish", "setup", "--help-all", "--help"}); err != nil {
+		t.Fatalf("setup --help-all --help: %v", err)
+	}
+	got = out.String()
+	for _, want := range []string{"--rsh-header", "--rsh-output-format", "--rsh-no-paginate"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("help-all should show %s:\n%s", want, got)
+		}
+	}
+}
+
 func TestBootstrapCommandsIgnoreInvalidConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name string

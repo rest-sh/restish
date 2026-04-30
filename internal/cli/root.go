@@ -149,6 +149,8 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Int("rsh-max-items", 0, "Maximum number of items to collect across all pages (0 = unlimited)")
 	pf.Int("rsh-max-body-size", 0, fmt.Sprintf("Maximum response body size in MiB (0 = default %d MiB)", output.DefaultMaxBodyBytes/(1024*1024)))
 	pf.String("rsh-config", "", "Path to the restish config file (overrides RSH_CONFIG and the platform default)")
+	pf.Bool("help-all", false, "Show all inherited Restish flags in help")
+	_ = pf.MarkHidden("help-all")
 
 	c.registerFlagCompletions(root)
 }
