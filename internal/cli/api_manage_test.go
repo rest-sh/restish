@@ -34,9 +34,9 @@ func specWithXCLIConfig(baseURL string) string {
 }`, baseURL)
 }
 
-// TestAPIConfigure verifies that "api configure" fetches the spec, reads
+// TestAPIConnect verifies that "api connect" fetches the spec, reads
 // x-cli-config, and writes a config file with the pre-populated fields.
-func TestAPIConfigure(t *testing.T) {
+func TestAPIConnect(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 
 	c, out, _ := newTestCLI(t)
@@ -71,8 +71,8 @@ func TestAPIConfigure(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 
 	if !strings.Contains(out.String(), "myapi") {
@@ -103,7 +103,7 @@ func TestAPIConfigure(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
+func TestAPIConnectFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{"components":{"schemas":{"Thing":{"type":"object"}}},"info":{"title":"Managed API","version":"1.0"},"paths":{"/things":{"get":{"operationId":"list-things","responses":{"200":{"description":"OK"}}}}},"openapi":"3.1.0"}`
 
@@ -131,18 +131,18 @@ func TestAPIConfigureFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "example", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "example", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	if strings.Contains(out.String(), "no spec found") {
 		t.Fatalf("expected spec to be found, got: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "spec loaded") {
-		t.Fatalf("expected spec loaded message, got: %q", out.String())
+	if !strings.Contains(out.String(), "operations discovered") {
+		t.Fatalf("expected discovered operations message, got: %q", out.String())
 	}
 }
 
-func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
+func TestAPIConnectAllowCrossOriginSpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 
 	c, _, _ := newTestCLI(t)
@@ -177,8 +177,8 @@ func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com", "--allow-cross-origin-spec"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--allow-cross-origin-spec"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -194,7 +194,7 @@ func TestAPIConfigureAllowCrossOriginSpec(t *testing.T) {
 	}
 }
 
-func TestAPIConfigurePreservesExistingProfilesByDefault(t *testing.T) {
+func TestAPIConnectPreservesExistingProfilesByDefault(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
@@ -242,13 +242,13 @@ func TestAPIConfigurePreservesExistingProfilesByDefault(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("first api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("first api connect: %v", err)
 	}
 
 	currentHeader = "Accept: application/vnd.api+json"
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("second api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("second api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -260,7 +260,7 @@ func TestAPIConfigurePreservesExistingProfilesByDefault(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureReplaceRefreshesProfiles(t *testing.T) {
+func TestAPIConnectReplaceRefreshesProfiles(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
@@ -308,13 +308,13 @@ func TestAPIConfigureReplaceRefreshesProfiles(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("first api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("first api connect: %v", err)
 	}
 
 	currentHeader = "Accept: application/vnd.api+json"
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com", "--replace"}); err != nil {
-		t.Fatalf("second api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--replace"}); err != nil {
+		t.Fatalf("second api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -326,7 +326,7 @@ func TestAPIConfigureReplaceRefreshesProfiles(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
+func TestAPIConnectLegacyXCLIConfigPrompt(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{
   "openapi": "3.1.0",
@@ -383,11 +383,11 @@ func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	if !strings.Contains(stderr.String(), "Client identifier") || !strings.Contains(stderr.String(), "Organization") {
-		t.Fatalf("expected configure-time prompts, got stderr %q", stderr.String())
+		t.Fatalf("expected connect-time prompts, got stderr %q", stderr.String())
 	}
 
 	written, err := config.Load(cfgFile)
@@ -415,7 +415,7 @@ func TestAPIConfigureLegacyXCLIConfigPrompt(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
+func TestAPIConnectRetriesInvalidXCLIPromptInput(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{
   "openapi": "3.1.0",
@@ -456,8 +456,8 @@ func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	errText := stderr.String()
 	if !strings.Contains(errText, "environment is required; please enter a non-empty value.") {
@@ -476,7 +476,7 @@ func TestAPIConfigureRetriesInvalidXCLIPromptInput(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureXCLIConfigCredentialPrompt(t *testing.T) {
+func TestAPIConnectXCLIConfigCredentialPrompt(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{
   "openapi": "3.1.0",
@@ -525,8 +525,8 @@ func TestAPIConfigureXCLIConfigCredentialPrompt(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	if !strings.Contains(stderr.String(), "Partner API key") {
 		t.Fatalf("expected credential prompt, got stderr %q", stderr.String())
@@ -548,7 +548,7 @@ func TestAPIConfigureXCLIConfigCredentialPrompt(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureV2ProfilePromptShape(t *testing.T) {
+func TestAPIConnectV2ProfilePromptShape(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{
   "openapi": "3.1.0",
@@ -600,8 +600,8 @@ func TestAPIConfigureV2ProfilePromptShape(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -976,7 +976,7 @@ func TestAPISetServerVariables(t *testing.T) {
 	}
 
 	if err := c.Run([]string{"restish", "api", "set", "myapi", `server_variables.env: undefined`, `profiles.staging.server_variables.version: undefined`}); err != nil {
-		t.Fatalf("api delete server variables: %v", err)
+		t.Fatalf("api remove server variables: %v", err)
 	}
 	written, err = config.Load(cfgFile)
 	if err != nil {
@@ -1111,13 +1111,13 @@ func TestAPISetMixedShorthandPreservesComments(t *testing.T) {
 	}
 }
 
-func TestAPIAddWithShorthand(t *testing.T) {
+func TestAPIConnectWithShorthand(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "add", "myapi", "https://api.example.com", `profiles.default.auth.type: "http-basic"`}); err != nil {
-		t.Fatalf("api add shorthand: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--no-discover", `profiles.default.auth.type: "http-basic"`}); err != nil {
+		t.Fatalf("api connect shorthand: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -1132,13 +1132,13 @@ func TestAPIAddWithShorthand(t *testing.T) {
 	}
 }
 
-func TestAPIAddCreatesMissingConfigFile(t *testing.T) {
+func TestAPIConnectCreatesMissingConfigFile(t *testing.T) {
 	cfgFile := filepath.Join(t.TempDir(), "restish.json")
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "add", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api add: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -1150,16 +1150,16 @@ func TestAPIAddCreatesMissingConfigFile(t *testing.T) {
 	}
 }
 
-func TestAPIAddNormalizesSchemelessURL(t *testing.T) {
+func TestAPIConnectNormalizesSchemelessURL(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "add", "remote", "api.example.com"}); err != nil {
-		t.Fatalf("api add remote: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "remote", "api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect remote: %v", err)
 	}
-	if err := c.Run([]string{"restish", "api", "add", "local", "localhost:8080"}); err != nil {
-		t.Fatalf("api add local: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "local", "localhost:8080", "--no-discover"}); err != nil {
+		t.Fatalf("api connect local: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -1174,7 +1174,66 @@ func TestAPIAddNormalizesSchemelessURL(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureSetupExpressions(t *testing.T) {
+func TestAPIConnectNoDiscoverPerformsNoNetworkDiscovery(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request during --no-discover: %s", r.URL)
+		return nil, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect --no-discover: %v", err)
+	}
+	if !strings.Contains(out.String(), "discovery skipped") {
+		t.Fatalf("expected discovery skipped summary, got %q", out.String())
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url = %q", got)
+	}
+}
+
+func TestAPIConnectSpecLocalFile(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specFile := filepath.Join(t.TempDir(), "openapi.json")
+	if err := os.WriteFile(specFile, []byte(`{
+		"openapi":"3.1.0",
+		"info":{"title":"Local","version":"1.0"},
+		"paths":{"/items":{"get":{"operationId":"list-items","responses":{"200":{"description":"OK"}}}}}
+	}`), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request for local --spec: %s", r.URL)
+		return nil, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--spec", specFile}); err != nil {
+		t.Fatalf("api connect --spec file: %v", err)
+	}
+	if !strings.Contains(out.String(), "1 operations discovered") {
+		t.Fatalf("expected operation count in summary, got %q", out.String())
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if got := written.APIs["myapi"].SpecFiles; !reflect.DeepEqual(got, []string{specFile}) {
+		t.Fatalf("spec_files = %#v, want %q", got, specFile)
+	}
+}
+
+func TestAPIConnectSetupExpressions(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
   "openapi": "3.1.0",
@@ -1219,12 +1278,12 @@ func TestAPIConfigureSetupExpressions(t *testing.T) {
 	})
 
 	if err := c.Run([]string{
-		"restish", "api", "configure", "myapi", "api.example.com",
+		"restish", "api", "connect", "myapi", "api.example.com",
 		`prompt.client_id: abc123`,
 		`prompt.token: secret-token`,
 		`profiles.default.headers[]: "X-Env: prod"`,
 	}); err != nil {
-		t.Fatalf("api configure: %v", err)
+		t.Fatalf("api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -1246,7 +1305,7 @@ func TestAPIConfigureSetupExpressions(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
+func TestAPIConnectFallbackAPIKeySetup(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
   "openapi": "3.1.0",
@@ -1284,10 +1343,10 @@ func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
 	})
 
 	if err := c.Run([]string{
-		"restish", "api", "configure", "myapi", "api.example.com",
+		"restish", "api", "connect", "myapi", "api.example.com",
 		`prompt.value: secret-key`,
 	}); err != nil {
-		t.Fatalf("api configure: %v", err)
+		t.Fatalf("api connect: %v", err)
 	}
 
 	written, err := config.Load(cfgFile)
@@ -1303,7 +1362,7 @@ func TestAPIConfigureFallbackAPIKeySetup(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFallbackHTTPBasicPromptsCredentials(t *testing.T) {
+func TestAPIConnectFallbackHTTPBasicPromptsCredentials(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
   "openapi": "3.1.0",
@@ -1340,8 +1399,8 @@ func TestAPIConfigureFallbackHTTPBasicPromptsCredentials(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	if !strings.Contains(stderr.String(), "Username:") || !strings.Contains(stderr.String(), "Password:") {
 		t.Fatalf("expected basic auth prompts, got stderr %q", stderr.String())
@@ -1360,7 +1419,7 @@ func TestAPIConfigureFallbackHTTPBasicPromptsCredentials(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
+func TestAPIConnectFallbackMultiCredentialSetup(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
   "openapi": "3.1.0",
@@ -1406,10 +1465,10 @@ func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
 	})
 
 	if err := c.Run([]string{
-		"restish", "api", "configure", "myapi", "api.example.com",
+		"restish", "api", "connect", "myapi", "api.example.com",
 		`prompt.credentials.PartnerKey.value: partner-secret`,
 	}); err != nil {
-		t.Fatalf("api configure: %v", err)
+		t.Fatalf("api connect: %v", err)
 	}
 	if !strings.Contains(out.String(), "Auth coverage") {
 		t.Fatalf("expected coverage summary, got %q", out.String())
@@ -1428,7 +1487,7 @@ func TestAPIConfigureFallbackMultiCredentialSetup(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFallbackAuthDiscoveryFlow(t *testing.T) {
+func TestAPIConnectFallbackAuthDiscoveryFlow(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
   "openapi": "3.1.0",
@@ -1494,8 +1553,8 @@ func TestAPIConfigureFallbackAuthDiscoveryFlow(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "example", "api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "example", "api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	outText := out.String()
 	for _, want := range []string{
@@ -1548,7 +1607,7 @@ func TestAPIConfigureFallbackAuthDiscoveryFlow(t *testing.T) {
 	}
 }
 
-func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
+func TestAPIConnectPreservesJSONCComments(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   // Existing APIs
   "apis": {
@@ -1590,11 +1649,11 @@ func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api configure: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 	if !strings.Contains(out.String(), "myapi") {
-		t.Fatalf("expected configure output, got %q", out.String())
+		t.Fatalf("expected connect output, got %q", out.String())
 	}
 
 	data, err := os.ReadFile(cfgFile)
@@ -1610,7 +1669,7 @@ func TestAPIConfigurePreservesJSONCComments(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureDoesNotOverwriteInvalidConfig(t *testing.T) {
+func TestAPIConnectDoesNotOverwriteInvalidConfig(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	invalid := "{\n  \"apis\": {\n"
 	if err := os.WriteFile(cfgFile, []byte(invalid), 0o644); err != nil {
@@ -1621,9 +1680,9 @@ func TestAPIConfigureDoesNotOverwriteInvalidConfig(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 
-	err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"})
+	err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"})
 	if err == nil {
-		t.Fatal("expected api configure to fail for invalid config")
+		t.Fatal("expected api connect to fail for invalid config")
 	}
 	if !strings.Contains(err.Error(), "invalid config") {
 		t.Fatalf("expected invalid config error, got: %v", err)
@@ -1638,7 +1697,20 @@ func TestAPIConfigureDoesNotOverwriteInvalidConfig(t *testing.T) {
 	}
 }
 
-func TestAPIDeletePreservesJSONCComments(t *testing.T) {
+func TestAPIConnectRejectsRemovedCommandNames(t *testing.T) {
+	for _, args := range [][]string{
+		{"restish", "api", "add", "myapi", "https://api.example.com"},
+		{"restish", "api", "configure", "myapi", "https://api.example.com"},
+		{"restish", "api", "delete", "myapi"},
+	} {
+		c, _, _ := newTestCLI(t)
+		if err := c.Run(args); err == nil {
+			t.Fatalf("%v: expected unknown command error", args)
+		}
+	}
+}
+
+func TestAPIRemovePreservesJSONCComments(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {
     // Keep this API
@@ -1654,11 +1726,11 @@ func TestAPIDeletePreservesJSONCComments(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "delete", "remove"}); err != nil {
-		t.Fatalf("api delete: %v", err)
+	if err := c.Run([]string{"restish", "api", "remove", "remove"}); err != nil {
+		t.Fatalf("api remove: %v", err)
 	}
-	if !strings.Contains(out.String(), "Deleted API") {
-		t.Fatalf("expected delete output, got %q", out.String())
+	if !strings.Contains(out.String(), "Removed API") {
+		t.Fatalf("expected remove output, got %q", out.String())
 	}
 
 	data, err := os.ReadFile(cfgFile)

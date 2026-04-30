@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,18 +12,22 @@ import (
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
-// TestAPIAddBuiltinNameRejected verifies that "api add" refuses names that
+// TestAPIConnectBuiltinNameRejected verifies that "api connect" refuses names that
 // collide with top-level built-in commands (e.g. "api", "get", "post").
-func TestAPIAddBuiltinNameRejected(t *testing.T) {
+func TestAPIConnectBuiltinNameRejected(t *testing.T) {
 	for _, name := range []string{"api", "get", "post", "cache", "edit"} {
-		c := &CLI{}
-		err := c.runAPIAdd(nil, []string{name, "https://example.com"})
+		var stdout, stderr bytes.Buffer
+		c := New()
+		c.Stdout = &stdout
+		c.Stderr = &stderr
+		c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+		err := c.Run([]string{"restish", "api", "connect", name, "https://example.com", "--no-discover"})
 		if err == nil {
-			t.Errorf("runAPIAdd(%q): expected error, got nil", name)
+			t.Errorf("api connect %q: expected error, got nil", name)
 			continue
 		}
 		if !strings.Contains(err.Error(), "conflicts with a built-in command") {
-			t.Errorf("runAPIAdd(%q): unexpected error: %v", name, err)
+			t.Errorf("api connect %q: unexpected error: %v", name, err)
 		}
 	}
 }

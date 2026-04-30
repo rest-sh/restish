@@ -119,8 +119,8 @@ func TestExplicitConfigFlagWritesSelectedFile(t *testing.T) {
 	c.Stdin = strings.NewReader("")
 	c.Stdout = &stdout
 	c.Stderr = &stderr
-	if err := c.Run([]string{"restish", "--rsh-config", cfgPath, "api", "add", "myapi", "https://api.example.com"}); err != nil {
-		t.Fatalf("api add: %v", err)
+	if err := c.Run([]string{"restish", "--rsh-config", cfgPath, "api", "connect", "myapi", "https://api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect: %v", err)
 	}
 
 	cfg, err := config.Load(cfgPath)

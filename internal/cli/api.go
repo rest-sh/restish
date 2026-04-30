@@ -22,6 +22,12 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Use:     "api",
 		Short:   "Manage registered API configurations",
 		GroupID: rootGroupConfig,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown api command %q", args[0])
+			}
+			return cmd.Help()
+		},
 	}
 	clearAuthCmd := &cobra.Command{
 		Use:   "clear-auth-cache <name>",
@@ -40,10 +46,10 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runAPIList,
 	})
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "delete <name>",
+		Use:   "remove <name>",
 		Short: "Remove a configured API",
 		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIDelete,
+		RunE:  c.runAPIRemove,
 	})
 	syncCmd := &cobra.Command{
 		Use:   "sync <name>",
@@ -53,21 +59,17 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host for this sync run")
 	apiCmd.AddCommand(syncCmd)
-	apiCmd.AddCommand(&cobra.Command{
-		Use:   "add <name> <url> [path:value ...]",
-		Short: "Register a new API quickly; optional shorthand expressions set nested fields",
+	connectCmd := &cobra.Command{
+		Use:   "connect <name> <url> [setup-expression ...]",
+		Short: "Connect Restish to an API and discover generated commands",
 		Args:  cobra.MinimumNArgs(2),
-		RunE:  c.runAPIAdd,
-	})
-	configureCmd := &cobra.Command{
-		Use:   "configure <name> <url> [setup-expression ...]",
-		Short: "Register an API and pre-populate config from its OpenAPI spec",
-		Args:  cobra.MinimumNArgs(2),
-		RunE:  c.runAPIConfigure,
+		RunE:  c.runAPIConnect,
 	}
-	configureCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
-	configureCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
-	apiCmd.AddCommand(configureCmd)
+	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
+	connectCmd.Flags().Bool("no-discover", false, "Register the API locally without network spec discovery")
+	connectCmd.Flags().String("spec", "", "OpenAPI spec URL or local file to use instead of discovery")
+	connectCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
+	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "show <name>",
 		Short: "Print the config for a registered API as JSON",
@@ -189,66 +191,24 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (c *CLI) runAPIAdd(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
-	baseURL, err := normalizeAPIBaseURL(args[1])
-	if err != nil {
-		return err
-	}
-
-	if isBuiltinCommandName(apiName) {
-		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
-	}
-	if c.cfg == nil {
-		return fmt.Errorf("config not loaded")
-	}
-	if c.cfg.APIs == nil {
-		c.cfg.APIs = map[string]*config.APIConfig{}
-	}
-	if _, exists := c.cfg.APIs[apiName]; exists {
-		return fmt.Errorf("API %q already exists", apiName)
-	}
-
-	work, err := cloneConfig(c.cfg)
-	if err != nil {
-		return err
-	}
-	if work.APIs == nil {
-		work.APIs = map[string]*config.APIConfig{}
-	}
-	work.APIs[apiName] = &config.APIConfig{BaseURL: baseURL}
-
-	exprs, err := parseAPISetExpressions(args[2:])
-	if err != nil {
-		return err
-	}
-	ops, err := c.buildAPIPatchOperations(work, apiName, exprs)
-	if err != nil {
-		return err
-	}
-	ops = append([]config.ConfigPatchOperation{{Path: []string{"apis", apiName}, Value: work.APIs[apiName]}}, ops...)
-
-	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
-		return err
-	}
-	c.cfg = work
-	return nil
-}
-
-// runAPIConfigure creates or updates the config entry for an API, pre-populating
+// runAPIConnect creates or updates the config entry for an API, pre-populating
 // it from the API's OpenAPI spec x-cli-config extension if available.
-func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
+func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	baseURL, err := normalizeAPIBaseURL(args[1])
 	if err != nil {
 		return err
 	}
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+	noDiscover, _ := cmd.Flags().GetBool("no-discover")
+	explicitSpec, _ := cmd.Flags().GetString("spec")
 	replaceProfiles, _ := cmd.Flags().GetBool("replace")
 	promptAnswers, setupExprs, err := parseAPIConfigureSetupExpressions(args[2:])
 	if err != nil {
 		return err
+	}
+	if noDiscover && explicitSpec != "" {
+		return fmt.Errorf("--no-discover cannot be used with --spec")
 	}
 
 	if isBuiltinCommandName(apiName) {
@@ -265,26 +225,32 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		existingAPI = cfg.APIs[apiName]
 	}
 
-	// Run spec discovery with the supplied base URL (no existing config needed).
-	discCfg := spec.DiscoverConfig{
-		APIName:          apiName,
-		BaseURL:          baseURL,
-		CacheDir:         c.specCacheDir(),
-		ServerVariables:  nil,
-		Version:          Version,
-		Transport:        c.baseHTTPTransport(),
-		AllowCrossOrigin: allowCrossOrigin,
-		ForceRefresh:     true,
-	}
-	apiSpec, discoverErr := spec.Discover(requestContext(cmd), discCfg, c.loaders)
-	if discoverErr != nil && !errors.Is(discoverErr, spec.ErrNoSpecFound) {
-		return fmt.Errorf("discovering API spec for %q: %w", apiName, discoverErr)
-	}
-
 	// Build the API config entry.
 	apiCfg := &config.APIConfig{
 		BaseURL:              baseURL,
 		AllowCrossOriginSpec: allowCrossOrigin,
+	}
+	applyExplicitSpec(apiCfg, explicitSpec)
+
+	var apiSpec *spec.APISpec
+	if !noDiscover {
+		discCfg := spec.DiscoverConfig{
+			APIName:          apiName,
+			BaseURL:          baseURL,
+			SpecURL:          apiCfg.SpecURL,
+			SpecFiles:        apiCfg.SpecFiles,
+			CacheDir:         c.specCacheDir(),
+			ServerVariables:  nil,
+			Version:          Version,
+			Transport:        c.baseHTTPTransport(),
+			AllowCrossOrigin: allowCrossOrigin,
+			ForceRefresh:     true,
+		}
+		discovered, discoverErr := spec.Discover(requestContext(cmd), discCfg, c.loaders)
+		if discoverErr != nil && !errors.Is(discoverErr, spec.ErrNoSpecFound) {
+			return fmt.Errorf("discovering API spec for %q: %w", apiName, discoverErr)
+		}
+		apiSpec = discovered
 	}
 	if apiSpec != nil {
 		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
@@ -352,11 +318,36 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stdout, "Preserved existing profile(s): %s (use --replace to recreate from discovered defaults)\n", strings.Join(preservedProfiles, ", "))
 	}
 	if apiSpec != nil {
-		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (spec loaded — run 'restish %s --help')\n", apiName, baseURL, apiName)
+		opCount := connectedOperationCount(apiSpec, apiCfg)
+		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (%d operations discovered — run 'restish %s --help')\n", apiName, baseURL, opCount, apiName)
+	} else if noDiscover {
+		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (discovery skipped — run 'restish api sync %s' later)\n", apiName, baseURL, apiName)
 	} else {
-		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
+		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
 	}
 	return nil
+}
+
+func applyExplicitSpec(apiCfg *config.APIConfig, raw string) {
+	if raw == "" {
+		return
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		apiCfg.SpecURL = raw
+		return
+	}
+	apiCfg.SpecFiles = []string{raw}
+}
+
+func connectedOperationCount(apiSpec *spec.APISpec, apiCfg *config.APIConfig) int {
+	if apiSpec == nil {
+		return 0
+	}
+	ops, err := apiSpec.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+	if err != nil {
+		return 0
+	}
+	return len(ops)
 }
 
 func preservedProfileNames(existingAPI *config.APIConfig, replace bool) []string {
@@ -1811,8 +1802,8 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runAPIDelete removes a configured API and saves the updated config.
-func (c *CLI) runAPIDelete(cmd *cobra.Command, args []string) error {
+// runAPIRemove removes a configured API and saves the updated config.
+func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
@@ -1826,6 +1817,6 @@ func (c *CLI) runAPIDelete(cmd *cobra.Command, args []string) error {
 	} else if err := config.Save(cfgPath, c.cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Deleted API %q\n", apiName)
+	fmt.Fprintf(c.Stdout, "Removed API %q\n", apiName)
 	return nil
 }

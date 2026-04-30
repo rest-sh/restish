@@ -186,7 +186,7 @@ func TestSpecDiscoveryViaWellKnownPath(t *testing.T) {
 	}
 }
 
-func TestAPIConfigureFailsOnMalformedDiscoveredSpec(t *testing.T) {
+func TestAPIConnectFailsOnMalformedDiscoveredSpec(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -202,16 +202,16 @@ func TestAPIConfigureFailsOnMalformedDiscoveredSpec(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "api", "configure", "bad", "https://api.example.com"})
+	err := c.Run([]string{"restish", "api", "connect", "bad", "https://api.example.com"})
 	if err == nil {
-		t.Fatal("expected malformed discovered spec to fail configure")
+		t.Fatal("expected malformed discovered spec to fail connect")
 	}
 	if !strings.Contains(err.Error(), "discovering API spec") {
 		t.Fatalf("expected discovery error context, got %v", err)
 	}
 }
 
-func TestAPIConfigureAllowsTrueNoSpec(t *testing.T) {
+func TestAPIConnectAllowsTrueNoSpec(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -224,8 +224,8 @@ func TestAPIConfigureAllowsTrueNoSpec(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "configure", "nospec", "https://api.example.com"}); err != nil {
-		t.Fatalf("configure should allow no spec: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "nospec", "https://api.example.com"}); err != nil {
+		t.Fatalf("connect should allow no spec: %v", err)
 	}
 	if !strings.Contains(out.String(), "no spec found") {
 		t.Fatalf("expected no spec message, got %q", out.String())
