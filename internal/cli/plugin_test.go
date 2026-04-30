@@ -313,7 +313,7 @@ func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
-	err := c.Run([]string{"restish", "plugin", "install", source})
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", source})
 	if err == nil {
 		t.Fatal("expected invalid plugin install to fail")
 	}
@@ -332,7 +332,7 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
-	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", testPluginBin}); err != nil {
 		t.Fatalf("plugin install: %v", err)
 	}
 	if !strings.Contains(out.String(), "Installed plugin") {
@@ -340,6 +340,26 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "trusted executables") {
 		t.Fatalf("expected trust warning, got:\n%s", errOut.String())
+	}
+}
+
+func TestPluginInstallRequiresYesNonInteractive(t *testing.T) {
+	skipNoPlugin(t)
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	err := c.Run([]string{"restish", "plugin", "install", testPluginBin})
+	if err == nil {
+		t.Fatal("expected plugin install without --yes to fail noninteractively")
+	}
+	if !strings.Contains(err.Error(), "confirmation required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "Capabilities:") {
+		t.Fatalf("expected trust summary before confirmation, got:\n%s", errOut.String())
 	}
 }
 
@@ -365,7 +385,7 @@ func TestPluginInstallFromPath(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
-	if err := c.Run([]string{"restish", "plugin", "install", "restish-testplugin"}); err != nil {
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "restish-testplugin"}); err != nil {
 		t.Fatalf("plugin install from PATH: %v", err)
 	}
 	if !strings.Contains(out.String(), "Installed plugin restish-testplugin") {
@@ -403,7 +423,7 @@ func TestPluginInstallFromGitHubShorthand(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "plugin", "install", "acme/tools:testplugin"}); err != nil {
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "acme/tools:testplugin"}); err != nil {
 		t.Fatalf("plugin install from github shorthand: %v", err)
 	}
 	if !sawGitHubAPI || !sawDownload {
@@ -438,7 +458,7 @@ func TestPluginInstallFromURLArchive(t *testing.T) {
 		return testHTTPResponse(404, "text/plain", []byte("not found")), nil
 	})
 
-	if err := c.Run([]string{"restish", "plugin", "install", "https://downloads.example/" + archiveName}); err != nil {
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "https://downloads.example/" + archiveName}); err != nil {
 		t.Fatalf("plugin install from URL archive: %v", err)
 	}
 	if !strings.Contains(out.String(), "Installed plugin restish-testplugin") {

@@ -58,12 +58,14 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Args:  cobra.NoArgs,
 		RunE:  c.runPluginList,
 	})
-	pluginCmd.AddCommand(&cobra.Command{
+	installCmd := &cobra.Command{
 		Use:   "install <source>",
 		Short: "Install a plugin from a path, URL, PATH command, or GitHub release",
 		Args:  cobra.ExactArgs(1),
 		RunE:  c.runPluginInstall,
-	})
+	}
+	installCmd.Flags().Bool("yes", false, "Trust and install without an interactive confirmation")
+	pluginCmd.AddCommand(installCmd)
 	pluginCmd.AddCommand(&cobra.Command{
 		Use:   "remove <name>",
 		Short: "Remove an installed plugin",
@@ -92,11 +94,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 
 	for _, p := range plugins {
 		m := p.Manifest
-		hooks := strings.Join(m.Hooks, ", ")
-		if hooks == "" {
-			hooks = "(none)"
-		}
-		fmt.Fprintf(c.Stdout, "%-20s %-10s hooks: %s\n", m.Name, m.Version, hooks)
+		fmt.Fprintf(c.Stdout, "%-20s %-10s capabilities: %s\n", m.Name, m.Version, pluginCapabilitySummary(m))
 		if m.Description != "" {
 			fmt.Fprintf(c.Stdout, "  %s\n", m.Description)
 		}
@@ -114,12 +112,45 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 	if resolved.Cleanup != nil {
 		defer resolved.Cleanup()
 	}
+	manifest, err := plugin.LoadManifestWithWarnings(resolved.Path, diagnosticPrefixWriter(c.Stderr))
+	if err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+	fmt.Fprintf(c.Stderr, "Plugin source: %s\n", args[0])
+	fmt.Fprintf(c.Stderr, "Resolved path: %s\n", resolved.Path)
+	fmt.Fprintf(c.Stderr, "Manifest: %s %s\n", manifest.Name, manifest.Version)
+	fmt.Fprintf(c.Stderr, "Capabilities: %s\n", pluginCapabilitySummary(*manifest))
+	yes, _ := cmd.Flags().GetBool("yes")
+	if !yes {
+		ok, err := c.Confirm(cmd.Context(), "Install and trust this plugin? [y/N] ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("install: confirmation required; rerun with --yes for automation")
+		}
+	}
 	if err := c.installResolvedPlugin(resolved); err != nil {
 		return err
 	}
 	c.warnf("installed plugins are trusted executables and may run arbitrary code on future restish invocations")
 	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", resolved.Name)
 	return nil
+}
+
+func pluginCapabilitySummary(m plugin.Manifest) string {
+	var caps []string
+	caps = append(caps, m.Hooks...)
+	if len(m.FormatterNames) > 0 {
+		caps = append(caps, "formatter("+strings.Join(m.FormatterNames, ",")+")")
+	}
+	if len(m.LoaderContentTypes) > 0 {
+		caps = append(caps, "loader("+strings.Join(m.LoaderContentTypes, ",")+")")
+	}
+	if len(caps) == 0 {
+		return "(none)"
+	}
+	return strings.Join(caps, ", ")
 }
 
 type resolvedPluginInstallSource struct {
