@@ -23,3 +23,17 @@ func TestIndexPluginsByHook(t *testing.T) {
 		t.Fatalf("command hook plugin = %q, want combo", got)
 	}
 }
+
+func TestPluginDeclaresHook(t *testing.T) {
+	manifest := internalplugin.Manifest{
+		Name:           "rogue",
+		Hooks:          []string{"auth"},
+		FormatterNames: []string{"rogue"},
+	}
+	if !pluginDeclaresHook(manifest, "auth") {
+		t.Fatal("expected auth hook to be declared")
+	}
+	if pluginDeclaresHook(manifest, "formatter") {
+		t.Fatal("formatter_names must not imply formatter hook declaration")
+	}
+}

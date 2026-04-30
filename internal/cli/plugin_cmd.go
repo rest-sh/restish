@@ -141,10 +141,10 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 func pluginCapabilitySummary(m plugin.Manifest) string {
 	var caps []string
 	caps = append(caps, m.Hooks...)
-	if len(m.FormatterNames) > 0 {
+	if pluginDeclaresHook(m, "formatter") && len(m.FormatterNames) > 0 {
 		caps = append(caps, "formatter("+strings.Join(m.FormatterNames, ",")+")")
 	}
-	if len(m.LoaderContentTypes) > 0 {
+	if pluginDeclaresHook(m, "loader") && len(m.LoaderContentTypes) > 0 {
 		caps = append(caps, "loader("+strings.Join(m.LoaderContentTypes, ",")+")")
 	}
 	if len(caps) == 0 {

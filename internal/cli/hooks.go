@@ -34,6 +34,15 @@ func indexPluginsByHook(plugins []plugin.Plugin) map[string][]plugin.Plugin {
 	return indexed
 }
 
+func pluginDeclaresHook(manifest plugin.Manifest, hook string) bool {
+	for _, declared := range manifest.Hooks {
+		if declared == hook {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 	if opts.TLSSignerName == "" || opts.TLSSignerPath != "" {
 		return opts, nil

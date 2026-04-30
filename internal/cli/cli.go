@@ -336,14 +336,16 @@ func (c *CLI) Run(args []string) error {
 
 	// Register plugin-provided formatters and loaders.
 	for _, p := range c.plugins {
-		for _, name := range p.Manifest.FormatterNames {
-			c.formatters[name] = &output.PluginFormatter{
-				PluginPath: p.Path,
-				FormatName: name,
-				Context:    ctx,
+		if pluginDeclaresHook(p.Manifest, "formatter") {
+			for _, name := range p.Manifest.FormatterNames {
+				c.formatters[name] = &output.PluginFormatter{
+					PluginPath: p.Path,
+					FormatName: name,
+					Context:    ctx,
+				}
 			}
 		}
-		if len(p.Manifest.LoaderContentTypes) > 0 {
+		if pluginDeclaresHook(p.Manifest, "loader") && len(p.Manifest.LoaderContentTypes) > 0 {
 			c.loaders = append(c.loaders, spec.PluginLoader{
 				PluginPath:   p.Path,
 				PluginName:   p.Manifest.Name,

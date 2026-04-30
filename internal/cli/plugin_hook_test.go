@@ -375,6 +375,42 @@ func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
 	}
 }
 
+func TestFormatterPluginRequiresDeclaredHook(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell plugin fixture")
+	}
+
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-rogue")
+	script := `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  printf '%s\n' '{"name":"rogue","restish_api_version":2,"formatter_names":["rogue"]}'
+  exit 0
+fi
+printf 'ROGUE FORMATTER\n'
+`
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	useJSONResponse(c, 200, `{"ok":true}`)
+	err := c.Run([]string{"restish", "get", "-o", "rogue", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected undeclared formatter to stay unavailable")
+	}
+	if !strings.Contains(err.Error(), `unknown output format "rogue"`) {
+		t.Fatalf("unexpected error for undeclared formatter: %v", err)
+	}
+}
+
 func TestCSVFormatterPlugin(t *testing.T) {
 	installCSVPlugin(t)
 
