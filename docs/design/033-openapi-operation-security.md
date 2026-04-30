@@ -567,6 +567,12 @@ restish --rsh-profile prod api configure example https://api.example.com \
 The exact grammar should follow existing `api configure` and `api set` behavior,
 but values land under the selected profile's `credentials`.
 
+When `api configure` is rerun for an existing API, local profiles are treated as
+user-owned state. By default, Restish should refresh discovery/spec metadata and
+may add newly discovered profile names, but it must not overwrite a profile that
+already exists in local config. Users who want to recreate profile setup from
+OpenAPI and `x-cli-config` hints must opt in with `--replace`.
+
 ## `x-cli-config`
 
 Standard OpenAPI remains the source of truth for auth schemes and operation

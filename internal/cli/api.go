@@ -66,6 +66,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runAPIConfigure,
 	}
 	configureCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
+	configureCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
 	apiCmd.AddCommand(configureCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "show <name>",
@@ -244,6 +245,7 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+	replaceProfiles, _ := cmd.Flags().GetBool("replace")
 	promptAnswers, setupExprs, err := parseAPIConfigureSetupExpressions(args[2:])
 	if err != nil {
 		return err
@@ -251,6 +253,16 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 
 	if isBuiltinCommandName(apiName) {
 		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
+	}
+
+	cfgPath := c.configFilePath()
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	var existingAPI *config.APIConfig
+	if cfg.APIs != nil {
+		existingAPI = cfg.APIs[apiName]
 	}
 
 	// Run spec discovery with the supplied base URL (no existing config needed).
@@ -287,34 +299,42 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 		}
 		if xcli != nil {
 			xcli = xcli.Normalize()
+			if !replaceProfiles {
+				removeExistingXCLIProfiles(xcli, existingAPI)
+			}
 			if !fallbackXCLI {
 				if err := c.promptXCLIConfig(requestContext(cmd), xcli, promptAnswers); err != nil {
 					return err
 				}
 			}
-			c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
-			if fallbackXCLI {
-				if err := c.configureFallbackAuth(requestContext(cmd), apiCfg, discovery, promptAnswers); err != nil {
-					return err
+			if len(xcli.Profiles) > 0 {
+				c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
+				if fallbackXCLI {
+					if err := c.configureFallbackAuth(requestContext(cmd), apiCfg, discovery, promptAnswers); err != nil {
+						return err
+					}
 				}
-			} else {
-				c.printAuthCoverage("default", discovery, configuredCredentials(apiCfg, "default"))
 			}
 		}
 	}
+	if !replaceProfiles {
+		if err := preserveExistingProfiles(apiCfg, existingAPI); err != nil {
+			return err
+		}
+	}
+	preservedProfiles := preservedProfileNames(existingAPI, replaceProfiles)
 	if len(setupExprs) > 0 {
 		work := &config.Config{APIs: map[string]*config.APIConfig{apiName: apiCfg}}
 		if _, err := c.buildAPIPatchOperations(work, apiName, setupExprs); err != nil {
 			return err
 		}
 	}
+	if apiSpec != nil {
+		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
+		c.printAuthCoverage("default", discovery, configuredCredentials(apiCfg, "default"))
+	}
 
 	// Load, update, and save the config.
-	cfgPath := c.configFilePath()
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return err
-	}
 	if cfg.APIs == nil {
 		cfg.APIs = make(map[string]*config.APIConfig)
 	}
@@ -327,12 +347,69 @@ func (c *CLI) runAPIConfigure(cmd *cobra.Command, args []string) error {
 	} else if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
+	c.cfg = cfg
+	if len(preservedProfiles) > 0 {
+		fmt.Fprintf(c.Stdout, "Preserved existing profile(s): %s (use --replace to recreate from discovered defaults)\n", strings.Join(preservedProfiles, ", "))
+	}
 	if apiSpec != nil {
 		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (spec loaded — run 'restish %s --help')\n", apiName, baseURL, apiName)
 	} else {
 		fmt.Fprintf(c.Stdout, "Configured API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
 	}
 	return nil
+}
+
+func preservedProfileNames(existingAPI *config.APIConfig, replace bool) []string {
+	if replace || existingAPI == nil || len(existingAPI.Profiles) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(existingAPI.Profiles))
+	for name := range existingAPI.Profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func removeExistingXCLIProfiles(xcli *spec.XCLIConfig, existingAPI *config.APIConfig) {
+	if xcli == nil || len(xcli.Profiles) == 0 || existingAPI == nil || len(existingAPI.Profiles) == 0 {
+		return
+	}
+	for name := range existingAPI.Profiles {
+		delete(xcli.Profiles, name)
+	}
+}
+
+func preserveExistingProfiles(apiCfg, existingAPI *config.APIConfig) error {
+	if apiCfg == nil || existingAPI == nil || len(existingAPI.Profiles) == 0 {
+		return nil
+	}
+	existing, err := cloneAPIConfig(existingAPI)
+	if err != nil {
+		return err
+	}
+	if apiCfg.Profiles == nil {
+		apiCfg.Profiles = map[string]*config.ProfileConfig{}
+	}
+	for name, profile := range existing.Profiles {
+		apiCfg.Profiles[name] = profile
+	}
+	return nil
+}
+
+func cloneAPIConfig(src *config.APIConfig) (*config.APIConfig, error) {
+	if src == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+	var dst config.APIConfig
+	if err := json.Unmarshal(data, &dst); err != nil {
+		return nil, err
+	}
+	return &dst, nil
 }
 
 func normalizeAPIBaseURL(raw string) (string, error) {

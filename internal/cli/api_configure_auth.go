@@ -138,7 +138,6 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 	if len(supported) > 1 && !configuredGlobalScheme(d.schemes, configured) {
 		prof.Auth = nil
 	}
-	c.printAuthCoverage("default", d, configured)
 	return nil
 }
 
