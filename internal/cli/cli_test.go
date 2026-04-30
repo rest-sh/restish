@@ -46,6 +46,16 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestVersionCommand(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "version"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "2.0.0") {
+		t.Errorf("expected version output to contain '2.0.0', got: %q", out.String())
+	}
+}
+
 func TestHelp(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
@@ -56,6 +66,60 @@ func TestHelp(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected help output to contain %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestBootstrapCommandsIgnoreInvalidConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "help flag", args: []string{"restish", "--help"}},
+		{name: "help command", args: []string{"restish", "help"}},
+		{name: "version flag", args: []string{"restish", "--version"}},
+		{name: "version command", args: []string{"restish", "version"}},
+		{name: "completion", args: []string{"restish", "completion", "bash"}},
+		{name: "setup help", args: []string{"restish", "setup", "--help"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":`), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			if err := c.Run(tc.args); err != nil {
+				t.Fatalf("%v returned error with invalid config: %v", tc.args, err)
+			}
+		})
+	}
+}
+
+func TestDoctorReportsInvalidConfigWithoutFailing(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte("{\n  \"apiss\": {}\n}"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor"}); err != nil {
+		t.Fatalf("doctor returned error with invalid config: %v", err)
+	}
+	got := errOut.String()
+	if !strings.Contains(got, "Config parse: invalid") ||
+		!strings.Contains(got, c.Hooks().ConfigPath) ||
+		!strings.Contains(got, "did you mean \"apis\"") {
+		t.Fatalf("unexpected doctor output:\n%s", got)
+	}
+}
+
+func TestBuiltInAPINameFailsAtConfigLoad(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"get":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	err := c.Run([]string{"restish", "get", "https://api.example.com"})
+	if err == nil {
+		t.Fatal("expected built-in API name to fail config load")
+	}
+	if !strings.Contains(err.Error(), `API name "get" conflicts`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

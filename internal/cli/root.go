@@ -66,10 +66,25 @@ commands for registered APIs via OpenAPI 3.`,
 	c.addSetupCommand(root)
 	c.addLinksCommand(root)
 	c.addThemeCommand(root)
+	c.addVersionCommand(root)
+	c.addDoctorCommand(root)
 	c.addPluginCommand(root)
 	c.addCommandPlugins(root)
 	c.setupMarkdownHelp(root)
 	return root
+}
+
+func (c *CLI) addVersionCommand(root *cobra.Command) {
+	root.AddCommand(&cobra.Command{
+		Use:     "version",
+		Short:   "Print the Restish version",
+		GroupID: rootGroupUtility,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(c.Stdout, Version)
+			return nil
+		},
+	})
 }
 
 func addRootCommandGroups(root *cobra.Command) {

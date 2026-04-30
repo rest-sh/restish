@@ -301,6 +301,11 @@ func (c *CLI) Run(args []string) error {
 
 	cfg, err := c.loadConfig()
 	if err != nil {
+		if isBootstrapCommand(args) {
+			c.cfg = &config.Config{}
+			root := c.newRootCmd()
+			return c.executeRoot(ctx, root, args)
+		}
 		return err
 	}
 	if insecure, permErr := config.ConfigFileHasInsecurePermissions(c.configFilePath()); permErr == nil && insecure {
@@ -315,6 +320,11 @@ func (c *CLI) Run(args []string) error {
 	}
 	if err := output.SetTheme(output.ThemeEntries(cfg.Theme)); err != nil {
 		return fmt.Errorf("config theme: %w", err)
+	}
+	for apiName := range cfg.APIs {
+		if isBuiltinCommandName(apiName) {
+			return fmt.Errorf("config: API name %q conflicts with a built-in command; rename it before continuing", apiName)
+		}
 	}
 
 	// Discover hook plugins at startup; warn about broken plugins so users
@@ -343,13 +353,6 @@ func (c *CLI) Run(args []string) error {
 	}
 
 	root := c.newRootCmd()
-
-	// Warn about any configured API names that shadow built-in commands.
-	for apiName := range cfg.APIs {
-		if isBuiltinCommandName(apiName) {
-			c.warnf("API name %q shadows a built-in command and will not be reachable as a subcommand", apiName)
-		}
-	}
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
@@ -390,16 +393,71 @@ func (c *CLI) Run(args []string) error {
 	}
 	c.addAPIShortNameCommands(root, cfg)
 
-	root.SetArgs(args[1:])
-	root.SetOut(c.Stdout)
-	root.SetErr(c.Stderr)
-	err = root.ExecuteContext(ctx)
+	err = c.executeRoot(ctx, root, args)
 	// When the context was cancelled by a signal (SIGINT/SIGTERM), return
 	// ExitCodeError{130} so main exits with 130 without printing any extra message.
 	if isSignalCancellation(err, ctx) {
 		return &ExitCodeError{Code: 130}
 	}
 	return err
+}
+
+func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		root.SetArgs(args[1:])
+	}
+	root.SetOut(c.Stdout)
+	root.SetErr(c.Stderr)
+	return root.ExecuteContext(ctx)
+}
+
+func isBootstrapCommand(args []string) bool {
+	if len(args) <= 1 {
+		return true
+	}
+	for _, arg := range args[1:] {
+		if arg == "--help" || arg == "-h" || arg == "--version" {
+			return true
+		}
+	}
+	first := firstCommandArg(args)
+	switch first {
+	case "help", "completion", "version", "doctor", "__complete", "__completeNoDesc":
+		return true
+	default:
+		return false
+	}
+}
+
+func firstCommandArg(args []string) string {
+	valueFlags := map[string]bool{
+		"--rsh-config":        true,
+		"--rsh-profile":       true,
+		"-p":                  true,
+		"--rsh-output-format": true,
+		"-o":                  true,
+		"--rsh-header":        true,
+		"-H":                  true,
+		"--rsh-query":         true,
+		"-q":                  true,
+	}
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		}
+		if strings.HasPrefix(arg, "-") {
+			if valueFlags[arg] && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		return arg
+	}
+	return ""
 }
 
 func signalAwareContext() (context.Context, context.CancelFunc) {
@@ -567,11 +625,11 @@ func (c *CLI) closeRequestClosers() {
 // CLI itself. When the first non-flag argument is one of these, the fast-path
 // skips API-name detection and loads all configured APIs.
 var builtinCommands = map[string]bool{
-	"api": true, "cache": true, "cert": true, "completion": true,
+	"api": true, "cache": true, "cert": true, "completion": true, "doctor": true,
 	"delete": true, "edit": true, "get": true, "head": true,
 	"help": true, "links": true, "options": true, "patch": true,
 	"plugin": true, "post": true, "put": true, "setup": true,
-	"theme": true,
+	"theme": true, "version": true,
 }
 
 // isBuiltinCommandName reports whether name collides with a top-level built-in
