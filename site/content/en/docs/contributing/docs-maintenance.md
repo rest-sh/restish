@@ -123,10 +123,10 @@ Use placeholders for:
 
 ## Migration Audit
 
-The old v1 docs in `restish-src/docs/` are still useful. They contain strong
-example commands and explanations that may be missing from the v2 site. When
-refreshing a page, check the matching old topic and decide whether each piece
-is:
+The old v1 docs archive is still useful. It contains strong example commands
+and explanations that may be missing from the v2 site. When refreshing a page,
+check the matching old topic from the v1 tag/archive and decide whether each
+piece is:
 
 - migrated into the current page
 - superseded by v2 behavior
