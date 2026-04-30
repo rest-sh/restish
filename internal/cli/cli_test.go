@@ -31,8 +31,18 @@ func newTestCLI(t *testing.T) (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	c.Stdin = strings.NewReader("")
 	c.Stdout = &stdout
 	c.Stderr = &stderr
+	c.Hooks().PassReader = strings.NewReader("")
 	c.Hooks().RetryBaseDelay = time.Millisecond
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	stateDir := t.TempDir()
+	c.Hooks().ConfigPath = filepath.Join(stateDir, "restish.json")
+	c.Hooks().TokenCachePath = filepath.Join(stateDir, "tokens.cbor")
+	c.Hooks().CachePath = filepath.Join(stateDir, "http-cache")
+	c.Hooks().SpecCachePath = filepath.Join(stateDir, "spec-cache")
+	if testPluginManifestCachePath != "" {
+		c.Hooks().PluginManifestCachePath = testPluginManifestCachePath
+	} else {
+		c.Hooks().PluginManifestCachePath = filepath.Join(stateDir, "plugin-manifest.cbor")
+	}
 	return c, &stdout, &stderr
 }
 

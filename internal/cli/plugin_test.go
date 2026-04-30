@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"flag"
 	"io"
 	"net/http"
 	"os"
@@ -15,7 +16,11 @@ import (
 	"testing"
 )
 
-var testPluginBuildDir string
+var (
+	testPluginBuildDir          string
+	testPluginManifestCachePath string
+	sharedPluginInstallMu       sync.Mutex
+)
 
 // testPluginBin values are populated lazily by the skipNo* helpers below.
 var (
@@ -71,6 +76,11 @@ func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "restish-cli-test-plugins-*")
 	if err == nil {
 		testPluginBuildDir = dir
+		testPluginManifestCachePath = filepath.Join(dir, "plugin-manifest.cbor")
+	}
+
+	if shouldPrebuildTestPlugins() {
+		prebuildTestPlugins()
 	}
 
 	code := m.Run()
@@ -79,6 +89,40 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(testPluginBuildDir)
 	}
 	os.Exit(code)
+}
+
+func shouldPrebuildTestPlugins() bool {
+	run := ""
+	if f := flag.Lookup("test.run"); f != nil {
+		run = f.Value.String()
+	}
+	return run == "" || run == "." || run == ".*"
+}
+
+func prebuildTestPlugins() {
+	sourceBuilders := []*testPluginBuild{
+		&testPluginBuilder,
+		&testMCPPluginBuilder,
+		&testBulkPluginBuilder,
+		&testCSVPluginBuilder,
+	}
+	var wg sync.WaitGroup
+	for _, builder := range sourceBuilders {
+		wg.Add(1)
+		go func(b *testPluginBuild) {
+			defer wg.Done()
+			b.once.Do(b.build)
+		}(builder)
+	}
+	wg.Wait()
+
+	for _, builder := range []*testPluginBuild{
+		&testHookPluginBuilder,
+		&testCmdPluginBuilder,
+		&testTLSSignerPluginBuilder,
+	} {
+		builder.once.Do(builder.build)
+	}
 }
 
 type testPluginBuild struct {
@@ -156,6 +200,59 @@ func (b *testPluginBuild) aliasBuiltPlugin(source string) {
 		return
 	}
 	*b.bin = bin
+}
+
+func installSharedPlugin(t *testing.T, dirName, source, name string) (string, string) {
+	t.Helper()
+
+	if testPluginBuildDir == "" {
+		pluginsParent := t.TempDir()
+		pluginDir := filepath.Join(pluginsParent, "plugins")
+		copyTestPlugin(t, source, filepath.Join(pluginDir, name))
+		return pluginsParent, pluginDir
+	}
+
+	pluginsParent := filepath.Join(testPluginBuildDir, "installed", dirName)
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	dest := filepath.Join(pluginDir, name)
+	if runtime.GOOS == "windows" {
+		dest += ".exe"
+	}
+
+	sharedPluginInstallMu.Lock()
+	defer sharedPluginInstallMu.Unlock()
+	if _, err := os.Stat(dest); err == nil {
+		return pluginsParent, pluginDir
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat shared plugin: %v", err)
+	}
+
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(source, dest); err == nil {
+		return pluginsParent, pluginDir
+	}
+	copyTestPlugin(t, source, dest)
+	return pluginsParent, pluginDir
+}
+
+func copyTestPlugin(t *testing.T, source, dest string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" && filepath.Ext(dest) == "" {
+		dest += ".exe"
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("read plugin: %v", err)
+	}
+	if err := os.WriteFile(dest, data, 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
 }
 
 // testdataDir returns the directory containing testdata/ relative to this file.
@@ -370,7 +467,7 @@ func TestPluginInstallPromptsAndAcceptsConfirmation(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, out, errOut := newTestCLI(t)
-	c.Stdin = strings.NewReader("y\n")
+	c.Hooks().PassReader = strings.NewReader("y\n")
 	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
 		t.Fatalf("plugin install with confirmation: %v", err)

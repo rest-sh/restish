@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,22 +21,7 @@ import (
 func TestProfileTLSSignerPlugin(t *testing.T) {
 	skipNoTLSSignerPlugin(t)
 
-	pluginsParent := t.TempDir()
-	pluginDir := filepath.Join(pluginsParent, "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	dest := filepath.Join(pluginDir, "restish-test-tls-signer")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
-	data, err := os.ReadFile(testTLSSignerPluginBin)
-	if err != nil {
-		t.Fatalf("read tls-signer plugin: %v", err)
-	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write tls-signer plugin: %v", err)
-	}
+	pluginsParent, _ := installSharedPlugin(t, "tls-signer", testTLSSignerPluginBin, "restish-test-tls-signer")
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	t.Setenv("PATH", "")
 

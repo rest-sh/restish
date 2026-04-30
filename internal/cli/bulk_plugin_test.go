@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -135,22 +134,7 @@ func installBulkPlugin(t *testing.T) {
 	t.Helper()
 	skipNoBulkPlugin(t)
 
-	data, err := os.ReadFile(testBulkPluginBin)
-	if err != nil {
-		t.Fatalf("read bulk plugin: %v", err)
-	}
-	pluginsParent := t.TempDir()
-	pluginDir := filepath.Join(pluginsParent, "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	dest := filepath.Join(pluginDir, "restish-bulk")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write bulk plugin: %v", err)
-	}
+	pluginsParent, _ := installSharedPlugin(t, "bulk", testBulkPluginBin, "restish-bulk")
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	t.Setenv("PATH", "")
 }

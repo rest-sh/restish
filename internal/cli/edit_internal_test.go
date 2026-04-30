@@ -75,6 +75,7 @@ func TestConfirmEOFReturnsFalse(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
+	c.hooks.PassReader = strings.NewReader("")
 	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -92,6 +93,7 @@ func TestConfirmYesInputReturnsTrue(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
+	c.hooks.PassReader = strings.NewReader("y\n")
 	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,6 +110,7 @@ func TestConfirmNoInputReturnsFalse(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
+	c.hooks.PassReader = strings.NewReader("n\n")
 	ok, err := c.Confirm(context.Background(), "Continue? [Y/n] ")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -41,23 +38,7 @@ func installCmdPlugin(t *testing.T) {
 	t.Helper()
 	skipNoCmdPlugin(t)
 
-	data, err := os.ReadFile(testCmdPluginBin)
-	if err != nil {
-		t.Fatalf("read cmd plugin: %v", err)
-	}
-
-	pluginsParent := t.TempDir()
-	pluginDir := filepath.Join(pluginsParent, "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	dest := filepath.Join(pluginDir, "restish-cmdplugin")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write cmd plugin: %v", err)
-	}
+	pluginsParent, _ := installSharedPlugin(t, "cmd", testCmdPluginBin, "restish-cmdplugin")
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	t.Setenv("PATH", "")
 }

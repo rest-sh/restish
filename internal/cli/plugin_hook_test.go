@@ -24,24 +24,7 @@ func installHookPlugin(t *testing.T) string {
 	t.Helper()
 	skipNoHookPlugin(t)
 
-	data, err := os.ReadFile(testHookPluginBin)
-	if err != nil {
-		t.Fatalf("read hook plugin: %v", err)
-	}
-
-	pluginsParent := t.TempDir()
-	pluginDir := filepath.Join(pluginsParent, "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	dest := filepath.Join(pluginDir, "restish-hookplugin")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write hook plugin: %v", err)
-	}
+	pluginsParent, pluginDir := installSharedPlugin(t, "hook", testHookPluginBin, "restish-hookplugin")
 
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	// Clear PATH so no other plugins from the environment interfere.
@@ -54,24 +37,7 @@ func installCSVPlugin(t *testing.T) string {
 	t.Helper()
 	skipNoCSVPlugin(t)
 
-	data, err := os.ReadFile(testCSVPluginBin)
-	if err != nil {
-		t.Fatalf("read csv plugin: %v", err)
-	}
-
-	pluginsParent := t.TempDir()
-	pluginDir := filepath.Join(pluginsParent, "plugins")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	dest := filepath.Join(pluginDir, "restish-csv")
-	if runtime.GOOS == "windows" {
-		dest += ".exe"
-	}
-	if err := os.WriteFile(dest, data, 0o755); err != nil {
-		t.Fatalf("write csv plugin: %v", err)
-	}
+	pluginsParent, pluginDir := installSharedPlugin(t, "csv", testCSVPluginBin, "restish-csv")
 
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	t.Setenv("PATH", "")
@@ -160,6 +126,7 @@ func TestHookPluginsRedactSecretRequestHeadersByDefault(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"ok":true}`)
 	c, _, _ := newTestCLI(t)
+	c.Hooks().PluginManifestCachePath = filepath.Join(t.TempDir(), "plugin-manifest.cbor")
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
@@ -175,6 +142,7 @@ func TestHookPluginsPreserveSecretRequestHeadersWhenOptedIn(t *testing.T) {
 
 	srv := hookJSONServer(t, 200, `{"ok":true}`)
 	c, _, _ := newTestCLI(t)
+	c.Hooks().PluginManifestCachePath = filepath.Join(t.TempDir(), "plugin-manifest.cbor")
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
 	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {

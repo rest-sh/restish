@@ -1446,6 +1446,7 @@ func TestAPIConnectFallbackMultiCredentialSetup(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("n\n")
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		if r.URL.String() == "https://api.example.com/openapi.json" {
 			return &http.Response{
@@ -1737,8 +1738,8 @@ func TestAPIConnectAdversarialSpecShapesFailGracefully(t *testing.T) {
 	defer srv.Close()
 
 	c, _, _ := newTestCLI(t)
-	c.Stdin = strings.NewReader("n\n")
 	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().PassReader = strings.NewReader("client-id\n")
 	err := c.Run([]string{"restish", "api", "connect", "adversarial", "https://api.example.com", "--spec", srv.URL + "/openapi.json"})
 	if err != nil {
 		t.Fatalf("api connect should handle adversarial-but-parseable spec gracefully: %v", err)
