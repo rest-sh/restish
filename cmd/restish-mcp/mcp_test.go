@@ -65,7 +65,7 @@ func TestToolsFromSpecFilteringAndNamespacing(t *testing.T) {
 	  }
 	}`)
 
-	tools, err := toolsFromSpec("demo", true, s, Options{})
+	tools, err := toolsFromSpec("demo", true, s, Options{AllowWriteTools: true})
 	if err != nil {
 		t.Fatalf("toolsFromSpec: %v", err)
 	}
@@ -88,6 +88,58 @@ func TestToolsFromSpecFilteringAndNamespacing(t *testing.T) {
 	props := create.InputSchema["properties"].(map[string]any)
 	if _, ok := props["body"]; !ok {
 		t.Fatal("expected body property in input schema")
+	}
+}
+
+func TestToolsFromSpecSkipsWriteOperationsByDefault(t *testing.T) {
+	s := loadTestSpec(t, "demo", `{
+	  "openapi": "3.1.0",
+	  "info": {"title": "Demo", "version": "1.0.0"},
+	  "paths": {
+	    "/items": {
+	      "get": {"operationId": "listItems"},
+	      "post": {"operationId": "createItem"},
+	      "put": {"operationId": "replaceItem"},
+	      "patch": {"operationId": "patchItem"},
+	      "delete": {"operationId": "deleteItem"}
+	    },
+	    "/options": {
+	      "options": {"operationId": "optionsItems"}
+	    }
+	  }
+	}`)
+
+	tools, err := toolsFromSpec("demo", false, s, Options{})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	var names []string
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	if strings.Join(names, ",") != "listItems,optionsItems" {
+		t.Fatalf("tools = %v, want listItems and optionsItems", names)
+	}
+}
+
+func TestToolsFromSpecAllowWriteToolsExposesWrites(t *testing.T) {
+	s := &APISpec{
+		Name: "demo",
+		Operations: []plugin.APIOperation{
+			{ID: "getItem", Method: "GET", Path: "/items"},
+			{ID: "createItem", Method: "POST", Path: "/items"},
+			{ID: "replaceItem", Method: "PUT", Path: "/items"},
+			{ID: "patchItem", Method: "PATCH", Path: "/items"},
+			{ID: "deleteItem", Method: "DELETE", Path: "/items"},
+		},
+	}
+
+	tools, err := toolsFromSpec("demo", false, s, Options{AllowWriteTools: true})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 5 {
+		t.Fatalf("expected all write tools with --allow-write-tools, got %#v", tools)
 	}
 }
 
@@ -159,7 +211,7 @@ func TestToolsFromSpecPrefersHostResolvedOperations(t *testing.T) {
 		},
 	}
 
-	tools, err := toolsFromSpec("demo", false, s, Options{ReadOnly: true})
+	tools, err := toolsFromSpec("demo", false, s, Options{})
 	if err != nil {
 		t.Fatalf("toolsFromSpec: %v", err)
 	}

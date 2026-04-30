@@ -74,10 +74,11 @@ type Param struct {
 }
 
 type Options struct {
-	Operations     map[string]bool
-	ReadOnly       bool
-	MaxResultBytes int
-	RequestTimeout int
+	Operations      map[string]bool
+	ReadOnly        bool
+	AllowWriteTools bool
+	MaxResultBytes  int
+	RequestTimeout  int
 }
 
 type Server struct {
@@ -141,10 +142,12 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 	var maxResultBytes int
 	var requestTimeout int
 	var readOnly bool
+	var allowWriteTools bool
 	fs.StringVar(&operations, "operations", "", "Comma-separated operationId allowlist")
 	fs.IntVar(&maxResultBytes, "max-result-bytes", DefaultMaxResultBytes, "Maximum tool result payload size")
 	fs.IntVar(&requestTimeout, "request-timeout", 60, "Per-tool HTTP request timeout in seconds (0 disables)")
 	fs.BoolVar(&readOnly, "read-only", false, "Expose only GET/HEAD operations")
+	fs.BoolVar(&allowWriteTools, "allow-write-tools", false, "Expose POST, PUT, PATCH, and DELETE operations as MCP tools")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
@@ -162,10 +165,11 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 	return &ServeConfig{
 		APINames: apiNames,
 		Options: Options{
-			Operations:     ops,
-			ReadOnly:       readOnly,
-			MaxResultBytes: maxResultBytes,
-			RequestTimeout: requestTimeout,
+			Operations:      ops,
+			ReadOnly:        readOnly,
+			AllowWriteTools: allowWriteTools,
+			MaxResultBytes:  maxResultBytes,
+			RequestTimeout:  requestTimeout,
 		},
 	}, nil
 }
@@ -206,7 +210,7 @@ func toolsFromSpec(apiName string, multiAPI bool, s *APISpec, opts Options) ([]*
 			if spec.OpExtBool(item.Op, "x-cli-ignore") || spec.OpExtBool(item.Op, "x-mcp-ignore") {
 				continue
 			}
-			if opts.ReadOnly && item.Method != "GET" && item.Method != "HEAD" {
+			if !mcpMethodAllowed(item.Method, opts) {
 				continue
 			}
 			if len(opts.Operations) > 0 && !opts.Operations[item.Op.OperationId] {
@@ -228,7 +232,7 @@ func toolsFromOperations(apiName string, multiAPI bool, ops []plugin.APIOperatio
 		if op.ID == "" || op.MCPIgnore {
 			continue
 		}
-		if opts.ReadOnly && !strings.EqualFold(op.Method, "GET") && !strings.EqualFold(op.Method, "HEAD") {
+		if !mcpMethodAllowed(op.Method, opts) {
 			continue
 		}
 		if len(opts.Operations) > 0 && !opts.Operations[op.ID] {
@@ -237,6 +241,22 @@ func toolsFromOperations(apiName string, multiAPI bool, ops []plugin.APIOperatio
 		tools = append(tools, buildToolFromOperation(apiName, multiAPI, op))
 	}
 	return tools
+}
+
+func mcpMethodAllowed(method string, opts Options) bool {
+	upper := strings.ToUpper(method)
+	if opts.ReadOnly {
+		return upper == "GET" || upper == "HEAD"
+	}
+	if opts.AllowWriteTools {
+		return true
+	}
+	switch upper {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return false
+	default:
+		return true
+	}
 }
 
 func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperation) *Tool {
