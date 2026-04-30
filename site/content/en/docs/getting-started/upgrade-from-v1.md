@@ -38,14 +38,20 @@ dropped with a warning instead of being rewritten to a different host.
 
 ## Config Migration
 
-When v2 does not find `restish.json`, it checks the legacy v1 config locations:
+Restish v2 uses `~/.config/restish/restish.json` on macOS, Linux, and other
+Unix-like systems by default. Windows uses `%APPDATA%\restish\restish.json`.
+
+When v2 does not find `restish.json` in the default location, it checks the
+legacy v1 config locations:
 
 - macOS: `~/Library/Application Support/restish/`
 - Linux: `~/.config/restish/`
 
 It reads `apis.json` and `config.json`, converts supported API/profile settings
-into the v2 shape, writes `restish.json`, and keeps a `.bak.v1` backup of the
-original directory.
+into the v2 shape, writes the new `restish.json`, and keeps a `.bak.v1` backup
+of the original directory. On macOS this means v1 files can be found in the old
+`Application Support` location while the v2 config is written to the
+developer-friendly `~/.config/restish/` location.
 
 Explicit config selection is different. If you pass `--rsh-config ./restish.json`
 or set `RSH_CONFIG`, that exact file must already exist. Restish does not use

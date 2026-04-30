@@ -15,6 +15,8 @@ line flags should be used when one invocation must be explicit.
 | `RSH_CONFIG` | Explicit config file path. |
 | `RSH_CONFIG_DIR` | Config directory override where supported. |
 | `RSH_CACHE_DIR` | HTTP/spec cache directory override. |
+| `XDG_CONFIG_HOME` | Base config directory; Restish uses `$XDG_CONFIG_HOME/restish/restish.json`. |
+| `XDG_CACHE_HOME` | Base cache directory; Restish uses `$XDG_CACHE_HOME/restish`. |
 | `RSH_PROFILE` | Default profile name. |
 
 ## Request Defaults

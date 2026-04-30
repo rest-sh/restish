@@ -46,24 +46,62 @@ func TestPaths_CacheFromXDGCacheHome(t *testing.T) {
 	defer func() { userCacheDirFunc = oldUserCache }()
 
 	t.Setenv("RSH_CACHE_DIR", "")
+	t.Setenv("XDG_CACHE_HOME", "/tmp/xdg-cache")
 	p := NewPaths()
 	if got, want := p.Cache(), "/tmp/xdg-cache/restish"; got != want {
 		t.Fatalf("Cache() = %q, want %q", got, want)
 	}
 }
 
-func TestPaths_WindowsDefaultsFromUserDirs(t *testing.T) {
+func TestPaths_UnixDefaultsUseDotConfigAndDotCache(t *testing.T) {
+	oldGOOS := runtimeGOOS
 	oldUserConfig := userConfigDirFunc
 	oldUserCache := userCacheDirFunc
-	userConfigDirFunc = func() (string, error) { return `C:\Users\me\AppData\Roaming`, nil }
-	userCacheDirFunc = func() (string, error) { return `C:\Users\me\AppData\Local`, nil }
+	oldUserHome := userHomeDirFunc
+	runtimeGOOS = "darwin"
+	userConfigDirFunc = func() (string, error) { return "/Users/me/Library/Application Support", nil }
+	userCacheDirFunc = func() (string, error) { return "/Users/me/Library/Caches", nil }
+	userHomeDirFunc = func() (string, error) { return "/Users/me", nil }
 	t.Setenv("RSH_CONFIG_DIR", "")
 	t.Setenv("RSH_CACHE_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	defer func() {
+		runtimeGOOS = oldGOOS
+		userConfigDirFunc = oldUserConfig
+		userCacheDirFunc = oldUserCache
+		userHomeDirFunc = oldUserHome
+	}()
+
+	p := NewPaths()
+	if got, want := p.Config(), filepath.Join("/Users/me", ".config", "restish"); got != want {
+		t.Fatalf("Config() = %q, want %q", got, want)
+	}
+	if got, want := p.Cache(), filepath.Join("/Users/me", ".cache", "restish"); got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
+}
+
+func TestPaths_WindowsDefaultsFromUserDirs(t *testing.T) {
+	oldGOOS := runtimeGOOS
+	oldUserConfig := userConfigDirFunc
+	oldUserCache := userCacheDirFunc
+	oldUserHome := userHomeDirFunc
+	runtimeGOOS = "windows"
+	userConfigDirFunc = func() (string, error) { return `C:\Users\me\AppData\Roaming`, nil }
+	userCacheDirFunc = func() (string, error) { return `C:\Users\me\AppData\Local`, nil }
+	userHomeDirFunc = func() (string, error) { return `C:\Users\me`, nil }
+	t.Setenv("RSH_CONFIG_DIR", "")
+	t.Setenv("RSH_CACHE_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("APPDATA", "")
 	t.Setenv("LOCALAPPDATA", "")
 	defer func() {
+		runtimeGOOS = oldGOOS
 		userConfigDirFunc = oldUserConfig
 		userCacheDirFunc = oldUserCache
+		userHomeDirFunc = oldUserHome
 	}()
 
 	p := NewPaths()
@@ -76,17 +114,23 @@ func TestPaths_WindowsDefaultsFromUserDirs(t *testing.T) {
 }
 
 func TestPaths_FallbackWhenUserDirsFail(t *testing.T) {
+	oldGOOS := runtimeGOOS
 	oldUserConfig := userConfigDirFunc
 	oldUserCache := userCacheDirFunc
+	oldUserHome := userHomeDirFunc
+	runtimeGOOS = "darwin"
 	userConfigDirFunc = func() (string, error) { return "", errors.New("no dir") }
 	userCacheDirFunc = func() (string, error) { return "", errors.New("no dir") }
+	userHomeDirFunc = func() (string, error) { return "", errors.New("no home") }
 	t.Setenv("RSH_CONFIG_DIR", "")
 	t.Setenv("RSH_CACHE_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
 	defer func() {
+		runtimeGOOS = oldGOOS
 		userConfigDirFunc = oldUserConfig
 		userCacheDirFunc = oldUserCache
+		userHomeDirFunc = oldUserHome
 	}()
 
 	p := NewPaths()

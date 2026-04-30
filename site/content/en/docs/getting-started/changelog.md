@@ -15,8 +15,8 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 ### Configuration
 
 - **Single config file** — `restish.json` replaces the separate `apis.json` and
-  `config.json` from v1. Config is stored under the platform default config
-  directory.
+  `config.json` from v1. Config is stored under `~/.config/restish/` on
+  macOS/Linux and `%APPDATA%\restish\` on Windows.
 - **`restish api connect`** — one-shot API registration with shorthand expressions,
   no editor required.
 - **`restish api set`** — programmatic shorthand updates to any config field

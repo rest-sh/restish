@@ -3,23 +3,29 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 var userConfigDirFunc = os.UserConfigDir
 var userCacheDirFunc = os.UserCacheDir
+var userHomeDirFunc = os.UserHomeDir
+var runtimeGOOS = runtime.GOOS
 
 // Paths provides centralized directory and path management for Restish,
-// relying on the standard library's platform paths after Restish-specific
-// environment variable overrides.
+// using developer-friendly XDG-style defaults on Unix-like systems and
+// standard user directories on Windows after Restish-specific environment
+// variable overrides.
 type Paths struct {
 	// ConfigDir overrides (in order of precedence):
 	// 1. RSH_CONFIG_DIR env var
-	// 2. os.UserConfigDir()/restish
+	// 2. XDG_CONFIG_HOME/restish
+	// 3. ~/.config/restish on Unix-like systems, os.UserConfigDir()/restish on Windows
 	configDir string
 
 	// CacheDir overrides (in order of precedence):
 	// 1. RSH_CACHE_DIR env var
-	// 2. os.UserCacheDir()/restish
+	// 2. XDG_CACHE_HOME/restish
+	// 3. ~/.cache/restish on Unix-like systems, os.UserCacheDir()/restish on Windows
 	cacheDir string
 	// ConfigFile is the explicit config file path when RSH_CONFIG or
 	// --rsh-config selects a file instead of the platform default directory.
@@ -85,7 +91,7 @@ func (p *Paths) ConfigFile() string {
 }
 
 // computeConfigDir determines the configuration directory, respecting Restish's
-// explicit override before using the standard platform config directory.
+// explicit override before using the default config directory.
 func computeConfigDir() string {
 	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
 		return dir
@@ -93,14 +99,18 @@ func computeConfigDir() string {
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
 		return filepath.Join(dir, "restish")
 	}
-	if dir, err := userConfigDirFunc(); err == nil && dir != "" {
-		return filepath.Join(dir, "restish")
+	if runtimeGOOS == "windows" {
+		if dir, err := userConfigDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
+		}
+	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
+		return filepath.Join(home, ".config", "restish")
 	}
 	return ".restish"
 }
 
 // computeCacheDir determines the cache directory, respecting Restish's explicit
-// override before using the standard platform cache directory.
+// override before using the default cache directory.
 func computeCacheDir() string {
 	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
 		return dir
@@ -108,8 +118,12 @@ func computeCacheDir() string {
 	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
 		return filepath.Join(dir, "restish")
 	}
-	if dir, err := userCacheDirFunc(); err == nil && dir != "" {
-		return filepath.Join(dir, "restish")
+	if runtimeGOOS == "windows" {
+		if dir, err := userCacheDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish")
+		}
+	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
+		return filepath.Join(home, ".cache", "restish")
 	}
 	return filepath.Join(".restish", "cache")
 }

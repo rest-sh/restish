@@ -43,15 +43,22 @@ document defines what those paths are for.
 
 ## Path Resolution
 
-Restish should resolve config and cache locations in a platform-correct way:
+Restish should resolve config and cache locations in a developer-friendly,
+predictable way:
 
-- XDG locations on Linux and other Unix-like systems where applicable
-- native config locations on macOS and Windows where appropriate
-- explicit overrides when tests or embedders supply custom paths
+- XDG-style locations on macOS, Linux, and other Unix-like systems
+- native user config and cache locations on Windows
+- explicit overrides when tests, scripts, projects, or embedders supply custom
+  paths
 
-The design intent is consistency. Config, token cache, spec cache, and response
-cache should all come from one coherent path-resolution strategy rather than
-several unrelated helper functions.
+The design intent is consistency and discoverability. Restish is a shell-native
+developer tool, so Unix-like users should be able to find, edit, back up, and
+sync configuration from the same `~/.config` tree they use for other CLI tools.
+This is more useful for Restish than macOS's native
+`~/Library/Application Support` default, which is appropriate for app bundles
+but surprising for a terminal-first workflow. Config, token cache, spec cache,
+and response cache should all come from one coherent path-resolution strategy
+rather than several unrelated helper functions.
 
 The plugin directory is part of this same path model. It should resolve beneath
 the configured Restish config directory, so tests, XDG overrides, and embedded
@@ -63,7 +70,10 @@ User-facing config file selection follows this precedence:
 1. `--rsh-config <file>`
 2. `RSH_CONFIG=<file>`
 3. `RSH_CONFIG_DIR=<dir>/restish.json`
-4. the platform default config directory
+4. `XDG_CONFIG_HOME/restish/restish.json`
+5. the default config directory:
+   - macOS, Linux, and other Unix-like systems: `~/.config/restish/restish.json`
+   - Windows: `%APPDATA%\restish\restish.json`
 
 `--rsh-config` and `RSH_CONFIG` select a complete config file, not an overlay.
 When either is present, Restish reads and writes only that file. A missing
@@ -76,6 +86,10 @@ token caches and external-tool approval records, lives next to the explicit
 config file. Response and spec caches remain under the cache root, but explicit
 configs get a cache namespace derived from the config path so two project
 configs do not reuse each other's cached HTTP responses or discovered specs.
+
+Cache directory selection mirrors config selection with `RSH_CACHE_DIR`,
+`XDG_CACHE_HOME/restish`, `~/.cache/restish` on Unix-like systems, and the
+Windows user cache directory on Windows.
 
 ## Primary Config Shape
 

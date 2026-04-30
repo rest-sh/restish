@@ -10,15 +10,32 @@ plugins, and generated command sources.
 
 ## Location And Selection
 
-Default config lives in the platform config directory as `restish.json`.
-Override it explicitly:
+Default config lives in a Restish config directory as `restish.json`:
+
+| Platform | Default path |
+| --- | --- |
+| macOS, Linux, and other Unix-like systems | `~/.config/restish/restish.json` |
+| Windows | `%APPDATA%\restish\restish.json` |
+
+Restish resolves config paths in this order:
+
+1. `--rsh-config <file>`
+2. `RSH_CONFIG=<file>`
+3. `RSH_CONFIG_DIR=<dir>/restish.json`
+4. `XDG_CONFIG_HOME/restish/restish.json`
+5. the platform default above
+
+Override the config file explicitly when a project, script, or test should not
+use your user config:
 
 ```bash
 restish --rsh-config ./restish.json api list
 RSH_CONFIG=./restish.json restish api list
 ```
 
-An explicit config file is the whole source of truth for that invocation.
+An explicit config file is the whole source of truth for that invocation. If
+that file is missing, Restish errors instead of falling back to your user
+config.
 
 ## Top-Level Shape
 

@@ -46,10 +46,13 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-max-pages` | | int | | 25 | `0` means unlimited. |
 | `--rsh-max-items` | | int | | 0 | `0` means unlimited. |
 | `--rsh-max-body-size` | | int MiB | | formatter default | Bounded response cap. |
-| `--rsh-config` | | string path | `RSH_CONFIG` | platform default | Selects one complete config file. Missing explicit files error. |
+| `--rsh-config` | | string path | `RSH_CONFIG` | default config path | Selects one complete config file. Missing explicit files error. |
 
 Config file location precedence is `--rsh-config`, `RSH_CONFIG`,
-`RSH_CONFIG_DIR/restish.json`, then the platform default config directory.
+`RSH_CONFIG_DIR/restish.json`, `XDG_CONFIG_HOME/restish/restish.json`, then the
+default config path. The default config path is
+`~/.config/restish/restish.json` on macOS, Linux, and other Unix-like systems,
+and `%APPDATA%\restish\restish.json` on Windows.
 `--rsh-config` and `RSH_CONFIG` are source-of-truth selectors: Restish does not
 merge them with the default config. Token and external-tool approval sidecars
 live next to the selected explicit config. HTTP response and spec caches stay
