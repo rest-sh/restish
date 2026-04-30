@@ -271,7 +271,8 @@ or external tools.
 
 ## Command Layout
 
-Flat layout is easiest for small APIs. Tag layout can help large APIs:
+Flat layout is the default. Restish does not guess an automatic layout from the
+spec. Tag layout can help large APIs when the tags are stable and useful:
 
 ```bash
 restish api set myapi command_layout: tags

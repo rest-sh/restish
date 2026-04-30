@@ -61,8 +61,10 @@ type AuthParam = auth.Param
 type AuthContext = auth.AuthContext
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr and the default
-// Restish registries. Customize it with AddAuthHandler, AddContentType,
-// AddEncoding, AddLinkParser, AddLoader, and AddFormatter before calling Run.
+// Restish registries. Customize it with SetCommandName,
+// SetCommandDescription, SetVersion, SetDefaultConfig, AddAuthHandler,
+// AddContentType, AddEncoding, AddLinkParser, AddLoader, and AddFormatter
+// before calling Run.
 func New() *CLI {
 	return internalcli.New()
 }

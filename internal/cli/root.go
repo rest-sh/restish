@@ -21,15 +21,27 @@ const (
 const securityCompletionAnnotation = "restish.securityCompletions"
 
 func (c *CLI) newRootCmd() *cobra.Command {
-	root := &cobra.Command{
-		Use:   "restish",
-		Short: "A CLI for interacting with REST-ish HTTP APIs",
-		Long: `Restish is a CLI for interacting with REST-ish HTTP APIs.
+	use := c.commandName
+	if use == "" {
+		use = "restish"
+	}
+	short := c.commandShort
+	if short == "" {
+		short = "A CLI for interacting with REST-ish HTTP APIs"
+	}
+	long := c.commandLong
+	if long == "" {
+		long = `Restish is a CLI for interacting with REST-ish HTTP APIs.
 
 Every API deserves a CLI. Restish provides generic HTTP commands for
 quick one-off requests, and generates documented, shell-completed
-commands for registered APIs via OpenAPI 3.`,
-		Version:       Version,
+commands for registered APIs via OpenAPI 3.`
+	}
+	root := &cobra.Command{
+		Use:           use,
+		Short:         short,
+		Long:          long,
+		Version:       c.currentVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		// ArbitraryArgs prevents cobra's legacyArgs validator from rejecting
@@ -81,10 +93,17 @@ func (c *CLI) addVersionCommand(root *cobra.Command) {
 		GroupID: rootGroupUtility,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(c.Stdout, Version)
+			fmt.Fprintln(c.Stdout, c.currentVersion())
 			return nil
 		},
 	})
+}
+
+func (c *CLI) currentVersion() string {
+	if c.commandVersion != "" {
+		return c.commandVersion
+	}
+	return Version
 }
 
 func addRootCommandGroups(root *cobra.Command) {

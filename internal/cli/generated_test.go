@@ -504,7 +504,9 @@ func TestGeneratedCommandOAuthScopeAlternativesRequireCredentialBindings(t *test
 	}
 	if !strings.Contains(err.Error(), "missing credential bindings") ||
 		!strings.Contains(err.Error(), "GraphOAuth") ||
-		!strings.Contains(err.Error(), "ApiKey") {
+		!strings.Contains(err.Error(), "ApiKey") ||
+		!strings.Contains(err.Error(), "restish api auth list tapi") ||
+		!strings.Contains(err.Error(), "restish api auth add tapi <credential-id>") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -744,6 +746,9 @@ func TestGeneratedCommandRequiredPathParam(t *testing.T) {
 	c2 := env.newCLI()
 	if err := c2.Run([]string{"restish", "tapi", "get-item"}); err == nil {
 		t.Error("expected error when required arg is absent, got nil")
+	} else if !strings.Contains(err.Error(), "missing required argument(s): id") ||
+		!strings.Contains(err.Error(), "restish tapi get-item --help") {
+		t.Fatalf("unexpected missing argument error: %v", err)
 	}
 }
 
@@ -2806,8 +2811,8 @@ func TestGeneratedCommandWithoutBodyRejectsExtraArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected extra positional arg for no-body operation to fail")
 	}
-	if !strings.Contains(err.Error(), "accepts 1 arg(s), received 2") {
-		t.Fatalf("expected ExactArgs error, got: %v", err)
+	if !strings.Contains(err.Error(), "too many arguments: expected 1, got 2") {
+		t.Fatalf("expected extra argument error, got: %v", err)
 	}
 }
 

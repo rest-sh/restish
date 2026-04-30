@@ -1099,6 +1099,56 @@ type resolvedAPIConfigKey struct {
 	credentialID string
 	paramName    string
 	varName      string
+	descriptor   apiSetFieldDescriptor
+}
+
+type apiSetFieldDescriptor struct {
+	Kind    apiConfigKeyKind
+	Pattern string
+	Append  bool
+}
+
+var apiSetFieldDescriptors = []apiSetFieldDescriptor{
+	{Kind: apiKeyBaseURL, Pattern: "base_url"},
+	{Kind: apiKeySpecURL, Pattern: "spec_url"},
+	{Kind: apiKeyAllowCrossOriginSpec, Pattern: "allow_cross_origin_spec"},
+	{Kind: apiKeyOperationBase, Pattern: "operation_base"},
+	{Kind: apiKeyCommandLayout, Pattern: "command_layout"},
+	{Kind: apiKeyServerVariable, Pattern: "server_variables.<var>"},
+	{Kind: apiKeyPaginationItemsPath, Pattern: "pagination.items_path"},
+	{Kind: apiKeyPaginationNextPath, Pattern: "pagination.next_path"},
+	{Kind: apiKeyProfileBaseURL, Pattern: "profiles.<name>.base_url"},
+	{Kind: apiKeyProfileHeaders, Pattern: "profiles.<name>.headers", Append: true},
+	{Kind: apiKeyProfileQuery, Pattern: "profiles.<name>.query", Append: true},
+	{Kind: apiKeyProfileTLSSigner, Pattern: "profiles.<name>.tls_signer"},
+	{Kind: apiKeyProfileServerVariable, Pattern: "profiles.<name>.server_variables.<var>"},
+	{Kind: apiKeyProfileAuthRef, Pattern: "profiles.<name>.auth_ref"},
+	{Kind: apiKeyProfileAuthType, Pattern: "profiles.<name>.auth.type"},
+	{Kind: apiKeyProfileAuthParam, Pattern: "profiles.<name>.auth.params.<param>"},
+	{Kind: apiKeyProfileCredentialAuthRef, Pattern: "profiles.<name>.credentials.<id>.auth_ref"},
+	{Kind: apiKeyProfileCredentialSatisfies, Pattern: "profiles.<name>.credentials.<id>.satisfies"},
+	{Kind: apiKeyProfileCredentialAuthType, Pattern: "profiles.<name>.credentials.<id>.auth.type"},
+	{Kind: apiKeyProfileCredentialAuthParam, Pattern: "profiles.<name>.credentials.<id>.auth.params.<param>"},
+}
+
+var apiSetFieldDescriptorByKind = func() map[apiConfigKeyKind]apiSetFieldDescriptor {
+	out := make(map[apiConfigKeyKind]apiSetFieldDescriptor, len(apiSetFieldDescriptors))
+	for _, desc := range apiSetFieldDescriptors {
+		out[desc.Kind] = desc
+	}
+	return out
+}()
+
+func resolvedAPIKey(kind apiConfigKeyKind, jsonPath []string) resolvedAPIConfigKey {
+	return resolvedAPIConfigKey{kind: kind, jsonPath: jsonPath, descriptor: apiSetFieldDescriptorByKind[kind]}
+}
+
+func apiSetSupportedFields() string {
+	patterns := make([]string, 0, len(apiSetFieldDescriptors))
+	for _, desc := range apiSetFieldDescriptors {
+		patterns = append(patterns, desc.Pattern)
+	}
+	return strings.Join(patterns, ", ")
 }
 
 func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
@@ -1110,15 +1160,15 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 
 	switch parts[0] {
 	case "base_url":
-		return resolvedAPIConfigKey{kind: apiKeyBaseURL, jsonPath: append(basePath, "base_url")}, nil
+		return resolvedAPIKey(apiKeyBaseURL, append(basePath, "base_url")), nil
 	case "spec_url":
-		return resolvedAPIConfigKey{kind: apiKeySpecURL, jsonPath: append(basePath, "spec_url")}, nil
+		return resolvedAPIKey(apiKeySpecURL, append(basePath, "spec_url")), nil
 	case "allow_cross_origin_spec":
-		return resolvedAPIConfigKey{kind: apiKeyAllowCrossOriginSpec, jsonPath: append(basePath, "allow_cross_origin_spec")}, nil
+		return resolvedAPIKey(apiKeyAllowCrossOriginSpec, append(basePath, "allow_cross_origin_spec")), nil
 	case "operation_base":
-		return resolvedAPIConfigKey{kind: apiKeyOperationBase, jsonPath: append(basePath, "operation_base")}, nil
+		return resolvedAPIKey(apiKeyOperationBase, append(basePath, "operation_base")), nil
 	case "command_layout":
-		return resolvedAPIConfigKey{kind: apiKeyCommandLayout, jsonPath: append(basePath, "command_layout")}, nil
+		return resolvedAPIKey(apiKeyCommandLayout, append(basePath, "command_layout")), nil
 	case "server_variables":
 		if len(parts) < 2 || parts[1] == "" {
 			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected server_variables.<name>", key)
@@ -1269,7 +1319,7 @@ func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
 			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>, credentials.<id>.auth_ref, credentials.<id>.satisfies, credentials.<id>.auth.type, credentials.<id>.auth.params.<param>", parts[2])
 		}
 	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: base_url, spec_url, allow_cross_origin_spec, operation_base, command_layout, server_variables.<var>, pagination.items_path, pagination.next_path, profiles.<name>.base_url, profiles.<name>.headers, profiles.<name>.query, profiles.<name>.tls_signer, profiles.<name>.server_variables.<var>, profiles.<name>.auth_ref, profiles.<name>.auth.type, profiles.<name>.auth.params.<param>, profiles.<name>.credentials.<id>.auth_ref, profiles.<name>.credentials.<id>.satisfies, profiles.<name>.credentials.<id>.auth.type, profiles.<name>.credentials.<id>.auth.params.<param>", key)
+		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: %s", key, apiSetSupportedFields())
 	}
 }
 
@@ -1302,6 +1352,7 @@ func (c *CLI) buildAPIPatchOperations(work *config.Config, apiName string, exprs
 		if err != nil {
 			return nil, err
 		}
+		resolved.descriptor = apiSetFieldDescriptorByKind[resolved.kind]
 
 		switch {
 		case expr.delete:
@@ -1439,11 +1490,17 @@ func appendAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey, val
 	prof := ensureProfile(apiCfg, resolved.profileName)
 	switch resolved.kind {
 	case apiKeyProfileHeaders:
+		if !resolved.descriptor.Append {
+			return fmt.Errorf("append is not supported for %s", resolved.descriptor.Pattern)
+		}
 		prof.Headers = append(prof.Headers, v)
 	case apiKeyProfileQuery:
+		if !resolved.descriptor.Append {
+			return fmt.Errorf("append is not supported for %s", resolved.descriptor.Pattern)
+		}
 		prof.Query = append(prof.Query, v)
 	default:
-		return fmt.Errorf("append is only supported for profiles.<name>.headers[] and profiles.<name>.query[]")
+		return fmt.Errorf("append is only supported for %s[] and %s[]", apiSetFieldDescriptorByKind[apiKeyProfileHeaders].Pattern, apiSetFieldDescriptorByKind[apiKeyProfileQuery].Pattern)
 	}
 	return nil
 }

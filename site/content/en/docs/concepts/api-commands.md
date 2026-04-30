@@ -49,8 +49,8 @@ Generated commands still support the same Restish behavior:
 
 ## Command Layout
 
-Restish defaults to a flat command layout. APIs with many operations can opt
-into tag-based layout:
+Restish defaults to a flat command layout. There is no automatic layout mode.
+APIs with many operations can opt into tag-based layout:
 
 ```bash
 restish api set example command_layout: tags

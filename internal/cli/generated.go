@@ -376,9 +376,9 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
 	cmd.SetUsageTemplate(generatedOperationUsageTemplate)
 	if !op.HasBody {
-		cmd.Args = generatedOperationArgs(len(required), false)
+		cmd.Args = generatedOperationArgs(required, false)
 	} else {
-		cmd.Args = generatedOperationArgs(len(required), true)
+		cmd.Args = generatedOperationArgs(required, true)
 		cmd.Flags().Bool("rsh-generate-body", false, "Print an example request body and exit")
 	}
 
@@ -463,7 +463,7 @@ func supportedGeneratedParamStyle(in, style string) bool {
 	}
 }
 
-func generatedOperationArgs(required int, hasBody bool) func(*cobra.Command, []string) error {
+func generatedOperationArgs(required []*paramInfo, hasBody bool) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if helpAll, _ := cmd.Flags().GetBool("help-all"); helpAll {
 			return nil
@@ -471,10 +471,21 @@ func generatedOperationArgs(required int, hasBody bool) func(*cobra.Command, []s
 		if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 			return nil
 		}
-		if hasBody {
-			return cobra.MinimumNArgs(required)(cmd, args)
+		requiredCount := len(required)
+		if len(args) < requiredCount {
+			missing := make([]string, 0, requiredCount-len(args))
+			for _, p := range required[len(args):] {
+				missing = append(missing, p.flagName)
+			}
+			return fmt.Errorf("missing required argument(s): %s; run %q for usage", strings.Join(missing, ", "), cmd.CommandPath()+" --help")
 		}
-		return cobra.ExactArgs(required)(cmd, args)
+		if hasBody {
+			return nil
+		}
+		if len(args) > requiredCount {
+			return fmt.Errorf("too many arguments: expected %d, got %d; run %q for usage", requiredCount, len(args), cmd.CommandPath()+" --help")
+		}
+		return nil
 	}
 }
 

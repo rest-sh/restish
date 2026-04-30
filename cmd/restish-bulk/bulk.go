@@ -531,15 +531,39 @@ func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 	if err != nil {
 		return err
 	}
-	local, _, err := a.getChanged(m, paths)
+	local, remote, err := a.getChanged(m, paths)
 	if err != nil {
 		return err
 	}
 	sort.Slice(local, func(i, j int) bool { return local[i].File.Path < local[j].File.Path })
 
-	results := a.pushFiles(local, jobs, opts)
 	var firstErr error
 	var summary pushSummary
+	remoteByPath := make(map[string]changedFile, len(remote))
+	for _, changed := range remote {
+		if changed.File != nil {
+			remoteByPath[changed.File.Path] = changed
+		}
+	}
+	pushable := local[:0]
+	for _, changed := range local {
+		if changed.File != nil {
+			if remoteChanged, ok := remoteByPath[changed.File.Path]; ok {
+				summary.Refused++
+				err := remoteLocalConflictError(changed, remoteChanged)
+				if warnErr := a.client.Warn(err.Error()); warnErr != nil && firstErr == nil {
+					firstErr = warnErr
+				}
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+		}
+		pushable = append(pushable, changed)
+	}
+
+	results := a.pushFiles(pushable, jobs, opts)
 	for result := range results {
 		if result.err != nil {
 			summary.Refused++
@@ -592,6 +616,18 @@ func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 		}
 	}
 	return m.save()
+}
+
+func remoteLocalConflictError(local, remote changedFile) error {
+	action := "changed"
+	if remote.Status == statusRemoved {
+		action = "removed"
+	}
+	path := ""
+	if local.File != nil {
+		path = local.File.Path
+	}
+	return fmt.Errorf("conflict pushing %s: remote was %s while local file has edits; pull and review before pushing", path, action)
 }
 
 type pushSummary struct {

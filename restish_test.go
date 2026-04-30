@@ -1,8 +1,12 @@
 package restish_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rest-sh/restish/v2"
@@ -20,10 +24,35 @@ func (testAuth) Authenticate(_ context.Context, req *http.Request, ac restish.Au
 }
 
 func TestPublicAPIEmbeddableCLI(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", configDir)
 	c := restish.New()
+	c.Stdin = bytes.NewReader(nil)
+	c.Stdout = &bytes.Buffer{}
+	c.Stderr = &bytes.Buffer{}
+	c.SetCommandName("acme")
+	c.SetCommandDescription("Acme API CLI", "Acme API CLI long help.")
+	c.SetVersion("acme-dev")
+	c.SetDefaultConfig(&restish.Config{
+		APIs: map[string]*restish.APIConfig{
+			"acme": {BaseURL: "https://api.example.com"},
+		},
+	})
 	c.AddAuthHandler("test-auth", testAuth{})
 	c.AddContentType(&restish.ContentType{Name: "example"})
+	if err := os.WriteFile(filepath.Join(configDir, "restish.json"), []byte(`{"apis":{"user":{"base_url":"https://user.example.com"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if restish.Version() == "" {
 		t.Fatal("expected version")
+	}
+	if err := c.Run([]string{"acme", "version"}); err != nil {
+		t.Fatalf("run version: %v", err)
+	}
+	if got := c.Stdout.(*bytes.Buffer).String(); !strings.Contains(got, "acme-dev") {
+		t.Fatalf("version output = %q, want custom version", got)
+	}
+	if c.Config().APIs["acme"] == nil || c.Config().APIs["user"] == nil {
+		t.Fatalf("default and user APIs should both be present: %#v", c.Config().APIs)
 	}
 }

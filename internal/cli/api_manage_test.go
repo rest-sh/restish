@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1694,6 +1695,53 @@ func TestAPIConnectDoesNotOverwriteInvalidConfig(t *testing.T) {
 	}
 	if string(data) != invalid {
 		t.Fatalf("expected invalid config to remain unchanged, got:\n%s", data)
+	}
+}
+
+func TestAPIConnectAdversarialSpecShapesFailGracefully(t *testing.T) {
+	deep := `{"type":"object"}`
+	for i := 0; i < 64; i++ {
+		deep = fmt.Sprintf(`{"type":"object","properties":{"n":%s}}`, deep)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Adversarial", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "OddOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {"authorizationUrl": "https://auth.example.com/auth", "scopes": {"read": "Read"}},
+          "clientCredentials": {"tokenUrl": "https://auth.example.com/token", "scopes": {"write": "Write"}}
+        }
+      }
+    },
+    "schemas": {"Deep": %s}
+  },
+  "paths": {
+    "/items": {
+      "post": {
+        "operationId": "createItem",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Deep"}}}},
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, "https://api.example.com", deep)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c, _, _ := newTestCLI(t)
+	c.Stdin = strings.NewReader("n\n")
+	c.Hooks().SpecCachePath = t.TempDir()
+	err := c.Run([]string{"restish", "api", "connect", "adversarial", "https://api.example.com", "--spec", srv.URL + "/openapi.json"})
+	if err != nil {
+		t.Fatalf("api connect should handle adversarial-but-parseable spec gracefully: %v", err)
 	}
 }
 

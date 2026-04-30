@@ -19,6 +19,8 @@ core architecture before changing behavior.
   commands.
 - [Design Records](./design-records/) for the subsystem-level architecture
   documents in the repository's `docs/design/` directory.
+- [Release Packaging](./release-packaging/) for release artifacts, Homebrew,
+  GitHub releases, Go install, plugin binaries, and changelog checks.
 - [Docs Maintenance](./docs-maintenance/) for doc checklists, validation, and
   migration status.
 

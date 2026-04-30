@@ -309,6 +309,54 @@ func TestBulkPluginWorkflow(t *testing.T) {
 	}
 }
 
+func TestBulkPluginRemoteDeleteLocalEditConflictIsSafe(t *testing.T) {
+	installBulkPlugin(t)
+	withWorkingDir(t)
+
+	srv := newBulkServer(t, []*bulkItem{
+		{User: "a", ID: "a1", Version: "a11", Body: map[string]any{"id": "a1"}},
+		{User: "b", ID: "b1", Version: "b11", Body: map[string]any{"id": "b1"}},
+	})
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	delete(srv.items, itemPath("a", "a1"))
+	if err := os.WriteFile("a/items/a1.json", []byte("{\n  \"id\": \"a1\",\n  \"name\": \"local edit\"\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "bulk", "status"}); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	status := out.String()
+	for _, want := range []string{"Local changes", "modified:  a/items/a1.json", "Remote changes", "removed:  a/items/a1.json"} {
+		if !strings.Contains(status, want) {
+			t.Fatalf("status missing %q:\n%s", want, status)
+		}
+	}
+
+	out.Reset()
+	errOut.Reset()
+	err := c.Run([]string{"restish", "bulk", "push"})
+	if err == nil {
+		t.Fatal("expected push conflict")
+	}
+	if _, ok := srv.items[itemPath("a", "a1")]; ok {
+		t.Fatal("remote item was recreated despite conflict")
+	}
+	if !strings.Contains(out.String(), "refused=1") {
+		t.Fatalf("expected refused summary, got:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "remote was removed") {
+		t.Fatalf("expected conflict warning, got:\n%s", errOut.String())
+	}
+}
+
 func TestBulkPullKeepsRemoteChangeWhenLocalEditsBlockWrite(t *testing.T) {
 	installBulkPlugin(t)
 	withWorkingDir(t)

@@ -73,7 +73,8 @@ that benefit from tag hierarchy can opt into:
 In tag layout, operations with a first OpenAPI tag are nested under a tag
 subcommand such as `restish example repos create-repo`. Untagged operations
 remain directly under the API command. The default remains flat because tag
-taxonomies are not always stable or ergonomic.
+taxonomies are not always stable or ergonomic. There is no automatic layout
+mode; API authors and users opt into tag layout explicitly when it helps.
 
 ## Operation Inclusion
 

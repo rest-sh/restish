@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -253,26 +254,35 @@ func TestParseArgsRequestTimeout(t *testing.T) {
 }
 
 func TestPluginClientSendsHTTPRequestTimeout(t *testing.T) {
-	var out bytes.Buffer
-	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &out)
-	client.httpRespCh <- plugin.HTTPResponseMsg{Type: plugin.MsgTypeHTTPResponse, RequestID: "1", Status: 200}
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	client := newPluginClient(plugin.NewDecoder(inR), outW)
 
-	if _, err := client.do(&HTTPRequest{Method: "GET", URI: "demo/items", Timeout: 9}); err != nil {
-		t.Fatalf("do: %v", err)
-	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.do(&HTTPRequest{Method: "GET", URI: "demo/items", Timeout: 9})
+		done <- err
+	}()
 
 	var msg plugin.HTTPRequestMsg
-	if err := plugin.ReadMessage(&out, &msg); err != nil {
+	if err := plugin.NewDecoder(outR).ReadMessage(&msg); err != nil {
 		t.Fatalf("decode request message: %v", err)
 	}
 	if got := msg.Timeout; got != 9 {
 		t.Fatalf("Timeout = %d, want 9", got)
 	}
+	if err := plugin.WriteMessage(inW, plugin.HTTPResponseMsg{Type: plugin.MsgTypeHTTPResponse, RequestID: msg.RequestID, Status: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("do: %v", err)
+	}
 }
 
 func TestPluginClientHTTPRequestTimesOutLocally(t *testing.T) {
+	inR, _ := io.Pipe()
 	var out bytes.Buffer
-	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &out)
+	client := newPluginClient(plugin.NewDecoder(inR), &out)
 
 	start := time.Now()
 	_, err := client.do(&HTTPRequest{Method: "GET", URI: "demo/items", Timeout: 1})

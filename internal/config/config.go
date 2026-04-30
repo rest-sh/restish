@@ -247,7 +247,7 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(stripped))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
-		err = withUnknownFieldSuggestion(err, cfg)
+		err = withUnknownFieldSuggestion(err, stripped, cfg)
 		line, col := extractJSONErrorPosition(err, stripped)
 		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
@@ -263,6 +263,51 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// ConfigDiagnostics describes non-executing config diagnostics. It is intended
+// for recovery commands such as doctor; normal execution still uses strict
+// parsing and validation.
+type ConfigDiagnostics struct {
+	UnknownFields []UnknownFieldDiagnostic
+}
+
+// UnknownFieldDiagnostic reports a config field that is not part of the v2
+// schema. Path is a dotted config path such as "apis.example.base".
+type UnknownFieldDiagnostic struct {
+	Path       string
+	Field      string
+	Line       int
+	Column     int
+	Suggestion string
+	Hint       string
+}
+
+// DiagnoseConfig inspects a config file without accepting unknown fields for
+// execution. It returns syntax errors, but otherwise reports schema diagnostics
+// that recovery commands can display alongside strict parser failures.
+func DiagnoseConfig(path string) (*ConfigDiagnostics, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return &ConfigDiagnostics{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
+	}
+	return diagnoseConfigBytes(data)
+}
+
+func diagnoseConfigBytes(data []byte) (*ConfigDiagnostics, error) {
+	stripped := jsonc.ToJSON(data)
+	var root any
+	dec := json.NewDecoder(bytes.NewReader(stripped))
+	dec.UseNumber()
+	if err := dec.Decode(&root); err != nil {
+		return nil, err
+	}
+	diags := &ConfigDiagnostics{}
+	collectUnknownFields(diags, stripped, root, reflect.TypeOf(Config{}), "")
+	return diags, nil
 }
 
 // Validate checks cross-field config invariants that JSON decoding alone cannot
@@ -399,18 +444,158 @@ func extractJSONErrorPosition(err error, data []byte) (int, int) {
 	return 0, 0
 }
 
-func withUnknownFieldSuggestion(err error, cfg Config) error {
+func withUnknownFieldSuggestion(err error, stripped []byte, cfg Config) error {
 	const prefix = "json: unknown field "
 	msg := err.Error()
 	if !strings.HasPrefix(msg, prefix) {
 		return err
 	}
 	field := strings.Trim(msg[len(prefix):], `"`)
+	if diags, diagErr := diagnoseConfigBytes(stripped); diagErr == nil {
+		for _, diag := range diags.UnknownFields {
+			if diag.Field != field {
+				continue
+			}
+			if diag.Suggestion != "" && diag.Hint != "" {
+				return fmt.Errorf("%w at %s (did you mean %q? %s)", err, diag.Path, diag.Suggestion, diag.Hint)
+			}
+			if diag.Suggestion != "" {
+				return fmt.Errorf("%w at %s (did you mean %q?)", err, diag.Path, diag.Suggestion)
+			}
+			if diag.Hint != "" {
+				return fmt.Errorf("%w at %s (%s)", err, diag.Path, diag.Hint)
+			}
+			return fmt.Errorf("%w at %s", err, diag.Path)
+		}
+	}
 	best := closestJSONTag(field, reflect.TypeOf(cfg))
 	if best == "" {
 		return err
 	}
 	return fmt.Errorf("%w (did you mean %q?)", err, best)
+}
+
+func collectUnknownFields(diags *ConfigDiagnostics, data []byte, node any, t reflect.Type, path string) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Struct:
+		obj, ok := node.(map[string]any)
+		if !ok {
+			return
+		}
+		fields := jsonFieldTypes(t)
+		for key, child := range obj {
+			ft, ok := fields[key]
+			childPath := key
+			if path != "" {
+				childPath = path + "." + key
+			}
+			if !ok {
+				line, col := jsonFieldPosition(data, key)
+				suggestion := closestJSONField(key, fields)
+				diags.UnknownFields = append(diags.UnknownFields, UnknownFieldDiagnostic{
+					Path:       childPath,
+					Field:      key,
+					Line:       line,
+					Column:     col,
+					Suggestion: suggestion,
+					Hint:       legacyFieldHint(key),
+				})
+				continue
+			}
+			collectUnknownFields(diags, data, child, ft, childPath)
+		}
+	case reflect.Map:
+		elem := t.Elem()
+		for elem.Kind() == reflect.Pointer {
+			elem = elem.Elem()
+		}
+		if elem.Kind() != reflect.Struct {
+			return
+		}
+		obj, ok := node.(map[string]any)
+		if !ok {
+			return
+		}
+		for key, child := range obj {
+			childPath := key
+			if path != "" {
+				childPath = path + "." + key
+			}
+			collectUnknownFields(diags, data, child, elem, childPath)
+		}
+	case reflect.Slice:
+		elem := t.Elem()
+		for elem.Kind() == reflect.Pointer {
+			elem = elem.Elem()
+		}
+		if elem.Kind() != reflect.Struct {
+			return
+		}
+		items, ok := node.([]any)
+		if !ok {
+			return
+		}
+		for i, child := range items {
+			collectUnknownFields(diags, data, child, elem, fmt.Sprintf("%s[%d]", path, i))
+		}
+	}
+}
+
+func jsonFieldTypes(t reflect.Type) map[string]reflect.Type {
+	fields := map[string]reflect.Type{}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		tag := f.Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		if name != "" {
+			fields[name] = f.Type
+		}
+	}
+	return fields
+}
+
+func closestJSONField(input string, fields map[string]reflect.Type) string {
+	best := ""
+	bestDistance := 3
+	for name := range fields {
+		d := levenshteinDistance(strings.ToLower(input), strings.ToLower(name))
+		if d < bestDistance {
+			bestDistance = d
+			best = name
+		}
+	}
+	return best
+}
+
+func legacyFieldHint(field string) string {
+	switch field {
+	case "base":
+		return `Restish v1 used "base"; v2 uses "base_url".`
+	case "security":
+		return `older v2 drafts used "security"; v2 operation auth uses profile credentials and --rsh-auth.`
+	case "auth-header":
+		return `the old auth-header command was replaced by api auth inspect.`
+	default:
+		return ""
+	}
+}
+
+func jsonFieldPosition(data []byte, field string) (int, int) {
+	needle, err := json.Marshal(field)
+	if err != nil {
+		return 0, 0
+	}
+	idx := bytes.Index(data, needle)
+	if idx < 0 {
+		return 0, 0
+	}
+	return byteOffsetToLineColumn(data, int64(idx+1))
 }
 
 func closestJSONTag(input string, t reflect.Type) string {

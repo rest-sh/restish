@@ -33,7 +33,7 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		if policy.OptionalAuth {
 			return nil, true, nil
 		}
-		return nil, false, fmt.Errorf("operation requires credentials for API %q but profile %q is not configured", apiName, profileName)
+		return nil, false, fmt.Errorf("operation requires credentials for API %q but profile %q is not configured; %s", apiName, profileName, operationAuthSetupHint(apiName, profileName))
 	}
 
 	var missing []string
@@ -91,7 +91,7 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		return nil, false, fmt.Errorf("profile %q of API %q has credential bindings that do not satisfy this operation: %s", profileName, apiName, strings.Join(uniqueStrings(needErrors), "; "))
 	}
 	sort.Strings(missing)
-	return nil, false, fmt.Errorf("profile %q of API %q is missing credential bindings for this operation: %s", profileName, apiName, strings.Join(uniqueStrings(missing), ", "))
+	return nil, false, fmt.Errorf("profile %q of API %q is missing credential bindings for this operation: %s; %s", profileName, apiName, strings.Join(uniqueStrings(missing), ", "), operationAuthSetupHint(apiName, profileName))
 }
 
 func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
@@ -111,7 +111,7 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 		return nil, false, fmt.Errorf("auth override %q does not match this operation; valid values: %s", override, strings.Join(authOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
 	}
 	if prof == nil {
-		return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings", override, profileName, apiName)
+		return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings; %s", override, profileName, apiName, operationAuthSetupHint(apiName, profileName))
 	}
 	selected, missing, needErrors, err := c.selectOperationAlternative(apiName, profileName, prof, alternative)
 	if err != nil {
@@ -123,12 +123,20 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return nil, false, fmt.Errorf("auth override %q requires missing credential bindings in profile %q of API %q: %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "))
+		return nil, false, fmt.Errorf("auth override %q requires missing credential bindings in profile %q of API %q: %s; %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "), operationAuthSetupHint(apiName, profileName))
 	}
 	if err := rejectConflictingSelectedAuth(selected); err != nil {
 		return nil, false, err
 	}
 	return selected, true, nil
+}
+
+func operationAuthSetupHint(apiName, profileName string) string {
+	prefix := "restish"
+	if profileName != "" && profileName != "default" {
+		prefix += " --rsh-profile " + profileName
+	}
+	return fmt.Sprintf("run %q to inspect coverage or %q to configure a credential", prefix+" api auth list "+apiName, prefix+" api auth add "+apiName+" <credential-id>")
 }
 
 func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *config.ProfileConfig, alternative spec.CredentialAlternative) ([]selectedOperationAuth, []string, []string, error) {

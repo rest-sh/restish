@@ -363,6 +363,26 @@ func TestPluginInstallRequiresYesNonInteractive(t *testing.T) {
 	}
 }
 
+func TestPluginInstallPromptsAndAcceptsConfirmation(t *testing.T) {
+	skipNoPlugin(t)
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, out, errOut := newTestCLI(t)
+	c.Stdin = strings.NewReader("y\n")
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
+		t.Fatalf("plugin install with confirmation: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "Install and trust this plugin?") {
+		t.Fatalf("expected trust prompt, got:\n%s", errOut.String())
+	}
+	if !strings.Contains(out.String(), "Installed plugin") {
+		t.Fatalf("expected install output, got:\n%s", out.String())
+	}
+}
+
 func TestPluginInstallFromPath(t *testing.T) {
 	skipNoPlugin(t)
 
@@ -543,6 +563,46 @@ func TestPluginListShowsNameVersionHooks(t *testing.T) {
 	}
 	if !strings.Contains(got, "command") {
 		t.Errorf("expected hook 'command' in output, got:\n%s", got)
+	}
+}
+
+func TestPluginListShowsCommandNamesAndJSON(t *testing.T) {
+	skipNoPlugin(t)
+
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(pluginDir, "restish-cmdplugin")
+	if runtime.GOOS == "windows" {
+		dest += ".exe"
+	}
+	data, _ := os.ReadFile(testPluginBin)
+	_ = os.WriteFile(dest, data, 0o755)
+
+	t.Setenv("PATH", "")
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
+	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
+		t.Fatalf("plugin list: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "commands: greet, fetch") {
+		t.Fatalf("expected command names in plugin list, got:\n%s", got)
+	}
+
+	c, out, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
+	if err := c.Run([]string{"restish", "plugin", "list", "--json"}); err != nil {
+		t.Fatalf("plugin list --json: %v", err)
+	}
+	if !strings.Contains(out.String(), `"name": "cmdplugin"`) ||
+		!strings.Contains(out.String(), `"commands":`) ||
+		!strings.Contains(out.String(), `"greet"`) {
+		t.Fatalf("expected machine-readable command list, got:\n%s", out.String())
 	}
 }
 

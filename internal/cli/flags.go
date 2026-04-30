@@ -170,3 +170,10 @@ func globalFlagsFromContext(ctx context.Context) GlobalFlags {
 	}
 	return GlobalFlags{Retry: -1, MaxPages: 25}
 }
+
+func requestContext(cmd *cobra.Command) context.Context {
+	if cmd != nil && cmd.Context() != nil {
+		return cmd.Context()
+	}
+	return context.Background()
+}

@@ -146,14 +146,28 @@ func validateOAuthIssuerURL(rawURL string) error {
 // the https scheme, shares the same hostname as issuerURL, and stays within
 // the issuer's path scope. This prevents a malicious OIDC server from
 // redirecting token traffic to another host or sibling tenant. Validation is
-// skipped when issuerURL itself uses http:// (e.g. local dev).
+// relaxed when issuerURL itself uses http:// loopback (e.g. local dev), but
+// those endpoints must also stay on loopback.
 func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 	issuer, err := url.Parse(issuerURL)
 	if err != nil {
 		return fmt.Errorf("OIDC: invalid issuer URL %q: %w", issuerURL, err)
 	}
-	// Only enforce for HTTPS issuers; HTTP issuers are already insecure (dev/test).
 	if issuer.Scheme != "https" {
+		if issuer.Scheme == "http" && isLoopbackOAuthHost(issuer.Hostname()) {
+			for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.DeviceAuthorizationEndpoint, cfg.TokenEndpoint} {
+				if endpoint == "" {
+					continue
+				}
+				u, err := url.Parse(endpoint)
+				if err != nil {
+					return fmt.Errorf("OIDC: invalid endpoint URL %q: %w", endpoint, err)
+				}
+				if u.Scheme != "http" || !isLoopbackOAuthHost(u.Hostname()) {
+					return fmt.Errorf("OIDC: loopback issuer endpoint %q must stay on http loopback", endpoint)
+				}
+			}
+		}
 		return nil
 	}
 	for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.DeviceAuthorizationEndpoint, cfg.TokenEndpoint} {

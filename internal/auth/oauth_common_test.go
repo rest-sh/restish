@@ -45,6 +45,12 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:      "loopback http issuer rejects remote token endpoint",
+			issuer:    "http://localhost:8080",
+			tokenURL:  "https://auth.example.com/token",
+			wantError: true,
+		},
+		{
 			name:      "empty endpoints are allowed",
 			issuer:    "https://auth.example.com",
 			authURL:   "",

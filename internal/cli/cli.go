@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,6 +88,11 @@ type CLI struct {
 	Paths *config.Paths
 
 	cfg                 *config.Config
+	defaultConfig       *config.Config
+	commandName         string
+	commandShort        string
+	commandLong         string
+	commandVersion      string
 	content             *content.Registry
 	loaders             []spec.Loader
 	linkParsers         []hypermedia.Parser
@@ -177,6 +183,28 @@ func (c *CLI) AddLoader(l spec.Loader) {
 	c.loaders = append(c.loaders, l)
 }
 
+// SetCommandName changes the root command name shown in help and examples.
+func (c *CLI) SetCommandName(name string) {
+	c.commandName = strings.TrimSpace(name)
+}
+
+// SetCommandDescription changes the short and long root help text.
+func (c *CLI) SetCommandDescription(short, long string) {
+	c.commandShort = strings.TrimSpace(short)
+	c.commandLong = strings.TrimSpace(long)
+}
+
+// SetVersion changes the version shown by this CLI instance.
+func (c *CLI) SetVersion(version string) {
+	c.commandVersion = strings.TrimSpace(version)
+}
+
+// SetDefaultConfig installs in-memory API/profile defaults that are merged
+// under user config at load time. User config wins on key conflicts.
+func (c *CLI) SetDefaultConfig(cfg *config.Config) {
+	c.defaultConfig = cloneConfigForEmbedding(cfg)
+}
+
 // Config returns the loaded configuration after Run has been called, or nil
 // if Run has not yet been called or configuration loading failed.
 // Embedders can use this to inspect configured APIs and profiles.
@@ -235,10 +263,72 @@ func (c *CLI) configScopedCacheDir(base string) string {
 }
 
 func (c *CLI) loadConfig() (*config.Config, error) {
+	var cfg *config.Config
+	var err error
 	if c.explicitConfigFile {
-		return config.LoadExplicit(c.configFilePath())
+		cfg, err = config.LoadExplicit(c.configFilePath())
+	} else {
+		cfg, err = config.Load(c.configFilePath())
 	}
-	return config.Load(c.configFilePath())
+	if err != nil {
+		return nil, err
+	}
+	return mergeDefaultConfigForEmbedding(c.defaultConfig, cfg), nil
+}
+
+func cloneConfigForEmbedding(src *config.Config) *config.Config {
+	if src == nil {
+		return nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		return nil
+	}
+	var dst config.Config
+	if err := json.Unmarshal(data, &dst); err != nil {
+		return nil
+	}
+	return &dst
+}
+
+func mergeDefaultConfigForEmbedding(defaults, loaded *config.Config) *config.Config {
+	if defaults == nil {
+		return loaded
+	}
+	merged := cloneConfigForEmbedding(defaults)
+	if merged == nil {
+		merged = &config.Config{}
+	}
+	if loaded == nil {
+		return merged
+	}
+	if len(loaded.APIs) > 0 {
+		if merged.APIs == nil {
+			merged.APIs = map[string]*config.APIConfig{}
+		}
+		for name, api := range loaded.APIs {
+			merged.APIs[name] = api
+		}
+	}
+	if len(loaded.AuthProfiles) > 0 {
+		if merged.AuthProfiles == nil {
+			merged.AuthProfiles = map[string]*config.AuthConfig{}
+		}
+		for name, auth := range loaded.AuthProfiles {
+			merged.AuthProfiles[name] = auth
+		}
+	}
+	if loaded.Cache != (config.CacheConfig{}) {
+		merged.Cache = loaded.Cache
+	}
+	if len(loaded.Theme) > 0 {
+		merged.Theme = loaded.Theme
+	}
+	if len(loaded.Plugins) > 0 {
+		merged.Plugins = loaded.Plugins
+	}
+	merged.Migration = loaded.Migration
+	return merged
 }
 
 // discoverSpec runs spec discovery for the named API using the registered loaders.

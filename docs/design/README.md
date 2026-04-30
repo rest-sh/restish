@@ -112,6 +112,7 @@ were a recurring source of remediation work.
 - [032-implementation-contract.md](./032-implementation-contract.md) - Cross-cutting implementation matrix for global flags, config schema, command precedence, plugin message families, and output ownership.
 - [033-openapi-operation-security.md](./033-openapi-operation-security.md) - Operation-specific OpenAPI security policy, profile scheme declarations, and the path from current `security: []` support to full enforcement.
 - [035-v2-product-surface-decisions.md](./035-v2-product-surface-decisions.md) - Accepted v2 command-surface decisions for setup, bootstrap, help, plugin/MCP trust, and embeddability.
+- [036-javascript-implementation-follow-up.md](./036-javascript-implementation-follow-up.md) - Planned follow-up review for docs-site JavaScript after removing the v1 tree and WASM prototype.
 
 **Extensibility**
 

@@ -308,6 +308,43 @@ func TestLoad_UnknownField(t *testing.T) {
 	}
 }
 
+func TestDiagnoseConfig_UnknownNestedLegacyField(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base": "https://api.example.com"
+    }
+  }
+}`)
+	diags, err := config.DiagnoseConfig(path)
+	if err != nil {
+		t.Fatalf("DiagnoseConfig: %v", err)
+	}
+	if len(diags.UnknownFields) != 1 {
+		t.Fatalf("UnknownFields = %#v, want one", diags.UnknownFields)
+	}
+	diag := diags.UnknownFields[0]
+	if diag.Path != "apis.example.base" {
+		t.Fatalf("Path = %q, want apis.example.base", diag.Path)
+	}
+	if diag.Line != 4 || diag.Column == 0 {
+		t.Fatalf("expected line/column for unknown field, got %d:%d", diag.Line, diag.Column)
+	}
+	if !strings.Contains(diag.Hint, `v1 used "base"`) {
+		t.Fatalf("expected v1 hint, got %q", diag.Hint)
+	}
+
+	_, err = config.Load(path)
+	if err == nil {
+		t.Fatal("expected strict Load to reject v1 field")
+	}
+	for _, want := range []string{"apis.example.base", `v2 uses "base_url"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected strict error to contain %q, got %v", want, err)
+		}
+	}
+}
+
 func TestLoad_RejectsTrailingTokens(t *testing.T) {
 	path := writeConfig(t, `{"apis": {}} true`)
 	_, err := config.Load(path)
@@ -669,6 +706,40 @@ func TestLoadValidatesOperationBasePath(t *testing.T) {
 				t.Fatalf("expected base_url error containing %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestLoadValidatesCommandLayout(t *testing.T) {
+	for _, layout := range []string{"", "flat", "tags"} {
+		t.Run("valid_"+layout, func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "command_layout": %q
+    }
+  }
+}`, layout))
+			if _, err := config.Load(path); err != nil {
+				t.Fatalf("expected command_layout %q to load: %v", layout, err)
+			}
+		})
+	}
+
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "command_layout": "auto"
+    }
+  }
+}`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected command_layout auto to be rejected")
+	}
+	if !strings.Contains(err.Error(), `command_layout`) || !strings.Contains(err.Error(), `"flat" or "tags"`) {
+		t.Fatalf("expected command_layout error, got %v", err)
 	}
 }
 

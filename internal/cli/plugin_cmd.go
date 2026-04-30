@@ -52,12 +52,14 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Short:   "Manage restish plugins",
 		GroupID: rootGroupPlugin,
 	}
-	pluginCmd.AddCommand(&cobra.Command{
+	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all discovered plugins",
 		Args:  cobra.NoArgs,
 		RunE:  c.runPluginList,
-	})
+	}
+	listCmd.Flags().Bool("json", false, "Write machine-readable plugin metadata as JSON")
+	pluginCmd.AddCommand(listCmd)
 	installCmd := &cobra.Command{
 		Use:   "install <source>",
 		Short: "Install a plugin from a path, URL, PATH command, or GitHub release",
@@ -88,13 +90,73 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 
 	if len(plugins) == 0 {
+		asJSON, _ := cmd.Flags().GetBool("json")
+		if asJSON {
+			fmt.Fprintln(c.Stdout, "[]")
+			return nil
+		}
 		fmt.Fprintln(c.Stdout, "No plugins found.")
 		return nil
 	}
 
+	type pluginListEntry struct {
+		Name         string   `json:"name"`
+		Version      string   `json:"version,omitempty"`
+		Description  string   `json:"description,omitempty"`
+		Path         string   `json:"path"`
+		Capabilities []string `json:"capabilities"`
+		Commands     []string `json:"commands,omitempty"`
+		Formatters   []string `json:"formatters,omitempty"`
+		Loaders      []string `json:"loaders,omitempty"`
+	}
+	entries := make([]pluginListEntry, 0, len(plugins))
 	for _, p := range plugins {
 		m := p.Manifest
+		entry := pluginListEntry{
+			Name:         m.Name,
+			Version:      m.Version,
+			Description:  m.Description,
+			Path:         p.Path,
+			Capabilities: append([]string(nil), m.Hooks...),
+			Formatters:   append([]string(nil), m.FormatterNames...),
+			Loaders:      append([]string(nil), m.LoaderContentTypes...),
+		}
+		if pluginDeclaresHook(m, "command") {
+			decls, err := loadCommandPluginCommands(p.Path)
+			if err != nil {
+				c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
+			}
+			for _, decl := range decls {
+				if decl.Name != "" {
+					entry.Commands = append(entry.Commands, decl.Name)
+				}
+			}
+		}
+		entries = append(entries, entry)
+	}
+	asJSON, _ := cmd.Flags().GetBool("json")
+	if asJSON {
+		enc := json.NewEncoder(c.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(entries)
+	}
+
+	for _, entry := range entries {
+		m := plugin.Manifest{
+			Name:               entry.Name,
+			Version:            entry.Version,
+			Description:        entry.Description,
+			Hooks:              entry.Capabilities,
+			FormatterNames:     entry.Formatters,
+			LoaderContentTypes: entry.Loaders,
+		}
 		fmt.Fprintf(c.Stdout, "%-20s %-10s capabilities: %s\n", m.Name, m.Version, pluginCapabilitySummary(m))
+		if len(entry.Commands) > 0 {
+			fmt.Fprintf(c.Stdout, "  commands: %s\n", strings.Join(entry.Commands, ", "))
+		}
+		if len(entry.Formatters) > 0 {
+			fmt.Fprintf(c.Stdout, "  formatters: %s\n", strings.Join(entry.Formatters, ", "))
+		}
 		if m.Description != "" {
 			fmt.Fprintf(c.Stdout, "  %s\n", m.Description)
 		}

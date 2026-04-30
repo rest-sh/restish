@@ -14,7 +14,6 @@ import (
 
 func TestPluginClientDoReturnsEOFWhenHostReadLoopEnds(t *testing.T) {
 	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &bytes.Buffer{})
-	go client.readLoop()
 
 	done := make(chan error, 1)
 	go func() {
@@ -63,8 +62,6 @@ func TestPluginClientCorrelatesHTTPResponsesByRequestID(t *testing.T) {
 		}
 		gotRequests = append(gotRequests, req)
 	}
-
-	go client.readLoop()
 
 	for i := len(gotRequests) - 1; i >= 0; i-- {
 		req := gotRequests[i]

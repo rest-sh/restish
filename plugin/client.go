@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // CommandClient is the plugin-side counterpart of the host command-plugin
@@ -28,6 +29,7 @@ type CommandClient struct {
 	readErr  atomic.Value
 	nextID   atomic.Uint64
 	pending  sync.Map
+	specs    sync.Map
 
 	// StdinDataHandler is called with each chunk of stdin data received from
 	// the host while Do() is waiting for an http-response. Set this before
@@ -46,6 +48,13 @@ type CommandClient struct {
 // background response reader, all host replies are routed through Do.
 func NewCommandClient(in io.Reader, out io.Writer) *CommandClient {
 	return &CommandClient{dec: NewDecoder(in), out: out}
+}
+
+// NewCommandClientFromDecoder returns a CommandClient that continues reading
+// from an existing decoder. Use this when startup code has already consumed
+// initial messages from the same input stream.
+func NewCommandClientFromDecoder(dec *Decoder, out io.Writer) *CommandClient {
+	return &CommandClient{dec: dec, out: out}
 }
 
 // ReadMessage reads one CBOR message from the host into v. Use this when the
@@ -80,6 +89,38 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 	if err := c.WriteMessage(req); err != nil {
 		return nil, err
 	}
+	var timeout <-chan time.Time
+	if req.Timeout > 0 {
+		timeout = time.After(time.Duration(req.Timeout) * time.Second)
+	}
+	var reply commandReply
+	select {
+	case reply = <-replyCh:
+	case <-timeout:
+		return nil, fmt.Errorf("plugin: HTTP request %s timed out after %ds", req.RequestID, req.Timeout)
+	}
+	if reply.err != nil {
+		return nil, reply.err
+	}
+	return &reply.resp, nil
+}
+
+// FetchAPISpec asks the host to load the OpenAPI spec or resolved operation
+// metadata for a registered API name.
+func (c *CommandClient) FetchAPISpec(name string) (*APISpecResponseMsg, error) {
+	replyCh := make(chan specReply, 1)
+	if _, loaded := c.specs.LoadOrStore(name, replyCh); loaded {
+		return nil, fmt.Errorf("plugin: duplicate API spec request %q", name)
+	}
+	defer c.specs.Delete(name)
+
+	c.startReadLoop()
+	if errValue := c.readErr.Load(); errValue != nil {
+		return nil, errValue.(error)
+	}
+	if err := c.WriteMessage(APISpecMsg{Type: MsgTypeAPISpec, Name: name}); err != nil {
+		return nil, err
+	}
 	reply := <-replyCh
 	if reply.err != nil {
 		return nil, reply.err
@@ -89,6 +130,11 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 
 type commandReply struct {
 	resp HTTPResponseMsg
+	err  error
+}
+
+type specReply struct {
+	resp APISpecResponseMsg
 	err  error
 }
 
@@ -114,6 +160,13 @@ func (c *CommandClient) readLoop() {
 				return
 			}
 			c.deliverHTTPResponse(reply)
+		case MsgTypeAPISpecResponse:
+			var reply APISpecResponseMsg
+			if err := DecMode.Unmarshal(raw, &reply); err != nil {
+				c.failPending(fmt.Errorf("plugin: decode api-spec-response: %w", err))
+				return
+			}
+			c.deliverAPISpecResponse(reply)
 		case MsgTypeStdinData:
 			if c.StdinDataHandler != nil {
 				var msg StdinDataMsg
@@ -138,10 +191,20 @@ func (c *CommandClient) deliverHTTPResponse(reply HTTPResponseMsg) {
 	}
 }
 
+func (c *CommandClient) deliverAPISpecResponse(reply APISpecResponseMsg) {
+	if ch, ok := c.specs.Load(reply.Name); ok {
+		ch.(chan specReply) <- specReply{resp: reply}
+	}
+}
+
 func (c *CommandClient) failPending(err error) {
 	c.readErr.Store(err)
 	c.pending.Range(func(_, value any) bool {
 		value.(chan commandReply) <- commandReply{err: err}
+		return true
+	})
+	c.specs.Range(func(_, value any) bool {
+		value.(chan specReply) <- specReply{err: err}
 		return true
 	})
 }
