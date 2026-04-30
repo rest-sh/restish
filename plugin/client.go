@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strconv"
@@ -108,20 +109,35 @@ func (c *CommandClient) Do(req *HTTPRequestMsg) (*HTTPResponseMsg, error) {
 // FetchAPISpec asks the host to load the OpenAPI spec or resolved operation
 // metadata for a registered API name.
 func (c *CommandClient) FetchAPISpec(name string) (*APISpecResponseMsg, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return c.FetchAPISpecContext(ctx, name, "")
+}
+
+// FetchAPISpecContext asks the host to load OpenAPI metadata for a registered
+// API name and optional profile, returning when ctx is canceled if the host does
+// not reply.
+func (c *CommandClient) FetchAPISpecContext(ctx context.Context, name, profile string) (*APISpecResponseMsg, error) {
 	replyCh := make(chan specReply, 1)
-	if _, loaded := c.specs.LoadOrStore(name, replyCh); loaded {
+	key := specRequestKey(name, profile)
+	if _, loaded := c.specs.LoadOrStore(key, replyCh); loaded {
 		return nil, fmt.Errorf("plugin: duplicate API spec request %q", name)
 	}
-	defer c.specs.Delete(name)
+	defer c.specs.Delete(key)
 
 	c.startReadLoop()
 	if errValue := c.readErr.Load(); errValue != nil {
 		return nil, errValue.(error)
 	}
-	if err := c.WriteMessage(APISpecMsg{Type: MsgTypeAPISpec, Name: name}); err != nil {
+	if err := c.WriteMessage(APISpecMsg{Type: MsgTypeAPISpec, Name: name, Profile: profile}); err != nil {
 		return nil, err
 	}
-	reply := <-replyCh
+	var reply specReply
+	select {
+	case reply = <-replyCh:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("plugin: API spec request %q timed out or was canceled: %w", name, ctx.Err())
+	}
 	if reply.err != nil {
 		return nil, reply.err
 	}
@@ -192,9 +208,17 @@ func (c *CommandClient) deliverHTTPResponse(reply HTTPResponseMsg) {
 }
 
 func (c *CommandClient) deliverAPISpecResponse(reply APISpecResponseMsg) {
-	if ch, ok := c.specs.Load(reply.Name); ok {
+	key := specRequestKey(reply.Name, reply.Profile)
+	if ch, ok := c.specs.Load(key); ok {
 		ch.(chan specReply) <- specReply{resp: reply}
 	}
+}
+
+func specRequestKey(name, profile string) string {
+	if profile == "" {
+		profile = "default"
+	}
+	return name + "\x00" + profile
 }
 
 func (c *CommandClient) failPending(err error) {

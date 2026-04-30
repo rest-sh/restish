@@ -25,4 +25,8 @@ you can see the initial failure. Use unique keys while experimenting so your
 results are not affected by a previous run. For policy details, read
 [Retries and Caching](/docs/guides/retries-and-caching/).
 
+By default, automatic retries apply to `GET` and `HEAD`. An explicit
+`--rsh-retry` also allows retrying other methods, which can repeat side effects
+if a server processed an earlier attempt.
+
 Related: [Retries and Caching](/docs/guides/retries-and-caching/).

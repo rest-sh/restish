@@ -275,6 +275,7 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 	if client == nil {
 		client = http.DefaultClient
 	}
+	client = oauthTokenHTTPClient(client)
 	if form == nil {
 		form = url.Values{}
 	}
@@ -306,6 +307,12 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 	if err := json.Unmarshal(body, &tok); err != nil {
 		return CachedToken{}, fmt.Errorf("decoding token response: %w", err)
 	}
+	if strings.TrimSpace(tok.AccessToken) == "" {
+		return CachedToken{}, fmt.Errorf("token endpoint response missing access_token")
+	}
+	if tt := strings.TrimSpace(tok.TokenType); tt != "" && !strings.EqualFold(tt, "bearer") {
+		return CachedToken{}, fmt.Errorf("token endpoint response has unsupported token_type %q", tok.TokenType)
+	}
 	ct := CachedToken{
 		AccessToken:  tok.AccessToken,
 		TokenType:    tok.TokenType,
@@ -315,6 +322,17 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 		ct.Expiry = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
 	}
 	return ct, nil
+}
+
+func oauthTokenHTTPClient(src *http.Client) *http.Client {
+	if src == nil {
+		src = http.DefaultClient
+	}
+	clone := *src
+	clone.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &clone
 }
 
 func parseTokenEndpointError(statusCode int, body []byte) error {

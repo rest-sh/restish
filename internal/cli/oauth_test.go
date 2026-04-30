@@ -1,11 +1,9 @@
 package cli_test
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -721,14 +719,4 @@ func TestOAuthClientCredentials_401RetryForcesFreshToken(t *testing.T) {
 	if got := rr.Last().Header.Get("Authorization"); got != "Bearer fresh-token" {
 		t.Fatalf("Authorization = %q", got)
 	}
-}
-
-// readJSONFile reads a JSON file and returns it as a map.
-func readJSONFile(path string) (map[string]json.RawMessage, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var m map[string]json.RawMessage
-	return m, json.Unmarshal(data, &m)
 }

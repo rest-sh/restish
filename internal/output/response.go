@@ -15,17 +15,18 @@ const DefaultMaxBodyBytes int64 = 100 * 1024 * 1024
 // Response is the normalized form of every HTTP response before formatting.
 // All formatters receive this struct; nothing downstream touches *http.Response.
 type Response struct {
-	Proto   string            `json:"proto"`
-	Status  int               `json:"status"`
-	Headers map[string]string `json:"headers"`
+	Proto   string              `json:"proto"`
+	Status  int                 `json:"status"`
+	Headers map[string][]string `json:"headers"`
 	// URL is the final response URL. It is used for presentation concerns such
 	// as syntax highlighting file-like text responses by extension.
 	URL string `json:"-"`
 	// Links is populated by hypermedia parsers; empty until then.
 	Links map[string]any `json:"links,omitempty"`
 	Body  any            `json:"body"`
-	// Raw holds the original, unmodified response body bytes. Used by
-	// RawFormatter to write the body to a file/pipe without modification.
+	// Raw holds the unformatted response body after Content-Encoding
+	// decompression. Used by RawFormatter to write body bytes without formatter
+	// re-encoding.
 	Raw []byte `json:"-"`
 }
 
@@ -40,12 +41,12 @@ func Normalize(resp *http.Response, reg *content.Registry, maxBytes int64) (*Res
 		maxBytes = DefaultMaxBodyBytes
 	}
 
-	// Canonicalise headers. Go's http package already canonicalises keys;
-	// we flatten multi-value headers to the first value for simplicity.
-	headers := make(map[string]string, len(resp.Header))
+	// Canonicalise headers. Go's http package already canonicalises keys; keep
+	// all values so repeated headers such as Set-Cookie and Link are preserved.
+	headers := make(map[string][]string, len(resp.Header))
 	for k, vals := range resp.Header {
 		if len(vals) > 0 {
-			headers[k] = vals[0]
+			headers[k] = append([]string(nil), vals...)
 		}
 	}
 
@@ -71,9 +72,9 @@ func responseURL(resp *http.Response) string {
 	return resp.Request.URL.String()
 }
 
-// decodeBody reads the response body, decompresses it if needed, then decodes
-// it using the content registry. Returns the raw bytes alongside the decoded
-// value so callers can write the original bytes unchanged if needed.
+// decodeBody reads the response body, decompresses Content-Encoding if needed,
+// then decodes it using the content registry. Returns the decoded body bytes so
+// callers can write them without formatter re-encoding if needed.
 func decodeBody(resp *http.Response, reg *content.Registry, maxBytes int64) (decoded any, raw []byte, err error) {
 	encoding := resp.Header.Get("Content-Encoding")
 	reader, err := reg.Decompress(encoding, resp.Body)

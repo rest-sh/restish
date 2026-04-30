@@ -1417,6 +1417,101 @@ paths: {}`), 0o644); err != nil {
 	}
 }
 
+func TestDiscoverCacheInvalidatesWhenAnySpecFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base.yaml")
+	overlayPath := filepath.Join(dir, "overlay.yaml")
+	if err := os.WriteFile(basePath, []byte(`openapi: "3.1.0"
+info:
+  title: Base
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, []byte(`openapi: "3.1.0"
+info:
+  title: Overlay A
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write overlay A: %v", err)
+	}
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "multi-file-change",
+		BaseURL:   "https://api.example.com",
+		SpecFiles: []string{basePath, overlayPath},
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, []byte(`openapi: "3.1.0"
+info:
+  title: Overlay B
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write overlay B: %v", err)
+	}
+
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	info, err := loaded.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Title != "Overlay B" {
+		t.Fatalf("cached stale spec title = %q, want Overlay B", info.Title)
+	}
+}
+
+func TestDiscoverCacheInvalidatesWhenSpecFileOrderChanges(t *testing.T) {
+	dir := t.TempDir()
+	aPath := filepath.Join(dir, "a.yaml")
+	bPath := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(aPath, []byte(`openapi: "3.1.0"
+info:
+  title: A
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write A: %v", err)
+	}
+	if err := os.WriteFile(bPath, []byte(`openapi: "3.1.0"
+info:
+  title: B
+  version: "1.0.0"
+paths: {}`), 0o644); err != nil {
+		t.Fatalf("write B: %v", err)
+	}
+
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:   "multi-file-order",
+		BaseURL:   "https://api.example.com",
+		SpecFiles: []string{aPath, bPath},
+		CacheDir:  cacheDir,
+		Version:   "v2.0.0",
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	cfg.SpecFiles = []string{bPath, aPath}
+	loaded, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	info, err := loaded.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if info.Title != "A" {
+		t.Fatalf("cached stale spec title = %q, want A", info.Title)
+	}
+}
+
 // ---- Discovery cancellation ------------------------------------------------
 
 func TestDiscover_CancellationPropagatesUsefulError(t *testing.T) {

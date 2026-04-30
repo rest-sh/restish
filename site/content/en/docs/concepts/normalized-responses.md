@@ -14,7 +14,7 @@ pagination, streaming, and formatter plugins compose predictably.
 Most filters start from one of these roots:
 
 - `status`: HTTP status and protocol information
-- `headers`: response headers
+- `headers`: response headers, with repeated header values preserved internally
 - `links`: normalized hypermedia links from headers or body formats
 - `body`: decoded response body
 
@@ -25,6 +25,10 @@ restish https://api.rest.sh/ -f headers.Content-Type -r
 restish https://api.rest.sh/images -f links.next -r
 restish https://api.rest.sh/example -f body.basics.profiles
 ```
+
+For filters, `headers` contains the first value for each response header so
+common expressions stay simple. When code or plugins need repeated header
+values, Restish also exposes the complete header map as `headers_all`.
 
 ## Why It Matters
 

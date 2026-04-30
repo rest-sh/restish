@@ -194,6 +194,7 @@ func runHookPlugin() {
 		var msg plugin.AuthHookInput
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
 		checkSecretHeaders(msg.Type, msg.Request.Headers)
+		checkSecretQuery(msg.Type, msg.Request.URI)
 		_ = plugin.WriteMessage(os.Stdout, plugin.AuthHookOutput{
 			Request: &plugin.HookRequestHeaderUpdate{
 				Headers: map[string]any{"Authorization": []any{"Bearer hook-token"}},
@@ -203,6 +204,7 @@ func runHookPlugin() {
 		var msg plugin.RequestMiddlewareInput
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
 		checkSecretHeaders(msg.Type, msg.Request.Headers)
+		checkSecretQuery(msg.Type, msg.Request.URI)
 		_ = plugin.WriteMessage(os.Stdout, plugin.RequestMiddlewareOutput{
 			Request: &plugin.HookRequestHeaderUpdate{
 				Headers: map[string]any{"X-Trace-Id": []any{"hook-trace-123"}},
@@ -226,6 +228,7 @@ func runResponseMiddleware(raw []byte) {
 	var msg plugin.ResponseMiddlewareInput
 	_ = plugin.DecMode.Unmarshal(raw, &msg)
 	checkSecretHeaders(msg.Type, msg.Request.Headers)
+	checkSecretQuery(msg.Type, msg.Request.URI)
 
 	behavior := os.Getenv("RSH_HOOK_RM_BEHAVIOR")
 	switch {
@@ -270,7 +273,7 @@ func checkSecretHeaders(hook string, headers map[string][]string) {
 	if expect == "" {
 		return
 	}
-	for _, name := range []string{"Authorization", "Cookie", "Proxy-Authorization"} {
+	for _, name := range []string{"Authorization", "Cookie", "Proxy-Authorization", "X-Api-Key", "X-Auth-Token", "X-Secret"} {
 		values := headers[name]
 		if len(values) == 0 {
 			fmt.Fprintf(os.Stderr, "%s: missing %s header\n", hook, name)
@@ -287,6 +290,29 @@ func checkSecretHeaders(hook string, headers map[string][]string) {
 				fmt.Fprintf(os.Stderr, "%s: %s was redacted unexpectedly\n", hook, name)
 				os.Exit(2)
 			}
+		}
+	}
+}
+
+func checkSecretQuery(hook, uri string) {
+	expect := os.Getenv("RSH_HOOK_EXPECT_SECRET_QUERY")
+	if expect == "" {
+		return
+	}
+	switch expect {
+	case "redacted":
+		if strings.Contains(uri, "api_key=secret") || strings.Contains(uri, "token=secret") {
+			fmt.Fprintf(os.Stderr, "%s: secret query leaked in %q\n", hook, uri)
+			os.Exit(2)
+		}
+		if !strings.Contains(uri, "api_key=%3Credacted%3E") || !strings.Contains(uri, "token=%3Credacted%3E") {
+			fmt.Fprintf(os.Stderr, "%s: secret query not redacted in %q\n", hook, uri)
+			os.Exit(2)
+		}
+	case "preserved":
+		if !strings.Contains(uri, "api_key=secret") || !strings.Contains(uri, "token=secret") {
+			fmt.Fprintf(os.Stderr, "%s: secret query not preserved in %q\n", hook, uri)
+			os.Exit(2)
 		}
 	}
 }

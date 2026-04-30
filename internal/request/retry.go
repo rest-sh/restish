@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,13 +14,17 @@ import (
 // and 5xx responses with exponential backoff + jitter.  4xx responses are
 // returned immediately without retrying.
 type retryTransport struct {
-	inner     http.RoundTripper
-	maxRetry  int
-	baseDelay time.Duration
-	logger    io.Writer
+	inner       http.RoundTripper
+	maxRetry    int
+	retryUnsafe bool
+	baseDelay   time.Duration
+	logger      io.Writer
 }
 
 func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !rt.shouldRetryMethod(req.Method) {
+		return rt.inner.RoundTrip(req)
+	}
 	var (
 		resp *http.Response
 		err  error
@@ -88,6 +93,18 @@ func shouldRetryStatus(status int) bool {
 	return status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests
 }
 
+func (rt retryTransport) shouldRetryMethod(method string) bool {
+	if rt.retryUnsafe {
+		return true
+	}
+	switch strings.ToUpper(method) {
+	case http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
+	}
+}
+
 func (rt retryTransport) logRetry(attempt int, wait time.Duration) {
 	if rt.logger == nil {
 		return
@@ -115,7 +132,7 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			// Integer seconds form.
-			if secs, parseErr := strconv.Atoi(ra); parseErr == nil && secs > 0 {
+			if secs, parseErr := strconv.Atoi(ra); parseErr == nil && secs >= 0 {
 				wait := time.Duration(secs) * time.Second
 				if wait > 60*time.Second {
 					wait = 60 * time.Second

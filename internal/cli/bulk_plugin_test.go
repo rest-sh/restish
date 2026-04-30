@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -161,7 +160,7 @@ func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 	installBulkPlugin(t)
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
 		t.Fatalf("help: %v", err)
 	}
@@ -190,7 +189,7 @@ func TestBulkPluginWorkflow(t *testing.T) {
 	})
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
 		t.Fatalf("init: %v", err)
@@ -305,7 +304,7 @@ func TestBulkPluginRemoteDeleteLocalEditConflictIsSafe(t *testing.T) {
 	})
 
 	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -353,7 +352,7 @@ func TestBulkPullKeepsRemoteChangeWhenLocalEditsBlockWrite(t *testing.T) {
 	})
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 
 	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
 		t.Fatalf("init: %v", err)

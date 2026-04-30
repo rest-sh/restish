@@ -11,7 +11,11 @@ cache for cacheable responses.
 ## Retry Behavior
 
 Restish retries network errors, `408`, `429`, and `5xx` responses by default.
-It honors `Retry-After` and `X-Retry-In` when present.
+Automatic retries are limited to `GET` and `HEAD`, where retrying is normally
+safe. Passing an explicit non-negative retry count such as `--rsh-retry 2`
+opts a command into retrying other methods too, which can repeat side effects
+if the server processed the first attempt. Restish honors `Retry-After` and
+`X-Retry-In` when present.
 
 Use the flaky fixture to see recovery:
 

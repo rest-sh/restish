@@ -57,7 +57,7 @@ func TestReadableFormatter_WithColor(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Body:    map[string]any{"colored": true},
 	}
 

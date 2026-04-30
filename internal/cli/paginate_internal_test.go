@@ -116,7 +116,7 @@ func TestValueStreamBaseForExplicitFilterOmitsResponsePreamble(t *testing.T) {
 	base := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  http.StatusOK,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Links:   map[string]any{"next": "https://api.example.com/items?page=2"},
 		Body:    []any{float64(1)},
 	}
@@ -140,7 +140,7 @@ func TestValueStreamBaseWithoutExplicitFilterKeepsResponsePreamble(t *testing.T)
 	base := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  http.StatusOK,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Body:    []any{float64(1)},
 	}
 
@@ -192,7 +192,7 @@ func TestRunPaginationHonorsContextCancellation(t *testing.T) {
 	firstResp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  http.StatusOK,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Links:   map[string]any{"next": "https://api.example.com/items?page=2"},
 		Body:    []any{float64(1)},
 	}

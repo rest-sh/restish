@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -70,13 +69,6 @@ func authCacheKey(ac AuthContext) string {
 		return ""
 	}
 	return ac.APIName + ":" + ac.ProfileName
-}
-
-func authLogger(ac AuthContext) Logger {
-	if ac.Logger != nil {
-		return ac.Logger
-	}
-	return log.New(io.Discard, "", 0)
 }
 
 func cloneAuthParams(params map[string]string) map[string]string {

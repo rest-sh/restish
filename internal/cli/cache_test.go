@@ -90,6 +90,59 @@ func TestCacheAuthenticatedRequestBypassesCache(t *testing.T) {
 	}
 }
 
+func TestCacheCredentialQueryBypassesCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	cacheDir := t.TempDir()
+
+	for i := range 2 {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().CachePath = cacheDir
+		if err := c.Run([]string{"restish", "get", srv.URL + "?api_key=secret&view=summary"}); err != nil {
+			t.Fatalf("request %d failed: %v", i+1, err)
+		}
+	}
+
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("credential query responses should bypass cache, got %d server hits", n)
+	}
+}
+
+func TestCacheProfileCredentialQueryBypassesCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	cacheDir := t.TempDir()
+	cfgFile := t.TempDir() + "/restish.json"
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"svc": map[string]any{
+				"base_url": srv.URL,
+				"profiles": map[string]any{
+					"default": map[string]any{
+						"query": []string{"token=secret", "view=summary"},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	for i := range 2 {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().CachePath = cacheDir
+		if err := c.Run([]string{"restish", "get", "svc/items"}); err != nil {
+			t.Fatalf("request %d failed: %v", i+1, err)
+		}
+	}
+
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("profile credential query responses should bypass cache, got %d server hits", n)
+	}
+}
+
 // TestCacheNoCacheBypassesCache verifies that --rsh-no-cache always hits the
 // server regardless of a primed cache.
 func TestCacheNoCacheBypassesCache(t *testing.T) {

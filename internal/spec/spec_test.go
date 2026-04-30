@@ -99,11 +99,6 @@ func TestOpenAPILoader_Load_Invalid(t *testing.T) {
 // ---- pickLoader ----------------------------------------------------------
 
 func TestPickLoader_ReturnsHighestPriority(t *testing.T) {
-	type mockLoader struct {
-		OpenAPILoader
-		prio int
-	}
-
 	loaders := []Loader{OpenAPILoader{}}
 	body := []byte(minimalOpenAPI)
 	got := pickLoader("application/json", body, loaders)

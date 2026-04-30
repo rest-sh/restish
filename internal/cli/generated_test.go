@@ -2455,7 +2455,7 @@ func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
+		return `{
   "openapi": "3.1.0",
   "info": {"title": "Test API", "version": "1.0"},
   "servers": [{"url": "/v1"}],
@@ -2467,7 +2467,7 @@ func TestGeneratedCommandsRespectServersBasePath(t *testing.T) {
       }
     }
   }
-}`)
+}`
 	})
 
 	c := env.newCLI()
@@ -2711,6 +2711,63 @@ func TestGeneratedCommandsResolveOperationBasePathAgainstBaseURL(t *testing.T) {
 	}
 	if lastPath != "/my-op" {
 		t.Fatalf("expected operation_base path to resolve against base_url root, got %q", lastPath)
+	}
+}
+
+func TestGeneratedCommandsResolveProfileOperationBaseAtExecutionTime(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/my-op", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/profile/api/v2/my-op", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("profile operation_base should escape the profile base path, got %s", r.URL.Path)
+	})
+	mux.HandleFunc("/api/v2/my-op", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("default operation base should not be baked into profile execution, got %s", r.URL.Path)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/my-op": {
+      "get": {
+        "operationId": "myOp",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL+"/api/v2")
+	})
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	baseURL := cfg.APIs["tapi"].BaseURL
+	cfg.APIs["tapi"].BaseURL = baseURL + "/api/v2"
+	cfg.APIs["tapi"].Profiles = map[string]*config.ProfileConfig{
+		"default": {},
+		"staging": {
+			BaseURL:       baseURL + "/profile/api/v2",
+			OperationBase: "/",
+		},
+	}
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "my-op"}); err != nil {
+		t.Fatalf("my-op failed: %v", err)
+	}
+	if lastPath != "/my-op" {
+		t.Fatalf("expected profile operation_base path to resolve at execution time, got %q", lastPath)
 	}
 }
 

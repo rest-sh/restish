@@ -238,6 +238,14 @@ func installSharedPlugin(t *testing.T, dirName, source, name string) (string, st
 	return pluginsParent, pluginDir
 }
 
+func sharedPluginConfigPath(t *testing.T) string {
+	t.Helper()
+	if configDir := os.Getenv("RSH_CONFIG_DIR"); configDir != "" {
+		return filepath.Join(configDir, "restish.json")
+	}
+	return filepath.Join(t.TempDir(), "restish.json")
+}
+
 func copyTestPlugin(t *testing.T, source, dest string) {
 	t.Helper()
 
@@ -323,7 +331,7 @@ func TestPluginIgnoresPathPlugins(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
 
 	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	t.Setenv("RSH_CONFIG_DIR", t.TempDir())
 	if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
 		t.Fatalf("plugin list: %v", err)
@@ -382,7 +390,7 @@ func TestPluginRemoveRejectsTraversal(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	err := c.Run([]string{"restish", "plugin", "remove", "../victim"})
 	if err == nil {
 		t.Fatal("expected plugin remove to reject traversal")
@@ -410,7 +418,7 @@ func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	err := c.Run([]string{"restish", "plugin", "install", "--yes", source})
 	if err == nil {
 		t.Fatal("expected invalid plugin install to fail")
@@ -429,7 +437,7 @@ func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "plugin", "install", "--yes", testPluginBin}); err != nil {
 		t.Fatalf("plugin install: %v", err)
 	}
@@ -448,7 +456,7 @@ func TestPluginInstallRequiresYesNonInteractive(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 
 	c, _, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	err := c.Run([]string{"restish", "plugin", "install", testPluginBin})
 	if err == nil {
 		t.Fatal("expected plugin install without --yes to fail noninteractively")
@@ -469,7 +477,7 @@ func TestPluginInstallPromptsAndAcceptsConfirmation(t *testing.T) {
 
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().PassReader = strings.NewReader("y\n")
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
 		t.Fatalf("plugin install with confirmation: %v", err)
 	}
@@ -502,7 +510,7 @@ func TestPluginInstallFromPath(t *testing.T) {
 	t.Setenv("PATH", pathDir)
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "restish-testplugin"}); err != nil {
 		t.Fatalf("plugin install from PATH: %v", err)
 	}
@@ -526,7 +534,7 @@ func TestPluginInstallFromGitHubShorthand(t *testing.T) {
 	pluginsParent := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		switch {
 		case r.URL.Host == "api.github.com" && r.URL.Path == "/repos/acme/tools/releases/latest":
@@ -568,7 +576,7 @@ func TestPluginInstallFromURLArchive(t *testing.T) {
 	pluginsParent := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Host == "downloads.example" && r.URL.Path == "/"+archiveName {
 			return testHTTPResponse(200, "application/gzip", archive), nil

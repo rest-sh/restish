@@ -136,11 +136,8 @@ func TestClear_ByHost(t *testing.T) {
 	if _, ok := c.Get("https://api.example.com/x"); ok {
 		t.Error("expected cache miss for cleared host")
 	}
-	// The other host should remain.
-	if _, ok := c.Get("https://other.example.com/y"); ok {
-		// May or may not be there depending on whether the host dir was removed;
-		// as long as Clear didn't error, this is acceptable behaviour.
-	}
+	// The other host may or may not remain depending on whether the host dir was
+	// removed; as long as Clear didn't error, this is acceptable behaviour.
 }
 
 func TestClear_EmptyCache(t *testing.T) {

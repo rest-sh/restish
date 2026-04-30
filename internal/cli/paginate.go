@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -123,6 +124,10 @@ func (c *CLI) runPagination(
 			c.warnf("pagination cycle detected at page %d URL %q; stopping", seenPage, nextURL)
 			break
 		}
+		if crosses, displayURL := paginationCrossesOrigin(firstURL, nextURL); crosses {
+			c.warnf("pagination next URL crosses origin; stopping before %q", displayURL)
+			break
+		}
 		page++
 		visited[nextURL] = page
 
@@ -175,6 +180,21 @@ func (c *CLI) runPagination(
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
+}
+
+func paginationCrossesOrigin(firstURL, nextURL string) (bool, string) {
+	base, err := url.Parse(firstURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return false, nextURL
+	}
+	next, err := url.Parse(nextURL)
+	if err != nil {
+		return false, nextURL
+	}
+	if !next.IsAbs() {
+		next = base.ResolveReference(next)
+	}
+	return !request.SameOrigin(base, next), next.String()
 }
 
 func (c *CLI) paginationStatusError(cmd *cobra.Command, page, status int) error {

@@ -178,6 +178,8 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	var loopErr error
 	doneReceived := false
 	var requestWG sync.WaitGroup
+	requestCtx, cancelRequests := context.WithCancel(cmd.Context())
+	defer cancelRequests()
 	dec := pluginwire.NewDecoder(stdoutPipe)
 	for {
 		raw, err := dec.ReadRaw()
@@ -196,7 +198,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 			break
 		}
 
-		done, err := c.handleCommandPluginMessage(cmd, writer, &requestWG, pluginwire.MessageType(raw), raw)
+		done, err := c.handleCommandPluginMessage(cmd, requestCtx, writer, &requestWG, pluginwire.MessageType(raw), raw)
 		if err != nil {
 			loopErr = err
 			break
@@ -209,6 +211,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 
 	close(cancelWatchDone)
 	close(stopCh)
+	cancelRequests()
 	if loopErr != nil {
 		_ = stdinPipe.Close()
 		requestWG.Wait()
@@ -322,7 +325,7 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 	}
 }
 
-func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPluginWriter, requestWG *sync.WaitGroup, msgType string, raw []byte) (bool, error) {
+func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.Context, writer *commandPluginWriter, requestWG *sync.WaitGroup, msgType string, raw []byte) (bool, error) {
 	switch msgType {
 	case pluginwire.MsgTypeDone:
 		var msg pluginwire.DoneMsg
@@ -341,7 +344,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		requestWG.Add(1)
 		go func() {
 			defer requestWG.Done()
-			if err := c.handlePluginHTTPRequest(cmd, writer, msg); err != nil {
+			if err := c.handlePluginHTTPRequest(cmd, requestCtx, writer, msg); err != nil {
 				_ = writer.WriteMessage(pluginwire.HTTPResponseMsg{
 					Type:      pluginwire.MsgTypeHTTPResponse,
 					RequestID: msg.RequestID,
@@ -355,7 +358,7 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, writer *commandPlug
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
-		return false, c.handlePluginAPISpec(cmd.Context(), writer, msg)
+		return false, c.handlePluginAPISpec(requestCtx, cmd, writer, msg)
 	case pluginwire.MsgTypeListAPIs:
 		return false, c.handlePluginListAPIs(writer)
 	case pluginwire.MsgTypeListProfiles:
@@ -451,7 +454,7 @@ func decodeCommandPluginMessage(msgType string, raw []byte, dst any) error {
 	return nil
 }
 
-func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginWriter, msg pluginwire.HTTPRequestMsg) error {
+func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Context, writer *commandPluginWriter, msg pluginwire.HTTPRequestMsg) error {
 	method := msg.Method
 	if method == "" {
 		method = "GET"
@@ -479,10 +482,10 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 		opts.ContentType = msg.ContentType
 	}
 
-	reqCtx := cmd.Context()
+	reqCtx := requestCtx
 	if msg.Timeout > 0 {
 		var cancel context.CancelFunc
-		reqCtx, cancel = context.WithTimeout(cmd.Context(), time.Duration(msg.Timeout)*time.Second)
+		reqCtx, cancel = context.WithTimeout(requestCtx, time.Duration(msg.Timeout)*time.Second)
 		defer cancel()
 	}
 
@@ -517,11 +520,12 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, writer *commandPluginW
 	body := resp.Body
 	if msg.Filter != "" {
 		doc := map[string]any{
-			"proto":   resp.Proto,
-			"status":  resp.Status,
-			"headers": resp.Headers,
-			"links":   resp.Links,
-			"body":    resp.Body,
+			"proto":       resp.Proto,
+			"status":      resp.Status,
+			"headers":     firstHeaderValues(resp.Headers),
+			"headers_all": resp.Headers,
+			"links":       resp.Links,
+			"body":        resp.Body,
 		}
 		filtered, ferr := filter.Apply(msg.Filter, doc, filter.LangAuto)
 		if ferr != nil {
@@ -557,18 +561,28 @@ func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg pluginwire.ResponseMs
 	return c.formatResponse(cmd, resp)
 }
 
-func (c *CLI) handlePluginAPISpec(ctx context.Context, writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {
+func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {
+	profileName := msg.Profile
+	if profileName == "" {
+		if cmd != nil {
+			profileName = c.profileFromCmd(cmd)
+		} else {
+			profileName = "default"
+		}
+	}
 	if msg.Name == "" {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:  pluginwire.MsgTypeAPISpecResponse,
-			Error: "missing api name",
+			Type:    pluginwire.MsgTypeAPISpecResponse,
+			Profile: profileName,
+			Error:   "missing api name",
 		})
 	}
 	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[msg.Name] == nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:  pluginwire.MsgTypeAPISpecResponse,
-			Name:  msg.Name,
-			Error: fmt.Sprintf("unknown API %q", msg.Name),
+			Type:    pluginwire.MsgTypeAPISpecResponse,
+			Name:    msg.Name,
+			Profile: profileName,
+			Error:   fmt.Sprintf("unknown API %q", msg.Name),
 		})
 	}
 	apiCfg := c.cfg.APIs[msg.Name]
@@ -576,44 +590,49 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, writer *commandPluginWrit
 	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:  pluginwire.MsgTypeAPISpecResponse,
-			Name:  msg.Name,
-			Error: err.Error(),
+			Type:    pluginwire.MsgTypeAPISpecResponse,
+			Name:    msg.Name,
+			Profile: profileName,
+			Error:   err.Error(),
 		})
 	}
 	if s == nil {
 		s, err = c.discoverSpec(ctx, msg.Name)
 		if err != nil {
 			return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-				Type:  pluginwire.MsgTypeAPISpecResponse,
-				Name:  msg.Name,
-				Error: err.Error(),
+				Type:    pluginwire.MsgTypeAPISpecResponse,
+				Name:    msg.Name,
+				Profile: profileName,
+				Error:   err.Error(),
 			})
 		}
 	}
 	if s == nil || len(s.Raw) == 0 {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:  pluginwire.MsgTypeAPISpecResponse,
-			Name:  msg.Name,
-			Error: fmt.Sprintf("no spec available for %q", msg.Name),
+			Type:    pluginwire.MsgTypeAPISpecResponse,
+			Name:    msg.Name,
+			Profile: profileName,
+			Error:   fmt.Sprintf("no spec available for %q", msg.Name),
 		})
 	}
 	opSet, err := s.OperationSetWithOptions(spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
-		ServerVariables: effectiveServerVariables(apiCfg, "default"),
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	})
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:  pluginwire.MsgTypeAPISpecResponse,
-			Name:  msg.Name,
-			Error: err.Error(),
+			Type:    pluginwire.MsgTypeAPISpecResponse,
+			Name:    msg.Name,
+			Profile: profileName,
+			Error:   err.Error(),
 		})
 	}
 
 	return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 		Type:        pluginwire.MsgTypeAPISpecResponse,
 		Name:        msg.Name,
+		Profile:     profileName,
 		ContentType: s.ContentType,
 		Raw:         s.Raw,
 		Operations:  pluginOperationsFromSpec(opSet.Operations),

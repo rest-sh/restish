@@ -18,6 +18,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/procutil"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 )
@@ -244,6 +245,7 @@ func (c *CLI) runSecretCommand(commandLine string) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, shell, flag, commandLine)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &stderr, limit: 4096}
 	out, err := cmd.Output()

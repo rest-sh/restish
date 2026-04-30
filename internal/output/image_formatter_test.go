@@ -32,8 +32,8 @@ func imageResp(raw []byte) *output.Response {
 	return &output.Response{
 		Proto:  "HTTP/1.1",
 		Status: 200,
-		Headers: map[string]string{
-			"Content-Type": "image/png",
+		Headers: map[string][]string{
+			"Content-Type": {"image/png"},
 		},
 		Body: string(raw), // content registry returns string for unknown types
 		Raw:  raw,
@@ -57,7 +57,7 @@ func TestImageFormatter_NonColor_WritesRawBytes(t *testing.T) {
 }
 
 func TestImageFormatter_NonColor_EmptyBody(t *testing.T) {
-	resp := &output.Response{Headers: map[string]string{}}
+	resp := &output.Response{Headers: map[string][]string{}}
 	var buf bytes.Buffer
 	if err := output.DefaultFormatters()["image"].Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -109,7 +109,7 @@ func TestImageFormatter_HalfBlock_InvalidImage_FallsBackToRaw(t *testing.T) {
 
 	data := []byte("not an image")
 	resp := &output.Response{
-		Headers: map[string]string{"Content-Type": "image/png"},
+		Headers: map[string][]string{"Content-Type": {"image/png"}},
 		Raw:     data,
 	}
 	var buf bytes.Buffer

@@ -251,10 +251,10 @@ func validateStreamingOutputMode(cmd *cobra.Command) error {
 }
 
 func streamBaseResponse(resp *http.Response) *output.Response {
-	headers := make(map[string]string, len(resp.Header))
+	headers := make(map[string][]string, len(resp.Header))
 	for k, vals := range resp.Header {
 		if len(vals) > 0 {
-			headers[k] = vals[0]
+			headers[k] = append([]string(nil), vals...)
 		}
 	}
 	return &output.Response{

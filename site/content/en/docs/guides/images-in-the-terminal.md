@@ -2,11 +2,11 @@
 title: Images in the Terminal
 linkTitle: Images in the Terminal
 weight: 70
-description: Render image responses in capable terminals or save exact image bytes to files.
+description: Render image responses in capable terminals or save image body bytes to files.
 ---
 
 Restish can render `image/*` responses in terminals that support image
-protocols, and can save the original bytes when you need a file.
+protocols, and can save the response body bytes when you need a file.
 
 ## Render A Known Image
 
@@ -28,7 +28,7 @@ restish https://api.rest.sh/images/png > image.png
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
-Image responses redirect as original bytes by default, so no output flag is
+Image responses redirect as body bytes by default, so no output flag is
 needed when saving them to a file.
 
 ## Terminal Support

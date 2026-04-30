@@ -49,7 +49,7 @@ func TestCommandPluginHelp(t *testing.T) {
 	installCmdPlugin(t)
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	_ = c.Run([]string{"restish", "--help"})
 
 	if !strings.Contains(out.String(), "greet") {
@@ -66,7 +66,7 @@ func TestCommandPluginGreet(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	var errOut captureWriter
 	c.Stderr = &errOut
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "greet"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCommandPluginFetch(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "fetch", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestCommandPluginProgress(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	var errOut captureWriter
 	c.Stderr = &errOut
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	_ = c.Run([]string{"restish", "greet"})
 	if !strings.Contains(errOut.String(), "Greeting in progress") {
 		t.Errorf("expected progress on stderr, got:\n%s", errOut.String())
@@ -114,7 +114,7 @@ func TestCommandPluginExitCode(t *testing.T) {
 	installCmdPlugin(t)
 
 	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "fail"}); err == nil {
 		t.Fatal("expected error for exit_code=1, got nil")
 	}
@@ -124,7 +124,7 @@ func TestCommandPluginDeath(t *testing.T) {
 	installCmdPlugin(t)
 
 	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	err := c.Run([]string{"restish", "die"})
 	if err == nil {
 		t.Fatal("expected error for plugin crash, got nil")
@@ -141,7 +141,7 @@ func TestCommandPluginPassthroughStdio(t *testing.T) {
 	var errOut captureWriter
 	c.Stderr = &errOut
 	c.Stdin = strings.NewReader("hello\n")
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "pipe"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestCommandPluginDoneHangKilledAfterGrace(t *testing.T) {
 	t.Setenv("RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE", "100ms")
 
 	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 
 	start := time.Now()
 	if err := c.Run([]string{"restish", "hangdone"}); err != nil {
@@ -175,7 +175,7 @@ func TestCommandPluginWithoutPassthroughDoesNotConsumeStdin(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Stdin = unreadableReader{}
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
 	if err := c.Run([]string{"restish", "greet"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

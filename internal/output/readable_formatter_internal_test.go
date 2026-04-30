@@ -107,7 +107,7 @@ func TestReadableFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/plain; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/plain; charset=utf-8"}},
 		URL:     "https://raw.githubusercontent.com/rest-sh/restish/main/cmd/restish/main.go?token=secret",
 		Body:    "package main\n\nfunc main() {}\n",
 		Raw:     []byte("package main\n\nfunc main() {}\n"),
@@ -134,7 +134,7 @@ func TestReadableFormatterHighlightsPrintableTextByContentType(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/html; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/html; charset=utf-8"}},
 		Body:    "<!doctype html>\n<title>Hello</title>\n",
 		Raw:     []byte("<!doctype html>\n<title>Hello</title>\n"),
 	}
@@ -155,7 +155,7 @@ func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/plain; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/plain; charset=utf-8"}},
 		URL:     "https://raw.githubusercontent.com/rest-sh/restish/main/README.md?token=secret",
 		Body:    "# Restish\n\n- Talk to APIs\n",
 		Raw:     []byte("# Restish\n\n- Talk to APIs\n"),
@@ -191,7 +191,7 @@ func TestReadableFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/markdown; charset=utf-8"}},
 		Body:    "## Restish\n",
 		Raw:     []byte("## Restish\n"),
 	}
@@ -293,7 +293,7 @@ func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/markdown; charset=utf-8"}},
 		Body:    "## Restish\n",
 		Raw:     []byte("## Restish\n"),
 	}
@@ -308,7 +308,7 @@ func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
 
 func TestMarkdownBodyDetectsMarkdownContentType(t *testing.T) {
 	resp := &Response{
-		Headers: map[string]string{"Content-Type": "text/markdown; charset=utf-8"},
+		Headers: map[string][]string{"Content-Type": {"text/markdown; charset=utf-8"}},
 		Body:    "# Restish\n",
 		Raw:     []byte("# Restish\n"),
 	}

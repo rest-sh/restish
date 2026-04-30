@@ -236,6 +236,41 @@ func TestLoad_ValidAPIs(t *testing.T) {
 	}
 }
 
+func TestValidateAPIName(t *testing.T) {
+	valid := []string{"café", "привет", "東京", "mañana-api", "api_123"}
+	for _, name := range valid {
+		t.Run("valid_"+name, func(t *testing.T) {
+			if err := config.ValidateAPIName(name); err != nil {
+				t.Fatalf("ValidateAPIName(%q): %v", name, err)
+			}
+		})
+	}
+
+	invalid := []string{"", "foo/bar", "foo:bar", "foo bar", "foo?bar", "foo#bar", "foo=bar", "-foo", "_foo", "foo$bar"}
+	for _, name := range invalid {
+		t.Run("invalid_"+name, func(t *testing.T) {
+			if err := config.ValidateAPIName(name); err == nil {
+				t.Fatalf("ValidateAPIName(%q) succeeded, want error", name)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsInvalidConfiguredAPIName(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"foo/bar": {BaseURL: "https://api.example.com"},
+		},
+	}
+	err := config.Validate(cfg)
+	if err == nil {
+		t.Fatal("expected invalid API name error")
+	}
+	if !strings.Contains(err.Error(), "API name") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoad_ProfileTLSSignerParams(t *testing.T) {
 	path := writeConfig(t, `{
 		"apis": {

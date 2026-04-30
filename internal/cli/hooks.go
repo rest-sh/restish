@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 
@@ -142,12 +143,16 @@ type HookFollowRequest struct {
 // non-nil when the plugin wants Restish to issue a new request.
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsByHook["response-middleware"] {
+		responseHeaders := responseHeaderMap(resp.Headers)
+		if !p.Manifest.NeedsAuthSecrets {
+			redactHookResponseHeaders(responseHeaders)
+		}
 		in := pluginwire.ResponseMiddlewareInput{
 			Type:    "response-middleware",
 			Request: hookRequestForPlugin(req, p),
 			Response: pluginwire.HookResponse{
 				Status:  resp.Status,
-				Headers: resp.Headers,
+				Headers: responseHeaders,
 				Body:    resp.Body,
 			},
 		}
@@ -174,17 +179,21 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 			}
 			if out.Response.Headers != nil {
 				if resp.Headers == nil {
-					resp.Headers = make(map[string]string)
+					resp.Headers = make(map[string][]string)
 				}
 				for k, v := range out.Response.Headers {
 					switch vt := v.(type) {
 					case string:
-						resp.Headers[k] = vt
+						resp.Headers[k] = []string{vt}
 					case []any:
-						if len(vt) > 0 {
-							if sv, ok := vt[0].(string); ok {
-								resp.Headers[k] = sv
+						var values []string
+						for _, item := range vt {
+							if sv, ok := item.(string); ok {
+								values = append(values, sv)
 							}
+						}
+						if len(values) > 0 {
+							resp.Headers[k] = values
 						}
 					}
 				}
@@ -218,31 +227,36 @@ func applyRequestUpdate(req *http.Request, update *pluginwire.HookRequestHeaderU
 
 func hookRequestForPlugin(req *http.Request, p plugin.Plugin) pluginwire.HookRequest {
 	headers := headerMap(req.Header)
+	uri := req.URL.String()
 	if !p.Manifest.NeedsAuthSecrets {
 		redactHookRequestHeaders(headers)
+		uri = redactHookRequestURI(req.URL)
 	}
 	return pluginwire.HookRequest{
 		Method:  req.Method,
-		URI:     req.URL.String(),
+		URI:     uri,
 		Headers: headers,
 	}
 }
 
 func redactHookRequestHeaders(headers map[string][]string) {
 	for name := range headers {
-		if isHookSecretHeader(name) {
+		if request.IsCredentialHeader(name) {
 			headers[name] = []string{"<redacted>"}
 		}
 	}
 }
 
-func isHookSecretHeader(name string) bool {
-	switch http.CanonicalHeaderKey(name) {
-	case "Authorization", "Cookie", "Proxy-Authorization":
-		return true
-	default:
-		return false
+func redactHookResponseHeaders(headers map[string][]string) {
+	for name := range headers {
+		if request.IsCredentialHeader(name) {
+			headers[name] = []string{"<redacted>"}
+		}
 	}
+}
+
+func redactHookRequestURI(u *url.URL) string {
+	return request.RedactedURL(u)
 }
 
 // headerMap converts an http.Header (map[string][]string) to a plain Go map
@@ -251,6 +265,14 @@ func headerMap(h http.Header) map[string][]string {
 	m := make(map[string][]string, len(h))
 	for k, vs := range h {
 		m[k] = append([]string(nil), vs...)
+	}
+	return m
+}
+
+func responseHeaderMap(h map[string][]string) map[string][]string {
+	m := make(map[string][]string, len(h))
+	for k, v := range h {
+		m[k] = append([]string(nil), v...)
 	}
 	return m
 }

@@ -82,6 +82,46 @@ func TestPaginationThreePages(t *testing.T) {
 	}
 }
 
+func TestPaginationStopsOnCrossOriginNextURL(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	crossOriginRequests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "evil.example.com" {
+			crossOriginRequests++
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`[999]`)),
+				Request:    r,
+			}, nil
+		}
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers.Set("Link", `<https://evil.example.com/items?page=2>; rel="next"`)
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[1,2,3]`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if crossOriginRequests != 0 {
+		t.Fatalf("cross-origin page requested %d times, want 0", crossOriginRequests)
+	}
+	if strings.Contains(out.String(), "999") {
+		t.Fatalf("cross-origin page leaked into output:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "pagination next URL crosses origin") {
+		t.Fatalf("expected cross-origin pagination warning, got:\n%s", errOut.String())
+	}
+}
+
 // TestPaginationNoPaginate verifies that --rsh-no-paginate returns only the
 // first page.
 func TestPaginationNoPaginate(t *testing.T) {
@@ -340,7 +380,7 @@ func TestPaginationJSONOutputIsValidJSON(t *testing.T) {
 	}
 
 	var values []map[string]int
-	if err := json.Unmarshal([]byte(out.String()), &values); err != nil {
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
 		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
 	}
 	if len(values) != 4 || values[0]["id"] != 1 || values[3]["id"] != 4 {

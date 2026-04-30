@@ -939,9 +939,18 @@ func (a *app) fetchFileData(f *File) (*fetchedFile, error) {
 	}
 	return &fetchedFile{
 		body:         append(body, '\n'),
-		etag:         resp.Headers["Etag"],
-		lastModified: resp.Headers["Last-Modified"],
+		etag:         firstHeader(resp.Headers, "Etag"),
+		lastModified: firstHeader(resp.Headers, "Last-Modified"),
 	}, nil
+}
+
+func firstHeader(headers map[string][]string, name string) string {
+	for key, values := range headers {
+		if strings.EqualFold(key, name) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
 }
 
 func applyFetchedFile(f *File, fetched *fetchedFile) {

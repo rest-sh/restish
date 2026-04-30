@@ -10,7 +10,7 @@ type pluginClient struct {
 
 type httpResponse struct {
 	Status  int
-	Headers map[string]string
+	Headers map[string][]string
 	Body    any
 	Error   string
 }

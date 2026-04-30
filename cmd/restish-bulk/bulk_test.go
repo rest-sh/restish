@@ -96,7 +96,7 @@ func TestFetchFilesHonorsJobsLimit(t *testing.T) {
 			active.Add(-1)
 			return &httpResponse{
 				Status:  200,
-				Headers: map[string]string{"Etag": uri},
+				Headers: map[string][]string{"Etag": {uri}},
 				Body:    map[string]any{"url": uri},
 			}, nil
 		},
@@ -136,7 +136,7 @@ func TestPullPersistsMetadataAfterCompletedFileWhenLaterFileFails(t *testing.T) 
 					},
 				}, nil
 			case "https://api.example.com/items/one":
-				return &httpResponse{Status: 200, Headers: map[string]string{"Etag": "one-etag"}, Body: map[string]any{"id": "one"}}, nil
+				return &httpResponse{Status: 200, Headers: map[string][]string{"Etag": {"one-etag"}}, Body: map[string]any{"id": "one"}}, nil
 			case "https://api.example.com/items/two":
 				time.Sleep(20 * time.Millisecond)
 				return &httpResponse{Status: 500, Body: map[string]any{"error": "boom"}}, nil

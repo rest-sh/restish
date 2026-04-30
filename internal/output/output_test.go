@@ -94,8 +94,27 @@ func TestNormalize_HeadersCanonicalized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if r.Headers["X-Custom-Header"] != "testval" {
+	if output.Header(r.Headers, "X-Custom-Header") != "testval" {
 		t.Errorf("expected X-Custom-Header=testval, got %q", r.Headers["X-Custom-Header"])
+	}
+}
+
+func TestNormalize_PreservesRepeatedHeaders(t *testing.T) {
+	resp := makeResp(200, "application/json", `{}`)
+	resp.Header.Add("Set-Cookie", "a=1")
+	resp.Header.Add("Set-Cookie", "b=2")
+	resp.Header.Add("Warning", `199 example "old"`)
+	resp.Header.Add("Warning", `299 example "new"`)
+
+	r, err := output.Normalize(resp, testRegistry, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := output.HeaderValues(r.Headers, "Set-Cookie"); len(got) != 2 || got[0] != "a=1" || got[1] != "b=2" {
+		t.Fatalf("Set-Cookie values = %#v", got)
+	}
+	if got := output.HeaderValues(r.Headers, "Warning"); len(got) != 2 || got[0] != `199 example "old"` || got[1] != `299 example "new"` {
+		t.Fatalf("Warning values = %#v", got)
 	}
 }
 
@@ -140,8 +159,8 @@ func TestJSONFormatter_OutputsBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:  "HTTP/1.1",
 		Status: 200,
-		Headers: map[string]string{
-			"Content-Type": "application/json",
+		Headers: map[string][]string{
+			"Content-Type": {"application/json"},
 		},
 		Body: map[string]any{"key": "value"},
 	}
@@ -173,7 +192,7 @@ func TestJSONFormatter_OutputsBody(t *testing.T) {
 }
 
 func TestJSONFormatter_NilBodyOutputsNull(t *testing.T) {
-	resp := &output.Response{Status: 204, Headers: map[string]string{}}
+	resp := &output.Response{Status: 204, Headers: map[string][]string{}}
 	var buf bytes.Buffer
 	if err := output.DefaultFormatters()["json"].Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -234,7 +253,7 @@ func TestReadableFormatter_ContainsStatus(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Body:    map[string]any{"hello": "world"},
 	}
 
@@ -257,7 +276,7 @@ func TestReadableFormatter_BodyIsValidJSON(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 		Body:    map[string]any{"name": "Alice", "age": float64(30)},
 	}
 
@@ -285,7 +304,7 @@ func TestReadableFormatter_PrintsPlainTextBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "text/plain"},
+		Headers: map[string][]string{"Content-Type": {"text/plain"}},
 		Body:    "hello & goodbye",
 		Raw:     []byte("hello & goodbye"),
 	}
@@ -306,7 +325,7 @@ func TestReadableFormatter_NilBodyNoBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  204,
-		Headers: map[string]string{},
+		Headers: map[string][]string{},
 	}
 	var buf bytes.Buffer
 	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
@@ -323,7 +342,7 @@ func TestReadableFormatter_FramedValueStreamRootArray(t *testing.T) {
 	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 	}, false, output.FramedValueTemplate{
 		ItemIndent:  "  ",
 		CloseIndent: "",
@@ -361,7 +380,7 @@ func TestReadableFormatter_FramedValueStreamWrappedObject(t *testing.T) {
 	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
-		Headers: map[string]string{"Content-Type": "application/json"},
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
 	}, false, output.FramedValueTemplate{
 		Prefix:      "{\n  \"data\": ",
 		Suffix:      ",\n  \"meta\": {\n    \"source\": \"test\"\n  }\n}",
@@ -409,9 +428,9 @@ func TestReadableFormatter_ImageBodyIncludesHeadersAndRenderedImage(t *testing.T
 	resp := &output.Response{
 		Proto:  "HTTP/1.1",
 		Status: 200,
-		Headers: map[string]string{
-			"Content-Type": "image/png",
-			"X-Test":       "present",
+		Headers: map[string][]string{
+			"Content-Type": {"image/png"},
+			"X-Test":       {"present"},
 		},
 		Body: string(data),
 		Raw:  data,

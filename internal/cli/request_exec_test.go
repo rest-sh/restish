@@ -106,6 +106,44 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	}
 }
 
+func TestApplyAPIProfileMergesProfileTLSWithFlagPrecedence(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						CACertPath:     "profile-ca.pem",
+						ClientCertPath: "profile-client.pem",
+						ClientKeyPath:  "profile-key.pem",
+					},
+				},
+			},
+		},
+	}
+
+	_, _, opts, err := c.applyAPIProfile("svc/items", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile: %v", err)
+	}
+	if opts.CACertPath != "profile-ca.pem" || opts.ClientCertPath != "profile-client.pem" || opts.ClientKeyPath != "profile-key.pem" {
+		t.Fatalf("profile TLS options not applied: %#v", opts)
+	}
+
+	_, _, opts, err = c.applyAPIProfile("svc/items", "default", request.Options{
+		CACertPath:     "flag-ca.pem",
+		ClientCertPath: "flag-client.pem",
+		ClientKeyPath:  "flag-key.pem",
+	}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile with flags: %v", err)
+	}
+	if opts.CACertPath != "flag-ca.pem" || opts.ClientCertPath != "flag-client.pem" || opts.ClientKeyPath != "flag-key.pem" {
+		t.Fatalf("CLI flag TLS options should win over profile values: %#v", opts)
+	}
+}
+
 func TestClosePreparedTransportUnregistersRequestCloser(t *testing.T) {
 	c := New()
 	closer := &countingCloser{}

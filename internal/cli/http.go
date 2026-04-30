@@ -249,7 +249,7 @@ func followCrossesFirstPartyHost(firstPartyOrigin, followURI string) bool {
 	if err != nil || baseU.Scheme == "" {
 		return !strings.EqualFold(followU.Hostname(), firstPartyOrigin)
 	}
-	return !sameURLOrigin(baseU, followU)
+	return !request.SameOrigin(baseU, followU)
 }
 
 // formatResponse applies any filter then selects and runs the formatter.
@@ -271,7 +271,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		_, err := c.Stdout.Write(resp.Raw)
 		return err
 	}
-	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(resp.Headers["Content-Type"], "image/") {
+	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(output.Header(resp.Headers, "Content-Type"), "image/") {
 		_, err := c.Stdout.Write(resp.Raw)
 		return err
 	}
@@ -318,11 +318,12 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 
 	// Build the full response map for filtering.
 	doc := map[string]any{
-		"proto":   resp.Proto,
-		"status":  resp.Status,
-		"headers": resp.Headers,
-		"links":   resp.Links,
-		"body":    resp.Body,
+		"proto":       resp.Proto,
+		"status":      resp.Status,
+		"headers":     firstHeaderValues(resp.Headers),
+		"headers_all": resp.Headers,
+		"links":       resp.Links,
+		"body":        resp.Body,
 	}
 
 	filtered, handled, err := c.filterOutput(cmd, filterExpr, doc, lang)
@@ -352,6 +353,16 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+}
+
+func firstHeaderValues(headers map[string][]string) map[string]string {
+	out := make(map[string]string, len(headers))
+	for k, values := range headers {
+		if len(values) > 0 {
+			out[k] = values[0]
+		}
+	}
+	return out
 }
 
 func explicitOutputFilter(gf GlobalFlags) bool {
@@ -654,7 +665,7 @@ func (c *CLI) logVerboseRequestBody(req *http.Request) {
 
 func (c *CLI) logVerboseResponseBody(resp *output.Response) {
 	if resp != nil && len(resp.Raw) > 0 {
-		c.logVerboseBody("< body", resp.Raw, resp.Headers["Content-Type"])
+		c.logVerboseBody("< body", resp.Raw, output.Header(resp.Headers, "Content-Type"))
 	}
 }
 
@@ -727,54 +738,17 @@ func networkErrorHint(err error) string {
 }
 
 func redactedRequestURL(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	copyURL := *u
-	q := copyURL.Query()
-	for key := range q {
-		if isSensitiveQueryParam(key) {
-			q.Set(key, "<redacted>")
-		}
-	}
-	copyURL.RawQuery = q.Encode()
-	return copyURL.String()
+	return request.RedactedURL(u)
 }
 
 func isSensitiveQueryParam(name string) bool {
-	name = strings.ToLower(name)
-	sensitive := []string{
-		"access_token",
-		"refresh_token",
-		"token",
-		"api_key",
-		"apikey",
-		"client_secret",
-		"password",
-		"secret",
-	}
-	for _, key := range sensitive {
-		if name == key {
-			return true
-		}
-	}
-	return false
+	return request.IsCredentialQueryParam(name)
 }
 
 // isSensitiveHeader reports whether a header name carries credentials and
 // should be redacted in verbose output.
 func isSensitiveHeader(name string) bool {
-	switch http.CanonicalHeaderKey(name) {
-	case "Authorization", "Cookie", "Set-Cookie", "Proxy-Authorization":
-		return true
-	}
-	lower := strings.ToLower(name)
-	for _, marker := range []string{"api-key", "apikey", "auth-token", "token", "secret", "password"} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
+	return request.IsCredentialHeader(name)
 }
 
 // isAPIShortName reports whether arg (with no path separator) exactly matches a
@@ -804,7 +778,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 	rawURL = match.rawURL
 
 	if match.profile == nil {
-		if match.api.Profiles != nil {
+		if match.api.Profiles != nil || profileName != "default" {
 			return rawURL, match.apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.apiName, profileNames(match.api.Profiles))
 		}
 		callbacks := c.authOnRequest(match.apiName, profileName, nil, authOpts)
@@ -824,6 +798,15 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 			opts.TLSSignerName = match.profile.TLSSigner
 		}
 		opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, match.profile.TLSSignerParams)
+		if opts.CACertPath == "" {
+			opts.CACertPath = match.profile.CACertPath
+		}
+		if opts.ClientCertPath == "" {
+			opts.ClientCertPath = match.profile.ClientCertPath
+		}
+		if opts.ClientKeyPath == "" {
+			opts.ClientKeyPath = match.profile.ClientKeyPath
+		}
 	}
 	if match.apiName != "" {
 		opts.CacheNamespace = match.apiName + ":" + profileName
@@ -894,6 +877,26 @@ func profileForName(api *config.APIConfig, profileName string) *config.ProfileCo
 	return api.Profiles[profileName]
 }
 
+func effectiveProfileBaseURL(api *config.APIConfig, profileName string) string {
+	if api == nil {
+		return ""
+	}
+	if prof := profileForName(api, profileName); prof != nil && prof.BaseURL != "" {
+		return prof.BaseURL
+	}
+	return api.BaseURL
+}
+
+func effectiveOperationBase(api *config.APIConfig, profileName string) string {
+	if api == nil {
+		return ""
+	}
+	if prof := profileForName(api, profileName); prof != nil && prof.OperationBase != "" {
+		return prof.OperationBase
+	}
+	return api.OperationBase
+}
+
 func cleanExpandedAPIURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -918,8 +921,16 @@ func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) ([]string,
 	if prof != nil && prof.BaseURL != "" {
 		bases = append(bases, prof.BaseURL)
 	}
-	if api.OperationBase != "" {
-		resolved, err := config.ResolveOperationBaseURL(api.BaseURL, api.OperationBase)
+	operationBase := effectiveOperationBase(api, "")
+	if prof != nil && prof.OperationBase != "" {
+		operationBase = prof.OperationBase
+	}
+	baseURL := api.BaseURL
+	if prof != nil && prof.BaseURL != "" {
+		baseURL = prof.BaseURL
+	}
+	if operationBase != "" {
+		resolved, err := config.ResolveOperationBaseURL(baseURL, operationBase)
 		if err != nil {
 			return bases, fmt.Errorf("operation_base: %w", err)
 		}
@@ -1075,6 +1086,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		CacheMaxBytes:        cacheMaxBytes,
 		NoCache:              gf.NoCache,
 		Retry:                retry,
+		RetryUnsafe:          gf.Retry >= 0,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
 		WrapTransport: func(rt http.RoundTripper) http.RoundTripper {

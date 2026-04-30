@@ -36,6 +36,9 @@ func newTestCLI(t *testing.T) (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
 	c.Hooks().PassReader = strings.NewReader("")
 	c.Hooks().RetryBaseDelay = time.Millisecond
 	stateDir := t.TempDir()
+	if configDir := os.Getenv("RSH_CONFIG_DIR"); configDir != "" {
+		stateDir = configDir
+	}
 	c.Hooks().ConfigPath = filepath.Join(stateDir, "restish.json")
 	c.Hooks().TokenCachePath = filepath.Join(stateDir, "tokens.cbor")
 	c.Hooks().CachePath = filepath.Join(stateDir, "http-cache")

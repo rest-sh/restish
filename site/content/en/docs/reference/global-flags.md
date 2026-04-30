@@ -84,6 +84,10 @@ restish 'https://api.rest.sh/flaky?failures=1&key=flags' --rsh-retry 2
 restish https://api.rest.sh/cache --rsh-no-cache
 ```
 
+Default retry behavior is conservative for `GET` and `HEAD`. Supplying
+`--rsh-retry` explicitly opts the current command into retrying unsafe methods
+as well, so use it carefully for requests that may change server state.
+
 ## General
 
 ```bash

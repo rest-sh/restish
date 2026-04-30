@@ -351,7 +351,7 @@ func securitySchemes(components *v3.Components) map[string]*v3.SecurityScheme {
 }
 
 func credentialAlternatives(requirements []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme) (bool, []CredentialAlternative) {
-	if requirements == nil || len(requirements) == 0 {
+	if len(requirements) == 0 {
 		return false, nil
 	}
 	var optional bool

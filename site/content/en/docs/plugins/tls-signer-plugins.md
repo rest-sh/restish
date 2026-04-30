@@ -29,14 +29,23 @@ available, and the target API requires mTLS.
       "base_url": "https://mtls.internal.test",
       "profiles": {
         "default": {
+          "ca_cert": "/etc/ssl/internal-ca.pem",
+          "client_cert": "/etc/ssl/client.pem",
+          "client_key": "/etc/ssl/client.key",
           "tls_signer": "pkcs11",
-          "tls_signer_params": ["module=/usr/local/lib/opensc-pkcs11.so"]
+          "tls_signer_params": {
+            "module": "/usr/local/lib/opensc-pkcs11.so"
+          }
         }
       }
     }
   }
 }
 ```
+
+Profile-level TLS settings override API-level defaults for that profile. CLI
+flags such as `--rsh-client-cert`, `--rsh-client-key`, `--rsh-ca-cert`, and
+`--rsh-tls-signer` override both config layers for the current command.
 
 ## Troubleshooting
 

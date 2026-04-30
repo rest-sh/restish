@@ -16,17 +16,27 @@ import (
 
 // cacheEntry is the on-disk format for a cached spec.
 type cacheEntry struct {
-	Version    string    `cbor:"version"`
-	FetchedAt  time.Time `cbor:"fetched_at"`
-	ExpiresAt  time.Time `cbor:"expires_at"`
-	Schema     int       `cbor:"schema,omitempty"`
-	Spec       cachedRaw `cbor:"spec,omitempty"`
-	Operations []opsBlob `cbor:"operations,omitempty"`
+	Version    string           `cbor:"version"`
+	FetchedAt  time.Time        `cbor:"fetched_at"`
+	ExpiresAt  time.Time        `cbor:"expires_at"`
+	Schema     int              `cbor:"schema,omitempty"`
+	Spec       cachedRaw        `cbor:"spec,omitempty"`
+	SpecFiles  []cachedSpecFile `cbor:"spec_files,omitempty"`
+	Operations []opsBlob        `cbor:"operations,omitempty"`
 
 	// Legacy v2-dev fields. Keep them readable so older raw-only cache entries
 	// can be upgraded opportunistically after a successful parse.
 	ContentType string `cbor:"content_type,omitempty"`
 	Raw         []byte `cbor:"raw,omitempty"`
+}
+
+type cachedSpecFile struct {
+	Source  string    `cbor:"source"`
+	Local   bool      `cbor:"local,omitempty"`
+	Path    string    `cbor:"path,omitempty"`
+	ModTime time.Time `cbor:"mod_time,omitempty"`
+	Size    int64     `cbor:"size,omitempty"`
+	SHA256  string    `cbor:"sha256,omitempty"`
 }
 
 type cachedRaw struct {

@@ -85,7 +85,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 
 // runPluginList discovers and prints all available plugins with their hooks.
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
-	plugins := plugin.Discover(plugin.DefaultPluginDir(), func(path string, err error) {
+	plugins := plugin.Discover(c.pluginDir(), func(path string, err error) {
 		c.warnf("plugin %s: %v", filepath.Base(path), err)
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 
@@ -192,11 +192,12 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("install: confirmation required; rerun with --yes for automation")
 		}
 	}
-	if err := c.installResolvedPlugin(resolved); err != nil {
+	installedName, err := c.installResolvedPlugin(resolved, *manifest)
+	if err != nil {
 		return err
 	}
 	c.warnf("installed plugins are trusted executables and may run arbitrary code on future restish invocations")
-	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", resolved.Name)
+	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", installedName)
 	return nil
 }
 
@@ -249,30 +250,44 @@ func (c *CLI) resolvePluginInstallSource(ctx context.Context, source string) (re
 	return resolvedPluginInstallSource{}, fmt.Errorf("install: cannot access %s", source)
 }
 
-func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource) error {
+func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource, manifest plugin.Manifest) (string, error) {
 	info, err := os.Stat(resolved.Path)
 	if err != nil {
-		return fmt.Errorf("install: cannot access %s: %w", resolved.Path, err)
+		return "", fmt.Errorf("install: cannot access %s: %w", resolved.Path, err)
 	}
 	if info.IsDir() {
-		return fmt.Errorf("install: %s is a directory", resolved.Path)
+		return "", fmt.Errorf("install: %s is a directory", resolved.Path)
 	}
 
-	pluginDir := plugin.DefaultPluginDir()
+	pluginDir := c.pluginDir()
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		return fmt.Errorf("install: cannot create plugin dir %s: %w", pluginDir, err)
+		return "", fmt.Errorf("install: cannot create plugin dir %s: %w", pluginDir, err)
 	}
 
-	dest := filepath.Join(pluginDir, resolved.Name)
+	installedName := installedPluginFileName(manifest.Name, resolved.Name)
+	dest := filepath.Join(pluginDir, installedName)
 	if err := copyFile(resolved.Path, dest); err != nil {
-		return fmt.Errorf("install: %w", err)
+		return "", fmt.Errorf("install: %w", err)
 	}
 	_ = os.Chmod(dest, 0o755)
 	if _, err := plugin.LoadManifestWithWarnings(dest, diagnosticPrefixWriter(c.Stderr)); err != nil {
 		_ = os.Remove(dest)
-		return fmt.Errorf("install: %w", err)
+		return "", fmt.Errorf("install: %w", err)
 	}
-	return nil
+	return installedName, nil
+}
+
+func installedPluginFileName(manifestName, sourceName string) string {
+	name := strings.TrimSpace(manifestName)
+	name = strings.TrimPrefix(name, "restish-")
+	if name == "" {
+		name = strings.TrimPrefix(strings.TrimSuffix(sourceName, filepath.Ext(sourceName)), "restish-")
+	}
+	installed := "restish-" + name
+	if runtime.GOOS == "windows" && filepath.Ext(installed) == "" && strings.EqualFold(filepath.Ext(sourceName), ".exe") {
+		installed += ".exe"
+	}
+	return installed
 }
 
 func resolveLocalPluginSource(source string) (string, bool, error) {
@@ -670,7 +685,7 @@ func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 	if err := validatePluginName(name); err != nil {
 		return err
 	}
-	pluginDir := plugin.DefaultPluginDir()
+	pluginDir := c.pluginDir()
 	path := filepath.Join(pluginDir, name)
 	if err := os.Remove(path); err != nil {
 		if runtime.GOOS == "windows" && filepath.Ext(name) == "" && errors.Is(err, os.ErrNotExist) {

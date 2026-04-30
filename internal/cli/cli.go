@@ -247,6 +247,10 @@ func (c *CLI) pluginManifestCachePath() string {
 	return c.paths().PluginManifestCache()
 }
 
+func (c *CLI) pluginDir() string {
+	return filepath.Join(filepath.Dir(c.configFilePath()), "plugins")
+}
+
 func (c *CLI) paths() *config.Paths {
 	if c.Paths != nil {
 		return c.Paths
@@ -421,11 +425,14 @@ func (c *CLI) Run(args []string) error {
 		if isBuiltinCommandName(apiName) {
 			return fmt.Errorf("config: API name %q conflicts with a built-in command; rename it before continuing", apiName)
 		}
+		if err := config.ValidateAPIName(apiName); err != nil {
+			return fmt.Errorf("config: API name %q is invalid: %w", apiName, err)
+		}
 	}
 
 	// Discover hook plugins at startup; warn about broken plugins so users
 	// know their plugin is not active rather than silently ignoring it.
-	c.plugins = internalplugin.Discover(internalplugin.DefaultPluginDir(), func(path string, err error) {
+	c.plugins = internalplugin.Discover(c.pluginDir(), func(path string, err error) {
 		c.warnf("plugin %s: %v", filepath.Base(path), err)
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 	c.pluginsByHook = indexPluginsByHook(c.plugins)

@@ -13,6 +13,9 @@ import (
 func writeAPIConfig(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
+	if configDir := os.Getenv("RSH_CONFIG_DIR"); configDir != "" {
+		dir = configDir
+	}
 	path := filepath.Join(dir, "restish.json")
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatalf("writeAPIConfig: %v", err)

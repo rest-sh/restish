@@ -73,25 +73,27 @@ type HTTPRequestMsg struct {
 
 // HTTPResponseMsg is the host reply to an HTTPRequestMsg.
 type HTTPResponseMsg struct {
-	Type      string            `cbor:"type"`
-	RequestID string            `cbor:"request_id,omitempty"`
-	Status    int               `cbor:"status"`
-	Headers   map[string]string `cbor:"headers,omitempty"`
-	Body      any               `cbor:"body"`
+	Type      string              `cbor:"type"`
+	RequestID string              `cbor:"request_id,omitempty"`
+	Status    int                 `cbor:"status"`
+	Headers   map[string][]string `cbor:"headers,omitempty"`
+	Body      any                 `cbor:"body"`
 	// Error is set when the HTTP request itself failed.
 	Error string `cbor:"error,omitempty"`
 }
 
 // APISpecMsg asks the host to load the OpenAPI spec for a registered API.
 type APISpecMsg struct {
-	Type string `cbor:"type"`
-	Name string `cbor:"name"`
+	Type    string `cbor:"type"`
+	Name    string `cbor:"name"`
+	Profile string `cbor:"profile,omitempty"`
 }
 
 // APISpecResponseMsg is the host reply to an APISpecMsg.
 type APISpecResponseMsg struct {
 	Type        string         `cbor:"type"`
 	Name        string         `cbor:"name"`
+	Profile     string         `cbor:"profile,omitempty"`
 	ContentType string         `cbor:"content_type,omitempty"`
 	Raw         []byte         `cbor:"raw,omitempty"`
 	Operations  []APIOperation `cbor:"operations,omitempty"`
@@ -212,11 +214,11 @@ type ConfirmResponseMsg struct {
 // one-shot render, or send body values incrementally on subsequent "item"
 // messages for paginated and event-stream output.
 type FormatterResponse struct {
-	Proto   string            `cbor:"proto,omitempty" json:"proto,omitempty"`
-	Status  int               `cbor:"status,omitempty" json:"status,omitempty"`
-	Headers map[string]string `cbor:"headers,omitempty" json:"headers,omitempty"`
-	Links   map[string]any    `cbor:"links,omitempty" json:"links,omitempty"`
-	Body    any               `cbor:"body,omitempty" json:"body,omitempty"`
+	Proto   string              `cbor:"proto,omitempty" json:"proto,omitempty"`
+	Status  int                 `cbor:"status,omitempty" json:"status,omitempty"`
+	Headers map[string][]string `cbor:"headers,omitempty" json:"headers,omitempty"`
+	Links   map[string]any      `cbor:"links,omitempty" json:"links,omitempty"`
+	Body    any                 `cbor:"body,omitempty" json:"body,omitempty"`
 }
 
 // FormatterRequest is sent to formatter plugins. Type is always "formatter"
@@ -232,10 +234,10 @@ type FormatterRequest struct {
 // ResponseMsg asks the host to format and display a response using the
 // configured output formatter (same as a regular API response).
 type ResponseMsg struct {
-	Type    string            `cbor:"type"`
-	Status  int               `cbor:"status,omitempty"`
-	Headers map[string]string `cbor:"headers,omitempty"`
-	Body    any               `cbor:"body,omitempty"`
+	Type    string              `cbor:"type"`
+	Status  int                 `cbor:"status,omitempty"`
+	Headers map[string][]string `cbor:"headers,omitempty"`
+	Body    any                 `cbor:"body,omitempty"`
 }
 
 // DoneMsg signals that the plugin has finished. ExitCode 0 is success.
@@ -378,9 +380,9 @@ type RequestMiddlewareOutput struct {
 
 // HookResponse carries the current HTTP response state forwarded to hook plugins.
 type HookResponse struct {
-	Status  int               `cbor:"status" json:"status"`
-	Headers map[string]string `cbor:"headers" json:"headers"`
-	Body    any               `cbor:"body" json:"body"`
+	Status  int                 `cbor:"status" json:"status"`
+	Headers map[string][]string `cbor:"headers" json:"headers"`
+	Body    any                 `cbor:"body" json:"body"`
 }
 
 // ResponseMiddlewareInput is sent to plugins registered for the

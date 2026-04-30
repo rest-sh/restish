@@ -16,7 +16,7 @@ Document formats produce one coherent result:
 - `json`: one JSON document
 - `yaml`: one YAML document
 - `cbor`: one CBOR document
-- `raw`: original body bytes when byte fidelity matters
+- `raw`: decoded response body bytes when formatter bypass matters
 - `image`: terminal image rendering for image responses
 - `gron`: one greppable path/value document
 
@@ -30,12 +30,16 @@ restish https://api.rest.sh/example -o gron
 restish https://api.rest.sh/images/png -o image
 ```
 
-For file redirects, image responses already write original bytes:
+For file redirects, image responses already write body bytes:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
+
+Raw output bypasses Restish's structured body decoding and formatting. It still
+uses the body exposed by the HTTP client after any content-encoding
+decompression, so it is not a capture of the exact compressed wire bytes.
 
 ## Record Formats
 

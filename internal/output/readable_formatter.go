@@ -35,7 +35,7 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	if resp.Body == nil {
 		return nil
 	}
-	if strings.HasPrefix(resp.Headers["Content-Type"], "image/") && len(resp.Raw) > 0 {
+	if strings.HasPrefix(Header(resp.Headers, "Content-Type"), "image/") && len(resp.Raw) > 0 {
 		return (&ImageFormatter{}).Format(w, resp, color)
 	}
 
@@ -277,7 +277,9 @@ func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(&preamble, "%s: %s\n", k, resp.Headers[k])
+		for _, value := range resp.Headers[k] {
+			fmt.Fprintf(&preamble, "%s: %s\n", k, value)
+		}
 	}
 
 	if color {
@@ -366,7 +368,7 @@ func textBodyLexer(resp *Response) chroma.Lexer {
 	if resp == nil {
 		return nil
 	}
-	if lexer := textBodyLexerByContentType(resp.Headers["Content-Type"]); lexer != nil {
+	if lexer := textBodyLexerByContentType(Header(resp.Headers, "Content-Type")); lexer != nil {
 		return lexer
 	}
 	if resp.URL == "" {
@@ -386,7 +388,7 @@ func markdownBody(resp *Response) bool {
 	if resp == nil {
 		return false
 	}
-	contentType := resp.Headers["Content-Type"]
+	contentType := Header(resp.Headers, "Content-Type")
 	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
 		contentType = mediaType
 	}

@@ -34,7 +34,7 @@ func TestHandleCommandPluginMessageRejectsMalformedDone(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	done, gotErr := cli.handleCommandPluginMessage(cmd, nil, nil, "done", raw)
+	done, gotErr := cli.handleCommandPluginMessage(cmd, context.Background(), nil, nil, "done", raw)
 	if !done {
 		t.Fatal("expected malformed done message to stop processing")
 	}
@@ -202,7 +202,7 @@ func handleAPISpecForTest(t *testing.T, c *CLI, ctx context.Context, apiName str
 	t.Helper()
 	var buf bytes.Buffer
 	writer := &commandPluginWriter{w: &buf}
-	if err := c.handlePluginAPISpec(ctx, writer, pluginwire.APISpecMsg{Name: apiName}); err != nil {
+	if err := c.handlePluginAPISpec(ctx, nil, writer, pluginwire.APISpecMsg{Name: apiName}); err != nil {
 		t.Fatalf("handlePluginAPISpec: %v", err)
 	}
 	var reply pluginwire.APISpecResponseMsg

@@ -51,7 +51,7 @@ func (f *ImageFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	case protoKitty:
 		return renderKitty(w, resp.Raw)
 	case protoITerm2:
-		return renderITerm2(w, resp.Raw, resp.Headers["Content-Type"])
+		return renderITerm2(w, resp.Raw, Header(resp.Headers, "Content-Type"))
 	default:
 		img, _, err := image.Decode(bytes.NewReader(resp.Raw))
 		if err != nil {

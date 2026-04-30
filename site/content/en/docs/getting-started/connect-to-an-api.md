@@ -18,6 +18,11 @@ restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 Restish discovers `https://api.rest.sh/openapi.json`, stores the API config,
 and caches the spec so generated commands are available quickly.
 
+The API name becomes a command group. Use a name that starts with a Unicode
+letter or number and then uses only letters, numbers, combining marks, `-`, or
+`_`. Names cannot collide with built-in commands such as `api`, `get`, or
+`post`.
+
 Inspect what was saved:
 
 ```bash

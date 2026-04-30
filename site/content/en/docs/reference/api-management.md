@@ -16,6 +16,11 @@ restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 Discovers a spec, builds initial config, prompts for setup where needed, and
 saves the API.
 
+API names become command groups. Names may contain Unicode letters, Unicode
+numbers, combining marks, `-`, and `_`, and must start with a letter or number.
+They cannot collide with built-in commands such as `api`, `get`, or `post`, and
+they cannot contain whitespace, URL/path delimiters, or shell punctuation.
+
 Use `--no-discover` when you only want to save a local base URL without network
 spec discovery:
 

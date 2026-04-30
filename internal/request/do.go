@@ -103,6 +103,9 @@ type Options struct {
 	// Retry is the maximum number of retry attempts for network errors and
 	// 5xx responses.  Zero disables retries.
 	Retry int
+	// RetryUnsafe allows retrying methods other than GET and HEAD. When false,
+	// Retry applies only to safe methods.
+	RetryUnsafe bool
 	// RetryBaseDelay is the base delay for the first retry backoff interval.
 	// Defaults to 1 s when zero.
 	RetryBaseDelay time.Duration
@@ -191,7 +194,7 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			return nil, fmt.Errorf("auth: %w", err)
 		}
 	}
-	if requestHasCredentialHeaders(req) {
+	if requestHasCredentialHeaders(req) || HasCredentialQuery(req.URL) {
 		opts.NoCache = true
 	}
 
@@ -228,11 +231,11 @@ func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) e
 		return nil
 	}
 	prev := via[len(via)-1]
-	if prev == nil || sameOrigin(prev.URL, req.URL) {
+	if prev == nil || SameOrigin(prev.URL, req.URL) {
 		return nil
 	}
 	for name := range req.Header {
-		if isCredentialHeader(name) {
+		if IsCredentialHeader(name) {
 			req.Header.Del(name)
 		}
 	}
@@ -244,14 +247,16 @@ func requestHasCredentialHeaders(req *http.Request) bool {
 		return false
 	}
 	for name := range req.Header {
-		if isCredentialHeader(name) {
+		if IsCredentialHeader(name) {
 			return true
 		}
 	}
 	return false
 }
 
-func isCredentialHeader(name string) bool {
+// IsCredentialHeader reports whether a header commonly carries credentials or
+// other secrets and should be redacted or stripped at trust boundaries.
+func IsCredentialHeader(name string) bool {
 	switch http.CanonicalHeaderKey(name) {
 	case "Authorization", "Cookie", "Proxy-Authorization", "Set-Cookie":
 		return true
@@ -265,7 +270,51 @@ func isCredentialHeader(name string) bool {
 	return false
 }
 
-func sameOrigin(a, b *url.URL) bool {
+// HasCredentialQuery reports whether u contains query parameters that commonly
+// carry credentials or other secrets.
+func HasCredentialQuery(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	for name := range u.Query() {
+		if IsCredentialQueryParam(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCredentialQueryParam reports whether a query parameter commonly carries
+// credentials or other secrets.
+func IsCredentialQueryParam(name string) bool {
+	name = strings.ToLower(name)
+	switch name {
+	case "access_token", "refresh_token", "token", "api_key", "apikey", "client_secret", "password", "secret":
+		return true
+	default:
+		return false
+	}
+}
+
+// RedactedURL returns u as a string with credential query values replaced by a
+// placeholder. Non-sensitive query parameters and URL structure are preserved.
+func RedactedURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	copyURL := *u
+	q := copyURL.Query()
+	for name := range q {
+		if IsCredentialQueryParam(name) {
+			q.Set(name, "<redacted>")
+		}
+	}
+	copyURL.RawQuery = q.Encode()
+	return copyURL.String()
+}
+
+// SameOrigin reports whether a and b share scheme, hostname, and effective port.
+func SameOrigin(a, b *url.URL) bool {
 	if a == nil || b == nil {
 		return false
 	}
@@ -400,7 +449,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 		if delay == 0 {
 			delay = time.Second
 		}
-		inner = retryTransport{inner: base, maxRetry: opts.Retry, baseDelay: delay, logger: opts.Logger}
+		inner = retryTransport{inner: base, maxRetry: opts.Retry, retryUnsafe: opts.RetryUnsafe, baseDelay: delay, logger: opts.Logger}
 	}
 
 	if opts.NoCache || opts.CacheDir == "" {

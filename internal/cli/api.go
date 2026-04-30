@@ -199,6 +199,9 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	if isBuiltinCommandName(apiName) {
 		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
 	}
+	if err := config.ValidateAPIName(apiName); err != nil {
+		return fmt.Errorf("invalid API name %q: %w", apiName, err)
+	}
 
 	cfgPath := c.configFilePath()
 	cfg, err := config.Load(cfgPath)
@@ -1811,14 +1814,6 @@ func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any
 	default:
 		return nil, fmt.Errorf("unsupported field")
 	}
-}
-
-// runAPIContentTypes lists all registered content types and their MIME types.
-func (c *CLI) runAPIContentTypes(cmd *cobra.Command, args []string) error {
-	for _, ct := range c.content.ContentTypes() {
-		fmt.Fprintf(c.Stdout, "%-12s %s\n", ct.Name, strings.Join(ct.MIMETypes, ", "))
-	}
-	return nil
 }
 
 // runAPIList prints all configured APIs with their base URL and profile count.

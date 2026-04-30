@@ -45,10 +45,6 @@ func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.
 	return c.buildAPICommandFromOperationSet(apiName, apiCfg, set)
 }
 
-func (c *CLI) buildAPICommandFromOperations(apiName string, apiCfg *config.APIConfig, ops []spec.Operation) *cobra.Command {
-	return c.buildAPICommandFromOperationSet(apiName, apiCfg, spec.OperationSet{Operations: ops})
-}
-
 func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.APIConfig, set spec.OperationSet) *cobra.Command {
 	ops := set.Operations
 	// ops == nil means no V3 model or no paths section — nothing to generate.
@@ -89,7 +85,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			tagCommandName = generatedTagCommandName(op.Tags[0], tagCommandNameByTag, tagCommands)
 			examplePrefix = apiName + " " + tagCommandName
 		}
-		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op, apiCfg.BaseURL, apiCfg.OperationBase)
+		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op)
 		if err != nil {
 			c.warnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
 			continue
@@ -219,7 +215,7 @@ type paramInfo struct {
 // Returns nil when the operation is excluded via x-cli-ignore.
 // operationBase, when non-empty, is resolved against baseURL and replaces the
 // apiName short-name prefix in generated URLs.
-func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation, baseURL, operationBase string) (*cobra.Command, error) {
+func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation) (*cobra.Command, error) {
 	// Derive command name from operationId, with x-cli-name override.
 	cmdName := toKebabCase(op.ID)
 	if cmdName == "" {
@@ -365,7 +361,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args, baseURL, operationBase)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -654,8 +650,6 @@ func (c *CLI) runGeneratedOp(
 	credentialAlternatives []spec.CredentialAlternative,
 	required, optional []*paramInfo,
 	args []string,
-	baseURL string,
-	operationBase string,
 ) error {
 	// Substitute required params into the path, query string, and headers.
 	path := opPath
@@ -691,6 +685,7 @@ func (c *CLI) runGeneratedOp(
 	// against base_url using v1 semantics so generated operations can escape a
 	// base URL sub-path.
 	var rawURL string
+	baseURL, operationBase := c.generatedOperationBase(cmd, apiName)
 	if operationBase != "" {
 		resolvedBase, err := config.ResolveOperationBaseURL(baseURL, operationBase)
 		if err != nil {
@@ -751,11 +746,27 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if v == "" && !p.hasDefault {
-			return nil, nil
-		}
 		return []string{v}, nil
 	}
+}
+
+func (c *CLI) generatedOperationBase(cmd *cobra.Command, apiName string) (string, string) {
+	if c == nil || c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[apiName] == nil {
+		return "", ""
+	}
+	apiCfg := c.cfg.APIs[apiName]
+	baseURL := apiCfg.BaseURL
+	operationBase := apiCfg.OperationBase
+	profileName := c.profileFromCmd(cmd)
+	if prof := profileForName(apiCfg, profileName); prof != nil {
+		if prof.BaseURL != "" {
+			baseURL = prof.BaseURL
+		}
+		if prof.OperationBase != "" {
+			operationBase = prof.OperationBase
+		}
+	}
+	return baseURL, operationBase
 }
 
 type generatedQueryParam struct {

@@ -80,7 +80,7 @@ JSON quotes.
 
 ## Raw Bytes And Files
 
-Image responses redirect as original bytes by default:
+Image responses redirect as body bytes by default:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
@@ -91,6 +91,9 @@ For generic byte streams, use raw output explicitly:
 ```bash
 restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
+
+Raw output bypasses Restish's structured body decoding and formatting, but it
+is still based on the body after HTTP content-encoding decompression.
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 

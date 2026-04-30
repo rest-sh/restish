@@ -28,15 +28,26 @@ Command plugins should usually ask Restish to make requests:
 ```json
 {
   "type": "http-request",
-  "request": {
-    "method": "GET",
-    "uri": "https://api.rest.sh/items"
-  }
+  "method": "GET",
+  "uri": "https://api.rest.sh/items"
 }
 ```
 
 That preserves host profiles, auth, TLS signer behavior, retries, cache,
-pagination, and output normalization.
+and output normalization. Each delegated `http-request` returns one normalized
+response. If a command plugin wants pagination, it should send follow-up
+requests itself.
+
+To inspect a registered API, send `api-spec` with the API name and, when needed,
+the profile whose server variables should be used:
+
+```json
+{
+  "type": "api-spec",
+  "name": "example",
+  "profile": "staging"
+}
+```
 
 ## Lifecycle
 

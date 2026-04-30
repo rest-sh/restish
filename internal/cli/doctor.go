@@ -69,7 +69,7 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(c.Stderr, "HTTP cache: %s\n", c.configScopedCacheDir(c.paths().Cache()))
 	fmt.Fprintf(c.Stderr, "Spec cache: %s\n", c.specCacheDir())
-	fmt.Fprintf(c.Stderr, "Plugin directory: %s\n", defaultPluginDirForDoctor())
+	fmt.Fprintf(c.Stderr, "Plugin directory: %s\n", c.pluginDir())
 	c.printShellSetupDiagnostic()
 	return nil
 }
@@ -125,7 +125,7 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	path := name
 	if !filepath.IsAbs(path) && filepath.Base(path) == path {
-		path = filepath.Join(defaultPluginDirForDoctor(), name)
+		path = filepath.Join(c.pluginDir(), name)
 	}
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -182,10 +182,6 @@ func (c *CLI) runDoctorMigrateV1(cmd *cobra.Command, args []string) error {
 func configFileExists(path string) (os.FileInfo, bool) {
 	info, err := os.Stat(path)
 	return info, err == nil
-}
-
-func defaultPluginDirForDoctor() string {
-	return internalplugin.DefaultPluginDir()
 }
 
 func (c *CLI) printConfigDiagnostics(path string) {

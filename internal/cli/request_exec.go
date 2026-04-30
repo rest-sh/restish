@@ -46,7 +46,7 @@ func (c *CLI) prepareRequest(
 		return nil, fmt.Errorf("auth override %q is not valid for an operation with security: []", operationAuth.Override)
 	}
 	if !noAuth && operationAuth != nil && apiName != "" {
-		prof := c.cfg.APIs[apiName].Profiles[profileName]
+		prof := profileForName(c.cfg.APIs[apiName], profileName)
 		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, operationAuth)
 		if err != nil {
 			return nil, err
@@ -81,7 +81,11 @@ func (c *CLI) prepareRequest(
 		opts.Query = filterCredentialQueryParams(opts.Query)
 	}
 
-	if opts.OnRequest != nil || requestOptionHeadersContainCredentials(opts.Headers) {
+	if opts.OnRequest != nil ||
+		requestOptionHeadersContainCredentials(opts.Headers) ||
+		requestOptionQueryContainsCredentials(opts.Query) ||
+		rawURLQueryContainsCredentials(rawURL) ||
+		len(c.pluginsByHook["request-middleware"]) > 0 {
 		opts.NoCache = true
 	}
 
@@ -156,6 +160,31 @@ func requestOptionHeadersContainCredentials(headers []string) bool {
 		}
 	}
 	return false
+}
+
+func requestOptionQueryContainsCredentials(query []string) bool {
+	for _, kv := range query {
+		name, _, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		decoded, err := url.QueryUnescape(name)
+		if err == nil {
+			name = decoded
+		}
+		if request.IsCredentialQueryParam(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func rawURLQueryContainsCredentials(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return request.HasCredentialQuery(u)
 }
 
 func cloneRequestOptions(opts request.Options) request.Options {
@@ -261,8 +290,8 @@ func (c *CLI) ensureBodyLinks(resp *output.Response) {
 		return
 	}
 	headers := make(http.Header, len(resp.Headers))
-	for k, v := range resp.Headers {
-		headers.Set(k, v)
+	for k, values := range resp.Headers {
+		headers[k] = append([]string(nil), values...)
 	}
 	links := hypermedia.Parse(base, headers, resp.Body, c.linkParsers)
 	if len(links) == 0 {

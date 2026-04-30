@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/rest-sh/restish/v2/internal/procutil"
 )
 
 const maxExternalToolStderrBytes = 4096
@@ -111,6 +113,7 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 	}
 
 	cmd := exec.CommandContext(ctx, shell, "-c", commandLine)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	// Assign stdin directly so exec's internals copy the bytes after Start.
 	// Using StdinPipe + manual write before Start would deadlock for payloads
 	// larger than the OS pipe buffer (~64 KB).

@@ -36,6 +36,14 @@ func TestWaitDurationHonorsRetryAfterBeforeJitter(t *testing.T) {
 	}
 }
 
+func TestWaitDurationHonorsRetryAfterZero(t *testing.T) {
+	rt := retryTransport{baseDelay: time.Second}
+	resp := &http.Response{Header: http.Header{"Retry-After": []string{"0"}}}
+	if wait := rt.waitDuration(resp, 3); wait != 0 {
+		t.Fatalf("waitDuration = %v, want 0", wait)
+	}
+}
+
 func TestWaitDurationHonorsXRetryIn(t *testing.T) {
 	rt := retryTransport{baseDelay: time.Second}
 	resp := &http.Response{Header: http.Header{"X-Retry-In": []string{"3"}}}
@@ -96,6 +104,75 @@ func TestRetryTransportRetries429AndLogsProgress(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "warning: retry 1/1") {
 		t.Fatalf("expected retry log, got %q", log.String())
+	}
+}
+
+func TestRetryTransportSkipsUnsafeMethodByDefault(t *testing.T) {
+	attempts := 0
+	rt := retryTransport{
+		baseDelay: time.Millisecond,
+		maxRetry:  2,
+		inner: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     http.Header{"Retry-After": []string{"0"}},
+				Body:       io.NopCloser(strings.NewReader("retry")),
+			}, nil
+		}),
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.example.com/items", strings.NewReader("body"))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+	defer resp.Body.Close()
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestRetryTransportRetriesUnsafeMethodWhenOptedIn(t *testing.T) {
+	attempts := 0
+	rt := retryTransport{
+		baseDelay:   time.Millisecond,
+		maxRetry:    1,
+		retryUnsafe: true,
+		inner: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return &http.Response{
+					StatusCode: http.StatusServiceUnavailable,
+					Header:     http.Header{"Retry-After": []string{"0"}},
+					Body:       io.NopCloser(strings.NewReader("retry")),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("ok")),
+			}, nil
+		}),
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.example.com/items", strings.NewReader("body"))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("body")), nil
+	}
+
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+	defer resp.Body.Close()
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
 	}
 }
 

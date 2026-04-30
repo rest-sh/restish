@@ -12,6 +12,8 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/tidwall/jsonc"
 )
@@ -97,10 +99,18 @@ type PaginationConfig struct {
 type ProfileConfig struct {
 	// BaseURL overrides the API-level base_url when this profile is active.
 	BaseURL string `json:"base_url,omitempty"`
+	// OperationBase overrides API-level operation_base when this profile is active.
+	OperationBase string `json:"operation_base,omitempty"`
 	// Headers is a list of persistent "Name: Value" headers sent with every request.
 	Headers []string `json:"headers,omitempty"`
 	// Query is a list of persistent "key=value" query params sent with every request.
 	Query []string `json:"query,omitempty"`
+	// CACertPath is an optional PEM CA bundle for this profile.
+	CACertPath string `json:"ca_cert,omitempty"`
+	// ClientCertPath is the PEM client certificate path for this profile.
+	ClientCertPath string `json:"client_cert,omitempty"`
+	// ClientKeyPath is the PEM client private key path for this profile.
+	ClientKeyPath string `json:"client_key,omitempty"`
 	// TLSSigner selects a tls-signer plugin for mTLS client certificate signing.
 	TLSSigner string `json:"tls_signer,omitempty"`
 	// TLSSignerParams passes plugin-specific configuration to the tls-signer.
@@ -317,6 +327,9 @@ func Validate(cfg *Config) error {
 		return nil
 	}
 	for name, api := range cfg.APIs {
+		if err := ValidateAPIName(name); err != nil {
+			return fmt.Errorf("apis.%s: invalid API name: %w", name, err)
+		}
 		if api == nil {
 			continue
 		}
@@ -334,6 +347,18 @@ func Validate(cfg *Config) error {
 		for profileName, prof := range api.Profiles {
 			if prof == nil {
 				continue
+			}
+			if err := ValidateOperationBase(prof.OperationBase); err != nil {
+				return fmt.Errorf("apis.%s.profiles.%s.operation_base: %w", name, profileName, err)
+			}
+			if prof.OperationBase != "" {
+				baseURL := api.BaseURL
+				if prof.BaseURL != "" {
+					baseURL = prof.BaseURL
+				}
+				if err := ValidateBaseURLForOperationBase(baseURL); err != nil {
+					return fmt.Errorf("apis.%s.profiles.%s.base_url: %w", name, profileName, err)
+				}
 			}
 			if prof.Auth != nil && prof.AuthRef != "" {
 				return fmt.Errorf("apis.%s.profiles.%s: auth and auth_ref are mutually exclusive", name, profileName)
@@ -365,6 +390,28 @@ func Validate(cfg *Config) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// ValidateAPIName enforces a shell- and URL-friendly API short name while
+// allowing non-English letters and numbers.
+func ValidateAPIName(name string) error {
+	if name == "" {
+		return fmt.Errorf("must not be empty")
+	}
+	first, _ := utf8.DecodeRuneInString(name)
+	if first == utf8.RuneError || !(unicode.IsLetter(first) || unicode.IsNumber(first)) {
+		return fmt.Errorf("must start with a Unicode letter or number")
+	}
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || r == '-' || r == '_' {
+			continue
+		}
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return fmt.Errorf("must not contain whitespace or control characters")
+		}
+		return fmt.Errorf("contains unsupported character %q; use Unicode letters, numbers, marks, '-' or '_'", r)
 	}
 	return nil
 }

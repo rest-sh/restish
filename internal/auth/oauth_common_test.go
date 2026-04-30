@@ -245,6 +245,74 @@ func TestFetchTokenAcceptsNumericStringExpiresInAndSendsAccept(t *testing.T) {
 	}
 }
 
+func TestFetchTokenValidatesAccessTokenAndTokenType(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty object", body: `{}`, want: "access_token"},
+		{name: "empty access token", body: `{"access_token":"","token_type":"bearer"}`, want: "access_token"},
+		{name: "unsupported token type", body: `{"access_token":"abc","token_type":"mac"}`, want: "token_type"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+				return testResponse(http.StatusOK, "application/json", tc.body), nil
+			})
+
+			_, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{}, nil)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q in error, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestFetchTokenAcceptsAbsentAndCaseInsensitiveBearerTokenType(t *testing.T) {
+	for _, body := range []string{
+		`{"access_token":"abc"}`,
+		`{"access_token":"abc","token_type":"Bearer"}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+				return testResponse(http.StatusOK, "application/json", body), nil
+			})
+			token, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{}, nil)
+			if err != nil {
+				t.Fatalf("FetchToken: %v", err)
+			}
+			if token.AccessToken != "abc" {
+				t.Fatalf("AccessToken = %q, want abc", token.AccessToken)
+			}
+		})
+	}
+}
+
+func TestFetchTokenDoesNotFollowRedirects(t *testing.T) {
+	calls := 0
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if calls > 1 {
+			t.Fatalf("unexpected redirected token request to %s", r.URL)
+		}
+		resp := testResponse(http.StatusTemporaryRedirect, "text/plain", "redirect")
+		resp.Header.Set("Location", "https://attacker.example/token")
+		return resp, nil
+	})
+
+	_, err := FetchToken(context.Background(), client, "https://auth.example.com/token", url.Values{"client_secret": {"secret"}}, nil)
+	if err == nil {
+		t.Fatal("expected token endpoint status error")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1", calls)
+	}
+}
+
 func TestFetchTokenRejectsInvalidStringExpiresIn(t *testing.T) {
 	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
 		return testResponse(http.StatusOK, "application/json", `{"access_token":"abc","token_type":"bearer","expires_in":"soon"}`), nil

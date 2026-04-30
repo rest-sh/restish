@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -288,6 +289,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	} else {
 		codeCh := make(chan string, 1)
 		errCh := make(chan error, 1)
+		var receivedCode atomic.Bool
 		ln, err := net.Listen("tcp", "localhost:"+port)
 		if err != nil {
 			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
@@ -310,9 +312,17 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 				trySendErr(errCh, fmt.Errorf("no code in callback"))
 				return
 			}
+			if !receivedCode.CompareAndSwap(false, true) {
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, "<html><body><h2>Authentication already received</h2><p>You can close this tab.</p></body></html>")
+				return
+			}
 			w.Header().Set("Content-Type", "text/html")
 			fmt.Fprint(w, "<html><body><h2>Authentication successful</h2><p>You can close this tab.</p></body></html>")
-			codeCh <- code
+			select {
+			case codeCh <- code:
+			default:
+			}
 		})}
 		go func() {
 			if e := srv.Serve(ln); e != nil && e != http.ErrServerClosed {

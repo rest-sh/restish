@@ -203,9 +203,9 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	updateOpts := prepared.opts
 	updateOpts.Headers = append([]string{}, prepared.opts.Headers...)
 	updateOpts.Headers = append(updateOpts.Headers, "Content-Type: "+actualContentType)
-	if etag := resp.Headers["Etag"]; etag != "" {
+	if etag := output.Header(resp.Headers, "Etag"); etag != "" {
 		updateOpts.Headers = append(updateOpts.Headers, "If-Match: "+etag)
-	} else if lastModified := resp.Headers["Last-Modified"]; lastModified != "" {
+	} else if lastModified := output.Header(resp.Headers, "Last-Modified"); lastModified != "" {
 		updateOpts.Headers = append(updateOpts.Headers, "If-Unmodified-Since: "+lastModified)
 	}
 
@@ -284,8 +284,8 @@ func splitCommandLine(s string) ([]string, error) {
 	return shlex.Split(s)
 }
 
-func supportsMergePatch(headers map[string]string) bool {
-	if value := headers["Accept-Patch"]; strings.Contains(strings.ToLower(value), "application/merge-patch+json") {
+func supportsMergePatch(headers map[string][]string) bool {
+	if value := output.Header(headers, "Accept-Patch"); strings.Contains(strings.ToLower(value), "application/merge-patch+json") {
 		return true
 	}
 	return false

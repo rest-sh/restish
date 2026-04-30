@@ -2,6 +2,8 @@ package spec
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -130,6 +132,7 @@ loadFresh:
 					AllowCrossOrigin: spec.AllowCrossOrigin,
 				},
 			}
+			entry.SpecFiles = cacheSpecFileMetadata(cfg.SpecFiles)
 			if set.Operations != nil {
 				entry.upsertOperationSetWithOptions(opts, set)
 			}
@@ -201,6 +204,9 @@ func cacheSpecFilesMatch(specFiles []string, entry *cacheEntry) bool {
 		return false
 	}
 	entry.normalize()
+	if len(entry.SpecFiles) > 0 {
+		return cacheSpecFileMetadataMatches(specFiles, entry.SpecFiles)
+	}
 	if len(specFiles) != 1 {
 		return false
 	}
@@ -213,6 +219,53 @@ func cacheSpecFilesMatch(specFiles []string, entry *cacheEntry) bool {
 		return entry.Spec.LocalPath == path
 	}
 	return entry.Spec.SourceURL == src
+}
+
+func cacheSpecFileMetadata(specFiles []string) []cachedSpecFile {
+	if len(specFiles) == 0 {
+		return nil
+	}
+	out := make([]cachedSpecFile, 0, len(specFiles))
+	for _, src := range specFiles {
+		meta := cachedSpecFile{Source: src}
+		if isLocalPath(src) {
+			meta.Local = true
+			path, err := localPathFromSource(src)
+			if err == nil {
+				meta.Path = path
+				if info, statErr := os.Stat(path); statErr == nil {
+					meta.ModTime = info.ModTime()
+					meta.Size = info.Size()
+				}
+				if data, readErr := os.ReadFile(path); readErr == nil {
+					sum := sha256.Sum256(data)
+					meta.SHA256 = hex.EncodeToString(sum[:])
+				}
+			}
+		}
+		out = append(out, meta)
+	}
+	return out
+}
+
+func cacheSpecFileMetadataMatches(specFiles []string, cached []cachedSpecFile) bool {
+	current := cacheSpecFileMetadata(specFiles)
+	if len(current) != len(cached) {
+		return false
+	}
+	for i := range current {
+		if current[i].Source != cached[i].Source ||
+			current[i].Local != cached[i].Local ||
+			current[i].Path != cached[i].Path ||
+			current[i].Size != cached[i].Size ||
+			current[i].SHA256 != cached[i].SHA256 {
+			return false
+		}
+		if current[i].Local && !current[i].ModTime.Equal(cached[i].ModTime) {
+			return false
+		}
+	}
+	return true
 }
 
 func specFilesChangedSince(specFiles []string, fetchedAt time.Time) bool {

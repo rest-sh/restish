@@ -88,9 +88,9 @@ func TestTableFormatter(t *testing.T) {
 
 func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
 	resp := tableResp()
-	resp.Headers = map[string]string{
-		"Content-Type": "application/json",
-		"Date":         "Mon, 02 Jan 2006 15:04:05 GMT",
+	resp.Headers = map[string][]string{
+		"Content-Type": {"application/json"},
+		"Date":         {"Mon, 02 Jan 2006 15:04:05 GMT"},
 	}
 
 	var buf bytes.Buffer

@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/pb33f/libopenapi"
@@ -39,7 +38,7 @@ type HTTPRequest struct {
 
 type HTTPResponse struct {
 	Status  int
-	Headers map[string]string
+	Headers map[string][]string
 	Body    any
 	Error   string
 }
@@ -297,13 +296,6 @@ func mcpWriteMethod(method string) bool {
 	default:
 		return false
 	}
-}
-
-func mcpTimeoutDuration(seconds int) time.Duration {
-	if seconds <= 0 {
-		return 0
-	}
-	return time.Duration(seconds) * time.Second
 }
 
 func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperation) *Tool {
