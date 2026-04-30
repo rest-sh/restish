@@ -200,7 +200,7 @@ func TestPushFileRejectsVersionConflictWithoutValidator(t *testing.T) {
 			VersionLocal:  "v1",
 			VersionRemote: "v2",
 		},
-	})
+	}, pushOptions{})
 	if err == nil {
 		t.Fatal("expected version conflict")
 	}
@@ -231,7 +231,7 @@ func TestDeleteFileRejectsVersionConflictWithoutValidator(t *testing.T) {
 			VersionLocal:  "v1",
 			VersionRemote: "v2",
 		},
-	})
+	}, pushOptions{})
 	if err == nil {
 		t.Fatal("expected version conflict")
 	}
@@ -240,5 +240,159 @@ func TestDeleteFileRejectsVersionConflictWithoutValidator(t *testing.T) {
 	}
 	if got := requests.Load(); got != 0 {
 		t.Fatalf("request count = %d, want 0", got)
+	}
+}
+
+func TestPushFileRejectsMissingPreconditionWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":"item"}`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	var requests atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			requests.Add(1)
+			return nil, fmt.Errorf("request should not be sent")
+		},
+	}
+	a := &app{client: client}
+
+	_, _, err := a.pushFile(changedFile{
+		Status: statusModified,
+		File: &File{
+			Path: "item.json",
+			URL:  "https://api.example.com/items/item",
+		},
+	}, pushOptions{})
+	if err == nil {
+		t.Fatal("expected missing precondition conflict")
+	}
+	if !strings.Contains(err.Error(), "no ETag/Last-Modified validator or matching version") {
+		t.Fatalf("expected missing precondition error, got %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("request count = %d, want 0", got)
+	}
+}
+
+func TestPushFileWithETagSendsConditionalHeader(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":"item"}`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	var ifMatch string
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			switch method {
+			case "PUT":
+				ifMatch = headers["If-Match"]
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			case "GET":
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			default:
+				t.Fatalf("unexpected method %s", method)
+				return nil, nil
+			}
+		},
+	}
+	a := &app{client: client}
+
+	if _, _, err := a.pushFile(changedFile{
+		Status: statusModified,
+		File: &File{
+			Path: "item.json",
+			URL:  "https://api.example.com/items/item",
+			ETag: `"abc"`,
+		},
+	}, pushOptions{}); err != nil {
+		t.Fatalf("pushFile: %v", err)
+	}
+	if ifMatch != `"abc"` {
+		t.Fatalf("If-Match = %q, want %q", ifMatch, `"abc"`)
+	}
+}
+
+func TestPushFileMatchingVersionWithoutValidatorSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":"item"}`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	var putSeen bool
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			switch method {
+			case "PUT":
+				putSeen = true
+				if len(headers) != 0 {
+					t.Fatalf("unexpected conditional headers for version-only push: %#v", headers)
+				}
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			case "GET":
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			default:
+				t.Fatalf("unexpected method %s", method)
+				return nil, nil
+			}
+		},
+	}
+	a := &app{client: client}
+
+	if _, _, err := a.pushFile(changedFile{
+		Status: statusModified,
+		File: &File{
+			Path:          "item.json",
+			URL:           "https://api.example.com/items/item",
+			VersionLocal:  "v1",
+			VersionRemote: "v1",
+		},
+	}, pushOptions{}); err != nil {
+		t.Fatalf("pushFile: %v", err)
+	}
+	if !putSeen {
+		t.Fatal("expected PUT request")
+	}
+}
+
+func TestPushFileForcePermitsMissingPrecondition(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":"item"}`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	var gotHeaders map[string]string
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			gotHeaders = headers
+			switch method {
+			case "PUT":
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			case "GET":
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "item"}}, nil
+			default:
+				t.Fatalf("unexpected method %s", method)
+				return nil, nil
+			}
+		},
+	}
+	a := &app{client: client}
+
+	if _, _, err := a.pushFile(changedFile{
+		Status: statusModified,
+		File: &File{
+			Path: "item.json",
+			URL:  "https://api.example.com/items/item",
+		},
+	}, pushOptions{Force: true}); err != nil {
+		t.Fatalf("pushFile force: %v", err)
+	}
+	if len(gotHeaders) != 0 {
+		t.Fatalf("force should not invent precondition headers, got %#v", gotHeaders)
 	}
 }

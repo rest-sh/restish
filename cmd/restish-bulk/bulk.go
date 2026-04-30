@@ -66,6 +66,10 @@ type changedFile struct {
 	File   *File
 }
 
+type pushOptions struct {
+	Force bool
+}
+
 type app struct {
 	client *pluginClient
 }
@@ -309,10 +313,12 @@ func (a *app) newPushCmd() *cobra.Command {
 				return err
 			}
 			jobs, _ := cmd.Flags().GetInt("jobs")
-			return a.push(meta, jobs)
+			force, _ := cmd.Flags().GetBool("force")
+			return a.push(meta, jobs, pushOptions{Force: force})
 		},
 	}
 	cmd.Flags().IntP("jobs", "j", defaultJobs, "Maximum concurrent resource requests")
+	cmd.Flags().Bool("force", false, "Push without ETag/Last-Modified or matching version preconditions")
 	return cmd
 }
 
@@ -519,7 +525,7 @@ func (a *app) fetchFiles(files []*File, jobs int) <-chan pullFetchResult {
 	return results
 }
 
-func (a *app) push(m *Meta, jobs int) error {
+func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 	jobs = normalizeJobs(jobs)
 	paths, err := collectFiles(m, nil, "", false)
 	if err != nil {
@@ -531,10 +537,12 @@ func (a *app) push(m *Meta, jobs int) error {
 	}
 	sort.Slice(local, func(i, j int) bool { return local[i].File.Path < local[j].File.Path })
 
-	results := a.pushFiles(local, jobs)
+	results := a.pushFiles(local, jobs, opts)
 	var firstErr error
+	var summary pushSummary
 	for result := range results {
 		if result.err != nil {
+			summary.Refused++
 			if firstErr == nil {
 				firstErr = result.err
 			}
@@ -544,6 +552,11 @@ func (a *app) push(m *Meta, jobs int) error {
 		f := changed.File
 		switch changed.Status {
 		case statusAdded, statusModified:
+			if changed.Status == statusAdded {
+				summary.Created++
+			} else {
+				summary.Updated++
+			}
 			if changed.Status == statusAdded {
 				m.Files[f.Path] = f
 			}
@@ -560,10 +573,12 @@ func (a *app) push(m *Meta, jobs int) error {
 			}
 			_ = m.save()
 		case statusRemoved:
+			summary.Deleted++
 			delete(m.Files, f.Path)
 			_ = m.save()
 		}
 	}
+	_ = a.writePushSummary(summary)
 	if firstErr != nil {
 		return firstErr
 	}
@@ -579,6 +594,21 @@ func (a *app) push(m *Meta, jobs int) error {
 	return m.save()
 }
 
+type pushSummary struct {
+	Created int
+	Updated int
+	Deleted int
+	Skipped int
+	Refused int
+}
+
+func (a *app) writePushSummary(s pushSummary) error {
+	return a.client.WriteStdout([]byte(fmt.Sprintf(
+		"Push summary: created=%d updated=%d deleted=%d skipped=%d refused=%d\n",
+		s.Created, s.Updated, s.Deleted, s.Skipped, s.Refused,
+	)))
+}
+
 type pushResult struct {
 	changed changedFile
 	fetched *fetchedFile
@@ -586,7 +616,7 @@ type pushResult struct {
 	err     error
 }
 
-func (a *app) pushFiles(changes []changedFile, jobs int) <-chan pushResult {
+func (a *app) pushFiles(changes []changedFile, jobs int, opts pushOptions) <-chan pushResult {
 	results := make(chan pushResult)
 	if len(changes) == 0 {
 		close(results)
@@ -602,7 +632,7 @@ func (a *app) pushFiles(changes []changedFile, jobs int) <-chan pushResult {
 			go func() {
 				defer wg.Done()
 				for changed := range work {
-					fetched, hash, err := a.pushFile(changed)
+					fetched, hash, err := a.pushFile(changed, opts)
 					results <- pushResult{changed: changed, fetched: fetched, hash: hash, err: err}
 				}
 			}()
@@ -616,7 +646,7 @@ func (a *app) pushFiles(changes []changedFile, jobs int) <-chan pushResult {
 	return results
 }
 
-func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
+func (a *app) pushFile(changed changedFile, opts pushOptions) (*fetchedFile, []byte, error) {
 	f := changed.File
 	switch changed.Status {
 	case statusAdded, statusModified:
@@ -629,8 +659,10 @@ func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
 			return nil, nil, err
 		}
 		headers := preconditionHeaders(f)
-		if len(headers) == 0 && versionConflictWithoutValidator(f) {
-			return nil, nil, versionConflictError("uploading", f)
+		if changed.Status == statusModified && len(headers) == 0 && !opts.Force {
+			if !versionPreconditionSatisfied(f) {
+				return nil, nil, missingPreconditionError("uploading", f)
+			}
 		}
 		resp, err := a.client.request("PUT", f.URL, headers, payload)
 		if err != nil {
@@ -654,8 +686,10 @@ func (a *app) pushFile(changed changedFile) (*fetchedFile, []byte, error) {
 		return remoteBody, localHash, nil
 	case statusRemoved:
 		headers := preconditionHeaders(f)
-		if len(headers) == 0 && versionConflictWithoutValidator(f) {
-			return nil, nil, versionConflictError("deleting", f)
+		if len(headers) == 0 && !opts.Force {
+			if !versionPreconditionSatisfied(f) {
+				return nil, nil, missingPreconditionError("deleting", f)
+			}
 		}
 		resp, err := a.client.request("DELETE", f.URL, headers, nil)
 		if err != nil {
@@ -698,6 +732,23 @@ func versionConflictWithoutValidator(f *File) bool {
 
 func versionConflictError(action string, f *File) error {
 	return fmt.Errorf("conflict %s %s: remote version changed from %q to %q and no ETag/Last-Modified validator is available; pull and review before pushing", action, f.Path, f.VersionLocal, f.VersionRemote)
+}
+
+func versionPreconditionSatisfied(f *File) bool {
+	if f == nil {
+		return false
+	}
+	if f.VersionLocal != "" || f.VersionRemote != "" {
+		return f.VersionLocal == f.VersionRemote
+	}
+	return false
+}
+
+func missingPreconditionError(action string, f *File) error {
+	if versionConflictWithoutValidator(f) {
+		return versionConflictError(action, f)
+	}
+	return fmt.Errorf("conflict %s %s: no ETag/Last-Modified validator or matching version is available; pull and review before pushing, or pass --force", action, f.Path)
 }
 
 func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile, error) {
