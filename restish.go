@@ -1,0 +1,74 @@
+// Package restish is the public Go API for embedding Restish in custom CLIs.
+//
+// The stock restish binary is built from cmd/restish. Embedders can construct a
+// CLI directly, register organization-specific auth handlers, content types,
+// encodings, link parsers, OpenAPI loaders, and formatters, then call Run with
+// their own argv.
+package restish
+
+import (
+	"github.com/rest-sh/restish/v2/auth"
+	internalcli "github.com/rest-sh/restish/v2/internal/cli"
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/content"
+	"github.com/rest-sh/restish/v2/internal/hypermedia"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/spec"
+)
+
+// CLI is an embeddable Restish runtime.
+//
+// The zero value is not intended for use; call New so standard content types,
+// loaders, formatters, paths, and I/O streams are initialized.
+type CLI = internalcli.CLI
+
+// Config is the Restish configuration loaded by CLI.Run.
+type Config = config.Config
+
+// APIConfig holds one registered API's base URL, spec source, profiles, and
+// generated-command options.
+type APIConfig = config.APIConfig
+
+// ProfileConfig holds one API profile's headers, query parameters, auth, and
+// TLS settings.
+type ProfileConfig = config.ProfileConfig
+
+// AuthConfig holds one configured auth handler type and its parameters.
+type AuthConfig = config.AuthConfig
+
+// ContentType describes one request/response body encoder and decoder.
+type ContentType = content.ContentType
+
+// Encoding describes one HTTP content-encoding codec.
+type Encoding = content.Encoding
+
+// Formatter renders normalized responses for -o/--rsh-output-format.
+type Formatter = output.Formatter
+
+// LinkParser extracts hypermedia links from response headers or bodies.
+type LinkParser = hypermedia.Parser
+
+// Loader detects and loads OpenAPI-like API descriptions.
+type Loader = spec.Loader
+
+// AuthHandler is implemented by custom authentication schemes.
+type AuthHandler = auth.Handler
+
+// AuthParam describes a custom auth handler parameter.
+type AuthParam = auth.Param
+
+// AuthContext is passed to custom auth handlers during request authentication.
+type AuthContext = auth.AuthContext
+
+// New returns a CLI wired to the real OS stdin/stdout/stderr and the default
+// Restish registries. Customize it with AddAuthHandler, AddContentType,
+// AddEncoding, AddLinkParser, AddLoader, and AddFormatter before calling Run.
+func New() *CLI {
+	return internalcli.New()
+}
+
+// Version is the current build version. Set github.com/rest-sh/restish/v2/internal/cli.Version
+// from a custom main package when branding or release metadata differs.
+func Version() string {
+	return internalcli.Version
+}
