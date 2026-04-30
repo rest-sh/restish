@@ -19,6 +19,13 @@ restish setup bash
 restish setup fish
 ```
 
+For zsh and fish, install completion at the same time:
+
+```bash
+restish setup zsh --completion
+restish setup fish --completion
+```
+
 Preview the change first when you want to inspect it:
 
 ```bash
@@ -57,6 +64,17 @@ restish completion bash
 restish completion fish
 restish completion powershell
 ```
+
+For a normal zsh or fish user install, let Restish write the completion script:
+
+```bash
+restish completion install zsh
+restish completion install fish
+```
+
+For zsh, the generated script is stored under Restish's config directory and a
+managed source block is added to `~/.zshrc`. For fish, the generated script is
+written to fish's user completions directory.
 
 Generated API commands participate in completion after an API is configured:
 

@@ -75,6 +75,7 @@ commands for registered APIs via OpenAPI 3.`
 	c.addCertCommand(root)
 	c.addAPICommand(root)
 	c.addCacheCommand(root)
+	c.addCompletionCommand(root)
 	c.addSetupCommand(root)
 	c.addLinksCommand(root)
 	c.addThemeCommand(root)

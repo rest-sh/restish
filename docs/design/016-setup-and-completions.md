@@ -57,6 +57,11 @@ That keeps Restish aligned with standard Go CLI behavior and automatically
 covers both built-in commands and generated commands that are part of the Cobra
 tree.
 
+`completion <shell>` remains a stdout generator so package managers, shell
+frameworks, and advanced users can install the script using their preferred
+mechanism. Restish also provides `completion install zsh` for common standalone
+user installs where dumping a script is not enough guidance.
+
 Completion should reflect the real command tree, which means it can include:
 
 - built-in commands
@@ -68,6 +73,13 @@ Where Restish has enough metadata, completion should also surface:
 - enum-backed parameter values
 - known output-format names
 - profile names and similar finite sets
+
+For zsh, `completion install zsh` writes the generated script under Restish's
+effective config directory, not the cache directory, then adds a managed source
+block to `~/.zshrc`. The script is generated state, but shell startup depends
+on it being present; cache cleanup should not break completion. Fish is simpler:
+`completion install fish` writes the generated script to fish's user completions
+directory, respecting `XDG_CONFIG_HOME` and falling back to `~/.config`.
 
 ## Setup Design
 
@@ -144,10 +156,29 @@ restish completion bash
 restish completion fish
 ```
 
+Install zsh completion for a user-managed Restish install:
+
+```bash
+restish completion install zsh
+```
+
+Install fish completion:
+
+```bash
+restish completion install fish
+```
+
 Configure the shell alias:
 
 ```bash
 restish setup zsh
+```
+
+Configure the shell wrapper and completion together:
+
+```bash
+restish setup zsh --completion
+restish setup fish --completion
 ```
 
 which appends a line like:

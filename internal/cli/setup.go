@@ -47,6 +47,7 @@ func (c *CLI) addSetupCommand(root *cobra.Command) {
 	}
 	setupCmd.Flags().Bool("dry-run", false, "Show what would be written without modifying files")
 	setupCmd.Flags().BoolP("yes", "y", false, "Apply changes without confirmation prompt")
+	setupCmd.Flags().Bool("completion", false, "Also install shell completion when supported")
 	root.AddCommand(setupCmd)
 }
 
@@ -67,48 +68,91 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	line := "\n" + setup.alias + "\n"
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	autoYes, _ := cmd.Flags().GetBool("yes")
+	withCompletion, _ := cmd.Flags().GetBool("completion")
+	if withCompletion && shell != "zsh" && shell != "fish" {
+		return fmt.Errorf("setup: --completion is currently supported for zsh and fish")
+	}
 
 	// Check if the alias is already present to avoid duplicates.
 	existing, _ := os.ReadFile(rcPath)
-	if strings.Contains(string(existing), setup.alias) {
+	aliasConfigured := strings.Contains(string(existing), setup.alias)
+	if aliasConfigured && !withCompletion {
 		fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
 		return nil
 	}
 
 	if dryRun {
-		fmt.Fprintf(c.Stdout, "Would update %s with:\n%s\n", rcPath, setup.alias)
+		if aliasConfigured {
+			fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
+		} else {
+			fmt.Fprintf(c.Stdout, "Would update %s with:\n%s\n", rcPath, setup.alias)
+		}
+		if withCompletion {
+			return c.installCompletion(cmd, completionInstallOptions{Shell: shell, DryRun: true})
+		}
 		return nil
 	}
 
-	if !autoYes {
-		fmt.Fprintf(c.Stdout, "Update %s? [y/N]: ", rcPath)
-		reader := bufio.NewReader(c.Stdin)
-		answer, _ := reader.ReadString('\n')
-		answer = strings.TrimSpace(strings.ToLower(answer))
-		if answer != "y" && answer != "yes" {
+	if !autoYes && (!aliasConfigured || withCompletion) {
+		if withCompletion {
+			fmt.Fprintf(c.Stdout, "Update %s and install %s completion? [y/N]: ", rcPath, shell)
+		} else {
+			fmt.Fprintf(c.Stdout, "Update %s? [y/N]: ", rcPath)
+		}
+		ok, err := c.confirm()
+		if err != nil {
+			return err
+		}
+		if !ok {
 			fmt.Fprintln(c.Stdout, "Cancelled.")
 			return nil
 		}
 	}
 
-	if info, err := os.Stat(rcPath); err == nil && info.Mode().Perm()&0o077 != 0 {
-		c.warnf("%s is more permissive than recommended; consider chmod 600 %s", rcPath, rcPath)
+	if !aliasConfigured {
+		if info, err := os.Stat(rcPath); err == nil && info.Mode().Perm()&0o077 != 0 {
+			c.warnf("%s is more permissive than recommended; consider chmod 600 %s", rcPath, rcPath)
+		}
+
+		updated := string(existing) + line
+		if err := atomicWriteTextFile(rcPath, []byte(updated), 0o600, 0o700); err != nil {
+			return fmt.Errorf("setup: write %s: %w", rcPath, err)
+		}
+
+		fmt.Fprintf(c.Stdout, "Configured %s: appended alias to %s\n", shell, rcPath)
+	} else {
+		fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
 	}
 
-	updated := string(existing) + line
-	if err := atomicWriteTextFile(rcPath, []byte(updated), 0o600, 0o700); err != nil {
-		return fmt.Errorf("setup: write %s: %w", rcPath, err)
+	if withCompletion {
+		if err := c.installCompletion(cmd, completionInstallOptions{Shell: shell, Yes: true}); err != nil {
+			return err
+		}
 	}
 
-	fmt.Fprintf(c.Stdout, "Configured %s: appended alias to %s\n", shell, rcPath)
 	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
 	return nil
+}
+
+func (c *CLI) confirm() (bool, error) {
+	reader := bufio.NewReader(c.Stdin)
+	answer, err := reader.ReadString('\n')
+	if err != nil && len(answer) == 0 {
+		return false, nil
+	}
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	return answer == "y" || answer == "yes", nil
 }
 
 func setupRCPath(shell, home string, setup shellSetup) string {
 	// macOS bash reads .bash_profile by default for login shells.
 	if shell == "bash" && setupRuntimeGOOS == "darwin" {
 		return filepath.Join(home, ".bash_profile")
+	}
+	if shell == "fish" {
+		if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
+			return filepath.Join(configHome, "fish", "config.fish")
+		}
 	}
 	return filepath.Join(home, setup.rcFile)
 }

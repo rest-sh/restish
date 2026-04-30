@@ -14,6 +14,8 @@ wrappers so interactive commands reach Restish unchanged.
 ```bash
 restish setup zsh --dry-run
 restish setup zsh --yes
+restish setup zsh --completion
+restish setup fish --completion
 restish setup bash
 restish setup fish
 ```
@@ -21,6 +23,11 @@ restish setup fish
 Use `--dry-run` to inspect what would be added before changing shell startup
 files. Use `--yes` when you are applying the change intentionally and do not
 want a prompt.
+
+`--completion` currently applies to zsh and fish. For zsh, it installs the
+generated completion script under Restish's config directory and adds a managed
+completion block to `~/.zshrc`. For fish, it writes the generated script to the
+shell's user completions directory.
 
 ## Notes
 

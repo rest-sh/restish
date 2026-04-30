@@ -20,12 +20,38 @@ restish completion powershell
 
 Install the output according to your shell's completion mechanism.
 
+## Install Completion
+
+For normal user-managed zsh and fish setups, Restish can install completion for
+you:
+
+```bash
+restish completion install zsh
+restish completion install fish
+```
+
+For zsh, this writes the generated script under Restish's config directory and
+adds a managed source block to `~/.zshrc`. For fish, it writes to the shell's
+user completions directory. Preview the files first:
+
+```bash
+restish completion install zsh --dry-run
+restish completion install fish --dry-run
+```
+
 ## Configure Shell Safety Too
 
 Completion does not prevent glob expansion. Run setup for interactive use:
 
 ```bash
 restish setup zsh
+```
+
+Or install completion while configuring the shell wrapper:
+
+```bash
+restish setup zsh --completion
+restish setup fish --completion
 ```
 
 ## Generated API Completion

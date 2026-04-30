@@ -26,6 +26,162 @@ func TestCompletionScripts(t *testing.T) {
 	}
 }
 
+func TestCompletionInstallZshWritesScriptAndRCBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "zsh", "--yes"}); err != nil {
+		t.Fatalf("completion install zsh: %v", err)
+	}
+
+	scriptPath := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "completions", "_restish.zsh")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read completion script: %v", err)
+	}
+	if !strings.Contains(string(script), "#compdef restish") {
+		t.Fatalf("expected zsh completion script, got:\n%s", string(script))
+	}
+
+	rcPath := filepath.Join(home, ".zshrc")
+	rc, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read zshrc: %v", err)
+	}
+	rcText := string(rc)
+	if !strings.Contains(rcText, "# >>> restish completion >>>") ||
+		!strings.Contains(rcText, "compinit") ||
+		!strings.Contains(rcText, "source '"+scriptPath+"'") {
+		t.Fatalf("expected managed completion block in zshrc, got:\n%s", rcText)
+	}
+	if !strings.Contains(out.String(), "Installed zsh completion") {
+		t.Fatalf("expected install confirmation, got: %q", out.String())
+	}
+}
+
+func TestCompletionInstallZshIdempotent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configPath := filepath.Join(t.TempDir(), "restish.json")
+
+	for i := 0; i < 2; i++ {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = configPath
+		if err := c.Run([]string{"restish", "completion", "install", "zsh", "--yes"}); err != nil {
+			t.Fatalf("run %d: completion install zsh: %v", i, err)
+		}
+	}
+
+	rcPath := filepath.Join(home, ".zshrc")
+	rc, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read zshrc: %v", err)
+	}
+	if count := strings.Count(string(rc), "# >>> restish completion >>>"); count != 1 {
+		t.Fatalf("expected one managed completion block, got %d:\n%s", count, string(rc))
+	}
+}
+
+func TestCompletionInstallZshDryRunDoesNotWrite(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "zsh", "--dry-run"}); err != nil {
+		t.Fatalf("completion install zsh --dry-run: %v", err)
+	}
+
+	scriptPath := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "completions", "_restish.zsh")
+	if _, err := os.Stat(scriptPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no completion script written")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
+		t.Fatalf("expected no zshrc written")
+	}
+	if !strings.Contains(out.String(), "Would write zsh completion script") {
+		t.Fatalf("expected dry-run output, got: %q", out.String())
+	}
+}
+
+func TestCompletionInstallFishWritesScript(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "fish", "--yes"}); err != nil {
+		t.Fatalf("completion install fish: %v", err)
+	}
+
+	scriptPath := filepath.Join(configHome, "fish", "completions", "restish.fish")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("read fish completion script: %v", err)
+	}
+	if !strings.Contains(string(script), "complete -c restish") {
+		t.Fatalf("expected fish completion script, got:\n%s", string(script))
+	}
+	if !strings.Contains(out.String(), "Installed fish completion") {
+		t.Fatalf("expected install confirmation, got: %q", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
+		t.Fatalf("expected fish install not to write zshrc")
+	}
+}
+
+func TestCompletionInstallFishIdempotent(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	c, _, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "fish", "--yes"}); err != nil {
+		t.Fatalf("completion install fish: %v", err)
+	}
+	first, err := os.ReadFile(filepath.Join(configHome, "fish", "completions", "restish.fish"))
+	if err != nil {
+		t.Fatalf("read fish completion script: %v", err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "fish", "--yes"}); err != nil {
+		t.Fatalf("second completion install fish: %v", err)
+	}
+	second, err := os.ReadFile(filepath.Join(configHome, "fish", "completions", "restish.fish"))
+	if err != nil {
+		t.Fatalf("read fish completion script after second run: %v", err)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("expected fish completion script to remain unchanged")
+	}
+	if !strings.Contains(out.String(), "Fish completion already installed") {
+		t.Fatalf("expected idempotent confirmation, got: %q", out.String())
+	}
+}
+
+func TestCompletionInstallFishDryRunDoesNotWrite(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "completion", "install", "fish", "--dry-run"}); err != nil {
+		t.Fatalf("completion install fish --dry-run: %v", err)
+	}
+
+	scriptPath := filepath.Join(configHome, "fish", "completions", "restish.fish")
+	if _, err := os.Stat(scriptPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no fish completion script written")
+	}
+	if !strings.Contains(out.String(), "Would write fish completion script") {
+		t.Fatalf("expected dry-run output, got: %q", out.String())
+	}
+}
+
 // TestSetupWritesAlias verifies that "setup zsh" appends the noglob alias to
 // the shell rc file.
 func TestSetupWritesAlias(t *testing.T) {
@@ -55,6 +211,66 @@ func TestSetupWritesAlias(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), ".zshrc") {
 		t.Errorf("expected confirmation with rc path, got: %q", out.String())
+	}
+}
+
+func TestSetupZshWithCompletion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "setup", "zsh", "--completion", "--yes"}); err != nil {
+		t.Fatalf("setup zsh --completion: %v", err)
+	}
+
+	rcPath := filepath.Join(home, ".zshrc")
+	rc, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read zshrc: %v", err)
+	}
+	rcText := string(rc)
+	if !strings.Contains(rcText, `alias restish="noglob restish"`) {
+		t.Fatalf("expected noglob alias, got:\n%s", rcText)
+	}
+	if !strings.Contains(rcText, "# >>> restish completion >>>") {
+		t.Fatalf("expected completion block, got:\n%s", rcText)
+	}
+
+	scriptPath := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "completions", "_restish.zsh")
+	if _, err := os.Stat(scriptPath); err != nil {
+		t.Fatalf("expected completion script: %v", err)
+	}
+	if !strings.Contains(out.String(), "Installed zsh completion") {
+		t.Fatalf("expected completion install confirmation, got: %q", out.String())
+	}
+}
+
+func TestSetupFishWithCompletion(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "setup", "fish", "--completion", "--yes"}); err != nil {
+		t.Fatalf("setup fish --completion: %v", err)
+	}
+
+	rcPath := filepath.Join(configHome, "fish", "config.fish")
+	rc, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read fish config: %v", err)
+	}
+	if !strings.Contains(string(rc), "function restish; command restish $argv; end") {
+		t.Fatalf("expected fish wrapper, got:\n%s", string(rc))
+	}
+
+	scriptPath := filepath.Join(configHome, "fish", "completions", "restish.fish")
+	if _, err := os.Stat(scriptPath); err != nil {
+		t.Fatalf("expected fish completion script: %v", err)
+	}
+	if !strings.Contains(out.String(), "Installed fish completion") {
+		t.Fatalf("expected fish completion install confirmation, got: %q", out.String())
 	}
 }
 
