@@ -96,7 +96,16 @@ Windows user cache directory on Windows.
 The primary top-level keys are:
 
 - `apis`
-- global output or behavior defaults as the product grows
+- `auth_profiles`
+- `cache`
+- `theme`
+- `plugins`
+
+`auth_profiles` stores shared auth configurations that profile-level `auth_ref`
+or credential-level `auth_ref` can point to. `cache` stores global cache
+settings. `theme` stores readable-output style overrides. `plugins` stores raw
+per-plugin JSON config keyed by plugin name so plugin-specific settings do not
+need to become core Restish fields.
 
 Each entry under `apis` is keyed by a short API name and contains the stable
 registration for that API:
@@ -104,9 +113,12 @@ registration for that API:
 - `base_url`
 - `spec_url`
 - `spec_files`
+- `allow_cross_origin_spec`
+- `operation_base`
+- `command_layout`
+- `server_variables`
 - pagination configuration
 - profile map
-- other API-wide metadata such as operation-base or plugin allowlists
 
 The exact field list may evolve, but the structural rule should remain:
 
@@ -125,12 +137,48 @@ Profiles may set or override:
 - `base_url`
 - persistent headers
 - persistent query parameters
-- auth configuration
+- profile-level auth configuration or `auth_ref`
+- operation credential bindings
 - TLS signer selection and parameters
+- OpenAPI server variable values
 - other request-affecting defaults added in future designs
 
 The default selected profile name is `default` unless the user specifies
 another profile through env vars or flags.
+
+Profile-level `auth` and `auth_ref` are mutually exclusive. `auth` is an inline
+auth config with `type` and string `params`; `auth_ref` points at one
+top-level `auth_profiles` entry. A reference is not an overlay.
+
+Generated operations may require named credential alternatives from OpenAPI.
+Those bindings live under:
+
+```jsonc
+"profiles": {
+  "prod": {
+    "credentials": {
+      "UserOAuth": {
+        "auth_ref": "work-oauth",
+        "satisfies": ["items:read"]
+      },
+      "PartnerKey": {
+        "auth": {
+          "type": "api-key",
+          "params": {
+            "in": "header",
+            "name": "X-Partner-Key",
+            "value": "env:PARTNER_KEY"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Credential-level `auth` and `auth_ref` are mutually exclusive for the same
+reason as profile-level auth. `satisfies` records scopes, roles, or other
+requirement values the credential is intended to satisfy.
 
 ## Layering And Precedence
 
@@ -188,20 +236,23 @@ configuration mistake and makes behavior depend on accident.
 
 ```jsonc
 {
+  "auth_profiles": {
+    "github-token": {
+      "type": "bearer",
+      "params": {
+        "token": "env:GITHUB_TOKEN"
+      }
+    }
+  },
   "apis": {
     "github": {
       "base_url": "https://api.github.com",
       "spec_url": "https://api.github.com/openapi.json",
+      "command_layout": "flat",
       "profiles": {
         "default": {
           "headers": ["Accept: application/json"],
-          "auth": {
-            "type": "http-basic",
-            "params": {
-              "username": "alice",
-              "password": "",
-            },
-          },
+          "auth_ref": "github-token"
         },
         "enterprise": {
           "base_url": "https://github.example.com/api/v3",
@@ -300,6 +351,7 @@ This improves short-term flexibility but hurts confidence and debuggability.
 
 - Design 004 consumes profile auth configuration.
 - Design 006 consumes spec-related config.
+- Design 033 defines credential bindings for OpenAPI operation security.
 - Design 017 defines how env vars and flags override config.
 - Design 027 defines comment-preserving edit behavior.
 - Design 031 defines migration expectations from v1.

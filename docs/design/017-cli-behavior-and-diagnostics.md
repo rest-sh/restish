@@ -15,6 +15,8 @@ This document defines those operator-facing rules.
 - exit codes are predictable
 - explicit user choices beat implicit heuristics
 - cancellation behaves consistently across commands
+- help, version, completion, and diagnostics remain reachable when config is
+  broken
 
 ## Command Resolution Rules
 
@@ -79,6 +81,27 @@ every command sees the same resolved values instead of re-reading ad-hoc state.
 That runtime object should be immutable from the point command execution begins.
 Late mutation creates hard-to-debug differences between setup, request
 execution, plugins, and output.
+
+## Bootstrap-Safe Commands
+
+Some commands are recovery paths and must run even when full config parsing,
+plugin discovery, or generated-command startup would fail:
+
+- root help and subcommand help
+- `--version` and `version`
+- shell completion generation
+- `shell setup --help`
+- `doctor`
+
+Normal requests, generated commands, plugin execution, and config-mutating
+commands still use strict config validation. Bootstrap mode exists so users can
+inspect, repair, or get help for a broken local environment; it must not become
+a second permissive execution path.
+
+Config recovery diagnostics may use a diagnostic parse path that reports
+unknown fields, dotted paths, line/column positions, closest field suggestions,
+and migration hints. That path is read-only and explanatory. Strict parsing is
+the only path for normal execution and config mutation.
 
 ## Stdout And Stderr Contract
 
@@ -260,7 +283,7 @@ Examples include:
 - missing required arguments
 - unknown flags
 - invalid shorthand syntax detected before request execution
-- unsupported shell names passed to `setup`
+- unsupported shell names passed to `shell setup`
 
 These should produce concise stderr output, reference help when useful, and
 avoid verbose stack-like dumps in ordinary mode.
@@ -274,6 +297,12 @@ Design requirements:
 - help text should be reproducible and not depend on ambient network state
 - generated command help should reflect resolved API command structure for the
   current context
+- generated operation help should focus on operation arguments, examples,
+  schema information, and operation-local flags by default
+- `--help-all` should expand inherited Restish request, output, auth, TLS,
+  pagination, cache, and config flags
+- `restish flags` should be the in-CLI reference for the complete `--rsh-*`
+  surface so ordinary command help can stay focused
 - completion output should be machine-oriented when emitted for shell
   integration, not decorated with human commentary
 
@@ -285,7 +314,7 @@ User-facing command help and docs must match actual supported behavior.
 
 That means:
 
-- only supported shells should be advertised by `setup`
+- only supported shells should be advertised by `shell setup`
 - platform-specific shell startup files should be handled honestly
 - completion claims should match actual registered completion behavior
 

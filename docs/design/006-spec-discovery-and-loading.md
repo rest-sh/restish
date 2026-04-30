@@ -237,9 +237,8 @@ more aggressively than routine startup.
 Examples:
 
 - `api connect` should not blindly trust stale cached `x-cli-config`
-- `api connect <name> <url>` and `api connect <name> <url>` normalize schemeless
-  URLs the same way requests do: `https://` by default, but `http://` for
-  localhost and loopback targets
+- `api connect <name> <url>` normalizes schemeless URLs the same way requests
+  do: `https://` by default, but `http://` for localhost and loopback targets
 - `api connect <name> <url> [setup-expression ...]` may consume
   `prompt.*` expressions as prompt preanswers, then apply ordinary config
   shorthand expressions as final overrides before saving

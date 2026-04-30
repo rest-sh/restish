@@ -6,8 +6,11 @@ Restish keeps `restish.json` as a strict, typed JSONC configuration file.
 Command-driven config edits should preserve user-authored comments and nearby
 formatting whenever possible instead of rewriting the entire file as plain JSON.
 
-This design is intentionally narrow. It targets the `api connect`, `api set`,
-and `api remove` workflows that modify object-shaped paths inside the config.
+This design is intentionally narrow. It targets command-driven mutations that
+modify object-shaped paths inside the config: `api connect`, `api set`, `api
+remove`, `api auth add/remove`, `config set`, and theme updates. `config edit`
+is different: it lets the user's editor modify the whole file, then reloads and
+validates the result before invalidating affected caches.
 
 ## Problem
 
@@ -40,7 +43,7 @@ The editor must:
 - preserves whitespace and comments outside the edited span
 - supports replacing an existing value by path
 - supports inserting missing object members, including creating intermediate
-  objects for nested `api set` paths
+  objects for nested `api set`, `api auth`, and `config set` paths
 - supports deleting object members cleanly
 - validates the patched file by loading it through the normal strict config
   parser before writing it back
@@ -57,9 +60,9 @@ The patcher is intentionally limited:
 - when there is no existing file, Restish still writes a normal formatted JSON
   config file
 
-Those limits are acceptable because current config commands only need object
-operations. Keeping the patcher narrow avoids introducing a larger dependency
-or a slower full-fidelity syntax tree.
+Those limits are acceptable because current command-driven config mutations
+only need object operations. Keeping the patcher narrow avoids introducing a
+larger dependency or a slower full-fidelity syntax tree.
 
 Two additional guarantees are now part of the design:
 
@@ -91,7 +94,15 @@ The command behavior is now:
   replacing an API entry, including when setup expressions are supplied on the
   command line
 - `api set` preserves comments when updating a supported config path
+- `api auth add/remove` preserves comments around profile and credential
+  entries that it does not change
 - `api remove` preserves comments around unaffected entries
+- `config set` preserves comments while applying arbitrary object-member path
+  updates
+- `config theme set` preserves comments while replacing the `theme` object
+- `config edit` does not patch individual spans, but it validates the edited
+  file through the strict config loader and invalidates spec caches when
+  relevant API fields changed
 
 The normal `Load` path remains the source of truth for validation and unknown
 field rejection.

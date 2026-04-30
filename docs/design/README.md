@@ -21,6 +21,35 @@ The format is still not rigid, but "short because the code explains the rest"
 is no longer the bar. If behavior matters to correctness, compatibility,
 security, or user expectations, it should be captured here explicitly.
 
+## Corpus Contract
+
+The design corpus has two jobs:
+
+1. define enough behavior to reimplement Restish v2 without reverse-engineering
+   the current Go code
+2. preserve the "why" behind decisions so release-window choices do not get
+   reopened accidentally after v2 is stable
+
+That means design records should describe product behavior, data contracts,
+execution order, failure modes, and compatibility decisions. They should not be
+used as a vague backlog, and they should not say "accepted" in two places with
+conflicting answers. When two records start to overlap in a way that creates
+two possible sources of truth, refactor them so the decision lives in one
+owning record and the other record links to it.
+
+The intended ownership is:
+
+- subsystem records own detailed behavior for their subsystem
+- [029-request-execution-pipeline.md](./029-request-execution-pipeline.md)
+  owns end-to-end execution order
+- [032-implementation-contract.md](./032-implementation-contract.md) owns the
+  compact cross-cutting matrix of flags, config shape, command precedence, and
+  plugin protocol families
+- [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) owns
+  the accepted top-level command surface
+- [000-restish-v1-baseline.md](./000-restish-v1-baseline.md) is historical
+  evidence, not a v2 requirement
+
 The order below is intentional. It starts with the highest-level core ideas,
 then moves through request construction and API-aware behavior, then response
 handling and operator workflows. Each document should ideally rely only on
@@ -81,6 +110,7 @@ were a recurring source of remediation work.
 - [001-cli-architecture.md](./001-cli-architecture.md) - Central `CLI` runtime, subsystem boundaries, lifecycle phases, and invariants for embedding, testing, and teardown.
 - [002-config-and-profiles.md](./002-config-and-profiles.md) - Persistent configuration model, path resolution, profile layering, atomic writes, and migration expectations.
 - [003-content-types-and-encodings.md](./003-content-types-and-encodings.md) - Registry-driven body encoding/decoding and compression handling.
+- [027-comment-preserving-config-edits.md](./027-comment-preserving-config-edits.md) - Comment-preserving config editing, structural patch guarantees, line-ending preservation, and concurrency-safe writes.
 - [030-security-model-and-trust-boundaries.md](./030-security-model-and-trust-boundaries.md) - Threat model, trust boundaries, sensitive-data handling, and the safety rules that apply across discovery, plugins, auth, and output.
 
 **Request And API Model**
@@ -89,6 +119,7 @@ were a recurring source of remediation work.
 - [005-tls-and-cert-handling.md](./005-tls-and-cert-handling.md) - TLS configuration, mTLS options, custom CAs, and certificate inspection.
 - [006-spec-discovery-and-loading.md](./006-spec-discovery-and-loading.md) - Secure spec discovery, loader contracts, caching, revalidation, and failure reporting.
 - [007-api-command-generation.md](./007-api-command-generation.md) - Config-backed API registration, OpenAPI-to-command mapping, naming, parameter handling, and compatibility aliases.
+- [033-openapi-operation-security.md](./033-openapi-operation-security.md) - Operation-specific OpenAPI security policy, credential bindings, setup UX, and compatibility rules.
 - [034-openapi-implementation-contract.md](./034-openapi-implementation-contract.md) - Implementation-grade OpenAPI 3.x behavior matrix for loading, command generation, parameters, servers, schemas, auth, media types, caching, and tests.
 - [008-shorthand-input.md](./008-shorthand-input.md) - Building request bodies from CLI arguments and stdin using shorthand syntax.
 - [029-request-execution-pipeline.md](./029-request-execution-pipeline.md) - End-to-end request planning, execution order, cancellation, transport layering, normalization, filtering, and rendering.
@@ -101,6 +132,7 @@ were a recurring source of remediation work.
 - [012-streaming.md](./012-streaming.md) - SSE and NDJSON streaming behavior, per-event filtering, and output rules.
 - [013-caching-and-retries.md](./013-caching-and-retries.md) - HTTP response caching, transport layering, and retry behavior.
 - [025-image-rendering.md](./025-image-rendering.md) - Terminal image rendering for image/* responses: Kitty, iTerm2, and half-block fallback.
+- [028-document-and-record-output.md](./028-document-and-record-output.md) - Output framing contracts for document vs record formats across pagination, streaming, filtering, and redirects.
 
 **Workflows And UX**
 
@@ -110,9 +142,7 @@ were a recurring source of remediation work.
 - [017-cli-behavior-and-diagnostics.md](./017-cli-behavior-and-diagnostics.md) - Command resolution, global flag policy, diagnostics, exit codes, prompts, and operator-facing behavior conventions.
 - [031-compatibility-and-migration.md](./031-compatibility-and-migration.md) - v1-to-v2 compatibility goals, intentional breaks, migration path, and release-readiness checklist for user-visible behavior.
 - [032-implementation-contract.md](./032-implementation-contract.md) - Cross-cutting implementation matrix for global flags, config schema, command precedence, plugin message families, and output ownership.
-- [033-openapi-operation-security.md](./033-openapi-operation-security.md) - Operation-specific OpenAPI security policy, profile scheme declarations, and the path from current `security: []` support to full enforcement.
-- [035-v2-product-surface-decisions.md](./035-v2-product-surface-decisions.md) - Accepted v2 command-surface decisions for setup, bootstrap, help, plugin/MCP trust, and embeddability.
-- [036-javascript-implementation-follow-up.md](./036-javascript-implementation-follow-up.md) - Planned follow-up review for docs-site JavaScript after removing the v1 tree and WASM prototype.
+- [035-javascript-implementation-boundary.md](./035-javascript-implementation-boundary.md) - Boundary for docs-site JavaScript after removing the v1 tree and WASM prototype: useful UI, not a second CLI source of truth.
 - [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) - Accepted v2 command/control surface decision, framed as a v1-to-v2 update for config, auth cache, flags, MCP, and shell setup.
 
 **Extensibility**
@@ -126,5 +156,3 @@ were a recurring source of remediation work.
 - [023-restish-mcp-plugin.md](./023-restish-mcp-plugin.md) - The concrete MCP command plugin that exposes OpenAPI operations as MCP tools over stdio.
 - [024-restish-bulk-plugin.md](./024-restish-bulk-plugin.md) - The concrete bulk-management command plugin that revives the v1 checkout workflow out of process.
 - [026-restish-csv-plugin.md](./026-restish-csv-plugin.md) - The concrete formatter-hook plugin that turns array-shaped responses into CSV.
-- [027-comment-preserving-config-edits.md](./027-comment-preserving-config-edits.md) - Comment-preserving config editing, structural patch guarantees, line-ending preservation, and concurrency-safe writes.
-- [028-document-and-record-output.md](./028-document-and-record-output.md) - Output framing contracts for document vs record formats across pagination, streaming, filtering, and redirects.

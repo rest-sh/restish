@@ -2,10 +2,9 @@
 
 ## Status
 
-Draft for v2 release-readiness. Current implementation only honors
-operation-level `security: []` as an explicit no-auth marker. Before v2 release,
-Restish should implement operation-specific security matching and Restish-native
-credential bindings.
+Accepted for the first Restish v2 release. This record owns the product and
+configuration model for OpenAPI operation security; design 034 carries the
+compact OpenAPI implementation matrix.
 
 ## Problem
 
@@ -517,12 +516,12 @@ restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
 configured credentials, missing credentials, declared `satisfies` values, and
 operation coverage.
 
-`api auth inspect` replaces the v1/v2-draft top-level `api auth inspect` command.
+`api auth inspect` replaces the v1/v2-draft header-only inspect behavior.
 It should inspect the credential or operation auth selected from the active API
-profile without sending the full application request. Unlike `api auth inspect`, it
-must handle credentials that do not produce an `Authorization` header, such as
-API keys in headers or query parameters, and combined requirements that attach
-several credentials.
+profile without sending the full application request. Unlike the old narrow
+behavior, it must handle credentials that do not produce an `Authorization`
+header, such as API keys in headers or query parameters, and combined
+requirements that attach several credentials.
 
 Default inspect output is human-oriented and redacted:
 
@@ -550,9 +549,9 @@ restish api auth inspect example --rsh-credential UserOAuth --raw-header Authori
 That command prints only the selected header value. Raw modes must be explicit
 because they can print secrets to stdout.
 
-Top-level `restish api auth inspect` should be removed for v2 rather than kept as an
-alias. This is a release-window break that keeps auth viewing, setup, and
-mutation under one command family.
+The old API-or-URI, Authorization-header-only inspect behavior should be
+removed for v2 rather than kept as an alias. This is a release-window break
+that keeps auth viewing, setup, and mutation under one API-auth command family.
 
 For noninteractive setup, extend the existing preanswer/set-expression grammar
 to address credential bindings:
@@ -762,11 +761,11 @@ commands:
   unambiguous binding, Restish should fail before the request with an actionable
   diagnostic.
 
-Top-level `restish api auth inspect` is removed in v2. Its replacement is
-`restish api auth inspect <api>`, with explicit raw-output flags for scripts
-that need the old Authorization-header value. This is an intentional v2 break
-because operation-specific and non-Authorization credentials make a top-level
-header-only command misleading.
+The old API-or-URI, Authorization-header-only inspect behavior is removed in
+v2. Its replacement is `restish api auth inspect <api>`, with explicit
+raw-output flags for scripts that need the old Authorization-header value. This
+is an intentional v2 break because operation-specific and non-Authorization
+credentials make a header-only command misleading.
 
 Existing `x-cli-config` documents are not a breaking-change surface for v2. If a
 legacy extension maps cleanly to one credential requirement, Restish should keep
@@ -840,7 +839,8 @@ scheme.
 - `api auth inspect` handles profile-level auth, credential-specific auth,
   operation-selected auth, non-Authorization credentials, combined credentials,
   and explicit raw header output;
-- top-level `api auth inspect` is removed.
+- the old API-or-URI, Authorization-header-only `api auth inspect` behavior is
+  removed.
 
 ## Documentation Impact
 
@@ -856,13 +856,9 @@ Update user docs before release:
   than per-endpoint auth selection;
 - API management reference: document `api auth list/add/remove/inspect` and
   configure behavior;
-- migration notes: document removal of top-level `api auth inspect` and the
-  equivalent `api auth inspect --raw-header Authorization` flow;
+- migration notes: document removal of the old header-only inspect behavior and
+  the equivalent `api auth inspect --raw-header Authorization` flow;
 - troubleshooting guide: add missing credential/requirement diagnostics.
-
-Design 034 should be updated when implementation lands so the OpenAPI
-implementation matrix describes the final v2 behavior instead of the current
-narrow `security: []` contract.
 
 ## Decision
 

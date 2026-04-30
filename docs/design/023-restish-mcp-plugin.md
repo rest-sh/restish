@@ -79,7 +79,11 @@ At startup:
 5. The plugin starts serving MCP stdio traffic.
 
 This design keeps spec loading and HTTP transport inside Restish while letting
-the plugin own the MCP-facing protocol.
+the plugin own the MCP-facing protocol. The plugin should use the public
+command-plugin client helpers for host HTTP delegation, API spec fetches,
+timeouts, stdout/stderr messages, and passthrough stdio. MCP-specific code owns
+MCP JSON-RPC and tool mapping only; it should not carry a second
+pending-request protocol implementation.
 
 ## Tool Inclusion Rules
 
@@ -90,11 +94,17 @@ Operations are skipped when:
 
 - `x-cli-ignore` is true
 - `x-mcp-ignore` is true
-- `--read-only` is set and the method is not `GET` or `HEAD`
+- the method is `POST`, `PUT`, `PATCH`, or `DELETE` and
+  `--allow-write-tools` is not set
 - `--operations` is set and the `operationId` is not allowlisted
 
 This is a product decision, not just a parser shortcut. The plugin wants stable
 tool names that API authors can reason about.
+
+MCP is model-facing automation, so it is read-biased by default. Write-like
+operations must require an explicit operator choice even when the OpenAPI spec
+describes them correctly. Explicit hide metadata such as `x-mcp-ignore` remains
+authoritative.
 
 ## Tool Naming
 
@@ -151,8 +161,9 @@ The plugin currently implements a focused stdio MCP server:
 - `tools/list`
 - `tools/call`
 
-The `--http` transport flag exists but is intentionally not implemented yet.
-The current design is stdio-first.
+HTTP transport is intentionally not part of the v2 MCP plugin surface. The
+current design is stdio-first, with `restish mcp serve <api...>` as the service
+entry point.
 
 ## Result Shaping
 

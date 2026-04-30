@@ -192,6 +192,26 @@ keeps its established verbs because they describe a resource checkout workflow.
 
 ## Decisions
 
+### API Connection Is The Setup Path
+
+V2 uses:
+
+```text
+restish api connect <name> <url> [setup-expression ...]
+```
+
+This is the single API registration path. It normalizes and saves the base URL,
+attempts spec discovery by default, applies OpenAPI-derived setup hints when a
+spec is found, and still registers the API when discovery does not find a spec.
+`--no-discover` performs minimal local registration with no spec probes.
+`--spec <url-or-file>` uses an explicit OpenAPI source. `--replace` allows a
+rerun to replace generated or default material that would otherwise be
+preserved as user-owned local config.
+
+V2 does not keep older API setup aliases. Multiple setup verbs would make
+scripts, docs, help output, and support answers less clear before the first
+stable v2 release.
+
 ### Configuration Is A First-Class Object
 
 V2 adds `restish config` for configuration work:

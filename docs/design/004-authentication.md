@@ -341,9 +341,10 @@ Default output is redacted and human-oriented. Explicit raw-output flags may
 print selected values for scripts, such as the `Authorization` header value.
 Raw modes must be opt-in because they can print secrets to stdout.
 
-The v1/v2-draft top-level `restish api auth inspect <api>` command is removed for
-v2. It was too narrow for API keys, combined credentials, and operation-selected
-auth.
+The v1/v2-draft header-only auth-inspection behavior is removed for v2. The
+stable command keeps the `restish api auth inspect <api>` family, but it must
+be credential-aware and operation-aware rather than assuming that "auth" means
+one `Authorization` header.
 
 ## Security Rules
 

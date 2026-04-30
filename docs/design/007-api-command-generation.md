@@ -51,7 +51,7 @@ restish <api> <operation> ...
 Under that group, each included operation becomes a child command.
 
 Built-in commands still take precedence over API short names. The generator does
-not get to shadow core commands such as `api`, `cache`, or `setup`.
+not get to shadow core commands such as `api`, `cache`, `config`, or `shell`.
 
 The set of reserved built-in command names should come from the actual root
 command tree or a guard test that proves the reserved list is in sync. A stale
@@ -422,3 +422,5 @@ Would make help, completion, and discovery less coherent.
 - Design 017 defines command resolution and completion expectations.
 - Design 029 defines how generated commands enter the shared request pipeline.
 - Design 031 defines compatibility expectations for user-visible naming changes.
+- Design 037 defines the accepted top-level command surface that generated API
+  names must not collide with.

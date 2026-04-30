@@ -80,9 +80,10 @@ The current design set intentionally changes v1 in at least these areas:
 - more explicit pipeline planning for pagination and streaming
 - retirement of the v1 interactive `api connect <name>` prompt flow in favor
   of `restish.json`, `api connect`, `api set`, and `config edit`
-- removal of the v1/v2-draft top-level `api auth inspect` command in favor of
-  `restish api auth inspect <api> --raw-header Authorization`, because v2 auth
-  can be credential-specific and may not use the `Authorization` header
+- removal of the v1/v2-draft API-or-URI, Authorization-header-only auth inspect
+  behavior in favor of `restish api auth inspect <api> --raw-header
+  Authorization`, because v2 auth can be credential-specific and may not use
+  the `Authorization` header
 
 Those are acceptable breaks, but they require migration documentation and
 operator guidance.
@@ -99,11 +100,18 @@ The implemented v2 behavior is:
   on startup or first write
 - automatically migrate v1 `apis.json` and `config.json` into `restish.json`
   when safe
+- treat `RSH_CONFIG_DIR` as a clean v2 config root; it does not scan or mutate
+  platform legacy locations
 - preserve comments where possible
 - emit a clear hint when migration cannot be automatic
 
 Migration should not be macOS-only, Linux-only, or implicit based on whichever
 path happened to work on the developer's machine.
+
+Automatic v1 migration is limited to the default platform config path when no
+v2 config exists. `restish doctor migrate-v1` is the explicit operator command
+for running or inspecting default-location v1 migration when the normal
+first-run path is not enough.
 
 Explicit config file selection is intentionally stricter. If `--rsh-config` or
 `RSH_CONFIG` names a file that does not exist, Restish errors instead of falling

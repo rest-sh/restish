@@ -6,8 +6,8 @@ Restish v2 supports two shell-facing behaviors that make the CLI easier to use
 interactively:
 
 - shell completion scripts
-- shell setup that installs `noglob`-style protection where the shell has a
-  correct equivalent
+- shell setup that installs the supported per-shell wrapper or alias needed to
+  keep Restish input predictable
 
 These are separate concerns on purpose: completion teaches the shell what
 arguments exist, while setup teaches the shell not to eagerly expand Restish
@@ -83,17 +83,22 @@ directory, respecting `XDG_CONFIG_HOME` and falling back to `~/.config`.
 
 ## Setup Design
 
-`setup <shell>` appends a shell snippet to the relevant rc file that configures
-`restish` to run under `noglob`-style behavior where the shell has a correct
-equivalent.
+`shell setup <shell>` appends a shell snippet to the relevant rc file that
+configures `restish` with the supported per-shell integration. For zsh this is
+the shell's native `noglob` precommand. Other shells must use a shell-specific
+wrapper that genuinely preserves Restish arguments, or they should not be
+advertised as setup-supported. Fish has a managed function path and can be
+paired with completion installation, but it should not be described as
+zsh-style `noglob`.
 
 The built-in setup currently supports:
 
 - `zsh`
 - `bash`
+- `fish`
 
-Shells without a compatible equivalent, such as fish, should not be advertised
-as supported by `setup` just because they support completion.
+Shells without a supported wrapper or alias should not be advertised as
+supported by `shell setup` just because they support completion.
 
 ## Rc File Selection
 
@@ -105,8 +110,10 @@ Expected behavior:
 - `zsh` -> `~/.zshrc`
 - `bash` on macOS login-shell workflows -> `~/.bash_profile`
 - `bash` on other Unix-like systems -> `~/.bashrc`
+- `fish` -> `$XDG_CONFIG_HOME/fish/config.fish` or
+  `~/.config/fish/config.fish`
 
-This keeps the setup command aligned with where those shells actually load user
+This keeps `shell setup` aligned with where those shells actually load user
 startup config in common environments.
 
 ## Idempotence And Confirmation
@@ -187,7 +194,7 @@ which appends a line like:
 alias restish="noglob restish"
 ```
 
-to the shell rc file.
+to the shell rc file for shells that support that alias style.
 
 Generated command completions can also benefit from OpenAPI-derived enum values.
 

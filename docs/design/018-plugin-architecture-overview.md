@@ -38,6 +38,13 @@ the configured directory is the explicit trust decision. If multiple plugins
 claim the same manifest name or command name, Restish must not silently pick one
 without surfacing the collision.
 
+Plugin installation should keep that trust decision visible. Before copying a
+binary or archive into the configured plugin directory, `plugin install` shows
+the source, resolved binary or archive, manifest identity, and declared
+capabilities. Automation can opt in with `--yes`, but the runtime still fails
+closed: a plugin must declare a hook, loader, formatter, signer, or command
+before Restish enables that capability.
+
 The configured plugin directory comes from the same path resolver as the rest
 of Restish config. It should not have a separate helper that accidentally
 ignores XDG or test path overrides.

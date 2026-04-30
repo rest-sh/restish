@@ -227,7 +227,7 @@ The root command tree has four sources:
 4. plugin-contributed command roots
 
 Built-ins must take precedence over generated or plugin-provided names. This
-avoids shadowing of core commands such as `api`, `cache`, or `setup`.
+avoids shadowing of core commands such as `api`, `cache`, `config`, or `shell`.
 
 The command tree should remain inspectable from the runtime state. Restish
 should not depend on hidden late-bound command injection that only happens after
@@ -245,6 +245,18 @@ Tests and embedders should be able to override:
 - config source
 - browser/editor openers
 - plugin discovery paths
+
+Organizations shipping branded CLIs should be able to construct a `CLI`, set
+the command name, description, and version, register custom content types,
+encodings, auth handlers, link parsers, loaders, and formatters, and provide
+in-memory default config such as bundled APIs, profiles, auth profiles, and
+operation metadata. User config wins over bundled defaults with the same API or
+auth-profile name. That keeps embedded distributions useful out of the box
+without trapping users in vendor-owned defaults.
+
+Out-of-process plugins remain the normal extension path for the stock `restish`
+binary. Embedding is for organizations that intentionally ship a distinct CLI
+surface, not for every formatter or workflow extension.
 
 This is why central ownership matters: if a command bypasses the runtime, it
 becomes much harder to test and much harder to trust as part of a shared
@@ -267,6 +279,9 @@ future direction:
 - move global-flag parsing into one structured runtime step
 - reduce public "testing only" runtime fields by hiding them behind test hooks
 - replace ad-hoc boolean parameter lists with options structs in execution code
+- collapse small internal packages only when ownership is obvious; input
+  parsing and cache behavior remain separate concerns until a broader request
+  executor reshape makes another home clearer
 
 Those changes are encouraged because they move the implementation closer to the
 runtime shape described here.

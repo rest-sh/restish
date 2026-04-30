@@ -196,6 +196,11 @@ The plugin should detect and surface at least:
 The design bias is toward surfacing a conflict instead of overwriting one side
 silently.
 
+In particular, a resource that changed locally and remotely is a conflict. The
+remote-delete/local-edit case follows the same rule: `status` should show both
+sides, and `push` must refuse instead of recreating the deleted remote resource
+unless a future design introduces an explicit conflict-resolution workflow.
+
 ## Output Ownership
 
 Bulk commands mostly own their own human-oriented output:

@@ -2,9 +2,9 @@
 
 ## Status
 
-Draft for v2 release-readiness. This record captures the OpenAPI 3.x behavior
-that Restish generated commands must preserve. It is intentionally more
-reference-like than most design docs because it is meant to be usable as a
+Accepted for the first Restish v2 release. This record captures the OpenAPI 3.x
+behavior that Restish generated commands must preserve. It is intentionally
+more reference-like than most design docs because it is meant to be usable as a
 reimplementation checklist.
 
 ## Problem
@@ -27,7 +27,8 @@ the parser library as the product contract.
 - Keep startup fast enough for shell loops that invoke `restish` repeatedly.
 - Bound ambiguous or expensive spec features instead of panicking, hanging, or
   allocating unbounded structures.
-- Make unsupported features explicit in diagnostics, help, or future TODOs.
+- Make unsupported features explicit in diagnostics, help, or documented
+  release decisions.
 
 ## Non-Goals
 
@@ -392,11 +393,20 @@ User-facing OpenAPI documentation should explain the common behaviors without
 mirroring this entire matrix. This design doc remains the maintainer-facing
 source for reimplementation and regression-test planning.
 
-## Open Questions
+## Release Decisions
 
-- Should unsupported parameter styles warn during command registration, command
-  help, execution, or all three?
-- Should generated commands eventually expose a strict OpenAPI validation mode
-  for request bodies and parameters?
-- When design 033 is implemented, should profiles without declared OAuth scopes
-  warn or fail for scoped operations?
+Unsupported parameter styles are visible in generated help when Restish can
+detect them during operation extraction. If the unsupported parameter is used at
+execution time, Restish should warn and fall back to the closest safe
+location-specific serialization. Required path substitutions must still fail
+rather than risk corrupting the URL.
+
+Strict OpenAPI request validation is not part of the first v2 release. Generated
+commands use schemas for help, completion, example generation, media selection,
+and bounded coercion only. A future explicit validation mode may be added, but
+default requests stay shell-native and permissive.
+
+Credential bindings without declared OAuth scopes or other requirement values
+may be accepted during setup so users can register an API incrementally. A
+scoped operation fails before request execution when the selected profile cannot
+prove that its credential satisfies the required values.

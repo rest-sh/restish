@@ -37,6 +37,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-ignore-status-code` | | bool | | false | Suppresses status-derived non-zero exit. |
 | `--rsh-timeout` | `-t` | duration | `RSH_TIMEOUT` | none | Header wait timeout. |
 | `--rsh-profile` | `-p` | string | `RSH_PROFILE` | `default` | Active API profile. |
+| `--rsh-auth` | | string | `RSH_AUTH` | empty | Generated-operation credential alternative override, e.g. `UserOAuth+PartnerKey`. |
 | `--rsh-no-cache` | | bool | `RSH_NO_CACHE` | false | Bypass reads and writes. |
 | `--rsh-no-browser` | | bool | | false | OAuth auth-code browser suppression. |
 | `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. |
@@ -65,6 +66,7 @@ Top-level config is JSONC with strict decoded fields:
 | Path | Type | Meaning |
 | --- | --- | --- |
 | `apis` | map | API registrations keyed by short name. |
+| `auth_profiles` | map | Shared auth configs referenced by profile or credential `auth_ref`. |
 | `cache.max_size` | string | Disk cache size such as `100MB`. |
 | `theme` | map | Readable-output style entries. |
 | `plugins` | map | Raw per-plugin JSON config. |
@@ -78,22 +80,29 @@ API fields:
 | `spec_files` | array | Ordered local/remote specs to merge. |
 | `allow_cross_origin_spec` | bool | Permit safe cross-origin Link spec discovery. |
 | `operation_base` | string | Absolute path prefix resolved against `base_url` for generated operations. |
+| `command_layout` | string | `flat` or `tags`; empty means `flat`. |
 | `server_variables` | map | Explicit OpenAPI server URL variable values used for generated operation paths. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |
 
 Profile fields are `base_url`, `headers`, `query`, `tls_signer`,
-`tls_signer_params`, `server_variables`, and `auth`. Profile server variables
-override API-level server variables for command generation. Auth fields are
-`type` plus string `params`. Config files are written private and insecure
-permissions are warning-only, not fatal.
+`tls_signer_params`, `server_variables`, `auth`, `auth_ref`, and
+`credentials`. Profile server variables override API-level server variables for
+command generation. Inline `auth` and `auth_ref` are mutually exclusive.
+
+Credential fields under `profiles.<name>.credentials.<id>` are `auth`,
+`auth_ref`, and `satisfies`. Credential inline `auth` and `auth_ref` are also
+mutually exclusive. Auth fields are `type` plus string `params`.
+
+Config files are written private and insecure permissions are warning-only, not
+fatal.
 
 ## Command Surface And Precedence
 
 Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
-`api`, `cache`, `cert`, `edit`, `links`, `plugin`, `setup`,
-`theme`, `completion`, and `help`.
+`api`, `cache`, `cert`, `completion`, `config`, `content-types`, `doctor`,
+`edit`, `flags`, `help`, `links`, `plugin`, `shell`, and `version`.
 
 Generated API commands are registered under API short names when cached spec
 metadata is available. Short-name GET fallback commands are registered for APIs
@@ -138,11 +147,17 @@ across pagination, streaming, filters, and explicit formats.
 
 ## Intentional v2 Breaks
 
-The v1 interactive `api connect <name>` prompt flow is retired. v2 config is
-edited through `restish.json`, `api connect`, `api set`, and `config edit`.
+The v1 habit of whole-config editing through `api edit` is retired. v2 config
+is edited through `restish.json`, `api connect`, `api set`, `config set`, and
+`config edit`.
 Legacy `x-cli-config.prompt` is not retired: `api connect <name> <url>`
 prompts for those values while writing local config, then normal requests use
 the saved config without extension-driven prompting.
 
 The `restish-mcp --http` flag is not part of v2; MCP currently uses stdio as a
 command plugin.
+
+The v2 command surface is intentionally not preserving pre-release aliases such
+as `api show`, `api edit`, `api clear-auth-cache`, `api content-types`, a
+top-level `setup` command, or a direct `mcp <api...>` service invocation. Design
+037 owns the exact accepted command tree and v1-to-v2 command move table.
