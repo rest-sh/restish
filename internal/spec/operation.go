@@ -84,6 +84,8 @@ type CredentialRequirement struct {
 	Needs    []string // scopes, roles, or other requirement values
 	Source   string   // loader identity, e.g. openapi
 	External bool     // true when the source used a URI-style reference
+	// Deprecated is true when the source security scheme is marked deprecated.
+	Deprecated bool
 }
 
 // CredentialAlternative is one AND-set within OpenAPI's OR-list security model.
@@ -368,12 +370,13 @@ func credentialAlternatives(requirements []*base.SecurityRequirement, schemes ma
 		for id, needs := range requirement.Requirements.FromOldest() {
 			scheme := schemes[id]
 			requirement := CredentialRequirement{
-				ID:       id,
-				Ref:      credentialRequirementRef(id, scheme),
-				Kind:     credentialRequirementKind(scheme),
-				Needs:    append([]string(nil), needs...),
-				Source:   "openapi",
-				External: credentialRequirementExternal(id, scheme),
+				ID:         id,
+				Ref:        credentialRequirementRef(id, scheme),
+				Kind:       credentialRequirementKind(scheme),
+				Needs:      append([]string(nil), needs...),
+				Source:     "openapi",
+				External:   credentialRequirementExternal(id, scheme),
+				Deprecated: scheme != nil && scheme.Deprecated,
 			}
 			sort.Strings(requirement.Needs)
 			alternative = append(alternative, requirement)

@@ -15,6 +15,7 @@ type SecuritySchemeSummary struct {
 	Detail        string
 	Supported     bool
 	GlobalDefault bool
+	Deprecated    bool
 }
 
 // SecuritySchemeSummaries returns the declared OpenAPI security schemes in
@@ -47,6 +48,7 @@ func (s *APISpec) SecuritySchemeSummaries() ([]SecuritySchemeSummary, error) {
 			Detail:        securitySchemeDetail(scheme),
 			Supported:     SchemeToXCLIAuth(scheme, nil) != nil,
 			GlobalDefault: global[id],
+			Deprecated:    scheme.Deprecated,
 		})
 	}
 	return out, nil

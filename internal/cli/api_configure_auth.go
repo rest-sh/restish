@@ -60,16 +60,22 @@ func (c *CLI) printAPIDiscovery(apiName, baseURL string, d configureAuthDiscover
 	fmt.Fprintf(c.Stdout, "This API declares %d auth scheme(s):\n\n", len(d.schemes))
 	for _, scheme := range d.schemes {
 		count := d.opCounts[scheme.ID]
-		suffix := ""
+		var details []string
+		if needs := d.needDefaults[scheme.ID]; len(needs) > 0 {
+			details = append(details, "needs "+strings.Join(needs, " "))
+		}
 		if scheme.GlobalDefault {
-			suffix = ", global default"
+			details = append(details, "global default")
 		}
 		if !scheme.Supported {
-			if suffix == "" {
-				suffix = ", unsupported"
-			} else {
-				suffix += ", unsupported"
-			}
+			details = append(details, "unsupported")
+		}
+		if scheme.Deprecated {
+			details = append(details, "deprecated")
+		}
+		suffix := ""
+		if len(details) > 0 {
+			suffix = ", " + strings.Join(details, ", ")
 		}
 		fmt.Fprintf(c.Stdout, "  %-14s %-32s %3d operations%s\n", scheme.ID, scheme.Detail, count, suffix)
 	}
@@ -100,7 +106,7 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 		}
 		configure := true
 		if len(supported) > 1 && !answers.hasCredentialAnswer("default", scheme.ID) {
-			def := scheme.GlobalDefault
+			def := defaultConfigureSchemeID(d.schemes, d.opCounts) == scheme.ID
 			ok, err := c.promptYesNoDefault(ctx, fmt.Sprintf("Configure %s? %s ", scheme.ID, yesNoDefaultSuffix(def)), def)
 			if err != nil {
 				return err
@@ -148,6 +154,33 @@ func configuredGlobalScheme(schemes []spec.SecuritySchemeSummary, configured map
 		}
 	}
 	return false
+}
+
+func defaultConfigureSchemeID(schemes []spec.SecuritySchemeSummary, opCounts map[string]int) string {
+	var best string
+	bestCount := -1
+	for _, scheme := range schemes {
+		if !scheme.Supported || scheme.Deprecated {
+			continue
+		}
+		count := opCounts[scheme.ID]
+		if best == "" ||
+			(scheme.GlobalDefault && !schemeByID(schemes, best).GlobalDefault) ||
+			(scheme.GlobalDefault == schemeByID(schemes, best).GlobalDefault && count > bestCount) {
+			best = scheme.ID
+			bestCount = count
+		}
+	}
+	return best
+}
+
+func schemeByID(schemes []spec.SecuritySchemeSummary, id string) spec.SecuritySchemeSummary {
+	for _, scheme := range schemes {
+		if scheme.ID == id {
+			return scheme
+		}
+	}
+	return spec.SecuritySchemeSummary{}
 }
 
 func (c *CLI) promptAuthParams(ctx context.Context, profileName, credentialID string, ac *config.AuthConfig, defaultNeeds []string, answers configurePromptAnswers) error {
