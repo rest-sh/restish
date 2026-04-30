@@ -139,7 +139,7 @@ across pagination, streaming, filters, and explicit formats.
 ## Intentional v2 Breaks
 
 The v1 interactive `api connect <name>` prompt flow is retired. v2 config is
-edited through `restish.json`, `api connect`, `api set`, and `api edit`.
+edited through `restish.json`, `api connect`, `api set`, and `config edit`.
 Legacy `x-cli-config.prompt` is not retired: `api connect <name> <url>`
 prompts for those values while writing local config, then normal requests use
 the saved config without extension-driven prompting.

@@ -131,11 +131,11 @@ func TestOAuthClientCredentials_EnvSecretSource(t *testing.T) {
 
 	show, out, _ := newTestCLI(t)
 	show.Hooks().ConfigPath = c.Hooks().ConfigPath
-	if err := show.Run([]string{"restish", "api", "show", "myapi"}); err != nil {
-		t.Fatalf("api show: %v", err)
+	if err := show.Run([]string{"restish", "api", "inspect", "myapi"}); err != nil {
+		t.Fatalf("api inspect: %v", err)
 	}
 	if strings.Contains(out.String(), "resolved-secret") {
-		t.Fatalf("api show leaked resolved secret: %s", out.String())
+		t.Fatalf("api inspect leaked resolved secret: %s", out.String())
 	}
 }
 
@@ -407,7 +407,7 @@ func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 	}
 }
 
-// TestClearAuthCache_RemovesEntry verifies that "api clear-auth-cache <name>"
+// TestClearAuthCache_RemovesEntry verifies that "api auth clear-cache <name>"
 // deletes the cached token for the named API.
 func TestClearAuthCache_RemovesEntry(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
@@ -419,7 +419,7 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
-	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "myapi"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), `profile "default"`) {
@@ -448,7 +448,7 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
-	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "--all", "myapi"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "--all-profiles", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), "all profiles") {
@@ -509,9 +509,9 @@ func TestClearAuthCache_SharedAuthProfile(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"restish", "get", "myapi/items"},
-		{"restish", "api", "clear-auth-cache", "myapi"},
+		{"restish", "api", "auth", "clear-cache", "myapi"},
 		{"restish", "get", "myapi/items"},
-		{"restish", "api", "clear-auth-cache", "--auth-profile", "shared"},
+		{"restish", "api", "auth", "clear-cache", "--auth-profile", "shared"},
 		{"restish", "get", "myapi/items"},
 	} {
 		c, _, _ := newTestCLI(t)
@@ -535,7 +535,7 @@ func TestClearAuthCache_UnknownAPI(t *testing.T) {
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
-	if err := c.Run([]string{"restish", "api", "clear-auth-cache", "noapi"}); err == nil {
+	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "noapi"}); err == nil {
 		t.Fatal("expected error for unknown API, got nil")
 	}
 }

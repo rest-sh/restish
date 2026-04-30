@@ -171,14 +171,14 @@ restish completion install fish
 Configure the shell alias:
 
 ```bash
-restish setup zsh
+restish shell setup zsh
 ```
 
 Configure the shell wrapper and completion together:
 
 ```bash
-restish setup zsh --completion
-restish setup fish --completion
+restish shell setup zsh --completion
+restish shell setup fish --completion
 ```
 
 which appends a line like:

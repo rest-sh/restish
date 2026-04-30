@@ -83,12 +83,13 @@ func TestHelp(t *testing.T) {
 
 func TestHelpHidesRequestFlagsForNonRequestCommands(t *testing.T) {
 	for _, args := range [][]string{
-		{"restish", "setup", "--help"},
+		{"restish", "shell", "setup", "--help"},
 		{"restish", "plugin", "--help"},
 		{"restish", "cache", "--help"},
+		{"restish", "config", "--help"},
 		{"restish", "api", "list", "--help"},
 		{"restish", "api", "remove", "--help"},
-		{"restish", "theme", "--help"},
+		{"restish", "config", "theme", "--help"},
 	} {
 		c, out, _ := newTestCLI(t)
 		if err := c.Run(args); err != nil {
@@ -121,7 +122,7 @@ func TestRequestHelpShowsRequestFlagsAndHelpAllExpandsNonRequestHelp(t *testing.
 	}
 
 	c, out, _ = newTestCLI(t)
-	if err := c.Run([]string{"restish", "setup", "--help-all", "--help"}); err != nil {
+	if err := c.Run([]string{"restish", "shell", "setup", "--help-all", "--help"}); err != nil {
 		t.Fatalf("setup --help-all --help: %v", err)
 	}
 	got = out.String()
@@ -142,7 +143,7 @@ func TestBootstrapCommandsIgnoreInvalidConfig(t *testing.T) {
 		{name: "version flag", args: []string{"restish", "--version"}},
 		{name: "version command", args: []string{"restish", "version"}},
 		{name: "completion", args: []string{"restish", "completion", "bash"}},
-		{name: "setup help", args: []string{"restish", "setup", "--help"}},
+		{name: "setup help", args: []string{"restish", "shell", "setup", "--help"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, _, _ := newTestCLI(t)

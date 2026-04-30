@@ -238,13 +238,13 @@ func TestToolsFromSpecPrefersHostResolvedOperations(t *testing.T) {
 }
 
 func TestParseArgsRejectsRemovedHTTPFlag(t *testing.T) {
-	if _, err := ParseArgs([]string{"--http", ":3000", "demo"}); err == nil {
+	if _, err := ParseArgs([]string{"serve", "--http", ":3000", "demo"}); err == nil {
 		t.Fatal("expected removed --http flag to be rejected by flag parser")
 	}
 }
 
 func TestParseArgsRequestTimeout(t *testing.T) {
-	cfg, err := ParseArgs([]string{"--request-timeout", "7", "demo"})
+	cfg, err := ParseArgs([]string{"serve", "--request-timeout", "7", "demo"})
 	if err != nil {
 		t.Fatalf("ParseArgs: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestRunServeToolCall(t *testing.T) {
 			Status: 200,
 			Body:   map[string]any{"id": "42", "name": "example"},
 		}, nil
-	}, []string{"demo"})
+	}, []string{"serve", "demo"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

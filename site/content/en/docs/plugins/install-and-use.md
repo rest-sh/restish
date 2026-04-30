@@ -85,7 +85,7 @@ Command plugin example:
 
 ```bash
 restish bulk --help
-restish mcp --help
+restish mcp serve example
 ```
 
 ## Debug A Plugin

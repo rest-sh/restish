@@ -14,7 +14,6 @@ auth, TLS, retries, and output normalization.
 ```bash
 restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish plugin list
-restish mcp --help
 ```
 
 The API must be registered and have a usable spec.

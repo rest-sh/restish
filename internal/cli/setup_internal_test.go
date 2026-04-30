@@ -62,8 +62,8 @@ func TestRunSetup_DarwinBashWritesProfile(t *testing.T) {
 	c.Stderr = &bytes.Buffer{}
 
 	root := &cobra.Command{Use: "restish"}
-	c.addSetupCommand(root)
-	root.SetArgs([]string{"setup", "bash", "--yes"})
+	c.addShellCommand(root)
+	root.SetArgs([]string{"shell", "setup", "bash", "--yes"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute setup bash: %v", err)
 	}

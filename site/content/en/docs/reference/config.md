@@ -37,13 +37,20 @@ An explicit config file is the whole source of truth for that invocation. If
 that file is missing, Restish errors instead of falling back to your user
 config.
 
+Inspect the active path from the CLI:
+
+```bash
+restish config path
+restish config show
+restish config show --json
+```
+
 ## Top-Level Shape
 
 ```jsonc
 {
   "apis": {},
-  "profiles": {},
-  "pagination": {},
+  "auth_profiles": {},
   "cache": {},
   "theme": {},
   "plugins": {}
@@ -117,13 +124,20 @@ the scopes or role values this local credential is allowed to cover.
 ## Editing
 
 ```bash
-restish api edit
+restish config edit
 restish api set example spec_url: https://api.rest.sh/openapi.json
-restish api show example
+restish api inspect example
 ```
 
-`api edit` preserves comments where possible. Use `api set` for small scripted
+`config edit` preserves comments where possible. Use `api set` for small scripted
 changes.
+
+For global config fields, use `config set`:
+
+```bash
+restish config set cache.max_size: 250MB
+restish config theme set user/repo dark
+```
 
 ## Related Pages
 

@@ -21,7 +21,7 @@ and caches the spec so generated commands are available quickly.
 Inspect what was saved:
 
 ```bash
-restish api show example
+restish api inspect example
 restish example --help
 ```
 

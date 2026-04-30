@@ -1,23 +1,23 @@
 ---
-title: Setup Command
+title: Shell Setup Command
 linkTitle: Setup
 weight: 40
 description: Configure shell wrappers so Restish arguments reach the CLI unchanged.
 ---
 
 Restish commands often contain characters that shells also interpret: `?`, `&`,
-`[`, `]`, `*`, quotes, and spaces. The `setup` command installs small shell
-wrappers so interactive commands reach Restish unchanged.
+`[`, `]`, `*`, quotes, and spaces. The `shell setup` command installs small
+shell wrappers so interactive commands reach Restish unchanged.
 
 ## Examples
 
 ```bash
-restish setup zsh --dry-run
-restish setup zsh --yes
-restish setup zsh --completion
-restish setup fish --completion
-restish setup bash
-restish setup fish
+restish shell setup zsh --dry-run
+restish shell setup zsh --yes
+restish shell setup zsh --completion
+restish shell setup fish --completion
+restish shell setup bash
+restish shell setup fish
 ```
 
 Use `--dry-run` to inspect what would be added before changing shell startup

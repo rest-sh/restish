@@ -44,14 +44,14 @@ restish completion install fish --dry-run
 Completion does not prevent glob expansion. Run setup for interactive use:
 
 ```bash
-restish setup zsh
+restish shell setup zsh
 ```
 
 Or install completion while configuring the shell wrapper:
 
 ```bash
-restish setup zsh --completion
-restish setup fish --completion
+restish shell setup zsh --completion
+restish shell setup fish --completion
 ```
 
 ## Generated API Completion

@@ -42,19 +42,19 @@ restish api sync example
 
 Forces a spec refresh after the API publishes changes.
 
-## List And Show
+## List And Inspect
 
 ```bash
 restish api list
-restish api show example
+restish api inspect example
 ```
 
-## Set And Edit
+## Set And Config Edit
 
 ```bash
 restish api set example command_layout: tags
 restish api set example operation_base: /v1
-restish api edit
+restish config edit
 ```
 
 ## Remove
@@ -68,7 +68,7 @@ Removes a configured API. It does not delete remote resources.
 ## Clear Auth Cache
 
 ```bash
-restish api clear-auth-cache example
+restish api auth clear-cache example
 ```
 
 Use after OAuth credentials or token state need a fresh flow.
@@ -87,14 +87,6 @@ restish api auth inspect example --raw-header Authorization
 `api auth` manages profile credential bindings for generated OpenAPI
 operations. `inspect` replaces the old top-level auth helper and
 also works for non-Authorization credentials such as API-key headers.
-
-## Content Types
-
-```bash
-restish api content-types
-```
-
-Prints registered input and output content types.
 
 ## Related Pages
 

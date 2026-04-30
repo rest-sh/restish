@@ -34,12 +34,12 @@ of falling back to well-known discovery probes.
 
 ```bash
 restish api list
-restish api show example
+restish api inspect example
 restish api set example command_layout: tags
-restish api edit
+restish config edit
 ```
 
-`api set` accepts shorthand-style path updates. `api edit` is better for larger
+`api set` accepts shorthand-style path updates. `config edit` is better for larger
 changes and preserves comments where possible.
 
 ## Operation Base

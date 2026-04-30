@@ -33,7 +33,7 @@ Flags override environment defaults for one command.
 
 | Variable | Purpose |
 | --- | --- |
-| `VISUAL` | Preferred editor for `api edit` and `edit`. |
+| `VISUAL` | Preferred editor for `config edit` and `edit`. |
 | `EDITOR` | Fallback editor. |
 | `NO_COLOR` | Disable color where respected. |
 | `CLICOLOR_FORCE` or `FORCE_COLOR` | Force color where respected. |

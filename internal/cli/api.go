@@ -29,15 +29,6 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 			return cmd.Help()
 		},
 	}
-	clearAuthCmd := &cobra.Command{
-		Use:   "clear-auth-cache <name>",
-		Short: "Delete the cached OAuth2 token for a named API",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runClearAuthCache,
-	}
-	clearAuthCmd.Flags().Bool("all", false, "Delete cached auth tokens for every profile of the named API")
-	clearAuthCmd.Flags().Bool("auth-profile", false, "Treat name as a shared auth profile instead of an API")
-	apiCmd.AddCommand(clearAuthCmd)
 	apiCmd.AddCommand(c.newAPIAuthCommand())
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -71,16 +62,10 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
 	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "show <name>",
+		Use:   "inspect <name>",
 		Short: "Print the config for a registered API as JSON",
 		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIShow,
-	})
-	apiCmd.AddCommand(&cobra.Command{
-		Use:   "edit",
-		Short: "Open the restish config file in $VISUAL or $EDITOR",
-		Args:  cobra.NoArgs,
-		RunE:  c.runAPIEdit,
+		RunE:  c.runAPIInspect,
 	})
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "set <name> <key> <value> | <name> <path:value>",
@@ -88,40 +73,40 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Args:  cobra.MinimumNArgs(2),
 		RunE:  c.runAPISet,
 	})
-	apiCmd.AddCommand(&cobra.Command{
-		Use:   "content-types",
-		Short: "List registered content types and their MIME types",
-		Args:  cobra.NoArgs,
-		RunE:  c.runAPIContentTypes,
-	})
 	root.AddCommand(apiCmd)
 }
 
 // runClearAuthCache deletes the token cache entry for the named API+profile.
-func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
-	authProfileMode, _ := cmd.Flags().GetBool("auth-profile")
+func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
+	authProfile, _ := cmd.Flags().GetString("auth-profile")
 	tc := auth.NewTokenCache(c.tokenCachePath())
-	if authProfileMode {
-		if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[apiName] == nil {
-			return fmt.Errorf("unknown auth profile %q", apiName)
+	if authProfile != "" {
+		if len(args) > 0 {
+			return fmt.Errorf("--auth-profile cannot be used with an API argument")
 		}
-		if err := tc.DeletePrefix("auth_profile:" + apiName + ":"); err != nil {
-			return fmt.Errorf("clear-auth-cache: %w", err)
+		if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[authProfile] == nil {
+			return fmt.Errorf("unknown auth profile %q", authProfile)
 		}
-		fmt.Fprintf(c.Stdout, "Cleared auth cache for auth profile %q\n", apiName)
+		if err := tc.DeletePrefix("auth_profile:" + authProfile + ":"); err != nil {
+			return fmt.Errorf("auth clear-cache: %w", err)
+		}
+		fmt.Fprintf(c.Stdout, "Cleared auth cache for auth profile %q\n", authProfile)
 		return nil
 	}
+	if len(args) != 1 {
+		return fmt.Errorf("api auth clear-cache requires an API name or --auth-profile <name>")
+	}
+	apiName := args[0]
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
 	}
 
 	profileName := c.profileFromCmd(cmd)
-	allProfiles, _ := cmd.Flags().GetBool("all")
+	allProfiles, _ := cmd.Flags().GetBool("all-profiles")
 
 	if allProfiles {
 		if err := tc.DeletePrefix(apiName + ":"); err != nil {
-			return fmt.Errorf("clear-auth-cache: %w", err)
+			return fmt.Errorf("auth clear-cache: %w", err)
 		}
 		for _, prof := range c.cfg.APIs[apiName].Profiles {
 			resolved, err := c.resolveProfileAuth(apiName, "", prof)
@@ -130,7 +115,7 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 			}
 			if resolved.Ref != "" {
 				if err := tc.DeletePrefix("auth_profile:" + resolved.Ref + ":"); err != nil {
-					return fmt.Errorf("clear-auth-cache: %w", err)
+					return fmt.Errorf("auth clear-cache: %w", err)
 				}
 			}
 		}
@@ -139,7 +124,7 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 	}
 	key := apiName + ":" + profileName
 	if err := tc.Delete(key); err != nil {
-		return fmt.Errorf("clear-auth-cache: %w", err)
+		return fmt.Errorf("auth clear-cache: %w", err)
 	}
 	if prof := c.cfg.APIs[apiName].Profiles[profileName]; prof != nil {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
@@ -148,7 +133,7 @@ func (c *CLI) runClearAuthCache(cmd *cobra.Command, args []string) error {
 		}
 		if resolved.CacheKey != "" {
 			if err := tc.Delete(resolved.CacheKey); err != nil {
-				return fmt.Errorf("clear-auth-cache: %w", err)
+				return fmt.Errorf("auth clear-cache: %w", err)
 			}
 		}
 	}
@@ -783,9 +768,9 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 	}
 }
 
-// runAPIShow prints the config for a named API as indented JSON,
+// runAPIInspect prints the config for a named API as indented JSON,
 // with secret auth params replaced by "***".
-func (c *CLI) runAPIShow(cmd *cobra.Command, args []string) error {
+func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
 		return fmt.Errorf("unknown API %q", apiName)
@@ -848,8 +833,8 @@ func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any
 	}
 }
 
-// runAPIEdit opens the restish config file in $VISUAL or $EDITOR.
-func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
+// runConfigEdit opens the restish config file in $VISUAL or $EDITOR.
+func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	cfgPath := c.configFilePath()
 	oldCfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -871,7 +856,7 @@ func (c *CLI) runAPIEdit(cmd *cobra.Command, args []string) error {
 	}
 	for _, apiName := range apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg) {
 		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
-			return fmt.Errorf("api edit: invalidate spec cache for %q: %w", apiName, err)
+			return fmt.Errorf("config edit: invalidate spec cache for %q: %w", apiName, err)
 		}
 	}
 	c.cfg = newCfg

@@ -70,7 +70,7 @@ After the binary works, configure your shell so query strings, brackets, and
 shorthand arrays are not rewritten before Restish sees them:
 
 ```bash
-restish setup zsh
+restish shell setup zsh
 ```
 
 Use `bash` or `fish` instead of `zsh` when that is your shell.

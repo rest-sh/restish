@@ -35,8 +35,8 @@ func TestThemeSetFromURL(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "theme", "set", "https://themes.example.com/theme.json"}); err != nil {
-		t.Fatalf("theme set: %v", err)
+	if err := c.Run([]string{"restish", "config", "theme", "set", "https://themes.example.com/theme.json"}); err != nil {
+		t.Fatalf("config theme set: %v", err)
 	}
 	if !strings.Contains(out.String(), "Set theme from https://themes.example.com/theme.json") {
 		t.Fatalf("unexpected output: %q", out.String())
@@ -74,8 +74,8 @@ func TestThemeSetGithubShorthand(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "theme", "set", "example/themes"}); err != nil {
-		t.Fatalf("theme set: %v", err)
+	if err := c.Run([]string{"restish", "config", "theme", "set", "example/themes"}); err != nil {
+		t.Fatalf("config theme set: %v", err)
 	}
 
 	cfg, err := config.Load(c.Hooks().ConfigPath)
@@ -102,8 +102,8 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "theme", "set", "example/themes", "dark"}); err != nil {
-		t.Fatalf("theme set: %v", err)
+	if err := c.Run([]string{"restish", "config", "theme", "set", "example/themes", "dark"}); err != nil {
+		t.Fatalf("config theme set: %v", err)
 	}
 
 	cfg, err := config.Load(c.Hooks().ConfigPath)
@@ -117,7 +117,7 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 
 func TestThemeSetRejectsNameForURL(t *testing.T) {
 	c, _, _ := newTestCLI(t)
-	err := c.Run([]string{"restish", "theme", "set", "https://themes.example.com/theme.json", "dark"})
+	err := c.Run([]string{"restish", "config", "theme", "set", "https://themes.example.com/theme.json", "dark"})
 	if err == nil {
 		t.Fatal("expected URL with theme name to fail")
 	}

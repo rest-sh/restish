@@ -328,8 +328,8 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 	}
 	c.Hooks().ConfigPath = cfgPath
 
-	if err := c.Run([]string{"restish", "api", "edit"}); err != nil {
-		t.Fatalf("api edit: %v", err)
+	if err := c.Run([]string{"restish", "config", "edit"}); err != nil {
+		t.Fatalf("config edit: %v", err)
 	}
 	if !strings.Contains(out.String(), "editor-stdout") {
 		t.Errorf("expected editor stdout in c.Stdout, got: %q", out.String())
@@ -384,8 +384,8 @@ JSON
 	c.Hooks().ConfigPath = cfgPath
 	c.Hooks().SpecCachePath = cacheDir
 
-	if err := c.Run([]string{"restish", "api", "edit"}); err != nil {
-		t.Fatalf("api edit: %v", err)
+	if err := c.Run([]string{"restish", "config", "edit"}); err != nil {
+		t.Fatalf("config edit: %v", err)
 	}
 	if _, err := os.Stat(changedCache); !os.IsNotExist(err) {
 		t.Fatalf("expected changed API cache to be invalidated, stat err=%v", err)

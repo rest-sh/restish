@@ -52,7 +52,7 @@ func TestMCPRequiresAPIName(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgPath
-	if err := c.Run([]string{"restish", "mcp"}); err == nil {
+	if err := c.Run([]string{"restish", "mcp", "serve"}); err == nil {
 		t.Fatal("expected error when no API names are provided")
 	}
 }
@@ -141,7 +141,7 @@ paths:
 	c2.Hooks().ConfigPath = cfgPath
 	c2.Hooks().SpecCachePath = filepath.Join(pluginsParent, "specs")
 	c2.Stdin = stdin
-	if err := c2.Run([]string{"restish", "mcp", "demo"}); err != nil {
+	if err := c2.Run([]string{"restish", "mcp", "serve", "demo"}); err != nil {
 		t.Fatalf("mcp: %v\nstdout:\n%s\nstderr:\n%s", err, out.String(), errOut.String())
 	}
 

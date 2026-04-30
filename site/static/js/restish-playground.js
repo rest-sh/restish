@@ -168,7 +168,7 @@
       method = mapped.method;
       url = mapped.url;
       bodyArgs = mapped.bodyArgs;
-    } else if (args[0] === "api" || args[0] === "plugin" || args[0] === "setup" || args[0] === "cache") {
+    } else if (args[0] === "api" || args[0] === "plugin" || args[0] === "shell" || args[0] === "config" || args[0] === "cache") {
       throw new Error(`\`restish ${args[0]}\` changes local CLI state or setup. Run it in a terminal.`);
     } else {
       throw new Error(`\`${args[0]}\` is not in the browser preview command map.`);

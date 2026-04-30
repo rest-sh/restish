@@ -103,7 +103,7 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | ------------------------------ | ------------------------------------------- | ----------------------------------------------------- |
 | `apis.json`                    | `restish.json`                              | API config now lives under top-level `apis`           |
 | `config.json`                  | `restish.json`                              | v2 uses one config file                               |
-| `restish api edit`             | `restish api edit`                          | Same command, now opens `restish.json`                |
+| `restish api edit`             | `restish config edit`                          | Config editing moved under `config`                |
 | old interactive API setup    | `restish api connect <name> <url>`        | v2 expects the base URL explicitly |
 | n/a                            | `restish api connect <name> <url> 'path:value'` | fast one-shot registration with shorthand expressions |
 | n/a                            | `restish api set <name> 'path:value'`       | shorthand updates support set/append/delete           |
@@ -135,7 +135,7 @@ After the first run, verify the migrated config and one known request:
 
 ```bash
 restish api list
-restish api show your-api
+restish api inspect your-api
 restish -p default your-api --help
 ```
 
@@ -162,7 +162,7 @@ Open `restish.json` directly when:
 Use:
 
 ```bash
-restish api edit
+restish config edit
 ```
 
 ## Related Pages

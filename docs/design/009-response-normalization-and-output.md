@@ -205,7 +205,7 @@ Invalid theme keys or invalid style descriptors are config errors. Restish
 should fail early during startup instead of silently producing partially styled
 output.
 
-The `restish theme set <source>` command fetches a theme JSON document,
+The `restish config theme set <source>` command fetches a theme JSON document,
 validates it, and saves its entries into the top-level config `theme` object
 while preserving JSONC comments where possible. The fetched JSON is a direct
 token map:
@@ -223,7 +223,7 @@ For convenience, `<source>` may be an `http` or `https` URL, or a GitHub
 include an optional theme name:
 
 ```bash
-restish theme set user/repo dark
+restish config theme set user/repo dark
 ```
 
 which resolves to the repository's root `dark.json`.

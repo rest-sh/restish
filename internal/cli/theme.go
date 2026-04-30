@@ -18,19 +18,13 @@ const maxThemeBytes = 1 << 20
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
-func (c *CLI) addThemeCommand(root *cobra.Command) {
-	themeCmd := &cobra.Command{
-		Use:     "theme",
-		Short:   "Manage readable output highlighting theme",
-		GroupID: rootGroupConfig,
-	}
-	themeCmd.AddCommand(&cobra.Command{
+func (c *CLI) newThemeSetCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "set <url-or-user/repo> [name]",
 		Short: "Fetch a theme JSON file and save it in config",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runThemeSet,
-	})
-	root.AddCommand(themeCmd)
+	}
 }
 
 func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
@@ -57,7 +51,7 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else if err != nil {
-		return fmt.Errorf("theme set: stat config: %w", err)
+		return fmt.Errorf("config theme set: stat config: %w", err)
 	} else if err := config.SaveConfigValue(cfgPath, []string{"theme"}, map[string]string(entries)); err != nil {
 		return err
 	}
@@ -69,35 +63,35 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries, error) {
 	u, err := url.Parse(source)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("theme set: expected http(s) URL or GitHub user/repo shorthand")
+		return nil, fmt.Errorf("config theme set: expected http(s) URL or GitHub user/repo shorthand")
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("theme set: unsupported URL scheme %q", u.Scheme)
+		return nil, fmt.Errorf("config theme set: unsupported URL scheme %q", u.Scheme)
 	}
 
 	req, err := http.NewRequestWithContext(requestContext(cmd), http.MethodGet, source, nil)
 	if err != nil {
-		return nil, fmt.Errorf("theme set: request: %w", err)
+		return nil, fmt.Errorf("config theme set: request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Transport: c.baseHTTPTransport()}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("theme set: fetch %s: %w", source, err)
+		return nil, fmt.Errorf("config theme set: fetch %s: %w", source, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("theme set: fetch %s: HTTP %d", source, resp.StatusCode)
+		return nil, fmt.Errorf("config theme set: fetch %s: HTTP %d", source, resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxThemeBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("theme set: read response: %w", err)
+		return nil, fmt.Errorf("config theme set: read response: %w", err)
 	}
 	if len(data) > maxThemeBytes {
-		return nil, fmt.Errorf("theme set: theme is larger than %d bytes", maxThemeBytes)
+		return nil, fmt.Errorf("config theme set: theme is larger than %d bytes", maxThemeBytes)
 	}
 
 	entries, err := output.ParseThemeJSON(data)
@@ -115,12 +109,12 @@ func resolveThemeSource(args []string) (string, error) {
 			name = args[1]
 		}
 		if !githubThemeName.MatchString(name) {
-			return "", fmt.Errorf("theme set: invalid GitHub theme name %q", name)
+			return "", fmt.Errorf("config theme set: invalid GitHub theme name %q", name)
 		}
 		return "https://raw.githubusercontent.com/" + source + "/HEAD/" + name + ".json", nil
 	}
 	if len(args) == 2 {
-		return "", fmt.Errorf("theme set: theme name is only supported with GitHub user/repo shorthand")
+		return "", fmt.Errorf("config theme set: theme name is only supported with GitHub user/repo shorthand")
 	}
 	return source, nil
 }

@@ -34,6 +34,15 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE:  c.runAPIAuthRemove,
 	})
+	clearCacheCmd := &cobra.Command{
+		Use:   "clear-cache [api]",
+		Short: "Delete cached API auth tokens",
+		Args:  cobra.MaximumNArgs(1),
+		RunE:  c.runAPIAuthClearCache,
+	}
+	clearCacheCmd.Flags().Bool("all-profiles", false, "Delete cached auth tokens for every profile of the named API")
+	clearCacheCmd.Flags().String("auth-profile", "", "Delete cached auth tokens for a shared auth profile instead of an API")
+	cmd.AddCommand(clearCacheCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",

@@ -8,6 +8,14 @@ description: Reference for flags shared across most Restish commands.
 Global flags apply across generic requests, generated API commands, utilities,
 and many plugin-delegated requests.
 
+Use the CLI reference command to see the same groups from your installed
+binary:
+
+```bash
+restish flags
+restish flags output
+```
+
 ## Request Construction
 
 ```bash

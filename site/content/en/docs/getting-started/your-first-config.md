@@ -53,13 +53,13 @@ restish -p json example list-images
 ## Editing Commands
 
 ```bash
-restish api edit
-restish api show example
+restish config edit
+restish api inspect example
 restish api set example spec_url: https://api.rest.sh/openapi.json
 restish api sync example
 ```
 
-`api edit` preserves comments where possible. `api set` is better for small,
+`config edit` preserves comments where possible. `api set` is better for small,
 repeatable edits.
 
 ## Explicit Project Config

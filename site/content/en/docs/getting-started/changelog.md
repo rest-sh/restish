@@ -94,15 +94,13 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 | old interactive API setup | `restish api connect <name> <url>` |
 
 The v1 interactive setup prompt flow is intentionally retired. In v2, use
-`restish api connect`, `api set`, and `api edit` for persistent config.
+`restish api connect`, `api set`, and `config edit` for persistent config.
 
 ### Commands And Flags
 
 - v0-style slug aliases are removed permanently; use the current operation name
   or add `x-cli-aliases` to the spec.
-- `restish setup` currently supports `zsh` and `bash`. Fish users should still
-  install completion, but quote glob-like arguments explicitly because Fish
-  does not offer a compatible `noglob` alias equivalent.
+- `restish shell setup` supports `zsh`, `bash`, and `fish`.
 
 ### Plugins
 

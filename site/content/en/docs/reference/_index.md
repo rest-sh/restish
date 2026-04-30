@@ -39,6 +39,6 @@ Before release, compare command reference pages with:
 restish --help
 restish api --help
 restish plugin --help
-restish setup --help
-restish api content-types
+restish shell setup --help
+restish content-types
 ```

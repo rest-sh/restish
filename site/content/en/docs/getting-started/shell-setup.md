@@ -14,28 +14,28 @@ query strings, filters, and shorthand before Restish can parse them.
 Run the setup command for your shell:
 
 ```bash
-restish setup zsh
-restish setup bash
-restish setup fish
+restish shell setup zsh
+restish shell setup bash
+restish shell setup fish
 ```
 
 For zsh and fish, install completion at the same time:
 
 ```bash
-restish setup zsh --completion
-restish setup fish --completion
+restish shell setup zsh --completion
+restish shell setup fish --completion
 ```
 
 Preview the change first when you want to inspect it:
 
 ```bash
-restish setup zsh --dry-run
+restish shell setup zsh --dry-run
 ```
 
 Apply without prompting in automation:
 
 ```bash
-restish setup zsh --yes
+restish shell setup zsh --yes
 ```
 
 For zsh and bash this writes a `noglob` alias. Fish gets the equivalent wrapper
@@ -87,7 +87,7 @@ restish example <TAB>
 
 - Quote URLs that contain `?` or `&` in scripts.
 - Quote filters that contain brackets, spaces, pipes, or comparisons.
-- Use `restish setup <shell>` for interactive use.
+- Use `restish shell setup <shell>` for interactive use.
 - Prefer generated commands when an API has a spec; completion becomes much
   more useful.
 

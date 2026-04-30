@@ -13,7 +13,7 @@ Use the smallest plugin shape that fits your job:
 
 - Hook plugin: one request in, one reply out. Best for auth, request/response
   middleware, custom spec loaders, and output formatters.
-- Command plugin: a long-lived top-level command such as `restish mcp ...` or
+- Command plugin: a long-lived top-level command such as `restish mcp serve ...` or
   `restish bulk ...` that can ask the host to make HTTP requests.
 - TLS signer plugin: advanced mTLS use cases where the private key must stay
   outside the Restish process.

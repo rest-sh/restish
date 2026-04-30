@@ -219,10 +219,10 @@ func (c *CLI) printShellSetupDiagnostic() {
 		return
 	}
 	if source == "$SHELL" {
-		fmt.Fprintf(c.Stderr, "Shell setup: run `restish setup %s` if glob expansion causes trouble (detected via $SHELL)\n", shell)
+		fmt.Fprintf(c.Stderr, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble (detected via $SHELL)\n", shell)
 		return
 	}
-	fmt.Fprintf(c.Stderr, "Shell setup: run `restish setup %s` if glob expansion causes trouble\n", shell)
+	fmt.Fprintf(c.Stderr, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble\n", shell)
 }
 
 func (c *CLI) checkAPIReachability(baseURL string) {

@@ -18,7 +18,7 @@ response `Content-Type` controls how Restish decodes what came back.
 Run the live list from your binary:
 
 ```bash
-restish api content-types
+restish content-types
 ```
 
 Typical built-ins include `json`, `yaml`, `cbor`, `msgpack`, `ion`, `form`,

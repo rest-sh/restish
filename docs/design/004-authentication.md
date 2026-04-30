@@ -288,7 +288,7 @@ Auth params may use late-resolved secret sources:
   newlines
 
 Resolution happens after config loading and before the auth handler runs, so
-commands such as `api show` do not need to print resolved secret values.
+commands such as `api inspect` do not need to print resolved secret values.
 Command stderr is bounded and redacted when included in errors.
 
 ## External Tool Auth

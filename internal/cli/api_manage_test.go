@@ -640,8 +640,8 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-// TestAPIShow verifies that "api show" prints the API config as JSON.
-func TestAPIShow(t *testing.T) {
+// TestAPIInspect verifies that "api inspect" prints the API config as JSON.
+func TestAPIInspect(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
 			"myapi": {BaseURL: "https://api.example.com"},
@@ -653,8 +653,8 @@ func TestAPIShow(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 
-	if err := c.Run([]string{"restish", "api", "show", "myapi"}); err != nil {
-		t.Fatalf("api show: %v", err)
+	if err := c.Run([]string{"restish", "api", "inspect", "myapi"}); err != nil {
+		t.Fatalf("api inspect: %v", err)
 	}
 
 	got := out.String()
@@ -664,7 +664,7 @@ func TestAPIShow(t *testing.T) {
 	// Validate that output is valid JSON.
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(got)), &parsed); err != nil {
-		t.Errorf("api show output is not valid JSON: %v\n%s", err, got)
+		t.Errorf("api inspect output is not valid JSON: %v\n%s", err, got)
 	}
 }
 
@@ -1855,13 +1855,13 @@ func TestAPISyncNetworkFailureLeavesRegistrationAndCache(t *testing.T) {
 	}
 }
 
-// TestAPIContentTypes verifies that "api content-types" lists the built-in types.
+// TestAPIContentTypes verifies that "content-types" lists the built-in types.
 func TestAPIContentTypes(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
-	if err := c.Run([]string{"restish", "api", "content-types"}); err != nil {
-		t.Fatalf("api content-types: %v", err)
+	if err := c.Run([]string{"restish", "content-types"}); err != nil {
+		t.Fatalf("content-types: %v", err)
 	}
 	got := out.String()
 	// JSON is always registered.

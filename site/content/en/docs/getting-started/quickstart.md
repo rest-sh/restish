@@ -119,7 +119,7 @@ retries, pagination, filtering, and output formats all still apply.
 Profiles keep repeated request defaults out of every command. Open the config:
 
 ```bash
-restish api edit
+restish config edit
 ```
 
 Add a profile under the `example` API:

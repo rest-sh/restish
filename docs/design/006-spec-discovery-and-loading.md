@@ -184,7 +184,7 @@ replacement for the raw spec cache. It is keyed by the API base URL, operation
 base, effective OpenAPI server-variable values, cache schema version, Restish
 version, raw spec hash, and local spec file freshness. Routine startup can build
 generated commands from this operation cache without invoking the OpenAPI parser.
-Rare flows that need the full document, such as `api show` or plugin `api-spec`
+Rare flows that need the full document, such as `api inspect` or plugin `api-spec`
 requests, parse the raw bytes lazily on demand.
 
 OpenAPI server variables are intentionally part of operation-cache identity.
@@ -245,7 +245,7 @@ Examples:
   shorthand expressions as final overrides before saving
 - `api sync` should refresh from the authoritative source; when `spec_url` is
   configured, that means fetching exactly `spec_url`
-- `api set` and `api edit` should invalidate cached specs when fields that
+- `api set` and `config edit` should invalidate cached specs when fields that
   affect discovery or operation generation change, including `base_url`,
   `spec_url`, `spec_files`, `operation_base`, and OpenAPI server variables
 

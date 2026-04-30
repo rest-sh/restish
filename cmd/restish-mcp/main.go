@@ -22,7 +22,7 @@ func main() {
 		{
 			Name:             "mcp",
 			Short:            "Serve registered APIs over the Model Context Protocol",
-			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.",
+			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.\n\nUsage:\n  restish mcp serve <api...>",
 			PassthroughStdio: true,
 		},
 	}) {

@@ -26,15 +26,18 @@ A bare URL is a generic GET.
 
 - `api`: manage registered APIs and specs
 - `cache`: inspect and clear HTTP response cache
-- `setup`: write shell wrappers for safer interactive use
-- `theme`: manage readable-output highlighting theme
+- `config`: inspect and edit the active Restish config
+- `shell setup`: write shell wrappers for safer interactive use
+- `config theme`: manage readable-output highlighting theme
 
 ## Utilities
 
 - `cert`: inspect server TLS certificate chains
+- `content-types`: list registered content types and MIME types
 - `edit`: fetch, edit, and update a resource
 - `links`: print normalized hypermedia links
 - `completion`: generate shell completion scripts
+- `flags`: show the global flag reference
 
 Use `api auth inspect` to inspect configured API auth material.
 

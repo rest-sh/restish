@@ -12,7 +12,7 @@ the current spec.
 
 ```bash
 restish api sync example
-restish api show example
+restish api inspect example
 restish example --help
 ```
 

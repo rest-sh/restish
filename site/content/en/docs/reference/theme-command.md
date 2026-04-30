@@ -1,25 +1,25 @@
 ---
-title: Theme Command
+title: Config Theme Command
 linkTitle: Theme
 weight: 40
 description: Manage readable output highlighting themes.
 ---
 
-The `theme` command controls the colors used by the readable formatter. It is
-for people who spend time inspecting responses in a terminal and want output
-that works better with their terminal background, contrast needs, or personal
+`config theme` controls the colors used by the readable formatter. It is for
+people who spend time inspecting responses in a terminal and want output that
+works better with their terminal background, contrast needs, or personal
 preferences.
 
 ## Examples
 
 ```bash
-restish theme list
-restish theme show
-restish theme set
+restish config theme set https://example.com/theme.json
+restish config theme set user/repo dark
 ```
 
-`theme list` shows the available themes. `theme show` previews the active
-theme. `theme set` opens the interactive selection flow.
+`config theme set` fetches a theme JSON file and saves it in the active config.
+GitHub shorthand resolves `user/repo` to a raw `theme.json`, or to
+`<name>.json` when you pass the optional name.
 
 ## Notes
 

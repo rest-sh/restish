@@ -13,7 +13,7 @@ or TLS settings change.
 
 ```bash
 restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
-restish api edit
+restish config edit
 ```
 
 Add profiles under the API:

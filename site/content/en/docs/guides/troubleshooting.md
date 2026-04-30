@@ -21,12 +21,12 @@ sends a request.
 **Fix:**
 
 ```bash
-restish setup zsh
+restish shell setup zsh
 restish 'https://api.rest.sh/images?format=jpeg&limit=1'
 restish https://api.rest.sh/images -f 'body[0].self'
 ```
 
-**Prevention:** Quote complex arguments in scripts and run `restish setup <shell>` for interactive use.
+**Prevention:** Quote complex arguments in scripts and run `restish shell setup <shell>` for interactive use.
 
 **Related docs:** [Shell Setup](/docs/getting-started/shell-setup/), [Query Syntax](/docs/reference/query-syntax/).
 
@@ -106,7 +106,7 @@ names changed, or operations are hidden/ignored.
 **How to confirm:**
 
 ```bash
-restish api show myapi
+restish api inspect myapi
 restish api sync myapi
 restish myapi --help
 ```

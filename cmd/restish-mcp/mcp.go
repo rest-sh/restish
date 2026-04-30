@@ -141,6 +141,13 @@ type ServeConfig struct {
 }
 
 func ParseArgs(args []string) (*ServeConfig, error) {
+	if len(args) == 0 {
+		return nil, errors.New("mcp requires a subcommand; use: mcp serve <api...>")
+	}
+	if args[0] != "serve" {
+		return nil, fmt.Errorf("unknown mcp command %q; use: mcp serve <api...>", args[0])
+	}
+	args = args[1:]
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var operations string
@@ -158,7 +165,7 @@ func ParseArgs(args []string) (*ServeConfig, error) {
 	}
 	apiNames := fs.Args()
 	if len(apiNames) == 0 {
-		return nil, errors.New("mcp requires at least one API name")
+		return nil, errors.New("mcp serve requires at least one API name")
 	}
 	ops := map[string]bool{}
 	for _, item := range strings.Split(operations, ",") {

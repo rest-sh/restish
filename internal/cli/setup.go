@@ -28,11 +28,24 @@ var shellSetups = map[string]shellSetup{
 	"fish": {rcFile: filepath.Join(".config", "fish", "config.fish"), alias: `function restish; command restish $argv; end`},
 }
 
-// addSetupCommand registers the "setup" subcommand on root.
-func (c *CLI) addSetupCommand(root *cobra.Command) {
+// addShellCommand registers shell-integration commands on root.
+func (c *CLI) addShellCommand(root *cobra.Command) {
 	shells := make([]string, 0, len(shellSetups))
 	for k := range shellSetups {
 		shells = append(shells, k)
+	}
+	shellCmd := &cobra.Command{
+		Use:   "shell",
+		Short: "Configure shell integration for restish",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown shell command %q", args[0])
+			}
+			return cmd.Help()
+		},
+	}
+	if rootCommandHasGroup(root, rootGroupConfig) {
+		shellCmd.GroupID = rootGroupConfig
 	}
 	setupCmd := &cobra.Command{
 		Use:       "setup <shell>",
@@ -42,13 +55,11 @@ func (c *CLI) addSetupCommand(root *cobra.Command) {
 		ValidArgs: shells,
 		RunE:      c.runSetup,
 	}
-	if rootCommandHasGroup(root, rootGroupConfig) {
-		setupCmd.GroupID = rootGroupConfig
-	}
 	setupCmd.Flags().Bool("dry-run", false, "Show what would be written without modifying files")
 	setupCmd.Flags().BoolP("yes", "y", false, "Apply changes without confirmation prompt")
 	setupCmd.Flags().Bool("completion", false, "Also install shell completion when supported")
-	root.AddCommand(setupCmd)
+	shellCmd.AddCommand(setupCmd)
+	root.AddCommand(shellCmd)
 }
 
 // runSetup appends a noglob alias to the appropriate shell rc file.
@@ -206,10 +217,10 @@ func (c *CLI) hintShellSetup() {
 		return
 	}
 	if source == "$SHELL" {
-		c.tipf("run `restish setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)", shell)
+		c.tipf("run `restish shell setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)", shell)
 		return
 	}
-	c.tipf("run `restish setup %s` to configure your shell (prevents glob expansion issues)", shell)
+	c.tipf("run `restish shell setup %s` to configure your shell (prevents glob expansion issues)", shell)
 }
 
 func detectRunningShell() (string, string) {
