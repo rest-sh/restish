@@ -119,11 +119,11 @@ several schemes, configure named credential bindings under the active profile:
 sensitive credential headers/query values. Optional anonymous alternatives use
 configured credentials when available and anonymous access as the fallback.
 
-Choose a specific allowed alternative with `--rsh-security`:
+Choose a specific allowed alternative with `--rsh-auth`:
 
 ```bash
-restish example partner-report --rsh-security PartnerKey
-restish example signed-report --rsh-security UserOAuth+PartnerKey
+restish example partner-report --rsh-auth PartnerKey
+restish example signed-report --rsh-auth UserOAuth+PartnerKey
 ```
 
 ## Inspect The Final Header

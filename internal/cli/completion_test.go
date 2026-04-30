@@ -102,7 +102,7 @@ func TestGeneratedSecurityFlagCompletion(t *testing.T) {
 	})
 
 	c, out := env.newCaptureCLI()
-	err := c.Run([]string{"restish", "__complete", "tapi", "get-reports", "--rsh-security", ""})
+	err := c.Run([]string{"restish", "__complete", "tapi", "get-reports", "--rsh-auth", ""})
 	if err != nil {
 		t.Fatalf("__complete: %v", err)
 	}

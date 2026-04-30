@@ -260,7 +260,7 @@ Generated commands honor operation-level security:
 - A single effective requirement can use profile-level `auth` for compatibility.
 - Multiple alternatives or combined requirements use
   `profiles.<name>.credentials.<credential-id>` bindings.
-- `--rsh-security PartnerKey` or `--rsh-security UserOAuth+PartnerKey` selects
+- `--rsh-auth PartnerKey` or `--rsh-auth UserOAuth+PartnerKey` selects
   one allowed alternative for an operation.
 
 OpenAPI scope and role arrays are matched against credential `satisfies` values.

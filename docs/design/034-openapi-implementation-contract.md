@@ -320,7 +320,7 @@ require explicit `profiles.<name>.credentials.<id>` bindings. Requirement
 values such as OAuth scopes or role strings are matched against a binding's
 `satisfies` list.
 
-`--rsh-security` selects one allowed alternative by credential ID set, for
+`--rsh-auth` selects one allowed alternative by credential ID set, for
 example `PartnerKey` or `UserOAuth+PartnerKey`. Overrides are rejected for
 `security: []`, invalid combinations, and profiles that do not satisfy the
 selected alternative.

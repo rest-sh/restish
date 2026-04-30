@@ -370,9 +370,9 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	if gotAuth != "" {
 		t.Fatalf("Authorization = %q, want empty for security: [] operation", gotAuth)
 	}
-	err := c.Run([]string{"restish", "tapi", "get-public", "--rsh-security", "PartnerKey"})
+	err := c.Run([]string{"restish", "tapi", "get-public", "--rsh-auth", "PartnerKey"})
 	if err == nil {
-		t.Fatal("expected --rsh-security to be rejected for security: [] operation")
+		t.Fatal("expected --rsh-auth to be rejected for security: [] operation")
 	}
 	if !strings.Contains(err.Error(), "security: []") {
 		t.Fatalf("unexpected error: %v", err)
@@ -580,7 +580,7 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 			t.Fatalf("%s failed: %v", command, err)
 		}
 	}
-	if err := c.Run([]string{"restish", "tapi", "either-report", "--rsh-security", "PartnerKey"}); err != nil {
+	if err := c.Run([]string{"restish", "tapi", "either-report", "--rsh-auth", "PartnerKey"}); err != nil {
 		t.Fatalf("either-report failed: %v", err)
 	}
 

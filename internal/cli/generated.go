@@ -368,7 +368,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args, baseURL, operationBase)
 		},
 	}
-	if candidates := securityOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
+	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
 		cmd.Annotations = map[string]string{
 			securityCompletionAnnotation: strings.Join(candidates, "\n"),
 		}
@@ -701,7 +701,7 @@ func (c *CLI) runGeneratedOp(
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
 			CredentialAlternatives: credentialAlternatives,
-			Override:               gf.Security,
+			Override:               gf.Auth,
 		},
 	})
 }

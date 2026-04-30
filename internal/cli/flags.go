@@ -37,7 +37,7 @@ type GlobalFlags struct {
 	IgnoreStatus     bool
 	Timeout          string
 	Profile          string
-	Security         string
+	Auth             string
 	NoCache          bool
 	NoBrowser        bool
 	Retry            int // -1 means "not set by user"
@@ -76,7 +76,7 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 	gf.CACert, _ = cmd.Flags().GetString("rsh-ca-cert")
 	gf.TLSMinVersion, _ = cmd.Flags().GetString("rsh-tls-min-version")
 	gf.Profile, _ = cmd.Flags().GetString("rsh-profile")
-	gf.Security, _ = cmd.Flags().GetString("rsh-security")
+	gf.Auth, _ = cmd.Flags().GetString("rsh-auth")
 	gf.Timeout, _ = cmd.Flags().GetString("rsh-timeout")
 
 	// Bool flags
@@ -131,8 +131,8 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 	if v := os.Getenv("RSH_PROFILE"); v != "" && !cmd.Flags().Changed("rsh-profile") {
 		gf.Profile = v
 	}
-	if v := os.Getenv("RSH_SECURITY"); v != "" && !cmd.Flags().Changed("rsh-security") {
-		gf.Security = v
+	if v := os.Getenv("RSH_AUTH"); v != "" && !cmd.Flags().Changed("rsh-auth") {
+		gf.Auth = v
 	}
 
 	return gf

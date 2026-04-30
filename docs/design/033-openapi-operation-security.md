@@ -367,7 +367,7 @@ The algorithm is:
 4. For each non-empty credential alternative in source order, check whether the
    selected profile satisfies every requirement in that alternative.
 5. Pick the first satisfied alternative unless the user supplied an explicit
-   security override.
+   auth override.
 6. Attach only the auth bindings required by the selected alternative.
 7. If no credential alternative is satisfied but anonymous access is allowed,
    send the request without auth.
@@ -414,8 +414,8 @@ Some operations offer alternatives where the user may want a specific credential
 Generated commands should support a global override such as:
 
 ```bash
-restish --rsh-profile prod example partner-report --rsh-security PartnerKey
-restish --rsh-profile prod example signed-report --rsh-security UserOAuth+PartnerKey
+restish --rsh-profile prod example partner-report --rsh-auth PartnerKey
+restish --rsh-profile prod example signed-report --rsh-auth UserOAuth+PartnerKey
 ```
 
 The override selects one credential alternative by requirement ID set. Restish
@@ -814,7 +814,7 @@ scheme.
   and sensitive credential headers/query;
 - alternative requirements accept any satisfied alternative in spec order;
 - combined requirements require every credential requirement in the alternative;
-- explicit `--rsh-security` selects a permitted alternative and rejects a
+- explicit `--rsh-auth` selects a permitted alternative and rejects a
   credential not allowed by the operation;
 - OAuth scopes and non-OAuth requirement values appear in diagnostics and are
   checked against binding `satisfies` declarations;

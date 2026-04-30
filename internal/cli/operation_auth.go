@@ -100,18 +100,18 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 		if policy.OptionalAuth {
 			return nil, true, nil
 		}
-		return nil, false, fmt.Errorf(`security override "anonymous" is not valid for this operation`)
+		return nil, false, fmt.Errorf(`auth override "anonymous" is not valid for this operation`)
 	}
-	requested, err := parseSecurityOverride(override)
+	requested, err := parseAuthOverride(override)
 	if err != nil {
 		return nil, false, err
 	}
 	alternative, ok := matchingSecurityAlternative(policy.CredentialAlternatives, requested)
 	if !ok {
-		return nil, false, fmt.Errorf("security override %q does not match this operation; valid values: %s", override, strings.Join(securityOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
+		return nil, false, fmt.Errorf("auth override %q does not match this operation; valid values: %s", override, strings.Join(authOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
 	}
 	if prof == nil {
-		return nil, false, fmt.Errorf("security override %q requires profile %q of API %q to configure credential bindings", override, profileName, apiName)
+		return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings", override, profileName, apiName)
 	}
 	selected, missing, needErrors, err := c.selectOperationAlternative(apiName, profileName, prof, alternative)
 	if err != nil {
@@ -119,11 +119,11 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 	}
 	if len(needErrors) > 0 {
 		sort.Strings(needErrors)
-		return nil, false, fmt.Errorf("security override %q is not satisfied by profile %q of API %q: %s", override, profileName, apiName, strings.Join(uniqueStrings(needErrors), "; "))
+		return nil, false, fmt.Errorf("auth override %q is not satisfied by profile %q of API %q: %s", override, profileName, apiName, strings.Join(uniqueStrings(needErrors), "; "))
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return nil, false, fmt.Errorf("security override %q requires missing credential bindings in profile %q of API %q: %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "))
+		return nil, false, fmt.Errorf("auth override %q requires missing credential bindings in profile %q of API %q: %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "))
 	}
 	if err := rejectConflictingSelectedAuth(selected); err != nil {
 		return nil, false, err
@@ -297,16 +297,16 @@ func canUseProfileAuthFallback(policy *operationAuthPolicy) bool {
 		len(policy.CredentialAlternatives[0]) == 1
 }
 
-func parseSecurityOverride(value string) (map[string]bool, error) {
+func parseAuthOverride(value string) (map[string]bool, error) {
 	parts := strings.Split(value, "+")
 	out := make(map[string]bool, len(parts))
 	for _, part := range parts {
 		id := strings.TrimSpace(part)
 		if id == "" {
-			return nil, fmt.Errorf("invalid security override %q", value)
+			return nil, fmt.Errorf("invalid auth override %q", value)
 		}
 		if out[id] {
-			return nil, fmt.Errorf("invalid security override %q: duplicate credential %q", value, id)
+			return nil, fmt.Errorf("invalid auth override %q: duplicate credential %q", value, id)
 		}
 		out[id] = true
 	}
@@ -332,7 +332,7 @@ func matchingSecurityAlternative(alternatives []spec.CredentialAlternative, requ
 	return nil, false
 }
 
-func securityOverrideCandidates(optional bool, alternatives []spec.CredentialAlternative) []string {
+func authOverrideCandidates(optional bool, alternatives []spec.CredentialAlternative) []string {
 	candidates := make([]string, 0, len(alternatives)+1)
 	for _, alternative := range alternatives {
 		var ids []string
