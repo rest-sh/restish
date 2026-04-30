@@ -159,8 +159,8 @@ Two auth trees exist. Check whether `auth/` (the exported package) re-exports or
 ### `plugin/` vs `internal/plugin/`
 Same pattern as auth. Trace what each package actually exports and whether the split is load-bearing for external plugin authors.
 
-### `restish-src/`
-This directory contains the upstream v1 source. It should not be contributing code to v2. If anything in `internal/` or `cmd/` still imports from `restish-src/`, that is a simplification target.
+### Vendored legacy source
+Old Restish v1 source should not be vendored into this repository. If anything in `internal/` or `cmd/` depends on archived v1 code, that is a simplification target.
 
 ### `docs/design/` alignment
 When removing or collapsing a subsystem, check whether a design doc describes it. If so, update or retire the design doc. Stale design docs are a form of complexity.

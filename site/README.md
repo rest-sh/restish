@@ -1,7 +1,7 @@
 # Restish Docs Site
 
-This directory contains the new Restish v2 documentation site scaffold built
-with Hugo and the Docsy theme.
+This directory contains the Restish v2 documentation site, built with Hugo and
+the Docsy theme.
 
 ## Commands
 
@@ -20,7 +20,6 @@ hugo
 ## Notes
 
 - Content lives under `content/en/docs/`.
-- The structure follows [`docs/site-plan.md`](/Users/daniel/src/restish2/docs/site-plan.md).
-- The theme is provided through Hugo Modules using Docsy.
-- We have not verified the build in this workspace yet because `hugo` is not
-  installed on this machine.
+- The theme is provided through Hugo Modules.
+- Generated output goes under `public/` and Hugo's resource cache; both are
+  ignored.

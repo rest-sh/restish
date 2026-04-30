@@ -1,7 +1,27 @@
+/.DS_Store
+
+# Local build outputs from `go build ./cmd/...`.
+/restish
+/restish-bulk
+/restish-csv
+/restish-mcp
+/restish-pkcs11
+
+# Local planning and review notes.
+/TODO.md
+/review.md
+/simplify.md
+/product.md
+/refactor.md
+
+.claude/worktrees/
+
 site/node_modules/
 site/dist/
 site/.astro/
+site/.vitepress/
 site/public/
 site/resources/
 site/.hugo_build.lock
 dist/
+/tmp/

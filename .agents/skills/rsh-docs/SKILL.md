@@ -123,9 +123,9 @@ Follow idiomatic Go docs. Exported packages, types, functions, and methods need 
 - When adding a canonical endpoint, update `reference/example-api.md`.
 - Preserve or add "Related Pages" links where the site uses them.
 
-Before larger doc changes, review `docs/design/`, `restish-src/docs/` when older knowledge may matter, `site/content/en/docs/contributing/docs-maintenance.md`, and `TODO.md` when it is the active docs backlog.
+Before larger doc changes, review `docs/design/`, the v1 tag or source archive when older knowledge may matter, `site/content/en/docs/contributing/docs-maintenance.md`, and `references/docs.md` for documentation-site patterns and style inspiration.
 
-When migrating older docs, track whether material was retired, already migrated, or still missing. If you uncover a broad docs gap, add a practical follow-up to `TODO.md`.
+When migrating older docs, track whether material was retired, already migrated, or still missing. If you uncover a broad docs gap, add a practical follow-up to the project issue tracker or an active design record.
 
 ## Validation
 

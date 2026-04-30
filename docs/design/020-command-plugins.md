@@ -202,7 +202,7 @@ far more awkward than keeping one long-lived session.
 The current implementation is centered in
 [`internal/cli/command_plugin.go`](../../internal/cli/command_plugin.go),
 with end-to-end examples in
-[`internal/cli/testdata/cmdplugin/main.go`](../../internal/cli/testdata/cmdplugin/main.go)
+[`internal/cli/testdata/testplugin/main.go`](../../internal/cli/testdata/testplugin/main.go)
 and tests in
 [`internal/cli/command_plugin_test.go`](../../internal/cli/command_plugin_test.go).
 

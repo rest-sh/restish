@@ -59,7 +59,7 @@ rg 'api[.]example[.]com|your-api[.]example[.]com|auth[.]example[.]com|upload[.]e
 2. Make the code or docs change.
 3. Update guides, recipes, reference, plugins, and troubleshooting where user behavior changed.
 4. Run focused tests or `hugo` validation.
-5. Record follow-ups in `TODO.md` only when they are real remaining work.
+5. Record real follow-ups in the project issue tracker or an active design record.
 
 ## Related Pages
 

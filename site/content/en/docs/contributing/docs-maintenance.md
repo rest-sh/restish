@@ -10,8 +10,8 @@ docs stay honest.
 
 This page is a maintenance workflow, not the source of truth for product
 behavior. Current behavior comes from the CLI, tests, design records, and live
-example API. When they disagree, update the docs and leave a follow-up in the
-active backlog.
+example API. When they disagree, update the docs and capture any remaining
+follow-up in the project issue tracker or an active design record.
 
 ## Before You Edit
 
@@ -23,8 +23,8 @@ Check the nearby docs before changing one page in isolation:
 - design records under `docs/design/` when architecture or invariants matter
 - the v1 tag or source archive when older example coverage may have been
   better there
-- `TODO.md` when it is being used as the active docs backlog
-- `docs.md` for documentation-site patterns and style inspiration
+- the `rsh-docs` skill reference notes for documentation-site patterns and
+  style inspiration
 
 ## Page Checklist
 
@@ -131,7 +131,8 @@ piece is:
 - migrated into the current page
 - superseded by v2 behavior
 - intentionally retired
-- still missing and tracked in `TODO.md`
+- still missing and tracked in the project issue tracker or an active design
+  record
 
 High-value old topics to keep auditing:
 

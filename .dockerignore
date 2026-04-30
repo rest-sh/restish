@@ -4,14 +4,9 @@
 .claude
 AGENTS.md
 CLAUDE.md
-TODO.md
 issues.md
-review.md
-refactor.md
-simplify.md
 restish
 docs/
-restish-src/
 tmp/
 site/
 site/node_modules/

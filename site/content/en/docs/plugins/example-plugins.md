@@ -30,8 +30,7 @@ plugins.
 
 | Fixture | Path | Use it for |
 | --- | --- | --- |
-| Tiny command plugin | `internal/cli/testdata/cmdplugin/main.go` | Minimal command protocol behavior. |
-| Tiny hook plugin | `internal/cli/testdata/hookplugin/main.go` | Minimal hook behavior in tests. |
+| Multipurpose test plugin | `internal/cli/testdata/testplugin/main.go` | Minimal command, hook, and TLS signer behavior in tests. |
 
 Fixtures are intentionally small and test-oriented. Use them to understand the
 protocol shape, then use the first-party binaries above for production-style

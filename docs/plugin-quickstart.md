@@ -188,8 +188,8 @@ These are the best examples in the repo:
   for a small formatter hook plugin
 - [`cmd/restish-mcp/main.go`](../cmd/restish-mcp/main.go)
   for a real command plugin
-- [`internal/cli/testdata/cmdplugin/main.go`](../internal/cli/testdata/cmdplugin/main.go)
-  for a tiny command-plugin test fixture
+- [`internal/cli/testdata/testplugin/main.go`](../internal/cli/testdata/testplugin/main.go)
+  for tiny command, hook, and TLS signer test fixtures
 - [`docs/design/019-hook-plugins.md`](./design/019-hook-plugins.md)
   for hook payload shapes
 - [`docs/design/020-command-plugins.md`](./design/020-command-plugins.md)
