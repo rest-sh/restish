@@ -12,11 +12,15 @@ go build ./cmd/restish-csv
 go build ./cmd/restish-mcp
 go build ./cmd/restish-pkcs11
 
-# Run all tests
+# Run fast tests (default development loop; excludes slow integration tests)
 go test ./...
 
 # Run tests for a specific package
 go test ./internal/cli/...
+
+# Run the full suite, including slow plugin and CLI integration tests.
+# Run this before commits that touch CLI/plugin behavior, and before final commits.
+go test -tags=integration ./...
 
 # Update golden files for output formatter regression tests
 go test -update ./internal/output/...

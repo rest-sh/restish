@@ -1,3 +1,5 @@
+//go:build integration
+
 package cli_test
 
 import (
@@ -17,9 +19,8 @@ import (
 )
 
 var (
-	testPluginBuildDir          string
-	testPluginManifestCachePath string
-	sharedPluginInstallMu       sync.Mutex
+	testPluginBuildDir    string
+	sharedPluginInstallMu sync.Mutex
 )
 
 // testPluginBin values are populated lazily by the skipNo* helpers below.

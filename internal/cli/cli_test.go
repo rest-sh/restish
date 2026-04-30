@@ -21,6 +21,8 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+var testPluginManifestCachePath string
+
 // newTestCLI returns a CLI wired to in-memory buffers for use in tests.
 // RetryBaseDelay is set to 1 ms so retry backoffs don't slow down the suite.
 func newTestCLI(t *testing.T) (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
