@@ -111,6 +111,12 @@ Use this shape: title/status, problem, goals, non-goals, current behavior/constr
 
 Design docs preserve decisions, tradeoffs, and invariants. They are not a substitute for user docs.
 
+When a design doc needs product framing, command/flag naming, UX tradeoffs,
+compatibility stance, release-readiness judgment, or prioritization help, use
+`rsh-product` alongside this skill. Let `rsh-product` shape the product
+decision, then use `rsh-docs` to make the record clear, durable, and connected
+to user-facing docs.
+
 ## Code Docs
 
 Follow idiomatic Go docs. Exported packages, types, functions, and methods need comments that describe behavior, not implementation trivia. Mention important errors, side effects, concurrency expectations, or compatibility constraints.
