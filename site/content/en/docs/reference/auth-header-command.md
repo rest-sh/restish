@@ -20,9 +20,12 @@ restish api auth inspect example --rsh-credential PartnerKey
 
 ## Notes
 
-Use this to confirm profile auth before debugging a `401` or `403`. Human output
-redacts sensitive values. Use `--raw-header Authorization` for scripts that
-previously called `restish auth-header`.
+Use this to confirm profile auth before debugging a `401` or `403`. If the
+profile has exactly one configured credential, `inspect` selects it by default.
+If the profile has several configured credentials, pass `--rsh-credential` to
+choose the one to inspect. Human output redacts sensitive values. Use
+`--raw-header Authorization` for scripts that previously called
+`restish auth-header`.
 
 ## Related Pages
 

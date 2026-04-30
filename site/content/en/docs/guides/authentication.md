@@ -137,6 +137,10 @@ restish api auth inspect example --raw-header Authorization
 restish api auth inspect example --rsh-credential PartnerKey
 ```
 
+When a profile has exactly one configured credential, `inspect` selects it by
+default. When a profile has several credentials, pass `--rsh-credential` so the
+command knows which auth material to show.
+
 Use verbose mode when the question is about the whole request:
 
 ```bash

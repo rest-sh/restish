@@ -138,16 +138,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--rsh-operation is not implemented yet; pass --rsh-credential to inspect a specific credential")
 	}
 
-	var resolved resolvedAuthConfig
-	if credentialID != "" {
-		credential := prof.Credentials[credentialID]
-		if credential == nil {
-			return fmt.Errorf("profile %q of API %q has no credential %q", profileName, apiName, credentialID)
-		}
-		resolved, err = c.resolveCredentialAuth(apiName, profileName, credentialID, credential)
-	} else {
-		resolved, err = c.resolveProfileAuth(apiName, profileName, prof)
-	}
+	resolved, selectedCredential, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
 	if err != nil {
 		return err
 	}
@@ -167,8 +158,12 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(c.Stdout, value)
 		return nil
 	}
+	if selectedCredential != "" {
+		fmt.Fprintf(c.Stdout, "Credential: %s\n", selectedCredential)
+	}
 	fmt.Fprintf(c.Stdout, "Auth type: %s\n", resolved.Config.Type)
-	for name, values := range req.Header {
+	for _, name := range sortedHeaderKeys(req.Header) {
+		values := req.Header[name]
 		for _, value := range values {
 			if isSensitiveHeader(name) || isAuthInspectionSensitiveHeader(resolved.Config, name) {
 				value = "<redacted>"
@@ -180,6 +175,51 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stdout, "Query: %s\n", redactedRequestURL(req.URL))
 	}
 	return nil
+}
+
+func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *config.ProfileConfig, credentialID string) (resolvedAuthConfig, string, error) {
+	if credentialID != "" {
+		credential := prof.Credentials[credentialID]
+		if credential == nil {
+			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has no credential %q", profileName, apiName, credentialID)
+		}
+		resolved, err := c.resolveCredentialAuth(apiName, profileName, credentialID, credential)
+		return resolved, credentialID, err
+	}
+
+	resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
+	if err != nil || resolved.Config != nil {
+		return resolved, "", err
+	}
+
+	ids := configuredCredentialIDs(prof)
+	switch len(ids) {
+	case 0:
+		if len(prof.Credentials) > 0 {
+			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth list %s\"", profileName, apiName, apiName)
+		}
+		return resolvedAuthConfig{}, "", nil
+	case 1:
+		credentialID := ids[0]
+		resolved, err := c.resolveCredentialAuth(apiName, profileName, credentialID, prof.Credentials[credentialID])
+		return resolved, credentialID, err
+	default:
+		return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass --rsh-credential <id>", profileName, apiName, strings.Join(ids, ", "))
+	}
+}
+
+func configuredCredentialIDs(prof *config.ProfileConfig) []string {
+	if prof == nil || len(prof.Credentials) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(prof.Credentials))
+	for id, credential := range prof.Credentials {
+		if credential != nil && (credential.Auth != nil || credential.AuthRef != "") {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func isAuthInspectionSensitiveHeader(ac *config.AuthConfig, name string) bool {
