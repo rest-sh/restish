@@ -5,7 +5,7 @@ weight: 50
 description: Learn the smallest useful restish.json shape before using the full config reference.
 ---
 
-Most users create config with `restish api configure` and edit it only when they
+Most users create config with `restish api connect` and edit it only when they
 need profiles, auth, or project-specific settings. This page shows the smallest
 shape worth recognizing.
 
@@ -65,7 +65,7 @@ repeatable edits.
 ## Explicit Project Config
 
 ```bash
-restish --rsh-config ./restish.json api add example https://api.rest.sh
+restish --rsh-config ./restish.json api connect example https://api.rest.sh
 ```
 
 When `--rsh-config` or `RSH_CONFIG` is set, that file is the full config source

@@ -7,22 +7,32 @@ description: Reference for registering APIs, syncing specs, editing config, and 
 
 `restish api` manages configured APIs and generated command sources.
 
-## Configure
+## Connect
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Discovers a spec, builds initial config, prompts for setup where needed, and
 saves the API.
 
-## Add
+Use `--no-discover` when you only want to save a local base URL without network
+spec discovery:
 
 ```bash
-restish api add example https://api.rest.sh spec_url: https://api.rest.sh/openapi.json
+restish api connect example https://api.rest.sh --no-discover
 ```
 
-Adds config quickly and accepts shorthand-style field updates.
+## Explicit Spec
+
+```bash
+restish api connect example https://api.rest.sh --spec https://api.rest.sh/openapi.json
+```
+
+Uses the provided OpenAPI file or URL instead of discovery. Rerun
+`api connect` to refresh generated/default material; pass `--replace` when you
+want the rerun to replace generated profile defaults instead of preserving local
+profile edits.
 
 ## Sync
 
@@ -47,10 +57,10 @@ restish api set example operation_base: /v1
 restish api edit
 ```
 
-## Delete
+## Remove
 
 ```bash
-restish api delete example
+restish api remove example
 ```
 
 Removes a configured API. It does not delete remote resources.
@@ -75,7 +85,7 @@ restish api auth inspect example --raw-header Authorization
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI
-operations. `inspect` replaces the removed top-level `auth-header` command and
+operations. `inspect` replaces the old top-level auth helper and
 also works for non-Authorization credentials such as API-key headers.
 
 ## Content Types

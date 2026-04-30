@@ -197,7 +197,7 @@ Commands must not bypass the runtime's streams. This is required for:
 
 Building the command tree must not require live network access. Cached specs are
 acceptable; live discovery belongs to explicit execution paths such as
-`api configure` or `api sync`.
+`api connect` or `api sync`.
 
 ### Context Propagation Is End-To-End
 

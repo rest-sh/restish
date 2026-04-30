@@ -77,7 +77,7 @@ requirements, and OAuth scopes, are preserved only as metadata or parsed
 indirectly through setup/config prompts. They are not currently enforced per
 operation, and they do not change which selected profile auth is used.
 
-`api configure` can read standard OpenAPI security schemes and the custom
+`api connect` can read standard OpenAPI security schemes and the custom
 `x-cli-config` extension to pre-populate a profile. The current extension shape
 handles the single-scheme case well, but it does not express several credentials
 bound to several credential requirement IDs within one profile.
@@ -434,10 +434,10 @@ When optional auth is available, Restish should prefer a satisfied non-empty
 credential alternative over anonymous access. Anonymous should be the fallback,
 not the first choice merely because `{}` appears first in the source document.
 
-## `api configure` UX
+## `api connect` UX
 
 The common case should remain compact. If an API has one effective supported
-credential requirement, `api configure` should prompt much like it does today:
+credential requirement, `api connect` should prompt much like it does today:
 
 ```text
 Discovered Example API
@@ -517,9 +517,9 @@ restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
 configured credentials, missing credentials, declared `satisfies` values, and
 operation coverage.
 
-`api auth inspect` replaces the v1/v2-draft top-level `auth-header` command.
+`api auth inspect` replaces the v1/v2-draft top-level `api auth inspect` command.
 It should inspect the credential or operation auth selected from the active API
-profile without sending the full application request. Unlike `auth-header`, it
+profile without sending the full application request. Unlike `api auth inspect`, it
 must handle credentials that do not produce an `Authorization` header, such as
 API keys in headers or query parameters, and combined requirements that attach
 several credentials.
@@ -550,7 +550,7 @@ restish api auth inspect example --rsh-credential UserOAuth --raw-header Authori
 That command prints only the selected header value. Raw modes must be explicit
 because they can print secrets to stdout.
 
-Top-level `restish auth-header` should be removed for v2 rather than kept as an
+Top-level `restish api auth inspect` should be removed for v2 rather than kept as an
 alias. This is a release-window break that keeps auth viewing, setup, and
 mutation under one command family.
 
@@ -558,16 +558,16 @@ For noninteractive setup, extend the existing preanswer/set-expression grammar
 to address credential bindings:
 
 ```bash
-restish --rsh-profile prod api configure example https://api.example.com \
+restish --rsh-profile prod api connect example https://api.example.com \
   credentials.UserOAuth.auth.params.client_id: env:USER_CLIENT_ID \
   credentials.AdminOAuth.auth.params.client_id: env:ADMIN_CLIENT_ID \
   credentials.PartnerKey.auth.params.value: env:PARTNER_KEY
 ```
 
-The exact grammar should follow existing `api configure` and `api set` behavior,
+The exact grammar should follow existing `api connect` and `api set` behavior,
 but values land under the selected profile's `credentials`.
 
-When `api configure` is rerun for an existing API, local profiles are treated as
+When `api connect` is rerun for an existing API, local profiles are treated as
 user-owned state. By default, Restish should refresh discovery/spec metadata and
 may add newly discovered profile names, but it must not overwrite a profile that
 already exists in local config. Users who want to recreate profile setup from
@@ -722,7 +722,7 @@ input and map it to either a dedicated auth param or the existing issuer/metadat
 discovery path, after applying the same HTTPS and endpoint validation rules as
 other OAuth discovery inputs.
 
-Security Scheme Objects can be marked `deprecated: true`. `api configure` and
+Security Scheme Objects can be marked `deprecated: true`. `api connect` and
 `api auth list` should show deprecated schemes but avoid selecting them by
 default when a non-deprecated alternative is available.
 
@@ -755,14 +755,14 @@ commands:
 - if an operation has explicit `security: []`, no auth is sent;
 - if an API has exactly one effective supported credential requirement,
   profile-level auth may satisfy that requirement for compatibility;
-- if a profile was created by `api configure` from a known OpenAPI scheme or
+- if a profile was created by `api connect` from a known OpenAPI scheme or
   normalized requirement ID, migration or reconfiguration should write the
   corresponding `credentials` binding;
 - if an operation requires a credential and the selected profile has no
   unambiguous binding, Restish should fail before the request with an actionable
   diagnostic.
 
-Top-level `restish auth-header` is removed in v2. Its replacement is
+Top-level `restish api auth inspect` is removed in v2. Its replacement is
 `restish api auth inspect <api>`, with explicit raw-output flags for scripts
 that need the old Authorization-header value. This is an intentional v2 break
 because operation-specific and non-Authorization credentials make a top-level
@@ -831,8 +831,8 @@ scheme.
   fallback;
 - cached operation metadata preserves effective security policy for offline
   startup;
-- `api configure` derives single-scheme setup from OpenAPI;
-- `api configure` prompts and writes `credentials` for multi-credential APIs;
+- `api connect` derives single-scheme setup from OpenAPI;
+- `api connect` prompts and writes `credentials` for multi-credential APIs;
 - `x-cli-config` single-scheme legacy shape normalizes to `credentials`;
 - `x-cli-config.credentials` drives prompts and written config without
   redefining operation policy;
@@ -840,7 +840,7 @@ scheme.
 - `api auth inspect` handles profile-level auth, credential-specific auth,
   operation-selected auth, non-Authorization credentials, combined credentials,
   and explicit raw header output;
-- top-level `auth-header` is removed.
+- top-level `api auth inspect` is removed.
 
 ## Documentation Impact
 
@@ -856,7 +856,7 @@ Update user docs before release:
   than per-endpoint auth selection;
 - API management reference: document `api auth list/add/remove/inspect` and
   configure behavior;
-- migration notes: document removal of top-level `auth-header` and the
+- migration notes: document removal of top-level `api auth inspect` and the
   equivalent `api auth inspect --raw-header Authorization` flow;
 - troubleshooting guide: add missing credential/requirement diagnostics.
 

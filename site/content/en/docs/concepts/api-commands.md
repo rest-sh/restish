@@ -12,7 +12,7 @@ request behavior.
 ## Start With A Short Name
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 

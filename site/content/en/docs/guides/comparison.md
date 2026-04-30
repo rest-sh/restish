@@ -37,7 +37,7 @@ http https://api.rest.sh/images Accept:application/json
 - plugins should extend the workflow
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images -f body.self -r
 ```
 

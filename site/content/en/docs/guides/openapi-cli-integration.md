@@ -40,7 +40,7 @@ Publish the spec at a predictable location such as `/openapi.json`, or expose a
 `service-desc` or `describedby` link from the API root. Verify with:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 

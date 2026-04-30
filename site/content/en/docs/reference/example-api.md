@@ -13,7 +13,7 @@ content negotiation, binary responses, redirects, and safe CRUD examples.
 Configure it once when you want short API-aware commands:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 

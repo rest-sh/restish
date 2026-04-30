@@ -22,7 +22,7 @@ import (
 
 // maxSpecBytes caps the body read during spec discovery (50 MiB).
 // OpenAPI specs are rarely larger than a few megabytes; this prevents an
-// untrusted server from exhausting memory during api configure / api sync.
+// untrusted server from exhausting memory during api connect / api sync.
 const maxSpecBytes = 50 * 1024 * 1024
 
 const defaultDiscoverTimeout = 30 * time.Second

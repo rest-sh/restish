@@ -17,7 +17,7 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 - **Single config file** — `restish.json` replaces the separate `apis.json` and
   `config.json` from v1. Config is stored under the platform default config
   directory.
-- **`restish api add`** — one-shot API registration with shorthand expressions,
+- **`restish api connect`** — one-shot API registration with shorthand expressions,
   no editor required.
 - **`restish api set`** — programmatic shorthand updates to any config field
   (`set`, `append`, `delete` via `undefined`).
@@ -49,7 +49,7 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 
 ### Output And Filtering
 
-- **Table formatter** — `--rsh-output table` renders arrays of objects as a
+- **Table formatter** — `-o table` renders arrays of objects as a
   Unicode box-drawing table with optional `--rsh-sort-by` and column
   selection.
 - **Image rendering** — inline image display in Kitty, iTerm2, and halfblock
@@ -91,10 +91,10 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 | `auth.name` | `auth.type` |
 | profile `base` | profile `base_url` |
 | API `base` | API `base_url` |
-| `restish api configure <name>` | `restish api configure <name> <url>` |
+| old interactive API setup | `restish api connect <name> <url>` |
 
-The v1 interactive `api configure` prompt flow is intentionally retired. In v2,
-use `restish.json`, `api add`, `api set`, and `api edit` for persistent config.
+The v1 interactive setup prompt flow is intentionally retired. In v2, use
+`restish api connect`, `api set`, and `api edit` for persistent config.
 
 ### Commands And Flags
 

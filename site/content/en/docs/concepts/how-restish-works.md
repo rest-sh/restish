@@ -43,7 +43,7 @@ Use them for exploration, odd jobs, and APIs without a useful description.
 API commands start with registration:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images
 ```
 

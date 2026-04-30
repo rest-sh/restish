@@ -37,11 +37,23 @@ keeps metadata needed for later status, pull, reset, and push operations.
 ```bash
 restish bulk status
 restish bulk pull
+restish bulk diff
 restish bulk push
 ```
 
 Use `status` before `push` so you know which local files changed and whether
 remote updates exist.
+
+`push` is conservative. Updates and deletes require an HTTP validator
+(`ETag`/`Last-Modified`) or matching local/remote version metadata. When that
+evidence is missing or stale, the resource is refused instead of overwritten.
+The push summary reports created, updated, deleted, skipped, and refused counts.
+
+Use force only after reviewing the diff and accepting the overwrite risk:
+
+```bash
+restish bulk push --force
+```
 
 ## Reset Local Changes
 

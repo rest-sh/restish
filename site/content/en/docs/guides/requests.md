@@ -69,7 +69,7 @@ echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post ro
 Register an API when repeated work deserves generated help and completion:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images
 restish example get-image jpeg > dragonfly.jpg
 ```

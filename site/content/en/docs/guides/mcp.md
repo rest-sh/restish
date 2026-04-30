@@ -12,7 +12,7 @@ auth, TLS, retries, and output normalization.
 ## Prerequisites
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish plugin list
 restish mcp --help
 ```
@@ -27,6 +27,18 @@ restish mcp serve example
 
 The plugin reads the registered API spec, turns operations into MCP tools, and
 delegates HTTP execution back to Restish.
+
+By default, MCP exposes read-like operations and hides `POST`, `PUT`, `PATCH`,
+and `DELETE`. Use the opt-in flag only when the connected MCP client is allowed
+to make write calls:
+
+```bash
+restish mcp serve example --allow-write-tools
+```
+
+If write operations are hidden, startup diagnostics say how many were skipped.
+Each delegated tool call also has a timeout; use `--request-timeout <seconds>`
+to tune it or `--request-timeout 0` to disable the timeout.
 
 ## Hide Operations
 
@@ -49,6 +61,8 @@ without confirmation or where the spec hides important side effects.
 - Run `restish api sync <name>` after spec changes.
 - Confirm `restish <name> --help` shows generated operations.
 - Use `restish plugin debug` when plugin startup or messages fail.
+- Pass `--allow-write-tools` only when missing tools are write operations you
+  intentionally want to expose.
 - Hide operations in the spec rather than relying on MCP clients to avoid them.
 
 ## Related Pages

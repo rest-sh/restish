@@ -87,7 +87,7 @@ The `/post` fixture echoes the parsed body so you can confirm what was sent.
 Give the same API a short name:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Check what Restish learned:

@@ -21,7 +21,7 @@ Check the nearby docs before changing one page in isolation:
 - related getting-started pages, guides, recipes, and reference pages
 - plugin operator or author docs if the behavior touches plugins
 - design records under `docs/design/` when architecture or invariants matter
-- old v1 docs under `restish-src/docs/` when example coverage may have been
+- the v1 tag or source archive when older example coverage may have been
   better there
 - `TODO.md` when it is being used as the active docs backlog
 - `docs.md` for documentation-site patterns and style inspiration

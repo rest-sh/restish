@@ -6,8 +6,8 @@ Restish keeps `restish.json` as a strict, typed JSONC configuration file.
 Command-driven config edits should preserve user-authored comments and nearby
 formatting whenever possible instead of rewriting the entire file as plain JSON.
 
-This design is intentionally narrow. It targets the `api configure`, `api set`,
-and `api delete` workflows that modify object-shaped paths inside the config.
+This design is intentionally narrow. It targets the `api connect`, `api set`,
+and `api remove` workflows that modify object-shaped paths inside the config.
 
 ## Problem
 
@@ -87,11 +87,11 @@ Without that, a perfect patcher can still lose user edits.
 
 The command behavior is now:
 
-- `api configure` preserves comments in an existing JSONC config when adding or
+- `api connect` preserves comments in an existing JSONC config when adding or
   replacing an API entry, including when setup expressions are supplied on the
   command line
 - `api set` preserves comments when updating a supported config path
-- `api delete` preserves comments around unaffected entries
+- `api remove` preserves comments around unaffected entries
 
 The normal `Load` path remains the source of truth for validation and unknown
 field rejection.

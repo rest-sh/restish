@@ -229,18 +229,18 @@ names before writing or reading. Names containing path separators, `.` or `..`
 segments, or other traversal-shaped input should be rejected or migrated with a
 clear warning.
 
-## `api configure` And `api sync`
+## `api connect` And `api sync`
 
 Commands that explicitly manage API registrations may bypass or invalidate cache
 more aggressively than routine startup.
 
 Examples:
 
-- `api configure` should not blindly trust stale cached `x-cli-config`
-- `api configure <name> <url>` and `api add <name> <url>` normalize schemeless
+- `api connect` should not blindly trust stale cached `x-cli-config`
+- `api connect <name> <url>` and `api connect <name> <url>` normalize schemeless
   URLs the same way requests do: `https://` by default, but `http://` for
   localhost and loopback targets
-- `api configure <name> <url> [setup-expression ...]` may consume
+- `api connect <name> <url> [setup-expression ...]` may consume
   `prompt.*` expressions as prompt preanswers, then apply ordinary config
   shorthand expressions as final overrides before saving
 - `api sync` should refresh from the authoritative source; when `spec_url` is

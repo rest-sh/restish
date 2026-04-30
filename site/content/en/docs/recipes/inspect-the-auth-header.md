@@ -24,4 +24,4 @@ redacted human-readable output, or add `--rsh-credential PartnerKey` to inspect
 a named OpenAPI credential binding. Use verbose mode when you need to inspect
 the whole request.
 
-Related: [Authentication](/docs/guides/authentication/), [API Auth Inspect](/docs/reference/auth-header-command/).
+Related: [Authentication](/docs/guides/authentication/), [API Auth Inspect](/docs/reference/api auth inspect-command/).

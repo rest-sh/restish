@@ -29,6 +29,15 @@ The part after `:` is expanded to a plugin binary name, so `:csv` means
 extracts it, verifies the plugin manifest, and copies the binary into your
 plugin directory.
 
+`plugin install` prints the source, resolved file or download URL, manifest
+name/version, and declared capabilities before installing. In a terminal,
+confirm the trust prompt to continue. In automation, pass `--yes` after pinning
+the source you intend to trust:
+
+```bash
+restish plugin install rest-sh/restish:csv --yes
+```
+
 Install a system-installed plugin from `PATH`:
 
 ```bash
@@ -53,8 +62,10 @@ restish plugin install ./restish-csv
 
 The plugin must be executable and compatible with the v2 plugin protocol. Every
 install path verifies the plugin manifest before keeping the binary. Restish
-loads plugins only after they are installed into Restish's configured plugin
-directory; it does not scan every executable on `PATH`.
+shows declared capability families in `plugin list`, and it only enables
+capabilities that the manifest explicitly declares. Restish loads plugins only
+after they are installed into Restish's configured plugin directory; it does
+not scan every executable on `PATH`.
 
 ## Remove A Plugin
 

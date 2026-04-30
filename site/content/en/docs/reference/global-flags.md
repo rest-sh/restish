@@ -41,7 +41,7 @@ Flags: `-f/--rsh-filter`, `--rsh-filter-lang`, `-o/--rsh-output-format`,
 
 ```bash
 restish -p json example list-images
-restish --rsh-no-browser api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish --rsh-no-browser api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Flags: `-p/--rsh-profile`, `--rsh-no-browser`.

@@ -12,7 +12,7 @@ short name.
 ## Register The Example API
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Restish discovers `https://api.rest.sh/openapi.json`, stores the API config,
@@ -54,7 +54,7 @@ assembly.
 If discovery is not available, provide the spec location yourself:
 
 ```bash
-restish api add example https://api.rest.sh spec_url: https://api.rest.sh/openapi.json
+restish api connect example https://api.rest.sh --spec https://api.rest.sh/openapi.json
 restish api sync example
 ```
 
@@ -77,7 +77,7 @@ prefix.
 Use an explicit config file when a project should carry its own Restish setup:
 
 ```bash
-restish --rsh-config ./restish.json api add example https://api.rest.sh
+restish --rsh-config ./restish.json api connect example https://api.rest.sh
 restish --rsh-config ./restish.json example list-images
 ```
 

@@ -43,7 +43,7 @@ Use `api auth inspect` to inspect configured API auth material.
 After configuration, an API name becomes a command group:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 restish example list-images
 restish example get-image jpeg

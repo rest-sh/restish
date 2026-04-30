@@ -78,9 +78,9 @@ The current design set intentionally changes v1 in at least these areas:
 - stronger separation between document and record output
 - JSONC-backed typed config model
 - more explicit pipeline planning for pagination and streaming
-- retirement of the v1 interactive `api configure <name>` prompt flow in favor
-  of `restish.json`, `api add`, `api set`, and `api edit`
-- removal of the v1/v2-draft top-level `auth-header` command in favor of
+- retirement of the v1 interactive `api connect <name>` prompt flow in favor
+  of `restish.json`, `api connect`, `api set`, and `api edit`
+- removal of the v1/v2-draft top-level `api auth inspect` command in favor of
   `restish api auth inspect <api> --raw-header Authorization`, because v2 auth
   can be credential-specific and may not use the `Authorization` header
 

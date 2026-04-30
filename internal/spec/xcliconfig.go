@@ -10,7 +10,7 @@ import (
 )
 
 // XCLIConfig is the x-cli-config extension at the OpenAPI document root.
-// It drives `restish api configure` pre-population of the config file.
+// It drives `restish api connect` pre-population of the config file.
 type XCLIConfig struct {
 	// Profiles maps profile names to their pre-populated settings.
 	Profiles map[string]*XCLIProfile `json:"profiles,omitempty" yaml:"profiles,omitempty"`

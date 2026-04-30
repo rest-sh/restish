@@ -184,10 +184,10 @@ restish links <uri> [rel1 rel2...]
 Performs a GET, normalizes all hypermedia links, and prints them. Optional
 additional arguments filter to specific link relation names.
 
-### `auth-header` command
+### `api auth inspect` predecessor command
 
 ```
-restish auth-header <api-name-or-uri>
+restish api auth inspect <api-name-or-uri>
 ```
 
 Returns an `Authorization` header value (e.g. `Bearer <token>`) for an
@@ -208,7 +208,7 @@ names.
 
 | Subcommand                    | Description                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------ |
-| `api configure <name> [url]`  | Interactive TUI to create or update an API registration (profiles, headers, query params, auth). |
+| old interactive API setup  | Interactive TUI to create or update an API registration (profiles, headers, query params, auth). |
 | `api show <name>`             | Print the API config as JSON or YAML.                                                            |
 | `api edit`                    | Open `apis.json` in `$VISUAL` / `$EDITOR`.                                                       |
 | `api sync <name>`             | Force-refresh the cached API spec.                                                               |
@@ -313,7 +313,7 @@ x-cli-config:
 Supported built-in security type values: `http-basic`,
 `oauth-client-credentials`, `oauth-authorization-code`.
 
-When a user runs `restish api configure`, the API's `x-cli-config` drives
+When a user runs `restish api connect`, the API's `x-cli-config` drives
 the interactive prompts, reducing setup friction.
 
 ### Operation name derivation
@@ -1088,13 +1088,13 @@ Directly inspects TLS certificate chain. Output includes: issuer, subject,
 signature algorithm, `NotBefore`, `NotAfter`, relative expiry ("in N.N days"
 / "N.N days ago"), and SAN DNS names.
 
-### `auth-header` command
+### `api auth inspect` predecessor command
 
 Emits a ready-to-use `Authorization` header value. Integrates with cached
 OAuth tokens. Useful for scripting:
 
 ```bash
-curl https://api.example.com/ -H "Authorization: $(restish auth-header my-api)"
+curl https://api.example.com/ -H "Authorization: $(restish api auth inspect my-api)"
 ```
 
 ### `api content-types`

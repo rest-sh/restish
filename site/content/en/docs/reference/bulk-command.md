@@ -16,13 +16,20 @@ too slow or too error-prone.
 restish bulk init https://api.rest.sh/books
 restish bulk status
 restish bulk pull
+restish bulk diff
 restish bulk push
 restish bulk reset
 ```
 
 `init` starts a bulk workspace for a collection. `status` shows local and remote
-state. `pull` refreshes local data. `push` sends local changes. `reset` returns
+state. `pull` refreshes local data. `diff` previews local edits. `push` sends
+local changes only when it has a safe precondition such as an ETag,
+Last-Modified value, or matching local/remote version metadata. `reset` returns
 the workspace to a clean state.
+
+Use `bulk push --force` only for an intentional overwrite when the API does not
+provide validators or when you have separately resolved the conflict. Push
+output summarizes created, updated, deleted, skipped, and refused resources.
 
 ## Notes
 

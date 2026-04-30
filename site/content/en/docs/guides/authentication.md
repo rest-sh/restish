@@ -79,11 +79,11 @@ RESTISH_DOCS_TOKEN=docs-token restish -p token example get-echo
 
 ## Prompt-Driven Setup
 
-When an OpenAPI spec declares security schemes, `api configure` can prompt for
+When an OpenAPI spec declares security schemes, `api connect` can prompt for
 values or accept preanswers:
 
 ```bash
-restish api configure example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
+restish api connect example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
 ```
 
 Generated OpenAPI commands use the operation's effective `security` policy.
@@ -210,6 +210,6 @@ again.
 
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
-- [Inspect the Auth Header](/docs/recipes/inspect-the-auth-header/)
+- [Inspect the Auth Header](/docs/recipes/inspect-the-api auth inspect/)
 - [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
 - [Security Design](/docs/contributing/design-records/)

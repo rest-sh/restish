@@ -111,6 +111,7 @@ were a recurring source of remediation work.
 - [031-compatibility-and-migration.md](./031-compatibility-and-migration.md) - v1-to-v2 compatibility goals, intentional breaks, migration path, and release-readiness checklist for user-visible behavior.
 - [032-implementation-contract.md](./032-implementation-contract.md) - Cross-cutting implementation matrix for global flags, config schema, command precedence, plugin message families, and output ownership.
 - [033-openapi-operation-security.md](./033-openapi-operation-security.md) - Operation-specific OpenAPI security policy, profile scheme declarations, and the path from current `security: []` support to full enforcement.
+- [035-v2-product-surface-decisions.md](./035-v2-product-surface-decisions.md) - Accepted v2 command-surface decisions for setup, bootstrap, help, plugin/MCP trust, and embeddability.
 
 **Extensibility**
 
