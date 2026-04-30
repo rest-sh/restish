@@ -1,10 +1,11 @@
 # Restish — Design Document
 
-> **Status:** Draft — feature inventory of v1 as the baseline for v2 design.
+> **Status:** Historical v1 inventory.
 >
 > This document catalogs every feature of Restish v1 (`rest-sh/restish`) as a
-> factual baseline. No v2 decisions are recorded here yet; those will be a
-> separate iteration once the inventory is agreed on.
+> factual baseline. It is not a v2 specification. Use it to understand what v1
+> did, to check migration coverage, and to recognize intentional breaks. The
+> normative v2 behavior lives in the other design records.
 
 ---
 
@@ -59,7 +60,9 @@ operations and schemas without requiring a client update.
 ## How To Use This Baseline
 
 This document is intentionally inventory-oriented. It exists to answer "what did
-v1 do?" rather than "what should v2 do?"
+v1 do?" rather than "what should v2 do?" Public readers should not infer that a
+v1 behavior described here remains supported in v2 unless a v2 design record
+also says so.
 
 Use it in combination with the v2 records as follows:
 
@@ -67,6 +70,7 @@ Use it in combination with the v2 records as follows:
 - consult the v2 records when you need the normative design for the new runtime
 - record intentional v1 incompatibilities in design 031 rather than editing this
   baseline to match v2
+- when this document and a v2 record differ, the v2 record is authoritative
 
 For a reimplementation effort, this document is most useful as a coverage
 checklist: it helps confirm that the v2 design corpus either preserves,
@@ -782,9 +786,9 @@ URIs are always resolved to absolute form against the request base.
 | `TerrificallySimpleJSONParser` | TSJ (`@id`, `@context`)                  |
 | `JSONAPIParser`                | JSON:API (`links`, `data.relationships`) |
 
-Note: Siren is listed in the README feature list but its parser was not
-found in the registered defaults in `cli.Defaults()` — may be an
-omission or may have been removed. **Needs verification.**
+Historical note: Siren was listed in the v1 README feature list, but this
+inventory did not find it in the registered defaults in `cli.Defaults()`. Treat
+that as a v1 inventory uncertainty, not as a v2 requirement.
 
 ### Automatic pagination
 

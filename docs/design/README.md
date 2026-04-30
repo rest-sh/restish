@@ -7,6 +7,26 @@ They are primarily for contributors and AI agents working on the codebase.
 They are not meant to be polished end-user documentation; the future docs site
 can build on these records, but does not need to mirror their structure.
 
+## Public Reader Guide
+
+These records are public design notes, not the user manual. They explain how
+Restish v2 is intended to behave and why major choices were made. For everyday
+usage, prefer the docs site and command help.
+
+Status labels mean:
+
+- **Accepted**: intended v2 behavior unless a later design record changes it
+- **Implemented**: accepted behavior that is also reflected in the current code
+- **Historical**: evidence or inventory used to design v2, not normative v2
+  behavior
+- **Boundary**: a scope rule that says where authority lives and where it does
+  not
+
+Most records omit an explicit status label. Treat those as accepted subsystem
+contracts once they appear in this corpus. If a record contains examples from
+v1, a rejected alternative, or a compatibility note, that text is context for
+the v2 decision rather than a promise to keep the old behavior.
+
 They should now be treated as implementation-grade design records rather than
 light sketches. A contributor should be able to read this corpus and recover:
 
@@ -106,7 +126,7 @@ were a recurring source of remediation work.
 
 **Foundations**
 
-- [000-restish-v1-baseline.md](./000-restish-v1-baseline.md) - Feature inventory of Restish v1, captured as the baseline that informed v2 design.
+- [000-restish-v1-baseline.md](./000-restish-v1-baseline.md) - Historical feature inventory of Restish v1; use it as evidence and coverage, not as normative v2 behavior.
 - [001-cli-architecture.md](./001-cli-architecture.md) - Central `CLI` runtime, subsystem boundaries, lifecycle phases, and invariants for embedding, testing, and teardown.
 - [002-config-and-profiles.md](./002-config-and-profiles.md) - Persistent configuration model, path resolution, profile layering, atomic writes, and migration expectations.
 - [003-content-types-and-encodings.md](./003-content-types-and-encodings.md) - Registry-driven body encoding/decoding and compression handling.
