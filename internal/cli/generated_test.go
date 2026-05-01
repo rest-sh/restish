@@ -92,6 +92,17 @@ func specWithOperations(baseURL string) string {
         "responses": {"200": {"description": "OK"}}
       }
     },
+    "/optional-body": {
+      "post": {
+        "operationId": "optionalBody",
+        "summary": "Accept an optional body",
+        "requestBody": {
+          "required": false,
+          "content": {"application/json": {"schema": {"type": "object"}}}
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
     "/legacy": {
       "get": {
         "operationId": "getLegacy",
@@ -798,6 +809,70 @@ func TestGeneratedCommandShorthandBody(t *testing.T) {
 	}
 	if body["name"] != "Widget" {
 		t.Errorf("name: got %v, want Widget", body["name"])
+	}
+}
+
+func TestGeneratedCommandRequiredBodyMissingFailsBeforeRequest(t *testing.T) {
+	var calls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	err := c.Run([]string{"restish", "tapi", "create-item"})
+	if err == nil {
+		t.Fatal("expected missing required body error")
+	}
+	if !strings.Contains(err.Error(), "request body is required") {
+		t.Fatalf("expected required body error, got %v", err)
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("server was called %d times despite missing body", got)
+	}
+}
+
+func TestGeneratedCommandRequiredBodyCanComeFromStdin(t *testing.T) {
+	var gotBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			gotBody, _ = io.ReadAll(r.Body)
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	c.Stdin = strings.NewReader(`{"name":"Widget"}`)
+	if err := c.Run([]string{"restish", "tapi", "create-item"}); err != nil {
+		t.Fatalf("create-item with stdin body: %v", err)
+	}
+	if !bytes.Contains(gotBody, []byte(`"name":"Widget"`)) {
+		t.Fatalf("expected stdin request body, got %s", gotBody)
+	}
+}
+
+func TestGeneratedCommandOptionalBodyCanBeOmitted(t *testing.T) {
+	var calls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/optional-body", func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "optional-body"}); err != nil {
+		t.Fatalf("optional-body without body: %v", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("server calls = %d, want 1", got)
 	}
 }
 

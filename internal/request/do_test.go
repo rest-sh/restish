@@ -270,11 +270,10 @@ func TestDo_HeaderTimeoutDoesNotWaitForNonCooperativeTransport(t *testing.T) {
 	}
 }
 
-func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
+func TestDo_TimeoutCancelsBodyReads(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	bodyRead := make(chan struct{})
 	resp, err := request.Do(ctx, "GET", "https://api.example.com/items", nil, request.Options{
 		Timeout: 20 * time.Millisecond,
 		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -285,7 +284,6 @@ func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
 					select {
 					case <-time.After(50 * time.Millisecond):
 						copy(p, "hello")
-						close(bodyRead)
 						return 5, io.EOF
 					case <-r.Context().Done():
 						return 0, r.Context().Err()
@@ -299,17 +297,12 @@ func TestDo_HeaderTimeoutDoesNotCancelBodyReads(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("reading body: %v", err)
+	_, err = io.ReadAll(resp.Body)
+	if err == nil {
+		t.Fatal("expected body read timeout")
 	}
-	if string(data) != "hello" {
-		t.Fatalf("body = %q, want %q", data, "hello")
-	}
-	select {
-	case <-bodyRead:
-	default:
-		t.Fatal("expected delayed body read to complete")
+	if err != context.DeadlineExceeded {
+		t.Fatalf("body read error = %v, want %v", err, context.DeadlineExceeded)
 	}
 }
 

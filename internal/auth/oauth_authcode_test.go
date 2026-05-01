@@ -225,6 +225,47 @@ func TestAuthCode_BrowserFlow_FaviconRequestDoesNotAbort(t *testing.T) {
 	}
 }
 
+func TestAuthCode_BrowserFlow_ImmediateCallbackDuringOpenBrowser(t *testing.T) {
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.FormValue("code"); got != "fast-code" {
+				t.Fatalf("code = %q", got)
+			}
+			return testResponse(200, "application/json", `{"access_token":"fast-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			callbackURL, state := mustCallbackURL(t, raw)
+			resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=fast-code", callbackURL, url.QueryEscape(state)))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("callback status = %d body=%q", resp.StatusCode, string(body))
+			}
+			return nil
+		},
+	}
+
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	params := map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_port": availablePort(t),
+	}
+	if err := h.OnRequest(req, params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer fast-token" {
+		t.Fatalf("Authorization = %q, want %q", got, "Bearer fast-token")
+	}
+}
+
 func TestAuthCode_BrowserFlow_TwoStrayPreflightsDoNotDeadlock(t *testing.T) {
 	h := &AuthorizationCode{
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
@@ -347,6 +388,7 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 		"token_url":     "https://auth.example.com/token",
 		"redirect_port": availablePort(t),
 		"audience":      "https://api.example.com/",
+		"cache_key":     "local-cache-key",
 		"resource":      "urn:example",
 		"organization":  "acme",
 	}
@@ -362,11 +404,17 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 	if query.Get("audience") != "https://api.example.com/" || query.Get("resource") != "urn:example" || query.Get("organization") != "acme" {
 		t.Fatalf("unexpected authorize params: %#v", query)
 	}
+	if query.Get("cache_key") != "" {
+		t.Fatalf("cache_key should not be sent to authorize endpoint: %#v", query)
+	}
 	if redirectURI := query.Get("redirect_uri"); !strings.HasSuffix(redirectURI, "/") {
 		t.Fatalf("redirect_uri = %q, want trailing slash", redirectURI)
 	}
 	if gotForm.Get("audience") != "https://api.example.com/" || gotForm.Get("resource") != "urn:example" || gotForm.Get("organization") != "acme" {
 		t.Fatalf("unexpected token form params: %#v", gotForm)
+	}
+	if gotForm.Get("cache_key") != "" {
+		t.Fatalf("cache_key should not be sent to token endpoint: %#v", gotForm)
 	}
 	if redirectURI := gotForm.Get("redirect_uri"); !strings.HasSuffix(redirectURI, "/") {
 		t.Fatalf("token redirect_uri = %q, want trailing slash", redirectURI)

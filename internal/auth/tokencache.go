@@ -156,6 +156,9 @@ func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 			return nil, fmt.Errorf("decoding token cache %s: cbor: %v; json: %v", c.path, err, jsonErr)
 		}
 	}
+	if m == nil {
+		m = map[string]CachedToken{}
+	}
 	info, statErr := os.Stat(c.path)
 	if statErr == nil {
 		c.modTime = info.ModTime()

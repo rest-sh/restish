@@ -241,6 +241,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":    true,
 		"authorize_url": true,
+		"cache_key":     true,
 		"issuer_url":    true,
 		"redirect_port": true,
 		"token_url":     true,
@@ -251,50 +252,24 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	}
 	fullAuthorizeURL := authorizeURL + "?" + q.Encode()
 
-	// Notify user and open browser. The full URL can contain sensitive request
-	// parameters, so keep it out of stderr unless it is needed for manual action.
-	if h.Stderr != nil && h.Verbose {
-		fmt.Fprintf(h.Stderr, "Opening browser for authentication:\n  %s\n", fullAuthorizeURL)
-	} else if h.Stderr != nil {
-		fmt.Fprintln(h.Stderr, "Opening browser for authentication.")
-	}
-
-	var openErr error
-	if !h.NoBrowser {
-		opener := h.OpenBrowser
-		if opener == nil {
-			opener = DefaultOpenBrowser
-		}
-		if err := opener(fullAuthorizeURL); err != nil {
-			openErr = err
-			if h.Stderr != nil {
-				fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open this URL manually:\n  %s\n", err, fullAuthorizeURL)
-			}
-		}
-	} else if h.Stderr != nil {
-		fmt.Fprintf(h.Stderr, "Browser launch disabled; open this URL manually:\n  %s\n", fullAuthorizeURL)
-	}
-
-	// Wait for callback.
 	ctx2, cancel := context.WithTimeout(ctx, authTimeout)
 	defer cancel()
 
-	var code string
-	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
-		promptCode, promptErr := h.Prompt("Paste the authorization code: ")
-		if promptErr != nil {
-			return CachedToken{}, promptErr
-		}
-		code = strings.TrimSpace(promptCode)
-	} else {
-		codeCh := make(chan string, 1)
-		errCh := make(chan error, 1)
+	var (
+		codeCh chan string
+		errCh  chan error
+		srv    *http.Server
+	)
+	manualOnly := h.CanPrompt && h.NoBrowser && h.Prompt != nil
+	if !manualOnly {
+		codeCh = make(chan string, 1)
+		errCh = make(chan error, 1)
 		var receivedCode atomic.Bool
 		ln, err := net.Listen("tcp", "localhost:"+port)
 		if err != nil {
 			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
 		}
-		srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" && r.URL.Path != "/callback" {
 				http.NotFound(w, r)
 				return
@@ -334,7 +309,41 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 			defer cancel()
 			_ = srv.Shutdown(ctx2)
 		}()
+	}
 
+	// Notify user and open browser. The full URL can contain sensitive request
+	// parameters, so keep it out of stderr unless it is needed for manual action.
+	if h.Stderr != nil && h.Verbose {
+		fmt.Fprintf(h.Stderr, "Opening browser for authentication:\n  %s\n", fullAuthorizeURL)
+	} else if h.Stderr != nil {
+		fmt.Fprintln(h.Stderr, "Opening browser for authentication.")
+	}
+
+	var openErr error
+	if !h.NoBrowser {
+		opener := h.OpenBrowser
+		if opener == nil {
+			opener = DefaultOpenBrowser
+		}
+		if err := opener(fullAuthorizeURL); err != nil {
+			openErr = err
+			if h.Stderr != nil {
+				fmt.Fprintf(h.Stderr, "Could not open browser: %v\nPlease open this URL manually:\n  %s\n", err, fullAuthorizeURL)
+			}
+		}
+	} else if h.Stderr != nil {
+		fmt.Fprintf(h.Stderr, "Browser launch disabled; open this URL manually:\n  %s\n", fullAuthorizeURL)
+	}
+
+	// Wait for callback.
+	var code string
+	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
+		promptCode, promptErr := h.Prompt("Paste the authorization code: ")
+		if promptErr != nil {
+			return CachedToken{}, promptErr
+		}
+		code = strings.TrimSpace(promptCode)
+	} else {
 		select {
 		case code = <-codeCh:
 		case err = <-errCh:

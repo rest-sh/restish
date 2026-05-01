@@ -174,17 +174,11 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 	if resolved.Cleanup != nil {
 		defer resolved.Cleanup()
 	}
-	manifest, err := plugin.LoadManifestWithWarnings(resolved.Path, diagnosticPrefixWriter(c.Stderr))
-	if err != nil {
-		return fmt.Errorf("install: %w", err)
-	}
 	fmt.Fprintf(c.Stderr, "Plugin source: %s\n", args[0])
 	fmt.Fprintf(c.Stderr, "Resolved path: %s\n", resolved.Path)
-	fmt.Fprintf(c.Stderr, "Manifest: %s %s\n", manifest.Name, manifest.Version)
-	fmt.Fprintf(c.Stderr, "Capabilities: %s\n", pluginCapabilitySummary(*manifest))
 	yes, _ := cmd.Flags().GetBool("yes")
 	if !yes {
-		ok, err := c.Confirm(cmd.Context(), "Install and trust this plugin? [y/N] ")
+		ok, err := c.Confirm(cmd.Context(), "Inspect and trust this plugin? This runs it once to read its manifest. [y/N] ")
 		if err != nil {
 			return err
 		}
@@ -192,6 +186,15 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("install: confirmation required; rerun with --yes for automation")
 		}
 	}
+	manifest, err := plugin.LoadManifestWithWarnings(resolved.Path, diagnosticPrefixWriter(c.Stderr))
+	if err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+	if err := validatePluginManifestName(manifest.Name); err != nil {
+		return fmt.Errorf("install: manifest name: %w", err)
+	}
+	fmt.Fprintf(c.Stderr, "Manifest: %s %s\n", manifest.Name, manifest.Version)
+	fmt.Fprintf(c.Stderr, "Capabilities: %s\n", pluginCapabilitySummary(*manifest))
 	installedName, err := c.installResolvedPlugin(resolved, *manifest)
 	if err != nil {
 		return err
@@ -264,8 +267,14 @@ func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource, manife
 		return "", fmt.Errorf("install: cannot create plugin dir %s: %w", pluginDir, err)
 	}
 
-	installedName := installedPluginFileName(manifest.Name, resolved.Name)
+	installedName, err := installedPluginFileName(manifest.Name, resolved.Name)
+	if err != nil {
+		return "", fmt.Errorf("install: manifest name: %w", err)
+	}
 	dest := filepath.Join(pluginDir, installedName)
+	if !pathWithinDir(pluginDir, dest) {
+		return "", fmt.Errorf("install: destination %s escapes plugin dir %s", dest, pluginDir)
+	}
 	if err := copyFile(resolved.Path, dest); err != nil {
 		return "", fmt.Errorf("install: %w", err)
 	}
@@ -277,17 +286,48 @@ func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource, manife
 	return installedName, nil
 }
 
-func installedPluginFileName(manifestName, sourceName string) string {
+func installedPluginFileName(manifestName, sourceName string) (string, error) {
 	name := strings.TrimSpace(manifestName)
 	name = strings.TrimPrefix(name, "restish-")
 	if name == "" {
 		name = strings.TrimPrefix(strings.TrimSuffix(sourceName, filepath.Ext(sourceName)), "restish-")
 	}
+	if err := validatePluginManifestName(name); err != nil {
+		return "", err
+	}
 	installed := "restish-" + name
 	if runtime.GOOS == "windows" && filepath.Ext(installed) == "" && strings.EqualFold(filepath.Ext(sourceName), ".exe") {
 		installed += ".exe"
 	}
-	return installed
+	return installed, nil
+}
+
+func validatePluginManifestName(name string) error {
+	name = strings.TrimSpace(strings.TrimPrefix(name, "restish-"))
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid plugin name %q", name)
+	}
+	if filepath.Base(name) != name || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("invalid plugin name %q", name)
+	}
+	for _, r := range name {
+		if r >= 'A' && r <= 'Z' ||
+			r >= 'a' && r <= 'z' ||
+			r >= '0' && r <= '9' ||
+			r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return fmt.Errorf("invalid plugin name %q", name)
+	}
+	return nil
+}
+
+func pathWithinDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != "" && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
 
 func resolveLocalPluginSource(source string) (string, bool, error) {

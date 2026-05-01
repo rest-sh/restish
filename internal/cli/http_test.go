@@ -61,6 +61,12 @@ func jsonResponse(status int, body string) *http.Response {
 	}
 }
 
+type readerFunc func([]byte) (int, error)
+
+func (f readerFunc) Read(p []byte) (int, error) {
+	return f(p)
+}
+
 // TestHTTPVerbs verifies that each lowercase verb sends the correct HTTP method.
 func TestHTTPVerbs(t *testing.T) {
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
@@ -342,6 +348,29 @@ func TestHTTPTimeoutShorthand(t *testing.T) {
 	err := c.Run([]string{"restish", "get", "-t", "50ms", "https://api.example.com/items"})
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+func TestHTTPTimeoutCoversBodyRead(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(readerFunc(func([]byte) (int, error) {
+				<-r.Context().Done()
+				return 0, r.Context().Err()
+			})),
+			Request: r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "get", "--rsh-timeout", "50ms", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected body read timeout")
+	}
+	if !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
 	}
 }
 

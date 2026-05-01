@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -140,6 +141,47 @@ func TestAPIConnectFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "operations discovered") {
 		t.Fatalf("expected discovered operations message, got: %q", out.String())
+	}
+}
+
+func TestAPISyncDiscoveryUsesProfileCACert(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specWithXCLIConfig("https://api.example.com"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	srv := httptest.NewTLSServer(mux)
+	t.Cleanup(srv.Close)
+
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caPath, caPEM, 0o600); err != nil {
+		t.Fatalf("write CA: %v", err)
+	}
+
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"secure": {
+				BaseURL: srv.URL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {CACertPath: caPath},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	if err := c.Run([]string{"restish", "api", "sync", "secure"}); err != nil {
+		t.Fatalf("api sync with profile CA: %v", err)
 	}
 }
 

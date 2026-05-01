@@ -309,7 +309,11 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		use += " <" + p.flagName + ">"
 	}
 	if op.HasBody {
-		use += " [body...]"
+		if op.BodyRequired {
+			use += " <body...>"
+		} else {
+			use += " [body...]"
+		}
 	}
 
 	// Short and long descriptions, with x-cli-description override.
@@ -361,7 +365,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -624,6 +628,7 @@ func generatedOperationExamples(apiName, use string, examples []string) string {
 		return ""
 	}
 	use = strings.TrimSuffix(use, " [body...]")
+	use = strings.TrimSuffix(use, " <body...>")
 	var b strings.Builder
 	for _, ex := range examples {
 		b.WriteString("  restish ")
@@ -645,6 +650,7 @@ func (c *CLI) runGeneratedOp(
 	apiName, opPath, method, requestMediaType string,
 	requestSchemaTypes map[string]string,
 	requestMultipartContentTypes map[string]string,
+	bodyRequired bool,
 	noAuth bool,
 	optionalAuth bool,
 	credentialAlternatives []spec.CredentialAlternative,
@@ -704,6 +710,7 @@ func (c *CLI) runGeneratedOp(
 	return c.runHTTPInternalWithBodyOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
+		bodyRequired:              bodyRequired,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
 			CredentialAlternatives: credentialAlternatives,

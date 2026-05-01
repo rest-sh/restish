@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rest-sh/restish/v2/internal/procutil"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
@@ -39,6 +40,7 @@ func callHookRaw(path string, timeout time.Duration, in any) ([]byte, error) {
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, path)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	cmd.Stdin = &stdin
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -70,6 +72,7 @@ func StartFormatterStream(ctx context.Context, path string, w io.Writer, in any)
 		ctx = context.Background()
 	}
 	cmd := exec.CommandContext(ctx, path)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("hook %s: stdin: %w", filepath.Base(path), err)

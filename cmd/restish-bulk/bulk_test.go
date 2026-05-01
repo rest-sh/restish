@@ -316,6 +316,64 @@ func TestPushFileWithETagSendsConditionalHeader(t *testing.T) {
 	}
 }
 
+func TestPushRefusesInvalidTrackedJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("item.json", []byte(`{"id":`), 0o644); err != nil {
+		t.Fatalf("write item: %v", err)
+	}
+	formatted, err := reformat([]byte(`{"id":"item"}`))
+	if err != nil {
+		t.Fatalf("reformat seed: %v", err)
+	}
+	var writes atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			if method != "GET" || uri != "https://api.example.com/items" {
+				writes.Add(1)
+				return nil, fmt.Errorf("unexpected write request %s %s", method, uri)
+			}
+			return &httpResponse{
+				Status: 200,
+				Body:   []any{map[string]any{"url": "https://api.example.com/items/item", "version": "v1"}},
+			}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{
+		URL: "https://api.example.com/items",
+		Files: map[string]*File{
+			"item.json": {
+				Path:          "item.json",
+				URL:           "https://api.example.com/items/item",
+				VersionLocal:  "v1",
+				VersionRemote: "v1",
+				Hash:          hashBytes(formatted),
+			},
+		},
+	}
+
+	err = a.push(meta, 1, pushOptions{})
+	if err == nil {
+		t.Fatal("expected invalid JSON error")
+	}
+	if !strings.Contains(err.Error(), "invalid JSON") {
+		t.Fatalf("expected invalid JSON error, got %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("write requests = %d, want 0", got)
+	}
+}
+
+func TestApplyFetchedFileClearsStaleValidators(t *testing.T) {
+	f := &File{ETag: `"old"`, LastModified: "yesterday"}
+	applyFetchedFile(f, &fetchedFile{})
+	if f.ETag != "" || f.LastModified != "" {
+		t.Fatalf("validators = etag:%q last-modified:%q, want cleared", f.ETag, f.LastModified)
+	}
+}
+
 func TestPushFileMatchingVersionWithoutValidatorSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

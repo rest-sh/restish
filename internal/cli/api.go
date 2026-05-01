@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"sort"
 	"strings"
@@ -150,6 +151,13 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	apiCfg := c.cfg.APIs[apiName]
 
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
+	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, c.profileFromCmd(cmd))
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
 	discCfg := spec.DiscoverConfig{
 		APIName:          apiName,
 		BaseURL:          apiCfg.BaseURL,
@@ -159,7 +167,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		OperationBase:    apiCfg.OperationBase,
 		ServerVariables:  effectiveServerVariables(apiCfg, c.profileFromCmd(cmd)),
 		Version:          Version,
-		Transport:        c.baseHTTPTransport(),
+		Transport:        transport,
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
 		ForceRefresh:     true,
 	}
@@ -222,6 +230,13 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 
 	var apiSpec *spec.APISpec
 	if !noDiscover {
+		transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, "default")
+		if err != nil {
+			return err
+		}
+		if closer != nil {
+			defer closer.Close()
+		}
 		discCfg := spec.DiscoverConfig{
 			APIName:          apiName,
 			BaseURL:          baseURL,
@@ -230,7 +245,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			CacheDir:         c.specCacheDir(),
 			ServerVariables:  nil,
 			Version:          Version,
-			Transport:        c.baseHTTPTransport(),
+			Transport:        transport,
 			AllowCrossOrigin: allowCrossOrigin,
 			ForceRefresh:     true,
 		}
@@ -769,6 +784,60 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 		}
 		apiCfg.Profiles[name] = prof
 	}
+}
+
+func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {
+	gf := globalFlagsFromContext(ctx)
+	if gf.Insecure {
+		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
+	}
+	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
+	if err != nil {
+		return nil, nil, err
+	}
+	tlsSignerParams, err := parseKVStrings(gf.TLSSignerParams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid tls signer param: %w", err)
+	}
+	opts := request.Options{
+		Transport:       c.baseHTTPTransport(),
+		Insecure:        gf.Insecure,
+		ClientCertPath:  gf.ClientCert,
+		ClientKeyPath:   gf.ClientKey,
+		TLSSignerName:   gf.TLSSigner,
+		TLSSignerParams: tlsSignerParams,
+		CACertPath:      gf.CACert,
+		TLSMinVersion:   tlsMinVersion,
+		UserAgent:       "restish/" + Version,
+		Logger:          diagnosticPrefixWriter(c.Stderr),
+	}
+	if apiCfg != nil {
+		if profileName == "" {
+			profileName = "default"
+		}
+		if prof := profileForName(apiCfg, profileName); prof != nil {
+			if opts.TLSSignerName == "" {
+				opts.TLSSignerName = prof.TLSSigner
+			}
+			opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
+			if opts.CACertPath == "" {
+				opts.CACertPath = prof.CACertPath
+			}
+			if opts.ClientCertPath == "" {
+				opts.ClientCertPath = prof.ClientCertPath
+			}
+			if opts.ClientKeyPath == "" {
+				opts.ClientKeyPath = prof.ClientKeyPath
+			}
+		}
+	}
+	opts, err = c.resolveTLSSigner(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	transport := request.BuildTransport(opts)
+	closer, _ := transport.(interface{ Close() error })
+	return transport, closer, nil
 }
 
 // runAPIInspect prints the config for a named API as indented JSON,

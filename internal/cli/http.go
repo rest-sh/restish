@@ -108,6 +108,7 @@ type requestBodyOptions struct {
 	schemaTypes               map[string]string
 	multipartPartContentTypes map[string]string
 	operationAuth             *operationAuthPolicy
+	bodyRequired              bool
 }
 
 func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
@@ -135,6 +136,9 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 	bodyVal, err := input.BodyWithSchemaTypes(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, bodyOpts.schemaTypes)
 	if err != nil {
 		return fmt.Errorf("building request body: %w", err)
+	}
+	if bodyOpts.bodyRequired && bodyVal == nil {
+		return fmt.Errorf("request body is required; pass body arguments, pipe a body on stdin, or run %q for an example", cmd.CommandPath()+" --rsh-generate-body")
 	}
 	if len(bodyOpts.multipartPartContentTypes) > 0 && strings.HasPrefix(strings.ToLower(opts.ContentType), "multipart/form-data") {
 		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}

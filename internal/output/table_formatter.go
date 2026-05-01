@@ -28,7 +28,9 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 		if err := writeHTTPPreamble(w, resp, color); err != nil {
 			return err
 		}
-		fmt.Fprintln(w)
+		if _, err := fmt.Fprintln(w); err != nil {
+			return err
+		}
 	}
 	rows, ok := toRows(resp.Body)
 	if !ok {
@@ -36,8 +38,8 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 		return (&JSONFormatter{}).Format(w, resp, color)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(w, "(empty)")
-		return nil
+		_, err := fmt.Fprintln(w, "(empty)")
+		return err
 	}
 
 	cols := f.Columns
@@ -77,7 +79,7 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 		}
 	}
 
-	writeSep := func(left, mid, right, horiz string) {
+	writeSep := func(left, mid, right, horiz string) error {
 		var row strings.Builder
 		row.WriteString(left)
 		for i, width := range widths {
@@ -88,10 +90,11 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 		}
 		row.WriteString(right)
 		row.WriteByte('\n')
-		_, _ = io.WriteString(w, row.String())
+		_, err := io.WriteString(w, row.String())
+		return err
 	}
 
-	writeRow := func(cells []string) {
+	writeRow := func(cells []string) error {
 		var row strings.Builder
 		row.WriteString("│")
 		for i, cell := range cells {
@@ -101,26 +104,34 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 			row.WriteString(" │")
 		}
 		row.WriteByte('\n')
-		_, _ = io.WriteString(w, row.String())
+		_, err := io.WriteString(w, row.String())
+		return err
 	}
 
 	// Top border.
-	writeSep("┌", "┬", "┐", "─")
+	if err := writeSep("┌", "┬", "┐", "─"); err != nil {
+		return err
+	}
 
 	// Header row.
-	writeRow(cols)
+	if err := writeRow(cols); err != nil {
+		return err
+	}
 
 	// Header / body separator.
-	writeSep("├", "┼", "┤", "─")
+	if err := writeSep("├", "┼", "┤", "─"); err != nil {
+		return err
+	}
 
 	// Data rows.
 	for _, row := range cells {
-		writeRow(row)
+		if err := writeRow(row); err != nil {
+			return err
+		}
 	}
 
 	// Bottom border.
-	writeSep("└", "┴", "┘", "─")
-	return nil
+	return writeSep("└", "┴", "┘", "─")
 }
 
 // toRows converts body to a slice of map rows. Returns false when body is not

@@ -430,6 +430,73 @@ func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 	}
 }
 
+func TestPluginInstallDeclineDoesNotExecuteManifest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	sourceDir := t.TempDir()
+	marker := filepath.Join(sourceDir, "executed")
+	source := filepath.Join(sourceDir, "restish-decline")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo ran > " + marker + "; echo '{\"name\":\"decline\",\"restish_api_version\":1}'; fi\n"
+	if err := os.WriteFile(source, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	err := c.Run([]string{"restish", "plugin", "install", source})
+	if err == nil {
+		t.Fatal("expected declined plugin install to fail")
+	}
+	if !strings.Contains(errOut.String(), "Inspect and trust this plugin?") {
+		t.Fatalf("expected trust prompt, got:\n%s", errOut.String())
+	}
+	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
+		t.Fatalf("plugin manifest command should not run before confirmation, stat: %v", statErr)
+	}
+}
+
+func TestPluginInstallRejectsManifestNameTraversal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	sourceDir := t.TempDir()
+	source := filepath.Join(sourceDir, "restish-traverse")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"../victim\",\"restish_api_version\":1}'; exit 0; fi\n"
+	if err := os.WriteFile(source, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	victim := filepath.Join(pluginsParent, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", source})
+	if err == nil {
+		t.Fatal("expected traversal manifest name to fail")
+	}
+	if !strings.Contains(err.Error(), "manifest name") {
+		t.Fatalf("expected manifest name error, got: %v", err)
+	}
+	data, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatalf("read victim: %v", err)
+	}
+	if string(data) != "keep" {
+		t.Fatalf("victim was modified: %q", data)
+	}
+}
+
 func TestPluginInstallWarnsThatPluginsAreTrusted(t *testing.T) {
 	skipNoPlugin(t)
 
@@ -464,8 +531,11 @@ func TestPluginInstallRequiresYesNonInteractive(t *testing.T) {
 	if !strings.Contains(err.Error(), "confirmation required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(errOut.String(), "Capabilities:") {
-		t.Fatalf("expected trust summary before confirmation, got:\n%s", errOut.String())
+	if strings.Contains(errOut.String(), "Capabilities:") {
+		t.Fatalf("manifest should not be read before confirmation, got:\n%s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "Resolved path:") {
+		t.Fatalf("expected source summary before confirmation, got:\n%s", errOut.String())
 	}
 }
 
@@ -481,7 +551,7 @@ func TestPluginInstallPromptsAndAcceptsConfirmation(t *testing.T) {
 	if err := c.Run([]string{"restish", "plugin", "install", testPluginBin}); err != nil {
 		t.Fatalf("plugin install with confirmation: %v", err)
 	}
-	if !strings.Contains(errOut.String(), "Install and trust this plugin?") {
+	if !strings.Contains(errOut.String(), "Inspect and trust this plugin?") {
 		t.Fatalf("expected trust prompt, got:\n%s", errOut.String())
 	}
 	if !strings.Contains(out.String(), "Installed plugin") {

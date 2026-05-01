@@ -87,6 +87,61 @@ func TestTokenCache_ReadsLegacyJSON(t *testing.T) {
 	}
 }
 
+func TestTokenCache_NullFileIsTreatedAsEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := os.WriteFile(path, []byte("null"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tc := NewTokenCache(path)
+	got, err := tc.Get("missing")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil token, got %+v", got)
+	}
+	if err := tc.Set("key", CachedToken{AccessToken: "new"}); err != nil {
+		t.Fatalf("Set after null cache: %v", err)
+	}
+	got, err = tc.Get("key")
+	if err != nil {
+		t.Fatalf("Get new key: %v", err)
+	}
+	if got == nil || got.AccessToken != "new" {
+		t.Fatalf("expected stored token after null cache, got %+v", got)
+	}
+}
+
+func TestTokenCache_EmptyObjectFileIsTreatedAsEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tc := NewTokenCache(path)
+	got, err := tc.Get("missing")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil token, got %+v", got)
+	}
+	if err := tc.Set("key", CachedToken{AccessToken: "new"}); err != nil {
+		t.Fatalf("Set after empty object cache: %v", err)
+	}
+}
+
+func TestTokenCache_ArrayFileReturnsDecodeError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := os.WriteFile(path, []byte("[]"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tc := NewTokenCache(path)
+	_, err := tc.Get("missing")
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+}
+
 func TestTokenCache_Delete(t *testing.T) {
 	tc := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	_ = tc.Set("key", CachedToken{AccessToken: "token"})

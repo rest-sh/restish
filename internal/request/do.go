@@ -55,7 +55,8 @@ type Options struct {
 	Server string
 	// Insecure disables TLS certificate verification.
 	Insecure bool
-	// Timeout bounds the time to receive response headers. Zero means no timeout.
+	// Timeout bounds the full request lifetime, including response body reads.
+	// Zero means no timeout.
 	Timeout time.Duration
 	// ClientCertPath is the PEM client certificate path for mTLS.
 	ClientCertPath string
@@ -131,12 +132,14 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	}
 
 	requestCtx := ctx
-	var cancelRequest context.CancelCauseFunc
+	var cancelRequest context.CancelFunc
+	cancelOnReturn := false
 	if opts.Timeout > 0 {
-		requestCtx, cancelRequest = context.WithCancelCause(ctx)
+		requestCtx, cancelRequest = context.WithTimeout(ctx, opts.Timeout)
+		cancelOnReturn = true
 		defer func() {
-			if err != nil && cancelRequest != nil {
-				cancelRequest(context.Canceled)
+			if cancelOnReturn && cancelRequest != nil {
+				cancelRequest()
 			}
 		}()
 	}
@@ -209,8 +212,11 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		CheckRedirect: credentialStrippingRedirectPolicy,
 	}
 
-	resp, err := doWithHeaderTimeout(client, req, opts.Timeout, cancelRequest)
+	resp, err := doWithResponseTimeout(client, req, cancelRequest)
 	if err != nil {
+		if cancelRequest != nil {
+			cancelRequest()
+		}
 		if builtTransport {
 			if closer, ok := transport.(interface{ Close() error }); ok {
 				_ = closer.Close()
@@ -218,12 +224,71 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 		return nil, err
 	}
+	var closeFns []func() error
+	if cancelRequest != nil {
+		closeFns = append(closeFns, func() error {
+			cancelRequest()
+			return nil
+		})
+	}
 	if builtTransport {
-		if closer, ok := transport.(interface{ Close() error }); ok && resp.Body != nil {
-			resp.Body = &closeAfterBody{ReadCloser: resp.Body, closeFn: closer.Close}
+		if closer, ok := transport.(interface{ Close() error }); ok {
+			closeFns = append(closeFns, closer.Close)
 		}
 	}
+	if len(closeFns) > 0 {
+		if resp.Body != nil {
+			resp.Body = &closeAfterBody{ReadCloser: resp.Body, closeFn: func() error {
+				var firstErr error
+				for _, closeFn := range closeFns {
+					if err := closeFn(); err != nil && firstErr == nil {
+						firstErr = err
+					}
+				}
+				return firstErr
+			}}
+		} else {
+			for _, closeFn := range closeFns {
+				_ = closeFn()
+			}
+		}
+	}
+	cancelOnReturn = false
 	return resp, nil
+}
+
+type doResult struct {
+	resp *http.Response
+	err  error
+}
+
+func doWithResponseTimeout(client *http.Client, req *http.Request, cancel context.CancelFunc) (*http.Response, error) {
+	if cancel == nil {
+		return client.Do(req)
+	}
+
+	resultCh := make(chan doResult, 1)
+	go func() {
+		resp, err := client.Do(req)
+		resultCh <- doResult{resp: resp, err: err}
+	}()
+
+	drainLateResult := func() {
+		go func() {
+			result := <-resultCh
+			if result.resp != nil && result.resp.Body != nil {
+				_ = result.resp.Body.Close()
+			}
+		}()
+	}
+
+	select {
+	case result := <-resultCh:
+		return result.resp, result.err
+	case <-req.Context().Done():
+		drainLateResult()
+		return nil, req.Context().Err()
+	}
 }
 
 func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) error {
@@ -337,52 +402,6 @@ func effectivePort(u *url.URL) string {
 		return "443"
 	}
 	return ""
-}
-
-type doResult struct {
-	resp *http.Response
-	err  error
-}
-
-func doWithHeaderTimeout(client *http.Client, req *http.Request, timeout time.Duration, cancel context.CancelCauseFunc) (*http.Response, error) {
-	if timeout <= 0 {
-		return client.Do(req)
-	}
-
-	resultCh := make(chan doResult, 1)
-	go func() {
-		resp, err := client.Do(req)
-		resultCh <- doResult{resp: resp, err: err}
-	}()
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	drainLateResult := func() {
-		go func() {
-			result := <-resultCh
-			if result.resp != nil && result.resp.Body != nil {
-				_ = result.resp.Body.Close()
-			}
-		}()
-	}
-
-	select {
-	case result := <-resultCh:
-		return result.resp, result.err
-	case <-req.Context().Done():
-		if cancel != nil {
-			cancel(context.Cause(req.Context()))
-		}
-		drainLateResult()
-		return nil, req.Context().Err()
-	case <-timer.C:
-		if cancel != nil {
-			cancel(context.DeadlineExceeded)
-		}
-		drainLateResult()
-		return nil, context.DeadlineExceeded
-	}
 }
 
 // newTransport returns an HTTP transport based on http.DefaultTransport.

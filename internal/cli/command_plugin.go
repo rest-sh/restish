@@ -18,6 +18,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/procutil"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/spf13/cobra"
@@ -28,6 +29,7 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagCommands)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), err)
@@ -119,6 +121,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	cmd.SetErr(syncErr)
 
 	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
+	procutil.ConfigureCommandTreeKill(cmd.Context(), proc)
 	var pluginStderr bytes.Buffer
 	proc.Stderr = io.MultiWriter(cmd.ErrOrStderr(), &limitedWriter{w: &pluginStderr, limit: 4096})
 

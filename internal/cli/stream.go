@@ -100,8 +100,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	for {
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			c.warnf("SSE stream error: %v", readErr)
-			return nil
+			return fmt.Errorf("SSE stream error: %w", readErr)
 		}
 		line = strings.TrimRight(line, "\r\n")
 
@@ -188,6 +187,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	// Increase the max token size to 1 MiB to accommodate large NDJSON lines.
 	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
 	count := 0
+	stoppedByMax := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -199,12 +199,16 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		}
 		count++
 		if maxEvents > 0 && count >= maxEvents {
+			stoppedByMax = true
 			break
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		c.warnf("NDJSON stream error: %v", err)
+		if stoppedByMax {
+			return nil
+		}
+		return fmt.Errorf("NDJSON stream error: %w", err)
 	}
 	return nil
 }

@@ -55,6 +55,7 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 		"device_authorization_url": "https://auth.example.com/device",
 		"token_url":                "https://auth.example.com/token",
 		"audience":                 "https://api.example.com/",
+		"cache_key":                "local-cache-key",
 	}
 	if err := h.OnRequest(req, params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -64,6 +65,9 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 	}
 	if gotStart.Get("audience") != "https://api.example.com/" {
 		t.Fatalf("expected passthrough audience in device auth request, got %#v", gotStart)
+	}
+	if gotStart.Get("cache_key") != "" {
+		t.Fatalf("cache_key leaked into device auth request: %#v", gotStart)
 	}
 }
 

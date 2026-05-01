@@ -2,6 +2,7 @@ package output_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,14 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/output"
 )
+
+var errFailingWriter = errors.New("write failed")
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errFailingWriter
+}
 
 var (
 	fmtPluginBuildOnce sync.Once
@@ -111,6 +120,13 @@ func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
 	}
 }
 
+func TestTableFormatterPropagatesWriterError(t *testing.T) {
+	err := (&output.TableFormatter{}).Format(failingWriter{}, tableResp(), false)
+	if !errors.Is(err, errFailingWriter) {
+		t.Fatalf("error = %v, want %v", err, errFailingWriter)
+	}
+}
+
 // TestTableFormatterColumns verifies that --rsh-columns restricts the output.
 func TestTableFormatterColumns(t *testing.T) {
 	var buf bytes.Buffer
@@ -189,6 +205,13 @@ func TestGronFormatter_EscapesNonIdentifierKeys(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in gron output, got:\n%s", want, got)
 		}
+	}
+}
+
+func TestGronFormatterPropagatesWriterError(t *testing.T) {
+	err := (&output.GronFormatter{}).Format(failingWriter{}, &output.Response{Body: map[string]any{"x": 1}}, false)
+	if !errors.Is(err, errFailingWriter) {
+		t.Fatalf("error = %v, want %v", err, errFailingWriter)
 	}
 }
 

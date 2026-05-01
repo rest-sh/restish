@@ -237,6 +237,7 @@ func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":               true,
 		"authorize_url":            true,
+		"cache_key":                true,
 		"device_authorization_url": true,
 		"issuer_url":               true,
 		"redirect_port":            true,

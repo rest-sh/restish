@@ -169,6 +169,14 @@ func (w *signalWriter) String() string {
 
 var _ io.Writer = (*signalWriter)(nil)
 
+type errorReader struct {
+	err error
+}
+
+func (r errorReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
 // TestSSEMaxEvents verifies that --rsh-max-events 2 stops after 2 SSE events.
 func TestSSEMaxEvents(t *testing.T) {
 	mux := http.NewServeMux()
@@ -336,6 +344,50 @@ func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
 		if item["id"] != i+1 {
 			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
 		}
+	}
+}
+
+func TestNDJSONScannerErrorFailsCommand(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/x-ndjson"}},
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", 1024*1024+1) + "\n")),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/stream"})
+	if err == nil {
+		t.Fatal("expected NDJSON scanner error")
+	}
+	if !strings.Contains(err.Error(), "NDJSON stream error") {
+		t.Fatalf("expected NDJSON stream error, got %v", err)
+	}
+}
+
+func TestSSEReadErrorFailsCommand(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(errorReader{err: errors.New("broken stream")}),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/events"})
+	if err == nil {
+		t.Fatal("expected SSE read error")
+	}
+	if !strings.Contains(err.Error(), "SSE stream error") {
+		t.Fatalf("expected SSE stream error, got %v", err)
 	}
 }
 

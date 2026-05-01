@@ -443,12 +443,21 @@ func (a *app) pull(m *Meta, jobs int) error {
 		return err
 	}
 
+	var firstErr error
 	fetches := make([]*File, 0, len(updates))
 	for _, f := range updates {
 		if f.VersionRemote == "" {
 			delete(m.Files, f.Path)
 			_ = m.save()
-			if !f.isChangedLocal(true) {
+			changed, err := f.isChangedLocal(true)
+			if err != nil {
+				if warnErr := a.client.Warn("skipping delete due to invalid local JSON: " + f.Path); warnErr != nil && firstErr == nil {
+					firstErr = warnErr
+				}
+				if firstErr == nil {
+					firstErr = err
+				}
+			} else if !changed {
 				_ = os.Remove(f.Path)
 			}
 			continue
@@ -457,7 +466,6 @@ func (a *app) pull(m *Meta, jobs int) error {
 	}
 
 	results := a.fetchFiles(fetches, jobs)
-	var firstErr error
 	for result := range results {
 		if result.err != nil {
 			if firstErr == nil {
@@ -468,7 +476,17 @@ func (a *app) pull(m *Meta, jobs int) error {
 		f := result.file
 		applyFetchedFile(f, result.fetched)
 		_ = m.save()
-		if f.isChangedLocal(true) {
+		changed, err := f.isChangedLocal(true)
+		if err != nil {
+			if warnErr := a.client.Warn("skipping due to invalid local JSON: " + f.Path); warnErr != nil && firstErr == nil {
+				firstErr = warnErr
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if changed {
 			if err := a.client.Warn("skipping due to local edits: " + f.Path); err != nil && firstErr == nil {
 				firstErr = err
 			}
@@ -804,7 +822,11 @@ func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile,
 			continue
 		}
 		if f, ok := m.Files[path]; ok {
-			if f.isChangedLocal(true) {
+			changed, err := f.isChangedLocal(true)
+			if err != nil {
+				return nil, nil, err
+			}
+			if changed {
 				local = append(local, changedFile{Status: statusModified, File: f})
 			}
 			if f.VersionRemote == "" {
@@ -843,10 +865,13 @@ func (a *app) localDiff(meta *Meta, files []string) error {
 	for _, path := range files {
 		var original []byte
 		if f, ok := meta.Files[path]; ok {
-			if !f.isChangedLocal(false) {
+			changed, err := f.isChangedLocal(false)
+			if err != nil {
+				return err
+			}
+			if !changed {
 				continue
 			}
-			var err error
 			original, err = os.ReadFile(filepath.Join(metaDir, filepath.FromSlash(path)))
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
@@ -957,12 +982,8 @@ func applyFetchedFile(f *File, fetched *fetchedFile) {
 	if fetched == nil {
 		return
 	}
-	if fetched.etag != "" {
-		f.ETag = fetched.etag
-	}
-	if fetched.lastModified != "" {
-		f.LastModified = fetched.lastModified
-	}
+	f.ETag = fetched.etag
+	f.LastModified = fetched.lastModified
 }
 
 func normalizeJobs(jobs int) int {
@@ -1068,19 +1089,19 @@ func (f *File) reset() error {
 	return f.write(data)
 }
 
-func (f *File) isChangedLocal(ignoreDeleted bool) bool {
+func (f *File) isChangedLocal(ignoreDeleted bool) (bool, error) {
 	if len(f.Hash) == 0 {
-		return false
+		return false, nil
 	}
 	data, err := os.ReadFile(f.Path)
 	if err != nil {
-		return !ignoreDeleted
+		return !ignoreDeleted, nil
 	}
 	formatted, err := reformat(data)
 	if err != nil {
-		return false
+		return true, fmt.Errorf("%s contains invalid JSON: %w", f.Path, err)
 	}
-	return !bytes.Equal(hashBytes(formatted), f.Hash)
+	return !bytes.Equal(hashBytes(formatted), f.Hash), nil
 }
 
 func (c changedFile) String() string {

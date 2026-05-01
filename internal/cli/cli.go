@@ -341,6 +341,13 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		return nil, nil
 	}
 	api := c.cfg.APIs[apiName]
+	transport, closer, err := c.discoveryTransport(ctx, api, "default")
+	if err != nil {
+		return nil, err
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
 	cfg := spec.DiscoverConfig{
 		APIName:          apiName,
 		BaseURL:          api.BaseURL,
@@ -350,7 +357,7 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		OperationBase:    api.OperationBase,
 		ServerVariables:  effectiveServerVariables(api, "default"),
 		Version:          Version,
-		Transport:        c.baseHTTPTransport(),
+		Transport:        transport,
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
 	}
 	return spec.Discover(ctx, cfg, c.loaders)

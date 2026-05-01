@@ -2,6 +2,7 @@ package request
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"path"
 	"strings"
@@ -26,15 +27,8 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 	// No scheme present: prepend https://
 	if !strings.Contains(rawURL, "://") {
 		defaultScheme := "https://"
-		hostPort := rawURL
-		if slash := strings.IndexByte(hostPort, '/'); slash >= 0 {
-			hostPort = hostPort[:slash]
-		}
-		host := hostPort
-		if cut := strings.IndexByte(host, ':'); cut >= 0 {
-			host = host[:cut]
-		}
-		if host == "localhost" || strings.HasPrefix(host, "127.") {
+		host := hostFromURLWithoutScheme(rawURL)
+		if host == "localhost" || isLoopbackIP(host) {
 			defaultScheme = "http://"
 		}
 		rawURL = defaultScheme + rawURL
@@ -53,6 +47,9 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 		if override.Scheme != "http" && override.Scheme != "https" {
 			return "", fmt.Errorf("invalid --rsh-server %q: scheme must be http or https", serverOverride)
 		}
+		if override.Host == "" {
+			return "", fmt.Errorf("invalid --rsh-server %q: host is required", serverOverride)
+		}
 		u.Scheme = override.Scheme
 		u.Host = override.Host
 		if override.Path != "" && override.Path != "/" {
@@ -62,6 +59,30 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+func hostFromURLWithoutScheme(rawURL string) string {
+	hostPort := rawURL
+	if slash := strings.IndexByte(hostPort, '/'); slash >= 0 {
+		hostPort = hostPort[:slash]
+	}
+	if strings.HasPrefix(hostPort, "[") {
+		if end := strings.IndexByte(hostPort, ']'); end > 0 {
+			return hostPort[1:end]
+		}
+	}
+	if host, _, err := net.SplitHostPort(hostPort); err == nil {
+		return strings.Trim(host, "[]")
+	}
+	if cut := strings.IndexByte(hostPort, ':'); cut >= 0 {
+		return hostPort[:cut]
+	}
+	return hostPort
+}
+
+func isLoopbackIP(host string) bool {
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 func joinURLPath(prefix, requestPath string) string {

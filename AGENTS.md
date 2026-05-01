@@ -44,6 +44,10 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state â
 
 `site/` contains the source for the documentation site at https://rest.sh/. This is user-facing documentation and should be updated with new features and changes.
 
+## Local Planning and Review Notes
+
+`TODO.md` and `review.md` are local working files for planning, code reviews, and in-progress implementation notes only. They must never be committed to git history. Keep them ignored/untracked, and if they are accidentally staged, unstage them before committing.
+
 ## Skills
 
 Invoke these skills when relevant:

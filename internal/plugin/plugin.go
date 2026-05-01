@@ -17,6 +17,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/procutil"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
@@ -128,6 +129,7 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagManifest)
+	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: manifest exec: %w", filepath.Base(path), err)

@@ -35,6 +35,11 @@ func TestNormalize(t *testing.T) {
 			want: "http://127.0.0.1:8080/items",
 		},
 		{
+			name: "bracketed ipv6 loopback defaults to http",
+			raw:  "[::1]:8080/items",
+			want: "http://[::1]:8080/items",
+		},
+		{
 			name: "bare port with path",
 			raw:  ":8080/path",
 			want: "http://localhost:8080/path",
@@ -106,5 +111,15 @@ func TestNormalizeRejectsNonHTTPSOverrideSchemes(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "http or https") {
 		t.Fatalf("expected scheme validation error, got %v", err)
+	}
+}
+
+func TestNormalizeRejectsServerOverrideWithoutHost(t *testing.T) {
+	_, err := request.Normalize("https://api.example.com/items", "https:///v2")
+	if err == nil {
+		t.Fatal("expected missing override host to fail")
+	}
+	if !strings.Contains(err.Error(), "host is required") {
+		t.Fatalf("expected host validation error, got %v", err)
 	}
 }
