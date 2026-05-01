@@ -2,12 +2,16 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/tailscale/hujson"
 )
+
+// ErrPathNotFound reports that a requested JSONC path did not exist.
+var ErrPathNotFound = errors.New("config: path not found")
 
 // ConfigPatchOperation describes one config edit operation.
 // If Delete is true, Value is ignored and Path is removed.
@@ -190,7 +194,9 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 		} else if i < len(path)-2 {
 			// We found an existing member, but we still need to descend further
 			// Check if it's an object
-			if _, isObj := memberPtr.Value.Value.(*hujson.Object); !isObj && memberPtr.Value.Value != nil {
+			if isJSONNull(memberPtr.Value.Value) {
+				memberPtr.Value.Value = &hujson.Object{}
+			} else if _, isObj := memberPtr.Value.Value.(*hujson.Object); !isObj && memberPtr.Value.Value != nil {
 				// The value is not an object, error
 				remainingPath := path[i:]
 				return fmt.Errorf(
@@ -208,6 +214,8 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 
 	// Ensure we have an object at this level
 	if current.Value == nil {
+		current.Value = &hujson.Object{}
+	} else if isJSONNull(current.Value) {
 		current.Value = &hujson.Object{}
 	}
 
@@ -261,8 +269,12 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 	return nil
 }
 
-// deleteValueAtPath removes the value at the specified path. If the path doesn't
-// exist, it does nothing and returns no error.
+func isJSONNull(value hujson.ValueTrimmed) bool {
+	lit, ok := value.(hujson.Literal)
+	return ok && string(lit) == "null"
+}
+
+// deleteValueAtPath removes the value at the specified path.
 func deleteValueAtPath(root *hujson.Value, path []string) error {
 	if len(path) == 0 {
 		return nil
@@ -275,12 +287,12 @@ func deleteValueAtPath(root *hujson.Value, path []string) error {
 		key := path[i]
 
 		if current.Value == nil {
-			return nil // Path doesn't exist
+			return ErrPathNotFound
 		}
 
 		obj, ok := current.Value.(*hujson.Object)
 		if !ok {
-			return nil // Path doesn't exist
+			return ErrPathNotFound
 		}
 
 		// Find the key in the object
@@ -293,7 +305,7 @@ func deleteValueAtPath(root *hujson.Value, path []string) error {
 		}
 
 		if memberIndex < 0 {
-			return nil // Path doesn't exist
+			return ErrPathNotFound
 		}
 
 		current = &obj.Members[memberIndex].Value
@@ -301,12 +313,12 @@ func deleteValueAtPath(root *hujson.Value, path []string) error {
 
 	// Delete the final key from the parent object
 	if current.Value == nil {
-		return nil
+		return ErrPathNotFound
 	}
 
 	obj, ok := current.Value.(*hujson.Object)
 	if !ok {
-		return nil
+		return ErrPathNotFound
 	}
 
 	lastKey := path[len(path)-1]
@@ -318,7 +330,7 @@ func deleteValueAtPath(root *hujson.Value, path []string) error {
 		}
 	}
 
-	return nil
+	return ErrPathNotFound
 }
 
 // decodeJSONKey extracts the string value from a JSON-encoded key.

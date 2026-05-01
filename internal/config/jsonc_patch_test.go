@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -205,11 +207,36 @@ func TestJSONCDeletePath_MissingPathLeavesBytesUnchanged(t *testing.T) {
 	input := []byte(`{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`)
 
 	got, err := jsoncDeletePath(input, []string{"apis", "missing"})
-	if err != nil {
-		t.Fatalf("jsoncDeletePath: %v", err)
+	if !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("jsoncDeletePath err = %v, want ErrPathNotFound", err)
 	}
-	if string(got) != string(input) {
-		t.Fatalf("expected missing delete to leave bytes unchanged:\n%s", string(got))
+	if got != nil {
+		t.Fatalf("expected nil bytes on missing delete, got:\n%s", string(got))
+	}
+}
+
+func TestJSONCSetPathOverwritesNullParent(t *testing.T) {
+	input := []byte(`{"apis": null}`)
+
+	got, err := jsoncSetPath(input, []string{"apis", "demo", "base_url"}, "https://api.example.com")
+	if err != nil {
+		t.Fatalf("jsoncSetPath: %v", err)
+	}
+	if !strings.Contains(string(got), `"demo"`) || !strings.Contains(string(got), `"base_url"`) {
+		t.Fatalf("expected null parent overwritten with object, got:\n%s", got)
+	}
+}
+
+func TestClosestJSONFieldScalesWithLengthAndRunes(t *testing.T) {
+	fields := jsonFieldTypes(reflect.TypeOf(APIConfig{}))
+	if got := closestJSONField("allow_cross_origin_specs", fields); got != "allow_cross_origin_spec" {
+		t.Fatalf("long suggestion = %q, want allow_cross_origin_spec", got)
+	}
+	if got := closestJSONField("x", fields); got != "" {
+		t.Fatalf("short suggestion = %q, want none", got)
+	}
+	if got := levenshteinDistance("café", "cafe"); got != 1 {
+		t.Fatalf("rune levenshtein = %d, want 1", got)
 	}
 }
 

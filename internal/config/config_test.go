@@ -65,6 +65,24 @@ func TestLoad_MissingFile(t *testing.T) {
 	}
 }
 
+func TestSaveChmodsExistingConfigDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "config")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, "restish.json")
+	if err := config.Save(path, &config.Config{}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("dir mode = %#o, want 0700", got)
+	}
+}
+
 func TestLoadExplicit_MissingFileErrors(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "restish.json")
 	_, err := config.LoadExplicit(path)
@@ -90,7 +108,7 @@ func TestValidate_AuthRefRequiresKnownProfile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unknown auth_ref error")
 	}
-	if !strings.Contains(err.Error(), "unknown auth profile") {
+	if !strings.Contains(err.Error(), "auth_profiles is not defined") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -138,7 +156,7 @@ func TestValidate_CredentialAuthRefRequiresKnownProfile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unknown credential auth_ref error")
 	}
-	if !strings.Contains(err.Error(), "unknown auth profile") {
+	if !strings.Contains(err.Error(), "auth_profiles is not defined") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -667,6 +685,26 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 		if _, err := os.Stat(backupPath); err != nil {
 			t.Fatalf("expected backup file %s: %v", backupPath, err)
 		}
+	}
+}
+
+func TestLoad_MigrationRefusesExistingBackupDir(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "example": { "base": "https://api.example.com" }
+}`)
+	if err := os.MkdirAll(legacyDir+".bak.v1", 0o700); err != nil {
+		t.Fatalf("mkdir backup: %v", err)
+	}
+
+	_, err := config.Load(filepath.Join(legacyDir, "restish.json"))
+	if err == nil {
+		t.Fatal("expected existing backup directory error")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

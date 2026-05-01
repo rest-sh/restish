@@ -137,6 +137,11 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 	}
 
 	backupDir := source.dir + ".bak.v1"
+	if _, err := os.Stat(backupDir); err == nil {
+		return nil, fmt.Errorf("config: backup directory %s already exists; remove or rename it before retrying migration", backupDir)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("config: check backup directory %s: %w", backupDir, err)
+	}
 	if err := backupLegacyFiles(source, backupDir); err != nil {
 		return nil, err
 	}
@@ -321,9 +326,6 @@ func cloneStringMap(values map[string]string) map[string]string {
 func backupLegacyFiles(source *legacyConfigSource, backupDir string) error {
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		return fmt.Errorf("config: backup mkdir: %w", err)
-	}
-	if err := os.Chmod(backupDir, 0o700); err != nil {
-		return fmt.Errorf("config: backup chmod dir: %w", err)
 	}
 
 	for _, file := range []struct {

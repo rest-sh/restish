@@ -260,7 +260,7 @@ func parseConfigBytes(path string, data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(stripped))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
-		err = withUnknownFieldSuggestion(err, stripped, cfg)
+		err = withUnknownFieldSuggestion(err, stripped)
 		line, col := extractJSONErrorPosition(err, stripped)
 		return nil, &ParseError{Path: path, Err: err, Line: line, Column: col}
 	}
@@ -367,7 +367,10 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("apis.%s.profiles.%s: auth and auth_ref are mutually exclusive", name, profileName)
 			}
 			if prof.AuthRef != "" {
-				if cfg.AuthProfiles == nil || cfg.AuthProfiles[prof.AuthRef] == nil {
+				if cfg.AuthProfiles == nil {
+					return fmt.Errorf("apis.%s.profiles.%s.auth_ref: auth profile %q is referenced, but auth_profiles is not defined; define auth_profiles.%s first", name, profileName, prof.AuthRef, prof.AuthRef)
+				}
+				if cfg.AuthProfiles[prof.AuthRef] == nil {
 					return fmt.Errorf("apis.%s.profiles.%s.auth_ref: unknown auth profile %q", name, profileName, prof.AuthRef)
 				}
 			}
@@ -382,7 +385,10 @@ func Validate(cfg *Config) error {
 					return fmt.Errorf("apis.%s.profiles.%s.credentials.%s: auth and auth_ref are mutually exclusive", name, profileName, credentialID)
 				}
 				if credential.AuthRef != "" {
-					if cfg.AuthProfiles == nil || cfg.AuthProfiles[credential.AuthRef] == nil {
+					if cfg.AuthProfiles == nil {
+						return fmt.Errorf("apis.%s.profiles.%s.credentials.%s.auth_ref: auth profile %q is referenced, but auth_profiles is not defined; define auth_profiles.%s first", name, profileName, credentialID, credential.AuthRef, credential.AuthRef)
+					}
+					if cfg.AuthProfiles[credential.AuthRef] == nil {
 						return fmt.Errorf("apis.%s.profiles.%s.credentials.%s.auth_ref: unknown auth profile %q", name, profileName, credentialID, credential.AuthRef)
 					}
 				}
@@ -494,7 +500,7 @@ func extractJSONErrorPosition(err error, data []byte) (int, int) {
 	return 0, 0
 }
 
-func withUnknownFieldSuggestion(err error, stripped []byte, cfg Config) error {
+func withUnknownFieldSuggestion(err error, stripped []byte) error {
 	const prefix = "json: unknown field "
 	msg := err.Error()
 	if !strings.HasPrefix(msg, prefix) {
@@ -518,11 +524,7 @@ func withUnknownFieldSuggestion(err error, stripped []byte, cfg Config) error {
 			return fmt.Errorf("%w at %s", err, diag.Path)
 		}
 	}
-	best := closestJSONTag(field, reflect.TypeOf(cfg))
-	if best == "" {
-		return err
-	}
-	return fmt.Errorf("%w (did you mean %q?)", err, best)
+	return err
 }
 
 func collectUnknownFields(diags *ConfigDiagnostics, data []byte, node any, t reflect.Type, path string) {
@@ -612,7 +614,7 @@ func jsonFieldTypes(t reflect.Type) map[string]reflect.Type {
 
 func closestJSONField(input string, fields map[string]reflect.Type) string {
 	best := ""
-	bestDistance := 3
+	bestDistance := max(1, utf8.RuneCountInString(input)/4) + 1
 	for name := range fields {
 		d := levenshteinDistance(strings.ToLower(input), strings.ToLower(name))
 		if d < bestDistance {
@@ -648,53 +650,28 @@ func jsonFieldPosition(data []byte, field string) (int, int) {
 	return byteOffsetToLineColumn(data, int64(idx+1))
 }
 
-func closestJSONTag(input string, t reflect.Type) string {
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return ""
-	}
-	best := ""
-	bestDistance := 3
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		if tag == "" || tag == "-" {
-			continue
-		}
-		name := strings.Split(tag, ",")[0]
-		if name == "" {
-			continue
-		}
-		d := levenshteinDistance(strings.ToLower(input), strings.ToLower(name))
-		if d < bestDistance {
-			bestDistance = d
-			best = name
-		}
-	}
-	return best
-}
-
 func levenshteinDistance(a, b string) int {
 	if a == b {
 		return 0
 	}
-	if len(a) == 0 {
-		return len(b)
+	ar := []rune(a)
+	br := []rune(b)
+	if len(ar) == 0 {
+		return len(br)
 	}
-	if len(b) == 0 {
-		return len(a)
+	if len(br) == 0 {
+		return len(ar)
 	}
-	prev := make([]int, len(b)+1)
+	prev := make([]int, len(br)+1)
 	for j := range prev {
 		prev[j] = j
 	}
-	for i := 1; i <= len(a); i++ {
-		curr := make([]int, len(b)+1)
+	for i := 1; i <= len(ar); i++ {
+		curr := make([]int, len(br)+1)
 		curr[0] = i
-		for j := 1; j <= len(b); j++ {
+		for j := 1; j <= len(br); j++ {
 			cost := 0
-			if a[i-1] != b[j-1] {
+			if ar[i-1] != br[j-1] {
 				cost = 1
 			}
 			insert := curr[j-1] + 1
@@ -704,7 +681,7 @@ func levenshteinDistance(a, b string) int {
 		}
 		prev = curr
 	}
-	return prev[len(b)]
+	return prev[len(br)]
 }
 
 // ParseError is returned when the config file contains invalid JSON or
@@ -759,19 +736,13 @@ func LockSiblingFile(path string) (io.Closer, error) {
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
 	dir := filepath.Dir(path)
 
-	// Check if directory exists before creating
-	_, err := os.Stat(dir)
-	dirExists := err == nil
-
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
 	}
-
-	// Only chmod if we just created the directory
-	if !dirExists {
-		if err := os.Chmod(dir, dirMode); err != nil {
-			return fmt.Errorf("config: chmod dir: %w", err)
-		}
+	// Re-apply the intended private mode even when the directory already
+	// existed; config directories may contain credentials and tokens.
+	if err := os.Chmod(dir, dirMode); err != nil {
+		return fmt.Errorf("config: chmod dir: %w", err)
 	}
 
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")

@@ -403,8 +403,13 @@ func (c *CLI) Run(args []string) error {
 
 	// On first run (no config file yet), suggest shell setup if on a supported
 	// shell so users discover the noglob alias before hitting the foot-gun.
-	if _, statErr := os.Stat(c.configFilePath()); errors.Is(statErr, os.ErrNotExist) && output.IsTerminal(c.Stderr) {
-		c.hintShellSetup()
+	if _, statErr := os.Stat(c.configFilePath()); errors.Is(statErr, os.ErrNotExist) {
+		if os.Getenv("RSH_CONFIG_DIR") != "" && !c.explicitConfigFile {
+			c.infof("no config at %s; using defaults", c.configFilePath())
+		}
+		if output.IsTerminal(c.Stderr) {
+			c.hintShellSetup()
+		}
 	}
 
 	cfg, err := c.loadConfig()

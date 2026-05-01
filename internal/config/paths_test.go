@@ -53,6 +53,29 @@ func TestPaths_CacheFromXDGCacheHome(t *testing.T) {
 	}
 }
 
+func TestPaths_IgnoresRelativeXDGDirs(t *testing.T) {
+	oldGOOS := runtimeGOOS
+	oldUserHome := userHomeDirFunc
+	runtimeGOOS = "darwin"
+	userHomeDirFunc = func() (string, error) { return "/Users/me", nil }
+	t.Setenv("RSH_CONFIG_DIR", "")
+	t.Setenv("RSH_CACHE_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "relative-config")
+	t.Setenv("XDG_CACHE_HOME", "relative-cache")
+	defer func() {
+		runtimeGOOS = oldGOOS
+		userHomeDirFunc = oldUserHome
+	}()
+
+	p := NewPaths()
+	if got, want := p.Config(), filepath.Join("/Users/me", ".config", "restish"); got != want {
+		t.Fatalf("Config() = %q, want %q", got, want)
+	}
+	if got, want := p.Cache(), filepath.Join("/Users/me", ".cache", "restish"); got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
+}
+
 func TestPaths_UnixDefaultsUseDotConfigAndDotCache(t *testing.T) {
 	oldGOOS := runtimeGOOS
 	oldUserConfig := userConfigDirFunc
