@@ -15,7 +15,10 @@ import (
 	"github.com/rest-sh/restish/v2/internal/procutil"
 )
 
-const maxExternalToolStderrBytes = 4096
+const (
+	maxExternalToolStderrBytes = 4096
+	maxExternalToolBodyBytes   = 1 << 20
+)
 
 // ExternalTool delegates authentication to an external program. The program
 // receives the outbound request as JSON on stdin and returns header updates
@@ -84,9 +87,13 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 	// Read and restore the request body if we need to forward it.
 	bodyStr := ""
 	if req.Body != nil && !omitBody {
-		bodyBytes, err := io.ReadAll(req.Body)
+		bodyBytes, err := io.ReadAll(io.LimitReader(req.Body, maxExternalToolBodyBytes+1))
 		if err != nil {
 			return fmt.Errorf("external-tool auth: reading request body: %w", err)
+		}
+		if len(bodyBytes) > maxExternalToolBodyBytes {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes[:maxExternalToolBodyBytes]))
+			return fmt.Errorf("external-tool auth: request body exceeds %d bytes; set omitbody=true or pass a digest instead", maxExternalToolBodyBytes)
 		}
 		bodyStr = string(bodyBytes)
 		req.Body = io.NopCloser(strings.NewReader(bodyStr))

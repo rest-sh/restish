@@ -24,15 +24,36 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const maxCommandPluginDiscoveryOutputBytes = 1 << 20
+const maxCommandPluginStderrBytes = 64 << 10
+
 func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	timeout := commandPluginDiscoveryTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagCommands)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
-	out, err := cmd.Output()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("plugin %s: command discovery stdout: %w", filepath.Base(path), err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("plugin %s: command discovery start: %w", filepath.Base(path), err)
+	}
+	out, readErr := io.ReadAll(io.LimitReader(stdout, maxCommandPluginDiscoveryOutputBytes+1))
+	waitErr := cmd.Wait()
+	if readErr != nil {
+		return nil, fmt.Errorf("plugin %s: command discovery read: %w", filepath.Base(path), readErr)
+	}
+	if len(out) > maxCommandPluginDiscoveryOutputBytes {
+		return nil, fmt.Errorf("plugin %s: command discovery output exceeded %d bytes", filepath.Base(path), maxCommandPluginDiscoveryOutputBytes)
+	}
+	if waitErr != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("plugin %s: command discovery timed out after %s: %w", filepath.Base(path), timeout, ctx.Err())
+		}
+		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), waitErr)
 	}
 	if len(out) == 0 {
 		return nil, nil
@@ -45,6 +66,15 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 		return nil, fmt.Errorf("plugin %s: commands decode: %w", filepath.Base(path), err)
 	}
 	return resp.Commands, nil
+}
+
+func commandPluginDiscoveryTimeout() time.Duration {
+	if value := strings.TrimSpace(os.Getenv("RSH_COMMAND_PLUGIN_DISCOVERY_TIMEOUT")); value != "" {
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 10 * time.Second
 }
 
 func (c *CLI) addCommandPlugins(root *cobra.Command) {
@@ -123,7 +153,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
 	procutil.ConfigureCommandTreeKill(cmd.Context(), proc)
 	var pluginStderr bytes.Buffer
-	proc.Stderr = io.MultiWriter(cmd.ErrOrStderr(), &limitedWriter{w: &pluginStderr, limit: 4096})
+	proc.Stderr = io.MultiWriter(cmd.ErrOrStderr(), &limitedWriter{w: &pluginStderr, limit: maxCommandPluginStderrBytes})
 
 	stdinPipe, err := proc.StdinPipe()
 	if err != nil {
@@ -277,12 +307,6 @@ func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{
 		err  error
 	}
 	reads := make(chan chunk, 4)
-	if stdin, ok := c.Stdin.(*os.File); ok && stdin != os.Stdin {
-		go func() {
-			<-done
-			_ = stdin.Close()
-		}()
-	}
 
 	go func() {
 		buf := make([]byte, 32*1024)
@@ -334,6 +358,10 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.
 		var msg pluginwire.DoneMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return true, err
+		}
+		if msg.ExitCode < 0 || msg.ExitCode > 255 {
+			c.warnf("command plugin returned out-of-range exit_code %d; clamping to 255", msg.ExitCode)
+			msg.ExitCode = 255
 		}
 		if msg.ExitCode != 0 {
 			return true, &ExitCodeError{Code: msg.ExitCode}

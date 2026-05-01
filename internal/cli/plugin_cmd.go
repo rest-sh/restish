@@ -584,6 +584,9 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 		if extracted+h.Size > pluginInstallLimits.ArchiveExtractBytes {
 			return "", fmt.Errorf("install: extract %s: plugin archive exceeds extracted limit of %d bytes", h.Name, pluginInstallLimits.ArchiveExtractBytes)
 		}
+		// filepath.Base intentionally flattens accepted archive paths, including
+		// POSIX names that contain backslashes, so extraction never recreates
+		// archive-controlled directories.
 		dest := filepath.Join(tempDir, filepath.Base(h.Name))
 		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
@@ -628,6 +631,9 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("install: extract %s: %w", f.Name, err)
 		}
+		// filepath.Base intentionally flattens accepted archive paths, including
+		// POSIX names that contain backslashes, so extraction never recreates
+		// archive-controlled directories.
 		dest := filepath.Join(tempDir, filepath.Base(f.Name))
 		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {

@@ -302,7 +302,10 @@ func (c *CommandClient) readLoop() {
 		case MsgTypeStdinData:
 			if c.StdinDataHandler != nil {
 				var msg StdinDataMsg
-				_ = DecMode.Unmarshal(raw, &msg)
+				if err := DecMode.Unmarshal(raw, &msg); err != nil {
+					c.failPending(fmt.Errorf("plugin: decode stdin-data: %w", err))
+					return
+				}
 				c.StdinDataHandler(msg.Data)
 			}
 		case MsgTypeStdinClose:
