@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -56,7 +57,7 @@ type globalFlagsContextKey struct{}
 // parseGlobalFlags reads persistent flags from cmd (which includes all
 // inherited persistent flags from parent commands) and merges RSH_* env vars.
 // Env vars have lower precedence than explicit flag values.
-func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
+func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	var gf GlobalFlags
 
 	// StringArray flags
@@ -128,9 +129,11 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 		gf.Timeout = v
 	}
 	if v := os.Getenv("RSH_RETRY"); v != "" && !cmd.Flags().Changed("rsh-retry") {
-		if n, err := strconv.Atoi(v); err == nil {
-			gf.Retry = n
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return gf, fmt.Errorf("invalid RSH_RETRY %q: %w", v, err)
 		}
+		gf.Retry = n
 	}
 	if v := os.Getenv("RSH_RETRY_MAX_WAIT"); v != "" && !cmd.Flags().Changed("rsh-retry-max-wait") {
 		gf.RetryMaxWait = v
@@ -143,7 +146,7 @@ func parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
 		gf.Auth = v
 	}
 
-	return gf
+	return gf, nil
 }
 
 func splitEnvList(v string) []string {

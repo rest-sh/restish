@@ -49,7 +49,10 @@ commands for registered APIs via OpenAPI 3.`
 		// bare-URL dispatch: "restish https://api.example.com").
 		Args: cobra.ArbitraryArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			gf := parseGlobalFlags(cmd)
+			gf, err := parseGlobalFlags(cmd)
+			if err != nil {
+				return err
+			}
 			cmd.SetContext(withGlobalFlags(cmd.Context(), gf))
 			return nil
 		},

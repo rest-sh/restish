@@ -374,6 +374,22 @@ func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 	}
 }
 
+func TestInvalidRSHRetryFailsFast(t *testing.T) {
+	t.Setenv("RSH_RETRY", "abc")
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with invalid RSH_RETRY")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected invalid RSH_RETRY error")
+	}
+	if !strings.Contains(err.Error(), "invalid RSH_RETRY") {
+		t.Fatalf("expected invalid RSH_RETRY error, got %v", err)
+	}
+}
+
 func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

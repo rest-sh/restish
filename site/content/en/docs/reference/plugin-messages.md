@@ -67,8 +67,8 @@ loader, formatter, or TLS signer task and return one result or error.
 restish plugin debug ./path/to/plugin
 ```
 
-Use debug output to confirm message type, payload shape, and whether the plugin
-sent `done` for command workflows.
+Use streaming debug output to confirm message type, payload shape, and whether
+the plugin sent `done` for command workflows.
 
 ## Related Pages
 

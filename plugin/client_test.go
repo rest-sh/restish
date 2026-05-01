@@ -198,6 +198,9 @@ func TestCommandClientFetchAPISpecContextTimesOut(t *testing.T) {
 	if req.Name != "example" || req.Profile != "staging" {
 		t.Fatalf("request = %#v", req)
 	}
+	if req.RequestID == "" {
+		t.Fatalf("request_id was not set: %#v", req)
+	}
 
 	err := <-errCh
 	if err == nil {
@@ -207,8 +210,151 @@ func TestCommandClientFetchAPISpecContextTimesOut(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, loaded := client.specs.Load("example\x00staging"); loaded {
-		t.Fatal("timed-out API spec request was not removed from pending map")
+	if _, loaded := client.replies.Load(replyRequestKey(MsgTypeAPISpecResponse, req.RequestID)); loaded {
+		t.Fatal("timed-out API spec request was not removed from pending replies")
+	}
+}
+
+func TestCommandClientFetchAPISpecConcurrentSameAPIUsesRequestID(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	hostErr := make(chan error, 1)
+	go func() {
+		dec := NewDecoder(pluginToHostR)
+		var reqs []APISpecMsg
+		for len(reqs) < 2 {
+			var req APISpecMsg
+			if err := dec.ReadMessage(&req); err != nil {
+				hostErr <- err
+				return
+			}
+			if req.Type != MsgTypeAPISpec || req.Name != "example" || req.Profile != "staging" || req.RequestID == "" {
+				hostErr <- fmt.Errorf("unexpected API spec request: %#v", req)
+				return
+			}
+			reqs = append(reqs, req)
+		}
+		if reqs[0].RequestID == reqs[1].RequestID {
+			hostErr <- fmt.Errorf("duplicate request_id %q", reqs[0].RequestID)
+			return
+		}
+		for i := len(reqs) - 1; i >= 0; i-- {
+			req := reqs[i]
+			if err := WriteMessage(hostToPluginW, APISpecResponseMsg{
+				Type:      MsgTypeAPISpecResponse,
+				RequestID: req.RequestID,
+				Name:      req.Name,
+				Profile:   req.Profile,
+				Raw:       []byte(req.RequestID),
+			}); err != nil {
+				hostErr <- err
+				return
+			}
+		}
+		hostErr <- nil
+	}()
+
+	var wg sync.WaitGroup
+	results := make(chan string, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, err := client.FetchAPISpecContext(context.Background(), "example", "staging")
+			if err != nil {
+				t.Errorf("FetchAPISpecContext: %v", err)
+				return
+			}
+			results <- string(resp.Raw)
+		}()
+	}
+	wg.Wait()
+	close(results)
+	if err := <-hostErr; err != nil {
+		t.Fatalf("host: %v", err)
+	}
+
+	seen := map[string]bool{}
+	for result := range results {
+		seen[result] = true
+	}
+	if len(seen) != 2 {
+		t.Fatalf("expected two distinct request_id responses, got %#v", seen)
+	}
+}
+
+func TestCommandClientFetchAPISpecIgnoresLateTimedOutReply(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	dec := NewDecoder(pluginToHostR)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := client.FetchAPISpecContext(ctx, "example", "staging")
+		firstErr <- err
+	}()
+	var firstReq APISpecMsg
+	if err := dec.ReadMessage(&firstReq); err != nil {
+		t.Fatalf("read first API spec request: %v", err)
+	}
+	cancel()
+	if err := <-firstErr; err == nil {
+		t.Fatal("expected first API spec request to time out")
+	}
+
+	secondErr := make(chan error, 1)
+	go func() {
+		resp, err := client.FetchAPISpecContext(context.Background(), "example", "staging")
+		if err != nil {
+			secondErr <- err
+			return
+		}
+		if string(resp.Raw) != "second" {
+			secondErr <- fmt.Errorf("Raw = %q, want second", resp.Raw)
+			return
+		}
+		secondErr <- nil
+	}()
+	var secondReq APISpecMsg
+	if err := dec.ReadMessage(&secondReq); err != nil {
+		t.Fatalf("read second API spec request: %v", err)
+	}
+	if firstReq.RequestID == secondReq.RequestID {
+		t.Fatalf("request_id reused: %q", firstReq.RequestID)
+	}
+	if err := WriteMessage(hostToPluginW, APISpecResponseMsg{
+		Type:      MsgTypeAPISpecResponse,
+		RequestID: firstReq.RequestID,
+		Name:      "example",
+		Profile:   "staging",
+		Raw:       []byte("late"),
+	}); err != nil {
+		t.Fatalf("write late response: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, APISpecResponseMsg{
+		Type:      MsgTypeAPISpecResponse,
+		RequestID: secondReq.RequestID,
+		Name:      "example",
+		Profile:   "staging",
+		Raw:       []byte("second"),
+	}); err != nil {
+		t.Fatalf("write second response: %v", err)
+	}
+	if err := <-secondErr; err != nil {
+		t.Fatalf("second FetchAPISpecContext: %v", err)
 	}
 }
 

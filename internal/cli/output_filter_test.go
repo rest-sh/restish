@@ -17,7 +17,10 @@ func newFilterTestCommand(t *testing.T, raw bool) *cobra.Command {
 		t.Fatalf("set rsh-raw: %v", err)
 	}
 	// Simulate PersistentPreRunE: parse flags and store GlobalFlags on context.
-	gf := parseGlobalFlags(cmd)
+	gf, err := parseGlobalFlags(cmd)
+	if err != nil {
+		t.Fatalf("parseGlobalFlags: %v", err)
+	}
 	cmd.SetContext(withGlobalFlags(context.Background(), gf))
 	return cmd
 }

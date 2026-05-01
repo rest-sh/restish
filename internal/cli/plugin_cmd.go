@@ -779,33 +779,68 @@ func (c *CLI) runPluginDebug(cmd *cobra.Command, args []string) error {
 	pluginCmd.Stdin = c.Stdin
 	pluginCmd.Stderr = c.Stderr
 
-	// Capture stdout for CBOR decoding only; raw CBOR bytes must not be written
-	// to the terminal since they would corrupt it.
-	stdoutBuf := &cappedBuffer{limit: maxPluginDebugCaptureBytes}
-	pluginCmd.Stdout = stdoutBuf
+	// Decode stdout as CBOR incrementally. Raw CBOR bytes must not be written to
+	// the terminal since they would corrupt it.
+	stdout, err := pluginCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("plugin debug: stdout pipe: %w", err)
+	}
 
-	if err := pluginCmd.Run(); err != nil {
+	if err := pluginCmd.Start(); err != nil {
+		return fmt.Errorf("plugin debug: start: %w", err)
+	}
+	decodeCh := make(chan pluginDebugDecodeResult, 1)
+	go func() {
+		n, err := decodePluginDebugStream(stdout, c.Stderr)
+		decodeCh <- pluginDebugDecodeResult{bytes: n, err: err}
+	}()
+
+	if err := pluginCmd.Wait(); err != nil {
 		// Non-zero exit is reported but not fatal in debug mode.
 		fmt.Fprintf(c.Stderr, "plugin exited: %v\n", err)
 	}
-
-	// Attempt to decode all CBOR messages from the captured stdout.
-	data := stdoutBuf.Bytes()
-	if len(data) > 0 {
-		dec := pluginwire.NewDecoder(bytes.NewReader(data))
-		for {
-			var v any
-			if decErr := dec.ReadMessage(&v); decErr != nil {
-				break
-			}
-			b, _ := json.MarshalIndent(v, "", "  ")
-			fmt.Fprintf(c.Stderr, "[debug] decoded CBOR message:\n%s\n", b)
-		}
+	result := <-decodeCh
+	if result.err != nil {
+		return result.err
 	}
-	if stdoutBuf.Truncated() {
-		c.warnf("plugin debug capture truncated after %d bytes", maxPluginDebugCaptureBytes)
+	if result.bytes > maxPluginDebugCaptureBytes {
+		c.warnf("plugin debug decoded more than %d stdout bytes", maxPluginDebugCaptureBytes)
 	}
 	return nil
+}
+
+type pluginDebugDecodeResult struct {
+	bytes int64
+	err   error
+}
+
+func decodePluginDebugStream(r io.Reader, w io.Writer) (int64, error) {
+	counter := &countingReader{r: r}
+	dec := pluginwire.NewDecoder(counter)
+	for {
+		var v any
+		if err := dec.ReadMessage(&v); err != nil {
+			if !errors.Is(err, io.EOF) {
+				_, _ = io.Copy(io.Discard, counter)
+			}
+			return counter.n, nil
+		}
+		b, _ := json.MarshalIndent(v, "", "  ")
+		if _, err := fmt.Fprintf(w, "[debug] decoded CBOR message:\n%s\n", b); err != nil {
+			return counter.n, err
+		}
+	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	r.n += int64(n)
+	return n, err
 }
 
 // terminalContextFlags returns the standard terminal context flags that Restish

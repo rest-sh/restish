@@ -37,8 +37,8 @@ When discovery fails, check file permissions, install location, manifest fields,
 and protocol version.
 
 Run `restish plugin debug ./path/to/plugin` when a plugin launches but does not
-behave correctly. Debug output is meant to reveal protocol messages without
-requiring you to attach a debugger to the host CLI.
+behave correctly. Debug output prints decoded protocol messages as the plugin
+emits them, without requiring you to attach a debugger to the host CLI.
 
 ## Related Pages
 

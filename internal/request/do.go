@@ -278,23 +278,28 @@ func doWithResponseTimeout(client *http.Client, req *http.Request, cancel contex
 	resultCh := make(chan doResult, 1)
 	go func() {
 		resp, err := client.Do(req)
-		resultCh <- doResult{resp: resp, err: err}
-	}()
-
-	drainLateResult := func() {
-		go func() {
-			result := <-resultCh
-			if result.resp != nil && result.resp.Body != nil {
-				_ = result.resp.Body.Close()
+		result := doResult{resp: resp, err: err}
+		select {
+		case <-req.Context().Done():
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
 			}
-		}()
-	}
+			return
+		default:
+		}
+		select {
+		case resultCh <- result:
+		case <-req.Context().Done():
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+		}
+	}()
 
 	select {
 	case result := <-resultCh:
 		return result.resp, result.err
 	case <-req.Context().Done():
-		drainLateResult()
 		return nil, req.Context().Err()
 	}
 }

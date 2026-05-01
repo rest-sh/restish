@@ -119,30 +119,15 @@ func (c *CommandClient) FetchAPISpec(name string) (*APISpecResponseMsg, error) {
 // API name and optional profile, returning when ctx is canceled if the host does
 // not reply.
 func (c *CommandClient) FetchAPISpecContext(ctx context.Context, name, profile string) (*APISpecResponseMsg, error) {
-	replyCh := make(chan specReply, 1)
-	key := specRequestKey(name, profile)
-	if _, loaded := c.specs.LoadOrStore(key, replyCh); loaded {
-		return nil, fmt.Errorf("plugin: duplicate API spec request %q", name)
-	}
-	defer c.specs.Delete(key)
-
-	c.startReadLoop()
-	if errValue := c.readErr.Load(); errValue != nil {
-		return nil, errValue.(error)
-	}
-	if err := c.WriteMessage(APISpecMsg{Type: MsgTypeAPISpec, Name: name, Profile: profile}); err != nil {
+	var reply APISpecResponseMsg
+	if err := c.roundTrip(ctx, MsgTypeAPISpecResponse, &APISpecMsg{
+		Type:    MsgTypeAPISpec,
+		Name:    name,
+		Profile: profile,
+	}, &reply); err != nil {
 		return nil, err
 	}
-	var reply specReply
-	select {
-	case reply = <-replyCh:
-	case <-ctx.Done():
-		return nil, fmt.Errorf("plugin: API spec request %q timed out or was canceled: %w", name, ctx.Err())
-	}
-	if reply.err != nil {
-		return nil, reply.err
-	}
-	return &reply.resp, nil
+	return &reply, nil
 }
 
 // ListAPIs asks the host for configured API names.

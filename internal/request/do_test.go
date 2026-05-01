@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -343,6 +344,31 @@ func TestDo_HeaderTimeoutDoesNotWaitForNonCooperativeTransport(t *testing.T) {
 	case <-closed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("late response body was not closed")
+	}
+}
+
+func TestDo_TimeoutDoesNotSpawnDrainWaiterForStuckTransport(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
+		Timeout: 20 * time.Millisecond,
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			close(started)
+			<-release
+			return response(http.StatusOK, "late"), nil
+		}),
+	})
+	defer close(release)
+	if err != context.DeadlineExceeded {
+		t.Fatalf("err = %v, want %v", err, context.DeadlineExceeded)
+	}
+	<-started
+
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	stack := string(buf[:n])
+	if got := strings.Count(stack, "internal/request.doWithResponseTimeout.func"); got > 1 {
+		t.Fatalf("doWithResponseTimeout goroutines = %d, want at most 1\n%s", got, stack)
 	}
 }
 

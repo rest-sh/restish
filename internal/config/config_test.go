@@ -816,6 +816,48 @@ func TestLoadValidatesCommandLayout(t *testing.T) {
 	}
 }
 
+func TestLoadValidatesRetryMaxWait(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "retry_max_wait": "250ms"
+    }
+  }
+}`)
+	if _, err := config.Load(path); err != nil {
+		t.Fatalf("expected valid retry_max_wait to load: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "not duration", raw: `"not-a-duration"`, want: "invalid duration"},
+		{name: "zero", raw: `"0s"`, want: "greater than 0"},
+		{name: "negative", raw: `"-1s"`, want: "greater than 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "retry_max_wait": %s
+    }
+  }
+}`, tc.raw))
+			_, err := config.Load(path)
+			if err == nil {
+				t.Fatal("expected invalid retry_max_wait to be rejected")
+			}
+			if !strings.Contains(err.Error(), "apis.example.retry_max_wait") || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected retry_max_wait error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestLoad_MigratesLegacyFullURLOperationBaseWithWarning(t *testing.T) {
 	home := t.TempDir()
 	setLegacyConfigEnv(t, home)

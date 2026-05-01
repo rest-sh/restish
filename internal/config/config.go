@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -342,6 +343,9 @@ func Validate(cfg *Config) error {
 		if err := ValidateCommandLayout(api.CommandLayout); err != nil {
 			return fmt.Errorf("apis.%s.command_layout: %w", name, err)
 		}
+		if err := ValidateRetryMaxWait(api.RetryMaxWait); err != nil {
+			return fmt.Errorf("apis.%s.retry_max_wait: %w", name, err)
+		}
 		if api.OperationBase != "" {
 			if err := ValidateBaseURLForOperationBase(api.BaseURL); err != nil {
 				return fmt.Errorf("apis.%s.base_url: %w", name, err)
@@ -433,6 +437,22 @@ func ValidateCommandLayout(raw string) error {
 	default:
 		return fmt.Errorf("must be \"flat\" or \"tags\"")
 	}
+}
+
+// ValidateRetryMaxWait enforces the retry_max_wait duration contract.
+func ValidateRetryMaxWait(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return err
+	}
+	if d <= 0 {
+		return fmt.Errorf("must be greater than 0")
+	}
+	return nil
 }
 
 // ValidateOperationBase enforces the v2 contract that operation_base is an

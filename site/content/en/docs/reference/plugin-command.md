@@ -23,7 +23,7 @@ restish plugin debug ./restish-csv
 
 Use `plugin list` when a command or formatter is missing. Use `plugin debug`
 when a plugin starts but does not behave as expected; it prints decoded protocol
-messages so you can see where host and plugin disagree.
+messages as they arrive so you can see where host and plugin disagree.
 
 ## Notes
 
