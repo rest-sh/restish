@@ -11,8 +11,8 @@ job, reads the result, and continues the host request pipeline.
 ## Hook Types
 
 - `auth`: produce or mutate request auth.
-- `request`: inspect or mutate outgoing requests.
-- `response`: inspect or mutate incoming responses.
+- `request-middleware`: inspect or mutate outgoing requests.
+- `response-middleware`: inspect or mutate incoming responses.
 - `loader`: load API descriptions from additional content types or sources.
 - `formatter`: render normalized responses as new output formats.
 
@@ -30,7 +30,7 @@ restish https://api.rest.sh/images -o csv
 
 ```json
 {
-  "type": "request",
+  "type": "request-middleware",
   "request": {
     "method": "GET",
     "uri": "https://api.rest.sh/items"

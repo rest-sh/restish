@@ -28,6 +28,7 @@ type Loader interface {
 // references. Plain loaders may ignore it.
 type LoadOptions struct {
 	Context          context.Context
+	ContentType      string
 	SourceURL        string
 	LocalPath        string
 	AllowCrossOrigin bool
@@ -151,6 +152,9 @@ func load(contentType string, body []byte, loaders []Loader) (*APISpec, error) {
 }
 
 func loadWithOptions(contentType string, body []byte, loaders []Loader, opts LoadOptions) (*APISpec, error) {
+	if opts.ContentType == "" {
+		opts.ContentType = contentType
+	}
 	best := pickLoader(contentType, body, loaders)
 	if best == nil {
 		return nil, nil
@@ -180,6 +184,10 @@ func loadWithLoaderOptions(loader Loader, body []byte, opts LoadOptions) (*APISp
 	case OpenAPILoader:
 		return l.LoadWithOptions(body, opts)
 	case *OpenAPILoader:
+		return l.LoadWithOptions(body, opts)
+	case interface {
+		LoadWithOptions([]byte, LoadOptions) (*APISpec, error)
+	}:
 		return l.LoadWithOptions(body, opts)
 	default:
 		return loader.Load(body)

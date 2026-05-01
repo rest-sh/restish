@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -232,11 +235,44 @@ func hookRequestForPlugin(req *http.Request, p plugin.Plugin) pluginwire.HookReq
 		redactHookRequestHeaders(headers)
 		uri = redactHookRequestURI(req.URL)
 	}
-	return pluginwire.HookRequest{
+	hookReq := pluginwire.HookRequest{
 		Method:  req.Method,
 		URI:     uri,
 		Headers: headers,
 	}
+	if body, ok := hookRequestBody(req); ok {
+		sum := sha256.Sum256(body)
+		hookReq.BodySHA256 = hex.EncodeToString(sum[:])
+		if p.Manifest.NeedsAuthSecrets || manifestRequiresFeature(p.Manifest, pluginwire.FeatureRequestFinalBody) {
+			hookReq.Body = body
+		}
+	}
+	return hookReq
+}
+
+func hookRequestBody(req *http.Request) ([]byte, bool) {
+	if req == nil || req.GetBody == nil {
+		return nil, false
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	defer body.Close()
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+func manifestRequiresFeature(m plugin.Manifest, feature string) bool {
+	for _, required := range m.RequiredFeatures {
+		if required == feature {
+			return true
+		}
+	}
+	return false
 }
 
 func redactHookRequestHeaders(headers map[string][]string) {

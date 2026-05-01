@@ -113,6 +113,13 @@ already prepared the request object and transport options.
 If a future middleware contract needs broader request mutation, that should be a
 new explicit hook capability rather than an undocumented side effect.
 
+Request-signing plugins may require the final request body. Restish includes a
+SHA-256 hash of replayable request bodies in hook request metadata. Plugins that
+declare the `request.final_body` required feature, or plugins that opt into
+auth-secret forwarding, may also receive the final body bytes. Non-replayable
+bodies are omitted because the host must not consume the stream before sending
+the request.
+
 ### Response Middleware Hook
 
 The `response-middleware` hook receives:
@@ -125,6 +132,10 @@ The plugin may:
 - return `{"drop": true}` to suppress output entirely
 - return `{"follow": {...}}` to tell Restish to make a follow-up request
 - return `{"response": {...}}` to replace body fields or merge headers
+
+The response update's `headers` object is a partial update: keys returned by the
+plugin replace those individual response header values, while omitted inbound
+headers remain unchanged.
 
 The follow-up path is especially important: the plugin asks Restish to issue
 the request, so auth, retries, TLS, and other core behaviors still apply.
@@ -145,8 +156,10 @@ registered `spec.Loader` instances at startup.
 When a matching content type is detected, Restish sends the raw body to the
 plugin and expects back:
 
+- `content_type`: the detected source content type, when known
+- `source_url` or `local_path`: source metadata, when known
 - `body`: an OpenAPI document as bytes or a string
-- optional `content_type`
+- optional response `content_type`
 
 The plugin does not return Restish's internal API model directly. Instead, it
 returns an OpenAPI document, and Restish parses that through the normal

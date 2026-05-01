@@ -231,6 +231,26 @@ type FormatterRequest struct {
 	Response FormatterResponse `cbor:"response" json:"response"`
 }
 
+// LoaderRequest is sent to plugins registered for the "loader" hook. Body
+// contains the source document bytes. ContentType, SourceURL, and LocalPath are
+// metadata from discovery or cache when the host has it.
+type LoaderRequest struct {
+	Type        string `cbor:"type" json:"type"`
+	Body        []byte `cbor:"body" json:"body"`
+	ContentType string `cbor:"content_type,omitempty" json:"content_type,omitempty"`
+	SourceURL   string `cbor:"source_url,omitempty" json:"source_url,omitempty"`
+	LocalPath   string `cbor:"local_path,omitempty" json:"local_path,omitempty"`
+}
+
+// LoaderResponse is returned by a "loader" hook plugin. Body must contain an
+// OpenAPI document in JSON or YAML form. ContentType may describe that returned
+// body when it differs from the input document's content type.
+type LoaderResponse struct {
+	// Body is an OpenAPI document as []byte or string.
+	Body        any    `cbor:"body" json:"body"`
+	ContentType string `cbor:"content_type,omitempty" json:"content_type,omitempty"`
+}
+
 // ResponseMsg asks the host to format and display a response using the
 // configured output formatter (same as a regular API response).
 type ResponseMsg struct {
@@ -339,9 +359,11 @@ type TLSSignerShutdownMsg struct {
 
 // HookRequest carries the current HTTP request state forwarded to hook plugins.
 type HookRequest struct {
-	Method  string              `cbor:"method" json:"method"`
-	URI     string              `cbor:"uri" json:"uri"`
-	Headers map[string][]string `cbor:"headers" json:"headers"`
+	Method     string              `cbor:"method" json:"method"`
+	URI        string              `cbor:"uri" json:"uri"`
+	Headers    map[string][]string `cbor:"headers" json:"headers"`
+	Body       []byte              `cbor:"body,omitempty" json:"body,omitempty"`
+	BodySHA256 string              `cbor:"body_sha256,omitempty" json:"body_sha256,omitempty"`
 }
 
 // HookRequestHeaderUpdate holds headers that a hook plugin wants to set or

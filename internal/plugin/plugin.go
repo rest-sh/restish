@@ -22,9 +22,26 @@ import (
 )
 
 // CurrentPluginAPIVersion is the highest plugin protocol version this build of
-// Restish understands. Plugins that declare a higher version may use protocol
-// features that this host cannot handle; a warning is emitted during discovery.
+// Restish requires plugins to ask for. The manifest restish_api_version field is
+// a minimum required version, so a plugin built against a future Restish can
+// still load when it only needs features this host supports.
 const CurrentPluginAPIVersion = 2
+
+var knownHooks = map[string]bool{
+	"auth":                true,
+	"request-middleware":  true,
+	"response-middleware": true,
+	"loader":              true,
+	"formatter":           true,
+	"command":             true,
+	"tls-signer":          true,
+}
+
+var supportedRequiredFeatures = map[string]bool{
+	pluginwire.FeatureManifestRequiredFeatures: true,
+	pluginwire.FeatureLoaderSourceMetadata:     true,
+	pluginwire.FeatureRequestFinalBody:         true,
+}
 
 // Manifest is an alias for the canonical plugin.Manifest defined in the public
 // plugin package. Using the same type eliminates the dual-maintenance risk that
@@ -43,10 +60,11 @@ type Plugin struct {
 // manifestCacheFile, when non-empty, enables a CBOR on-disk manifest cache
 // keyed by plugin path + mtime. This avoids subprocess spawns on every
 // invocation when the plugin binary has not changed. When duplicate plugin
-// identities are found, the first plugin in directory order is loaded.
+// identities are found, the first plugin in directory order is loaded and later
+// duplicates are reported through errFn.
 func Discover(pluginDir string, errFn func(path string, err error), manifestCacheFile string, stderr io.Writer) []Plugin {
 	seenPaths := map[string]bool{}
-	seenNames := map[string]bool{}
+	seenNames := map[string]string{}
 	var plugins []Plugin
 
 	cache := loadManifestCache(manifestCacheFile)
@@ -83,10 +101,13 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 			}
 			return
 		}
-		if seenNames[m.Name] {
+		if firstPath, ok := seenNames[m.Name]; ok {
+			if errFn != nil {
+				errFn(path, fmt.Errorf("plugin %s: duplicate manifest name %q already declared by %s", filepath.Base(path), m.Name, filepath.Base(firstPath)))
+			}
 			return
 		}
-		seenNames[m.Name] = true
+		seenNames[m.Name] = path
 		plugins = append(plugins, Plugin{Path: path, Manifest: *m})
 	}
 
@@ -153,14 +174,41 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 		return nil, fmt.Errorf("plugin %s: manifest missing or invalid restish_api_version", filepath.Base(path))
 	}
 	if m.RestishAPIVersion > CurrentPluginAPIVersion {
-		// Warn but still load: the plugin may work for the features it actually uses.
-		if warningWriter != nil {
-			fmt.Fprintf(warningWriter, "warning: plugin %s declares restish_api_version %d but this host only supports %d; some features may not work\n",
-				filepath.Base(path), m.RestishAPIVersion, CurrentPluginAPIVersion)
-		}
+		return nil, fmt.Errorf("plugin %s: requires restish_api_version %d, but this host supports %d", filepath.Base(path), m.RestishAPIVersion, CurrentPluginAPIVersion)
+	}
+	if err := validateManifest(m); err != nil {
+		return nil, fmt.Errorf("plugin %s: %w", filepath.Base(path), err)
 	}
 
 	return &m, nil
+}
+
+func validateManifest(m Manifest) error {
+	declaredHooks := make(map[string]bool, len(m.Hooks))
+	for _, hook := range m.Hooks {
+		if !knownHooks[hook] {
+			return fmt.Errorf("manifest declares unknown hook %q", hook)
+		}
+		declaredHooks[hook] = true
+	}
+	for _, feature := range m.RequiredFeatures {
+		if !supportedRequiredFeatures[feature] {
+			return fmt.Errorf("manifest requires unsupported feature %q", feature)
+		}
+	}
+	if declaredHooks["formatter"] && len(m.FormatterNames) == 0 {
+		return fmt.Errorf("manifest declares formatter hook but omits formatter_names")
+	}
+	if !declaredHooks["formatter"] && len(m.FormatterNames) > 0 {
+		return fmt.Errorf("manifest sets formatter_names without declaring formatter hook")
+	}
+	if declaredHooks["loader"] && len(m.LoaderContentTypes) == 0 {
+		return fmt.Errorf("manifest declares loader hook but omits loader_content_types")
+	}
+	if !declaredHooks["loader"] && len(m.LoaderContentTypes) > 0 {
+		return fmt.Errorf("manifest sets loader_content_types without declaring loader hook")
+	}
+	return nil
 }
 
 // manifestCacheEntry stores one plugin's cached manifest along with the

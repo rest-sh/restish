@@ -512,6 +512,28 @@ func TestLoaderPlugin(t *testing.T) {
 	}
 }
 
+func TestLoaderPluginReceivesSourceMetadata(t *testing.T) {
+	skipNoHookPlugin(t)
+	t.Setenv("RSH_HOOK_EXPECT_LOADER_METADATA", "1")
+
+	pl := spec.PluginLoader{
+		PluginPath:   testHookPluginBin,
+		PluginName:   "hookplugin",
+		ContentTypes: []string{"application/x-hook-api"},
+	}
+	apiSpec, err := pl.LoadWithOptions([]byte(`{"some":"body"}`), spec.LoadOptions{
+		ContentType: "application/x-hook-api",
+		SourceURL:   "https://example.test/openapi.hook",
+		LocalPath:   "/tmp/openapi.hook",
+	})
+	if err != nil {
+		t.Fatalf("LoadWithOptions: %v", err)
+	}
+	if apiSpec == nil || apiSpec.Document == nil {
+		t.Fatal("LoadWithOptions: expected parsed APISpec")
+	}
+}
+
 // TestLoaderPluginRegistration verifies that loader plugins discovered at
 // startup are registered in the CLI's loader list.
 func TestLoaderPluginRegistration(t *testing.T) {

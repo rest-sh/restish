@@ -65,6 +65,29 @@ plugin's declaration of identity and capability, including at least:
 Manifest compatibility is checked before the plugin is allowed to participate in
 runtime behavior.
 
+The compatibility policy is intentionally additive:
+
+- `restish_api_version` is the minimum host/plugin API version the plugin
+  requires, not the version it happened to be built with.
+- future protocol versions must remain backward compatible with older
+  manifest meanings.
+- unknown optional manifest fields are ignored.
+- `required_features` is the fail-closed mechanism for additive behavior that
+  a plugin cannot operate without.
+- breaking changes require a new major protocol family rather than changing
+  the meaning of an existing field.
+
+Plugins that ask for an API version newer than the host supports, declare an
+unknown hook, or list an unsupported required feature are rejected during
+manifest loading with a plugin-specific diagnostic. Plugins that only include
+new optional fields remain loadable.
+
+Known hook names are `auth`, `request-middleware`, `response-middleware`,
+`loader`, `formatter`, `command`, and `tls-signer`. Hook-specific manifest
+fields are part of that declaration: formatter plugins must declare
+`formatter_names`, loader plugins must declare `loader_content_types`, and
+those fields are rejected when the corresponding hook is absent.
+
 Manifest and startup protocol fields are part of the public Go API for plugin
 authors. They should have godoc that explains behavior and compatibility
 expectations, and exported constants should be used for host-provided startup
@@ -114,10 +137,80 @@ The canonical public module path for plugins is
 against that module path rather than an old repository path or internal
 packages.
 
-Good plugin candidates include provider-specific pagination strategies,
-Swagger/OpenAPI 2.0 loaders, rate/load-test workflows, and auth systems with
-nonstandard token exchange. These features are useful extension points but
-should not force the core request path to grow provider-specific policy.
+## Future Plugin Candidates
+
+Future plugin ideas are useful design probes. They help keep the protocol broad
+enough for real extensions without turning the host into a generic automation
+runtime. The examples below should stay in mind when evaluating compatibility,
+message shapes, config access, streaming behavior, and helper APIs.
+
+Auth and credential plugins:
+
+- AWS SigV4, custom HMAC, Hawk, or other request-signing schemes.
+- OAuth provider-specific token exchange, SSO, and device-code variations that
+  are too policy-heavy for the built-in auth handlers.
+- Vault, 1Password, pass, keychain, or cloud secret-manager token fetchers.
+- API-specific auth refreshers that need host-owned prompting and redaction.
+
+Request and response middleware plugins:
+
+- Provider-specific pagination strategies, including page/count APIs and
+  continuation tokens that are not exposed as standard links.
+- `202 Accepted` polling workflows that follow operation-status URLs until a
+  terminal response is available.
+- Correlation IDs, idempotency keys, audit headers, and organization-specific
+  request metadata.
+- Error-envelope normalizers that convert provider-specific problem responses
+  into a stable shape before formatting.
+
+Loader plugins:
+
+- Swagger/OpenAPI 2.0 conversion into OpenAPI 3.x.
+- Postman, Insomnia, Bruno, or other collection formats converted into OpenAPI.
+- GraphQL introspection conversion experiments for API-aware command
+  generation.
+- Vendor catalog formats that need a small translation layer before Restish can
+  use the normal OpenAPI path.
+
+Formatter plugins:
+
+- Markdown tables, GitHub-flavored issue/comment output, and human-readable
+  reports for docs or tickets.
+- NDJSON, Prometheus exposition, JUnit, TAP, or other automation-oriented
+  formats.
+- HTML or static report generation for responses that need to be shared outside
+  a terminal.
+- Domain-specific renderers for logs, metrics, traces, or audit events.
+
+Command plugins:
+
+- API smoke tests, workflow checks, and contract probes driven by registered
+  APIs.
+- Light rate-limit, retry, or load-test experiments that need pacing,
+  concurrency, and summary reporting.
+- API diff, changelog, or compatibility-report commands.
+- Mock-server generation, SDK snippet generation, or OpenAPI linting workflows.
+- Import/export commands for collections or profile setup.
+
+TLS signer plugins:
+
+- macOS Keychain, Windows CNG, TPM, SSH agent, cloud KMS, and other external
+  signing backends.
+- Enterprise signers that require an external approval or token-session
+  lifecycle.
+
+These candidates put pressure on several protocol questions:
+
+- request-signing plugins may need access to request bodies, body hashes,
+  canonical header ordering, or the final URL after all host preparation;
+- response-follow plugins may need headers and request bodies, not only method
+  and URI;
+- loader plugins need enough source metadata to produce useful diagnostics and
+  choose the right conversion path;
+- command plugins need ergonomic helpers for every supported host capability,
+  not only delegated HTTP and API spec loading;
+- compatibility negotiation needs to distinguish "this plugin was built with a
+  newer API" from "this plugin requires a feature this host cannot provide."
 
 ## Why Separate Plugin Types
 
@@ -139,6 +232,8 @@ universal:
 - the host surfaces plugin stderr when it is helpful for debugging
 - the host should not wait forever on a hung plugin
 - successful completion still requires process cleanup
+- per-request hook plugins should start in under 100 ms; expensive work should
+  move to command plugins or a future long-lived hook design
 
 The category-specific docs define the exact session model.
 

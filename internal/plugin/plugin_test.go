@@ -195,7 +195,7 @@ func TestLoadManifest_NonZeroExit(t *testing.T) {
 	}
 }
 
-func TestLoadManifest_FutureVersion_WarnsButLoads(t *testing.T) {
+func TestLoadManifest_FutureRequiredVersionFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
 	}
@@ -209,15 +209,64 @@ func TestLoadManifest_FutureVersion_WarnsButLoads(t *testing.T) {
 
 	var warnBuf bytes.Buffer
 
-	got, err := loadManifest(p, &warnBuf)
-	if err != nil {
-		t.Fatalf("LoadManifest: %v", err)
+	_, err := loadManifest(p, &warnBuf)
+	if err == nil {
+		t.Fatal("expected future minimum API version to fail")
 	}
-	if got == nil {
-		t.Fatal("expected non-nil manifest for future-version plugin")
+	if !strings.Contains(err.Error(), "requires restish_api_version") {
+		t.Fatalf("expected minimum-version error, got %v", err)
 	}
-	if warnBuf.Len() == 0 {
-		t.Error("expected a warning to be emitted")
+	if warnBuf.Len() != 0 {
+		t.Fatalf("future required version should fail without warning, got %q", warnBuf.String())
+	}
+}
+
+func TestLoadManifest_CompatibilityMatrix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	tests := []struct {
+		name    string
+		json    string
+		wantErr string
+	}{
+		{
+			name: "older minimum version",
+			json: `{"name":"older","restish_api_version":1,"hooks":["auth"]}`,
+		},
+		{
+			name: "current minimum version",
+			json: `{"name":"current","restish_api_version":2,"hooks":["auth"]}`,
+		},
+		{
+			name: "newer compatible optional field",
+			json: `{"name":"newer-compatible","restish_api_version":2,"hooks":["auth"],"future_optional":true}`,
+		},
+		{
+			name:    "unsupported required feature",
+			json:    `{"name":"unsupported","restish_api_version":2,"hooks":["auth"],"required_features":["future.magic"]}`,
+			wantErr: `unsupported feature "future.magic"`,
+		},
+		{
+			name: "supported required feature",
+			json: `{"name":"supported","restish_api_version":2,"hooks":["loader"],"loader_content_types":["application/x-test"],"required_features":["loader.source_metadata"]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := writeScript(t, dir, "restish-test", fmt.Sprintf("#!/bin/sh\necho '%s'", tt.json))
+			_, err := LoadManifest(p)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("LoadManifest error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadManifest: %v", err)
+			}
+		})
 	}
 }
 
@@ -288,7 +337,7 @@ func TestDiscover_IgnoresNonRestishExecutables(t *testing.T) {
 	}
 }
 
-func TestDiscover_FutureVersionWarningUsesStderrWriter(t *testing.T) {
+func TestDiscover_FutureRequiredVersionReportsError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
 	}
@@ -301,12 +350,15 @@ func TestDiscover_FutureVersionWarningUsesStderrWriter(t *testing.T) {
 	writeScript(t, dir, "restish-future", script)
 
 	var warnings bytes.Buffer
-	plugins := Discover(dir, nil, "", &warnings)
-	if len(plugins) != 1 {
-		t.Fatalf("expected future-version plugin to load, got %d plugins", len(plugins))
+	var errs []string
+	plugins := Discover(dir, func(_ string, err error) {
+		errs = append(errs, err.Error())
+	}, "", &warnings)
+	if len(plugins) != 0 {
+		t.Fatalf("expected future-version plugin to be skipped, got %d plugins", len(plugins))
 	}
-	if got := warnings.String(); !strings.Contains(got, "declares restish_api_version") {
-		t.Fatalf("expected future-version warning through Discover writer, got %q", got)
+	if len(errs) != 1 || !strings.Contains(errs[0], "requires restish_api_version") {
+		t.Fatalf("expected future-version error through Discover errFn, got %v", errs)
 	}
 }
 
@@ -320,9 +372,77 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 	writeScript(t, dir, "restish-myplugin", script)
 	writeScript(t, dir, "restish-myplugin-copy", script)
 
-	plugins := Discover(dir, nil, "", nil)
+	var errs []string
+	plugins := Discover(dir, func(_ string, err error) {
+		errs = append(errs, err.Error())
+	}, "", nil)
 	if len(plugins) != 1 {
 		t.Errorf("expected 1 unique plugin, got %d", len(plugins))
+	}
+	if len(errs) != 1 || !strings.Contains(errs[0], "duplicate manifest name") {
+		t.Fatalf("expected duplicate-name error, got %v", errs)
+	}
+}
+
+func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	tests := []struct {
+		name    string
+		m       Manifest
+		wantErr string
+	}{
+		{
+			name:    "unknown hook",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"request"}},
+			wantErr: `unknown hook "request"`,
+		},
+		{
+			name:    "formatter hook requires names",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"formatter"}},
+			wantErr: "omits formatter_names",
+		},
+		{
+			name:    "formatter names require hook",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, FormatterNames: []string{"bad"}},
+			wantErr: "formatter_names without declaring formatter hook",
+		},
+		{
+			name:    "loader hook requires content types",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"loader"}},
+			wantErr: "omits loader_content_types",
+		},
+		{
+			name:    "loader content types require hook",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, LoaderContentTypes: []string{"application/x-bad"}},
+			wantErr: "loader_content_types without declaring loader hook",
+		},
+		{
+			name: "valid formatter",
+			m: Manifest{
+				Name:              "good",
+				RestishAPIVersion: CurrentPluginAPIVersion,
+				Hooks:             []string{"formatter"},
+				FormatterNames:    []string{"good"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := writeScript(t, dir, "restish-test", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(tt.m)))
+			_, err := LoadManifest(p)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("LoadManifest error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadManifest: %v", err)
+			}
+		})
 	}
 }
 

@@ -18,6 +18,18 @@ const (
 	StartupFlagStderrTTY = "--rsh-stderr-tty"
 )
 
+const (
+	// FeatureManifestRequiredFeatures means the host understands manifest
+	// required_features validation.
+	FeatureManifestRequiredFeatures = "manifest.required_features"
+	// FeatureLoaderSourceMetadata means loader hooks receive content_type,
+	// source_url, and local_path metadata when available.
+	FeatureLoaderSourceMetadata = "loader.source_metadata"
+	// FeatureRequestFinalBody means auth and request-middleware hooks may
+	// receive the final request body bytes when Restish has them.
+	FeatureRequestFinalBody = "request.final_body"
+)
+
 // Manifest is the metadata a plugin reports when called with
 // --rsh-plugin-manifest. Plugin authors populate and write this with
 // WriteManifest instead of manually marshalling CBOR.
@@ -28,10 +40,16 @@ type Manifest struct {
 	Version string `cbor:"version,omitempty" json:"version,omitempty"`
 	// Description is a short human-readable summary of the plugin.
 	Description string `cbor:"description,omitempty" json:"description,omitempty"`
-	// RestishAPIVersion is the plugin protocol version the plugin expects.
+	// RestishAPIVersion is the minimum host/plugin protocol version required by
+	// this plugin. Restish treats future protocol versions as backward
+	// compatible unless RequiredFeatures asks for unsupported behavior.
 	RestishAPIVersion int `cbor:"restish_api_version" json:"restish_api_version"`
 	// Hooks lists plugin capabilities such as "command", "formatter", or "auth".
 	Hooks []string `cbor:"hooks,omitempty" json:"hooks,omitempty"`
+	// RequiredFeatures lists additive protocol features that must be supported
+	// by the host before this plugin may run. Unknown optional manifest fields
+	// are ignored, but unknown required features fail manifest loading.
+	RequiredFeatures []string `cbor:"required_features,omitempty" json:"required_features,omitempty"`
 	// FormatterNames lists the output format names this plugin registers when
 	// the "formatter" hook is declared.
 	FormatterNames []string `cbor:"formatter_names,omitempty" json:"formatter_names,omitempty"`

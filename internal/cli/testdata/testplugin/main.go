@@ -215,9 +215,17 @@ func runHookPlugin() {
 	case "formatter":
 		runFormatter(dec, raw)
 	case "loader":
-		_ = plugin.WriteMessage(os.Stdout, map[string]any{
-			"content_type": "application/openapi+json",
-			"body":         minimalOpenAPI,
+		var msg plugin.LoaderRequest
+		_ = plugin.DecMode.Unmarshal(raw, &msg)
+		if os.Getenv("RSH_HOOK_EXPECT_LOADER_METADATA") == "1" {
+			if msg.ContentType != "application/x-hook-api" || msg.SourceURL != "https://example.test/openapi.hook" || msg.LocalPath != "/tmp/openapi.hook" {
+				fmt.Fprintf(os.Stderr, "loader metadata mismatch: content_type=%q source_url=%q local_path=%q\n", msg.ContentType, msg.SourceURL, msg.LocalPath)
+				os.Exit(1)
+			}
+		}
+		_ = plugin.WriteMessage(os.Stdout, plugin.LoaderResponse{
+			ContentType: "application/openapi+json",
+			Body:        minimalOpenAPI,
 		})
 	default:
 		os.Exit(0)
