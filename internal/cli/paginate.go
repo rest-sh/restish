@@ -124,8 +124,8 @@ func (c *CLI) runPagination(
 			c.warnf("pagination cycle detected at page %d URL %q; stopping", seenPage, nextURL)
 			break
 		}
-		if crosses, displayURL := paginationCrossesOrigin(firstURL, nextURL); crosses {
-			c.warnf("pagination next URL crosses origin; stopping before %q", displayURL)
+		if crosses, displayURL, reason := paginationCrossesOrigin(firstURL, nextURL); crosses {
+			c.warnf("pagination next URL %s; stopping before %q", reason, displayURL)
 			break
 		}
 		page++
@@ -182,19 +182,32 @@ func (c *CLI) runPagination(
 	return nil
 }
 
-func paginationCrossesOrigin(firstURL, nextURL string) (bool, string) {
+// paginationCrossesOrigin reports whether following nextURL from firstURL
+// should be blocked. It returns (true, displayURL, reason) when:
+//   - the host or port differs (reason: "crosses origin")
+//   - the scheme is downgraded from HTTPS to HTTP (reason: "downgrades HTTPS to HTTP")
+//
+// HTTP-to-HTTPS upgrades on the same host are permitted.
+func paginationCrossesOrigin(firstURL, nextURL string) (bool, string, string) {
 	base, err := url.Parse(firstURL)
 	if err != nil || base.Host == "" {
-		return false, nextURL
+		return false, nextURL, ""
 	}
 	next, err := url.Parse(nextURL)
 	if err != nil {
-		return false, nextURL
+		return false, nextURL, ""
 	}
 	if !next.IsAbs() {
 		next = base.ResolveReference(next)
 	}
-	return !sameHostPort(base, next), next.String()
+	if !sameHostPort(base, next) {
+		return true, next.String(), "crosses origin"
+	}
+	// Block HTTPS → HTTP scheme downgrade; HTTP → HTTPS upgrade is permitted.
+	if strings.EqualFold(base.Scheme, "https") && strings.EqualFold(next.Scheme, "http") {
+		return true, next.String(), "downgrades HTTPS to HTTP"
+	}
+	return false, next.String(), ""
 }
 
 func sameHostPort(a, b *url.URL) bool {

@@ -122,7 +122,9 @@ func TestPaginationStopsOnCrossOriginNextURL(t *testing.T) {
 	}
 }
 
-func TestPaginationAllowsSchemeChangeOnSameHostPort(t *testing.T) {
+// TestPaginationAllowsHTTPToHTTPSUpgrade verifies that pagination from HTTP
+// to HTTPS on the same host is permitted (scheme upgrade is safe).
+func TestPaginationAllowsHTTPToHTTPSUpgrade(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -148,8 +150,50 @@ func TestPaginationAllowsSchemeChangeOnSameHostPort(t *testing.T) {
 	if !strings.Contains(got, "1") || !strings.Contains(got, "2") {
 		t.Fatalf("expected both pages after http->https same-host pagination, got:\n%s", got)
 	}
-	if strings.Contains(errOut.String(), "pagination next URL crosses origin") {
-		t.Fatalf("unexpected cross-origin warning:\n%s", errOut.String())
+	if strings.Contains(errOut.String(), "crosses origin") || strings.Contains(errOut.String(), "downgrades") {
+		t.Fatalf("unexpected pagination warning:\n%s", errOut.String())
+	}
+}
+
+// TestPaginationBlocksHTTPSToHTTPDowngrade verifies that pagination from HTTPS
+// to HTTP on the same host is blocked (scheme downgrade is unsafe).
+func TestPaginationBlocksHTTPSToHTTPDowngrade(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	downgradeRequests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Scheme == "http" {
+			downgradeRequests++
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`[999]`)),
+				Request:    r,
+			}, nil
+		}
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers.Set("Link", `<http://api.example.com/items?page=2>; rel="next"`)
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[1,2,3]`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if downgradeRequests != 0 {
+		t.Fatalf("downgraded page requested %d times, want 0", downgradeRequests)
+	}
+	if strings.Contains(out.String(), "999") {
+		t.Fatalf("downgraded page leaked into output:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "downgrades HTTPS to HTTP") {
+		t.Fatalf("expected HTTPS downgrade warning, got:\n%s", errOut.String())
 	}
 }
 
