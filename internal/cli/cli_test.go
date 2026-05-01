@@ -104,7 +104,7 @@ func TestHelpHidesRequestFlagsForNonRequestCommands(t *testing.T) {
 				t.Fatalf("%v should omit request global %s by default:\n%s", args, hidden, got)
 			}
 		}
-		for _, visible := range []string{"--rsh-config", "--rsh-verbose"} {
+		for _, visible := range []string{"--help-all", "--rsh-config", "--rsh-verbose"} {
 			if !strings.Contains(got, visible) {
 				t.Fatalf("%v should keep core global %s visible:\n%s", args, visible, got)
 			}
@@ -214,20 +214,54 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 		"Registered APIs",
 		"Utilities",
 		"Help",
-		"Request Options",
-		"Output Options",
-		"TLS Options",
-		"Pagination and Streaming Options",
-		"Cache and Retry Options",
 		"General Options",
+		"--help-all",
+		"--rsh-config",
+		"--rsh-verbose",
 		"zapi",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected grouped help to contain %q:\n%s", want, got)
 		}
 	}
+	for _, hidden := range []string{
+		"Request Options",
+		"Output Options",
+		"TLS Options",
+		"Pagination and Streaming Options",
+		"Cache and Retry Options",
+		"--rsh-header",
+		"--rsh-output-format",
+		"--rsh-insecure",
+		"--rsh-no-paginate",
+	} {
+		if strings.Contains(got, hidden) {
+			t.Errorf("expected default root help to omit %q:\n%s", hidden, got)
+		}
+	}
 	if strings.Contains(got, "Additional Commands:") {
 		t.Fatalf("expected all top-level commands to be grouped:\n%s", got)
+	}
+
+	c, out, _ = newTestCLI(t)
+	if err := c.Run([]string{"restish", "--help-all", "--help"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got = out.String()
+	for _, want := range []string{
+		"Request Options",
+		"Output Options",
+		"Auth and Profile Options",
+		"TLS Options",
+		"Pagination and Streaming Options",
+		"Cache and Retry Options",
+		"General Options",
+		"--rsh-auth",
+		"--rsh-config",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected root --help-all to contain %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -329,7 +363,7 @@ func TestRun_UsesInjectedHTTPTransport(t *testing.T) {
 
 func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 	c, out, _ := newTestCLI(t)
-	if err := c.Run([]string{"restish", "--help"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "--help"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.Contains(out.String(), "default -1") || strings.Contains(out.String(), "(default -1)") {

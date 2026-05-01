@@ -978,7 +978,26 @@ func TestGeneratedCommandHelpFocusesOperationAndHelpAllShowsGlobals(t *testing.T
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnv(t, mux)
+
 	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("api help: %v", err)
+	}
+	apiHelp := out.String()
+	if !strings.Contains(apiHelp, "--help-all") {
+		t.Fatalf("generated API help should point to --help-all, got:\n%s", apiHelp)
+	}
+
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help-all", "--help"}); err != nil {
+		t.Fatalf("api help-all: %v", err)
+	}
+	apiHelpAll := out.String()
+	if !strings.Contains(apiHelpAll, "--rsh-auth") || !strings.Contains(apiHelpAll, "--rsh-config") {
+		t.Fatalf("generated API help-all should include auth and config flags, got:\n%s", apiHelpAll)
+	}
+
+	c, out = env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-item", "--help"}); err != nil {
 		t.Fatalf("focused help: %v", err)
 	}
@@ -1006,6 +1025,16 @@ func TestGeneratedCommandHelpFocusesOperationAndHelpAllShowsGlobals(t *testing.T
 	full := out.String()
 	if !strings.Contains(full, "Global Flags:") || !strings.Contains(full, "--rsh-header") {
 		t.Fatalf("help-all should include inherited global flags, got:\n%s", full)
+	}
+	authGroupIdx := strings.Index(full, "Auth and Profile Options")
+	authFlagIdx := strings.Index(full, "--rsh-auth")
+	configGroupIdx := strings.Index(full, "General Options")
+	configFlagIdx := strings.Index(full, "--rsh-config")
+	if authGroupIdx < 0 || authFlagIdx < authGroupIdx {
+		t.Fatalf("help-all should group --rsh-auth under auth options, got:\n%s", full)
+	}
+	if configGroupIdx < 0 || configFlagIdx < configGroupIdx {
+		t.Fatalf("help-all should group --rsh-config under general options, got:\n%s", full)
 	}
 }
 
