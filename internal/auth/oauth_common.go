@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"golang.org/x/net/idna"
 )
 
@@ -373,11 +375,7 @@ func redactSecretFields(v any) {
 	switch typed := v.(type) {
 	case map[string]any:
 		for key, value := range typed {
-			lower := strings.ToLower(key)
-			if strings.Contains(lower, "secret") ||
-				strings.Contains(lower, "password") ||
-				strings.Contains(lower, "assertion") ||
-				strings.Contains(lower, "token") {
+			if secrets.IsOAuthErrorBodyKey(key) {
 				typed[key] = "***"
 				continue
 			}
@@ -422,7 +420,8 @@ func applyTokenAuthHeader(req *http.Request, params map[string]string) {
 	if err != nil || method != authMethodClientSecretBasic {
 		return
 	}
-	req.SetBasicAuth(params["client_id"], params["client_secret"])
+	encoded := base64.StdEncoding.EncodeToString([]byte(url.QueryEscape(params["client_id"]) + ":" + url.QueryEscape(params["client_secret"])))
+	req.Header.Set("Authorization", "Basic "+encoded)
 }
 
 func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {

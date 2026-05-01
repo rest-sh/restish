@@ -20,6 +20,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/input"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -716,7 +717,7 @@ func redactSensitiveJSON(value any) {
 	switch v := value.(type) {
 	case map[string]any:
 		for key, item := range v {
-			if isSensitiveQueryParam(key) {
+			if secrets.IsJSONBodyKey(key) || secrets.IsHeaderName(key) {
 				v[key] = "<redacted>"
 				continue
 			}
@@ -750,13 +751,13 @@ func redactedRequestURL(u *url.URL) string {
 }
 
 func isSensitiveQueryParam(name string) bool {
-	return request.IsCredentialQueryParam(name)
+	return secrets.IsQueryParamName(name)
 }
 
 // isSensitiveHeader reports whether a header name carries credentials and
 // should be redacted in verbose output.
 func isSensitiveHeader(name string) bool {
-	return request.IsCredentialHeader(name)
+	return secrets.IsHeaderName(name)
 }
 
 // isAPIShortName reports whether arg (with no path separator) exactly matches a

@@ -43,6 +43,13 @@ The response cache is a disk-backed, size-bounded cache with LRU-style
 eviction. Entries are grouped under per-host directories so cache management can
 operate on one API host or the entire cache tree.
 
+Credentialed requests may use the cache only when Restish can partition entries
+by API/profile namespace. API-aware requests set the namespace to
+`<api>:<profile>`, so a response cached for one profile is not reused by another
+profile on the same host. Direct URL requests that carry credential headers or
+credential-looking query parameters still bypass the cache because there is no
+stable profile namespace to key on.
+
 The size bound is part of the public design, not just an implementation detail.
 If a size-related config value exists, it should affect actual eviction policy.
 

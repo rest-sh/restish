@@ -55,7 +55,7 @@ func TestCacheSecondRequestServedFromCache(t *testing.T) {
 	}
 }
 
-func TestCacheAuthenticatedRequestBypassesCache(t *testing.T) {
+func TestCacheAuthenticatedProfileRequestUsesProfileNamespace(t *testing.T) {
 	var hits atomic.Int32
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
@@ -85,8 +85,8 @@ func TestCacheAuthenticatedRequestBypassesCache(t *testing.T) {
 		}
 	}
 
-	if n := hits.Load(); n != 2 {
-		t.Fatalf("authenticated responses should bypass cache, got %d server hits", n)
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("authenticated profile responses should share profile cache, got %d server hits", n)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestCacheCredentialQueryBypassesCache(t *testing.T) {
 	}
 }
 
-func TestCacheProfileCredentialQueryBypassesCache(t *testing.T) {
+func TestCacheProfileCredentialQueryUsesProfileNamespace(t *testing.T) {
 	var hits atomic.Int32
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
@@ -138,8 +138,8 @@ func TestCacheProfileCredentialQueryBypassesCache(t *testing.T) {
 		}
 	}
 
-	if n := hits.Load(); n != 2 {
-		t.Fatalf("profile credential query responses should bypass cache, got %d server hits", n)
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("profile credential query responses should share profile cache, got %d server hits", n)
 	}
 }
 

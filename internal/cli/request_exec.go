@@ -81,11 +81,12 @@ func (c *CLI) prepareRequest(
 		opts.Query = filterCredentialQueryParams(opts.Query)
 	}
 
-	if opts.OnRequest != nil ||
+	hasCredentialContext := opts.OnRequest != nil ||
 		requestOptionHeadersContainCredentials(opts.Headers) ||
 		requestOptionQueryContainsCredentials(opts.Query) ||
 		rawURLQueryContainsCredentials(rawURL) ||
-		len(c.pluginsByHook["request-middleware"]) > 0 {
+		len(c.pluginsByHook["request-middleware"]) > 0
+	if hasCredentialContext && opts.CacheNamespace == "" {
 		opts.NoCache = true
 	}
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/url"
@@ -104,6 +105,7 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 func TestParseTokenEndpointErrorRedactsSecrets(t *testing.T) {
 	err := parseTokenEndpointError(400, []byte(`{
 		"error":"invalid_client",
+		"token_type":"bearer",
 		"client_secret":"top-secret",
 		"refresh_token":"refresh-secret",
 		"details":{"access_token":"abc"}
@@ -119,6 +121,54 @@ func TestParseTokenEndpointErrorRedactsSecrets(t *testing.T) {
 		if strings.Contains(tokenErr.Body, secret) {
 			t.Fatalf("expected body redaction, got %q", tokenErr.Body)
 		}
+	}
+	if !strings.Contains(tokenErr.Body, `"token_type":"bearer"`) {
+		t.Fatalf("token_type should not be redacted, got %q", tokenErr.Body)
+	}
+}
+
+func TestApplyTokenAuthHeaderPercentEncodesBasicCredentials(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "https://auth.example.com/token", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	params := map[string]string{
+		"client_id":     "id:with+space ü",
+		"client_secret": "sec:ret+space ü",
+		"auth_method":   authMethodClientSecretBasic,
+	}
+	applyTokenAuthHeader(req, params)
+
+	const prefix = "Basic "
+	got := req.Header.Get("Authorization")
+	if !strings.HasPrefix(got, prefix) {
+		t.Fatalf("Authorization = %q, want Basic header", got)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(got, prefix))
+	if err != nil {
+		t.Fatalf("decode Authorization: %v", err)
+	}
+	want := url.QueryEscape(params["client_id"]) + ":" + url.QueryEscape(params["client_secret"])
+	if string(decoded) != want {
+		t.Fatalf("decoded credentials = %q, want %q", decoded, want)
+	}
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 {
+		t.Fatalf("decoded credentials should contain one delimiter: %q", decoded)
+	}
+	id, err := url.QueryUnescape(parts[0])
+	if err != nil {
+		t.Fatalf("unescape client_id: %v", err)
+	}
+	secret, err := url.QueryUnescape(parts[1])
+	if err != nil {
+		t.Fatalf("unescape client_secret: %v", err)
+	}
+	if got := id; got != params["client_id"] {
+		t.Fatalf("client_id round trip = %q, want %q", got, params["client_id"])
+	}
+	if got := secret; got != params["client_secret"] {
+		t.Fatalf("client_secret round trip = %q, want %q", got, params["client_secret"])
 	}
 }
 

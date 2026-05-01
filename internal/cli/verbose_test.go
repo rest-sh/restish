@@ -167,7 +167,7 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 			StatusCode: 200,
 			Proto:      "HTTP/1.1",
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"token":"response-secret","ok":true}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"token":"response-secret","Authorization":"bearer-secret","token_type":"bearer","ok":true}`)),
 			Request:    r,
 		}, nil
 	})
@@ -177,8 +177,11 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 		t.Fatalf("post: %v", err)
 	}
 	stderr := errOut.String()
-	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") {
+	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") || strings.Contains(stderr, "bearer-secret") {
 		t.Fatalf("verbose body leaked secret:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, `"token_type": "bearer"`) {
+		t.Fatalf("token_type should not be redacted, got:\n%s", stderr)
 	}
 	if strings.Count(stderr, `\u003credacted\u003e`) < 2 && strings.Count(stderr, "<redacted>") < 2 {
 		t.Fatalf("expected redacted request and response bodies, got:\n%s", stderr)

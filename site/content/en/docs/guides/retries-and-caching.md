@@ -62,6 +62,10 @@ Use verbose output to see cache diagnostics:
 restish https://api.rest.sh/cached/60 -v
 ```
 
+Credentialed API-profile requests are cached inside that API/profile namespace.
+Direct URL requests that put credentials in headers or query parameters bypass
+the cache because Restish has no profile namespace to separate entries.
+
 Manage cache files:
 
 ```bash

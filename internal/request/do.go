@@ -11,6 +11,7 @@ import (
 
 	"github.com/gregjones/httpcache"
 	"github.com/rest-sh/restish/v2/internal/cache"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 )
 
 type closeableTransport struct {
@@ -197,7 +198,7 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			return nil, fmt.Errorf("auth: %w", err)
 		}
 	}
-	if requestHasCredentialHeaders(req) || HasCredentialQuery(req.URL) {
+	if opts.CacheNamespace == "" && (requestHasCredentialHeaders(req) || HasCredentialQuery(req.URL)) {
 		opts.NoCache = true
 	}
 
@@ -322,17 +323,7 @@ func requestHasCredentialHeaders(req *http.Request) bool {
 // IsCredentialHeader reports whether a header commonly carries credentials or
 // other secrets and should be redacted or stripped at trust boundaries.
 func IsCredentialHeader(name string) bool {
-	switch http.CanonicalHeaderKey(name) {
-	case "Authorization", "Cookie", "Proxy-Authorization", "Set-Cookie":
-		return true
-	}
-	lower := strings.ToLower(name)
-	for _, marker := range []string{"api-key", "apikey", "auth-token", "token", "secret", "password"} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
+	return secrets.IsHeaderName(name)
 }
 
 // HasCredentialQuery reports whether u contains query parameters that commonly
@@ -352,13 +343,7 @@ func HasCredentialQuery(u *url.URL) bool {
 // IsCredentialQueryParam reports whether a query parameter commonly carries
 // credentials or other secrets.
 func IsCredentialQueryParam(name string) bool {
-	name = strings.ToLower(name)
-	switch name {
-	case "access_token", "refresh_token", "token", "api_key", "apikey", "client_secret", "password", "secret":
-		return true
-	default:
-		return false
-	}
+	return secrets.IsQueryParamName(name)
 }
 
 // RedactedURL returns u as a string with credential query values replaced by a
