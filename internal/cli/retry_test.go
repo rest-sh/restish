@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestRetrySucceedsAfterTransientFailures verifies that when the server
@@ -101,6 +102,66 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 
 	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("expected success, got: %v", err)
+	}
+	if n := callCount.Load(); n != 2 {
+		t.Errorf("expected 2 server calls, got %d", n)
+	}
+}
+
+func TestRetryUnsafeWarningIsOneShot(t *testing.T) {
+	var callCount atomic.Int32
+	c, _, stderr := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		callCount.Add(1)
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
+
+	args := []string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "1", "https://api.example.com/items", "name:demo"}
+	if err := c.Run(args); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := c.Run(args); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if got := strings.Count(stderr.String(), "retrying unsafe HTTP methods can repeat side effects"); got != 1 {
+		t.Fatalf("unsafe retry warning count = %d, want 1; stderr:\n%s", got, stderr.String())
+	}
+	if got := callCount.Load(); got != 2 {
+		t.Fatalf("call count = %d, want 2", got)
+	}
+}
+
+func TestAPIRetryMaxWaitCapsRetryAfter(t *testing.T) {
+	var callCount atomic.Int32
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"retry_max_wait": "1ms"
+			}
+		}
+	}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		n := callCount.Add(1)
+		if n == 1 {
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Retry-After": []string{"1"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
+
+	start := time.Now()
+	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", "myapi/items"}); err != nil {
+		t.Fatalf("expected success, got: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("API retry_max_wait was not applied; elapsed %s", elapsed)
 	}
 	if n := callCount.Load(); n != 2 {
 		t.Errorf("expected 2 server calls, got %d", n)

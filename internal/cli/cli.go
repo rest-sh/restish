@@ -104,6 +104,7 @@ type CLI struct {
 	nextRequestCloserID uint64
 	requestClosers      []requestCloserEntry
 	explicitConfigFile  bool
+	retryUnsafeWarned   bool
 }
 
 type requestCloserEntry struct {

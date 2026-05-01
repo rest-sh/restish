@@ -164,6 +164,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	if flag := pf.Lookup("rsh-retry"); flag != nil {
 		flag.DefValue = ""
 	}
+	pf.String("rsh-retry-max-wait", "", "Maximum wait for Retry-After/X-Retry-In delays (default: 5m)")
 	pf.Int("rsh-max-events", 0, "Maximum number of SSE events or NDJSON lines to process (0 = unlimited)")
 	pf.Bool("rsh-no-paginate", false, "Disable automatic pagination (return only the first page)")
 	pf.Bool("rsh-collect", false, "Collect all pages then apply filter (default: stream items as they arrive)")

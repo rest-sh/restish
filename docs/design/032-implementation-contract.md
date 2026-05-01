@@ -41,6 +41,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-no-cache` | | bool | `RSH_NO_CACHE` | false | Bypass reads and writes. |
 | `--rsh-no-browser` | | bool | | false | OAuth auth-code browser suppression. |
 | `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. |
+| `--rsh-retry-max-wait` | | duration | `RSH_RETRY_MAX_WAIT` | `5m` | Cap server-provided retry waits. |
 | `--rsh-max-events` | | int | | 0 | Streaming event/line cap. |
 | `--rsh-no-paginate` | | bool | | false | Disable automatic pagination. |
 | `--rsh-collect` | | bool | | false | Collect pages before filtering. |
@@ -82,6 +83,7 @@ API fields:
 | `operation_base` | string | Absolute path prefix resolved against `base_url` for generated operations. |
 | `command_layout` | string | `flat` or `tags`; empty means `flat`. |
 | `server_variables` | map | Explicit OpenAPI server URL variable values used for generated operation paths. |
+| `retry_max_wait` | string duration | API-local cap for `Retry-After`/`X-Retry-In` when no flag/env override is set. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |

@@ -153,6 +153,7 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 	rawURL = prepared.rawURL
 	apiName = prepared.apiName
 	opts = prepared.opts
+	c.warnRetryUnsafe(method, opts)
 	if firstPartyHost == "" {
 		if u, parseErr := url.Parse(prepared.rawURL); parseErr == nil {
 			firstPartyHost = u.Scheme + "://" + u.Host
@@ -786,6 +787,17 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 	}
 	rawURL = match.rawURL
 
+	if opts.RetryMaxWait == 0 && strings.TrimSpace(match.api.RetryMaxWait) != "" {
+		retryMaxWait, parseErr := time.ParseDuration(match.api.RetryMaxWait)
+		if parseErr != nil || retryMaxWait <= 0 {
+			if parseErr == nil {
+				parseErr = fmt.Errorf("must be greater than 0")
+			}
+			return rawURL, match.apiName, opts, fmt.Errorf("invalid retry_max_wait for API %q: %w", match.apiName, parseErr)
+		}
+		opts.RetryMaxWait = retryMaxWait
+	}
+
 	if match.profile == nil {
 		if match.api.Profiles != nil || profileName != "default" {
 			return rawURL, match.apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.apiName, profileNames(match.api.Profiles))
@@ -1036,6 +1048,18 @@ func parseKVStrings(values []string) (map[string]string, error) {
 	return out, nil
 }
 
+func (c *CLI) warnRetryUnsafe(method string, opts request.Options) {
+	if c == nil || c.retryUnsafeWarned || !opts.RetryUnsafe || opts.Retry <= 0 {
+		return
+	}
+	switch strings.ToUpper(method) {
+	case http.MethodGet, http.MethodHead:
+		return
+	}
+	c.retryUnsafeWarned = true
+	c.warnf("retrying unsafe HTTP methods can repeat side effects; use --rsh-retry carefully for POST, PUT, PATCH, or DELETE")
+}
+
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.
 func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	gf := globalFlagsFromContext(requestContext(cmd))
@@ -1063,6 +1087,16 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	retry := 2
 	if gf.Retry >= 0 {
 		retry = gf.Retry
+	}
+	var retryMaxWait time.Duration
+	if gf.RetryMaxWait != "" {
+		retryMaxWait, err = time.ParseDuration(gf.RetryMaxWait)
+		if err != nil || retryMaxWait <= 0 {
+			if err == nil {
+				err = fmt.Errorf("must be greater than 0")
+			}
+			return request.Options{}, fmt.Errorf("invalid retry max wait %q: %w", gf.RetryMaxWait, err)
+		}
 	}
 
 	tlsSignerParams, err := parseKVStrings(gf.TLSSignerParams)
@@ -1097,6 +1131,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		Retry:                retry,
 		RetryUnsafe:          gf.Retry >= 0,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
+		RetryMaxWait:         retryMaxWait,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
 		WrapTransport: func(rt http.RoundTripper) http.RoundTripper {
 			if gf.Verbose < 1 {

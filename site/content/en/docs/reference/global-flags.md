@@ -81,12 +81,15 @@ restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 
 ```bash
 restish 'https://api.rest.sh/flaky?failures=1&key=flags' --rsh-retry 2
+restish https://api.rest.sh/status/429 --rsh-retry-max-wait 30s
 restish https://api.rest.sh/cache --rsh-no-cache
 ```
 
 Default retry behavior is conservative for `GET` and `HEAD`. Supplying
 `--rsh-retry` explicitly opts the current command into retrying unsafe methods
 as well, so use it carefully for requests that may change server state.
+`--rsh-retry-max-wait` caps server-provided `Retry-After` and `X-Retry-In`
+delays; the default cap is 5 minutes.
 
 ## General
 

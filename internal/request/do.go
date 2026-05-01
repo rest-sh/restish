@@ -111,6 +111,9 @@ type Options struct {
 	// RetryBaseDelay is the base delay for the first retry backoff interval.
 	// Defaults to 1 s when zero.
 	RetryBaseDelay time.Duration
+	// RetryMaxWait caps server-provided Retry-After/X-Retry-In delays.
+	// Defaults to DefaultRetryMaxWait when zero.
+	RetryMaxWait time.Duration
 	// Logger receives retry progress warnings on stderr-style output.
 	Logger io.Writer
 	// WrapTransport, when non-nil, wraps the final transport after TLS, retry,
@@ -457,7 +460,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 		if delay == 0 {
 			delay = time.Second
 		}
-		inner = retryTransport{inner: base, maxRetry: opts.Retry, retryUnsafe: opts.RetryUnsafe, baseDelay: delay, logger: opts.Logger}
+		inner = retryTransport{inner: base, maxRetry: opts.Retry, retryUnsafe: opts.RetryUnsafe, baseDelay: delay, maxWait: opts.RetryMaxWait, logger: opts.Logger}
 	}
 
 	if opts.NoCache || opts.CacheDir == "" {

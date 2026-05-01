@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// DefaultRetryMaxWait is the default cap for server-provided retry delays.
+const DefaultRetryMaxWait = 5 * time.Minute
+
 // retryTransport wraps an inner RoundTripper and retries on network errors
 // and 5xx responses with exponential backoff + jitter.  4xx responses are
 // returned immediately without retrying.
@@ -18,6 +21,7 @@ type retryTransport struct {
 	maxRetry    int
 	retryUnsafe bool
 	baseDelay   time.Duration
+	maxWait     time.Duration
 	logger      io.Writer
 }
 
@@ -42,10 +46,17 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 			wait := rt.waitDuration(lastResp, attempt)
 			rt.logRetry(attempt, wait)
+			timer := time.NewTimer(wait)
 			select {
 			case <-req.Context().Done():
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
 				return nil, req.Context().Err()
-			case <-time.After(wait):
+			case <-timer.C:
 			}
 
 			// Refresh the request body for the retry.
@@ -126,7 +137,7 @@ func (rt retryTransport) CloseIdleConnections() {
 }
 
 // waitDuration returns the duration to wait before the next attempt.
-// It honours the Retry-After response header when present (capped at 60s);
+// It honours the Retry-After response header when present (capped at maxWait);
 // otherwise it computes exponential backoff with ±25 % jitter.
 func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Duration {
 	if resp != nil {
@@ -134,28 +145,19 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 			// Integer seconds form.
 			if secs, parseErr := strconv.Atoi(ra); parseErr == nil && secs >= 0 {
 				wait := time.Duration(secs) * time.Second
-				if wait > 60*time.Second {
-					wait = 60 * time.Second
-				}
-				return wait
+				return rt.capWait(wait)
 			}
 			// HTTP-date form.
 			if t, parseErr := http.ParseTime(ra); parseErr == nil {
 				if wait := time.Until(t); wait > 0 {
-					if wait > 60*time.Second {
-						wait = 60 * time.Second
-					}
-					return wait
+					return rt.capWait(wait)
 				}
 			}
 		}
 		if retryIn := resp.Header.Get("X-Retry-In"); retryIn != "" {
 			if secs, parseErr := strconv.Atoi(retryIn); parseErr == nil && secs >= 0 {
 				wait := time.Duration(secs) * time.Second
-				if wait > 60*time.Second {
-					wait = 60 * time.Second
-				}
-				return wait
+				return rt.capWait(wait)
 			}
 		}
 	}
@@ -171,4 +173,15 @@ func (rt retryTransport) waitDuration(resp *http.Response, attempt int) time.Dur
 		return base
 	}
 	return base/2 + time.Duration(rand.Int64N(int64(base)))
+}
+
+func (rt retryTransport) capWait(wait time.Duration) time.Duration {
+	maxWait := rt.maxWait
+	if maxWait <= 0 {
+		maxWait = DefaultRetryMaxWait
+	}
+	if wait > maxWait {
+		return maxWait
+	}
+	return wait
 }

@@ -67,6 +67,7 @@ restish config show --json
       "spec_url": "https://api.rest.sh/openapi.json",
       "operation_base": "/",
       "command_layout": "flat",
+      "retry_max_wait": "30s",
       "profiles": {
         "default": {},
         "json": { "headers": ["Accept: application/json"] }
@@ -86,6 +87,7 @@ Common fields:
 | `operation_base` | Path prefix for operations. |
 | `command_layout` | `flat` or `tags`. |
 | `server_variables` | Configured OpenAPI server variable values. |
+| `retry_max_wait` | API-local cap for `Retry-After`/`X-Retry-In` delays when no flag/env override is set. |
 | `profiles` | API-local profiles. |
 
 ## Profiles And Auth

@@ -74,7 +74,8 @@ Retry behavior is intentionally conservative:
 - `4xx` responses are otherwise returned immediately
 - request bodies are only retried when they can be recreated safely
 - backoff uses exponential delay with jitter
-- `Retry-After` is honored when provided
+- `Retry-After` and `X-Retry-In` are honored when provided, capped by
+  `--rsh-retry-max-wait` or the API's `retry_max_wait` setting
 
 This keeps retries focused on failures that are likely to succeed on a later
 attempt while avoiding silent replay of requests that cannot be reproduced
@@ -91,6 +92,9 @@ The design rule is:
 
 Restish intentionally refuses to blindly retry requests whose bodies cannot be
 recreated, which is safer than assuming all failures are idempotent in practice.
+When a user explicitly enables retries for unsafe methods with `--rsh-retry`,
+Restish warns once per CLI session because POST, PUT, PATCH, and DELETE retries
+can double-process server-side side effects.
 
 ## Retry Algorithm
 
@@ -103,6 +107,7 @@ The conceptual retry loop is:
    - retryable failure -> continue if limits allow
 4. compute wait delay from:
    - `Retry-After` when applicable
+   - `X-Retry-In` when applicable
    - otherwise exponential backoff with jitter
 5. wait unless the context is canceled
 6. rebuild the next attempt with a fresh body reader if needed

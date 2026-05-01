@@ -82,6 +82,9 @@ type APIConfig struct {
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
 	// Pagination holds optional per-API pagination configuration.
 	Pagination *PaginationConfig `json:"pagination,omitempty"`
+	// RetryMaxWait caps Retry-After/X-Retry-In delays for this API when no
+	// command-line or environment override is supplied.
+	RetryMaxWait string `json:"retry_max_wait,omitempty"`
 }
 
 // PaginationConfig holds per-API pagination settings.

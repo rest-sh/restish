@@ -15,7 +15,10 @@ Automatic retries are limited to `GET` and `HEAD`, where retrying is normally
 safe. Passing an explicit non-negative retry count such as `--rsh-retry 2`
 opts a command into retrying other methods too, which can repeat side effects
 if the server processed the first attempt. Restish honors `Retry-After` and
-`X-Retry-In` when present.
+`X-Retry-In` when present, capped at 5 minutes by default. Use
+`--rsh-retry-max-wait 30s` for one command, or set an API-level
+`retry_max_wait` duration in `restish.json`, when a service needs a shorter
+rate-limit wait.
 
 Use the flaky fixture to see recovery:
 

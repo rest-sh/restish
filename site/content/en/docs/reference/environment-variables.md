@@ -26,6 +26,7 @@ line flags should be used when one invocation must be explicit.
 | `RSH_TIMEOUT` | Default request timeout such as `15s`. |
 | `RSH_NO_CACHE` | Bypass HTTP cache where supported. |
 | `RSH_RETRY` | Default retry count where supported. |
+| `RSH_RETRY_MAX_WAIT` | Default cap for `Retry-After`/`X-Retry-In`, such as `30s`. |
 
 Flags override environment defaults for one command.
 
