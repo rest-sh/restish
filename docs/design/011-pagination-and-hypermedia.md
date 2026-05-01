@@ -108,6 +108,9 @@ design layer rather than smuggled into the current `rel -> uri` contract.
 Pagination execution uses the normalized link map plus optional per-API config.
 For GET requests, if a `next` link is present, Restish can continue fetching
 pages automatically.
+Pagination treats URLs with the same host and port as followable even when the
+scheme changes, which supports APIs and proxies that move a first `http` page
+to later `https` pages. A different host or port still stops pagination.
 
 Per-API pagination config can refine how page data is interpreted:
 
@@ -116,6 +119,8 @@ Per-API pagination config can refine how page data is interpreted:
 
 This lets Restish handle both standard hypermedia and APIs whose collection
 wrappers need one extra hint.
+If a later page returns an HTTP error, Restish stops pagination and returns that
+status instead of discarding the error and formatting a partial collection.
 
 Filters that select response metadata rather than body records normally disable
 automatic pagination. For example, `-f headers`, `-f headers.Date`, and

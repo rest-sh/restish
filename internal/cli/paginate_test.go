@@ -122,6 +122,37 @@ func TestPaginationStopsOnCrossOriginNextURL(t *testing.T) {
 	}
 }
 
+func TestPaginationAllowsSchemeChangeOnSameHostPort(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		body := `[2]`
+		if r.URL.Scheme == "http" {
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+			body = `[1]`
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "http://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "1") || !strings.Contains(got, "2") {
+		t.Fatalf("expected both pages after http->https same-host pagination, got:\n%s", got)
+	}
+	if strings.Contains(errOut.String(), "pagination next URL crosses origin") {
+		t.Fatalf("unexpected cross-origin warning:\n%s", errOut.String())
+	}
+}
+
 // TestPaginationNoPaginate verifies that --rsh-no-paginate returns only the
 // first page.
 func TestPaginationNoPaginate(t *testing.T) {

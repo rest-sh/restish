@@ -54,6 +54,26 @@ func TestSSEThreeEvents(t *testing.T) {
 	}
 }
 
+func TestSSEDataFieldWithoutColonPreservesBlankLine(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: first\ndata\ndata: third\n\n")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", "body.data", "-r"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	if got, want := out.String(), "first\n\nthird\n"; got != want {
+		t.Fatalf("SSE data output = %q, want %q", got, want)
+	}
+}
+
 // TestNDJSONThreeLines verifies that three NDJSON lines are each printed to stdout.
 func TestNDJSONThreeLines(t *testing.T) {
 	mux := http.NewServeMux()
@@ -81,6 +101,27 @@ func TestNDJSONThreeLines(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(got), "\n")
 	if len(lines) != 3 {
 		t.Errorf("expected 3 output lines, got %d:\n%s", len(lines), got)
+	}
+}
+
+func TestNDJSONLineLimitUsesMaxBodySize(t *testing.T) {
+	message := strings.Repeat("x", 1200*1024)
+	line := `{"message":"` + message + `"}`
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, line)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-body-size", "2", "-f", "body.message", "-r"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != message {
+		t.Fatalf("large NDJSON message length = %d, want %d", len(got), len(message))
 	}
 }
 

@@ -16,6 +16,9 @@ restish https://api.rest.sh/images -f body.self -r
 
 When a response exposes a `next` link, Restish follows it until there are no
 more pages or a configured limit is reached.
+Next-page URLs may change scheme, such as `http` to `https`, as long as the
+host and port stay the same. Pagination stops with a warning when the next page
+points at a different host or port.
 
 ## Inspect One Page
 
@@ -42,6 +45,8 @@ restish https://api.rest.sh/images --rsh-max-pages 3
 
 `--rsh-max-pages` protects you from unexpectedly large collections.
 `--rsh-max-items` bounds the total logical items Restish processes.
+If a later page returns an HTTP error, Restish stops and returns that status
+instead of formatting a partial collection as if it were complete.
 
 ## Collect Before Filtering
 

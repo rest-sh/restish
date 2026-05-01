@@ -184,7 +184,7 @@ func (c *CLI) runPagination(
 
 func paginationCrossesOrigin(firstURL, nextURL string) (bool, string) {
 	base, err := url.Parse(firstURL)
-	if err != nil || base.Scheme == "" || base.Host == "" {
+	if err != nil || base.Host == "" {
 		return false, nextURL
 	}
 	next, err := url.Parse(nextURL)
@@ -194,7 +194,14 @@ func paginationCrossesOrigin(firstURL, nextURL string) (bool, string) {
 	if !next.IsAbs() {
 		next = base.ResolveReference(next)
 	}
-	return !request.SameOrigin(base, next), next.String()
+	return !sameHostPort(base, next), next.String()
+}
+
+func sameHostPort(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.EqualFold(a.Host, b.Host)
 }
 
 func (c *CLI) paginationStatusError(cmd *cobra.Command, page, status int) error {
@@ -341,6 +348,9 @@ func buildPaginatedResponse(firstResp *output.Response, pagCfg *config.Paginatio
 	}
 }
 
+// paginatedItemsPlaceholder is intentionally improbable rather than random:
+// it only lives inside a transient JSON template and is looked up after
+// marshaling, before any user-visible output is produced.
 const paginatedItemsPlaceholder = "__restish_paginated_items_placeholder__"
 
 func paginatedReadableFrame(firstBody any, pagCfg *config.PaginationConfig) (output.FramedValueTemplate, bool) {
@@ -480,8 +490,9 @@ func setSimplePath(value any, path string, replacement any) (any, bool) {
 
 // pageItems extracts the items array from a page body using pagCfg.ItemsPath.
 // Falls back to treating the body as an array, or wrapping it as a single item.
-// A non-nil filterErr is returned when ItemsPath is set but the filter fails,
-// so callers can surface the problem rather than silently returning no items.
+// A non-nil filterErr may accompany returned items when ItemsPath finds a
+// scalar instead of an array. Callers should warn or fail with the error while
+// still deciding whether the fallback item is useful.
 func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 	if pagCfg != nil && pagCfg.ItemsPath != "" {
 		m, ok := body.(map[string]any)

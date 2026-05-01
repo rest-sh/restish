@@ -184,8 +184,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	}()
 
 	scanner := bufio.NewScanner(resp.Body)
-	// Increase the max token size to 1 MiB to accommodate large NDJSON lines.
-	scanner.Buffer(make([]byte, 64*1024), 1*1024*1024)
+	scanner.Buffer(make([]byte, 64*1024), maxStreamLineBytes(cmd))
 	count := 0
 	stoppedByMax := false
 
@@ -211,6 +210,18 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		return fmt.Errorf("NDJSON stream error: %w", err)
 	}
 	return nil
+}
+
+func maxStreamLineBytes(cmd *cobra.Command) int {
+	maxBytes := maxBodyBytes(cmd)
+	if maxBytes <= 0 {
+		maxBytes = output.DefaultMaxBodyBytes
+	}
+	maxInt := int64(int(^uint(0) >> 1))
+	if maxBytes > maxInt {
+		return int(maxInt)
+	}
+	return int(maxBytes)
 }
 
 // renderStreamValue applies the active filter to one streamed item and renders

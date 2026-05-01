@@ -41,6 +41,10 @@ If an endpoint is slow to emit its first record, add a timeout while debugging:
 restish https://api.rest.sh/logs --rsh-max-events 3 --rsh-timeout 5s
 ```
 
+Very large NDJSON records use the same per-response cap as bounded responses.
+Raise it with `--rsh-max-body-size` when a stream legitimately emits large
+single-line records.
+
 ## Accept Headers
 
 When a server needs a stream-specific `Accept` header, send it explicitly:
