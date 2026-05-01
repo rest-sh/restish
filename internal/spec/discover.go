@@ -2,8 +2,6 @@ package spec
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +79,7 @@ type DiscoverConfig struct {
 // Discovery order (first success wins, network steps run in parallel):
 //  1. CBOR spec cache
 //  2. Explicit SpecURL (if configured)
-//  3. Link headers from a GET on BaseURL (service-desc / describedby)
+//  3. Link headers from a GET on BaseURL (service-desc / service-doc / describedby)
 //  4. Well-known paths /openapi.json and /openapi.yaml
 //  5. BaseURL body itself
 func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
@@ -237,10 +235,6 @@ func cacheSpecFileMetadata(specFiles []string) []cachedSpecFile {
 					meta.ModTime = info.ModTime()
 					meta.Size = info.Size()
 				}
-				if data, readErr := os.ReadFile(path); readErr == nil {
-					sum := sha256.Sum256(data)
-					meta.SHA256 = hex.EncodeToString(sum[:])
-				}
 			}
 		}
 		out = append(out, meta)
@@ -257,8 +251,7 @@ func cacheSpecFileMetadataMatches(specFiles []string, cached []cachedSpecFile) b
 		if current[i].Source != cached[i].Source ||
 			current[i].Local != cached[i].Local ||
 			current[i].Path != cached[i].Path ||
-			current[i].Size != cached[i].Size ||
-			current[i].SHA256 != cached[i].SHA256 {
+			current[i].Size != cached[i].Size {
 			return false
 		}
 		if current[i].Local && !current[i].ModTime.Equal(cached[i].ModTime) {
@@ -293,8 +286,11 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Use a large buffer so goroutines never block on send.
-	ch := make(chan discoveryResult, 16)
+	initialProbes := 1
+	if cfg.SpecURL == "" {
+		initialProbes = 1 + len(wellKnownSpecPaths)
+	}
+	ch := make(chan discoveryResult, initialProbes)
 	var wg sync.WaitGroup
 	tr := effectiveTransport(cfg)
 
@@ -364,7 +360,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	})
 
 	// Well-known paths.
-	for _, path := range []string{"/openapi.json", "/openapi.yaml"} {
+	for _, path := range wellKnownSpecPaths {
 		u := joinURL(cfg.BaseURL, path)
 		launch(1, u, func() (string, []byte, time.Duration, error) {
 			return fetchBytes(ctx, u, tr)
@@ -379,6 +375,8 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 
 	return collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
 }
+
+var wellKnownSpecPaths = []string{"/openapi.json", "/openapi.yaml"}
 
 func collectDiscoveryResults(ctx context.Context, cancel context.CancelFunc, ch <-chan discoveryResult, baseURL string) (*APISpec, time.Duration, error) {
 	// Collect errors, preferring lower-priority values (0 = SpecURL is most
@@ -466,9 +464,18 @@ func cacheTTL(resp *http.Response) time.Duration {
 	cc := resp.Header.Get("Cache-Control")
 	for _, part := range strings.Split(cc, ",") {
 		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "max-age=") {
-			if secs, err := strconv.Atoi(part[8:]); err == nil && secs > 0 {
-				return time.Duration(secs) * time.Second
+		if strings.EqualFold(part, "no-store") {
+			return 0
+		}
+	}
+	for _, directive := range []string{"s-maxage=", "max-age="} {
+		for _, part := range strings.Split(cc, ",") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(strings.ToLower(part), directive) {
+				if secs, err := strconv.Atoi(part[len(directive):]); err == nil && secs > 0 {
+					return time.Duration(secs) * time.Second
+				}
+				return 0
 			}
 		}
 	}
@@ -476,7 +483,7 @@ func cacheTTL(resp *http.Response) time.Duration {
 }
 
 // extractSpecLinks parses Link response headers and returns URLs whose rel is
-// "service-desc" or "describedby".
+// "service-desc", "service-doc", or "describedby".
 func extractSpecLinks(baseURL string, h http.Header) []string {
 	base, err := url.Parse(baseURL)
 	if err != nil {
@@ -484,11 +491,20 @@ func extractSpecLinks(baseURL string, h http.Header) []string {
 	}
 	var out []string
 	for _, parsed := range hypermedia.LinkHeaderLinks(base, h) {
-		if parsed.Rel == "service-desc" || parsed.Rel == "describedby" {
+		if isSpecLinkRel(parsed.Rel) {
 			out = append(out, parsed.URI)
 		}
 	}
 	return out
+}
+
+func isSpecLinkRel(rel string) bool {
+	switch strings.ToLower(rel) {
+	case "service-desc", "service-doc", "describedby":
+		return true
+	default:
+		return false
+	}
 }
 
 func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin bool) []string {
@@ -584,7 +600,9 @@ func joinURL(base, path string) string {
 
 // loadSpecFiles loads the ordered list of spec files from cfg.SpecFiles,
 // merges them in order (later entries win on conflict), and returns a single
-// APISpec whose Raw bytes are re-serialized YAML.
+// APISpec whose Raw bytes are re-serialized YAML. Multi-file merging parses
+// documents into generic maps, so YAML anchors, aliases, comments, and exact
+// scalar spellings are not preserved in the merged representation.
 func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
 	tr := effectiveTransport(cfg)
 

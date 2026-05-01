@@ -171,6 +171,18 @@ func TestExtractSpecLinks_ServiceDesc(t *testing.T) {
 	}
 }
 
+func TestExtractSpecLinks_ServiceDoc(t *testing.T) {
+	h := http.Header{}
+	h.Set("Link", `</openapi.json>; rel="service-doc"`)
+	links := extractSpecLinks("https://api.example.com/", h)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %v", len(links), links)
+	}
+	if links[0] != "https://api.example.com/openapi.json" {
+		t.Errorf("got %q, want %q", links[0], "https://api.example.com/openapi.json")
+	}
+}
+
 func TestExtractSpecLinks_DescribedBy(t *testing.T) {
 	h := http.Header{}
 	h.Set("Link", `<https://cdn.example.com/spec.yaml>; rel=describedby`)
@@ -355,6 +367,45 @@ func TestCacheTTL_NoMaxAge(t *testing.T) {
 	ttl := cacheTTL(resp)
 	if ttl != 0 {
 		t.Errorf("expected 0, got %v", ttl)
+	}
+}
+
+func TestCacheTTL_NoStoreOverridesMaxAge(t *testing.T) {
+	resp := &http.Response{Header: http.Header{}}
+	resp.Header.Set("Cache-Control", "public, max-age=3600, no-store")
+	ttl := cacheTTL(resp)
+	if ttl != 0 {
+		t.Errorf("expected 0, got %v", ttl)
+	}
+}
+
+func TestCacheTTL_SMaxAgeOverridesMaxAge(t *testing.T) {
+	resp := &http.Response{Header: http.Header{}}
+	resp.Header.Set("Cache-Control", "max-age=3600, s-maxage=60")
+	ttl := cacheTTL(resp)
+	if ttl != time.Minute {
+		t.Errorf("expected 1m, got %v", ttl)
+	}
+}
+
+func TestCacheSpecFileMetadataAvoidsContentHash(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "spec.yaml")
+	if err := os.WriteFile(specPath, []byte("openapi: 3.1.0\ninfo: {title: Demo, version: v1}\npaths: {}\n"), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	meta := cacheSpecFileMetadata([]string{specPath})
+	if len(meta) != 1 {
+		t.Fatalf("metadata len = %d, want 1", len(meta))
+	}
+	if meta[0].Size == 0 || meta[0].ModTime.IsZero() {
+		t.Fatalf("expected size and mtime metadata, got %+v", meta[0])
+	}
+	if meta[0].SHA256 != "" {
+		t.Fatalf("expected no SHA256 for fast metadata path, got %q", meta[0].SHA256)
+	}
+	if !cacheSpecFileMetadataMatches([]string{specPath}, meta) {
+		t.Fatal("metadata should match unchanged file")
 	}
 }
 

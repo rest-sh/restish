@@ -152,6 +152,15 @@ Webhooks-only documents, documents without paths, and empty Path Items are valid
 inputs that generate no request commands. They must not panic loader,
 generation, MCP tool export, or help registration paths.
 
+When `spec_files` contains multiple documents, Restish deep-merges the parsed
+documents and re-serializes the merged result as YAML before loading. This keeps
+the merge deterministic but means YAML anchors, aliases, comments, and exact
+scalar spelling are not preserved across the merge boundary. Single-file loads
+avoid this round trip.
+
+Spec discovery recognizes `Link` relations `service-desc`, `service-doc`, and
+`describedby` as advertised API description links.
+
 ## Loader Selection
 
 Loaders are registered in priority order. Sources include:
