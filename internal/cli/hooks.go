@@ -215,6 +215,8 @@ func applyRequestUpdate(req *http.Request, update *pluginwire.HookRequestHeaderU
 	}
 	for k, v := range update.Headers {
 		switch vt := v.(type) {
+		case nil:
+			req.Header.Del(k)
 		case []any:
 			req.Header.Del(k)
 			for _, s := range vt {

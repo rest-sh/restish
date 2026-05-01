@@ -74,6 +74,27 @@ func TestHookRequestForPluginIncludesBodyHashAndOptInBody(t *testing.T) {
 	}
 }
 
+func TestApplyRequestUpdateNilDeletesHeader(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("X-Remove", "old")
+	req.Header.Set("X-Keep", "old")
+
+	applyRequestUpdate(req, &pluginwire.HookRequestHeaderUpdate{Headers: map[string]any{
+		"X-Remove": nil,
+		"X-Keep":   "new",
+	}})
+
+	if got := req.Header.Get("X-Remove"); got != "" {
+		t.Fatalf("X-Remove = %q, want deleted", got)
+	}
+	if got := req.Header.Get("X-Keep"); got != "new" {
+		t.Fatalf("X-Keep = %q, want new", got)
+	}
+}
+
 func firstHeaderValue(headers map[string][]string, name string) string {
 	values := headers[name]
 	if len(values) == 0 {

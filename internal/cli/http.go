@@ -708,8 +708,25 @@ func redactVerboseBody(data []byte, contentType string) string {
 			}
 		}
 	}
+	if mediaType == "application/x-www-form-urlencoded" {
+		values, err := url.ParseQuery(string(data))
+		if err == nil {
+			for key := range values {
+				if secrets.IsQueryParamName(key) {
+					values[key] = []string{"<redacted>"}
+				}
+			}
+			return values.Encode()
+		}
+	}
+	if mediaType != "" && mediaType != "text/plain" && !strings.HasPrefix(mediaType, "text/") && !json.Valid(data) {
+		return fmt.Sprintf("<%d bytes of %s body>", len(data), mediaType)
+	}
 	if !json.Valid(data) && strings.ContainsRune(string(data), '\x00') {
-		return ""
+		if mediaType == "" {
+			return fmt.Sprintf("<%d bytes of binary body>", len(data))
+		}
+		return fmt.Sprintf("<%d bytes of %s body>", len(data), mediaType)
 	}
 	return string(data)
 }

@@ -38,6 +38,11 @@ restish https://api.rest.sh/images -o csv
 }
 ```
 
+Request middleware can update headers by returning strings, arrays of strings,
+or `null`; `null` deletes that header from the prepared request. Response
+middleware that returns `response_headers` replaces the normalized response
+headers, so include any original headers the plugin wants to keep.
+
 ## Pitfalls
 
 - Keep hooks narrow and deterministic.

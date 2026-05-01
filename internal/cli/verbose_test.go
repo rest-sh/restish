@@ -188,6 +188,55 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 	}
 }
 
+func TestVerboseRedactsFormBodies(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/x-www-form-urlencoded"}},
+			Body:       io.NopCloser(strings.NewReader(`token=response-secret&name=visible`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "post", "-v", "--rsh-content-type", "application/x-www-form-urlencoded", "https://api.example.com/hello", "token: request-secret", "name: visible"})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	stderr := errOut.String()
+	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") {
+		t.Fatalf("verbose form body leaked secret:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "token=%3Credacted%3E") || !strings.Contains(stderr, "name=visible") {
+		t.Fatalf("expected redacted form body with visible fields, got:\n%s", stderr)
+	}
+}
+
+func TestVerboseNonTextBodyUsesPlaceholder(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+			Body:       io.NopCloser(strings.NewReader("secret-bytes")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/blob"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	stderr := errOut.String()
+	if strings.Contains(stderr, "secret-bytes") {
+		t.Fatalf("verbose non-text body leaked raw bytes:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "<12 bytes of application/octet-stream body>") {
+		t.Fatalf("expected binary placeholder, got:\n%s", stderr)
+	}
+}
+
 func TestVerboseLogsRequestBodyBeforeResponseHeaders(t *testing.T) {
 	c, _, errOut := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {

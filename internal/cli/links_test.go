@@ -99,6 +99,32 @@ func TestLinksCommandFilterRel(t *testing.T) {
 	}
 }
 
+func TestLinksCommandWarnsForMissingRel(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+				"Content-Type": []string{"application/json"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[]`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "missing"}); err != nil {
+		t.Fatalf("links: %v", err)
+	}
+	if strings.TrimSpace(out.String()) != "{}" {
+		t.Fatalf("expected empty object for missing rel, got:\n%s", out.String())
+	}
+	if got := errOut.String(); !strings.Contains(got, `rel "missing" not found`) || !strings.Contains(got, "next") {
+		t.Fatalf("expected missing rel warning with available rels, got:\n%s", got)
+	}
+}
+
 func TestLinksCommandReturnsStatusError(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
@@ -115,7 +141,7 @@ func TestLinksCommandReturnsStatusError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected links to return a status error")
 	}
-	if strings.TrimSpace(out.String()) != "null" {
+	if strings.TrimSpace(out.String()) != "{}" {
 		t.Fatalf("expected links output before status error, got:\n%s", out.String())
 	}
 }

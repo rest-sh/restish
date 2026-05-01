@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 )
@@ -49,7 +50,7 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 	c.ensureBodyLinks(resp)
 
-	var links map[string]string
+	links := map[string]string{}
 	if len(resp.Links) > 0 {
 		links = make(map[string]string, len(resp.Links))
 		for rel, value := range resp.Links {
@@ -60,11 +61,13 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Filter to requested rels if specified.
-	if len(filterRels) > 0 && len(links) > 0 {
+	if len(filterRels) > 0 {
 		filtered := make(map[string]string, len(filterRels))
 		for _, rel := range filterRels {
 			if u, ok := links[rel]; ok {
 				filtered[rel] = u
+			} else {
+				c.warnf("rel %q not found (available: %v)", rel, sortedLinkRels(links))
 			}
 		}
 		links = filtered
@@ -76,4 +79,13 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintln(c.Stdout, string(data))
 	return c.statusError(cmd, resp.Status)
+}
+
+func sortedLinkRels(links map[string]string) []string {
+	rels := make([]string, 0, len(links))
+	for rel := range links {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	return rels
 }

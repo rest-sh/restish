@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,81 @@ func response(status int, body string) *http.Response {
 		StatusCode: status,
 		Header:     http.Header{},
 		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+type closeCountingTransport struct {
+	closeCount atomic.Int32
+	idleCount  atomic.Int32
+}
+
+func (t *closeCountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return response(http.StatusOK, "ok"), nil
+}
+
+func (t *closeCountingTransport) Close() error {
+	t.closeCount.Add(1)
+	return nil
+}
+
+func (t *closeCountingTransport) CloseIdleConnections() {
+	t.idleCount.Add(1)
+}
+
+type closeCountingWrapper struct {
+	inner      http.RoundTripper
+	closeCount atomic.Int32
+	idleCount  atomic.Int32
+}
+
+func (t *closeCountingWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.inner.RoundTrip(req)
+}
+
+func (t *closeCountingWrapper) Close() error {
+	t.closeCount.Add(1)
+	if closer, ok := t.inner.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+func (t *closeCountingWrapper) CloseIdleConnections() {
+	t.idleCount.Add(1)
+	if closer, ok := t.inner.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func TestBuildTransportCloseFullStackOnce(t *testing.T) {
+	base := &closeCountingTransport{}
+	var wrapper *closeCountingWrapper
+	rt := request.BuildTransport(request.Options{
+		Transport:      base,
+		CacheDir:       t.TempDir(),
+		Retry:          1,
+		RetryBaseDelay: time.Nanosecond,
+		WrapTransport: func(inner http.RoundTripper) http.RoundTripper {
+			wrapper = &closeCountingWrapper{inner: inner}
+			return wrapper
+		},
+	})
+
+	closer, ok := rt.(interface{ Close() error })
+	if !ok {
+		t.Fatal("transport does not implement Close")
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := wrapper.closeCount.Load(); got != 1 {
+		t.Fatalf("wrapper Close count = %d, want 1", got)
+	}
+	if got := base.closeCount.Load(); got != 1 {
+		t.Fatalf("base Close count = %d, want 1", got)
+	}
+	if got := base.idleCount.Load(); got != 1 {
+		t.Fatalf("base CloseIdleConnections count = %d, want 1", got)
 	}
 }
 

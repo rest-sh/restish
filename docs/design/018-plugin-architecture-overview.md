@@ -88,6 +88,12 @@ fields are part of that declaration: formatter plugins must declare
 `formatter_names`, loader plugins must declare `loader_content_types`, and
 those fields are rejected when the corresponding hook is absent.
 
+Request-middleware header updates use host-owned merge semantics: a string
+sets one header value, an array replaces all values, and `null` deletes the
+header. Response-middleware `response_headers` replaces the normalized response
+header object rather than merging into it; plugins that need to preserve inbound
+headers must echo them back explicitly.
+
 Manifest and startup protocol fields are part of the public Go API for plugin
 authors. They should have godoc that explains behavior and compatibility
 expectations, and exported constants should be used for host-provided startup
