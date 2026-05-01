@@ -125,6 +125,8 @@ func (c *TokenCache) DeletePrefix(prefix string) error {
 }
 
 func (c *TokenCache) load() (map[string]CachedToken, error) {
+	// Caller must hold c.mu. This uses the cached copy when file metadata is
+	// unchanged, otherwise it delegates to loadLocked for the disk read.
 	if c.loaded {
 		info, err := os.Stat(c.path)
 		if err == nil && info.ModTime().Equal(c.modTime) && info.Size() == c.size {

@@ -23,7 +23,12 @@ func (c *CLI) FetchResponse(ctx context.Context, method, rawURL, profileName str
 	if profileName == "" {
 		profileName = "default"
 	}
-	opts := request.Options{}
+	opts := request.Options{
+		AcceptHeader:         c.content.AcceptHeader(),
+		AcceptEncodingHeader: c.content.AcceptEncodingHeader(),
+		UserAgent:            "restish/" + Version,
+		Transport:            c.baseHTTPTransport(),
+	}
 	if len(rawHeaders) > 0 {
 		opts.Headers = rawHeaders
 	}

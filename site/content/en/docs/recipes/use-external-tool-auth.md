@@ -35,6 +35,11 @@ Config shape:
 Restish approves external tools by command hash. If the helper changes, you
 must approve it again.
 
+Set `omitbody=true` for helpers that may see binary request bodies. The
+external-tool auth wire format is compatible with Restish v1 and sends `body`
+as JSON text, so binary payloads should be omitted or represented by a digest
+that your helper can verify separately.
+
 Use this when another program owns credentials, signing, or token refresh. Keep
 the helper small and auditable, because it runs locally with the same access as
 your shell. The [Authentication guide](/docs/guides/authentication/) explains

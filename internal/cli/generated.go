@@ -345,17 +345,11 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	long = appendGeneratedOperationHelp(long, required, optional, op.Help)
 
 	cmd := &cobra.Command{
-		Use:     use,
-		Short:   short,
-		Long:    long,
-		Example: generatedOperationExamples(examplePrefix, use, op.Help.Examples),
-		Aliases: op.XCLI.Aliases,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
-				return nil
-			}
-			return cobra.MinimumNArgs(len(required))(cmd, args)
-		},
+		Use:        use,
+		Short:      short,
+		Long:       long,
+		Example:    generatedOperationExamples(c.commandName, examplePrefix, use, op.Help.Examples),
+		Aliases:    op.XCLI.Aliases,
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -623,15 +617,20 @@ func indentSchemaContinuation(schema, indent string) string {
 	return strings.Join(lines, "\n")
 }
 
-func generatedOperationExamples(apiName, use string, examples []string) string {
+func generatedOperationExamples(commandName, apiName, use string, examples []string) string {
 	if len(examples) == 0 {
 		return ""
+	}
+	if commandName == "" {
+		commandName = "restish"
 	}
 	use = strings.TrimSuffix(use, " [body...]")
 	use = strings.TrimSuffix(use, " <body...>")
 	var b strings.Builder
 	for _, ex := range examples {
-		b.WriteString("  restish ")
+		b.WriteString("  ")
+		b.WriteString(commandName)
+		b.WriteString(" ")
 		b.WriteString(apiName)
 		b.WriteString(" ")
 		b.WriteString(use)

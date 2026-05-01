@@ -382,6 +382,7 @@ func (c *CLI) Run(args []string) error {
 	ctx, cancel := signalAwareContext()
 	defer cancel()
 
+	c.retryUnsafeWarned = false
 	c.requestClosers = nil
 	defer c.closeRequestClosers()
 

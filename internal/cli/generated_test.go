@@ -1180,6 +1180,19 @@ func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) 
 			t.Fatalf("expected help to contain %q, got:\n%s", want, got)
 		}
 	}
+
+	c, out = env.newCaptureCLI()
+	c.SetCommandName("myapp")
+	if err := c.Run([]string{"myapp", "tapi", "create-pet", "--help"}); err != nil {
+		t.Fatalf("help with custom command name: %v", err)
+	}
+	got = out.String()
+	if !strings.Contains(got, "myapp tapi create-pet name: Fluffy, secret_token: abc123") {
+		t.Fatalf("expected generated example to use custom command name, got:\n%s", got)
+	}
+	if strings.Contains(got, "restish tapi create-pet name: Fluffy") {
+		t.Fatalf("generated example used hard-coded command name, got:\n%s", got)
+	}
 }
 
 func TestGeneratedCommandHelpShowsResponseHeaders(t *testing.T) {

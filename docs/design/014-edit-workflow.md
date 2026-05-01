@@ -56,6 +56,9 @@ content-type and normalization model Restish uses elsewhere. It also avoids
 needing a byte-preserving edit mode for every possible wire format.
 
 The editable representation can currently be JSON or YAML via `--edit-format`.
+That flag only controls the temporary editor file. When Restish sends the
+edited resource back with PUT, it should encode the body using the original GET
+response content type, defaulting to JSON when the response did not include one.
 
 ## Editor Selection
 

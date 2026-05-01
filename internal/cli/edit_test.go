@@ -87,6 +87,53 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	}
 }
 
+func TestEditCommandYAMLEditKeepsOriginalJSONWireType(t *testing.T) {
+	captured := installFakeEditor(t, "name: after\n")
+
+	var rr requestRecorder
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			rr.capture(r)
+			if got := r.Header.Get("Content-Type"); got != "application/json" {
+				http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
+				return
+			}
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "--edit-format", "yaml", "-y", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	originalFile, err := os.ReadFile(captured)
+	if err != nil {
+		t.Fatalf("read captured file: %v", err)
+	}
+	if !strings.Contains(string(originalFile), "name: before") {
+		t.Fatalf("captured file did not contain fetched YAML: %s", originalFile)
+	}
+	if got := rr.Last().Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("PUT Content-Type = %q, want application/json", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.body, &body); err != nil {
+		t.Fatalf("update body is not valid JSON: %v; body=%q", err, rr.body)
+	}
+	if body["name"] != "after" {
+		t.Fatalf("expected updated name, got %v", body["name"])
+	}
+}
+
 func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
 	captured := installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 

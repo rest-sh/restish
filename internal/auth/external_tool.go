@@ -27,7 +27,8 @@ const (
 // Config params:
 //
 //	commandline  (required) shell command to run; executed via $SHELL -c
-//	omitbody     (optional) "true" skips sending the request body to the tool
+//	omitbody     (optional) "true" skips sending the request body to the tool;
+//	             use for binary bodies because body is v1-compatible JSON text
 //	output       (optional) "bearer-token" treats stdout as a bearer token
 //
 // Wire format (stdin → tool):

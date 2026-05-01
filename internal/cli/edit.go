@@ -81,6 +81,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	wireContentType := editWireContentType(resp.Headers)
 
 	originalText, err := marshalEditValue(editFormat, resp.Body)
 	if err != nil {
@@ -187,7 +188,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 
 	updateMethod := "PUT"
 	updateBody := any(editedValue)
-	updateContentType := mimeType
+	updateContentType := wireContentType
 	if supportsMergePatch(resp.Headers) {
 		updateMethod = "PATCH"
 		updateBody = buildMergePatch(resp.Body, editedValue)
@@ -250,6 +251,14 @@ func editFormatInfo(name string) (mimeType, ext string, err error) {
 	default:
 		return "", "", fmt.Errorf("unsupported edit format %q; expected json or yaml", name)
 	}
+}
+
+func editWireContentType(headers map[string][]string) string {
+	contentType := strings.TrimSpace(strings.Split(output.Header(headers, "Content-Type"), ";")[0])
+	if contentType == "" {
+		return "application/json"
+	}
+	return contentType
 }
 
 func marshalEditValue(format string, v any) ([]byte, error) {

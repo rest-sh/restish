@@ -108,7 +108,7 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 	}
 }
 
-func TestRetryUnsafeWarningIsOneShot(t *testing.T) {
+func TestRetryUnsafeWarningResetsBetweenRuns(t *testing.T) {
 	var callCount atomic.Int32
 	c, _, stderr := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -123,11 +123,25 @@ func TestRetryUnsafeWarningIsOneShot(t *testing.T) {
 	if err := c.Run(args); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	if got := strings.Count(stderr.String(), "retrying unsafe HTTP methods can repeat side effects"); got != 1 {
-		t.Fatalf("unsafe retry warning count = %d, want 1; stderr:\n%s", got, stderr.String())
+	if got := strings.Count(stderr.String(), "retrying unsafe HTTP methods can repeat side effects"); got != 2 {
+		t.Fatalf("unsafe retry warning count = %d, want 2; stderr:\n%s", got, stderr.String())
 	}
 	if got := callCount.Load(); got != 2 {
 		t.Fatalf("call count = %d, want 2", got)
+	}
+}
+
+func TestRetryZeroDoesNotWarnForUnsafeMethods(t *testing.T) {
+	c, _, stderr := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
+
+	if err := c.Run([]string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "0", "https://api.example.com/items", "name:demo"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if strings.Contains(stderr.String(), "retrying unsafe HTTP methods can repeat side effects") {
+		t.Fatalf("unexpected unsafe retry warning with --rsh-retry 0; stderr:\n%s", stderr.String())
 	}
 }
 

@@ -401,7 +401,8 @@ Output schema (only `headers` and `uri` are processed):
 ```
 
 Parameters: `commandline` (required), `omitbody` (optional — omits `body`
-from stdin payload).
+from stdin payload; set this for binary request bodies because the v1-compatible
+JSON wire format carries `body` as text).
 
 ### PKCS#11 Hardware Certificates
 

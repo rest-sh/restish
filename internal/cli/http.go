@@ -1146,7 +1146,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		CacheMaxBytes:        cacheMaxBytes,
 		NoCache:              gf.NoCache,
 		Retry:                retry,
-		RetryUnsafe:          gf.Retry >= 0,
+		RetryUnsafe:          gf.Retry > 0,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		RetryMaxWait:         retryMaxWait,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
@@ -1186,6 +1186,9 @@ func parseByteSize(s string) (int64, error) {
 
 	mult := int64(1)
 	switch {
+	case strings.HasSuffix(v, "TIB"):
+		mult = 1024 * 1024 * 1024 * 1024
+		v = strings.TrimSuffix(v, "TIB")
 	case strings.HasSuffix(v, "GIB"):
 		mult = 1024 * 1024 * 1024
 		v = strings.TrimSuffix(v, "GIB")
@@ -1195,6 +1198,9 @@ func parseByteSize(s string) (int64, error) {
 	case strings.HasSuffix(v, "KIB"):
 		mult = 1024
 		v = strings.TrimSuffix(v, "KIB")
+	case strings.HasSuffix(v, "TB"):
+		mult = 1000 * 1000 * 1000 * 1000
+		v = strings.TrimSuffix(v, "TB")
 	case strings.HasSuffix(v, "GB"):
 		mult = 1000 * 1000 * 1000
 		v = strings.TrimSuffix(v, "GB")
