@@ -230,3 +230,12 @@ func TestDeviceCodeRequestRejectsOversizedBody(t *testing.T) {
 		t.Fatalf("expected size limit error, got %v", err)
 	}
 }
+
+func TestDeviceCodeSlowDownIntervalIsCapped(t *testing.T) {
+	if got := capDevicePollInterval(35 * time.Second); got != 30*time.Second {
+		t.Fatalf("capDevicePollInterval(35s) = %v, want 30s", got)
+	}
+	if got := capDevicePollInterval(25 * time.Second); got != 25*time.Second {
+		t.Fatalf("capDevicePollInterval(25s) = %v, want 25s", got)
+	}
+}

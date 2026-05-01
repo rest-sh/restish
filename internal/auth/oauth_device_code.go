@@ -212,7 +212,7 @@ func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, devi
 		switch tokenErr.ErrorCode {
 		case "authorization_pending":
 		case "slow_down":
-			interval += 5 * time.Second
+			interval = capDevicePollInterval(interval + 5*time.Second)
 		default:
 			return CachedToken{}, err
 		}
@@ -225,6 +225,14 @@ func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, devi
 		case <-timer.C:
 		}
 	}
+}
+
+func capDevicePollInterval(interval time.Duration) time.Duration {
+	const maxDevicePollInterval = 30 * time.Second
+	if interval > maxDevicePollInterval {
+		return maxDevicePollInterval
+	}
+	return interval
 }
 
 func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[string]string, deviceURL string) (*deviceAuthorizationResponse, error) {

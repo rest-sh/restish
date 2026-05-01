@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -464,6 +466,36 @@ func TestAuthCode_ManualCodeFallback(t *testing.T) {
 	}
 }
 
+func TestAuthCode_NoBrowserManualPromptDoesNotStartCallbackListener(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	port := fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
+
+	h := &AuthorizationCode{
+		NoBrowser: true,
+		CanPrompt: true,
+		Prompt: func(prompt string) (string, error) {
+			return "manual-code", nil
+		},
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			return testResponse(200, "application/json", `{"access_token":"manual-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err = h.OnRequest(req, map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_port": port,
+	})
+	if err != nil {
+		t.Fatalf("manual prompt should not bind occupied callback port: %v", err)
+	}
+}
+
 func TestAuthCode_RefreshNetworkFailureDoesNotFallback(t *testing.T) {
 	h := &AuthorizationCode{
 		Cache: NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
@@ -496,6 +528,33 @@ func TestAuthCode_RefreshNetworkFailureDoesNotFallback(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "dial failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDefaultOpenBrowserReturnsAfterStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep command not portable to Windows")
+	}
+	oldCommand := openBrowserCommand
+	openBrowserCommand = func(rawURL string) *exec.Cmd {
+		return exec.Command("sleep", "2")
+	}
+	t.Cleanup(func() { openBrowserCommand = oldCommand })
+
+	start := time.Now()
+	if err := DefaultOpenBrowser("https://example.com"); err != nil {
+		t.Fatalf("DefaultOpenBrowser: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("DefaultOpenBrowser waited for child process: %v", elapsed)
+	}
+}
+
+func TestDefaultOpenBrowserCommandUsesArgumentSeparator(t *testing.T) {
+	cmd := defaultOpenBrowserCommand("-https://example.com")
+	args := strings.Join(cmd.Args, "\x00")
+	if !strings.Contains(args, "\x00--\x00-https://example.com") {
+		t.Fatalf("browser command should pass -- before URL, got %#v", cmd.Args)
 	}
 }
 
