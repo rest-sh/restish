@@ -38,6 +38,21 @@ func indexPluginsByHook(plugins []plugin.Plugin) map[string][]plugin.Plugin {
 	return indexed
 }
 
+func indexAuthPluginsByAPI(plugins []plugin.Plugin) ([]plugin.Plugin, map[string][]plugin.Plugin) {
+	byAPI := map[string][]plugin.Plugin{}
+	var global []plugin.Plugin
+	for _, p := range plugins {
+		if len(p.Manifest.AuthAPINames) == 0 {
+			global = append(global, p)
+			continue
+		}
+		for _, name := range p.Manifest.AuthAPINames {
+			byAPI[name] = append(byAPI[name], p)
+		}
+	}
+	return global, byAPI
+}
+
 func pluginDeclaresHook(manifest plugin.Manifest, hook string) bool {
 	for _, declared := range manifest.Hooks {
 		if declared == hook {
@@ -78,19 +93,9 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 // Plugins that declare auth_api_names in their manifest are only called when
 // apiName appears in that list.
 func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
-	for _, p := range c.pluginsByHook["auth"] {
-		if len(p.Manifest.AuthAPINames) > 0 {
-			matched := false
-			for _, name := range p.Manifest.AuthAPINames {
-				if name == apiName {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
+	plugins := append([]plugin.Plugin(nil), c.globalAuthPlugins...)
+	plugins = append(plugins, c.authPluginsByAPI[apiName]...)
+	for _, p := range plugins {
 		params := rawParams
 		if !p.Manifest.NeedsAuthSecrets && len(secretKeys) > 0 {
 			redacted := make(map[string]string, len(rawParams))

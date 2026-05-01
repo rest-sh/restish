@@ -1,6 +1,7 @@
 package input_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -14,6 +15,33 @@ func TestBody_NoArgsNoStdin(t *testing.T) {
 	}
 	if body != nil {
 		t.Errorf("expected nil body with no args and TTY stdin, got %v", body)
+	}
+}
+
+func TestBodyWarnsWhenUnstructuredStdinIsIgnoredForArgs(t *testing.T) {
+	var warnings []string
+	body, err := input.BodyWithSchemaTypesAndWarnings(strings.NewReader("plain text"), false, []string{"name:", "Ada"}, "", nil, func(format string, args ...any) {
+		warnings = append(warnings, format)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want one", warnings)
+	}
+	m, ok := body.(map[string]any)
+	if !ok || m["name"] != "Ada" {
+		t.Fatalf("body = %#v, want args-only map", body)
+	}
+}
+
+func TestBodyRejectsOversizedStdin(t *testing.T) {
+	_, err := input.Body(bytes.NewReader(bytes.Repeat([]byte("x"), input.MaxStdinBodyBytes+1)), false, nil, "")
+	if err == nil {
+		t.Fatal("expected oversized stdin error")
+	}
+	if !strings.Contains(err.Error(), "stdin body exceeds") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

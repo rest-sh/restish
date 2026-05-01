@@ -10,6 +10,8 @@ import (
 	"github.com/danielgtaylor/shorthand/v2"
 )
 
+const MaxStdinBodyBytes = 16 << 20
+
 // Body parses positional CLI args (shorthand syntax) and/or stdin into a
 // request body. The rules are:
 //
@@ -34,6 +36,10 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType str
 // so OpenAPI string fields keep string semantics for numeric-looking shorthand
 // values without changing generic request shorthand behavior.
 func BodyWithSchemaTypes(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string, schemaTypes map[string]string) (any, error) {
+	return BodyWithSchemaTypesAndWarnings(stdinReader, stdinIsTTY, args, contentType, schemaTypes, nil)
+}
+
+func BodyWithSchemaTypesAndWarnings(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string, schemaTypes map[string]string, warnf func(string, ...any)) (any, error) {
 	opts := shorthand.ParseOptions{
 		EnableFileInput:       enableFileInput(contentType),
 		EnableObjectDetection: true,
@@ -42,9 +48,12 @@ func BodyWithSchemaTypes(stdinReader io.Reader, stdinIsTTY bool, args []string, 
 	var base any
 
 	if !stdinIsTTY {
-		data, err := io.ReadAll(stdinReader)
+		data, err := io.ReadAll(io.LimitReader(stdinReader, MaxStdinBodyBytes+1))
 		if err != nil {
 			return nil, err
+		}
+		if len(data) > MaxStdinBodyBytes {
+			return nil, fmt.Errorf("stdin body exceeds %d bytes; use @file input or reduce stdin size", MaxStdinBodyBytes)
 		}
 		if len(data) > 0 {
 			parsed, serr := shorthand.Unmarshal(string(data), opts, nil)
@@ -54,11 +63,20 @@ func BodyWithSchemaTypes(stdinReader io.Reader, stdinIsTTY bool, args []string, 
 				if len(args) == 0 {
 					return string(data), nil
 				}
+				if warnf != nil {
+					warnf("stdin body could not be parsed as structured shorthand; applying body arguments only")
+				}
 				// Can't patch non-structured stdin; treat it as args-only.
 			} else {
 				if len(args) == 0 {
 					coerceSchemaTypes(parsed, schemaTypes)
 					return parsed, nil
+				}
+				if !isStructuredBody(parsed) {
+					if warnf != nil {
+						warnf("stdin body is not a structured object or array; applying body arguments only")
+					}
+					parsed = nil
 				}
 				base = parsed
 			}
@@ -78,6 +96,15 @@ func BodyWithSchemaTypes(stdinReader io.Reader, stdinIsTTY bool, args []string, 
 	}
 	coerceSchemaTypes(result, schemaTypes)
 	return result, nil
+}
+
+func isStructuredBody(value any) bool {
+	switch value.(type) {
+	case map[string]any, []any:
+		return true
+	default:
+		return false
+	}
 }
 
 func coerceSchemaTypes(value any, schemaTypes map[string]string) {

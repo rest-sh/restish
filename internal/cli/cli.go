@@ -99,6 +99,8 @@ type CLI struct {
 	formatters          map[string]output.Formatter
 	plugins             []internalplugin.Plugin
 	pluginsByHook       map[string][]internalplugin.Plugin
+	authPluginsByAPI    map[string][]internalplugin.Plugin
+	globalAuthPlugins   []internalplugin.Plugin
 	customAuthHandlers  map[string]authpkg.Handler
 	requestClosersMu    sync.Mutex
 	nextRequestCloserID uint64
@@ -449,6 +451,7 @@ func (c *CLI) Run(args []string) error {
 		c.warnf("plugin %s: %v", filepath.Base(path), err)
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 	c.pluginsByHook = indexPluginsByHook(c.plugins)
+	c.globalAuthPlugins, c.authPluginsByAPI = indexAuthPluginsByAPI(c.pluginsByHook["auth"])
 
 	// Register plugin-provided formatters and loaders.
 	for _, p := range c.plugins {

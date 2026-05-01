@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -86,7 +87,11 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("edit: marshal resource: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "restish-edit-*"+ext)
+	editTmpDir := filepath.Join(c.cacheDir(), "edit")
+	if err := os.MkdirAll(editTmpDir, 0o700); err != nil {
+		return fmt.Errorf("edit: create temp dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(editTmpDir, "restish-edit-*"+ext)
 	if err != nil {
 		return fmt.Errorf("edit: create temp file: %w", err)
 	}

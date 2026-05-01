@@ -27,6 +27,23 @@ func TestIndexPluginsByHook(t *testing.T) {
 	}
 }
 
+func TestIndexAuthPluginsByAPI(t *testing.T) {
+	plugins := []internalplugin.Plugin{
+		{Manifest: internalplugin.Manifest{Name: "global", Hooks: []string{"auth"}}},
+		{Manifest: internalplugin.Manifest{Name: "scoped", Hooks: []string{"auth"}, AuthAPINames: []string{"api1", "api2"}}},
+	}
+	global, byAPI := indexAuthPluginsByAPI(plugins)
+	if len(global) != 1 || global[0].Manifest.Name != "global" {
+		t.Fatalf("global plugins = %#v", global)
+	}
+	if len(byAPI["api1"]) != 1 || byAPI["api1"][0].Manifest.Name != "scoped" {
+		t.Fatalf("api1 plugins = %#v", byAPI["api1"])
+	}
+	if len(byAPI["api2"]) != 1 || byAPI["api2"][0].Manifest.Name != "scoped" {
+		t.Fatalf("api2 plugins = %#v", byAPI["api2"])
+	}
+}
+
 func TestPluginDeclaresHook(t *testing.T) {
 	manifest := internalplugin.Manifest{
 		Name:           "rogue",
