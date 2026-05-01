@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -141,6 +142,172 @@ func TestCommandClientFetchAPISpecContextTimesOut(t *testing.T) {
 
 	if _, loaded := client.specs.Load("example\x00staging"); loaded {
 		t.Fatal("timed-out API spec request was not removed from pending map")
+	}
+}
+
+func TestCommandClientHelpersRouteConcurrentRepliesByRequestID(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	hostErr := make(chan error, 1)
+	go func() {
+		dec := NewDecoder(pluginToHostR)
+		var prompts []PromptMsg
+		for len(prompts) < 2 {
+			msgRaw, err := dec.ReadRaw()
+			if err != nil {
+				hostErr <- err
+				return
+			}
+			if MessageType(msgRaw) != MsgTypePrompt {
+				hostErr <- nil
+				return
+			}
+			var msg PromptMsg
+			if err := DecMode.Unmarshal(msgRaw, &msg); err != nil {
+				hostErr <- err
+				return
+			}
+			if msg.RequestID == "" {
+				hostErr <- nil
+				return
+			}
+			prompts = append(prompts, msg)
+		}
+		for i := len(prompts) - 1; i >= 0; i-- {
+			msg := prompts[i]
+			if err := WriteMessage(hostToPluginW, PromptResponseMsg{
+				Type:      MsgTypePromptResponse,
+				RequestID: msg.RequestID,
+				Value:     msg.Message + "-reply",
+			}); err != nil {
+				hostErr <- err
+				return
+			}
+		}
+		hostErr <- nil
+	}()
+
+	var wg sync.WaitGroup
+	results := make(chan string, 2)
+	for _, prompt := range []string{"first", "second"} {
+		wg.Add(1)
+		go func(prompt string) {
+			defer wg.Done()
+			resp, err := client.PromptContext(context.Background(), prompt, false)
+			if err != nil {
+				t.Errorf("PromptContext(%s): %v", prompt, err)
+				return
+			}
+			results <- resp.Value
+		}(prompt)
+	}
+	wg.Wait()
+	close(results)
+	if err := <-hostErr; err != nil {
+		t.Fatalf("host: %v", err)
+	}
+
+	seen := map[string]bool{}
+	for result := range results {
+		seen[result] = true
+	}
+	for _, want := range []string{"first-reply", "second-reply"} {
+		if !seen[want] {
+			t.Fatalf("missing %q in %#v", want, seen)
+		}
+	}
+}
+
+func TestCommandClientHelpersWriteExpectedMessages(t *testing.T) {
+	tests := []struct {
+		name     string
+		call     func(*CommandClient) error
+		wantType string
+	}{
+		{
+			name: "list apis",
+			call: func(c *CommandClient) error {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				_, err := c.ListAPIsContext(ctx)
+				return err
+			},
+			wantType: MsgTypeListAPIs,
+		},
+		{
+			name: "list profiles",
+			call: func(c *CommandClient) error {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				_, err := c.ListProfilesContext(ctx, "api")
+				return err
+			},
+			wantType: MsgTypeListProfiles,
+		},
+		{
+			name: "config read",
+			call: func(c *CommandClient) error {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				_, err := c.ConfigReadContext(ctx, "api", "default", "plug")
+				return err
+			},
+			wantType: MsgTypeConfigRead,
+		},
+		{
+			name: "confirm",
+			call: func(c *CommandClient) error {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				_, err := c.ConfirmContext(ctx, "continue?")
+				return err
+			},
+			wantType: MsgTypeConfirm,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hostToPluginR, hostToPluginW := io.Pipe()
+			pluginToHostR, pluginToHostW := io.Pipe()
+			defer hostToPluginR.Close()
+			defer hostToPluginW.Close()
+			defer pluginToHostR.Close()
+			defer pluginToHostW.Close()
+
+			client := NewCommandClient(hostToPluginR, pluginToHostW)
+			errCh := make(chan error, 1)
+			go func() { errCh <- tt.call(client) }()
+
+			raw, err := NewDecoder(pluginToHostR).ReadRaw()
+			if err != nil {
+				t.Fatalf("read helper message: %v", err)
+			}
+			if got := MessageType(raw); got != tt.wantType {
+				t.Fatalf("message type = %q, want %q", got, tt.wantType)
+			}
+			if err := <-errCh; err == nil || !strings.Contains(err.Error(), "timed out or was canceled") {
+				t.Fatalf("helper error = %v, want cancellation", err)
+			}
+		})
+	}
+
+	var out bytes.Buffer
+	client := NewCommandClient(bytes.NewReader(nil), &out)
+	if err := client.Response(201, map[string][]string{"X-Test": []string{"yes"}}, map[string]any{"ok": true}); err != nil {
+		t.Fatalf("Response: %v", err)
+	}
+	var msg ResponseMsg
+	if err := NewDecoder(bytes.NewReader(out.Bytes())).ReadMessage(&msg); err != nil {
+		t.Fatalf("read response message: %v", err)
+	}
+	if msg.Type != MsgTypeResponse || msg.Status != 201 {
+		t.Fatalf("response message = %#v", msg)
 	}
 }
 

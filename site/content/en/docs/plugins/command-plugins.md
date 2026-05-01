@@ -23,7 +23,41 @@ Use a hook plugin for one request/response/auth/formatting task.
 
 ## Delegated HTTP
 
-Command plugins should usually ask Restish to make requests:
+Go command plugins should use `plugin.CommandClient` helpers instead of
+hand-writing CBOR messages. Delegated HTTP uses `Do`:
+
+```go
+resp, err := c.Do(&plugin.HTTPRequestMsg{
+  Method: "GET",
+  URI:    "https://api.rest.sh/items",
+})
+```
+
+That preserves host profiles, auth, TLS signer behavior, retries, cache,
+and output normalization. Each delegated `http-request` returns one normalized
+response. If a command plugin wants pagination, it should send follow-up
+requests itself.
+
+To inspect a registered API, call `FetchAPISpec` or `FetchAPISpecContext` with
+the API name and, when needed, the profile whose server variables should be
+used:
+
+```go
+spec, err := c.FetchAPISpecContext(ctx, "example", "staging")
+```
+
+Other host-owned workflows have helpers too:
+
+```go
+apis, err := c.ListAPIs()
+profiles, err := c.ListProfiles("example")
+cfg, err := c.ConfigRead("example", "default", "my-plugin")
+answer, err := c.Prompt("Label", false)
+ok, err := c.Confirm("Continue?")
+err = c.Response(200, nil, map[string]any{"ok": ok, "apis": apis.APIs})
+```
+
+Non-Go plugins can send the same message families directly:
 
 ```json
 {
@@ -32,14 +66,6 @@ Command plugins should usually ask Restish to make requests:
   "uri": "https://api.rest.sh/items"
 }
 ```
-
-That preserves host profiles, auth, TLS signer behavior, retries, cache,
-and output normalization. Each delegated `http-request` returns one normalized
-response. If a command plugin wants pagination, it should send follow-up
-requests itself.
-
-To inspect a registered API, send `api-spec` with the API name and, when needed,
-the profile whose server variables should be used:
 
 ```json
 {

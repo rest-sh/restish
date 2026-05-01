@@ -363,7 +363,11 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.
 		}
 		return false, c.handlePluginAPISpec(requestCtx, cmd, writer, msg)
 	case pluginwire.MsgTypeListAPIs:
-		return false, c.handlePluginListAPIs(writer)
+		var msg pluginwire.ListAPIsMsg
+		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
+			return false, err
+		}
+		return false, c.handlePluginListAPIs(writer, msg)
 	case pluginwire.MsgTypeListProfiles:
 		var msg pluginwire.ListProfilesMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
@@ -575,17 +579,19 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 	}
 	if msg.Name == "" {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:    pluginwire.MsgTypeAPISpecResponse,
-			Profile: profileName,
-			Error:   "missing api name",
+			Type:      pluginwire.MsgTypeAPISpecResponse,
+			RequestID: msg.RequestID,
+			Profile:   profileName,
+			Error:     "missing api name",
 		})
 	}
 	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[msg.Name] == nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:    pluginwire.MsgTypeAPISpecResponse,
-			Name:    msg.Name,
-			Profile: profileName,
-			Error:   fmt.Sprintf("unknown API %q", msg.Name),
+			Type:      pluginwire.MsgTypeAPISpecResponse,
+			RequestID: msg.RequestID,
+			Name:      msg.Name,
+			Profile:   profileName,
+			Error:     fmt.Sprintf("unknown API %q", msg.Name),
 		})
 	}
 	apiCfg := c.cfg.APIs[msg.Name]
@@ -593,29 +599,32 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:    pluginwire.MsgTypeAPISpecResponse,
-			Name:    msg.Name,
-			Profile: profileName,
-			Error:   err.Error(),
+			Type:      pluginwire.MsgTypeAPISpecResponse,
+			RequestID: msg.RequestID,
+			Name:      msg.Name,
+			Profile:   profileName,
+			Error:     err.Error(),
 		})
 	}
 	if s == nil {
 		s, err = c.discoverSpec(ctx, msg.Name)
 		if err != nil {
 			return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-				Type:    pluginwire.MsgTypeAPISpecResponse,
-				Name:    msg.Name,
-				Profile: profileName,
-				Error:   err.Error(),
+				Type:      pluginwire.MsgTypeAPISpecResponse,
+				RequestID: msg.RequestID,
+				Name:      msg.Name,
+				Profile:   profileName,
+				Error:     err.Error(),
 			})
 		}
 	}
 	if s == nil || len(s.Raw) == 0 {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:    pluginwire.MsgTypeAPISpecResponse,
-			Name:    msg.Name,
-			Profile: profileName,
-			Error:   fmt.Sprintf("no spec available for %q", msg.Name),
+			Type:      pluginwire.MsgTypeAPISpecResponse,
+			RequestID: msg.RequestID,
+			Name:      msg.Name,
+			Profile:   profileName,
+			Error:     fmt.Sprintf("no spec available for %q", msg.Name),
 		})
 	}
 	opSet, err := s.OperationSetWithOptions(spec.OperationOptions{
@@ -625,15 +634,17 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 	})
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
-			Type:    pluginwire.MsgTypeAPISpecResponse,
-			Name:    msg.Name,
-			Profile: profileName,
-			Error:   err.Error(),
+			Type:      pluginwire.MsgTypeAPISpecResponse,
+			RequestID: msg.RequestID,
+			Name:      msg.Name,
+			Profile:   profileName,
+			Error:     err.Error(),
 		})
 	}
 
 	return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 		Type:        pluginwire.MsgTypeAPISpecResponse,
+		RequestID:   msg.RequestID,
 		Name:        msg.Name,
 		Profile:     profileName,
 		ContentType: s.ContentType,
@@ -690,13 +701,15 @@ func (c *CLI) handlePluginPrompt(ctx context.Context, writer *commandPluginWrite
 	}
 	if readErr != nil {
 		return writer.WriteMessage(pluginwire.PromptResponseMsg{
-			Type:  pluginwire.MsgTypePromptResponse,
-			Error: readErr.Error(),
+			Type:      pluginwire.MsgTypePromptResponse,
+			RequestID: msg.RequestID,
+			Error:     readErr.Error(),
 		})
 	}
 	return writer.WriteMessage(pluginwire.PromptResponseMsg{
-		Type:  pluginwire.MsgTypePromptResponse,
-		Value: value,
+		Type:      pluginwire.MsgTypePromptResponse,
+		RequestID: msg.RequestID,
+		Value:     value,
 	})
 }
 
@@ -704,18 +717,20 @@ func (c *CLI) handlePluginConfirm(ctx context.Context, writer *commandPluginWrit
 	confirmed, err := c.Confirm(ctx, msg.Message)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
-			Type:  pluginwire.MsgTypeConfirmResponse,
-			Error: err.Error(),
+			Type:      pluginwire.MsgTypeConfirmResponse,
+			RequestID: msg.RequestID,
+			Error:     err.Error(),
 		})
 	}
 	return writer.WriteMessage(pluginwire.ConfirmResponseMsg{
-		Type:  pluginwire.MsgTypeConfirmResponse,
-		Value: confirmed,
+		Type:      pluginwire.MsgTypeConfirmResponse,
+		RequestID: msg.RequestID,
+		Value:     confirmed,
 	})
 }
 
 func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg pluginwire.ConfigReadMsg) error {
-	reply := pluginwire.ConfigReadResponseMsg{Type: pluginwire.MsgTypeConfigReadResponse}
+	reply := pluginwire.ConfigReadResponseMsg{Type: pluginwire.MsgTypeConfigReadResponse, RequestID: msg.RequestID}
 
 	if msg.Plugin != "" && c.cfg != nil && c.cfg.Plugins != nil {
 		if raw, ok := c.cfg.Plugins[msg.Plugin]; ok {
@@ -748,7 +763,7 @@ func (c *CLI) handlePluginConfigRead(writer *commandPluginWriter, msg pluginwire
 	return writer.WriteMessage(reply)
 }
 
-func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter) error {
+func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter, msg pluginwire.ListAPIsMsg) error {
 	var names []string
 	if c.cfg != nil {
 		names = make([]string, 0, len(c.cfg.APIs))
@@ -758,8 +773,9 @@ func (c *CLI) handlePluginListAPIs(writer *commandPluginWriter) error {
 		sort.Strings(names)
 	}
 	return writer.WriteMessage(pluginwire.ListAPIsResponseMsg{
-		Type: pluginwire.MsgTypeListAPIsResponse,
-		APIs: names,
+		Type:      pluginwire.MsgTypeListAPIsResponse,
+		RequestID: msg.RequestID,
+		APIs:      names,
 	})
 }
 
@@ -775,9 +791,10 @@ func (c *CLI) handlePluginListProfiles(writer *commandPluginWriter, msg pluginwi
 		}
 	}
 	return writer.WriteMessage(pluginwire.ListProfilesResponseMsg{
-		Type:     pluginwire.MsgTypeListProfilesResponse,
-		API:      msg.API,
-		Profiles: profileNames,
+		Type:      pluginwire.MsgTypeListProfilesResponse,
+		RequestID: msg.RequestID,
+		API:       msg.API,
+		Profiles:  profileNames,
 	})
 }
 

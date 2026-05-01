@@ -84,14 +84,16 @@ type HTTPResponseMsg struct {
 
 // APISpecMsg asks the host to load the OpenAPI spec for a registered API.
 type APISpecMsg struct {
-	Type    string `cbor:"type"`
-	Name    string `cbor:"name"`
-	Profile string `cbor:"profile,omitempty"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	Name      string `cbor:"name"`
+	Profile   string `cbor:"profile,omitempty"`
 }
 
 // APISpecResponseMsg is the host reply to an APISpecMsg.
 type APISpecResponseMsg struct {
 	Type        string         `cbor:"type"`
+	RequestID   string         `cbor:"request_id,omitempty"`
 	Name        string         `cbor:"name"`
 	Profile     string         `cbor:"profile,omitempty"`
 	ContentType string         `cbor:"content_type,omitempty"`
@@ -130,37 +132,42 @@ type APIParam struct {
 
 // ListAPIsMsg asks the host for the list of configured API names.
 type ListAPIsMsg struct {
-	Type string `cbor:"type"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
 }
 
 // ListAPIsResponseMsg is the host reply to a ListAPIsMsg.
 type ListAPIsResponseMsg struct {
-	Type  string   `cbor:"type"`
-	APIs  []string `cbor:"apis"`
-	Error string   `cbor:"error,omitempty"`
+	Type      string   `cbor:"type"`
+	RequestID string   `cbor:"request_id,omitempty"`
+	APIs      []string `cbor:"apis"`
+	Error     string   `cbor:"error,omitempty"`
 }
 
 // ListProfilesMsg asks the host for the profile names of a specific API.
 type ListProfilesMsg struct {
-	Type string `cbor:"type"`
-	API  string `cbor:"api"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	API       string `cbor:"api"`
 }
 
 // ListProfilesResponseMsg is the host reply to a ListProfilesMsg.
 type ListProfilesResponseMsg struct {
-	Type     string   `cbor:"type"`
-	API      string   `cbor:"api"`
-	Profiles []string `cbor:"profiles"`
-	Error    string   `cbor:"error,omitempty"`
+	Type      string   `cbor:"type"`
+	RequestID string   `cbor:"request_id,omitempty"`
+	API       string   `cbor:"api"`
+	Profiles  []string `cbor:"profiles"`
+	Error     string   `cbor:"error,omitempty"`
 }
 
 // ConfigReadMsg asks the host for the effective configuration of an API
 // profile (base URL, persistent headers and query params), and/or the
 // plugin-specific config stored under plugins[Plugin] in restish.json.
 type ConfigReadMsg struct {
-	Type    string `cbor:"type"`
-	API     string `cbor:"api,omitempty"`
-	Profile string `cbor:"profile,omitempty"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	API       string `cbor:"api,omitempty"`
+	Profile   string `cbor:"profile,omitempty"`
 	// Plugin is the plugin's short name (without the "restish-" prefix).
 	// When set, the response includes PluginConfig populated from
 	// restish.json's plugins[Plugin] entry.
@@ -170,11 +177,12 @@ type ConfigReadMsg struct {
 // ConfigReadResponseMsg is the host reply to a ConfigReadMsg.
 // Auth secrets are intentionally excluded.
 type ConfigReadResponseMsg struct {
-	Type    string   `cbor:"type"`
-	BaseURL string   `cbor:"base_url,omitempty"`
-	Headers []string `cbor:"headers,omitempty"`
-	Query   []string `cbor:"query,omitempty"`
-	Error   string   `cbor:"error,omitempty"`
+	Type      string   `cbor:"type"`
+	RequestID string   `cbor:"request_id,omitempty"`
+	BaseURL   string   `cbor:"base_url,omitempty"`
+	Headers   []string `cbor:"headers,omitempty"`
+	Query     []string `cbor:"query,omitempty"`
+	Error     string   `cbor:"error,omitempty"`
 	// PluginConfig holds the parsed plugins[name] entry from restish.json,
 	// or nil when no config is stored for this plugin.
 	PluginConfig any `cbor:"plugin_config,omitempty"`
@@ -184,29 +192,33 @@ type ConfigReadResponseMsg struct {
 // user. When Hidden is true and stdin is a TTY, echo is suppressed (suitable
 // for password entry).
 type PromptMsg struct {
-	Type    string `cbor:"type"`
-	Message string `cbor:"message"`
-	Hidden  bool   `cbor:"hidden,omitempty"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	Message   string `cbor:"message"`
+	Hidden    bool   `cbor:"hidden,omitempty"`
 }
 
 // PromptResponseMsg is the host reply to a PromptMsg.
 type PromptResponseMsg struct {
-	Type  string `cbor:"type"`
-	Value string `cbor:"value,omitempty"`
-	Error string `cbor:"error,omitempty"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	Value     string `cbor:"value,omitempty"`
+	Error     string `cbor:"error,omitempty"`
 }
 
 // ConfirmMsg asks the host to display a message and read a yes/no answer.
 type ConfirmMsg struct {
-	Type    string `cbor:"type"`
-	Message string `cbor:"message"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	Message   string `cbor:"message"`
 }
 
 // ConfirmResponseMsg is the host reply to a ConfirmMsg.
 type ConfirmResponseMsg struct {
-	Type  string `cbor:"type"`
-	Value bool   `cbor:"value"`
-	Error string `cbor:"error,omitempty"`
+	Type      string `cbor:"type"`
+	RequestID string `cbor:"request_id,omitempty"`
+	Value     bool   `cbor:"value"`
+	Error     string `cbor:"error,omitempty"`
 }
 
 // FormatterResponse is the normalized response shape forwarded to formatter

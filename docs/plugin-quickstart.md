@@ -157,7 +157,6 @@ To make authenticated delegated requests from a command plugin:
 
 ```go
 resp, err := c.Do(&plugin.HTTPRequestMsg{
-	Type:   plugin.MsgTypeHTTPRequest,
 	Method: "GET",
 	URI:    "myapi/users",
 })
@@ -165,6 +164,22 @@ resp, err := c.Do(&plugin.HTTPRequestMsg{
 
 Restish handles auth, TLS, retries, cache settings, and response normalization
 before the reply comes back to your plugin.
+
+Prefer `CommandClient` helpers over hand-written protocol messages for host
+capabilities that wait for a reply:
+
+```go
+apis, err := c.ListAPIs()
+profiles, err := c.ListProfiles("myapi")
+cfg, err := c.ConfigRead("myapi", "default", "hello-cmd")
+answer, err := c.Prompt("Label", false)
+ok, err := c.Confirm("Continue?")
+err = c.Response(200, nil, map[string]any{"configured": cfg.PluginConfig != nil})
+```
+
+The context-aware variants (`ListAPIsContext`, `ConfigReadContext`,
+`PromptContext`, and friends) let plugins bound waits when the host is busy or
+the user does not answer.
 
 ## Local Development Loop
 

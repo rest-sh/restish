@@ -28,6 +28,10 @@ Plugin to host:
 - `warn`
 - `done`
 
+Reply-bearing command messages may include `request_id`; hosts echo it in the
+matching response. Go plugins should normally let `plugin.CommandClient`
+generate and route those IDs.
+
 Host to plugin:
 
 - `http-response`
