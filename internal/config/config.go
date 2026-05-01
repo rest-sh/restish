@@ -723,7 +723,7 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.
 		return err
 	}
 	defer lock.Close()
-	return atomicWriteFileLocked(path, data, fileMode, dirMode)
+	return atomicWriteFileLocked(path, data, fileMode, dirMode, true)
 }
 
 // LockSiblingFile acquires the sibling advisory lock used for config-style
@@ -733,7 +733,7 @@ func LockSiblingFile(path string) (io.Closer, error) {
 	return lockConfigFile(path)
 }
 
-func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
+func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, chmodExistingDir bool) error {
 	dir := filepath.Dir(path)
 	_, statErr := os.Stat(dir)
 	dirMissing := os.IsNotExist(statErr)
@@ -744,7 +744,7 @@ func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMo
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
 	}
-	if dirMissing {
+	if dirMissing || chmodExistingDir {
 		if err := os.Chmod(dir, dirMode); err != nil {
 			return fmt.Errorf("config: chmod dir: %w", err)
 		}

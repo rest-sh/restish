@@ -102,7 +102,7 @@ func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, 
 	if _, err := parseConfigBytes(path, patched); err != nil {
 		return err
 	}
-	return atomicWriteFileLocked(path, patched, 0o600, 0o700)
+	return atomicWriteFileLocked(path, patched, 0o600, 0o700, false)
 }
 
 // jsoncSetPath updates a nested path in JSONC-formatted bytes while preserving
