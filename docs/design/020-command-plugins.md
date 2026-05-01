@@ -147,6 +147,11 @@ Restish also passes simple terminal context flags on plugin startup:
 That gives plugins enough signal to adapt interactive behavior without coupling
 them tightly to the terminal implementation.
 
+Command discovery responses include a `protocol_version` field. Version `0` is
+treated as the initial command-plugin discovery shape for compatibility with
+older helpers, and versions greater than the host's current command-plugin
+protocol are rejected before commands are registered.
+
 ## Session Termination Rules
 
 The host ends a command-plugin session when:

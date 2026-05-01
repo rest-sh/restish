@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/procutil"
@@ -58,12 +59,16 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	if len(out) == 0 {
 		return nil, nil
 	}
+	return decodeCommandPluginDiscovery(filepath.Base(path), out)
+}
 
-	var resp struct {
-		Commands []pluginwire.CommandDecl `cbor:"commands"`
-	}
+func decodeCommandPluginDiscovery(pluginName string, out []byte) ([]pluginwire.CommandDecl, error) {
+	var resp pluginwire.CommandDiscoveryResponse
 	if err := pluginwire.DecMode.Unmarshal(out, &resp); err != nil {
-		return nil, fmt.Errorf("plugin %s: commands decode: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("plugin %s: commands decode: %w", pluginName, err)
+	}
+	if resp.ProtocolVersion > pluginwire.CommandPluginProtocolVersion {
+		return nil, fmt.Errorf("plugin %s: plugin requires restish >= a version that supports command plugin protocol %d", pluginName, resp.ProtocolVersion)
 	}
 	return resp.Commands, nil
 }
@@ -79,6 +84,7 @@ func commandPluginDiscoveryTimeout() time.Duration {
 
 func (c *CLI) addCommandPlugins(root *cobra.Command) {
 	seen := map[string]string{}
+	c.pluginCommandNames = map[string]string{}
 	for _, p := range c.pluginsByHook["command"] {
 		cmds, err := loadCommandPluginCommands(p.Path)
 		if err != nil {
@@ -96,6 +102,7 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 				continue
 			}
 			seen[decl.Name] = filepath.Base(pluginPath)
+			c.pluginCommandNames[decl.Name] = filepath.Base(pluginPath)
 			root.AddCommand(&cobra.Command{
 				Use:                decl.Name,
 				Short:              decl.Short,
@@ -295,60 +302,87 @@ func commandPluginShutdownGrace() time.Duration {
 
 // streamPluginStdin forwards c.Stdin to the command plugin as "stdin-data"
 // messages until stdin closes, a write error occurs, or done is closed.
-//
-// An inner goroutine performs the blocking Read from c.Stdin so that the outer
-// goroutine can select on both the read result and the done signal. When done
-// is closed the outer goroutine exits immediately; the inner goroutine remains
-// alive only until c.Stdin yields its next byte (TTY) or closes (pipe), at
-// which point it exits through the done-guarded channel send.
 func (c *CLI) streamPluginStdin(writer *commandPluginWriter, done <-chan struct{}) {
-	type chunk struct {
-		data []byte
-		err  error
-	}
-	reads := make(chan chunk, 4)
-
-	go func() {
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := c.Stdin.Read(buf)
-			var data []byte
-			if n > 0 {
-				data = make([]byte, n)
-				copy(data, buf[:n])
-			}
-			select {
-			case reads <- chunk{data: data, err: err}:
-			case <-done:
-				return
-			}
-			if err != nil {
+	reader := newCancelableStdinReader(c.Stdin, done)
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			data := make([]byte, n)
+			copy(data, buf[:n])
+			if writeErr := writer.WriteMessage(pluginwire.StdinDataMsg{
+				Type: pluginwire.MsgTypeStdinData,
+				Data: data,
+			}); writeErr != nil {
 				return
 			}
 		}
-	}()
-
-	for {
-		select {
-		case r := <-reads:
-			if len(r.data) > 0 {
-				if writeErr := writer.WriteMessage(pluginwire.StdinDataMsg{
-					Type: pluginwire.MsgTypeStdinData,
-					Data: r.data,
-				}); writeErr != nil {
-					return
-				}
-			}
-			if errors.Is(r.err, io.EOF) {
-				_ = writer.WriteMessage(pluginwire.StdinCloseMsg{Type: pluginwire.MsgTypeStdinClose})
-				return
-			}
-			if r.err != nil {
-				return
-			}
-		case <-done:
+		if errors.Is(err, errStdinReadCanceled) {
 			return
 		}
+		if errors.Is(err, io.EOF) {
+			_ = writer.WriteMessage(pluginwire.StdinCloseMsg{Type: pluginwire.MsgTypeStdinClose})
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+var errStdinReadCanceled = errors.New("stdin read canceled")
+
+type stdinReadDeadliner interface {
+	SetReadDeadline(time.Time) error
+}
+
+type cancelableStdinReader struct {
+	r          io.Reader
+	done       <-chan struct{}
+	deadliner  stdinReadDeadliner
+	deadlineOK bool
+}
+
+func newCancelableStdinReader(r io.Reader, done <-chan struct{}) *cancelableStdinReader {
+	dr, ok := r.(stdinReadDeadliner)
+	return &cancelableStdinReader{
+		r:          r,
+		done:       done,
+		deadliner:  dr,
+		deadlineOK: ok,
+	}
+}
+
+func (r *cancelableStdinReader) Read(p []byte) (int, error) {
+	if !r.deadlineOK {
+		select {
+		case <-r.done:
+			return 0, errStdinReadCanceled
+		default:
+		}
+		return r.r.Read(p)
+	}
+	for {
+		select {
+		case <-r.done:
+			_ = r.deadliner.SetReadDeadline(time.Time{})
+			return 0, errStdinReadCanceled
+		default:
+		}
+		if err := r.deadliner.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+			r.deadlineOK = false
+			return r.Read(p)
+		}
+		n, err := r.r.Read(p)
+		if err == nil || n > 0 || errors.Is(err, io.EOF) {
+			_ = r.deadliner.SetReadDeadline(time.Time{})
+			return n, err
+		}
+		if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+			continue
+		}
+		_ = r.deadliner.SetReadDeadline(time.Time{})
+		return n, err
 	}
 }
 
@@ -833,8 +867,14 @@ func isEOFLike(err error) bool {
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
-	// CBOR decoder wraps io.EOF/io.ErrUnexpectedEOF; catch any remaining cases
-	// via string matching as a fallback for library-specific error types.
-	s := err.Error()
-	return strings.Contains(s, "EOF") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
+	var syntaxErr *cbor.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		s := strings.ToLower(syntaxErr.Error())
+		return strings.Contains(s, "unexpected eof") || strings.Contains(s, "truncated")
+	}
+	// Last resort for library and platform wrappers that do not preserve a
+	// concrete sentinel. Keep this narrow so ordinary protocol errors are not
+	// mistaken for plugin death.
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "unexpected eof") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
 }

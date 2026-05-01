@@ -29,7 +29,9 @@ self-delimiting, so no length prefix or other framing is needed. Any language
 with a CBOR library can implement a plugin.
 
 The startup flags (`--rsh-plugin-manifest`, `--rsh-plugin-commands`) use the
-same format as runtime messages: write one CBOR map to stdout and exit.
+same format as runtime messages: write one CBOR map to stdout and exit. Command
+discovery responses include `protocol_version`; Go plugins get that field from
+`plugin.WriteCommands`.
 
 ## The Public Helper Package
 
@@ -194,6 +196,10 @@ the user does not answer.
 
 4. Use `restish plugin list` to confirm discovery.
 5. Use `restish plugin debug <name> ...` when you need to inspect CBOR traffic.
+   Expected traces start with startup discovery (`manifest`, and `commands` for
+   command plugins), then show hook messages such as auth, request middleware,
+   response middleware, formatter, loader, or TLS signer sign/shutdown frames
+   depending on the plugin's manifest.
 
 ## Good Reference Implementations
 

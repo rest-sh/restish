@@ -6,6 +6,11 @@ import (
 )
 
 const (
+	// CommandPluginProtocolVersion is the current command-plugin discovery
+	// protocol version. A plugin that emits a larger version requires a newer
+	// Restish host.
+	CommandPluginProtocolVersion = 1
+
 	// StartupFlagManifest asks a plugin to write its Manifest and exit.
 	StartupFlagManifest = "--rsh-plugin-manifest"
 	// StartupFlagCommands asks a command plugin to write its command list and exit.
@@ -84,6 +89,12 @@ type CommandDecl struct {
 	PassthroughStdio bool `cbor:"passthrough_stdio,omitempty" json:"passthrough_stdio,omitempty"`
 }
 
+// CommandDiscoveryResponse is the response to StartupFlagCommands.
+type CommandDiscoveryResponse struct {
+	ProtocolVersion int           `cbor:"protocol_version,omitempty" json:"protocol_version,omitempty"`
+	Commands        []CommandDecl `cbor:"commands" json:"commands"`
+}
+
 // WriteManifest serialises m as a CBOR data item and writes it to w.
 // It is the canonical way to respond to --rsh-plugin-manifest.
 //
@@ -99,8 +110,8 @@ func WriteManifest(w io.Writer, m Manifest) error {
 //	case plugin.StartupFlagCommands:
 //	    return plugin.WriteCommands(os.Stdout, cmds)
 func WriteCommands(w io.Writer, cmds []CommandDecl) error {
-	type wrapper struct {
-		Commands []CommandDecl `cbor:"commands"`
-	}
-	return WriteMessage(w, wrapper{Commands: cmds})
+	return WriteMessage(w, CommandDiscoveryResponse{
+		ProtocolVersion: CommandPluginProtocolVersion,
+		Commands:        cmds,
+	})
 }

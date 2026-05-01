@@ -96,6 +96,16 @@ make the explicit trust decision with the existing local install path:
 restish plugin install "$(brew --prefix restish-csv)/bin/restish-csv"
 ```
 
+Plugin protocol release checklist:
+
+- Keep existing message fields additive and preserve field meanings.
+- Add tests proving unknown optional fields are ignored.
+- Add tests proving unsupported `required_features` fail clearly.
+- Update `docs/plugin-quickstart.md`, site plugin docs, and design docs for new
+  messages, hooks, or required features.
+- Run `restish plugin debug` against command, formatter, loader, auth,
+  middleware, and TLS signer fixtures before tagging.
+
 ## OCI Image
 
 The official image is published as:

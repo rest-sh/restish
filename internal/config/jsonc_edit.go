@@ -58,7 +58,13 @@ func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
 				continue
 			}
 			if op.Delete {
-				data, err = jsoncDeletePath(data, op.Path)
+				var next []byte
+				next, err = jsoncDeletePath(data, op.Path)
+				if errors.Is(err, ErrPathNotFound) {
+					err = nil
+					continue
+				}
+				data = next
 			} else {
 				data, err = jsoncSetPath(data, op.Path, op.Value)
 			}

@@ -207,6 +207,9 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	if isBuiltinCommandName(apiName) {
 		return fmt.Errorf("API name %q conflicts with a built-in command; choose a different name", apiName)
 	}
+	if pluginName := c.pluginCommandNames[apiName]; pluginName != "" {
+		return fmt.Errorf("API name %q conflicts with command plugin %s; choose a different name", apiName, pluginName)
+	}
 	if err := config.ValidateAPIName(apiName); err != nil {
 		return fmt.Errorf("invalid API name %q: %w", apiName, err)
 	}

@@ -66,6 +66,24 @@ func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 	}
 }
 
+func TestDecodeCommandPluginDiscoveryRejectsFutureProtocol(t *testing.T) {
+	raw, err := cbor.Marshal(pluginwire.CommandDiscoveryResponse{
+		ProtocolVersion: pluginwire.CommandPluginProtocolVersion + 1,
+		Commands:        []pluginwire.CommandDecl{{Name: "future"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	_, err = decodeCommandPluginDiscovery("restish-future", raw)
+	if err == nil {
+		t.Fatal("expected future command plugin protocol to be rejected")
+	}
+	if !strings.Contains(err.Error(), "plugin requires restish >=") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunCommandPluginReturnsOnContextCancellation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
@@ -100,6 +118,45 @@ func TestRunCommandPluginReturnsOnContextCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("runCommandPlugin did not return after context cancellation")
 	}
+}
+
+func TestStreamPluginStdinCancellationStabilizesPipeReaders(t *testing.T) {
+	base := runtime.NumGoroutine()
+
+	for i := 0; i < 5; i++ {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe: %v", err)
+		}
+		var out bytes.Buffer
+		cli := &CLI{Stdin: r}
+		done := make(chan struct{})
+		exited := make(chan struct{})
+		go func() {
+			defer close(exited)
+			cli.streamPluginStdin(&commandPluginWriter{w: &out}, done)
+		}()
+		close(done)
+		select {
+		case <-exited:
+		case <-time.After(2 * time.Second):
+			t.Fatal("streamPluginStdin did not return after cancellation")
+		}
+		if _, err := r.Stat(); err != nil {
+			t.Fatalf("stdin reader was closed by streamPluginStdin: %v", err)
+		}
+		_ = r.Close()
+		_ = w.Close()
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= base+2 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("goroutine count did not stabilize: before=%d after=%d", base, runtime.NumGoroutine())
 }
 
 func TestValidatePluginCommandNameRejectsCollisions(t *testing.T) {

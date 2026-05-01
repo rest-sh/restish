@@ -99,6 +99,7 @@ type CLI struct {
 	formatters          map[string]output.Formatter
 	plugins             []internalplugin.Plugin
 	pluginsByHook       map[string][]internalplugin.Plugin
+	pluginCommandNames  map[string]string
 	authPluginsByAPI    map[string][]internalplugin.Plugin
 	globalAuthPlugins   []internalplugin.Plugin
 	customAuthHandlers  map[string]authpkg.Handler

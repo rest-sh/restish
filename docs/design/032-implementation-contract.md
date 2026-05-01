@@ -60,6 +60,10 @@ merge them with the default config. Token and external-tool approval sidecars
 live next to the selected explicit config. HTTP response and spec caches stay
 under the cache root, with a namespace derived from the explicit config path.
 
+TODO: add a Windows ACL implementation for config and token-cache permission
+diagnostics. The current Unix mode-bit check has no Windows equivalent yet, so
+Windows reports no insecure-permission finding until ACL inspection is added.
+
 ## Config Schema
 
 Top-level config is JSONC with strict decoded fields:

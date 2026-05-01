@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"regexp"
@@ -103,6 +104,72 @@ func TestCommandClientDoSkipsUnknownMessages(t *testing.T) {
 	}
 	if err := <-errCh; err != nil {
 		t.Fatalf("Do: %v", err)
+	}
+}
+
+func TestCommandClientDuplicateHTTPResponseDoesNotStopReadLoop(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	errCh := make(chan error, 1)
+	go func() {
+		resp, err := client.Do(&HTTPRequestMsg{URI: "https://api.example.com/items"})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if resp.Status != 200 {
+			errCh <- fmt.Errorf("status = %d, want 200", resp.Status)
+			return
+		}
+		errCh <- nil
+	}()
+
+	dec := NewDecoder(pluginToHostR)
+	var req HTTPRequestMsg
+	if err := dec.ReadMessage(&req); err != nil {
+		t.Fatalf("read request: %v", err)
+	}
+	reply := HTTPResponseMsg{Type: MsgTypeHTTPResponse, RequestID: req.RequestID, Status: 200, Body: "ok"}
+	if err := WriteMessage(hostToPluginW, reply); err != nil {
+		t.Fatalf("write response: %v", err)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, reply); err != nil {
+		t.Fatalf("write duplicate response: %v", err)
+	}
+
+	listErr := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		resp, err := client.ListAPIsContext(ctx)
+		if err != nil {
+			listErr <- err
+			return
+		}
+		if len(resp.APIs) != 1 || resp.APIs[0] != "demo" {
+			listErr <- fmt.Errorf("APIs = %v, want [demo]", resp.APIs)
+			return
+		}
+		listErr <- nil
+	}()
+	var listReq ListAPIsMsg
+	if err := dec.ReadMessage(&listReq); err != nil {
+		t.Fatalf("read list request: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, ListAPIsResponseMsg{Type: MsgTypeListAPIsResponse, RequestID: listReq.RequestID, APIs: []string{"demo"}}); err != nil {
+		t.Fatalf("write list response: %v", err)
+	}
+	if err := <-listErr; err != nil {
+		t.Fatalf("ListAPIs: %v", err)
 	}
 }
 

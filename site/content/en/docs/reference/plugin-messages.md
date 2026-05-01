@@ -8,6 +8,18 @@ description: Reference for Restish host/plugin message families.
 Restish v2 plugins communicate over structured messages. Operators usually need
 `plugin debug`; authors need the message families and lifecycle rules.
 
+## Startup Messages
+
+`--rsh-plugin-manifest` writes one manifest map and exits.
+`--rsh-plugin-commands` writes one command discovery map and exits. Command
+discovery includes:
+
+- `protocol_version`: command-plugin discovery protocol version
+- `commands`: command declarations contributed by the plugin
+
+Restish treats omitted `protocol_version` as the initial command-plugin
+protocol, and rejects future versions that require a newer host.
+
 ## Command Plugin Messages
 
 Plugin to host:

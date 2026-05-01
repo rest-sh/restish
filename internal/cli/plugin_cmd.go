@@ -578,9 +578,6 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 		if !isWantedPluginArchiveEntry(h.Name, pluginName) {
 			continue
 		}
-		if h.Size > pluginInstallLimits.ArchiveMemberBytes {
-			return "", fmt.Errorf("install: extract %s: plugin archive member exceeds limit of %d bytes", h.Name, pluginInstallLimits.ArchiveMemberBytes)
-		}
 		if extracted+h.Size > pluginInstallLimits.ArchiveExtractBytes {
 			return "", fmt.Errorf("install: extract %s: plugin archive exceeds extracted limit of %d bytes", h.Name, pluginInstallLimits.ArchiveExtractBytes)
 		}
@@ -592,7 +589,7 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 		if err != nil {
 			return "", fmt.Errorf("install: extract %s: %w", h.Name, err)
 		}
-		n, err := copyPluginBytes(out, tr, pluginInstallLimits.ArchiveMemberBytes)
+		n, err := copyArchiveMemberBytes(out, tr, pluginInstallLimits.ArchiveMemberBytes)
 		if err != nil {
 			_ = out.Close()
 			return "", fmt.Errorf("install: extract %s: %w", h.Name, err)
@@ -640,7 +637,7 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 			_ = in.Close()
 			return "", fmt.Errorf("install: extract %s: %w", f.Name, err)
 		}
-		n, copyErr := copyPluginBytes(out, in, pluginInstallLimits.ArchiveMemberBytes)
+		n, copyErr := copyArchiveMemberBytes(out, in, pluginInstallLimits.ArchiveMemberBytes)
 		closeErr := out.Close()
 		_ = in.Close()
 		if copyErr != nil {
@@ -686,6 +683,14 @@ func copyPluginBytes(dst io.Writer, src io.Reader, limit int64) (int64, error) {
 		return n, fmt.Errorf("plugin download exceeds limit of %d bytes", limit)
 	}
 	return n, nil
+}
+
+func copyArchiveMemberBytes(dst io.Writer, src io.Reader, limit int64) (int64, error) {
+	n, err := copyPluginBytes(dst, src, limit)
+	if err != nil && limit > 0 && n > limit {
+		return n, fmt.Errorf("plugin archive member exceeds limit of %d bytes", limit)
+	}
+	return n, err
 }
 
 func isWantedPluginArchiveEntry(name, pluginName string) bool {

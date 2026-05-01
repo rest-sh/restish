@@ -74,6 +74,16 @@ Each plugin archive should contain one executable plugin binary. Plugin docs
 and release notes should remind users that installed plugins are trusted local
 executables and that v1 plugins must be rebuilt for the v2 protocol.
 
+Plugin protocol release checklist:
+
+- Keep existing message fields additive and preserve field meanings.
+- Add tests proving unknown optional fields are ignored.
+- Add tests proving unsupported `required_features` fail clearly.
+- Update plugin quickstart, reference, site, and design docs for new messages,
+  hooks, or required features.
+- Run `restish plugin debug` against command, formatter, loader, auth,
+  middleware, and TLS signer fixtures before tagging.
+
 ## Related Pages
 
 - [Install](../../getting-started/install/)

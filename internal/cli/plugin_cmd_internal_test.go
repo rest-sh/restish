@@ -5,7 +5,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -54,6 +56,23 @@ func TestExtractPluginTarGzRejectsOversizedEntry(t *testing.T) {
 	_, err := materializePluginDownload(bytes.NewReader(archive), "https://downloads.example/restish-test.tar.gz", t.TempDir(), "restish-test")
 	if err == nil {
 		t.Fatal("expected oversized tar.gz entry to fail")
+	}
+	if !strings.Contains(err.Error(), "archive member exceeds limit") {
+		t.Fatalf("expected archive member limit error, got %v", err)
+	}
+}
+
+func TestExtractPluginTarGzRejectsMalformedOversizedEntryByReadLimit(t *testing.T) {
+	restorePluginInstallLimits(t, pluginInstallSizeLimits{
+		DownloadBytes:       1024,
+		ArchiveMemberBytes:  4,
+		ArchiveExtractBytes: 32,
+	})
+
+	archive := testMalformedTarGzEntry(t, "restish-test", 10, []byte("abcde"))
+	_, err := materializePluginDownload(bytes.NewReader(archive), "https://downloads.example/restish-test.tar.gz", t.TempDir(), "restish-test")
+	if err == nil {
+		t.Fatal("expected malformed oversized tar.gz entry to fail")
 	}
 	if !strings.Contains(err.Error(), "archive member exceeds limit") {
 		t.Fatalf("expected archive member limit error, got %v", err)
@@ -122,6 +141,49 @@ func testTarGzEntry(t *testing.T, name string, data []byte) []byte {
 		t.Fatalf("close gzip: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func testMalformedTarGzEntry(t *testing.T, name string, declaredSize int64, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	header := make([]byte, 512)
+	copy(header[0:100], name)
+	writeTarOctal(header[100:108], 0o755)
+	writeTarOctal(header[108:116], 0)
+	writeTarOctal(header[116:124], 0)
+	writeTarOctal(header[124:136], declaredSize)
+	writeTarOctal(header[136:148], 0)
+	for i := 148; i < 156; i++ {
+		header[i] = ' '
+	}
+	header[156] = '0'
+	copy(header[257:263], "ustar\x00")
+	copy(header[263:265], "00")
+	var sum int64
+	for _, b := range header {
+		sum += int64(b)
+	}
+	copy(header[148:156], fmt.Sprintf("%06o\x00 ", sum))
+	if _, err := gz.Write(header); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := gz.Write(data); err != nil {
+		t.Fatalf("write tar data: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func writeTarOctal(field []byte, n int64) {
+	for i := range field {
+		field[i] = '0'
+	}
+	s := strconv.FormatInt(n, 8)
+	copy(field[len(field)-1-len(s):], s)
+	field[len(field)-1] = 0
 }
 
 func testZipEntry(t *testing.T, name string, data []byte) []byte {
