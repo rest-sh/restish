@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -127,6 +128,63 @@ func TestTokenCache_EmptyObjectFileIsTreatedAsEmpty(t *testing.T) {
 	}
 	if err := tc.Set("key", CachedToken{AccessToken: "new"}); err != nil {
 		t.Fatalf("Set after empty object cache: %v", err)
+	}
+}
+
+func TestTokenCache_ReloadsWhenSizeChangesWithSameModTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	tc := NewTokenCache(path)
+	if err := tc.Set("mykey", CachedToken{AccessToken: "first"}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := tc.Get("mykey"); err != nil {
+		t.Fatalf("initial Get: %v", err)
+	}
+	originalMtime := tc.modTime
+
+	updated := map[string]CachedToken{
+		"mykey": {AccessToken: "second-token-that-changes-size"},
+	}
+	data, err := cbor.Marshal(updated)
+	if err != nil {
+		t.Fatalf("marshal updated cache: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("overwrite cache: %v", err)
+	}
+	if err := os.Chtimes(path, originalMtime, originalMtime); err != nil {
+		t.Fatalf("restore mtime: %v", err)
+	}
+
+	got, err := tc.Get("mykey")
+	if err != nil {
+		t.Fatalf("Get after same-mtime overwrite: %v", err)
+	}
+	if got == nil || got.AccessToken != "second-token-that-changes-size" {
+		t.Fatalf("expected reloaded token, got %+v", got)
+	}
+}
+
+func TestTokenCache_SaveCleansTempFileOnRenameError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.cbor")
+	oldRename := renameTokenCacheFile
+	renameTokenCacheFile = func(oldpath, newpath string) error {
+		return errors.New("rename failed")
+	}
+	t.Cleanup(func() { renameTokenCacheFile = oldRename })
+
+	tc := NewTokenCache(path)
+	err := tc.Set("mykey", CachedToken{AccessToken: "abc"})
+	if err == nil {
+		t.Fatal("expected rename error")
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "tokens-*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected no orphan temp files, got %v", matches)
 	}
 }
 

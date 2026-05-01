@@ -15,6 +15,8 @@ import (
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
 )
 
+var renameTokenCacheFile = os.Rename
+
 // CachedToken holds a cached OAuth2 access token and optional refresh token.
 type CachedToken struct {
 	AccessToken  string    `cbor:"access_token" json:"access_token"`
@@ -39,6 +41,7 @@ type TokenCache struct {
 	loaded  bool
 	cache   map[string]CachedToken
 	modTime time.Time
+	size    int64
 }
 
 // NewTokenCache returns a TokenCache that stores tokens at path.
@@ -124,10 +127,10 @@ func (c *TokenCache) DeletePrefix(prefix string) error {
 func (c *TokenCache) load() (map[string]CachedToken, error) {
 	if c.loaded {
 		info, err := os.Stat(c.path)
-		if err == nil && info.ModTime().Equal(c.modTime) {
+		if err == nil && info.ModTime().Equal(c.modTime) && info.Size() == c.size {
 			return c.cache, nil
 		}
-		if errors.Is(err, os.ErrNotExist) && c.modTime.IsZero() {
+		if errors.Is(err, os.ErrNotExist) && c.modTime.IsZero() && c.size == 0 {
 			return c.cache, nil
 		}
 	}
@@ -145,6 +148,7 @@ func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 		c.cache = map[string]CachedToken{}
 		c.loaded = true
 		c.modTime = time.Time{}
+		c.size = 0
 		return c.cache, nil
 	}
 	if err != nil {
@@ -162,6 +166,7 @@ func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
 	info, statErr := os.Stat(c.path)
 	if statErr == nil {
 		c.modTime = info.ModTime()
+		c.size = info.Size()
 	}
 	c.cache = m
 	c.loaded = true
@@ -183,21 +188,28 @@ func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 		return err
 	}
 	tmpName := tmp.Name()
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpName)
+		}
+	}()
 	_, werr := tmp.Write(data)
 	cerr := tmp.Close()
 	if werr != nil || cerr != nil {
-		os.Remove(tmpName)
 		if werr != nil {
 			return werr
 		}
 		return cerr
 	}
-	if err := os.Rename(tmpName, c.path); err != nil {
+	if err := renameTokenCacheFile(tmpName, c.path); err != nil {
 		return err
 	}
+	renamed = true
 	info, statErr := os.Stat(c.path)
 	if statErr == nil {
 		c.modTime = info.ModTime()
+		c.size = info.Size()
 	}
 	c.cache = m
 	c.loaded = true

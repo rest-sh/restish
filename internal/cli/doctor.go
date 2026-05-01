@@ -69,6 +69,15 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(c.Stderr, "HTTP cache: %s\n", c.configScopedCacheDir(c.paths().Cache()))
 	fmt.Fprintf(c.Stderr, "Spec cache: %s\n", c.specCacheDir())
+	tokenCachePath := c.tokenCachePath()
+	fmt.Fprintf(c.Stderr, "Token cache: %s\n", tokenCachePath)
+	if insecure, err := config.ConfigFileHasInsecurePermissions(tokenCachePath); err != nil {
+		fmt.Fprintf(c.Stderr, "Token cache permissions: unknown (%v)\n", err)
+	} else if insecure {
+		fmt.Fprintf(c.Stderr, "Token cache permissions: insecure (run chmod 600 %s before the next OAuth request)\n", tokenCachePath)
+	} else {
+		fmt.Fprintln(c.Stderr, "Token cache permissions: ok")
+	}
 	fmt.Fprintf(c.Stderr, "Plugin directory: %s\n", c.pluginDir())
 	c.printShellSetupDiagnostic()
 	return nil
