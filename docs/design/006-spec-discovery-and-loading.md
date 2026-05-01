@@ -73,11 +73,17 @@ The design requirements are:
 - explicit opt-in before following cross-origin discovery links
 - reject private-range or loopback follow targets by default unless the original
   configured API is itself in that trust class
+- treat DNS lookup errors and lookup timeouts as non-public when validating
+  cross-origin discovery targets
 - only `http` and `https` are valid remote schemes
 - size limits before full-body parse attempts
 - all requests derive from the command context
 
 Spec discovery is not a place for indefinite waits or unconstrained redirects.
+The current implementation resolves hostnames before fetching but does not yet
+dial by the resolved IP literal, so a DNS rebinding race between validation and
+transport dial remains a residual risk for cross-origin discovery. Cross-origin
+follow is opt-in and unknown/private targets fail closed.
 
 ## Probe Execution
 

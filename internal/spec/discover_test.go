@@ -234,6 +234,46 @@ func TestFilterDiscoveredSpecLinksRejectsDNSResolvedPrivateTarget(t *testing.T) 
 	}
 }
 
+func TestHostIsNonPublicFailsClosedOnLookupError(t *testing.T) {
+	oldLookup := lookupIPAddr
+	lookupIPAddr = func(context.Context, string) ([]net.IPAddr, error) {
+		return nil, errors.New("dns failure")
+	}
+	t.Cleanup(func() { lookupIPAddr = oldLookup })
+
+	if !hostIsNonPublic("spec.example.com") {
+		t.Fatal("lookup errors should be treated as non-public")
+	}
+	links := filterDiscoveredSpecLinks("https://api.example.com", []string{"https://spec.example.com/openapi.json"}, true)
+	if len(links) != 0 {
+		t.Fatalf("expected lookup-error target to be rejected, got %v", links)
+	}
+}
+
+func TestHostIsNonPublicFailsClosedOnLookupTimeout(t *testing.T) {
+	oldLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	t.Cleanup(func() { lookupIPAddr = oldLookup })
+
+	start := time.Now()
+	if !hostIsNonPublic("slow.example.com") {
+		t.Fatal("lookup timeouts should be treated as non-public")
+	}
+	if elapsed := time.Since(start); elapsed < 1500*time.Millisecond || elapsed > 3*time.Second {
+		t.Fatalf("lookup timeout = %v, want about 2s", elapsed)
+	}
+}
+
+func TestFilterDiscoveredSpecLinksRejectsLinkLocalIPv6Literal(t *testing.T) {
+	links := filterDiscoveredSpecLinks("https://api.example.com", []string{"http://[fe80::1]/openapi.json"}, true)
+	if len(links) != 0 {
+		t.Fatalf("expected link-local IPv6 target to be rejected, got %v", links)
+	}
+}
+
 func TestFilterDiscoveredSpecLinksAllowsPrivateTargetFromPrivateBase(t *testing.T) {
 	links := filterDiscoveredSpecLinks("http://10.0.0.5", []string{"http://10.0.0.10/openapi.json"}, true)
 	if len(links) != 1 {
@@ -1014,6 +1054,17 @@ func TestDiscover_LinkHeader(t *testing.T) {
 }
 
 func TestDiscover_LinkHeaderCrossOriginRequiresOptIn(t *testing.T) {
+	oldLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		switch host {
+		case "api.example.com", "spec.example.com":
+			return []net.IPAddr{{IP: net.ParseIP("203.0.113.10")}}, nil
+		default:
+			return oldLookup(ctx, host)
+		}
+	}
+	t.Cleanup(func() { lookupIPAddr = oldLookup })
+
 	spec := `{"openapi":"3.1.0","info":{"title":"Linked","version":"1.0.0"},"paths":{}}`
 	var crossOriginHits atomic.Int32
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {

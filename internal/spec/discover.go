@@ -519,32 +519,40 @@ func filterDiscoveredSpecLinks(baseURL string, links []string, allowCrossOrigin 
 }
 
 func isDisallowedCrossOriginHost(baseHost, host string) bool {
-	basePrivate := hostIsNonPublic(baseHost)
-	targetPrivate := hostIsNonPublic(host)
-	return targetPrivate && !basePrivate
+	basePrivate, baseOK := hostNonPublicStatus(baseHost)
+	targetPrivate, targetOK := hostNonPublicStatus(host)
+	if !targetOK {
+		return true
+	}
+	return targetPrivate && !(baseOK && basePrivate)
 }
 
 func hostIsNonPublic(host string) bool {
+	nonPublic, ok := hostNonPublicStatus(host)
+	return nonPublic || !ok
+}
+
+func hostNonPublicStatus(host string) (nonPublic bool, ok bool) {
 	host = strings.Trim(strings.TrimSuffix(host, "."), "[]")
 	if strings.EqualFold(host, "localhost") {
-		return true
+		return true, true
 	}
 	ip := net.ParseIP(host)
 	if ip != nil {
-		return isNonPublicIP(ip)
+		return isNonPublicIP(ip), true
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	addrs, err := lookupIPAddr(ctx, host)
 	if err != nil {
-		return false
+		return true, false
 	}
 	for _, addr := range addrs {
 		if isNonPublicIP(addr.IP) {
-			return true
+			return true, true
 		}
 	}
-	return false
+	return false, true
 }
 
 func isNonPublicIP(ip net.IP) bool {
