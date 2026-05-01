@@ -10,8 +10,8 @@ Streams may not have a natural end. Always bound examples with
 you select one field from each event as it arrives.
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -r
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -o lines
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
 ```
 
 Use NDJSON output for structured event records:
@@ -20,8 +20,9 @@ Use NDJSON output for structured event records:
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 
-Use scalar filters with `-r` when humans or shell loops need one value per line.
-Use `-o ndjson` when the next tool expects structured event records. The
+Use scalar filters with `-o lines` when humans or shell loops need one value
+per line. Use `-o ndjson` when the next tool expects structured event records.
+The
 [Streaming guide](/docs/guides/streaming/) explains why JSON document output is
 not a good fit for unbounded streams.
 

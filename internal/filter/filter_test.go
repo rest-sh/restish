@@ -145,19 +145,3 @@ func TestJQ_SelectFilter(t *testing.T) {
 		t.Errorf("got %v, want foo", result)
 	}
 }
-
-// --- RawOutput ---
-
-func TestRawOutput_String(t *testing.T) {
-	out := filter.RawOutput("hello")
-	if out != "hello" {
-		t.Errorf("got %q, want %q", out, "hello")
-	}
-}
-
-func TestRawOutput_StringArray(t *testing.T) {
-	out := filter.RawOutput([]any{"a", "b", "c"})
-	if out != "a\nb\nc" {
-		t.Errorf("got %q, want %q", out, "a\nb\nc")
-	}
-}

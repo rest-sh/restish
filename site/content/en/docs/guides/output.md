@@ -44,7 +44,7 @@ restish https://api.rest.sh/images -o ndjson -f body.self
 
 `readable` is the normal interactive default and is optimized for humans on a
 terminal. `json`, `yaml`, and `cbor` are document formats. `ndjson` is a record
-format for streaming or shell pipelines.
+format for structured streams, and `lines` is for shell-friendly scalar values.
 
 ## Document vs Record Output
 
@@ -71,12 +71,14 @@ restish https://api.rest.sh/example -f body.basics.profiles
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -r
-restish https://api.rest.sh/ -f headers.Content-Type -r
+restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish https://api.rest.sh/ -f headers.Content-Type
 ```
 
-Use `-r` when the filtered value is a scalar and shell tools should not receive
-JSON quotes. Without a filter, `-r` writes the response body bytes.
+Explicit scalar filters print without JSON string quotes. Use `-o lines` when
+the filtered value is an array or stream of scalar values and shell tools should
+receive one value per line. Use `-o json` when a script needs the selected value
+as JSON.
 
 ## Raw Bytes And Files
 
@@ -94,7 +96,8 @@ restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 
 Raw output bypasses Restish's structured body decoding and formatting, but it
 is still based on the body after HTTP content-encoding decompression. Use
-`-r` or `--rsh-raw` for raw output; `raw` is not an `-o` format.
+`-r` or `--rsh-raw` for raw response body bytes; `raw` is not an `-o` format
+and raw mode cannot be combined with filters.
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 

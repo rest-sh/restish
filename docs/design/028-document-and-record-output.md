@@ -85,9 +85,9 @@ collect-like execution path to uphold that contract.
 Record formats represent one item or event at a time:
 
 - `ndjson`
+- `lines` for scalar values
 - `csv`
 - future record-oriented plugins
-- stream-specific raw output
 
 These formats optimize for first-byte latency and shell-friendliness. They are
 allowed to emit one result at a time because that is their explicit contract.
@@ -102,6 +102,7 @@ That means:
 - `-o yaml` implies document semantics
 - `-o readable` implies document semantics
 - `-o ndjson` implies record semantics
+- `-o lines` implies scalar value-per-line semantics
 - plugin formats should declare whether they are document-oriented,
   record-oriented, or both
 
@@ -122,6 +123,8 @@ The revised rule is:
 
 - when Restish is still writing the original unmodified raw payload, raw output
   remains meaningful and available explicitly through `-r`
+- when an explicit filter selects a scalar, Restish may print the scalar plainly
+  because the selected value is already shell-native
 - when Restish is writing a normalized or transformed value, redirected output
   should default to JSON
 
@@ -164,6 +167,18 @@ NDJSON is a good fit because:
 - paginated item-by-item processing
 - SSE / NDJSON stream processing
 - shell loops, `jq -r`, `while read`, and `xargs`
+
+### `lines` Is The Explicit Scalar Line Format
+
+Restish should add a built-in `lines` formatter for shell-native scalar values.
+It prints strings without JSON quotes and prints arrays or streams of scalars
+one value per line.
+
+`-o lines` is the correct answer when a filter selects values for shell tools
+such as `while read`, `xargs`, or command substitution. It must reject objects
+and arrays containing objects so line output does not silently erase structured
+shape. Users who need structured data should choose `-o json`, `-o ndjson`, or
+another structured format.
 
 ### Readable Output Has Two Internal Modes
 
@@ -362,6 +377,7 @@ Clear failure is better than silently emitting invalid or misleading output.
 - `-o yaml`: collect/merge, valid YAML document
 - `-o readable`: render progressively for humans
 - `-o ndjson`: stream one item per line
+- `-o lines`: stream scalar values one per line, error on structured values
 - `-o csv`: stream one record per row if the formatter supports it
 
 ### True SSE / NDJSON Stream
@@ -393,7 +409,7 @@ the user sees feedback immediately.
 Shell pipeline processing paginated items:
 
 ```bash
-restish api.rest.sh/images -o ndjson -f 'body.id' | jq -r . | while read id; do
+restish api.rest.sh/images -f 'body.id' -o lines | while read id; do
   echo "process $id"
 done
 ```

@@ -19,7 +19,7 @@ Use a machine-oriented format in scripts:
 ```bash
 restish https://api.rest.sh/images -o json
 restish https://api.rest.sh/images -o ndjson
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 ```
 
 ## Exit Codes
@@ -57,8 +57,8 @@ These flags are the usual script building blocks:
 
 - `--rsh-ignore-status-code` keeps HTTP error bodies usable.
 - `-S` suppresses output when the exit code is enough.
-- `-o json` and `-o ndjson` avoid terminal-oriented formatting.
-- `-r` writes raw response body bytes, or raw scalar values after filtering.
+- `-o json`, `-o ndjson`, and `-o lines` avoid terminal-oriented formatting.
+- `-r` writes raw response body bytes.
 - `--rsh-no-paginate`, `--rsh-max-pages`, and `--rsh-max-items` bound
   collection work.
 

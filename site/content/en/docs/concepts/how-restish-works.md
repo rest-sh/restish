@@ -66,7 +66,7 @@ Restish decodes responses into a stable shape before filtering and formatting.
 That is why filters can address `headers`, `links`, and `body` consistently:
 
 ```bash
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/images -f links.next
 restish https://api.rest.sh/example -f body.basics.profiles
 ```
 

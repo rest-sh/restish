@@ -54,9 +54,9 @@ start at [Upgrade From v1](../upgrade-from-v1/).
   selection.
 - **Image rendering** — inline image display in Kitty, iTerm2, and halfblock
   terminals via `RSH_IMAGE_PROTOCOL` or auto-detection.
-- **`--rsh-raw` / `-r`** — raw output mode; unfiltered responses write body
-  bytes, while filtered strings print without quotes and arrays print one value
-  per line.
+- **`--rsh-raw` / `-r`** — raw response body bytes after transport decoding.
+- **`lines` output** — `-o lines` prints filtered scalar values one value per
+  line for shell loops.
 - **jq filter support** — filter expressions not starting with a shorthand root
   are passed to jq automatically.
 

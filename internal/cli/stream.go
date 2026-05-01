@@ -48,7 +48,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	gfSSE := globalFlagsFromContext(requestContext(cmd))
 	maxEvents := gfSSE.MaxEvents
 	filterExpr := gfSSE.Filter
-	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
+	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), filterExpr != "")
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,8 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	}
 
 	maxEvents := globalFlagsFromContext(requestContext(cmd)).MaxEvents
-	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp))
+	gf := globalFlagsFromContext(requestContext(cmd))
+	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), gf.Filter != "")
 	if err != nil {
 		return err
 	}
@@ -247,7 +248,7 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	tty := output.IsTerminal(c.Stdout)
 	if fmtName == "readable" || (fmtName == "" && tty) {
 		if !parsedJSON {
-			return c.writeRaw(result)
+			return c.writePlainValue(result)
 		}
 	}
 

@@ -14,7 +14,7 @@ common question: "where can this response take me next?"
 ```bash
 restish links https://api.rest.sh/images
 restish links https://api.rest.sh/images next
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/images -f links.next
 ```
 
 The first command prints all discovered relations. The second prints only the

@@ -18,7 +18,7 @@ restish https://api.rest.sh/images --rsh-no-paginate
 Show only the next link:
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
+restish https://api.rest.sh/images --rsh-no-paginate -f links.next
 ```
 
 The first command shows the page body plus normalized links. The second command

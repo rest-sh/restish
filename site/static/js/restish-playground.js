@@ -458,7 +458,8 @@
       status: response.status,
       headers,
       links: parseLinkHeader(headers.Link || "", request.url),
-      body
+      body,
+      raw
     };
     normalized = await maybePaginate(normalized, plan, request);
 
@@ -623,7 +624,8 @@
         ...(extraHeaders || {})
       },
       links: parseLinkHeader((extraHeaders && extraHeaders.Link) || "", new URL("https://api.rest.sh/")),
-      body
+      body,
+      raw: JSON.stringify(body)
     };
   }
 
@@ -711,7 +713,13 @@
     }
 
     if (flags.raw) {
-      return rawOutput(value);
+      if (explicitFilter) {
+        throw new Error("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers; use -o lines for shell-friendly filtered values.");
+      }
+      if (flags.outputFormat) {
+        throw new Error("--rsh-raw cannot be combined with --rsh-output-format.");
+      }
+      return doc.raw !== undefined ? doc.raw : JSON.stringify(doc.body);
     }
     if (flags.outputFormat === "json") {
       return JSON.stringify(value, null, 2) + "\n";
@@ -721,6 +729,9 @@
     }
     if (flags.outputFormat === "ndjson") {
       return ndjsonOutput(value);
+    }
+    if (flags.outputFormat === "lines") {
+      return linesOutput(value);
     }
     if (flags.outputFormat === "table") {
       return tableOutput(value, flags.columns, flags.sortBy);
@@ -818,19 +829,19 @@
     return walk(doc, pathParts(normalized));
   }
 
-  function rawOutput(value) {
+  function linesOutput(value) {
     if (Array.isArray(value)) {
-      return value.map(rawScalar).join("\n") + "\n";
+      return value.map(lineScalar).join("\n") + "\n";
     }
-    return rawScalar(value) + "\n";
+    return lineScalar(value) + "\n";
   }
 
-  function rawScalar(value) {
+  function lineScalar(value) {
     if (value === undefined || value === null) {
-      return "";
+      return "null";
     }
     if (typeof value === "object") {
-      return JSON.stringify(value);
+      throw new Error("lines: line output requires scalar values; use -o json for structured data.");
     }
     return String(value);
   }
@@ -873,7 +884,7 @@
         return `${pad}${key}: ${readableInline(child, depth)}`;
       }).join("\n") + "\n";
     }
-    return rawOutput(value);
+    return linesOutput(value);
   }
 
   function readableInline(value) {
@@ -901,7 +912,7 @@
     if (!cols.length) {
       return "";
     }
-    const tableRows = [cols].concat(rows.map((row) => cols.map((col) => rawScalar(row && row[col]))));
+    const tableRows = [cols].concat(rows.map((row) => cols.map((col) => tableScalar(row && row[col]))));
     const widths = cols.map((_, index) => Math.max(...tableRows.map((row) => row[index].length)));
     return tableRows.map((row, rowIndex) => {
       const line = row.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd();
@@ -915,6 +926,16 @@
   function ndjsonOutput(value) {
     const rows = Array.isArray(value) ? value : [value];
     return rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+  }
+
+  function tableScalar(value) {
+    if (value === undefined || value === null) {
+      return "";
+    }
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+    return String(value);
   }
 
   function yamlOutput(value, depth) {

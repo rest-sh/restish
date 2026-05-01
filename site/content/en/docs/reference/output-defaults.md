@@ -22,6 +22,7 @@ normally.
 - `--rsh-raw` preserves decoded body bytes for generic byte streams.
 - `-o json` and `-o yaml` produce complete documents.
 - `-o ndjson` produces records.
+- `-o lines` produces one scalar value per line.
 
 ## Examples
 
@@ -38,16 +39,18 @@ restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 A filter changes what is rendered:
 
 ```bash
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 ```
 
-Use `-r` for shell-friendly scalar output. Once you filter, you are no longer
-asking for the response body bytes; you are asking Restish to render the selected
-value. Raw response output is based on the body after HTTP content-encoding
-decompression, not the exact compressed wire transfer. The
-[Output guide](/docs/guides/output/) covers that processing model.
+Explicit scalar filters print without JSON string quotes. Use `-o lines` for
+shell-friendly arrays or streams of scalar values. Once you filter, you are no
+longer asking for response body bytes; you are asking Restish to render the
+selected value.
 
-Use `-r` or `--rsh-raw` for raw output. `raw` is not an `-o` output format.
+Raw response output is based on the body after HTTP content-encoding
+decompression, not the exact compressed wire transfer. Use `-r` or
+`--rsh-raw` for raw response body bytes. `raw` is not an `-o` output format,
+and raw mode cannot be combined with filters.
 
 ## Related Pages
 

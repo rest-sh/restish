@@ -65,7 +65,7 @@ func TestSSEDataFieldWithoutColonPreservesBlankLine(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", "body.data", "-r"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", "body.data", "-o", "lines"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -117,7 +117,7 @@ func TestNDJSONLineLimitUsesMaxBodySize(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-body-size", "2", "-f", "body.message", "-r"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-body-size", "2", "-f", "body.message", "-o", "lines"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if got := strings.TrimSpace(out.String()); got != message {
@@ -267,11 +267,11 @@ func TestSSEWithFilter(t *testing.T) {
 	}
 
 	got := out.String()
-	// Output should contain "a" and "b" (the type values).
-	if !strings.Contains(got, `"a"`) {
+	// Output should contain a and b (the type values).
+	if !strings.Contains(got, "a") {
 		t.Errorf("expected type 'a' in output, got:\n%s", got)
 	}
-	if !strings.Contains(got, `"b"`) {
+	if !strings.Contains(got, "b") {
 		t.Errorf("expected type 'b' in output, got:\n%s", got)
 	}
 	// Should not contain the "n" field since we filtered to "type".

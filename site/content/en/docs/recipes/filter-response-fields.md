@@ -12,18 +12,19 @@ to jq expressions when you need conditionals or transforms.
 
 ```bash
 restish https://api.rest.sh/example -f body.basics.profiles
-restish https://api.rest.sh/ -f headers.Content-Type -r
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/ -f headers.Content-Type
+restish https://api.rest.sh/images -f links.next
 ```
 
 Use jq for richer transforms:
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -r
+restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
 ```
 
-Use `-r` when the selected value is a string or list of strings and you want
-plain shell-friendly output. The [Normalized Responses concept](/docs/concepts/normalized-responses/)
+Explicit scalar filters print plain text by default. Use `-o lines` when the
+selected value is an array or stream of strings and you want shell-friendly
+line output. The [Normalized Responses concept](/docs/concepts/normalized-responses/)
 shows why the same roots work across body data, headers, and links.
 
 Related: [Filtering](/docs/guides/filtering/), [Query Syntax](/docs/reference/query-syntax/).

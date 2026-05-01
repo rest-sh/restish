@@ -21,7 +21,7 @@ do not know what to choose, follow the default path in order.
 - See what Restish sends: `restish https://api.rest.sh/`
 - Register the docs API: `restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'`
 - Use a generated command: `restish example list-images`
-- Filter a response: `restish https://api.rest.sh/images -f body.self -r`
+- Filter a response: `restish https://api.rest.sh/images -f body.self -o lines`
 
 ## Existing v1 Users
 

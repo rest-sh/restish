@@ -247,6 +247,29 @@ func TestNDJSONFormatter_OutputsOneValuePerLine(t *testing.T) {
 	}
 }
 
+func TestLinesFormatter_OutputsScalarArrayOneValuePerLine(t *testing.T) {
+	resp := &output.Response{Body: []any{"Alice", "Bob", float64(3), true, nil}}
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["lines"].Format(&buf, resp, false); err != nil {
+		t.Fatalf("lines formatter: %v", err)
+	}
+	if got, want := buf.String(), "Alice\nBob\n3\ntrue\nnull\n"; got != want {
+		t.Fatalf("lines output = %q, want %q", got, want)
+	}
+}
+
+func TestLinesFormatter_RejectsStructuredValue(t *testing.T) {
+	resp := &output.Response{Body: map[string]any{"name": "Alice"}}
+	var buf bytes.Buffer
+	err := output.DefaultFormatters()["lines"].Format(&buf, resp, false)
+	if err == nil {
+		t.Fatal("expected lines formatter to reject structured value")
+	}
+	if !strings.Contains(err.Error(), "requires scalar values") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // --- ReadableFormatter ---
 
 func TestReadableFormatter_ContainsStatus(t *testing.T) {

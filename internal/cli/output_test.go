@@ -171,7 +171,7 @@ func TestRawOutputFormatRemoved(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for -o raw, got nil")
 	}
-	if !strings.Contains(err.Error(), `use -r/--rsh-raw`) {
+	if !strings.Contains(err.Error(), `raw response body bytes`) {
 		t.Fatalf("expected -r hint, got: %v", err)
 	}
 }
@@ -197,22 +197,58 @@ func TestFilterShorthand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := strings.TrimSpace(out.String())
-	// JSON-encoded string result.
-	if got != `"Alice"` {
-		t.Errorf("got %q, want %q", got, `"Alice"`)
+	if got != "Alice" {
+		t.Errorf("got %q, want %q", got, "Alice")
 	}
 }
 
-// TestFilterRaw verifies that -r strips quotes from string results.
-func TestFilterRaw(t *testing.T) {
+func TestFilterArrayPreservesShapeByDefault(t *testing.T) {
 	c, out, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{"name":"Alice"}`)
-	if err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", "https://api.example.com/items"}); err != nil {
+	useJSONResponse(c, 200, `{"names":["Alice","Bob"]}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.names", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got := strings.TrimSpace(out.String())
-	if got != "Alice" {
-		t.Errorf("got %q, want %q", got, "Alice")
+	var got []string
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("expected JSON array output, got %q: %v", out.String(), err)
+	}
+	if len(got) != 2 || got[0] != "Alice" || got[1] != "Bob" {
+		t.Fatalf("names = %#v, want Alice/Bob", got)
+	}
+}
+
+func TestFilterLinesOutput(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"names":["Alice","Bob"]}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.names", "-o", "lines", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "Alice\nBob\n"; got != want {
+		t.Fatalf("lines output = %q, want %q", got, want)
+	}
+}
+
+func TestFilterLinesOutputRejectsObjects(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"items":[{"name":"Alice"}]}`)
+	err := c.Run([]string{"restish", "get", "-f", "body.items", "-o", "lines", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected -o lines to reject object arrays")
+	}
+	if !strings.Contains(err.Error(), "requires scalar values") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFilterRawErrors(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"name":"Alice"}`)
+	err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected -f with -r to fail")
+	}
+	if !strings.Contains(err.Error(), "cannot be combined") || !strings.Contains(err.Error(), "-o lines") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -245,7 +281,7 @@ func TestFilterHeaderValue(t *testing.T) {
 	if err := c.Run([]string{"restish", "get", "-f", "headers.Date", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := strings.TrimSpace(out.String()); got != `"Mon, 02 Jan 2006 15:04:05 GMT"` {
+	if got := strings.TrimSpace(out.String()); got != "Mon, 02 Jan 2006 15:04:05 GMT" {
 		t.Fatalf("headers.Date output = %q", got)
 	}
 }
@@ -311,6 +347,18 @@ func TestRawFlagWithoutFilterWritesOriginalBytes(t *testing.T) {
 	}
 	if out.String() != raw {
 		t.Fatalf("raw output changed:\ngot  %q\nwant %q", out.String(), raw)
+	}
+}
+
+func TestRawFlagWithOutputFormatErrors(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{}`)
+	err := c.Run([]string{"restish", "get", "-r", "-o", "json", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected -r with -o to fail")
+	}
+	if !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

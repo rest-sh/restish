@@ -170,6 +170,18 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		if gf := globalFlagsFromContext(requestContext(cmd)); gf.Raw {
+			if err := validateRawOutputOptions(gf); err != nil {
+				_ = httpResp.Body.Close()
+				return err
+			}
+			defer httpResp.Body.Close()
+			if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
+				return err
+			}
+			_, err := io.Copy(c.Stdout, httpResp.Body)
+			return err
+		}
 		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
 			_ = httpResp.Body.Close()
 			return err
@@ -216,7 +228,7 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 
 	// Pagination: if this is a GET and there's a next link, paginate.
 	gf := globalFlagsFromContext(requestContext(cmd))
-	if method == "GET" && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
+	if method == "GET" && !gf.Raw && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
 		var pagCfg *config.PaginationConfig
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
@@ -265,6 +277,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	if gf.Silent {
 		return nil
 	}
+	if err := validateRawOutputOptions(gf); err != nil {
+		return err
+	}
 
 	fmtName := gf.OutputFormat
 	filterExpr := gf.Filter
@@ -273,9 +288,8 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	headersOnly := gf.HeadersShorthand
 	tty := output.IsTerminal(c.Stdout)
 
-	if gf.Raw && !explicitFilter && fmtName == "" {
-		_, err := c.Stdout.Write(resp.Raw)
-		return err
+	if gf.Raw {
+		return c.writeRawBytes(resp.Raw)
 	}
 	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(output.Header(resp.Headers, "Content-Type"), "image/") {
 		_, err := c.Stdout.Write(resp.Raw)
@@ -346,11 +360,11 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	if explicitFilter && filterExpr == "@" {
-		return c.renderValue(cmd, doc)
+		return c.renderValue(cmd, doc, true)
 	}
 
 	if filterExpr != "@" {
-		return c.renderValue(cmd, filtered)
+		return c.renderValue(cmd, filtered, explicitFilter)
 	}
 
 	formatter, err := c.selectFormatter(cmd, fmtName, tty)
@@ -375,6 +389,19 @@ func explicitOutputFilter(gf GlobalFlags) bool {
 	return gf.Filter != "" || gf.HeadersShorthand
 }
 
+func validateRawOutputOptions(gf GlobalFlags) error {
+	if !gf.Raw {
+		return nil
+	}
+	if explicitOutputFilter(gf) {
+		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers; use -o lines for shell-friendly filtered values")
+	}
+	if gf.OutputFormat != "" {
+		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-output-format; raw output writes the response body bytes")
+	}
+	return nil
+}
+
 func filterNeedsLinks(filterExpr string) bool {
 	filterExpr = strings.TrimSpace(filterExpr)
 	return filterExpr == "@" || filterExpr == "links" ||
@@ -385,8 +412,8 @@ func filterNeedsLinks(filterExpr string) bool {
 
 // renderValue writes a filtered/subselected value using the same formatter
 // selection rules as normal responses, but without HTTP status/header preamble.
-func (c *CLI) renderValue(cmd *cobra.Command, value any) error {
-	renderer, err := c.newValueRenderer(cmd, nil)
+func (c *CLI) renderValue(cmd *cobra.Command, value any, plainScalars bool) error {
+	renderer, err := c.newValueRenderer(cmd, nil, plainScalars)
 	if err != nil {
 		return err
 	}
@@ -423,7 +450,7 @@ func (r valueStreamRenderer) Close() error {
 	return r.stream.Close()
 }
 
-func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (valueRenderer, error) {
+func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainScalars bool) (valueRenderer, error) {
 	if base == nil {
 		base = &output.Response{}
 	}
@@ -433,27 +460,27 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 		return valueRendererFunc{render: func(any) error { return nil }}, nil
 	}
 
-	rawMode := gf.Raw
-	if rawMode {
-		return valueRendererFunc{render: c.writeRaw}, nil
+	if gf.Raw {
+		return nil, validateRawOutputOptions(gf)
 	}
 
 	fmtName := gf.OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 	color := output.ColorEnabled(c.Stdout)
 
-	// Body/sub-value rendering should stay machine-friendly by default on
-	// non-TTY, even though the default formatter there is `raw`.
-	if !tty && fmtName == "" {
+	if fmtName == "" && plainScalars {
 		return valueRendererFunc{render: func(value any) error {
-			encoded, err := json.Marshal(value)
-			if err != nil {
-				return err
+			if output.IsLineScalar(value) {
+				return output.WriteLinesValue(c.Stdout, value)
 			}
-			encoded = append(encoded, '\n')
-			_, err = c.Stdout.Write(encoded)
-			return err
+			return c.renderValueWithDefaults(value, tty, color)
 		}}, nil
+	}
+
+	// Body/sub-value rendering should stay machine-friendly by default on
+	// non-TTY.
+	if !tty && fmtName == "" {
+		return valueRendererFunc{render: func(value any) error { return c.writeJSONValue(value) }}, nil
 	}
 
 	// Readable output for sub-values omits the synthetic HTTP preamble and just
@@ -508,9 +535,39 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 	}}, nil
 }
 
+func (c *CLI) renderValueWithDefaults(value any, tty, color bool) error {
+	if !tty {
+		return c.writeJSONValue(value)
+	}
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	encoded = append(encoded, '\n')
+	if color {
+		highlighted, err := output.HighlightWithLexer(output.ReadableLexer, encoded)
+		if err == nil {
+			_, err = c.Stdout.Write(highlighted)
+			return err
+		}
+	}
+	_, err = c.Stdout.Write(encoded)
+	return err
+}
+
+func (c *CLI) writeJSONValue(value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	encoded = append(encoded, '\n')
+	_, err = c.Stdout.Write(encoded)
+	return err
+}
+
 func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
 	if fmtName == "raw" {
-		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw output`)
+		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw response body bytes`)
 	}
 
 	fmts := c.formatters
@@ -551,16 +608,13 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 	return formatter, nil
 }
 
-// writeRaw writes value to stdout as plain text (via filter.RawOutput),
-// appending a newline if the result does not already end with one.
-// Used by both formatResponse and formatStreamItem for --rsh-raw output.
-func (c *CLI) writeRaw(value any) error {
-	s := filter.RawOutput(value)
-	if !strings.HasSuffix(s, "\n") {
-		s += "\n"
-	}
-	_, err := io.WriteString(c.Stdout, s)
+func (c *CLI) writeRawBytes(data []byte) error {
+	_, err := c.Stdout.Write(data)
 	return err
+}
+
+func (c *CLI) writePlainValue(value any) error {
+	return output.WriteLinesValue(c.Stdout, value)
 }
 
 func shouldSuggestBodyPrefix(filterExpr string) bool {

@@ -15,29 +15,29 @@ for direct paths and projections; use jq for richer transforms.
 - `body` for decoded response body
 
 {{< restish-example >}}
-restish https://api.rest.sh/ -f headers.Content-Type -r
+restish https://api.rest.sh/ -f headers.Content-Type
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/images -f links.next
 restish https://api.rest.sh/example -f body.basics.profiles
 ```
 
 ## Shorthand Paths
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body[0].name -r
+restish https://api.rest.sh/images -f body[0].name
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -f body[-1].self -r
-restish https://api.rest.sh/example -f body.volunteer[0].organization -r
+restish https://api.rest.sh/images -f body[-1].self
+restish https://api.rest.sh/example -f body.volunteer[0].organization
 ```
 
 ## Selection And Projection
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f 'body[format = jpeg].self' -r
+restish https://api.rest.sh/images -f 'body[format = jpeg].self' -o lines
 {{< /restish-example >}}
 
 ```bash
@@ -53,7 +53,7 @@ responses.
 Restish auto-detects jq-style filters that start with `.` or use jq operators:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -r
+restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
 {{< /restish-example >}}
 
 ```bash
@@ -76,14 +76,16 @@ filter needs the whole collection:
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 {{< /restish-example >}}
 
-## Raw Scalars
+## Scalar Lines
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f '.body[] | .name' -r
+restish https://api.rest.sh/images -f '.body[] | .name' -o lines
 {{< /restish-example >}}
 
-Raw mode prints scalar results without JSON string quotes and prints array items
-one per line.
+Explicit scalar filters print without JSON string quotes. Use `-o lines` when
+the filtered value is an array or stream of scalars and you want one value per
+line. `-o lines` rejects structured objects; use `-o json` when you need to
+preserve array or object shape.
 
 ## Related Pages
 

@@ -6,11 +6,11 @@ description: Print one field per collection item.
 ---
 
 This is the most common shell pattern: call a list endpoint, select one field
-from each item, and print the result without JSON quotes. It is useful for
-loops, copy-paste, and quick checks.
+from each item, and print one plain value per line. It is useful for loops,
+copy-paste, and quick checks.
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 {{< /restish-example >}}
 
 Example output:
@@ -23,8 +23,9 @@ Example output:
 /images/heic
 ```
 
-`body.self` selects the `self` field from each item in the response body. `-r`
-turns the selected strings into plain text. For more complex selection, use the
-jq-style filter examples in [Filtering](/docs/guides/filtering/).
+`body.self` selects the `self` field from each item in the response body.
+`-o lines` turns the selected strings into one plain text value per line. For
+more complex selection, use the jq-style filter examples in
+[Filtering](/docs/guides/filtering/).
 
 Related: [Filtering](/docs/guides/filtering/).

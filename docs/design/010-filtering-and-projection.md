@@ -151,7 +151,8 @@ Examples:
 
 - `--rsh-headers` asks for header-oriented output
 - `--rsh-filter` asks for a selected sub-value
-- `--rsh-raw` asks for raw/plain output of the current selection
+- `--rsh-raw` asks for original response body bytes
+- `-o lines` asks for shell-friendly scalar line output
 
 When options conflict, Restish should either:
 
@@ -160,18 +161,29 @@ When options conflict, Restish should either:
 
 Silent discarding of user intent is not acceptable.
 
-## `--rsh-raw`
+## Raw And Line Output
 
-`--rsh-raw` is the single raw/plain output control. Without a filter, it writes
-the original response body bytes after transfer decoding. With a filter, it is a
-presentation shortcut layered on top of filtering. It is meant for shell-friendly
-display of filter results by:
+`--rsh-raw` writes the original response body bytes after transfer decoding. It
+is incompatible with `--rsh-filter` and `--rsh-headers` because filtered values
+are normalized logical values, not byte-preserving response payloads.
 
-- removing JSON quotes from scalar strings
-- printing arrays of scalars one item per line
+Filtered scalar values print plainly by default:
 
-It should not try to invent a broad alternate formatting system, and `raw`
-should not be reintroduced as an `-o` formatter name.
+```bash
+restish get https://api.example.com/items -f body.items[0].name
+```
+
+For arrays or streams of scalar values, users can request shell-friendly line
+output explicitly:
+
+```bash
+restish get https://api.example.com/items -f '.body.items[] | .name' -o lines
+```
+
+The `lines` formatter prints scalar values without JSON quotes, one value per
+line. It rejects objects and arrays containing objects so users do not
+accidentally destroy structured data shape. The `raw` name should not be
+reintroduced as an `-o` formatter name.
 
 ## Output Consequences
 
@@ -182,6 +194,10 @@ non-TTY/stdout-redirected cases:
 - if the result is a transformed value, default to JSON
 - do not try to preserve raw bytes that no longer correspond to the selected
   result
+- if the result is a scalar selected by an explicit filter, print the scalar
+  plainly unless an explicit output format such as `-o json` is set
+- if the result is an array or object, preserve its structure unless the user
+  explicitly chooses a flattening format such as `-o lines`
 
 This is a key interaction between filtering and design 009/028.
 
@@ -239,10 +255,10 @@ restish get https://api.example.com/items -f '.body.items[] | select(.active) | 
 restish get https://api.example.com/items -f '.body.items | length'
 ```
 
-Example raw presentation of filtered values:
+Example line presentation of filtered values:
 
 ```bash
-restish get https://api.example.com/items -f '.body.items[] | .name' --rsh-raw
+restish get https://api.example.com/items -f '.body.items[] | .name' -o lines
 ```
 
 which prints:

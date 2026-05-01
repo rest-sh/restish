@@ -269,7 +269,7 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 	fmtName := gf.OutputFormat
 	tty := output.IsTerminal(c.Stdout)
 	if !tty || (fmtName != "" && fmtName != "readable") {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
 	}
 
 	formatter, err := c.selectFormatter(cmd, fmtName, tty)
@@ -278,12 +278,12 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 	}
 	framed, ok := formatter.(output.FramedValueStreamFormatter)
 	if !ok {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
 	}
 
 	frame, ok := paginatedReadableFrame(base.Body, pagCfg)
 	if !ok {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf))
+		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
 	}
 
 	stream, err := framed.StartFramedValueStream(c.Stdout, valueStreamBaseForFilter(base, gf), output.ColorEnabled(c.Stdout), frame)
@@ -307,9 +307,6 @@ func valueStreamBaseForFilter(base *output.Response, gf GlobalFlags) *output.Res
 func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) (bool, error) {
 	gf := globalFlagsFromContext(requestContext(cmd))
 	if gf.Silent {
-		return true, nil
-	}
-	if gf.Raw {
 		return true, nil
 	}
 

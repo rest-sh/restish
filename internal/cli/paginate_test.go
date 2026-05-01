@@ -627,7 +627,7 @@ func TestPaginationSkipsForHeaderFilter(t *testing.T) {
 	}
 }
 
-func TestPaginationRawFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
+func TestPaginationLinesFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -651,11 +651,11 @@ func TestPaginationRawFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "get", "-f", "body.self", "-r", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-f", "body.self", "-o", "lines", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if got, want := out.String(), "one\ntwo\n"; got != want {
-		t.Fatalf("raw filtered pagination output = %q, want %q", got, want)
+		t.Fatalf("lines filtered pagination output = %q, want %q", got, want)
 	}
 }
 

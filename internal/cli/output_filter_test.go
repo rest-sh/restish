@@ -9,13 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newFilterTestCommand(t *testing.T, raw bool) *cobra.Command {
+func newFilterTestCommand(t *testing.T) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().Bool("rsh-raw", false, "")
-	if err := cmd.Flags().Set("rsh-raw", map[bool]string{true: "true", false: "false"}[raw]); err != nil {
-		t.Fatalf("set rsh-raw: %v", err)
-	}
 	// Simulate PersistentPreRunE: parse flags and store GlobalFlags on context.
 	gf, err := parseGlobalFlags(cmd)
 	if err != nil {
@@ -28,7 +25,7 @@ func newFilterTestCommand(t *testing.T, raw bool) *cobra.Command {
 func TestFilterOutputReturnsFilteredValue(t *testing.T) {
 	var stdout bytes.Buffer
 	c := &CLI{Stdout: &stdout}
-	cmd := newFilterTestCommand(t, false)
+	cmd := newFilterTestCommand(t)
 
 	filtered, handled, err := c.filterOutput(cmd, "body.answer", map[string]any{
 		"body": map[string]any{"answer": 42},
@@ -44,27 +41,5 @@ func TestFilterOutputReturnsFilteredValue(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("unexpected stdout in non-raw mode: %q", stdout.String())
-	}
-}
-
-func TestFilterOutputWritesRawValue(t *testing.T) {
-	var stdout bytes.Buffer
-	c := &CLI{Stdout: &stdout}
-	cmd := newFilterTestCommand(t, true)
-
-	filtered, handled, err := c.filterOutput(cmd, "body.answer", map[string]any{
-		"body": map[string]any{"answer": "hello"},
-	}, filter.LangAuto)
-	if err != nil {
-		t.Fatalf("filterOutput: %v", err)
-	}
-	if !handled {
-		t.Fatal("expected raw mode to handle output directly")
-	}
-	if filtered != nil {
-		t.Fatalf("filtered = %#v, want nil after raw output", filtered)
-	}
-	if got := stdout.String(); got != "hello\n" {
-		t.Fatalf("stdout = %q, want %q", got, "hello\n")
 	}
 }

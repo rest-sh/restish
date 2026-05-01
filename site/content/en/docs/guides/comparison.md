@@ -38,7 +38,7 @@ http https://api.rest.sh/images Accept:application/json
 
 ```bash
 restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
-restish example list-images -f body.self -r
+restish example list-images -f body.self -o lines
 ```
 
 ## Side-By-Side

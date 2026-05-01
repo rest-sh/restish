@@ -33,7 +33,7 @@ Flags: `-H/--rsh-header`, `-q/--rsh-query`, `-c/--rsh-content-type`,
 ## Output And Filtering
 
 ```bash
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 restish https://api.rest.sh/images -o table --rsh-columns name,format,self
 restish https://api.rest.sh/images -o ndjson -f body.self
 restish https://api.rest.sh/images --rsh-sort-by name -o table

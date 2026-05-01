@@ -16,7 +16,7 @@ restish links https://api.rest.sh/images next
 Equivalent filter form:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/images -f links.next
 {{< /restish-example >}}
 
 Both commands read the same normalized `links.next` value. The command form is

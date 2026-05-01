@@ -96,7 +96,7 @@ restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
 | `/example` | Nested data for filtering and projection examples. |
 
 ```bash
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/images -f links.next
 restish https://api.rest.sh/example -f body.basics.profiles
 restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
 ```
@@ -113,7 +113,7 @@ Always bound copy-paste stream examples:
 
 ```bash
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
 ```
 
 ## Resilience And HTTP Behavior

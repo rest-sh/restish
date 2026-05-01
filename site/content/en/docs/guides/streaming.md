@@ -22,8 +22,8 @@ SSE output includes event metadata and parsed data. Filter the event data when
 you only need fields:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -r
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -o lines
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
 ```
 
 ## NDJSON
@@ -32,7 +32,7 @@ The `/logs` endpoint emits line-oriented JSON records:
 
 ```bash
 restish https://api.rest.sh/logs --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/logs --rsh-max-events 3 -f body.user.id -r
+restish https://api.rest.sh/logs --rsh-max-events 3 -f body.user.id -o lines
 ```
 
 If an endpoint is slow to emit its first record, add a timeout while debugging:
@@ -56,11 +56,12 @@ restish -H 'Accept: text/event-stream' https://api.rest.sh/events --rsh-max-even
 ## Document Formats On Live Streams
 
 Document formats such as `json` and `yaml` require one complete document. For
-live streams, prefer `ndjson` or a raw scalar filter:
+live streams, prefer `ndjson` for structured records or `lines` for filtered
+scalar values:
 
 ```bash
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -o lines
 ```
 
 ## SSE Parsing Notes

@@ -65,8 +65,8 @@ For each stream item:
 4. write the result immediately
 
 This keeps the stream path aligned with the rest of the CLI model: filters still
-work, `--rsh-raw` still affects display, and stdout still receives one logical
-result per emitted event.
+work, `-o lines` can render filtered scalar values for shell pipelines, and
+stdout still receives one logical result per emitted event.
 
 If stdout is buffered for throughput, the stream path must flush at record or
 event boundaries. Streaming should improve latency for users watching output

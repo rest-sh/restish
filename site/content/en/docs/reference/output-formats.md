@@ -39,17 +39,20 @@ restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 Raw output bypasses Restish's structured body decoding and formatting. It still
 uses the body exposed by the HTTP client after any content-encoding
 decompression, so it is not a capture of the exact compressed wire bytes.
-Use `-r` or `--rsh-raw` for raw output; `raw` is not an `-o` format.
+Use `-r` or `--rsh-raw` for raw response body bytes; `raw` is not an `-o`
+format.
 
 ## Record Formats
 
 Record formats can emit one item or event at a time:
 
 - `ndjson`: one JSON value per line
+- `lines`: one scalar value per line, without JSON string quotes
 - plugin formats such as `csv` when implemented as record-oriented formatters
 
 ```bash
 restish https://api.rest.sh/images -o ndjson -f body.self
+restish https://api.rest.sh/images -f body.self -o lines
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 
@@ -62,14 +65,16 @@ restish https://api.rest.sh/images -o table --rsh-sort-by name
 
 Tables are for terminal inspection, not stable machine parsing.
 
-## Filters And Raw Scalars
+## Filters And Scalar Lines
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | .name' -r
+restish https://api.rest.sh/images -f '.body[] | .name' -o lines
 ```
 
-Raw mode strips quotes from scalar strings and prints array items one per line.
-Without a filter, `-r` writes the response body bytes.
+Explicit scalar filters print without JSON string quotes. `-o lines` prints
+arrays and streams of scalar values one value per line, and rejects structured
+objects. Without a filter, `-r` writes the response body bytes and cannot be
+combined with `-f`.
 
 ## Related Pages
 

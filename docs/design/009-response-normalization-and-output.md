@@ -107,8 +107,8 @@ For an unfiltered response, `-r` raw output is byte-oriented. It must write the
 original response body bytes after transfer decoding, not a Go value formatted
 through `fmt` and not a decode/re-encode approximation. Once the user selects a
 transformed logical value with a filter, byte fidelity no longer applies to that
-transformed value; `-r` then means shell-friendly unformatted presentation of
-the selected value.
+transformed value; `-r` is therefore rejected with filters. Shell-friendly
+filtered scalar output belongs to the `lines` output format instead.
 
 ## Hypermedia Integration
 
@@ -139,16 +139,19 @@ should not have to guess which one silently won.
 Restish separates `-o` output formats into two families:
 
 - **document formats** such as `json`, `yaml`, and `readable`
-- **record formats** such as `ndjson` and record-oriented formatter plugins
+- **record/value formats** such as `ndjson`, `lines`, and record-oriented
+  formatter plugins
 
-`raw` is not an `-o` output format. Raw/plain output is requested with `-r` so
-users have one spelling for response-body bytes and filtered scalar output.
+`raw` is not an `-o` output format. Raw byte output is requested with `-r` and
+applies only to the original response body. Plain scalar line output is
+requested with `-o lines`.
 
 Document formats must preserve framing guarantees:
 
 - `-o json` always emits one valid JSON document
 - `-o yaml` always emits one valid YAML document
 - `-o readable` emits one coherent human-readable response view
+- `-o lines` emits one scalar value per line and rejects structured values
 
 Design 028 defines the higher-level planner that combines normalization results
 with pagination, streaming, and filtering.
@@ -163,8 +166,10 @@ The practical rule is:
 
 - if Restish is still outputting the original payload unchanged, raw output is
   meaningful
-- if Restish is outputting a transformed or selected logical value, default to
-  JSON
+- if Restish is outputting an explicitly filtered scalar, print the scalar
+  plainly without JSON string quotes
+- if Restish is outputting a transformed or selected structured value, preserve
+  its shape with the selected/default formatter
 
 ## Readable Output Contract
 

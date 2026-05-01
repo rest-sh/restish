@@ -21,8 +21,8 @@ Most filters start from one of these roots:
 Examples:
 
 ```bash
-restish https://api.rest.sh/ -f headers.Content-Type -r
-restish https://api.rest.sh/images -f links.next -r
+restish https://api.rest.sh/ -f headers.Content-Type
+restish https://api.rest.sh/images -f links.next
 restish https://api.rest.sh/example -f body.basics.profiles
 ```
 

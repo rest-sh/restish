@@ -34,8 +34,8 @@ restish links https://api.rest.sh/images next self
 Filter links from a normal request:
 
 ```bash
-restish https://api.rest.sh/images -f links.next -r
-restish https://api.rest.sh/images -f links.self -r
+restish https://api.rest.sh/images -f links.next
+restish https://api.rest.sh/images -f links.self
 ```
 
 ## Pagination Uses Links

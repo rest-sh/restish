@@ -16,7 +16,7 @@ restish https://api.rest.sh/ --rsh-headers
 Filter one header as raw text:
 
 {{< restish-example >}}
-restish https://api.rest.sh/ -f headers.Content-Type -r
+restish https://api.rest.sh/ -f headers.Content-Type
 {{< /restish-example >}}
 
 Use `/headers` when you want the request headers the server received:

@@ -11,7 +11,7 @@ Use limits and collect mode to make the behavior explicit.
 ## Automatic Pagination
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 {{< /restish-example >}}
 
 When a response exposes a `next` link, Restish follows it until there are no
@@ -23,7 +23,7 @@ points at a different host or port.
 ## Inspect One Page
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
+restish https://api.rest.sh/images --rsh-no-paginate -f links.next
 {{< /restish-example >}}
 
 ```bash

@@ -53,6 +53,7 @@ type FramedValueStreamFormatter interface {
 func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
 		"json":     &JSONFormatter{},
+		"lines":    &LinesFormatter{},
 		"ndjson":   &NDJSONFormatter{},
 		"readable": &ReadableFormatter{},
 		"table":    &TableFormatter{},

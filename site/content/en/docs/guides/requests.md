@@ -77,7 +77,7 @@ restish example get-image jpeg > dragonfly.jpg
 Generated commands still support normal request flags:
 
 {{< restish-example >}}
-restish example list-images -f body.self -r
+restish example list-images -f body.self -o lines
 {{< /restish-example >}}
 
 ## Override The Server Temporarily

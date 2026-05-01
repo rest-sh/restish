@@ -147,10 +147,10 @@ restish -p json example list-images
 
 ## 8. Filter For Shell Use
 
-When you only need one field, filter it and use raw output:
+When you need one field from each item, filter it and use line output:
 
 {{< restish-example >}}
-restish example list-images -f body.self -r
+restish example list-images -f body.self -o lines
 {{< /restish-example >}}
 
 Example output:
@@ -172,10 +172,10 @@ interactively. Use `-o json` when the next tool expects a JSON document:
 restish https://api.rest.sh/images -o json
 {{< /restish-example >}}
 
-Use `-r` with a scalar filter when shell scripts need plain text:
+Use `-o lines` when shell scripts need one plain scalar value per line:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.self -r
+restish https://api.rest.sh/images -f body.self -o lines
 {{< /restish-example >}}
 
 ## What You Learned

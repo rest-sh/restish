@@ -127,7 +127,7 @@ document format or collect mode requires buffering.
 **How to confirm:**
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next -r
+restish https://api.rest.sh/images --rsh-no-paginate -f links.next
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 ```
 
@@ -150,7 +150,7 @@ document format.
 
 ```bash
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -r
+restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -o lines
 ```
 
 **Prevention:** Use `--rsh-max-events` in examples and scripts unless EOF is expected.
