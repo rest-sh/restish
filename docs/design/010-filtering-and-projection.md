@@ -151,7 +151,7 @@ Examples:
 
 - `--rsh-headers` asks for header-oriented output
 - `--rsh-filter` asks for a selected sub-value
-- `--rsh-raw` asks for a string/scalar-oriented presentation shortcut
+- `--rsh-raw` asks for raw/plain output of the current selection
 
 When options conflict, Restish should either:
 
@@ -162,16 +162,16 @@ Silent discarding of user intent is not acceptable.
 
 ## `--rsh-raw`
 
-`--rsh-raw` is intentionally narrow. It is not a third filter language and not
-the same as `-o raw`.
-
-`--rsh-raw` is a presentation shortcut layered on top of filtering. It is meant
-for shell-friendly display of filter results by:
+`--rsh-raw` is the single raw/plain output control. Without a filter, it writes
+the original response body bytes after transfer decoding. With a filter, it is a
+presentation shortcut layered on top of filtering. It is meant for shell-friendly
+display of filter results by:
 
 - removing JSON quotes from scalar strings
 - printing arrays of scalars one item per line
 
-It should not try to invent a broad alternate formatting system.
+It should not try to invent a broad alternate formatting system, and `raw`
+should not be reintroduced as an `-o` formatter name.
 
 ## Output Consequences
 

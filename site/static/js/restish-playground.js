@@ -145,6 +145,9 @@
     if (!args.length) {
       throw new Error("Add a URL or supported docs API command.");
     }
+    if (flags.outputFormat === "raw") {
+      throw new Error("Output format `raw` has been removed. Use `-r` or `--rsh-raw` for raw output.");
+    }
 
     let method = "GET";
     let url = "";
@@ -707,7 +710,7 @@
       value = applyFilter(doc, filter);
     }
 
-    if (flags.raw || flags.outputFormat === "raw") {
+    if (flags.raw) {
       return rawOutput(value);
     }
     if (flags.outputFormat === "json") {

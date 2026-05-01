@@ -19,10 +19,13 @@ func runCompletion(t *testing.T, args ...string) string {
 // the registered formatter names.
 func TestOutputFormatCompletions(t *testing.T) {
 	got := runCompletion(t, "get", "--rsh-output-format", "")
-	for _, want := range []string{"json", "readable", "raw", "yaml"} {
+	for _, want := range []string{"json", "readable", "yaml"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in -o completions, got:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "raw") {
+		t.Errorf("did not expect raw in -o completions, got:\n%s", got)
 	}
 }
 

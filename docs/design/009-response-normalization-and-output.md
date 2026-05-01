@@ -103,11 +103,12 @@ That dual representation is what lets Restish support:
 
 without forcing an irreversible choice too early in the pipeline.
 
-For an unfiltered response, raw output is byte-oriented. `-r` or `-o raw` must
-write the original response body bytes after transfer decoding, not a Go value
-formatted through `fmt` and not a decode/re-encode approximation. Once the user
-selects a transformed logical value with a filter, byte fidelity no longer
-applies to that transformed value.
+For an unfiltered response, `-r` raw output is byte-oriented. It must write the
+original response body bytes after transfer decoding, not a Go value formatted
+through `fmt` and not a decode/re-encode approximation. Once the user selects a
+transformed logical value with a filter, byte fidelity no longer applies to that
+transformed value; `-r` then means shell-friendly unformatted presentation of
+the selected value.
 
 ## Hypermedia Integration
 
@@ -135,10 +136,13 @@ should not have to guess which one silently won.
 
 ## Output Families
 
-Restish separates output formats into two families:
+Restish separates `-o` output formats into two families:
 
 - **document formats** such as `json`, `yaml`, and `readable`
 - **record formats** such as `ndjson` and record-oriented formatter plugins
+
+`raw` is not an `-o` output format. Raw/plain output is requested with `-r` so
+users have one spelling for response-body bytes and filtered scalar output.
 
 Document formats must preserve framing guarantees:
 
@@ -152,8 +156,8 @@ with pagination, streaming, and filtering.
 ## Default Output Behavior
 
 When stdout is not a TTY and Restish is writing normalized structured data, the
-default output is JSON rather than raw bytes. Explicit `-o raw` remains the
-escape hatch for original wire payloads.
+default output is JSON rather than raw bytes. Explicit `-r` remains the escape
+hatch for original response-body bytes.
 
 The practical rule is:
 

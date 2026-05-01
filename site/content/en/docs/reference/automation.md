@@ -57,8 +57,8 @@ These flags are the usual script building blocks:
 
 - `--rsh-ignore-status-code` keeps HTTP error bodies usable.
 - `-S` suppresses output when the exit code is enough.
-- `-o json`, `-o ndjson`, and `-o raw` avoid terminal-oriented formatting.
-- `-r` prints raw scalar values after filtering.
+- `-o json` and `-o ndjson` avoid terminal-oriented formatting.
+- `-r` writes raw response body bytes, or raw scalar values after filtering.
 - `--rsh-no-paginate`, `--rsh-max-pages`, and `--rsh-max-items` bound
   collection work.
 

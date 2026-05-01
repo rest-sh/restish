@@ -25,8 +25,8 @@ type Response struct {
 	Links map[string]any `json:"links,omitempty"`
 	Body  any            `json:"body"`
 	// Raw holds the unformatted response body after Content-Encoding
-	// decompression. Used by RawFormatter to write body bytes without formatter
-	// re-encoding.
+	// decompression. Used by raw CLI output and binary/content-aware formatters
+	// to write body bytes without formatter re-encoding.
 	Raw []byte `json:"-"`
 }
 

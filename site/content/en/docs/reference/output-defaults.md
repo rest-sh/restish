@@ -47,6 +47,8 @@ value. Raw response output is based on the body after HTTP content-encoding
 decompression, not the exact compressed wire transfer. The
 [Output guide](/docs/guides/output/) covers that processing model.
 
+Use `-r` or `--rsh-raw` for raw output. `raw` is not an `-o` output format.
+
 ## Related Pages
 
 - [Output](/docs/guides/output/)

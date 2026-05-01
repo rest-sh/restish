@@ -164,6 +164,18 @@ func TestUnknownOutputFormat(t *testing.T) {
 	}
 }
 
+func TestRawOutputFormatRemoved(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{}`)
+	err := c.Run([]string{"restish", "get", "-o", "raw", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected error for -o raw, got nil")
+	}
+	if !strings.Contains(err.Error(), `use -r/--rsh-raw`) {
+		t.Fatalf("expected -r hint, got: %v", err)
+	}
+}
+
 // TestResponseBodyOnError verifies that a 4xx response still writes the body
 // to stdout before returning the exit code error.
 func TestResponseBodyOnError(t *testing.T) {

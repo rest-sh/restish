@@ -76,7 +76,7 @@ restish https://api.rest.sh/ -f headers.Content-Type -r
 ```
 
 Use `-r` when the filtered value is a scalar and shell tools should not receive
-JSON quotes.
+JSON quotes. Without a filter, `-r` writes the response body bytes.
 
 ## Raw Bytes And Files
 
@@ -93,7 +93,8 @@ restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
 
 Raw output bypasses Restish's structured body decoding and formatting, but it
-is still based on the body after HTTP content-encoding decompression.
+is still based on the body after HTTP content-encoding decompression. Use
+`-r` or `--rsh-raw` for raw output; `raw` is not an `-o` format.
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 

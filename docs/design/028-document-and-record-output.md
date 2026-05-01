@@ -120,8 +120,8 @@ that produce normalized values rather than the original wire payload.
 
 The revised rule is:
 
-- when Restish is still writing the original unmodified raw payload, `raw`
-  remains meaningful and available explicitly
+- when Restish is still writing the original unmodified raw payload, raw output
+  remains meaningful and available explicitly through `-r`
 - when Restish is writing a normalized or transformed value, redirected output
   should default to JSON
 

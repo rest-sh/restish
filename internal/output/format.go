@@ -54,7 +54,6 @@ func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
 		"json":     &JSONFormatter{},
 		"ndjson":   &NDJSONFormatter{},
-		"raw":      &RawFormatter{},
 		"readable": &ReadableFormatter{},
 		"table":    &TableFormatter{},
 		"gron":     &GronFormatter{},

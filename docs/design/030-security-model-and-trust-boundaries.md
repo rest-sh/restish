@@ -176,7 +176,7 @@ distinguish:
 - image payloads with explicit TTY renderers
 
 If Restish cannot safely render binary to a TTY, it should use a placeholder or
-require `-o raw`.
+require `-r`.
 
 ## Plugin Safety
 

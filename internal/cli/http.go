@@ -507,6 +507,10 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response) (value
 }
 
 func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
+	if fmtName == "raw" {
+		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw output`)
+	}
+
 	fmts := c.formatters
 	if fmts == nil {
 		fmts = output.DefaultFormatters()

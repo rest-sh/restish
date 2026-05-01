@@ -16,7 +16,6 @@ Document formats produce one coherent result:
 - `json`: one JSON document
 - `yaml`: one YAML document
 - `cbor`: one CBOR document
-- `raw`: decoded response body bytes when formatter bypass matters
 - `image`: terminal image rendering for image responses
 - `gron`: one greppable path/value document
 
@@ -40,6 +39,7 @@ restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 Raw output bypasses Restish's structured body decoding and formatting. It still
 uses the body exposed by the HTTP client after any content-encoding
 decompression, so it is not a capture of the exact compressed wire bytes.
+Use `-r` or `--rsh-raw` for raw output; `raw` is not an `-o` format.
 
 ## Record Formats
 
@@ -69,6 +69,7 @@ restish https://api.rest.sh/images -f '.body[] | .name' -r
 ```
 
 Raw mode strips quotes from scalar strings and prints array items one per line.
+Without a filter, `-r` writes the response body bytes.
 
 ## Related Pages
 
