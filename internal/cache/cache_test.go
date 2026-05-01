@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -121,6 +123,9 @@ func TestClear_All(t *testing.T) {
 	if info.EntryCount != 0 {
 		t.Errorf("expected 0 entries after full clear, got %d", info.EntryCount)
 	}
+	if got := atomic.LoadInt64(&c.sizeEstimate); got != 0 {
+		t.Errorf("sizeEstimate after full clear: got %d, want 0", got)
+	}
 }
 
 func TestClear_ByHost(t *testing.T) {
@@ -136,8 +141,13 @@ func TestClear_ByHost(t *testing.T) {
 	if _, ok := c.Get("https://api.example.com/x"); ok {
 		t.Error("expected cache miss for cleared host")
 	}
-	// The other host may or may not remain depending on whether the host dir was
-	// removed; as long as Clear didn't error, this is acceptable behaviour.
+	_, total, err := c.allFiles()
+	if err != nil {
+		t.Fatalf("allFiles: %v", err)
+	}
+	if got := atomic.LoadInt64(&c.sizeEstimate); got != total {
+		t.Errorf("sizeEstimate after host clear: got %d, want %d", got, total)
+	}
 }
 
 func TestClear_EmptyCache(t *testing.T) {
@@ -198,6 +208,36 @@ func TestSetOverwriteDoesNotDoubleCountSize(t *testing.T) {
 
 	if _, ok := c.Get(key); !ok {
 		t.Fatal("expected overwritten entry to remain cached")
+	}
+}
+
+func TestSetConcurrentSameKeyKeepsSizeEstimateAccurate(t *testing.T) {
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
+	key := "https://api.example.com/items"
+	payloads := [][]byte{
+		[]byte(strings.Repeat("a", 128)),
+		[]byte(strings.Repeat("b", 256)),
+		[]byte(strings.Repeat("c", 512)),
+		[]byte(strings.Repeat("d", 1024)),
+		[]byte(strings.Repeat("e", 2048)),
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			c.Set(key, payloads[i%len(payloads)])
+		}(i)
+	}
+	wg.Wait()
+
+	_, total, err := c.allFiles()
+	if err != nil {
+		t.Fatalf("allFiles: %v", err)
+	}
+	if got := atomic.LoadInt64(&c.sizeEstimate); got != total {
+		t.Fatalf("sizeEstimate after concurrent same-key sets: got %d, want %d", got, total)
 	}
 }
 
@@ -273,6 +313,48 @@ func TestClearNamespacePrefixUsesRawNamespace(t *testing.T) {
 	}
 	if got, ok := other.Get(key); !ok || string(got) != "other" {
 		t.Fatalf("expected other namespace to remain, got %q hit=%v", got, ok)
+	}
+	_, total, err := clearer.allFiles()
+	if err != nil {
+		t.Fatalf("allFiles: %v", err)
+	}
+	if got := atomic.LoadInt64(&clearer.sizeEstimate); got != total {
+		t.Fatalf("sizeEstimate after namespace prefix clear: got %d, want %d", got, total)
+	}
+}
+
+func TestClearNamespacesRecomputesSizeEstimate(t *testing.T) {
+	dir := t.TempDir()
+	first, err := New(dir, DefaultMaxBytes, "myapi:default")
+	if err != nil {
+		t.Fatalf("New first: %v", err)
+	}
+	second, err := New(dir, DefaultMaxBytes, "myapi:admin")
+	if err != nil {
+		t.Fatalf("New second: %v", err)
+	}
+	first.Set("https://api.example.com/items", []byte("default"))
+	second.Set("https://api.example.com/items", []byte("admin"))
+
+	clearer, err := New(dir, DefaultMaxBytes, "")
+	if err != nil {
+		t.Fatalf("New clearer: %v", err)
+	}
+	if err := clearer.ClearNamespaces([]string{"myapi:default"}); err != nil {
+		t.Fatalf("ClearNamespaces: %v", err)
+	}
+	if _, ok := first.Get("https://api.example.com/items"); ok {
+		t.Fatal("expected default namespace to be cleared")
+	}
+	if got, ok := second.Get("https://api.example.com/items"); !ok || string(got) != "admin" {
+		t.Fatalf("expected admin namespace to remain, got %q hit=%v", got, ok)
+	}
+	_, total, err := clearer.allFiles()
+	if err != nil {
+		t.Fatalf("allFiles: %v", err)
+	}
+	if got := atomic.LoadInt64(&clearer.sizeEstimate); got != total {
+		t.Fatalf("sizeEstimate after namespace clear: got %d, want %d", got, total)
 	}
 }
 

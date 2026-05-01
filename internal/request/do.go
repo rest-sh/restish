@@ -199,6 +199,10 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 	}
 	if opts.CacheNamespace == "" && (requestHasCredentialHeaders(req) || HasCredentialQuery(req.URL)) {
+		// This late cache bypass only affects callers that have not already built
+		// opts.Transport. The CLI decides its cache namespace before constructing
+		// the shared transport so authenticated API-profile requests can cache
+		// within their profile-specific namespace.
 		opts.NoCache = true
 	}
 

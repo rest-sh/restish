@@ -31,6 +31,8 @@ type DiskCache struct {
 	evictMu      sync.Mutex // only one eviction goroutine at a time
 	evictQueued  atomic.Bool
 	evictWG      sync.WaitGroup
+	keyMu        sync.Mutex
+	keyLocks     map[string]*sync.Mutex
 }
 
 // New returns a DiskCache rooted at dir with the given size cap.
@@ -80,6 +82,9 @@ func (c *DiskCache) Get(key string) ([]byte, bool) {
 // Set writes data to disk for key and evicts LRU entries if the total cache
 // size exceeds the configured limit.
 func (c *DiskCache) Set(key string, data []byte) {
+	unlock := c.lockKey(key)
+	defer unlock()
+
 	p := c.filePath(key)
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
@@ -96,6 +101,21 @@ func (c *DiskCache) Set(key string, data []byte) {
 	}
 	atomic.AddInt64(&c.sizeEstimate, int64(len(data)))
 	c.evictIfNeeded()
+}
+
+func (c *DiskCache) lockKey(key string) func() {
+	c.keyMu.Lock()
+	if c.keyLocks == nil {
+		c.keyLocks = make(map[string]*sync.Mutex)
+	}
+	mu := c.keyLocks[key]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		c.keyLocks[key] = mu
+	}
+	c.keyMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
 }
 
 // Delete removes the cached entry for key.
@@ -223,6 +243,7 @@ func (c *DiskCache) Clear(host string) error {
 		for _, e := range entries {
 			_ = os.RemoveAll(filepath.Join(c.dir, e.Name()))
 		}
+		atomic.StoreInt64(&c.sizeEstimate, 0)
 		return nil
 	}
 	target := filepath.Join(c.dir, cachePathComponent(host))
@@ -230,7 +251,9 @@ func (c *DiskCache) Clear(host string) error {
 		if errors.Is(err, os.ErrNotExist) && cachePathComponent(host) != host {
 			legacy := filepath.Join(c.dir, host)
 			if _, legacyErr := os.Stat(legacy); legacyErr == nil {
-				return os.RemoveAll(legacy)
+				err := os.RemoveAll(legacy)
+				c.recomputeSizeEstimate()
+				return err
 			}
 		}
 		if errors.Is(err, os.ErrNotExist) {
@@ -238,7 +261,9 @@ func (c *DiskCache) Clear(host string) error {
 		}
 		return err
 	}
-	return os.RemoveAll(target)
+	err := os.RemoveAll(target)
+	c.recomputeSizeEstimate()
+	return err
 }
 
 // ClearNamespaces deletes entries for the given cache namespaces across all
@@ -256,7 +281,7 @@ func (c *DiskCache) ClearNamespaces(namespaces []string) error {
 			want[cachePathComponent(namespace)] = true
 		}
 	}
-	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return nil
 		}
@@ -266,6 +291,8 @@ func (c *DiskCache) ClearNamespaces(namespaces []string) error {
 		}
 		return nil
 	})
+	c.recomputeSizeEstimate()
+	return err
 }
 
 // ClearNamespacePrefix deletes entries for every namespace with prefix.
@@ -274,7 +301,7 @@ func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
 		return nil
 	}
 	encodedPrefix := cachePathComponent(prefix)
-	return filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || !info.IsDir() {
 			return nil
 		}
@@ -284,4 +311,15 @@ func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
 		}
 		return nil
 	})
+	c.recomputeSizeEstimate()
+	return err
+}
+
+func (c *DiskCache) recomputeSizeEstimate() {
+	_, total, err := c.allFiles()
+	if err != nil {
+		total = 0
+	}
+	atomic.StoreInt64(&c.sizeEstimate, total)
+	c.evictIfNeeded()
 }
