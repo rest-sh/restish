@@ -969,6 +969,17 @@ paths:
 }
 
 func TestDiscoverAllowsCrossOriginRemoteExternalRefsWithOptIn(t *testing.T) {
+	oldLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		switch host {
+		case "api.example.com", "spec.example.com":
+			return []net.IPAddr{{IP: net.ParseIP("203.0.113.10")}}, nil
+		default:
+			return oldLookup(ctx, host)
+		}
+	}
+	t.Cleanup(func() { lookupIPAddr = oldLookup })
+
 	root := `openapi: "3.1.0"
 info:
   title: Remote Refs

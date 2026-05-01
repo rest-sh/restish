@@ -401,7 +401,7 @@ func TestNDJSONScannerErrorFailsCommand(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "get", "https://api.example.com/stream"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "https://api.example.com/stream"})
 	if err == nil {
 		t.Fatal("expected NDJSON scanner error")
 	}

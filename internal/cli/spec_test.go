@@ -105,15 +105,15 @@ func TestSpecDiscoveryViaCrossOriginLinkRequiresOptIn(t *testing.T) {
 	var specHits atomic.Int32
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {
-		case "https://api.example.com":
+		case "https://203.0.113.10":
 			return &http.Response{
 				StatusCode: 200,
 				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Link": []string{`<https://spec.example.com/openapi.json>; rel="service-desc"`}},
+				Header:     http.Header{"Link": []string{`<https://203.0.113.11/openapi.json>; rel="service-desc"`}},
 				Body:       io.NopCloser(strings.NewReader("")),
 				Request:    r,
 			}, nil
-		case "https://spec.example.com/openapi.json":
+		case "https://203.0.113.11/openapi.json":
 			specHits.Add(1)
 			return jsonResponse(200, minimalOpenAPI), nil
 		default:
@@ -129,7 +129,7 @@ func TestSpecDiscoveryViaCrossOriginLinkRequiresOptIn(t *testing.T) {
 
 	cfg := spec.DiscoverConfig{
 		APIName:   "testapi",
-		BaseURL:   "https://api.example.com",
+		BaseURL:   "https://203.0.113.10",
 		CacheDir:  t.TempDir(),
 		Version:   "test",
 		Transport: tr,

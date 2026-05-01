@@ -735,14 +735,19 @@ func LockSiblingFile(path string) (io.Closer, error) {
 
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
 	dir := filepath.Dir(path)
+	_, statErr := os.Stat(dir)
+	dirMissing := os.IsNotExist(statErr)
+	if statErr != nil && !dirMissing {
+		return fmt.Errorf("config: stat dir: %w", statErr)
+	}
 
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("config: mkdir: %w", err)
 	}
-	// Re-apply the intended private mode even when the directory already
-	// existed; config directories may contain credentials and tokens.
-	if err := os.Chmod(dir, dirMode); err != nil {
-		return fmt.Errorf("config: chmod dir: %w", err)
+	if dirMissing {
+		if err := os.Chmod(dir, dirMode); err != nil {
+			return fmt.Errorf("config: chmod dir: %w", err)
+		}
 	}
 
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
