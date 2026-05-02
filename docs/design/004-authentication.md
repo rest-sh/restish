@@ -247,6 +247,18 @@ OAuth HTTP clients should honor the same relevant TLS options as ordinary
 requests, including custom CA roots, TLS minimum version, and explicit
 insecure-skip settings.
 
+OIDC issuer and endpoint validation is deliberately strict. Issuers and
+discovered endpoints must use HTTPS, except for explicit `http://` loopback
+development flows. Public `http://`, custom schemes, embedded credentials,
+fragments, and preexisting query strings are rejected before any token or
+authorization request is sent.
+
+Discovery and token requests inherit the CLI HTTP client's timeout and TLS
+configuration. This keeps `--rsh-timeout`, CA roots, TLS minimum version, and
+`--rsh-insecure` consistent across ordinary requests and auth setup. OAuth
+token clients disable automatic redirects so provider errors and redirect
+responses remain visible to Restish.
+
 ### Authorization Code Flow
 
 Authorization code flow should support both:
@@ -259,8 +271,12 @@ The localhost callback server must:
 - validate path and state
 - ignore irrelevant requests like `/favicon.ico`
 - shut down cleanly on success, timeout, or cancellation
-- use a v1-compatible redirect URI with a trailing slash:
+- default to the v1-compatible redirect URI with a trailing slash:
   `http://localhost:<port>/`
+- allow a configured local callback path such as `/callback` when a provider
+  strictly matches registered redirect URIs
+- show only a neutral "authorization code received" page before token exchange,
+  then show success or failure after the token endpoint response is known
 
 Manual-code fallback must also shut down cleanly. If the callback, timeout, or
 context cancellation wins the race, any goroutine waiting for manual input must
@@ -291,6 +307,12 @@ Resolution happens after config loading and before the auth handler runs, so
 commands such as `api inspect` do not need to print resolved secret values.
 Command stderr is bounded and redacted when included in errors.
 
+Secret commands use deterministic platform shell execution: `cmd /c` on
+Windows and `/bin/sh -c` on other platforms. Restish intentionally does not use
+arbitrary `$SHELL` values here because interactive shells such as fish or
+Nushell do not necessarily support POSIX `-c` semantics. The command timeout is
+currently a fixed 30 seconds.
+
 ## External Tool Auth
 
 `external-tool` preserves the v1 JSON request-mutation protocol by default:
@@ -302,6 +324,10 @@ header or URI updates on stdout. A new opt-in output mode,
 External auth commands remain trusted local code. Restish requires command
 approval, streams stderr to the user, captures a bounded stderr excerpt for
 errors, and redacts common secret assignments in the returned diagnostic.
+External-tool command snippets use the same deterministic shell execution as
+secret commands: `cmd /c` on Windows and `/bin/sh -c` elsewhere. The default
+external-tool timeout remains 30 seconds unless the auth handler is constructed
+with an explicit timeout by an embedder.
 
 OAuth token exchange for provider-specific systems should be modeled as an auth
 hook/plugin pattern when the built-in flows are not enough. The core should keep

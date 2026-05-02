@@ -129,10 +129,13 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 	// unchanged, otherwise it delegates to loadLocked for the disk read.
 	if c.loaded {
 		info, err := os.Stat(c.path)
-		if err == nil && info.ModTime().Equal(c.modTime) && info.Size() == c.size {
-			return c.cache, nil
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) && c.modTime.IsZero() && c.size == 0 {
+				return c.cache, nil
+			}
+			return nil, fmt.Errorf("stat token cache %s: %w", c.path, err)
 		}
-		if errors.Is(err, os.ErrNotExist) && c.modTime.IsZero() && c.size == 0 {
+		if info.ModTime().Equal(c.modTime) && info.Size() == c.size {
 			return c.cache, nil
 		}
 	}

@@ -9,8 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -235,16 +233,10 @@ func (c *CLI) resolveAuthParam(value string) (string, error) {
 }
 
 func (c *CLI) runSecretCommand(commandLine string) (string, error) {
-	shell, flag := os.Getenv("SHELL"), "-c"
-	if runtime.GOOS == "windows" {
-		shell, flag = "cmd", "/c"
-	} else if shell == "" {
-		shell = "/bin/sh"
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, shell, flag, commandLine)
+	cmd := procutil.ShellCommand(ctx, commandLine)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &stderr, limit: 4096}

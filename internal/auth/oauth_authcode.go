@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 
 const defaultRedirectPort = "8484"
 const authTimeout = 5 * time.Minute
+const callbackPageResultWait = 200 * time.Millisecond
 
 // AuthorizationCode implements the OAuth2 authorization code flow with PKCE
 // (RFC 7636). On first use it opens a browser and waits for the redirect
@@ -56,6 +58,7 @@ func (h *AuthorizationCode) Parameters() []Param {
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when authorize_url/token_url are absent)", Required: false},
 		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request", Required: false},
 		{Name: "redirect_port", Description: fmt.Sprintf("Local port for the redirect callback (default %s)", defaultRedirectPort), Required: false},
+		{Name: "redirect_path", Description: "Local path for the redirect callback (default /)", Required: false},
 	}
 }
 
@@ -224,7 +227,11 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	if port == "" {
 		port = defaultRedirectPort
 	}
-	redirectURI := "http://localhost:" + port + "/"
+	redirectPath, err := oauthRedirectPath(params["redirect_path"])
+	if err != nil {
+		return CachedToken{}, err
+	}
+	redirectURI := "http://localhost:" + port + redirectPath
 
 	// Build authorization URL.
 	q := url.Values{
@@ -243,6 +250,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		"authorize_url": true,
 		"cache_key":     true,
 		"issuer_url":    true,
+		"redirect_path": true,
 		"redirect_port": true,
 		"token_url":     true,
 	}) {
@@ -258,12 +266,14 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	var (
 		codeCh chan string
 		errCh  chan error
+		doneCh chan error
 		srv    *http.Server
 	)
 	manualOnly := h.CanPrompt && h.NoBrowser && h.Prompt != nil
 	if !manualOnly {
 		codeCh = make(chan string, 1)
 		errCh = make(chan error, 1)
+		doneCh = make(chan error, 1)
 		var receivedCode atomic.Bool
 		ln, err := net.Listen("tcp", "localhost:"+port)
 		if err != nil {
@@ -293,10 +303,24 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 				return
 			}
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, "<html><body><h2>Authentication successful</h2><p>You can close this tab.</p></body></html>")
+			fmt.Fprint(w, "<html><body><h2>Authorization code received</h2><p>Return to the terminal while Restish finishes authentication.</p></body></html>")
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
 			select {
 			case codeCh <- code:
 			default:
+			}
+			select {
+			case exchangeErr := <-doneCh:
+				if exchangeErr != nil {
+					fmt.Fprintf(w, "<html><body><h2>Authentication failed</h2><p>%s</p></body></html>", html.EscapeString(exchangeErr.Error()))
+					return
+				}
+				fmt.Fprint(w, "<html><body><h2>Authentication successful</h2><p>You can close this tab.</p></body></html>")
+			case <-time.After(callbackPageResultWait):
+			case <-ctx2.Done():
+				fmt.Fprint(w, "<html><body><h2>Authentication timed out</h2></body></html>")
 			}
 		})}
 		go func() {
@@ -361,7 +385,34 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		"client_id":     {params["client_id"]},
 		"code_verifier": {verifier},
 	}
-	return FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
+	ct, err := FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
+	if doneCh != nil {
+		trySendErr(doneCh, err)
+	}
+	if err != nil {
+		return CachedToken{}, err
+	}
+	return ct, nil
+}
+
+func oauthRedirectPath(value string) (string, error) {
+	if value == "" {
+		return "/", nil
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return "", fmt.Errorf("redirect_path: invalid path %q: %w", value, err)
+	}
+	if u.IsAbs() || u.Host != "" || u.Scheme != "" {
+		return "", fmt.Errorf("redirect_path: must be a local absolute path, not a URL")
+	}
+	if !strings.HasPrefix(value, "/") {
+		return "", fmt.Errorf("redirect_path: must start with /")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("redirect_path: must not include query string or fragment")
+	}
+	return value, nil
 }
 
 func trySendErr(errCh chan error, err error) {

@@ -179,11 +179,18 @@ Authorization code shape:
       "authorize_url": "https://issuer.test/authorize",
       "token_url": "https://issuer.test/oauth/token",
       "client_id": "env:CLIENT_ID",
-      "scopes": ["read:items"]
+      "scopes": "read:items",
+      "redirect_path": "/callback"
     }
   }
 }
 ```
+
+Restish opens a localhost callback on `redirect_port` and defaults the callback
+path to `/`. Set `redirect_path` when your OAuth provider requires an exact
+registered redirect URI such as `http://localhost:8484/callback`. Issuers and
+OAuth endpoints must use HTTPS, except for localhost or loopback development
+URLs.
 
 Use `--rsh-no-browser` for headless sessions when the flow supports a manual
 browser step.
@@ -205,6 +212,10 @@ Use `external-tool` when another program owns credentials or signing:
 
 Restish records approved command hashes so a changed executable must be trusted
 again.
+
+External-tool and `command:` secret sources run through `cmd /c` on Windows and
+`/bin/sh -c` on other platforms. Keep snippets portable, avoid relying on your
+interactive `$SHELL`, and move complex logic into a script.
 
 ## Related Pages
 

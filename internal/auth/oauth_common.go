@@ -155,22 +155,23 @@ func validateOIDCEndpoints(issuerURL string, cfg *OIDCConfig) error {
 	if err != nil {
 		return fmt.Errorf("OIDC: invalid issuer URL %q: %w", issuerURL, err)
 	}
-	if issuer.Scheme != "https" {
-		if issuer.Scheme == "http" && isLoopbackOAuthHost(issuer.Hostname()) {
-			for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.DeviceAuthorizationEndpoint, cfg.TokenEndpoint} {
-				if endpoint == "" {
-					continue
-				}
-				u, err := url.Parse(endpoint)
-				if err != nil {
-					return fmt.Errorf("OIDC: invalid endpoint URL %q: %w", endpoint, err)
-				}
-				if u.Scheme != "http" || !isLoopbackOAuthHost(u.Hostname()) {
-					return fmt.Errorf("OIDC: loopback issuer endpoint %q must stay on http loopback", endpoint)
-				}
+	if issuer.Scheme == "http" && isLoopbackOAuthHost(issuer.Hostname()) {
+		for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.DeviceAuthorizationEndpoint, cfg.TokenEndpoint} {
+			if endpoint == "" {
+				continue
+			}
+			u, err := url.Parse(endpoint)
+			if err != nil {
+				return fmt.Errorf("OIDC: invalid endpoint URL %q: %w", endpoint, err)
+			}
+			if u.Scheme != "http" || !isLoopbackOAuthHost(u.Hostname()) {
+				return fmt.Errorf("OIDC: loopback issuer endpoint %q must stay on http loopback", endpoint)
 			}
 		}
 		return nil
+	}
+	if issuer.Scheme != "https" {
+		return fmt.Errorf("OIDC: issuer URL %q must use https unless the host is localhost or loopback http", issuerURL)
 	}
 	for _, endpoint := range []string{cfg.AuthorizationEndpoint, cfg.DeviceAuthorizationEndpoint, cfg.TokenEndpoint} {
 		if endpoint == "" {

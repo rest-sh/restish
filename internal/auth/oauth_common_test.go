@@ -39,11 +39,30 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name:      "http issuer skips validation",
+			name:      "loopback http issuer accepts loopback endpoints",
 			issuer:    "http://localhost:8080",
 			authURL:   "http://localhost:8080/authorize",
 			tokenURL:  "http://localhost:8080/token",
 			wantError: false,
+		},
+		{
+			name:      "public http issuer rejected",
+			issuer:    "http://auth.example.com",
+			authURL:   "http://auth.example.com/authorize",
+			tokenURL:  "http://auth.example.com/token",
+			wantError: true,
+		},
+		{
+			name:      "ftp issuer rejected",
+			issuer:    "ftp://auth.example.com",
+			tokenURL:  "ftp://auth.example.com/token",
+			wantError: true,
+		},
+		{
+			name:      "custom issuer scheme rejected",
+			issuer:    "custom://auth.example.com",
+			tokenURL:  "custom://auth.example.com/token",
+			wantError: true,
 		},
 		{
 			name:      "loopback http issuer rejects remote token endpoint",
@@ -99,6 +118,21 @@ func TestValidateOIDCEndpoints(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestOAuthTokenHTTPClientPreservesTimeoutAndBlocksRedirects(t *testing.T) {
+	src := &http.Client{Timeout: 3}
+	got := oauthTokenHTTPClient(src)
+	if got == src {
+		t.Fatal("expected cloned client")
+	}
+	if got.Timeout != src.Timeout {
+		t.Fatalf("Timeout = %v, want %v", got.Timeout, src.Timeout)
+	}
+	err := got.CheckRedirect(&http.Request{}, nil)
+	if !errors.Is(err, http.ErrUseLastResponse) {
+		t.Fatalf("CheckRedirect = %v, want ErrUseLastResponse", err)
 	}
 }
 

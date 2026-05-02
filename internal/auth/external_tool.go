@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -26,7 +24,8 @@ const (
 //
 // Config params:
 //
-//	commandline  (required) shell command to run; executed via $SHELL -c
+//	commandline  (required) shell command to run; executed via cmd /c on
+//	             Windows or /bin/sh -c on other platforms
 //	omitbody     (optional) "true" skips sending the request body to the tool;
 //	             use for binary bodies because body is v1-compatible JSON text
 //	output       (optional) "bearer-token" treats stdout as a bearer token
@@ -49,7 +48,7 @@ type ExternalTool struct {
 
 func (a *ExternalTool) Parameters() []Param {
 	return []Param{
-		{Name: "commandline", Description: "Shell command to run for auth (executed via $SHELL -c)", Required: true},
+		{Name: "commandline", Description: "Shell command to run for auth (executed via cmd /c on Windows or /bin/sh -c elsewhere)", Required: true},
 		{Name: "omitbody", Description: "Set to \"true\" to skip sending the request body to the tool"},
 		{Name: "output", Description: "Set to \"bearer-token\" to treat stdout as an OAuth bearer token"},
 	}
@@ -79,11 +78,6 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 		return fmt.Errorf("external-tool auth: missing required param \"commandline\"")
 	}
 	omitBody := strings.EqualFold(params["omitbody"], "true")
-
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
 
 	// Read and restore the request body if we need to forward it.
 	bodyStr := ""
@@ -120,7 +114,7 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(ctx, shell, "-c", commandLine)
+	cmd := procutil.ShellCommand(ctx, commandLine)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	// Assign stdin directly so exec's internals copy the bytes after Start.
 	// Using StdinPipe + manual write before Start would deadlock for payloads

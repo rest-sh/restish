@@ -423,6 +423,160 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 	}
 }
 
+func TestAuthCode_RedirectPath(t *testing.T) {
+	var authorizeURL string
+	var gotForm url.Values
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			gotForm = r.Form
+			return testResponse(200, "application/json", `{"access_token":"browser-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			authorizeURL = raw
+			go func() {
+				callbackURL, state := mustCallbackURL(t, raw)
+				resp, err := http.Get(fmt.Sprintf("%s?state=%s&code=good-code", callbackURL, url.QueryEscape(state)))
+				if err != nil {
+					t.Errorf("callback request failed: %v", err)
+					return
+				}
+				resp.Body.Close()
+			}()
+			return nil
+		},
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_port": availablePort(t),
+		"redirect_path": "/callback",
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	parsedAuthorize, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	if got := parsedAuthorize.Query().Get("redirect_uri"); !strings.HasSuffix(got, "/callback") {
+		t.Fatalf("authorize redirect_uri = %q, want /callback", got)
+	}
+	if got := gotForm.Get("redirect_uri"); !strings.HasSuffix(got, "/callback") {
+		t.Fatalf("token redirect_uri = %q, want /callback", got)
+	}
+}
+
+func TestOAuthRedirectPathValidation(t *testing.T) {
+	cases := []struct {
+		name      string
+		value     string
+		want      string
+		wantError bool
+	}{
+		{name: "default", want: "/"},
+		{name: "callback", value: "/callback", want: "/callback"},
+		{name: "relative", value: "callback", wantError: true},
+		{name: "url", value: "http://localhost/callback", wantError: true},
+		{name: "query", value: "/callback?x=1", wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := oauthRedirectPath(tc.value)
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("path = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAuthCode_CallbackPageReflectsTokenExchangeResult(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		bodyCh := make(chan string, 1)
+		h := &AuthorizationCode{
+			HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+				return testResponse(200, "application/json", `{"access_token":"browser-token","token_type":"bearer","expires_in":3600}`), nil
+			}),
+			OpenBrowser: func(raw string) error {
+				go func() {
+					callbackURL, state := mustCallbackURL(t, raw)
+					resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=good-code", callbackURL, url.QueryEscape(state)))
+					if err != nil {
+						bodyCh <- err.Error()
+						return
+					}
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					bodyCh <- string(body)
+				}()
+				return nil
+			},
+		}
+		req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+		err := h.OnRequest(req, map[string]string{
+			"client_id":     "id1",
+			"authorize_url": "https://auth.example.com/authorize",
+			"token_url":     "https://auth.example.com/token",
+			"redirect_port": availablePort(t),
+		})
+		if err != nil {
+			t.Fatalf("OnRequest: %v", err)
+		}
+		if body := <-bodyCh; !strings.Contains(body, "Authorization code received") || !strings.Contains(body, "Authentication successful") {
+			t.Fatalf("callback body = %q", body)
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		bodyCh := make(chan string, 1)
+		h := &AuthorizationCode{
+			HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+				return testResponse(400, "application/json", `{"error":"invalid_grant"}`), nil
+			}),
+			OpenBrowser: func(raw string) error {
+				go func() {
+					callbackURL, state := mustCallbackURL(t, raw)
+					resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=bad-code", callbackURL, url.QueryEscape(state)))
+					if err != nil {
+						bodyCh <- err.Error()
+						return
+					}
+					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+					bodyCh <- string(body)
+				}()
+				return nil
+			},
+		}
+		req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+		err := h.OnRequest(req, map[string]string{
+			"client_id":     "id1",
+			"authorize_url": "https://auth.example.com/authorize",
+			"token_url":     "https://auth.example.com/token",
+			"redirect_port": availablePort(t),
+		})
+		if err == nil {
+			t.Fatal("expected token exchange error")
+		}
+		if body := <-bodyCh; !strings.Contains(body, "Authorization code received") || !strings.Contains(body, "Authentication failed") {
+			t.Fatalf("callback body = %q", body)
+		}
+	})
+}
+
 func TestAuthCode_ManualCodeFallback(t *testing.T) {
 	var stderr bytes.Buffer
 	h := &AuthorizationCode{

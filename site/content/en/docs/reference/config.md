@@ -123,6 +123,15 @@ scheme or normalized credential requirement ID:
 Each binding may use inline `auth` or `auth_ref`, not both. `satisfies` declares
 the scopes or role values this local credential is allowed to cover.
 
+OAuth authorization-code auth accepts `redirect_port` and `redirect_path` under
+`auth.params`. `redirect_path` defaults to `/`, must start with `/`, and must
+not include a scheme, host, query string, or fragment. This lets profiles match
+provider registrations such as `http://localhost:8484/callback`.
+
+Secret params may use `env:NAME` or `command:...`. Command secrets and
+`external-tool` auth snippets run through `cmd /c` on Windows and `/bin/sh -c`
+elsewhere, with bounded stderr redaction when a command fails.
+
 ## Editing
 
 ```bash
