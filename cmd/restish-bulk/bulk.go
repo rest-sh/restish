@@ -21,6 +21,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/spf13/cobra"
 )
 
@@ -1153,45 +1154,13 @@ func prettyJSON(v any) ([]byte, error) {
 }
 
 func atomicWriteBulkFile(path string, data []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	renamed := false
-	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if err := tmp.Chmod(mode); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := renameBulkFile(tmpName, path); err != nil {
-		return err
-	}
-	renamed = true
-	if dirFile, err := os.Open(dir); err == nil {
-		_ = dirFile.Sync()
-		_ = dirFile.Close()
-	}
-	return nil
+	return fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{
+		FileMode:    mode,
+		DirMode:     0o700,
+		TempPattern: "." + filepath.Base(path) + "-*.tmp",
+		Rename:      renameBulkFile,
+		SyncDir:     true,
+	})
 }
 
 func hashBytes(data []byte) []byte {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/rest-sh/restish/v2/internal/procutil"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
@@ -251,12 +252,6 @@ func saveManifestCache(cachePath string, cache manifestCache, w io.Writer) {
 		}
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
-		if w != nil {
-			fmt.Fprintf(w, "warning: manifest cache: mkdir: %v\n", err)
-		}
-		return
-	}
 	if err := atomicWriteManifestCache(cachePath, data); err != nil {
 		if w != nil {
 			fmt.Fprintf(w, "warning: manifest cache: write: %v\n", err)
@@ -265,42 +260,13 @@ func saveManifestCache(cachePath string, cache manifestCache, w io.Writer) {
 }
 
 func atomicWriteManifestCache(cachePath string, data []byte) error {
-	dir := filepath.Dir(cachePath)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(cachePath)+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	renamed := false
-	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := renameManifestCacheFile(tmpName, cachePath); err != nil {
-		return err
-	}
-	renamed = true
-	if dirFile, err := os.Open(dir); err == nil {
-		_ = dirFile.Sync()
-		_ = dirFile.Close()
-	}
-	return nil
+	return fileutil.AtomicWriteFile(cachePath, data, fileutil.AtomicWriteOptions{
+		FileMode:    0o600,
+		DirMode:     0o700,
+		TempPattern: "." + filepath.Base(cachePath) + "-*.tmp",
+		Rename:      renameManifestCacheFile,
+		SyncDir:     true,
+	})
 }
 
 // DefaultPluginDir returns the default directory for installed plugins.

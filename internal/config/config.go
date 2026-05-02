@@ -16,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/tidwall/jsonc"
 )
 
@@ -747,64 +748,12 @@ func LockSiblingFile(path string) (io.Closer, error) {
 }
 
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, chmodExistingDir bool) error {
-	dir := filepath.Dir(path)
-	_, statErr := os.Stat(dir)
-	dirMissing := os.IsNotExist(statErr)
-	if statErr != nil && !dirMissing {
-		return fmt.Errorf("config: stat dir: %w", statErr)
-	}
-
-	if err := os.MkdirAll(dir, dirMode); err != nil {
-		return fmt.Errorf("config: mkdir: %w", err)
-	}
-	if dirMissing || chmodExistingDir {
-		if err := os.Chmod(dir, dirMode); err != nil {
-			return fmt.Errorf("config: chmod dir: %w", err)
-		}
-	}
-
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return fmt.Errorf("config: temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	cleanup := func() {
-		_ = os.Remove(tmpName)
-	}
-
-	if err := tmp.Chmod(fileMode); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return fmt.Errorf("config: chmod temp file: %w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return fmt.Errorf("config: write temp file: %w", err)
-	}
-	// Sync temp file to ensure durability before close
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return fmt.Errorf("config: sync temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return fmt.Errorf("config: close temp file: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		cleanup()
-		return fmt.Errorf("config: rename temp file: %w", err)
-	}
-
-	// Sync parent directory after rename to ensure durability on all filesystems
-	dirFile, err := os.Open(dir)
-	if err == nil {
-		_ = dirFile.Sync()
-		_ = dirFile.Close()
-	}
-
-	return nil
+	return fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{
+		FileMode:         fileMode,
+		DirMode:          dirMode,
+		ChmodExistingDir: chmodExistingDir,
+		SyncDir:          true,
+	})
 }
 
 // PluginConfig unmarshals the configuration stored under plugins[name] into v.

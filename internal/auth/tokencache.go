@@ -1,18 +1,17 @@
 package auth
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 var renameTokenCacheFile = os.Rename
@@ -183,34 +182,14 @@ func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 	if err != nil {
 		return err
 	}
-	dir := filepath.Dir(c.path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := fileutil.AtomicWriteFile(c.path, data, fileutil.AtomicWriteOptions{
+		FileMode:    0o600,
+		DirMode:     0o700,
+		TempPattern: "tokens-*.tmp",
+		Rename:      renameTokenCacheFile,
+	}); err != nil {
 		return err
 	}
-	// Atomic write: create a 0600 temp file in the target directory, then rename.
-	tmp, err := secureCreateTemp(dir, "tokens-", ".tmp", 0600)
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	renamed := false
-	defer func() {
-		if !renamed {
-			_ = os.Remove(tmpName)
-		}
-	}()
-	_, werr := tmp.Write(data)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil {
-		if werr != nil {
-			return werr
-		}
-		return cerr
-	}
-	if err := renameTokenCacheFile(tmpName, c.path); err != nil {
-		return err
-	}
-	renamed = true
 	info, statErr := os.Stat(c.path)
 	if statErr == nil {
 		c.modTime = info.ModTime()
@@ -219,23 +198,4 @@ func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 	c.cache = m
 	c.loaded = true
 	return nil
-}
-
-func secureCreateTemp(dir, prefix, suffix string, mode os.FileMode) (*os.File, error) {
-	for range 100 {
-		var buf [8]byte
-		if _, err := rand.Read(buf[:]); err != nil {
-			return nil, err
-		}
-		name := filepath.Join(dir, fmt.Sprintf("%s%x%s", prefix, buf[:], suffix))
-		f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, mode)
-		if err == nil {
-			return f, nil
-		}
-		if errors.Is(err, os.ErrExist) {
-			continue
-		}
-		return nil, err
-	}
-	return nil, fmt.Errorf("creating secure temp file in %s: too many collisions", dir)
 }

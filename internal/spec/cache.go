@@ -1,7 +1,6 @@
 package spec
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 // cacheEntry is the on-disk format for a cached spec.
@@ -106,9 +106,6 @@ func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
 	if !validCacheAPIName(apiName) {
 		return fmt.Errorf("spec cache: invalid API name %q", apiName)
 	}
-	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
-		return fmt.Errorf("spec cache: mkdir: %w", err)
-	}
 	entry.normalize()
 	if entry.Schema == 0 {
 		entry.Schema = currentCacheSchema
@@ -124,45 +121,11 @@ func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
 }
 
 func atomicWriteCacheFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := secureCreateTemp(dir, "spec-", ".tmp", 0o600)
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	_, werr := tmp.Write(data)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil {
-		_ = os.Remove(tmpName)
-		if werr != nil {
-			return werr
-		}
-		return cerr
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	return nil
-}
-
-func secureCreateTemp(dir, prefix, suffix string, mode os.FileMode) (*os.File, error) {
-	for range 100 {
-		var buf [8]byte
-		if _, err := rand.Read(buf[:]); err != nil {
-			return nil, err
-		}
-		name := filepath.Join(dir, fmt.Sprintf("%s%x%s", prefix, buf[:], suffix))
-		f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, mode)
-		if err == nil {
-			return f, nil
-		}
-		if errors.Is(err, os.ErrExist) {
-			continue
-		}
-		return nil, err
-	}
-	return nil, fmt.Errorf("creating temp file in %s: too many collisions", dir)
+	return fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{
+		FileMode:    0o600,
+		DirMode:     0o700,
+		TempPattern: "spec-*.tmp",
+	})
 }
 
 func (e *cacheEntry) normalize() {

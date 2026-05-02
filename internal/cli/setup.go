@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/spf13/cobra"
 )
 
@@ -169,40 +170,10 @@ func setupRCPath(shell, home string, setup shellSetup) string {
 }
 
 func atomicWriteTextFile(path string, data []byte, fileMode, dirMode os.FileMode) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, dirMode); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
-	if err := tmp.Chmod(fileMode); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		cleanup()
-		return err
-	}
-	return nil
+	return fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{
+		FileMode: fileMode,
+		DirMode:  dirMode,
+	})
 }
 
 // hintShellSetup prints a first-run tip suggesting shell setup when the

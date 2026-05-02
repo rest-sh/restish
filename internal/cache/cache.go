@@ -18,6 +18,7 @@ import (
 	"time"
 
 	configpkg "github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 // DefaultMaxBytes is the default maximum cache size (100 MiB).
@@ -92,9 +93,6 @@ func (c *DiskCache) Set(key string, data []byte) {
 	defer unlock()
 
 	p := c.filePath(key)
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return
-	}
 	var previousSize int64
 	if info, err := os.Stat(p); err == nil {
 		previousSize = info.Size()
@@ -118,46 +116,12 @@ func (c *DiskCache) lockKey(key string) func() {
 }
 
 func atomicWriteCacheFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := func() {
-		_ = os.Remove(tmpName)
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := renameCacheFile(tmpName, path); err != nil {
-		cleanup()
-		return err
-	}
-	if dirFile, err := os.Open(dir); err == nil {
-		_ = dirFile.Sync()
-		_ = dirFile.Close()
-	}
-	return nil
+	return fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{
+		FileMode: 0o600,
+		DirMode:  0o700,
+		Rename:   renameCacheFile,
+		SyncDir:  true,
+	})
 }
 
 // Delete removes the cached entry for key.
