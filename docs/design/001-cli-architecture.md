@@ -253,6 +253,10 @@ in-memory default config such as bundled APIs, profiles, auth profiles, and
 operation metadata. User config wins over bundled defaults with the same API or
 auth-profile name. That keeps embedded distributions useful out of the box
 without trapping users in vendor-owned defaults.
+Commands that modify config, including `api connect`, must reload through the
+same default-merging path before updating `CLI.cfg`; otherwise a write command
+can accidentally discard embedder-provided defaults for the rest of that
+invocation.
 
 Out-of-process plugins remain the normal extension path for the stock `restish`
 binary. Embedding is for organizations that intentionally ship a distinct CLI

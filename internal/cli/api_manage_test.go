@@ -105,6 +105,33 @@ func TestAPIConnect(t *testing.T) {
 	}
 }
 
+func TestAPIConnectPreservesEmbedderDefaultConfig(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.SetDefaultConfig(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"embedded": {
+				BaseURL: "https://embedded.example.com",
+			},
+		},
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "newapi", "https://api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	loaded := c.Config()
+	if loaded == nil {
+		t.Fatal("expected loaded config")
+	}
+	if loaded.APIs["embedded"] == nil {
+		t.Fatalf("expected embedded default API to remain in c.cfg, got %#v", loaded.APIs)
+	}
+	if loaded.APIs["newapi"] == nil {
+		t.Fatalf("expected connected API in c.cfg, got %#v", loaded.APIs)
+	}
+}
+
 func TestAPIConnectFindsWellKnownOfficialOpenAPISpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specBody := `{"components":{"schemas":{"Thing":{"type":"object"}}},"info":{"title":"Managed API","version":"1.0"},"paths":{"/things":{"get":{"operationId":"list-things","responses":{"200":{"description":"OK"}}}}},"openapi":"3.1.0"}`

@@ -61,8 +61,18 @@ company-specific default without an external executable.
 
 ## Bundled Defaults
 
-A custom CLI can load or write a Restish config before calling `Run`, or it can
-ship project templates that users connect with:
+A custom CLI can install in-memory bundled config before calling `Run`:
+
+```go
+cli := restish.New()
+cli.SetDefaultConfig(defaultConfig)
+```
+
+User config overrides bundled defaults with the same API or auth-profile name.
+Config-writing commands such as `api connect` keep those bundled defaults in
+the running `CLI` after the write completes. A custom CLI can also load or write
+a Restish config before calling `Run`, or ship project templates that users
+connect with:
 
 ```bash
 mycorp api connect billing https://billing.example.com --spec ./openapi.yaml

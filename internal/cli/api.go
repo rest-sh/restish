@@ -215,7 +215,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	}
 
 	cfgPath := c.configFilePath()
-	cfg, err := config.Load(cfgPath)
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return err
 	}
