@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,10 +16,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	configpkg "github.com/rest-sh/restish/v2/internal/config"
 )
 
 // DefaultMaxBytes is the default maximum cache size (100 MiB).
 const DefaultMaxBytes = 100 * 1024 * 1024
+
+const cacheKeyLockShards = 64
+
+var renameCacheFile = os.Rename
 
 // DiskCache is a file-system backed HTTP response cache.  It satisfies the
 // httpcache.Cache interface (Get/Set/Delete) and additionally provides Info
@@ -31,8 +38,7 @@ type DiskCache struct {
 	evictMu      sync.Mutex // only one eviction goroutine at a time
 	evictQueued  atomic.Bool
 	evictWG      sync.WaitGroup
-	keyMu        sync.Mutex
-	keyLocks     map[string]*sync.Mutex
+	keyLocks     [cacheKeyLockShards]sync.Mutex
 }
 
 // New returns a DiskCache rooted at dir with the given size cap.
@@ -93,7 +99,7 @@ func (c *DiskCache) Set(key string, data []byte) {
 	if info, err := os.Stat(p); err == nil {
 		previousSize = info.Size()
 	}
-	if err := os.WriteFile(p, data, 0o600); err != nil {
+	if err := atomicWriteCacheFile(p, data); err != nil {
 		return
 	}
 	if previousSize > 0 {
@@ -104,18 +110,54 @@ func (c *DiskCache) Set(key string, data []byte) {
 }
 
 func (c *DiskCache) lockKey(key string) func() {
-	c.keyMu.Lock()
-	if c.keyLocks == nil {
-		c.keyLocks = make(map[string]*sync.Mutex)
-	}
-	mu := c.keyLocks[key]
-	if mu == nil {
-		mu = &sync.Mutex{}
-		c.keyLocks[key] = mu
-	}
-	c.keyMu.Unlock()
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	mu := &c.keyLocks[h.Sum32()%cacheKeyLockShards]
 	mu.Lock()
 	return mu.Unlock
+}
+
+func atomicWriteCacheFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = os.Remove(tmpName)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := renameCacheFile(tmpName, path); err != nil {
+		cleanup()
+		return err
+	}
+	if dirFile, err := os.Open(dir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+	return nil
 }
 
 // Delete removes the cached entry for key.
@@ -174,6 +216,11 @@ func (c *DiskCache) evictIfNeeded() {
 		}()
 		c.evictMu.Lock()
 		defer c.evictMu.Unlock()
+		lock, err := configpkg.LockSiblingFile(filepath.Join(c.dir, ".evict"))
+		if err != nil {
+			return
+		}
+		defer lock.Close()
 		for {
 			entries, total, err := c.allFiles()
 			if err != nil {

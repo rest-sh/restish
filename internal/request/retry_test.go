@@ -123,6 +123,65 @@ func TestRetryTransportRetries429AndLogsProgress(t *testing.T) {
 	}
 }
 
+func TestShouldRetryStatusUsesExplicitTransientSet(t *testing.T) {
+	retryable := []int{
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		http.StatusRequestTimeout,
+		http.StatusTooManyRequests,
+	}
+	for _, status := range retryable {
+		if !shouldRetryStatus(status) {
+			t.Fatalf("shouldRetryStatus(%d) = false, want true", status)
+		}
+	}
+	notRetryable := []int{
+		http.StatusNotImplemented,
+		http.StatusHTTPVersionNotSupported,
+		http.StatusBadRequest,
+		http.StatusNotFound,
+	}
+	for _, status := range notRetryable {
+		if shouldRetryStatus(status) {
+			t.Fatalf("shouldRetryStatus(%d) = true, want false", status)
+		}
+	}
+}
+
+func TestRetryTransportDoesNotRetry501Or505(t *testing.T) {
+	for _, status := range []int{http.StatusNotImplemented, http.StatusHTTPVersionNotSupported} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			attempts := 0
+			rt := retryTransport{
+				baseDelay: time.Millisecond,
+				maxRetry:  2,
+				inner: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+					attempts++
+					return &http.Response{
+						StatusCode: status,
+						Header:     http.Header{"Retry-After": []string{"0"}},
+						Body:       io.NopCloser(strings.NewReader("no retry")),
+					}, nil
+				}),
+			}
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.example.com/items", nil)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			resp, err := rt.RoundTrip(req)
+			if err != nil {
+				t.Fatalf("round trip: %v", err)
+			}
+			defer resp.Body.Close()
+			if attempts != 1 {
+				t.Fatalf("attempts = %d, want 1", attempts)
+			}
+		})
+	}
+}
+
 func TestRetryTransportSkipsUnsafeMethodByDefault(t *testing.T) {
 	attempts := 0
 	rt := retryTransport{

@@ -1128,7 +1128,7 @@ func (c *CLI) warnRetryUnsafe(method string, opts request.Options) {
 		return
 	}
 	c.retryUnsafeWarned = true
-	c.warnf("retrying unsafe HTTP methods can repeat side effects; use --rsh-retry carefully for POST, PUT, PATCH, or DELETE")
+	c.warnf("retrying unsafe HTTP methods can repeat side effects; --rsh-retry-unsafe is enabled for POST, PUT, PATCH, or DELETE")
 }
 
 // httpOptsFromFlags reads the global HTTP flags from cmd and builds an Options.
@@ -1200,7 +1200,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		CacheMaxBytes:        cacheMaxBytes,
 		NoCache:              gf.NoCache,
 		Retry:                retry,
-		RetryUnsafe:          gf.Retry > 0,
+		RetryUnsafe:          gf.RetryUnsafe,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		RetryMaxWait:         retryMaxWait,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
@@ -1236,6 +1236,9 @@ func parseByteSize(s string) (int64, error) {
 	v := strings.TrimSpace(strings.ToUpper(s))
 	if v == "" {
 		return 0, fmt.Errorf("empty size")
+	}
+	if strings.HasPrefix(v, "-") {
+		return 0, fmt.Errorf("size must not be negative")
 	}
 
 	mult := int64(1)

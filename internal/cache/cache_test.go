@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -238,6 +239,61 @@ func TestSetConcurrentSameKeyKeepsSizeEstimateAccurate(t *testing.T) {
 	}
 	if got := atomic.LoadInt64(&c.sizeEstimate); got != total {
 		t.Fatalf("sizeEstimate after concurrent same-key sets: got %d, want %d", got, total)
+	}
+}
+
+func TestSetWritesAtomically(t *testing.T) {
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
+	key := "https://api.example.com/items"
+	c.Set(key, []byte("old"))
+
+	originalRename := renameCacheFile
+	t.Cleanup(func() {
+		renameCacheFile = originalRename
+	})
+	renameCacheFile = func(oldpath, newpath string) error {
+		if filepath.Ext(oldpath) != ".tmp" {
+			t.Fatalf("temp path extension = %q, want .tmp", filepath.Ext(oldpath))
+		}
+		if got, err := os.ReadFile(newpath); err != nil || string(got) != "old" {
+			t.Fatalf("existing cache entry changed before rename: got %q, err=%v", got, err)
+		}
+		if got, err := os.ReadFile(oldpath); err != nil || string(got) != "new" {
+			t.Fatalf("temp cache entry = %q, err=%v; want new data", got, err)
+		}
+		return originalRename(oldpath, newpath)
+	}
+
+	c.Set(key, []byte("new"))
+	got, ok := c.Get(key)
+	if !ok {
+		t.Fatal("expected cache hit after atomic rewrite")
+	}
+	if string(got) != "new" {
+		t.Fatalf("cached data = %q, want new", got)
+	}
+}
+
+func TestEvictionUsesSiblingLockFile(t *testing.T) {
+	dir := t.TempDir()
+	c, _ := New(dir, 5, "")
+	c.Set("https://api.example.com/a", []byte("12345"))
+	c.Set("https://api.example.com/b", []byte("67890"))
+	c.WaitEvict()
+
+	if _, err := os.Stat(filepath.Join(dir, ".evict.lock")); err != nil {
+		t.Fatalf("expected eviction lock file: %v", err)
+	}
+}
+
+func TestKeyLocksAreFixedShards(t *testing.T) {
+	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
+	for i := 0; i < 1000; i++ {
+		unlock := c.lockKey("https://api.example.com/items/" + strconv.Itoa(i))
+		unlock()
+	}
+	if got := len(c.keyLocks); got != cacheKeyLockShards {
+		t.Fatalf("key lock shards = %d, want %d", got, cacheKeyLockShards)
 	}
 }
 

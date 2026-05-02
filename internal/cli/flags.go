@@ -42,6 +42,7 @@ type GlobalFlags struct {
 	NoCache          bool
 	NoBrowser        bool
 	Retry            int // -1 means "not set by user"
+	RetryUnsafe      bool
 	RetryMaxWait     string
 	RetryMaxWaitSet  bool
 	MaxEvents        int
@@ -90,6 +91,7 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	gf.IgnoreStatus, _ = cmd.Flags().GetBool("rsh-ignore-status-code")
 	gf.NoCache, _ = cmd.Flags().GetBool("rsh-no-cache")
 	gf.NoBrowser, _ = cmd.Flags().GetBool("rsh-no-browser")
+	gf.RetryUnsafe, _ = cmd.Flags().GetBool("rsh-retry-unsafe")
 	gf.NoPaginate, _ = cmd.Flags().GetBool("rsh-no-paginate")
 	gf.Collect, _ = cmd.Flags().GetBool("rsh-collect")
 
@@ -134,6 +136,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 			return gf, fmt.Errorf("invalid RSH_RETRY %q: %w", v, err)
 		}
 		gf.Retry = n
+	}
+	if v := os.Getenv("RSH_RETRY_UNSAFE"); isTruthy(v) && !cmd.Flags().Changed("rsh-retry-unsafe") {
+		gf.RetryUnsafe = true
 	}
 	if v := os.Getenv("RSH_RETRY_MAX_WAIT"); v != "" && !cmd.Flags().Changed("rsh-retry-max-wait") {
 		gf.RetryMaxWait = v

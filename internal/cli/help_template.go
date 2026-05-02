@@ -71,8 +71,9 @@ var defaultFlagGroups = map[string]string{
 	"rsh-max-items":   flagGroupPaging,
 	"rsh-max-events":  flagGroupPaging,
 
-	"rsh-no-cache": flagGroupCache,
-	"rsh-retry":    flagGroupCache,
+	"rsh-no-cache":     flagGroupCache,
+	"rsh-retry":        flagGroupCache,
+	"rsh-retry-unsafe": flagGroupCache,
 
 	"rsh-verbose": flagGroupGeneral,
 	"rsh-config":  flagGroupGeneral,

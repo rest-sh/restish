@@ -10,12 +10,13 @@ cache for cacheable responses.
 
 ## Retry Behavior
 
-Restish retries network errors, `408`, `429`, and `5xx` responses by default.
-Automatic retries are limited to `GET` and `HEAD`, where retrying is normally
-safe. Passing an explicit non-negative retry count such as `--rsh-retry 2`
-opts a command into retrying other methods too, which can repeat side effects
-if the server processed the first attempt. Restish honors `Retry-After` and
-`X-Retry-In` when present, capped at 5 minutes by default. Use
+Restish retries network errors plus `408`, `429`, `500`, `502`, `503`, and
+`504` responses by default. Automatic retries are limited to `GET` and `HEAD`,
+where retrying is normally safe. `--rsh-retry N` controls the attempt count;
+use `--rsh-retry-unsafe` only when you want to retry POST, PUT, PATCH, or
+DELETE, because that can repeat side effects if the server processed the first
+attempt. Restish honors `Retry-After` and `X-Retry-In` when present, capped at
+5 minutes by default. Use
 `--rsh-retry-max-wait 30s` for one command, or set an API-level
 `retry_max_wait` duration in `restish.json`, when a service needs a shorter
 rate-limit wait.
@@ -24,6 +25,13 @@ Use the flaky fixture to see recovery:
 
 ```bash
 restish 'https://api.rest.sh/flaky?failures=1&key=docs-retry' --rsh-retry 2
+```
+
+Opt into replaying an unsafe method only when the endpoint is idempotent enough
+for your use case:
+
+```bash
+restish post https://api.example.com/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
 ```
 
 Disable retries for strict single-attempt debugging:
@@ -68,6 +76,8 @@ restish https://api.rest.sh/cached/60 -v
 Credentialed API-profile requests are cached inside that API/profile namespace.
 Direct URL requests that put credentials in headers or query parameters bypass
 the cache because Restish has no profile namespace to separate entries.
+Cache entries are written atomically and cache eviction is coordinated across
+Restish processes that share the same cache directory.
 
 Manage cache files:
 

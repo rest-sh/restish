@@ -41,6 +41,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-no-cache` | | bool | `RSH_NO_CACHE` | false | Bypass reads and writes. |
 | `--rsh-no-browser` | | bool | | false | OAuth auth-code browser suppression. |
 | `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. |
+| `--rsh-retry-unsafe` | | bool | `RSH_RETRY_UNSAFE` | false | Replay POST/PUT/PATCH/DELETE on retryable failures. |
 | `--rsh-retry-max-wait` | | duration | `RSH_RETRY_MAX_WAIT` | `5m` | Cap server-provided retry waits. |
 | `--rsh-max-events` | | int | | 0 | Streaming event/line cap. |
 | `--rsh-no-paginate` | | bool | | false | Disable automatic pagination. |
@@ -75,6 +76,10 @@ Top-level config is JSONC with strict decoded fields:
 | `cache.max_size` | string | Disk cache size such as `100MB`. |
 | `theme` | map | Readable-output style entries. |
 | `plugins` | map | Raw per-plugin JSON config. |
+
+HTTP response-cache entries are written with temp-file plus rename semantics,
+and LRU eviction is guarded by an advisory sibling lock so separate Restish
+processes can share the same cache directory.
 
 API fields:
 

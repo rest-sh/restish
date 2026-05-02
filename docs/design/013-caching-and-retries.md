@@ -43,6 +43,13 @@ The response cache is a disk-backed, size-bounded cache with LRU-style
 eviction. Entries are grouped under per-host directories so cache management can
 operate on one API host or the entire cache tree.
 
+Cache entry writes are atomic: data is written to a temporary file in the
+target directory, synced, and then renamed into place. Readers should see either
+the previous complete entry or the new complete entry, never a partially written
+entry. LRU eviction uses an advisory sibling lock in addition to the in-process
+eviction mutex so multiple Restish processes can share a cache directory without
+racing each other during cleanup.
+
 Credentialed requests may use the cache only when Restish can partition entries
 by API/profile namespace. API-aware requests set the namespace to
 `<api>:<profile>`, so a response cached for one profile is not reused by another
@@ -69,9 +76,10 @@ This layout supports both:
 Retry behavior is intentionally conservative:
 
 - network errors are retried
-- `5xx` responses are retried
-- `408` and `429` are retry candidates when policy allows
+- only explicit transient statuses are retried: `408`, `429`, `500`, `502`,
+  `503`, and `504`
 - `4xx` responses are otherwise returned immediately
+- non-transient `5xx` statuses such as `501` and `505` are returned immediately
 - request bodies are only retried when they can be recreated safely
 - backoff uses exponential delay with jitter
 - `Retry-After` and `X-Retry-In` are honored when provided, capped by
@@ -92,9 +100,10 @@ The design rule is:
 
 Restish intentionally refuses to blindly retry requests whose bodies cannot be
 recreated, which is safer than assuming all failures are idempotent in practice.
-When a user explicitly enables retries for unsafe methods with `--rsh-retry`,
-Restish warns once per CLI session because POST, PUT, PATCH, and DELETE retries
-can double-process server-side side effects.
+`--rsh-retry` only controls the retry attempt count. When a user explicitly
+enables retries for unsafe methods with `--rsh-retry-unsafe`, Restish warns once
+per CLI session because POST, PUT, PATCH, and DELETE retries can double-process
+server-side side effects.
 
 ## Retry Algorithm
 

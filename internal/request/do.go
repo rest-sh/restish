@@ -103,7 +103,7 @@ type Options struct {
 	// If zero, defaults to cache.DefaultMaxBytes.
 	CacheMaxBytes int64
 	// Retry is the maximum number of retry attempts for network errors and
-	// 5xx responses.  Zero disables retries.
+	// selected transient HTTP responses. Zero disables retries.
 	Retry int
 	// RetryUnsafe allows retrying methods other than GET and HEAD. When false,
 	// Retry applies only to safe methods.

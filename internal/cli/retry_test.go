@@ -81,6 +81,54 @@ func TestRetryZeroDisablesRetries(t *testing.T) {
 	}
 }
 
+func TestRetryDoesNotReplayPostWithoutUnsafeOptIn(t *testing.T) {
+	var callCount atomic.Int32
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		callCount.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Retry-After": []string{"0"}},
+			Body:       io.NopCloser(strings.NewReader("retry")),
+			Request:    r,
+		}, nil
+	})
+
+	_ = c.Run([]string{"restish", "post", "--rsh-no-cache", "--rsh-ignore-status-code", "--rsh-retry", "1", "https://api.example.com/items", "name:demo"})
+	if n := callCount.Load(); n != 1 {
+		t.Fatalf("POST without --rsh-retry-unsafe should not be retried; got %d calls", n)
+	}
+}
+
+func TestRetryReplaysPostWithUnsafeOptIn(t *testing.T) {
+	var callCount atomic.Int32
+	c, _, stderr := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		n := callCount.Add(1)
+		if n == 1 {
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Retry-After": []string{"0"}},
+				Body:       io.NopCloser(strings.NewReader("retry")),
+				Request:    r,
+			}, nil
+		}
+		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
+	})
+
+	if err := c.Run([]string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "1", "--rsh-retry-unsafe", "https://api.example.com/items", "name:demo"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if n := callCount.Load(); n != 2 {
+		t.Fatalf("POST with --rsh-retry-unsafe should retry once; got %d calls", n)
+	}
+	if !strings.Contains(stderr.String(), "--rsh-retry-unsafe is enabled") {
+		t.Fatalf("missing unsafe retry warning; stderr:\n%s", stderr.String())
+	}
+}
+
 // TestRetryAfterHeaderRespected verifies that the Retry-After header value is
 // used as the wait duration (the test uses a 0-second value to stay fast).
 func TestRetryAfterHeaderRespected(t *testing.T) {
@@ -116,7 +164,7 @@ func TestRetryUnsafeWarningResetsBetweenRuns(t *testing.T) {
 		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
 	})
 
-	args := []string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "1", "https://api.example.com/items", "name:demo"}
+	args := []string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "1", "--rsh-retry-unsafe", "https://api.example.com/items", "name:demo"}
 	if err := c.Run(args); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
@@ -137,7 +185,7 @@ func TestRetryZeroDoesNotWarnForUnsafeMethods(t *testing.T) {
 		return jsonResponse(http.StatusOK, `{"ok":true}`), nil
 	})
 
-	if err := c.Run([]string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "0", "https://api.example.com/items", "name:demo"}); err != nil {
+	if err := c.Run([]string{"restish", "post", "--rsh-no-cache", "--rsh-retry", "0", "--rsh-retry-unsafe", "https://api.example.com/items", "name:demo"}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if strings.Contains(stderr.String(), "retrying unsafe HTTP methods can repeat side effects") {

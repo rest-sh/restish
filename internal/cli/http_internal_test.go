@@ -17,6 +17,7 @@ func TestParseByteSize(t *testing.T) {
 		{"1GB", 1000 * 1000 * 1000},
 		{"2TB", 2 * 1000 * 1000 * 1000 * 1000},
 		{"1TiB", 1024 * 1024 * 1024 * 1024},
+		{"0", 0},
 	}
 
 	for _, tc := range tests {
@@ -26,6 +27,14 @@ func TestParseByteSize(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Fatalf("parseByteSize(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestParseByteSizeRejectsNegativeValuesClearly(t *testing.T) {
+	for _, in := range []string{"-50MB", "-1"} {
+		if _, err := parseByteSize(in); err == nil || err.Error() != "size must not be negative" {
+			t.Fatalf("parseByteSize(%q) err = %v, want size must not be negative", in, err)
 		}
 	}
 }

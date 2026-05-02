@@ -101,7 +101,17 @@ func (rt retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func shouldRetryStatus(status int) bool {
-	return status >= 500 || status == http.StatusRequestTimeout || status == http.StatusTooManyRequests
+	switch status {
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		http.StatusRequestTimeout,
+		http.StatusTooManyRequests:
+		return true
+	default:
+		return false
+	}
 }
 
 func (rt retryTransport) shouldRetryMethod(method string) bool {
