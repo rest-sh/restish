@@ -32,7 +32,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -158,7 +158,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -237,7 +237,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.OperationsWithOptions(OperationOptions{
+	ops, err := loaded.Operations(OperationOptions{
 		BaseURL: "https://staging.example.com",
 		ServerVariables: map[string]string{
 			"env":     "staging",
@@ -286,7 +286,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -327,7 +327,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -358,7 +358,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root", "/")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root", OperationBase: "/"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -389,7 +389,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root/", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root/"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -420,7 +420,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -451,7 +451,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -504,7 +504,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com/root", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -538,7 +538,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	_, err = loaded.OperationsWithOptions(OperationOptions{
+	_, err = loaded.Operations(OperationOptions{
 		BaseURL:         "https://api.example.com",
 		ServerVariables: map[string]string{"env": "staging"},
 	})
@@ -570,7 +570,7 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	_, err = loaded.OperationsWithOptions(OperationOptions{
+	_, err = loaded.Operations(OperationOptions{
 		BaseURL:         "https://api.example.com",
 		ServerVariables: map[string]string{"env": "prod"},
 	})
@@ -611,7 +611,7 @@ servers:
 		t.Fatalf("load: %v", err)
 	}
 
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -636,7 +636,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -684,7 +684,7 @@ components:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -727,7 +727,7 @@ webhooks:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -747,7 +747,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -772,7 +772,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -820,7 +820,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -865,7 +865,7 @@ components:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
@@ -922,7 +922,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}

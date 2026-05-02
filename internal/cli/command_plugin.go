@@ -759,7 +759,7 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 			Error:     fmt.Sprintf("no spec available for %q", msg.Name),
 		})
 	}
-	opSet, err := s.OperationSetWithOptions(spec.OperationOptions{
+	opSet, err := s.OperationSet(spec.OperationOptions{
 		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),

@@ -138,15 +138,11 @@ type OperationSet struct {
 	Operations []Operation
 }
 
-// OperationSet returns all operations with top-level API metadata.
-func (s *APISpec) OperationSet(baseURL, operationBase string) (OperationSet, error) {
-	return s.OperationSetWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase})
-}
-
-// OperationSetWithOptions returns all operations with config-sensitive
-// OpenAPI server variable resolution applied.
-func (s *APISpec) OperationSetWithOptions(opts OperationOptions) (OperationSet, error) {
-	ops, err := s.OperationsWithOptions(opts)
+// OperationSet returns all operations with top-level API metadata. The result
+// is keyed by base URL, operation base, and resolved OpenAPI server variable
+// values via opts.
+func (s *APISpec) OperationSet(opts OperationOptions) (OperationSet, error) {
+	ops, err := s.Operations(opts)
 	if err != nil {
 		return OperationSet{}, err
 	}
@@ -159,19 +155,13 @@ func (s *APISpec) OperationSetWithOptions(opts OperationOptions) (OperationSet, 
 
 // Operations returns all HTTP operations extracted from the spec's V3 model,
 // with paths prefixed by the base path derived from the spec's servers[] list
-// and the provided baseURL. When operationBase is non-empty the spec servers
-// are ignored and Operation.Path contains only the bare path template; the CLI
-// resolves operationBase against baseURL at request time.
+// and opts.BaseURL. When opts.OperationBase is non-empty the spec servers are
+// ignored and Operation.Path contains only the bare path template; the CLI
+// resolves operationBase against baseURL at request time. opts.ServerVariables
+// supplies values for OpenAPI server URL variables.
 //
-// Results are memoized per (baseURL, operationBase) pair.
-func (s *APISpec) Operations(baseURL, operationBase string) ([]Operation, error) {
-	return s.OperationsWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase})
-}
-
-// OperationsWithOptions is the config-sensitive form of Operations. It uses
-// OpenAPI server variable defaults plus explicit local values, never enum
-// Cartesian-product expansion.
-func (s *APISpec) OperationsWithOptions(opts OperationOptions) ([]Operation, error) {
+// Results are memoized per (baseURL, operationBase, server variables) tuple.
+func (s *APISpec) Operations(opts OperationOptions) ([]Operation, error) {
 	key := operationOptionsKey(opts)
 
 	s.opsCacheMu.Lock()

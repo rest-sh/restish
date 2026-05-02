@@ -449,7 +449,7 @@ func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig,
 	if apiCfg == nil {
 		return spec.OperationSet{}, false
 	}
-	return spec.LoadOperationSetFromCacheWithVariables(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, spec.OperationOptions{
+	return spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, spec.OperationOptions{
 		BaseURL:         apiCfg.BaseURL,
 		OperationBase:   apiCfg.OperationBase,
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),

@@ -186,7 +186,7 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("install: confirmation required; rerun with --yes for automation")
 		}
 	}
-	manifest, err := plugin.LoadManifestWithWarnings(resolved.Path, diagnosticPrefixWriter(c.Stderr))
+	manifest, err := plugin.LoadManifest(resolved.Path, diagnosticPrefixWriter(c.Stderr))
 	if err != nil {
 		return fmt.Errorf("install: %w", err)
 	}
@@ -279,7 +279,7 @@ func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource, manife
 		return "", fmt.Errorf("install: %w", err)
 	}
 	_ = os.Chmod(dest, 0o755)
-	if _, err := plugin.LoadManifestWithWarnings(dest, diagnosticPrefixWriter(c.Stderr)); err != nil {
+	if _, err := plugin.LoadManifest(dest, diagnosticPrefixWriter(c.Stderr)); err != nil {
 		_ = os.Remove(dest)
 		return "", fmt.Errorf("install: %w", err)
 	}

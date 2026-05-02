@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os/exec"
 	"strings"
 
@@ -151,9 +150,9 @@ type HookFollowRequest struct {
 // non-nil when the plugin wants Restish to issue a new request.
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsByHook["response-middleware"] {
-		responseHeaders := responseHeaderMap(resp.Headers)
+		responseHeaders := cloneHeaderMap(resp.Headers)
 		if !p.Manifest.NeedsAuthSecrets {
-			redactHookResponseHeaders(responseHeaders)
+			redactCredentialHeaders(responseHeaders)
 		}
 		in := pluginwire.ResponseMiddlewareInput{
 			Type:    "response-middleware",
@@ -236,11 +235,11 @@ func applyRequestUpdate(req *http.Request, update *pluginwire.HookRequestHeaderU
 }
 
 func hookRequestForPlugin(req *http.Request, p plugin.Plugin) pluginwire.HookRequest {
-	headers := headerMap(req.Header)
+	headers := cloneHeaderMap(req.Header)
 	uri := req.URL.String()
 	if !p.Manifest.NeedsAuthSecrets {
-		redactHookRequestHeaders(headers)
-		uri = redactHookRequestURI(req.URL)
+		redactCredentialHeaders(headers)
+		uri = request.RedactedURL(req.URL)
 	}
 	hookReq := pluginwire.HookRequest{
 		Method:  req.Method,
@@ -282,7 +281,9 @@ func manifestRequiresFeature(m plugin.Manifest, feature string) bool {
 	return false
 }
 
-func redactHookRequestHeaders(headers map[string][]string) {
+// redactCredentialHeaders replaces values for known credential-bearing headers
+// with "<redacted>" so plugins receive the request shape without the secrets.
+func redactCredentialHeaders(headers map[string][]string) {
 	for name := range headers {
 		if request.IsCredentialHeader(name) {
 			headers[name] = []string{"<redacted>"}
@@ -290,29 +291,9 @@ func redactHookRequestHeaders(headers map[string][]string) {
 	}
 }
 
-func redactHookResponseHeaders(headers map[string][]string) {
-	for name := range headers {
-		if request.IsCredentialHeader(name) {
-			headers[name] = []string{"<redacted>"}
-		}
-	}
-}
-
-func redactHookRequestURI(u *url.URL) string {
-	return request.RedactedURL(u)
-}
-
-// headerMap converts an http.Header (map[string][]string) to a plain Go map
-// suitable for CBOR serialization.
-func headerMap(h http.Header) map[string][]string {
-	m := make(map[string][]string, len(h))
-	for k, vs := range h {
-		m[k] = append([]string(nil), vs...)
-	}
-	return m
-}
-
-func responseHeaderMap(h map[string][]string) map[string][]string {
+// cloneHeaderMap returns a deep copy of h suitable for CBOR serialization
+// without aliasing the source slices.
+func cloneHeaderMap(h map[string][]string) map[string][]string {
 	m := make(map[string][]string, len(h))
 	for k, v := range h {
 		m[k] = append([]string(nil), v...)

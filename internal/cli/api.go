@@ -349,7 +349,7 @@ func connectedOperationCount(apiSpec *spec.APISpec, apiCfg *config.APIConfig) in
 	if apiSpec == nil {
 		return 0
 	}
-	ops, err := apiSpec.Operations(apiCfg.BaseURL, apiCfg.OperationBase)
+	ops, err := apiSpec.Operations(spec.OperationOptions{BaseURL: apiCfg.BaseURL, OperationBase: apiCfg.OperationBase})
 	if err != nil {
 		return 0
 	}

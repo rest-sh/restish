@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	authpkg "github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/content"
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
@@ -104,7 +104,7 @@ type CLI struct {
 	pluginCommandNames  map[string]string
 	authPluginsByAPI    map[string][]internalplugin.Plugin
 	globalAuthPlugins   []internalplugin.Plugin
-	customAuthHandlers  map[string]authpkg.Handler
+	customAuthHandlers  map[string]auth.Handler
 	requestClosersMu    sync.Mutex
 	nextRequestCloserID uint64
 	requestClosers      []requestCloserEntry
@@ -176,11 +176,11 @@ func (c *CLI) flushStdout() error {
 // oauth-authorization-code, oauth-device-code, external-tool) can be overridden.
 // Call this before CLI.Run.
 //
-// Use the github.com/rest-sh/restish/v2/auth package for the Handler
-// and Param types when implementing custom auth.
-func (c *CLI) AddAuthHandler(name string, handler authpkg.Handler) {
+// Use the restish.AuthHandler / restish.AuthParam aliases on the embedded API
+// when implementing custom auth.
+func (c *CLI) AddAuthHandler(name string, handler auth.Handler) {
 	if c.customAuthHandlers == nil {
-		c.customAuthHandlers = make(map[string]authpkg.Handler)
+		c.customAuthHandlers = make(map[string]auth.Handler)
 	}
 	c.customAuthHandlers[name] = handler
 }
@@ -506,7 +506,7 @@ func (c *CLI) Run(args []string) error {
 			OperationBase:   apiCfg.OperationBase,
 			ServerVariables: effectiveServerVariables(apiCfg, startupProfile),
 		}
-		if set, ok := spec.LoadOperationSetFromCacheWithVariables(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
+		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
@@ -522,9 +522,9 @@ func (c *CLI) Run(args []string) error {
 		if err != nil || s == nil {
 			continue
 		}
-		set, opsErr := s.OperationSetWithOptions(opOpts)
+		set, opsErr := s.OperationSet(opOpts)
 		if opsErr == nil {
-			_ = spec.StoreOperationSetInCacheWithVariables(c.specCacheDir(), apiName, Version, opOpts, set)
+			_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opOpts, set)
 		}
 		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)

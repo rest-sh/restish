@@ -127,7 +127,7 @@ func TestLoadManifest_JSONOutput(t *testing.T) {
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	p := writeScript(t, dir, "restish-myplugin", script)
 
-	got, err := LoadManifest(p)
+	got, err := LoadManifest(p, nil)
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestLoadManifest_MissingName(t *testing.T) {
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	p := writeScript(t, dir, "restish-noname", script)
 
-	_, err := LoadManifest(p)
+	_, err := LoadManifest(p, nil)
 	if err == nil {
 		t.Error("expected error for missing name")
 	}
@@ -163,7 +163,7 @@ func TestLoadManifest_MissingAPIVersion(t *testing.T) {
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	p := writeScript(t, dir, "restish-nover", script)
 
-	_, err := LoadManifest(p)
+	_, err := LoadManifest(p, nil)
 	if err == nil {
 		t.Error("expected error for missing restish_api_version")
 	}
@@ -176,7 +176,7 @@ func TestLoadManifest_EmptyOutput(t *testing.T) {
 	dir := t.TempDir()
 	p := writeScript(t, dir, "restish-empty", "#!/bin/sh\n# no output")
 
-	_, err := LoadManifest(p)
+	_, err := LoadManifest(p, nil)
 	if err == nil {
 		t.Error("expected error for empty manifest output")
 	}
@@ -189,7 +189,7 @@ func TestLoadManifest_NonZeroExit(t *testing.T) {
 	dir := t.TempDir()
 	p := writeScript(t, dir, "restish-fail", "#!/bin/sh\nexit 1")
 
-	_, err := LoadManifest(p)
+	_, err := LoadManifest(p, nil)
 	if err == nil {
 		t.Error("expected error for non-zero exit")
 	}
@@ -256,7 +256,7 @@ func TestLoadManifest_CompatibilityMatrix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			p := writeScript(t, dir, "restish-test", fmt.Sprintf("#!/bin/sh\necho '%s'", tt.json))
-			_, err := LoadManifest(p)
+			_, err := LoadManifest(p, nil)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("LoadManifest error = %v, want containing %q", err, tt.wantErr)
@@ -432,7 +432,7 @@ func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			p := writeScript(t, dir, "restish-test", fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(tt.m)))
-			_, err := LoadManifest(p)
+			_, err := LoadManifest(p, nil)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("LoadManifest error = %v, want containing %q", err, tt.wantErr)

@@ -221,7 +221,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(c.Stderr, "Spec cache: missing")
 	}
-	if set, ok := spec.LoadOperationSetFromCacheWithVariables(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
+	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
 		BaseURL:       api.BaseURL,
 		OperationBase: api.OperationBase,
 	}); ok {
@@ -267,7 +267,7 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(c.Stderr, "Executable: yes")
 	}
-	manifest, err := internalplugin.LoadManifestWithWarnings(path, diagnosticPrefixWriter(c.Stderr))
+	manifest, err := internalplugin.LoadManifest(path, diagnosticPrefixWriter(c.Stderr))
 	if err != nil {
 		fmt.Fprintf(c.Stderr, "Manifest: invalid (%v)\n", err)
 		return nil
@@ -410,7 +410,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
 		report.SpecCache = doctorStatusReport{Status: "present"}
 	}
-	if set, ok := spec.LoadOperationSetFromCacheWithVariables(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
+	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
 		BaseURL:       api.BaseURL,
 		OperationBase: api.OperationBase,
 	}); ok {
@@ -449,7 +449,7 @@ func (c *CLI) doctorPluginReport(name string) doctorPluginReport {
 	}
 	report.Found = true
 	report.Executable = info.Mode()&0o111 != 0
-	manifest, err := internalplugin.LoadManifestWithWarnings(path, diagnosticPrefixWriter(c.Stderr))
+	manifest, err := internalplugin.LoadManifest(path, diagnosticPrefixWriter(c.Stderr))
 	if err != nil {
 		report.Manifest = doctorManifestReport{Status: "invalid", Error: err.Error()}
 		return report

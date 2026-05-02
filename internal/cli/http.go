@@ -85,23 +85,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 // runHTTP reads global flags, executes the HTTP request, normalizes the
 // response, formats it, and handles exit codes.
 func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
-	return c.runHTTPInternal(cmd, method, args, false, nil, false, "", "")
-}
-
-// runHTTPInternal is the implementation of runHTTP. followMode=true is used for
-// follow-up requests triggered by response-middleware plugins; in that mode,
-// response-middleware is skipped to prevent infinite loops.
-// extraHeaders holds additional "Name: Value" strings injected by generated
-// commands (e.g. OpenAPI header/cookie parameters) that must not be stored on
-// the cobra.Command itself since command objects are reused across invocations.
-// noAuth strips authentication when following a redirect to a different host,
-// preventing credentialed SSRF via a compromised response-middleware plugin.
-func (c *CLI) runHTTPInternal(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodySchemaTypes ...map[string]string) error {
-	var opts requestBodyOptions
-	if len(bodySchemaTypes) > 0 {
-		opts.schemaTypes = bodySchemaTypes[0]
-	}
-	return c.runHTTPInternalWithBodyOptions(cmd, method, args, followMode, extraHeaders, noAuth, firstPartyHost, contentTypeOverride, opts)
+	return c.runHTTPWithOptions(cmd, method, args, false, nil, false, "", "", requestBodyOptions{})
 }
 
 type requestBodyOptions struct {
@@ -111,7 +95,19 @@ type requestBodyOptions struct {
 	bodyRequired              bool
 }
 
-func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
+// runHTTPWithOptions executes one HTTP request through the full pipeline:
+// auth, request middleware, retries, streaming, response middleware,
+// pagination, and formatting.
+//
+// followMode=true is used for follow-up requests triggered by
+// response-middleware plugins; in that mode, response-middleware is skipped to
+// prevent infinite loops. extraHeaders holds additional "Name: Value" strings
+// injected by generated commands (e.g. OpenAPI header/cookie parameters) that
+// must not be stored on the cobra.Command itself since command objects are
+// reused across invocations. noAuth strips authentication when following a
+// redirect to a different host, preventing credentialed SSRF via a compromised
+// response-middleware plugin.
+func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -221,7 +217,7 @@ func (c *CLI) runHTTPInternalWithBodyOptions(cmd *cobra.Command, method string, 
 			if crossHost {
 				c.warnf("response-middleware follow to different host %q — stripping credentials", followReq.URI)
 			}
-			return c.runHTTPInternal(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost, "")
+			return c.runHTTPWithOptions(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost, "", requestBodyOptions{})
 		}
 	}
 
@@ -345,17 +341,13 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		"body":        resp.Body,
 	}
 
-	filtered, handled, err := c.filterOutput(cmd, filterExpr, doc, lang)
+	filtered, err := filter.Apply(filterExpr, doc, lang)
 	if err != nil {
-		return err
+		return fmt.Errorf("filter: %w", err)
 	}
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
 		c.hintf("filter returned no results; to access response body fields use 'body.%s'", filterExpr)
-	}
-
-	if handled {
-		return nil
 	}
 
 	if explicitFilter && filterExpr == "@" {
@@ -592,15 +584,13 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 		fmts = copied
 	}
 
-	var (
-		formatter output.Formatter
-		ok        bool
-	)
 	if fmtName == "" {
-		formatter, ok = output.SelectDefault(fmts, tty)
-	} else {
-		formatter, ok = output.Select(fmts, fmtName, tty)
+		if tty {
+			return fmts["readable"], nil
+		}
+		return fmts["json"], nil
 	}
+	formatter, ok := fmts[fmtName]
 	if !ok {
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}

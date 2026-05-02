@@ -74,25 +74,3 @@ func FormatterNames(fmts map[string]Formatter) string {
 	sort.Strings(names)
 	return strings.Join(names, ", ")
 }
-
-// Select picks the right formatter given an explicit format name and whether
-// the output writer is a terminal.
-//
-//   - If fmtName is set and recognised, that formatter is returned.
-//   - If fmtName is unrecognised, nil is returned so the caller can error.
-//   - TTY default: "readable" (syntax-highlighted, human-friendly).
-//   - Non-TTY default: "json" (structured output for pipes and file redirects).
-func SelectDefault(fmts map[string]Formatter, tty bool) (Formatter, bool) {
-	if tty {
-		return fmts["readable"], true
-	}
-	return fmts["json"], true
-}
-
-func Select(fmts map[string]Formatter, fmtName string, tty bool) (Formatter, bool) {
-	if fmtName != "" {
-		f, ok := fmts[fmtName]
-		return f, ok
-	}
-	return SelectDefault(fmts, tty)
-}

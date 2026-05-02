@@ -7,7 +7,7 @@
 package restish
 
 import (
-	"github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/auth"
 	internalcli "github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/content"

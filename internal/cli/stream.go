@@ -254,12 +254,9 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	result := item
 	if filterExpr != "" {
 		doc := map[string]any{"body": item}
-		filtered, handled, err := c.filterOutput(cmd, filterExpr, doc, filter.LangAuto)
+		filtered, err := filter.Apply(filterExpr, doc, filter.LangAuto)
 		if err != nil {
-			return err
-		}
-		if handled {
-			return nil
+			return fmt.Errorf("filter: %w", err)
 		}
 		result = filtered
 	}

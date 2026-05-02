@@ -534,7 +534,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -580,7 +580,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -638,7 +638,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -682,7 +682,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -733,7 +733,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -787,7 +787,7 @@ paths:
 	if err != nil {
 		t.Fatalf("loadSpecFiles: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -864,7 +864,7 @@ paths:
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -1024,7 +1024,7 @@ paths:
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	ops, err := loaded.Operations("https://api.example.com", "")
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
@@ -1357,14 +1357,14 @@ paths:
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if _, err := loaded.Operations("https://api.example.com", ""); err != nil {
+	if _, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"}); err != nil {
 		t.Fatalf("Operations: %v", err)
 	}
 	if got := paramsHits.Load(); got == 0 {
 		t.Fatal("expected params ref to be fetched while priming operation cache")
 	}
 
-	set, ok := LoadOperationSetFromCache(cacheDir, "cached-remote-refs", "v2.0.0", nil, "https://api.example.com", "")
+	set, ok := LoadOperationSetFromCache(cacheDir, "cached-remote-refs", "v2.0.0", nil, OperationOptions{BaseURL: "https://api.example.com"})
 	if !ok {
 		t.Fatal("expected cached operation set")
 	}

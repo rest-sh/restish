@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"io"
+	"maps"
 	"net/http"
 )
 
@@ -61,32 +62,21 @@ type ForceCapable interface {
 	SupportsForce()
 }
 
-func authCacheKey(ac AuthContext) string {
-	if ac.CacheKey != "" {
-		return ac.CacheKey
-	}
-	if ac.APIName == "" && ac.ProfileName == "" {
-		return ""
-	}
-	return ac.APIName + ":" + ac.ProfileName
-}
-
-func cloneAuthParams(params map[string]string) map[string]string {
-	cloned := make(map[string]string, len(params)+1)
-	for key, value := range params {
-		cloned[key] = value
-	}
-	return cloned
-}
-
 func bearerAuth(req *http.Request, token string) {
 	req.Header.Set("Authorization", "Bearer "+token)
 }
 
+// authParams returns a copy of the user-supplied auth params with a synthetic
+// "_cache_key" entry added so token-cache lookups have a stable identity even
+// when callers pass an empty CacheKey.
 func authParams(ac AuthContext) map[string]string {
-	params := cloneAuthParams(ac.Params)
-	if key := authCacheKey(ac); key != "" {
-		params["_cache_key"] = key
+	params := make(map[string]string, len(ac.Params)+1)
+	maps.Copy(params, ac.Params)
+	switch {
+	case ac.CacheKey != "":
+		params["_cache_key"] = ac.CacheKey
+	case ac.APIName != "" || ac.ProfileName != "":
+		params["_cache_key"] = ac.APIName + ":" + ac.ProfileName
 	}
 	return params
 }

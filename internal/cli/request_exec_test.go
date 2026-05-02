@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	authpkg "github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"github.com/rest-sh/restish/v2/internal/request"
@@ -16,14 +16,14 @@ import (
 
 type testAuthHandler struct{}
 
-func (testAuthHandler) Parameters() []authpkg.Param { return nil }
+func (testAuthHandler) Parameters() []auth.Param { return nil }
 
 func (testAuthHandler) OnRequest(req *http.Request, params map[string]string) error {
 	req.Header.Set("Authorization", "Bearer "+params["token"])
 	return nil
 }
 
-func (h testAuthHandler) Authenticate(_ context.Context, req *http.Request, ac authpkg.AuthContext) error {
+func (h testAuthHandler) Authenticate(_ context.Context, req *http.Request, ac auth.AuthContext) error {
 	return h.OnRequest(req, ac.Params)
 }
 

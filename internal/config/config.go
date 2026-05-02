@@ -163,23 +163,6 @@ func DefaultPath() string {
 	return NewPaths().ConfigFile()
 }
 
-// DefaultTokenCachePath returns the path to the token cache file.
-func DefaultTokenCachePath() string {
-	return NewPaths().TokenCache()
-}
-
-// DefaultSpecCacheDir returns the directory for cached API spec CBOR files.
-// Spec cache files live at <dir>/<apiname>.cbor.
-func DefaultSpecCacheDir() string {
-	return NewPaths().SpecCache()
-}
-
-// DefaultCacheDir returns the directory for cached HTTP responses,
-// honoring the RSH_CACHE_DIR and XDG environment variable overrides.
-func DefaultCacheDir() string {
-	return NewPaths().Cache()
-}
-
 // NeedsPatchToPreserveFormatting reports whether the config file at path
 // contains JSONC comments and should use patch-based writes to preserve formatting.
 // Returns false when the file does not exist or cannot be read.

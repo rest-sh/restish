@@ -242,8 +242,8 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops1, err1 := s.Operations("https://api.example.com", "")
-	ops2, err2 := s.Operations("https://api.example.com", "")
+	ops1, err1 := s.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	ops2, err2 := s.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err1 != nil || err2 != nil {
 		t.Fatalf("Operations errors: %v / %v", err1, err2)
 	}
@@ -286,7 +286,7 @@ paths:
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	ops, err := s.Operations("https://api.example.com", "")
+	ops, err := s.Operations(OperationOptions{BaseURL: "https://api.example.com"})
 	if err != nil {
 		t.Fatalf("Operations: %v", err)
 	}

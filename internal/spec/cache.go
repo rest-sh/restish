@@ -221,27 +221,12 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 	return loadWithOptions(entry.contentType(), entry.raw(), loaders, entry.loadOptions())
 }
 
-// LoadOperationsFromCache reads extracted operations for a cached spec without
-// re-parsing the raw OpenAPI document. The bool return is false when the cache
-// entry is missing, expired, stale against local files, or lacks operations for
-// the requested base URL and operation base.
-func LoadOperationsFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) ([]Operation, bool) {
-	set, ok := LoadOperationSetFromCache(cacheDir, apiName, version, specFiles, baseURL, operationBase)
-	return set.Operations, ok
-}
-
 // LoadOperationSetFromCache reads extracted operations and API metadata for a
-// cached spec without reparsing the raw OpenAPI document.
-func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []string, baseURL, operationBase string) (OperationSet, bool) {
-	return LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version, specFiles, OperationOptions{
-		BaseURL:       baseURL,
-		OperationBase: operationBase,
-	})
-}
-
-// LoadOperationSetFromCacheWithVariables reads extracted operations and API
-// metadata for a cache key that includes OpenAPI server variable values.
-func LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version string, specFiles []string, opts OperationOptions) (OperationSet, bool) {
+// cached spec without reparsing the raw OpenAPI document. The bool return is
+// false when the cache entry is missing, expired, stale against local files,
+// or lacks operations for the requested base URL, operation base, and server
+// variable set.
+func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []string, opts OperationOptions) (OperationSet, bool) {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
 		return OperationSet{}, false
@@ -274,42 +259,21 @@ func LoadOperationSetFromCacheWithVariables(cacheDir, apiName, version string, s
 	return OperationSet{}, false
 }
 
-// StoreOperationsInCache updates an existing raw cache entry with extracted
-// operations. It is best-effort for callers; failed upgrades should not make
-// startup fail when the raw cache can still be parsed.
-func StoreOperationsInCache(cacheDir, apiName, version, baseURL, operationBase string, ops []Operation) error {
-	return StoreOperationSetInCache(cacheDir, apiName, version, baseURL, operationBase, OperationSet{Operations: ops})
-}
-
 // StoreOperationSetInCache updates an existing raw cache entry with extracted
-// operations and API metadata.
-func StoreOperationSetInCache(cacheDir, apiName, version, baseURL, operationBase string, set OperationSet) error {
-	return StoreOperationSetInCacheWithVariables(cacheDir, apiName, version, OperationOptions{
-		BaseURL:       baseURL,
-		OperationBase: operationBase,
-	}, set)
-}
-
-// StoreOperationSetInCacheWithVariables updates an existing raw cache entry
-// with operation metadata keyed by server variable values.
-func StoreOperationSetInCacheWithVariables(cacheDir, apiName, version string, opts OperationOptions, set OperationSet) error {
+// operations and API metadata. It is best-effort for callers; failed upgrades
+// should not make startup fail when the raw cache can still be parsed. The
+// cache entry is keyed by base URL, operation base, and server variable values
+// (via opts).
+func StoreOperationSetInCache(cacheDir, apiName, version string, opts OperationOptions, set OperationSet) error {
 	entry, ok := readCache(cacheDir, apiName, version)
 	if !ok {
 		return nil
 	}
-	entry.upsertOperationSetWithOptions(opts, set)
+	entry.upsertOperationSet(opts, set)
 	return writeCache(cacheDir, apiName, entry)
 }
 
-func (e *cacheEntry) upsertOperations(baseURL, operationBase string, ops []Operation) {
-	e.upsertOperationSet(baseURL, operationBase, OperationSet{Operations: ops})
-}
-
-func (e *cacheEntry) upsertOperationSet(baseURL, operationBase string, set OperationSet) {
-	e.upsertOperationSetWithOptions(OperationOptions{BaseURL: baseURL, OperationBase: operationBase}, set)
-}
-
-func (e *cacheEntry) upsertOperationSetWithOptions(opts OperationOptions, set OperationSet) {
+func (e *cacheEntry) upsertOperationSet(opts OperationOptions, set OperationSet) {
 	rawHash := cacheRawHash(e.raw())
 	blob := opsBlob{
 		Schema:             currentOperationCacheSchema,

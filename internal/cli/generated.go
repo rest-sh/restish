@@ -22,7 +22,7 @@ import (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
-	set, err := s.OperationSetWithOptions(spec.OperationOptions{
+	set, err := s.OperationSet(spec.OperationOptions{
 		BaseURL:         apiCfg.BaseURL,
 		OperationBase:   apiCfg.OperationBase,
 		ServerVariables: effectiveServerVariables(apiCfg, "default"),
@@ -706,7 +706,7 @@ func (c *CLI) runGeneratedOp(
 
 	bodyArgs := args[bodyArgStart:]
 	gf := globalFlagsFromContext(requestContext(cmd))
-	return c.runHTTPInternalWithBodyOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
+	return c.runHTTPWithOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
 		bodyRequired:              bodyRequired,

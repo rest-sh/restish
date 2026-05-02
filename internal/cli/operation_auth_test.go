@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	authpkg "github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
@@ -15,9 +15,9 @@ type forceRecordingAuth struct {
 	forces []bool
 }
 
-func (h *forceRecordingAuth) Parameters() []authpkg.Param { return nil }
+func (h *forceRecordingAuth) Parameters() []auth.Param { return nil }
 
-func (h *forceRecordingAuth) Authenticate(_ context.Context, req *http.Request, ac authpkg.AuthContext) error {
+func (h *forceRecordingAuth) Authenticate(_ context.Context, req *http.Request, ac auth.AuthContext) error {
 	h.forces = append(h.forces, ac.Force)
 	req.Header.Set("Authorization", "Bearer token")
 	return nil

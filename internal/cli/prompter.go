@@ -12,18 +12,6 @@ import (
 	"github.com/rest-sh/restish/v2/internal/output"
 )
 
-// Prompter is the interface for interactive user prompts. All methods check ctx
-// before blocking on I/O, so callers can respect cancellation.
-type Prompter interface {
-	// Prompt shows label and reads a line of visible text input.
-	Prompt(ctx context.Context, label string) (string, error)
-	// Secret shows label and reads a secret value without echoing it.
-	Secret(ctx context.Context, label string) (string, error)
-	// Confirm shows label and reads a yes/no answer. Returns true only for
-	// explicit "y" or "yes"; empty input on a non-TTY returns false.
-	Confirm(ctx context.Context, label string) (bool, error)
-}
-
 var promptOpenTTY = func() (*os.File, error) {
 	return os.Open("/dev/tty")
 }

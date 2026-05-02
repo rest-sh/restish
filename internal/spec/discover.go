@@ -116,7 +116,7 @@ loadFresh:
 		}
 		if spec != nil && cfg.CacheDir != "" {
 			opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
-			set, _ := spec.OperationSetWithOptions(opts)
+			set, _ := spec.OperationSet(opts)
 			entry := &cacheEntry{
 				Version:   cfg.Version,
 				FetchedAt: time.Now(),
@@ -132,7 +132,7 @@ loadFresh:
 			}
 			entry.SpecFiles = cacheSpecFileMetadata(cfg.SpecFiles)
 			if set.Operations != nil {
-				entry.upsertOperationSetWithOptions(opts, set)
+				entry.upsertOperationSet(opts, set)
 			}
 			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 		}
@@ -154,7 +154,7 @@ loadFresh:
 			expiresAt = time.Now().Add(24 * time.Hour)
 		}
 		opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
-		set, _ := spec.OperationSetWithOptions(opts)
+		set, _ := spec.OperationSet(opts)
 		entry := &cacheEntry{
 			Version:   cfg.Version,
 			FetchedAt: time.Now(),
@@ -169,7 +169,7 @@ loadFresh:
 			},
 		}
 		if set.Operations != nil {
-			entry.upsertOperationSetWithOptions(opts, set)
+			entry.upsertOperationSet(opts, set)
 		}
 		_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
 	}

@@ -136,15 +136,10 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 	return plugins
 }
 
-// LoadManifest calls path with plugin.StartupFlagManifest and parses the CBOR (or
-// JSON fallback) manifest from stdout.
-func LoadManifest(path string) (*Manifest, error) {
-	return loadManifest(path, os.Stderr)
-}
-
-// LoadManifestWithWarnings is like LoadManifest, but sends compatibility
-// warnings to warningWriter. Pass nil to suppress warnings.
-func LoadManifestWithWarnings(path string, warningWriter io.Writer) (*Manifest, error) {
+// LoadManifest calls path with plugin.StartupFlagManifest and parses the CBOR
+// (or JSON fallback) manifest from stdout. Compatibility warnings are sent to
+// warningWriter; pass nil to suppress warnings.
+func LoadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 	return loadManifest(path, warningWriter)
 }
 

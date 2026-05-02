@@ -34,7 +34,7 @@ func newConfigureAuthDiscovery(apiSpec *spec.APISpec, baseURL string) configureA
 	if schemes, err := apiSpec.SecuritySchemeSummaries(); err == nil {
 		d.schemes = schemes
 	}
-	if ops, err := apiSpec.Operations(baseURL, ""); err == nil {
+	if ops, err := apiSpec.Operations(spec.OperationOptions{BaseURL: baseURL}); err == nil {
 		d.operations = ops
 		d.opCounts = credentialOperationCounts(ops)
 		d.needDefaults = credentialNeedDefaults(ops)
