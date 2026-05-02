@@ -193,7 +193,7 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 
 	if !opts.Yes {
 		fmt.Fprintf(c.Stdout, "Install zsh completion and update %s? [y/N]: ", rcPath)
-		ok, err := c.confirm()
+		ok, err := c.confirm(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -250,7 +250,7 @@ func (c *CLI) installFishCompletion(cmd *cobra.Command, opts completionInstallOp
 
 	if !opts.Yes {
 		fmt.Fprintf(c.Stdout, "Install fish completion to %s? [y/N]: ", scriptPath)
-		ok, err := c.confirm()
+		ok, err := c.confirm(cmd.Context())
 		if err != nil {
 			return err
 		}

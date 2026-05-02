@@ -37,13 +37,16 @@ type resolvedAuthConfig struct {
 	CacheKey string
 }
 
-type cliPrompter struct{ cli *CLI }
+type cliPrompter struct {
+	cli *CLI
+	ctx context.Context
+}
 
 func (p cliPrompter) Prompt(prompt string) (string, error) {
-	return p.cli.Prompt(context.Background(), prompt)
+	return p.cli.Prompt(p.ctx, prompt)
 }
 func (p cliPrompter) PromptSecret(prompt string) (string, error) {
-	return p.cli.Secret(context.Background(), prompt)
+	return p.cli.Secret(p.ctx, prompt)
 }
 
 // authHandlerFor returns the Handler for the given AuthConfig.
@@ -69,9 +72,7 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	case "bearer":
 		return &auth.Bearer{}, nil
 	case "http-basic":
-		return &auth.HTTPBasic{Prompter: func(prompt string) (string, error) {
-			return c.Secret(context.Background(), prompt)
-		}}, nil
+		return &auth.HTTPBasic{}, nil
 	case "oauth-client-credentials":
 		return &auth.ClientCredentials{
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
@@ -82,12 +83,9 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 			Stderr:     c.Stderr,
-			Prompt: func(prompt string) (string, error) {
-				return c.Prompt(context.Background(), prompt)
-			},
-			CanPrompt: c.canPromptCode(),
-			NoBrowser: opts.NoBrowser,
-			Verbose:   opts.Verbose,
+			CanPrompt:  c.canPromptCode(),
+			NoBrowser:  opts.NoBrowser,
+			Verbose:    opts.Verbose,
 		}, nil
 	case "oauth-device-code":
 		return &auth.DeviceCode{
@@ -261,7 +259,7 @@ func (c *CLI) authContext(ctx context.Context, apiName, profileName string, para
 		CacheKey:    cacheKey,
 		Params:      params,
 		TokenStore:  auth.NewTokenCache(c.tokenCachePath()),
-		Prompter:    cliPrompter{cli: c},
+		Prompter:    cliPrompter{cli: c, ctx: ctx},
 		Stderr:      c.Stderr,
 		HTTPClient:  c.authHTTPClient(ctx),
 		Logger:      log.New(c.Stderr, "", 0),

@@ -50,25 +50,35 @@ func (c *CLI) Secret(ctx context.Context, label string) (string, error) {
 //   - Empty input (Enter) → true only when stdin is an interactive TTY
 //   - EOF → false (safe default for piped/scripted invocations)
 func (c *CLI) Confirm(ctx context.Context, label string) (bool, error) {
+	return c.confirmDefault(ctx, label, true)
+}
+
+func (c *CLI) confirm(ctx context.Context) (bool, error) {
+	return c.confirmDefault(ctx, "", false)
+}
+
+func (c *CLI) confirmDefault(ctx context.Context, label string, defaultYes bool) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	fmt.Fprint(c.Stderr, label)
+	if label != "" {
+		fmt.Fprint(c.Stderr, label)
+	}
 
 	src, cleanup := c.promptSource()
 	defer cleanup()
 	reader := bufio.NewReader(src)
 	line, err := reader.ReadString('\n')
-	if errors.Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) && line == "" {
 		return false, nil
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("confirm: %w", err)
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))
 	if answer == "" {
 		if output.IsTerminalReader(src) {
-			return true, nil
+			return defaultYes, nil
 		}
 		return false, nil
 	}

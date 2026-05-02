@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -111,7 +110,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Fprintf(c.Stdout, "Update %s? [y/N]: ", rcPath)
 		}
-		ok, err := c.confirm()
+		ok, err := c.confirm(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -144,16 +143,6 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
 	return nil
-}
-
-func (c *CLI) confirm() (bool, error) {
-	reader := bufio.NewReader(c.Stdin)
-	answer, err := reader.ReadString('\n')
-	if err != nil && len(answer) == 0 {
-		return false, nil
-	}
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	return answer == "y" || answer == "yes", nil
 }
 
 func setupRCPath(shell, home string, setup shellSetup) string {
