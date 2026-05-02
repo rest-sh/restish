@@ -48,6 +48,16 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state â
 
 `TODO.md` and `review.md` are local working files for planning, code reviews, and in-progress implementation notes only. They must never be committed to git history. Keep them ignored/untracked, and if they are accidentally staged, unstage them before committing.
 
+## Commit Messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) for all commits:
+
+```text
+<type>(optional-scope): <description>
+```
+
+Prefer these types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, and `security`. Use a concise imperative description, such as `fix: preserve JSONC edit directory modes` or `docs: update plugin quickstart`.
+
 ## Skills
 
 Invoke these skills when relevant:
