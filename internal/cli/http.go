@@ -1169,11 +1169,10 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		RetryMaxWait:         retryMaxWait,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
-		WrapTransport: func(rt http.RoundTripper) http.RoundTripper {
-			if gf.Verbose < 1 {
-				return rt
+		OnResponse: func(resp *http.Response) {
+			if gf.Verbose > 0 {
+				c.logVerbose(resp, gf.Verbose)
 			}
-			return &verboseTransport{inner: rt, cli: c, verbose: gf.Verbose}
 		},
 	}, nil
 }

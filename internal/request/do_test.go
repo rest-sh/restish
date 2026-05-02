@@ -104,6 +104,39 @@ func TestBuildTransportCloseFullStackOnce(t *testing.T) {
 	}
 }
 
+func TestBuildTransportOnResponseKeepsCloseChain(t *testing.T) {
+	base := &closeCountingTransport{}
+	var responses atomic.Int32
+	rt := request.BuildTransport(request.Options{
+		Transport: base,
+		OnResponse: func(resp *http.Response) {
+			if resp.Request == nil {
+				t.Error("OnResponse should receive a response with Request set")
+			}
+			responses.Add(1)
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	_ = resp.Body.Close()
+	if got := responses.Load(); got != 1 {
+		t.Fatalf("OnResponse calls = %d, want 1", got)
+	}
+	closer, ok := rt.(interface{ Close() error })
+	if !ok {
+		t.Fatal("transport does not implement Close")
+	}
+	if err := closer.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := base.closeCount.Load(); got != 1 {
+		t.Fatalf("base Close count = %d, want 1", got)
+	}
+}
+
 func TestDo_BasicGet(t *testing.T) {
 	resp, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
 		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {

@@ -88,6 +88,9 @@ type Options struct {
 	// params have been applied, immediately before the request is sent.
 	// Auth handlers use this hook to inject credentials.
 	OnRequest func(*http.Request) error
+	// OnResponse, if non-nil, is called with the raw HTTP response before it is
+	// returned to the caller.
+	OnResponse func(*http.Response)
 	// OnUnauthorized, when non-nil, is used by callers that want to retry once
 	// after a 401 with freshly acquired credentials.
 	OnUnauthorized func(*http.Request) error
@@ -476,10 +479,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 	}
 
 	if opts.NoCache || opts.CacheDir == "" {
-		if opts.WrapTransport != nil {
-			return opts.WrapTransport(inner)
-		}
-		return inner
+		return finalizeTransport(inner, opts)
 	}
 	maxBytes := opts.CacheMaxBytes
 	if maxBytes == 0 {
@@ -488,18 +488,54 @@ func BuildTransport(opts Options) http.RoundTripper {
 	dc, err := cache.New(opts.CacheDir, maxBytes, opts.CacheNamespace)
 	if err != nil {
 		// Cache unavailable; fall back without caching.
-		if opts.WrapTransport != nil {
-			return opts.WrapTransport(inner)
-		}
-		return inner
+		return finalizeTransport(inner, opts)
 	}
 	ct := httpcache.NewTransport(dc)
 	ct.Transport = inner
-	final := wrapTransportWithCloseFns(ct, transportCleanup(inner)...)
+	return finalizeTransport(wrapTransportWithCloseFns(ct, transportCleanup(inner)...), opts)
+}
+
+func finalizeTransport(final http.RoundTripper, opts Options) http.RoundTripper {
 	if opts.WrapTransport != nil {
-		return opts.WrapTransport(final)
+		final = opts.WrapTransport(final)
+	}
+	if opts.OnResponse != nil {
+		final = responseHookTransport{inner: final, onResponse: opts.OnResponse}
 	}
 	return final
+}
+
+type responseHookTransport struct {
+	inner      http.RoundTripper
+	onResponse func(*http.Response)
+}
+
+func (t responseHookTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.inner.RoundTrip(req)
+	if resp != nil {
+		if resp.Request == nil {
+			resp.Request = req
+		}
+		t.onResponse(resp)
+	}
+	return resp, err
+}
+
+func (t responseHookTransport) Close() error {
+	if closer, ok := t.inner.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+func (t responseHookTransport) CloseIdleConnections() {
+	if closer, ok := t.inner.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func (t responseHookTransport) Unwrap() http.RoundTripper {
+	return t.inner
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
