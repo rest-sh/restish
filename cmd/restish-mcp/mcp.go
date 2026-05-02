@@ -26,6 +26,8 @@ const DefaultMaxResultBytes = 16 * 1024
 // maxRPCPayloadBytes caps the Content-Length accepted from an MCP client to
 // prevent memory exhaustion. Matches the CBOR plugin protocol limit.
 const maxRPCPayloadBytes = 64 << 20 // 64 MiB
+const maxRPCHeaderLineBytes = 8 << 10
+const maxRPCHeaderBytes = 16 << 10
 
 type HTTPRequest struct {
 	Method      string
@@ -67,10 +69,15 @@ type Tool struct {
 }
 
 type Param struct {
-	Name        string
-	In          string
-	Required    bool
-	Description string
+	Name          string
+	In            string
+	Required      bool
+	Description   string
+	Type          string
+	ItemType      string
+	Style         string
+	Explode       *bool
+	AllowReserved bool
 }
 
 type Options struct {
@@ -96,13 +103,14 @@ type Server struct {
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      any             `json:"id,omitempty"`
+	HasID   bool            `json:"-"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
 type rpcResponse struct {
 	JSONRPC string    `json:"jsonrpc"`
-	ID      any       `json:"id,omitempty"`
+	ID      any       `json:"id"`
 	Result  any       `json:"result,omitempty"`
 	Error   *rpcError `json:"error,omitempty"`
 }
@@ -316,10 +324,15 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 	params := make([]Param, 0, len(op.Parameters))
 	for _, p := range op.Parameters {
 		params = append(params, Param{
-			Name:        p.Name,
-			In:          p.In,
-			Required:    p.Required,
-			Description: p.Description,
+			Name:          p.Name,
+			In:            p.In,
+			Required:      p.Required,
+			Description:   p.Description,
+			Type:          p.Type,
+			ItemType:      p.ItemType,
+			Style:         p.Style,
+			Explode:       p.Explode,
+			AllowReserved: p.AllowReserved,
 		})
 		prop := schemaFromOperationParam(p)
 		properties[p.Name] = prop
@@ -394,16 +407,22 @@ func buildTool(apiName string, multiAPI bool, path, method string, pathParams []
 	var required []string
 	var params []Param
 	for _, p := range spec.MergeParameters(pathParams, op.Parameters) {
-		params = append(params, Param{
-			Name:        p.Name,
-			In:          p.In,
-			Required:    p.Required != nil && *p.Required,
-			Description: p.Description,
-		})
 		prop := schemaMap(nil)
 		if p.Schema != nil && p.Schema.Schema() != nil {
 			prop = schemaMap(p.Schema.Schema())
 		}
+		typ, itemType := schemaTypeInfo(prop)
+		params = append(params, Param{
+			Name:          p.Name,
+			In:            p.In,
+			Required:      p.Required != nil && *p.Required,
+			Description:   p.Description,
+			Type:          typ,
+			ItemType:      itemType,
+			Style:         p.Style,
+			Explode:       p.Explode,
+			AllowReserved: p.AllowReserved,
+		})
 		if p.Description != "" {
 			prop["description"] = p.Description
 		}
@@ -489,6 +508,15 @@ func schemaMap(v any) map[string]any {
 	return out
 }
 
+func schemaTypeInfo(prop map[string]any) (string, string) {
+	typ, _ := prop["type"].(string)
+	itemType := ""
+	if items, ok := prop["items"].(map[string]any); ok {
+		itemType, _ = items["type"].(string)
+	}
+	return typ, itemType
+}
+
 func indexTools(tools []*Tool) map[string]*Tool {
 	out := make(map[string]*Tool, len(tools))
 	for _, tool := range tools {
@@ -505,29 +533,80 @@ func (s *Server) ServeStdio(stdin io.Reader, stdout io.Writer) error {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
+			_ = writeRPC(stdout, rpcResponse{
+				JSONRPC: "2.0",
+				ID:      nil,
+				Error:   &rpcError{Code: -32700, Message: "framing error: " + err.Error()},
+			})
 			return err
 		}
-		var req rpcRequest
-		if err := json.Unmarshal(payload, &req); err != nil {
+		req, err := parseRPCRequest(payload)
+		if err != nil {
 			if writeErr := writeRPC(stdout, rpcResponse{
 				JSONRPC: "2.0",
+				ID:      nil,
 				Error:   &rpcError{Code: -32700, Message: "parse error"},
 			}); writeErr != nil {
 				return writeErr
 			}
 			continue
 		}
-		if req.Method == "" {
+		if err := validateRPCRequest(req); err != nil {
+			if writeErr := writeRPC(stdout, rpcResponse{
+				JSONRPC: "2.0",
+				ID:      responseID(req),
+				Error:   &rpcError{Code: -32600, Message: "invalid request"},
+			}); writeErr != nil {
+				return writeErr
+			}
 			continue
 		}
 		resp := s.handleRequest(req)
-		if req.ID == nil || resp.JSONRPC == "" {
+		if !req.HasID || resp.JSONRPC == "" {
 			continue
 		}
 		if err := writeRPC(stdout, resp); err != nil {
 			return err
 		}
 	}
+}
+
+func parseRPCRequest(payload []byte) (rpcRequest, error) {
+	var req rpcRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return req, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return req, err
+	}
+	if _, ok := fields["id"]; ok {
+		req.HasID = true
+	}
+	return req, nil
+}
+
+func validateRPCRequest(req rpcRequest) error {
+	if req.JSONRPC != "2.0" || req.Method == "" || !usableRPCID(req.ID) {
+		return errors.New("invalid request")
+	}
+	return nil
+}
+
+func usableRPCID(id any) bool {
+	switch id.(type) {
+	case nil, string, float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func responseID(req rpcRequest) any {
+	if !req.HasID || !usableRPCID(req.ID) {
+		return nil
+	}
+	return req.ID
 }
 
 func (s *Server) handleRequest(req rpcRequest) rpcResponse {
@@ -625,15 +704,32 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 			}
 			continue
 		}
-		text := valueString(value)
 		switch param.In {
 		case "path":
+			text, err := serializeMCPPathParam(param, value)
+			if err != nil {
+				return nil, err
+			}
 			path = strings.ReplaceAll(path, "{"+param.Name+"}", url.PathEscape(text))
 		case "query":
-			query.Set(param.Name, text)
+			parts, err := serializeMCPQueryParam(param, value)
+			if err != nil {
+				return nil, err
+			}
+			for _, part := range parts {
+				query.Add(part.name, part.value)
+			}
 		case "header":
+			text, err := serializeMCPHeaderParam(param, value)
+			if err != nil {
+				return nil, err
+			}
 			headers[param.Name] = text
 		case "cookie":
+			text, err := serializeMCPCookieParam(param, value)
+			if err != nil {
+				return nil, err
+			}
 			cookies = append(cookies, param.Name+"="+url.QueryEscape(text))
 		}
 	}
@@ -721,13 +817,18 @@ func marshalPretty(v any) string {
 
 func readFrame(r *bufio.Reader) ([]byte, error) {
 	length := -1
+	totalHeaderBytes := 0
 	for {
-		line, err := r.ReadString('\n')
+		line, n, err := readHeaderLine(r)
 		if err != nil {
 			if errors.Is(err, io.EOF) && line == "" {
 				return nil, io.EOF
 			}
 			return nil, err
+		}
+		totalHeaderBytes += n
+		if totalHeaderBytes > maxRPCHeaderBytes {
+			return nil, fmt.Errorf("MCP frame headers exceed %d bytes", maxRPCHeaderBytes)
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
@@ -755,6 +856,24 @@ func readFrame(r *bufio.Reader) ([]byte, error) {
 	return payload, nil
 }
 
+func readHeaderLine(r *bufio.Reader) (string, int, error) {
+	var line []byte
+	for {
+		frag, err := r.ReadSlice('\n')
+		line = append(line, frag...)
+		if len(line) > maxRPCHeaderLineBytes {
+			return string(line), len(line), fmt.Errorf("MCP frame header line exceeds %d bytes", maxRPCHeaderLineBytes)
+		}
+		if err == nil {
+			return string(line), len(line), nil
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return string(line), len(line), err
+	}
+}
+
 func writeRPC(w io.Writer, resp rpcResponse) error {
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -771,13 +890,170 @@ func writeFrame(w io.Writer, payload []byte) error {
 	return err
 }
 
-func valueString(v any) string {
+type mcpQueryParam struct {
+	name  string
+	value string
+}
+
+func serializeMCPPathParam(p Param, value any) (string, error) {
+	if isObjectValue(value) {
+		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
+	}
+	if values, ok, err := arrayStrings(value); err != nil {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+	} else if ok {
+		style := defaultMCPParamStyle(p)
+		if style != "simple" {
+			return "", fmt.Errorf("parameter %q: unsupported path array style %q", p.Name, style)
+		}
+		return strings.Join(values, ","), nil
+	}
+	text, ok := scalarValueString(value)
+	if !ok {
+		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	}
+	return text, nil
+}
+
+func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
+	if isObjectValue(value) {
+		return nil, fmt.Errorf("parameter %q: object values are not supported", p.Name)
+	}
+	if values, ok, err := arrayStrings(value); err != nil {
+		return nil, fmt.Errorf("parameter %q: %w", p.Name, err)
+	} else if ok {
+		style := defaultMCPParamStyle(p)
+		explode := mcpParamExplode(p)
+		switch style {
+		case "form":
+			if explode {
+				out := make([]mcpQueryParam, 0, len(values))
+				for _, value := range values {
+					out = append(out, mcpQueryParam{name: p.Name, value: value})
+				}
+				return out, nil
+			}
+			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, ",")}}, nil
+		case "spaceDelimited":
+			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, " ")}}, nil
+		case "pipeDelimited":
+			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, "|")}}, nil
+		default:
+			return nil, fmt.Errorf("parameter %q: unsupported query array style %q", p.Name, style)
+		}
+	}
+	text, ok := scalarValueString(value)
+	if !ok {
+		return nil, fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	}
+	return []mcpQueryParam{{name: p.Name, value: text}}, nil
+}
+
+func serializeMCPHeaderParam(p Param, value any) (string, error) {
+	if isObjectValue(value) {
+		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
+	}
+	if values, ok, err := arrayStrings(value); err != nil {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+	} else if ok {
+		style := defaultMCPParamStyle(p)
+		if style != "simple" {
+			return "", fmt.Errorf("parameter %q: unsupported header array style %q", p.Name, style)
+		}
+		return strings.Join(values, ","), nil
+	}
+	text, ok := scalarValueString(value)
+	if !ok {
+		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	}
+	return text, nil
+}
+
+func serializeMCPCookieParam(p Param, value any) (string, error) {
+	if isObjectValue(value) {
+		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
+	}
+	if values, ok, err := arrayStrings(value); err != nil {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+	} else if ok {
+		style := defaultMCPParamStyle(p)
+		if style != "form" {
+			return "", fmt.Errorf("parameter %q: unsupported cookie array style %q", p.Name, style)
+		}
+		return strings.Join(values, ","), nil
+	}
+	text, ok := scalarValueString(value)
+	if !ok {
+		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	}
+	return text, nil
+}
+
+func defaultMCPParamStyle(p Param) string {
+	if p.Style != "" {
+		return p.Style
+	}
+	switch p.In {
+	case "query", "cookie":
+		return "form"
+	default:
+		return "simple"
+	}
+}
+
+func mcpParamExplode(p Param) bool {
+	if p.Explode != nil {
+		return *p.Explode
+	}
+	return defaultMCPParamStyle(p) == "form"
+}
+
+func arrayStrings(v any) ([]string, bool, error) {
+	items, ok := v.([]any)
+	if !ok {
+		return nil, false, nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := scalarValueString(item)
+		if !ok {
+			return nil, true, errors.New("array items must be scalar values")
+		}
+		out = append(out, text)
+	}
+	return out, true, nil
+}
+
+func isObjectValue(v any) bool {
+	_, ok := v.(map[string]any)
+	return ok
+}
+
+func scalarValueString(v any) (string, bool) {
 	switch t := v.(type) {
 	case string:
-		return t
+		return t, true
 	case json.Number:
-		return t.String()
+		return t.String(), true
+	case bool:
+		return strconv.FormatBool(t), true
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64), true
+	case float32:
+		return strconv.FormatFloat(float64(t), 'f', -1, 32), true
+	case int:
+		return strconv.Itoa(t), true
+	case int64:
+		return strconv.FormatInt(t, 10), true
+	case int32:
+		return strconv.FormatInt(int64(t), 10), true
+	case uint:
+		return strconv.FormatUint(uint64(t), 10), true
+	case uint64:
+		return strconv.FormatUint(t, 10), true
+	case uint32:
+		return strconv.FormatUint(uint64(t), 10), true
 	default:
-		return fmt.Sprint(v)
+		return "", false
 	}
 }

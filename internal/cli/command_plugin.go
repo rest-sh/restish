@@ -727,13 +727,16 @@ func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
 				continue
 			}
 			params = append(params, pluginwire.APIParam{
-				Name:        p.Name,
-				In:          p.In,
-				Required:    p.Required,
-				Description: p.Desc,
-				Type:        p.Type,
-				ItemType:    p.ItemType,
-				Enum:        append([]string(nil), p.Enum...),
+				Name:          p.Name,
+				In:            p.In,
+				Required:      p.Required,
+				Description:   p.Desc,
+				Type:          p.Type,
+				ItemType:      p.ItemType,
+				Style:         p.Style,
+				Explode:       p.Explode,
+				AllowReserved: p.AllowReserved,
+				Enum:          append([]string(nil), p.Enum...),
 			})
 		}
 		out = append(out, pluginwire.APIOperation{

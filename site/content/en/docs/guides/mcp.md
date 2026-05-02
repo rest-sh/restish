@@ -39,6 +39,12 @@ If write operations are hidden, startup diagnostics say how many were skipped.
 Each delegated tool call also has a timeout; use `--request-timeout <seconds>`
 to tune it or `--request-timeout 0` to disable the timeout.
 
+Tool arguments follow the OpenAPI parameter shape. Query arrays are sent as
+repeated query keys when the spec uses the usual `form` plus `explode: true`
+style, and header arrays are comma-joined. Object parameters and unsupported
+array styles are rejected with a tool error so the client does not send
+ambiguous values.
+
 ## Hide Operations
 
 Use OpenAPI hints when some operations should not be exposed to MCP clients:

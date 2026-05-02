@@ -151,6 +151,20 @@ the plugin.
 That means auth, profile resolution, request middleware, retries, TLS, and
 other Restish behavior still apply to MCP tool calls.
 
+Parameter serialization follows a narrow OpenAPI-compatible subset:
+
+- scalar path, query, header, and cookie values are rendered as scalar text
+- query arrays use repeated keys for `style: form, explode: true`
+- query arrays may also use comma, space, or pipe joining for the matching
+  OpenAPI array styles
+- header arrays use the OpenAPI `simple` style and are comma-joined
+- object parameters and unsupported array styles fail the tool call with a
+  clear MCP error instead of sending Go debug strings such as `[a b]`
+
+Host-resolved operations should carry parameter location, type, item type,
+style, explode, and allow-reserved metadata so the MCP plugin does not need to
+re-parse raw OpenAPI documents when Restish has already resolved the operation.
+
 ## MCP Surface Area
 
 The plugin currently implements a focused stdio MCP server:
@@ -164,6 +178,12 @@ The plugin currently implements a focused stdio MCP server:
 HTTP transport is intentionally not part of the v2 MCP plugin surface. The
 current design is stdio-first, with `restish mcp serve <api...>` as the service
 entry point.
+
+The stdio JSON-RPC reader enforces both payload and header limits. Payloads are
+capped at 64 MiB, individual header lines are capped at 8 KiB, and the full
+header preamble is capped at 16 KiB. Invalid JSON-RPC frames receive parse or
+invalid-request errors (`-32700` or `-32600`) instead of being silently dropped;
+requests without a usable ID use JSON-RPC `id: null` in the error response.
 
 ## Result Shaping
 

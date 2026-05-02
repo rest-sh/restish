@@ -237,6 +237,64 @@ func TestToolsFromSpecPrefersHostResolvedOperations(t *testing.T) {
 	}
 }
 
+func TestToolRequestSerializesArrayParameters(t *testing.T) {
+	explode := true
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items",
+		Params: []Param{
+			{Name: "tag", In: "query", Type: "array", ItemType: "string", Style: "form", Explode: &explode},
+			{Name: "X-Ids", In: "header", Type: "array", ItemType: "integer", Style: "simple"},
+		},
+	}
+	req, err := tool.Request(map[string]any{
+		"tag":   []any{"red", "blue"},
+		"X-Ids": []any{float64(1), float64(2)},
+	})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if req.URI != "demo/items?tag=red&tag=blue" {
+		t.Fatalf("URI = %q, want repeated query keys", req.URI)
+	}
+	if got := req.Headers["X-Ids"]; got != "1,2" {
+		t.Fatalf("X-Ids = %q, want 1,2", got)
+	}
+}
+
+func TestToolRequestRejectsObjectParameter(t *testing.T) {
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items",
+		Params:  []Param{{Name: "filter", In: "query", Type: "object"}},
+	}
+	_, err := tool.Request(map[string]any{"filter": map[string]any{"status": "open"}})
+	if err == nil {
+		t.Fatal("expected object rejection")
+	}
+	if !strings.Contains(err.Error(), "object values are not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestToolRequestRejectsUnsupportedArrayStyle(t *testing.T) {
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items",
+		Params:  []Param{{Name: "ids", In: "header", Type: "array", Style: "form"}},
+	}
+	_, err := tool.Request(map[string]any{"ids": []any{"a", "b"}})
+	if err == nil {
+		t.Fatal("expected unsupported style error")
+	}
+	if !strings.Contains(err.Error(), "unsupported header array style") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseArgsRejectsRemovedHTTPFlag(t *testing.T) {
 	if _, err := ParseArgs([]string{"serve", "--http", ":3000", "demo"}); err == nil {
 		t.Fatal("expected removed --http flag to be rejected by flag parser")
@@ -372,6 +430,123 @@ func TestRunServeToolCall(t *testing.T) {
 	text := content[0].(map[string]any)["text"].(string)
 	if !strings.Contains(text, `"name": "example"`) {
 		t.Fatalf("expected tool body in result, got:\n%s", text)
+	}
+}
+
+func TestServeStdioInvalidRequests(t *testing.T) {
+	var stdin bytes.Buffer
+	writeFrame(&stdin, mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "missing-method",
+	}))
+	writeFrame(&stdin, mustJSON(t, map[string]any{
+		"jsonrpc": "1.0",
+		"id":      "wrong-version",
+		"method":  "ping",
+	}))
+	writeFrame(&stdin, []byte(`{"jsonrpc":"2.0","id":`))
+	writeFrame(&stdin, mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"method":  "ping",
+	}))
+	writeFrame(&stdin, mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "ok",
+		"method":  "ping",
+	}))
+
+	var stdout bytes.Buffer
+	server := &Server{}
+	if err := server.ServeStdio(&stdin, &stdout); err != nil {
+		t.Fatalf("ServeStdio: %v", err)
+	}
+	responses := readResponses(t, stdout.Bytes())
+	if len(responses) != 4 {
+		t.Fatalf("responses = %d, want 4: %#v", len(responses), responses)
+	}
+	for i, resp := range responses[:2] {
+		errObj := resp["error"].(map[string]any)
+		if got := int(errObj["code"].(float64)); got != -32600 {
+			t.Fatalf("response %d code = %d, want -32600", i, got)
+		}
+	}
+	if got := responses[0]["id"]; got != "missing-method" {
+		t.Fatalf("missing-method id = %#v", got)
+	}
+	if got := responses[1]["id"]; got != "wrong-version" {
+		t.Fatalf("wrong-version id = %#v", got)
+	}
+	if got := int(responses[2]["error"].(map[string]any)["code"].(float64)); got != -32700 {
+		t.Fatalf("parse error code = %d, want -32700", got)
+	}
+	if _, ok := responses[2]["id"]; !ok || responses[2]["id"] != nil {
+		t.Fatalf("parse error id = %#v, want null", responses[2]["id"])
+	}
+	if _, ok := responses[3]["result"].(map[string]any); !ok {
+		t.Fatalf("expected ping result, got %#v", responses[3])
+	}
+}
+
+func TestReadFrameHeaderLimits(t *testing.T) {
+	t.Run("oversized line", func(t *testing.T) {
+		input := strings.Repeat("X", maxRPCHeaderLineBytes+1) + "\r\n\r\n"
+		_, err := readFrame(bufio.NewReader(strings.NewReader(input)))
+		if err == nil || !strings.Contains(err.Error(), "header line exceeds") {
+			t.Fatalf("err = %v, want header line limit", err)
+		}
+	})
+
+	t.Run("oversized preamble", func(t *testing.T) {
+		var input strings.Builder
+		for input.Len() <= maxRPCHeaderBytes {
+			input.WriteString("X-Test: ")
+			input.WriteString(strings.Repeat("a", 512))
+			input.WriteString("\r\n")
+		}
+		input.WriteString("\r\n")
+		_, err := readFrame(bufio.NewReader(strings.NewReader(input.String())))
+		if err == nil || !strings.Contains(err.Error(), "headers exceed") {
+			t.Fatalf("err = %v, want total header limit", err)
+		}
+	})
+
+	t.Run("payload accepted within header limits", func(t *testing.T) {
+		payload := []byte("{}")
+		var input bytes.Buffer
+		input.WriteString("Content-Length: 2\r\n")
+		input.WriteString(strings.Repeat("X-Test: a\r\n", 10))
+		input.WriteString("\r\n")
+		input.Write(payload)
+		got, err := readFrame(bufio.NewReader(&input))
+		if err != nil {
+			t.Fatalf("readFrame: %v", err)
+		}
+		if string(got) != "{}" {
+			t.Fatalf("payload = %q", got)
+		}
+	})
+}
+
+func TestServeStdioWritesFramingError(t *testing.T) {
+	input := strings.Repeat("X", maxRPCHeaderLineBytes+1) + "\r\n\r\n"
+	var stdout bytes.Buffer
+	err := (&Server{}).ServeStdio(strings.NewReader(input), &stdout)
+	if err == nil {
+		t.Fatal("expected framing error")
+	}
+	responses := readResponses(t, stdout.Bytes())
+	if len(responses) != 1 {
+		t.Fatalf("responses = %d, want 1", len(responses))
+	}
+	errObj := responses[0]["error"].(map[string]any)
+	if got := int(errObj["code"].(float64)); got != -32700 {
+		t.Fatalf("code = %d, want -32700", got)
+	}
+	if !strings.Contains(errObj["message"].(string), "framing error") {
+		t.Fatalf("message = %q", errObj["message"])
+	}
+	if responses[0]["id"] != nil {
+		t.Fatalf("id = %#v, want null", responses[0]["id"])
 	}
 }
 
