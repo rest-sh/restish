@@ -7,6 +7,10 @@ description: Install, list, remove, configure, verify, and debug Restish plugins
 
 This is the operator path for using plugins that already exist.
 
+Plugins are executable programs on your machine. Install and run them at your
+own risk, from sources you trust. Restish checks the plugin manifest and
+capabilities, but it does not sandbox plugin code or verify publisher identity.
+
 ## List Plugins
 
 ```bash
@@ -61,11 +65,12 @@ restish plugin install ./restish-csv
 ```
 
 The plugin must be executable and compatible with the v2 plugin protocol. Every
-install path verifies the plugin manifest before keeping the binary. Restish
-shows declared capability families in `plugin list`, and it only enables
-capabilities that the manifest explicitly declares. Restish loads plugins only
-after they are installed into Restish's configured plugin directory; it does
-not scan every executable on `PATH`.
+install path verifies the plugin manifest before keeping the binary, but
+manifest verification is not a security review. Restish shows declared
+capability families in `plugin list`, and it only enables capabilities that the
+manifest explicitly declares. Restish loads plugins only after they are
+installed into Restish's configured plugin directory; it does not scan every
+executable on `PATH`.
 
 ## Remove A Plugin
 

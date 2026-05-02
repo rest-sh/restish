@@ -9,6 +9,9 @@ Plugins are extension points around the Restish runtime. They can add auth,
 request and response middleware, spec loaders, formatters, top-level commands,
 and TLS signing.
 
+Plugins are trusted local executables and run at your own risk. Restish checks
+their manifest and declared capabilities, but it does not sandbox plugin code.
+
 ## Operator vs Author
 
 Operators install, configure, run, verify, and debug plugins. They should start

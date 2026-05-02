@@ -180,8 +180,8 @@ require `-r`.
 
 ## Plugin Safety
 
-Plugins are trusted local executables, but the host still owns several safety
-responsibilities:
+Plugins are trusted local executables that run at the user's own risk. The host
+still owns several safety responsibilities:
 
 - manifest version compatibility checks
 - duplicate-name detection

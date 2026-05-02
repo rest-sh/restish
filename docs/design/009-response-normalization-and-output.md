@@ -138,7 +138,8 @@ should not have to guess which one silently won.
 
 Restish separates `-o` output formats into two families:
 
-- **document formats** such as `json`, `yaml`, and `readable`
+- **document formats** such as `json`, `yaml`, `cbor`, `table`, `gron`, and
+  `readable`
 - **record/value formats** such as `ndjson`, `lines`, and record-oriented
   formatter plugins
 
@@ -150,8 +151,28 @@ Document formats must preserve framing guarantees:
 
 - `-o json` always emits one valid JSON document
 - `-o yaml` always emits one valid YAML document
+- `-o cbor` always emits one CBOR document for the normalized body
 - `-o readable` emits one coherent human-readable response view
 - `-o lines` emits one scalar value per line and rejects structured values
+
+Built-in formatter contracts:
+
+| Format | Contract |
+| --- | --- |
+| `json` | Body or selected value as stable JSON, without HTML escaping. |
+| `yaml` | Body or selected value as YAML; full-response TTY output may include a short status preamble. |
+| `cbor` | Body as CBOR for binary-safe structured pipelines. |
+| `readable` | HTTP preamble plus body presentation for humans. |
+| `table` | Object or array-of-object bodies as a fixed-width table; non-tabular values fall back to JSON. |
+| `gron` | Deterministic `json.<path> = <value>;` assignments for grep-friendly inspection. |
+| `ndjson` | One compact JSON record per line for item streams and event streams. |
+| `lines` | Scalars, or arrays of scalars, as unquoted lines; objects and arrays of objects are errors. |
+| `image` | Terminal presentation for image responses; redirected output keeps original bytes. |
+
+`--rsh-columns` and `--rsh-sort-by` only affect `table`. Table column discovery
+uses stable key ordering, later rows can add extra columns, and long cells are
+truncated for terminal readability. That makes `table` a human scanning format,
+not a lossless interchange format.
 
 Design 028 defines the higher-level planner that combines normalization results
 with pagination, streaming, and filtering.
@@ -185,6 +206,23 @@ A bounded readable response typically includes:
 Readable output is primarily for humans, but it should still preserve the
 meaning of text and structured content rather than aggressively prettifying
 everything into a less faithful shape.
+
+Readable text bodies use presentation helpers only when they do not change the
+underlying response model:
+
+- `text/markdown`, `text/x-markdown`, and Markdown-looking response URLs may be
+  rendered with a terminal Markdown renderer in color-capable TTYs
+- other highlightable text content types or URL extensions may use Chroma
+  syntax highlighting
+- `text/plain`, `application/octet-stream`, unknown text, non-TTY output, or
+  renderer failures fall back to the original printable bytes
+
+The Markdown renderer derives its style from the active Restish theme so
+Markdown bodies and generated help feel coherent with readable JSON and HTTP
+preambles. `GLAMOUR_STYLE` remains an explicit operator escape hatch for users
+who want Glamour's environment-driven behavior instead of Restish's theme. This
+is presentation only; filtered output, machine formats, and redirected bytes
+must not depend on terminal Markdown rendering.
 
 ## Readable Theme Configuration
 

@@ -85,6 +85,26 @@ timeouts, stdout/stderr messages, and passthrough stdio. MCP-specific code owns
 MCP JSON-RPC and tool mapping only; it should not carry a second
 pending-request protocol implementation.
 
+The accepted service invocation is:
+
+```text
+restish mcp serve [flags] <api...>
+```
+
+Flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--operations <id,id>` | Allowlist operation IDs before tool registration. |
+| `--read-only` | Expose only `GET` and `HEAD`, even if write tools are otherwise allowed. |
+| `--allow-write-tools` | Expose `POST`, `PUT`, `PATCH`, and `DELETE` operations. |
+| `--max-result-bytes <n>` | Truncate MCP text results after this many bytes; default is 16 KiB. |
+| `--request-timeout <seconds>` | Per-tool delegated HTTP timeout; default is 60 seconds, `0` disables the local plugin timeout. |
+
+`--http` is intentionally not accepted. The plugin is stdio-first for v2; if an
+HTTP transport returns later, it should be designed as a new explicit service
+mode rather than kept as a hidden compatibility flag.
+
 ## Tool Inclusion Rules
 
 `restish-mcp` only exposes operations that have a stable operation identity.
@@ -94,6 +114,7 @@ Operations are skipped when:
 
 - `x-cli-ignore` is true
 - `x-mcp-ignore` is true
+- `--read-only` is set and the method is not `GET` or `HEAD`
 - the method is `POST`, `PUT`, `PATCH`, or `DELETE` and
   `--allow-write-tools` is not set
 - `--operations` is set and the `operationId` is not allowlisted
@@ -104,7 +125,9 @@ tool names that API authors can reason about.
 MCP is model-facing automation, so it is read-biased by default. Write-like
 operations must require an explicit operator choice even when the OpenAPI spec
 describes them correctly. Explicit hide metadata such as `x-mcp-ignore` remains
-authoritative.
+authoritative. If `--read-only` and `--allow-write-tools` are both supplied,
+read-only wins; this keeps the safer flag dominant in generated MCP client
+configuration.
 
 ## Tool Naming
 

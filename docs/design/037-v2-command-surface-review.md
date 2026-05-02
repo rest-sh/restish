@@ -135,7 +135,7 @@ restish api
     add <api> <credential-id>
     remove <api> <credential-id>
     inspect <api>
-    clear-cache <api>
+    clear-cache [api]
 
 restish config
   path
@@ -252,13 +252,18 @@ V2 uses:
 ```text
 restish api auth clear-cache <api>
 restish api auth clear-cache <api> --all-profiles
-restish api auth clear-cache <api> --auth-profile <name>
+restish api auth clear-cache --auth-profile <name>
 ```
 
 OAuth token cache state is authentication state. Keeping cache recovery beside
 `api auth list`, `api auth add`, and `api auth inspect` makes the workflow
 findable from `restish api auth --help` and avoids overloading the top-level
 `api` object with credential internals.
+
+The API argument is omitted only for `--auth-profile`, because shared auth
+profiles are not owned by a single API. `--all-profiles` still requires an API
+name and clears the API-prefixed token entries plus shared auth-profile entries
+referenced by that API's profiles.
 
 ### Global Flag Discovery Gets Its Own Command
 

@@ -265,6 +265,34 @@ Out-of-process plugins remain the normal extension path for the stock `restish`
 binary. Embedding is for organizations that intentionally ship a distinct CLI
 surface, not for every formatter or workflow extension.
 
+The public Go package should expose only the embedding surface that can be
+supported as a product contract. The current intended surface is:
+
+- `New()` to create an initialized runtime with default streams, paths,
+  registries, and signal handling
+- type aliases for config, content-type, encoding, formatter, link-parser,
+  loader, and auth-handler contracts that embedders are expected to implement
+- registration methods for auth handlers, content types, encodings, link
+  parsers, OpenAPI loaders, and output formatters
+- branding methods for command name, description, and version
+- `SetSignalHandling(false)` for host applications that already own process
+  signal policy
+- `SetDefaultConfig` for bundled API/profile/auth defaults that user config can
+  override
+- `Config()` for inspecting loaded config after a successful `Run`
+- `FetchResponse` for programmatic single-request execution when the embedder
+  wants Restish auth/profile/header behavior but not CLI output planning
+
+`FetchResponse` is deliberately narrower than `Run`. It executes one prepared
+HTTP request, applies profile matching and auth when the URL or API short name
+matches local config, appends caller-supplied raw headers after profile
+headers, decodes and normalizes the response, and returns the normalized
+response object. It does not paginate, stream, retry through the full CLI
+policy, filter, render, inspect status-derived exit codes, or write to stdout
+and stderr. Embedders that need the exact CLI behavior should call `Run`.
+Embedders that need a lower-level HTTP helper should own that helper directly
+instead of expanding `FetchResponse` into a second request pipeline.
+
 This is why central ownership matters: if a command bypasses the runtime, it
 becomes much harder to test and much harder to trust as part of a shared
 pipeline.

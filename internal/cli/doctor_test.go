@@ -1,6 +1,9 @@
 package cli_test
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -23,5 +26,88 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 	if !strings.Contains(got, "Token cache permissions: insecure") ||
 		!strings.Contains(got, "before the next OAuth request") {
 		t.Fatalf("expected token cache remediation, got:\n%s", got)
+	}
+}
+
+func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor", "--json"}); err != nil {
+		t.Fatalf("doctor --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		ConfigFile  string `json:"config_file"`
+		ConfigParse struct {
+			Status   string `json:"status"`
+			APICount int    `json:"api_count"`
+		} `json:"config_parse"`
+		PluginDirectory string `json:"plugin_directory"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.ConfigFile != c.Hooks().ConfigPath {
+		t.Fatalf("config_file = %q, want %q", report.ConfigFile, c.Hooks().ConfigPath)
+	}
+	if report.ConfigParse.Status != "ok" || report.ConfigParse.APICount != 1 {
+		t.Fatalf("unexpected config parse report: %#v", report.ConfigParse)
+	}
+	if report.PluginDirectory == "" {
+		t.Fatal("expected plugin_directory in doctor report")
+	}
+}
+
+func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodHead {
+			t.Fatalf("doctor reachability used %s, want HEAD", r.Method)
+		}
+		return &http.Response{
+			StatusCode: http.StatusMethodNotAllowed,
+			Status:     "405 Method Not Allowed",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Registered   bool `json:"registered"`
+		Reachability struct {
+			Status     string `json:"status"`
+			Checked    bool   `json:"checked"`
+			Reachable  bool   `json:"reachable"`
+			Method     string `json:"method"`
+			StatusCode int    `json:"status_code"`
+			Note       string `json:"note"`
+		} `json:"reachability"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if !report.Registered {
+		t.Fatal("expected registered API")
+	}
+	if report.Reachability.Status != "ok" ||
+		!report.Reachability.Checked ||
+		!report.Reachability.Reachable ||
+		report.Reachability.Method != http.MethodHead ||
+		report.Reachability.StatusCode != http.StatusMethodNotAllowed ||
+		report.Reachability.Note == "" {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
 	}
 }

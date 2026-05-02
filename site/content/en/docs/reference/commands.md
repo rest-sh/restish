@@ -34,12 +34,21 @@ A bare URL is a generic GET.
 
 - `cert`: inspect server TLS certificate chains
 - `content-types`: list registered content types and MIME types
+- `doctor`: diagnose config, runtime paths, APIs, plugins, and v1 migration state
 - `edit`: fetch, edit, and update a resource
 - `links`: print normalized hypermedia links
 - `completion`: generate shell completion scripts
 - `flags`: show the global flag reference
 
 Use `api auth inspect` to inspect configured API auth material.
+
+`doctor` writes human diagnostics to stderr by default. Use `--json` for a
+machine-readable report:
+
+```bash
+restish doctor --json
+restish doctor api example --check-network --json
+```
 
 ## Generated API Commands
 

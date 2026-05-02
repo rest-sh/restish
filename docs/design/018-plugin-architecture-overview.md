@@ -45,6 +45,30 @@ capabilities. Automation can opt in with `--yes`, but the runtime still fails
 closed: a plugin must declare a hook, loader, formatter, signer, or command
 before Restish enables that capability.
 
+Accepted install sources are intentionally explicit:
+
+- a local file path
+- an executable already resolvable on `PATH`
+- an `http` or `https` URL pointing at a plugin binary, `.zip`, `.tar.gz`, or
+  `.tgz`
+- a GitHub latest-release shorthand of the form `owner/repo:plugin`, which
+  resolves one release asset for the current `GOOS`/`GOARCH`
+
+Archive extraction must be defensive. The installer reads archives into a
+bounded temporary directory, accepts only regular files whose basename matches
+the requested plugin name or the `restish-*` plugin convention, flattens archive
+paths before writing, enforces download/member/extracted-size limits, rejects
+archives with zero or multiple plugin candidates, and only then copies the
+selected executable into the plugin directory as `restish-<manifest-name>`.
+The copied file is re-queried for its manifest; if that check fails, the
+installed file is removed.
+
+This installation flow is a trust prompt, not a software-supply-chain proof.
+Plugins run at the user's own risk. Direct URLs and GitHub latest-release
+shorthands do not verify publisher identity. The security model already treats
+installed plugins as trusted local executables, and the install UX must not
+imply otherwise.
+
 The configured plugin directory comes from the same path resolver as the rest
 of Restish config. It should not have a separate helper that accidentally
 ignores XDG or test path overrides.

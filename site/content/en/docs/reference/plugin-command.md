@@ -9,6 +9,10 @@ Plugins extend Restish without making every feature part of the core binary.
 Operators use the `plugin` command to install, list, remove, and debug those
 extensions. Authors use the plugin reference pages to understand the protocols.
 
+Installed plugins are executable code and run at your own risk. Restish checks
+manifests and declared capabilities; it does not sandbox plugins or verify
+publisher identity.
+
 ## Examples
 
 ```bash

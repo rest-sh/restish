@@ -345,6 +345,7 @@ restish get https://api.example.com/items --rsh-ignore-status-code
 
 - Design 001 defines runtime I/O ownership.
 - Design 016 covers setup and completion behavior in more detail.
+- Design 038 defines the `doctor` health-check command family.
 - Design 028 defines output-family behavior.
 - Design 029 defines execution and cancellation flow.
 - Design 030 defines redaction and safety rules.
