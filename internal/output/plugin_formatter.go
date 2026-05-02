@@ -2,6 +2,7 @@ package output
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -123,7 +124,12 @@ func (f *PluginFormatter) context() context.Context {
 type pluginFormatterStream struct {
 	pluginPath string
 	formatName string
-	stream     *plugin.FormatterStream
+	stream     formatterStream
+}
+
+type formatterStream interface {
+	Send(any) error
+	Close() error
 }
 
 func (s *pluginFormatterStream) WriteValue(value any) error {
@@ -141,15 +147,14 @@ func (s *pluginFormatterStream) WriteValue(value any) error {
 }
 
 func (s *pluginFormatterStream) Close() error {
-	if err := s.stream.Send(pluginwire.FormatterRequest{
+	sendErr := s.stream.Send(pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: s.formatName,
 		Event:  "end",
-	}); err != nil {
-		return fmt.Errorf("formatter plugin %s: %w", s.formatName, err)
-	}
-	if err := s.stream.Close(); err != nil {
-		return fmt.Errorf("formatter plugin %s: %w", s.formatName, err)
+	})
+	closeErr := s.stream.Close()
+	if sendErr != nil || closeErr != nil {
+		return fmt.Errorf("formatter plugin %s: %w", s.formatName, errors.Join(sendErr, closeErr))
 	}
 	return nil
 }
