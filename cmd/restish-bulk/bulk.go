@@ -30,6 +30,8 @@ const (
 	defaultJobs = 4
 )
 
+var renameBulkFile = os.Rename
+
 type File struct {
 	Path          string `json:"path"`
 	URL           string `json:"url"`
@@ -345,10 +347,7 @@ func (m *Meta) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(metaDir, 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(metaFile, append(data, '\n'), 0o600)
+	return atomicWriteBulkFile(metaFile, append(data, '\n'), 0o600)
 }
 
 func (a *app) pullIndex(m *Meta) error {
@@ -395,15 +394,20 @@ func (a *app) pullIndex(m *Meta) error {
 		entries = append(entries, listEntry{URL: rawURL, Version: version})
 	}
 
-	baseURL, _ := url.Parse(normalizedBaseURL(m.URL))
+	baseURL, err := url.Parse(normalizedBaseURL(m.URL))
+	if err != nil {
+		return fmt.Errorf("invalid bulk index URL %q: %w", m.URL, err)
+	}
 	m.Base = commonPrefix(baseURL, entries)
 
 	for _, f := range m.Files {
 		f.VersionRemote = ""
 	}
 	for _, entry := range entries {
-		u, _ := url.Parse(entry.URL)
-		resolved := baseURL.ResolveReference(u).String()
+		resolved, err := resolveBulkEntryURL(baseURL, entry.URL)
+		if err != nil {
+			return err
+		}
 		relPath, err := bulkRelativePath(m.Base, resolved)
 		if err != nil {
 			return err
@@ -416,6 +420,17 @@ func (a *app) pullIndex(m *Meta) error {
 		f.VersionRemote = entry.Version
 	}
 	return nil
+}
+
+func resolveBulkEntryURL(baseURL *url.URL, raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid bulk resource URL %q: %w", raw, err)
+	}
+	if u == nil {
+		return "", fmt.Errorf("invalid bulk resource URL %q", raw)
+	}
+	return baseURL.ResolveReference(u).String(), nil
 }
 
 func (a *app) pull(m *Meta, jobs int) error {
@@ -1135,6 +1150,48 @@ func prettyJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+func atomicWriteBulkFile(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := renameBulkFile(tmpName, path); err != nil {
+		return err
+	}
+	renamed = true
+	if dirFile, err := os.Open(dir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+	return nil
 }
 
 func hashBytes(data []byte) []byte {

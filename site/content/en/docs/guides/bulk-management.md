@@ -31,6 +31,9 @@ restish bulk init https://api.rest.sh/books
 
 The plugin fetches the collection through Restish, writes resources to disk, and
 keeps metadata needed for later status, pull, reset, and push operations.
+Collection entries must include valid resource URLs. Relative URLs are resolved
+against the collection URL; malformed URLs stop the checkout with a clear error
+instead of creating partial local paths.
 
 ## Daily Workflow
 
@@ -43,6 +46,9 @@ restish bulk push
 
 Use `status` before `push` so you know which local files changed and whether
 remote updates exist.
+
+Bulk metadata is saved atomically after completed file updates, so interrupted
+long pulls or pushes keep the last completed checkout state.
 
 `push` is conservative. Updates and deletes require an HTTP validator
 (`ETag`/`Last-Modified`) or matching local/remote version metadata. When that

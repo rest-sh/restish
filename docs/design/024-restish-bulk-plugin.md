@@ -75,6 +75,9 @@ The checkout is therefore a hybrid:
 Remote resource paths are resolved against the configured collection/base URL
 before local checkout paths or common prefixes are computed. This preserves
 relative URLs from APIs and avoids writing files under the wrong local path.
+Malformed resource URLs in the remote index are treated as data errors and fail
+the refresh with a clear diagnostic; the plugin must not pass a nil parsed URL
+into `ResolveReference` or skip corrupted index data silently.
 
 ## Per-Resource Metadata
 
@@ -97,6 +100,11 @@ Metadata should continue to be saved after each resource update rather than
 only once at the end of a command. That is an intentional resilience tradeoff:
 an interrupted long-running pull or push should preserve as much completed work
 as possible.
+
+Metadata writes are atomic: write a same-directory temporary file, fsync it,
+rename it over `.rshbulk/meta`, then best-effort fsync the metadata directory.
+This avoids corrupting the entire checkout state if a process is interrupted
+while metadata is being rewritten.
 
 ## HTTP Delegation
 

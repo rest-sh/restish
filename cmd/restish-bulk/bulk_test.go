@@ -77,6 +77,106 @@ func TestCommonPrefixResolvesAgainstBaseURL(t *testing.T) {
 	}
 }
 
+func TestPullIndexRejectsMalformedEntryURL(t *testing.T) {
+	var out bytes.Buffer
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			return &httpResponse{
+				Status: 200,
+				Body: []any{
+					map[string]any{"url": "http://[::1", "version": "v1"},
+				},
+			}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{URL: "https://api.example.com/index", Files: map[string]*File{}}
+	err := a.pullIndex(meta)
+	if err == nil {
+		t.Fatal("expected malformed URL error")
+	}
+	if !strings.Contains(err.Error(), "invalid bulk resource URL") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPullIndexResolvesRelativeEntryURLs(t *testing.T) {
+	var out bytes.Buffer
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			return &httpResponse{
+				Status: 200,
+				Body: []any{
+					map[string]any{"url": "/items/one", "version": "v1"},
+					map[string]any{"url": "/items/two", "version": "v2"},
+				},
+			}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{URL: "https://api.example.com/index", Files: map[string]*File{}}
+	if err := a.pullIndex(meta); err != nil {
+		t.Fatalf("pullIndex: %v", err)
+	}
+	if got := meta.Files["one.json"].URL; got != "https://api.example.com/items/one" {
+		t.Fatalf("one URL = %q", got)
+	}
+	if got := meta.Files["two.json"].VersionRemote; got != "v2" {
+		t.Fatalf("two version = %q", got)
+	}
+}
+
+func TestMetaSaveUsesAtomicRenameAndReplacesExistingFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(metaFile, []byte(`{"url":"old"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRename := renameBulkFile
+	var sawTemp bool
+	renameBulkFile = func(oldpath, newpath string) error {
+		if filepath.Dir(oldpath) != metaDir || filepath.Base(newpath) != "meta" {
+			t.Fatalf("rename %q -> %q does not use metadata temp path", oldpath, newpath)
+		}
+		if !strings.Contains(filepath.Base(oldpath), ".meta-") || !strings.HasSuffix(oldpath, ".tmp") {
+			t.Fatalf("temp name = %q, want .meta-*.tmp", oldpath)
+		}
+		if _, err := os.Stat(oldpath); err != nil {
+			t.Fatalf("temp file missing before rename: %v", err)
+		}
+		sawTemp = true
+		return oldRename(oldpath, newpath)
+	}
+	t.Cleanup(func() { renameBulkFile = oldRename })
+
+	meta := &Meta{URL: "https://api.example.com/items", Files: map[string]*File{"one.json": {Path: "one.json", URL: "https://api.example.com/items/one"}}}
+	if err := meta.save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if !sawTemp {
+		t.Fatal("rename hook was not called")
+	}
+	data, err := os.ReadFile(metaFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "old") || !strings.Contains(string(data), "one.json") {
+		t.Fatalf("metadata was not replaced atomically, got %s", data)
+	}
+	matches, err := filepath.Glob(filepath.Join(metaDir, ".meta-*.tmp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary files left behind: %#v", matches)
+	}
+}
+
 func TestFetchFilesHonorsJobsLimit(t *testing.T) {
 	t.Chdir(t.TempDir())
 	var out bytes.Buffer
