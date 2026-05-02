@@ -62,7 +62,7 @@ func TestBuildAPICommandWarnsOnModelFailure(t *testing.T) {
 func buildSpecWithPaths(t *testing.T, yamlBody string) *spec.APISpec {
 	t.Helper()
 	loaders := spec.DefaultLoaders()
-	s, err := loaders[0].Load([]byte(yamlBody))
+	s, err := loaders[0].LoadWithOptions([]byte(yamlBody), spec.LoadOptions{})
 	if err != nil {
 		t.Fatalf("build spec: %v", err)
 	}

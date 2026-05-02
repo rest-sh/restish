@@ -204,7 +204,7 @@ func (l *countingLoader) Detect(contentType string, body []byte) bool {
 	return false
 }
 
-func (l *countingLoader) Load(body []byte) (*spec.APISpec, error) {
+func (l *countingLoader) LoadWithOptions(body []byte, _ spec.LoadOptions) (*spec.APISpec, error) {
 	return nil, nil
 }
 

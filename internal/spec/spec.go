@@ -18,8 +18,8 @@ import (
 type Loader interface {
 	// Detect returns true if this loader recognises the content type and/or body.
 	Detect(contentType string, body []byte) bool
-	// Load parses body and returns a structured APISpec.
-	Load(body []byte) (*APISpec, error)
+	// LoadWithOptions parses body and returns a structured APISpec.
+	LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, error)
 	// Priority determines loader selection order; higher priority wins.
 	Priority() int
 }
@@ -159,7 +159,7 @@ func loadWithOptions(contentType string, body []byte, loaders []Loader, opts Loa
 	if best == nil {
 		return nil, nil
 	}
-	spec, err := loadWithLoaderOptions(best, body, opts)
+	spec, err := best.LoadWithOptions(body, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -177,21 +177,6 @@ func loadWithOptions(contentType string, body []byte, loaders []Loader, opts Loa
 	}
 	spec.AllowCrossOrigin = opts.AllowCrossOrigin
 	return spec, nil
-}
-
-func loadWithLoaderOptions(loader Loader, body []byte, opts LoadOptions) (*APISpec, error) {
-	switch l := loader.(type) {
-	case OpenAPILoader:
-		return l.LoadWithOptions(body, opts)
-	case *OpenAPILoader:
-		return l.LoadWithOptions(body, opts)
-	case interface {
-		LoadWithOptions([]byte, LoadOptions) (*APISpec, error)
-	}:
-		return l.LoadWithOptions(body, opts)
-	default:
-		return loader.Load(body)
-	}
 }
 
 // pickLoader returns the highest-priority loader that detects the content, or nil.

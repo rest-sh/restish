@@ -168,6 +168,22 @@ Loaders are registered in priority order. Sources include:
 - built-in loaders
 - plugin-provided loaders
 
+The internal loader interface is options-aware by default:
+
+```go
+type Loader interface {
+    Detect(contentType string, body []byte) bool
+    LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, error)
+    Priority() int
+}
+```
+
+`LoadOptions` carries request context, source URL/local path, transport, content
+type, and the cross-origin reference policy. This avoids parallel `Load` /
+`LoadWithOptions` APIs and makes reference-resolution context part of the
+canonical loader contract. Concrete loaders may expose local convenience
+methods, but core dispatch should call the options-aware method.
+
 Selection rules should be explicit:
 
 - content-type hints may narrow candidates
