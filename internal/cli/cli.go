@@ -384,17 +384,18 @@ func (c *CLI) Run(args []string) error {
 	ctx, cancel := c.rootContext()
 	defer cancel()
 
+	argScan := scanCLIArgs(args)
 	c.retryUnsafeWarned = false
 
 	if c.hooks.ConfigPath == "" {
-		if configPath, ok := explicitConfigPathFromArgs(args); ok {
-			c.Paths = config.NewPathsWithConfigFile(configPath)
+		if argScan.ExplicitConfigPath {
+			c.Paths = config.NewPathsWithConfigFile(argScan.ConfigPath)
 			c.explicitConfigFile = true
 		} else if os.Getenv("RSH_CONFIG") != "" {
 			c.explicitConfigFile = true
 		}
 	}
-	if pathErr := c.paths().ConfigError(); pathErr != nil && c.hooks.ConfigPath == "" && !c.explicitConfigFile && !isBootstrapCommand(args) {
+	if pathErr := c.paths().ConfigError(); pathErr != nil && c.hooks.ConfigPath == "" && !c.explicitConfigFile && !argScan.Bootstrap {
 		return pathErr
 	}
 
@@ -423,7 +424,7 @@ func (c *CLI) Run(args []string) error {
 
 	cfg, err := c.loadConfig()
 	if err != nil {
-		if isBootstrapCommand(args) {
+		if argScan.Bootstrap {
 			c.cfg = &config.Config{}
 			root := c.newRootCmd()
 			return c.executeRoot(ctx, root, args)
@@ -487,8 +488,8 @@ func (c *CLI) Run(args []string) error {
 	// API's cached spec to avoid eagerly parsing every registered API.
 	// (Network discovery is not triggered here; use "restish api sync <name>"
 	// to prime the cache for an API.)
-	startupProfile := profileNameFromArgs(args)
-	for _, apiName := range c.generatedAPINames(args, cfg) {
+	startupProfile := argScan.ProfileName
+	for _, apiName := range c.generatedAPINamesForScan(argScan, cfg) {
 		apiCfg := cfg.APIs[apiName]
 		opOpts := spec.OperationOptions{
 			BaseURL:         apiCfg.BaseURL,
@@ -549,53 +550,88 @@ func (c *CLI) rootContext() (context.Context, context.CancelFunc) {
 	return signalAwareContext()
 }
 
-func isBootstrapCommand(args []string) bool {
-	if len(args) <= 1 {
-		return true
-	}
-	for _, arg := range args[1:] {
-		if arg == "--help" || arg == "-h" || arg == "--version" {
-			return true
-		}
-	}
-	first := firstCommandArg(args)
-	switch first {
-	case "help", "completion", "version", "doctor", "__complete", "__completeNoDesc":
-		return true
-	default:
-		return false
-	}
+type cliArgScan struct {
+	FirstCommand            string
+	ProfileName             string
+	ConfigPath              string
+	ExplicitConfigPath      bool
+	Bootstrap               bool
+	GeneratedAPICommandTree bool
 }
 
-func firstCommandArg(args []string) string {
-	valueFlags := map[string]bool{
-		"--rsh-config":        true,
-		"--rsh-profile":       true,
-		"-p":                  true,
-		"--rsh-output-format": true,
-		"-o":                  true,
-		"--rsh-header":        true,
-		"-H":                  true,
-		"--rsh-query":         true,
-		"-q":                  true,
+func scanCLIArgs(args []string) cliArgScan {
+	scan := cliArgScan{ProfileName: os.Getenv("RSH_PROFILE")}
+	if scan.ProfileName == "" {
+		scan.ProfileName = "default"
 	}
+	if len(args) <= 1 {
+		scan.Bootstrap = true
+		return scan
+	}
+
+	hasBootstrapFlag := false
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
+		switch arg {
+		case "--help", "-h", "--version":
+			hasBootstrapFlag = true
+		case "help", "__complete", "__completeNoDesc":
+			scan.GeneratedAPICommandTree = true
+		}
+
 		if arg == "--" {
-			if i+1 < len(args) {
-				return args[i+1]
+			if scan.FirstCommand == "" && i+1 < len(args) {
+				scan.FirstCommand = args[i+1]
 			}
-			return ""
+			break
 		}
-		if strings.HasPrefix(arg, "-") {
-			if valueFlags[arg] && i+1 < len(args) {
-				i++
+		if arg == "help" || arg == "__complete" || arg == "__completeNoDesc" {
+			scan.GeneratedAPICommandTree = true
+		}
+
+		consumesNext := false
+		if strings.HasPrefix(arg, "--rsh-config=") {
+			value := strings.TrimPrefix(arg, "--rsh-config=")
+			scan.ConfigPath = value
+			scan.ExplicitConfigPath = value != ""
+		} else if arg == "--rsh-config" {
+			consumesNext = true
+			if i+1 < len(args) && args[i+1] != "" {
+				scan.ConfigPath = args[i+1]
+				scan.ExplicitConfigPath = true
 			}
-			continue
+		} else if strings.HasPrefix(arg, "--rsh-profile=") {
+			if value := strings.TrimPrefix(arg, "--rsh-profile="); value != "" {
+				scan.ProfileName = value
+			}
+		} else if arg == "--rsh-profile" || arg == "-p" {
+			consumesNext = true
+			if i+1 < len(args) && args[i+1] != "" {
+				scan.ProfileName = args[i+1]
+			}
+		} else if strings.HasPrefix(arg, "-p") && len(arg) > 2 {
+			scan.ProfileName = strings.TrimPrefix(arg, "-p")
+		} else if strings.HasPrefix(arg, "-") {
+			consumesNext = flagConsumesNextArg(arg)
 		}
-		return arg
+
+		if scan.FirstCommand == "" && !strings.HasPrefix(arg, "-") {
+			scan.FirstCommand = arg
+		}
+		if consumesNext && i+1 < len(args) {
+			i++
+		}
 	}
-	return ""
+
+	switch scan.FirstCommand {
+	case "help", "completion", "version", "doctor", "__complete", "__completeNoDesc":
+		scan.Bootstrap = true
+	}
+	if hasBootstrapFlag {
+		scan.Bootstrap = true
+		scan.GeneratedAPICommandTree = true
+	}
+	return scan
 }
 
 func signalAwareContext() (context.Context, context.CancelFunc) {
@@ -622,57 +658,6 @@ func isSignalCancellation(err error, ctx context.Context) bool {
 	return err != nil &&
 		errors.Is(err, context.Canceled) &&
 		errors.Is(context.Cause(ctx), errSignalCanceled)
-}
-
-func profileNameFromArgs(args []string) string {
-	profile := os.Getenv("RSH_PROFILE")
-	if profile == "" {
-		profile = "default"
-	}
-	for i := 1; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if strings.HasPrefix(arg, "--rsh-profile=") {
-			value := strings.TrimPrefix(arg, "--rsh-profile=")
-			if value != "" {
-				profile = value
-			}
-			continue
-		}
-		if arg == "--rsh-profile" || arg == "-p" {
-			if i+1 < len(args) && args[i+1] != "" {
-				profile = args[i+1]
-				i++
-			}
-			continue
-		}
-		if strings.HasPrefix(arg, "-p") && len(arg) > 2 {
-			profile = strings.TrimPrefix(arg, "-p")
-		}
-	}
-	return profile
-}
-
-func explicitConfigPathFromArgs(args []string) (string, bool) {
-	for i := 1; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if strings.HasPrefix(arg, "--rsh-config=") {
-			value := strings.TrimPrefix(arg, "--rsh-config=")
-			return value, value != ""
-		}
-		if arg == "--rsh-config" {
-			if i+1 < len(args) && args[i+1] != "" {
-				return args[i+1], true
-			}
-			return "", false
-		}
-	}
-	return "", false
 }
 
 func effectiveServerVariables(apiCfg *config.APIConfig, profileName string) map[string]string {
@@ -770,39 +755,20 @@ func isBuiltinCommandName(name string) bool {
 // value-taking flags consume the next token as their value unless it starts
 // with "-"; bool/count flags do not consume the API name.
 func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
-	if generatedAPICommandTreeRequested(args) {
-		return sortedAPINames(cfg)
-	}
-
-	// Scan past the program name and any leading flags.
-	toks := args[1:]
-	for len(toks) > 0 {
-		t := toks[0]
-		toks = toks[1:]
-		if !strings.HasPrefix(t, "-") {
-			if _, ok := cfg.APIs[t]; ok {
-				return []string{t}
-			}
-			return nil
-		}
-		// Flag token: --flag=value is self-contained; otherwise only flags
-		// that actually take values consume the following token.
-		if flagConsumesNextArg(t) && len(toks) > 0 && !strings.HasPrefix(toks[0], "-") {
-			toks = toks[1:]
-		}
-	}
-
-	return sortedAPINames(cfg)
+	return c.generatedAPINamesForScan(scanCLIArgs(args), cfg)
 }
 
-func generatedAPICommandTreeRequested(args []string) bool {
-	for _, arg := range args[1:] {
-		switch arg {
-		case "--help", "-h", "help", "__complete", "__completeNoDesc":
-			return true
-		}
+func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
+	if scan.GeneratedAPICommandTree {
+		return sortedAPINames(cfg)
 	}
-	return false
+	if scan.FirstCommand == "" {
+		return sortedAPINames(cfg)
+	}
+	if _, ok := cfg.APIs[scan.FirstCommand]; ok {
+		return []string{scan.FirstCommand}
+	}
+	return nil
 }
 
 func sortedAPINames(cfg *config.Config) []string {
