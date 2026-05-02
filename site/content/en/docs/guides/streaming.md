@@ -44,6 +44,8 @@ restish https://api.rest.sh/logs --rsh-max-events 3 --rsh-timeout 5s
 Very large NDJSON records use the same per-response cap as bounded responses.
 Raise it with `--rsh-max-body-size` when a stream legitimately emits large
 single-line records.
+SSE uses the same line cap and also caps the accumulated `data:` payload for one
+event, including multi-line events.
 
 ## Accept Headers
 
@@ -68,6 +70,8 @@ restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -o lines
 
 - multiple `data:` lines are joined into one event payload
 - a blank line ends an event
+- lines starting with `:` are comments
+- a field without `:` has an empty value
 - event metadata is preserved in the normalized event output
 - automatic reconnect is not a replacement for application-level retry logic
 

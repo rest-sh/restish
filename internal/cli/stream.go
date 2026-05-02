@@ -3,11 +3,10 @@ package cli
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/filter"
@@ -58,7 +57,10 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		}
 	}()
 
-	reader := bufio.NewReader(resp.Body)
+	scanner := bufio.NewScanner(resp.Body)
+	lineLimit := maxStreamLineBytes(cmd)
+	eventLimit := maxSSEEventBytes(cmd)
+	scanner.Buffer(make([]byte, 64*1024), lineLimit)
 	var eventName string
 	var eventID string
 	var retryMs int
@@ -97,33 +99,39 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		return nil
 	}
 
-	for {
-		line, readErr := reader.ReadString('\n')
-		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return fmt.Errorf("SSE stream error: %w", readErr)
-		}
-		line = strings.TrimRight(line, "\r\n")
-
+	stoppedByMax := false
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
 		if line == "" {
 			// Blank line terminates an event.
 			if err := flush(); err != nil {
 				return err
 			}
 			if maxEvents > 0 && count >= maxEvents {
-				break
-			}
-			if errors.Is(readErr, io.EOF) {
+				stoppedByMax = true
 				break
 			}
 			continue
 		}
 
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
 		field, value, hasColon := strings.Cut(line, ":")
 		if hasColon {
 			value = strings.TrimPrefix(value, " ")
+		} else {
+			value = ""
 		}
 		switch field {
 		case "data":
+			nextLen := data.Len() + len(value)
+			if data.Len() > 0 {
+				nextLen++
+			}
+			if nextLen > eventLimit {
+				return fmt.Errorf("SSE event data exceeds %d bytes", eventLimit)
+			}
 			if data.Len() > 0 {
 				data.WriteByte('\n')
 			}
@@ -133,17 +141,24 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		case "id":
 			eventID = value
 		case "retry":
-			var retry int
-			if _, err := fmt.Sscanf(value, "%d", &retry); err == nil {
+			if retry, err := strconv.Atoi(value); err == nil {
 				retryMs = retry
 			}
 		}
+	}
 
-		if errors.Is(readErr, io.EOF) {
-			if err := flush(); err != nil {
-				return err
-			}
-			break
+	if err := scanner.Err(); err != nil {
+		if stoppedByMax {
+			return nil
+		}
+		if strings.Contains(err.Error(), "token too long") {
+			return fmt.Errorf("SSE stream line exceeds %d bytes", lineLimit)
+		}
+		return fmt.Errorf("SSE stream error: %w", err)
+	}
+	if !stoppedByMax {
+		if err := flush(); err != nil {
+			return err
 		}
 	}
 
@@ -223,6 +238,10 @@ func maxStreamLineBytes(cmd *cobra.Command) int {
 		return int(maxInt)
 	}
 	return int(maxBytes)
+}
+
+func maxSSEEventBytes(cmd *cobra.Command) int {
+	return maxStreamLineBytes(cmd)
 }
 
 // renderStreamValue applies the active filter to one streamed item and renders

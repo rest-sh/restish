@@ -85,6 +85,9 @@ SSE support should preserve the usual event framing rules:
 
 - join multiple `data:` lines into one event payload
 - treat blank lines as event boundaries
+- treat a field without `:` as a field with an empty value
+- treat lines beginning with `:` as comments
+- parse `retry` with integer parsing and ignore invalid retry values
 - ignore or minimally process non-`data:` fields unless and until Restish
   decides to expose a richer SSE event object model
 
@@ -141,6 +144,10 @@ Important controls:
 
 - context cancellation should interrupt stream reads promptly
 - `--rsh-max-events` provides a simple safety limit for both SSE and NDJSON
+- SSE and NDJSON per-line reads are capped by the stream line limit derived
+  from `--rsh-max-body-size`
+- SSE accumulated `data:` payload for one event is capped separately by the
+  same stream-size budget so many continuation lines cannot grow without bound
 - end-of-stream should be treated as normal completion
 
 Stream reads should not hang indefinitely after the user canceled the command.

@@ -464,7 +464,7 @@ func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "get", srv.URL + "/events"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
 	if exitCode(err) != 4 {
 		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
 	}
@@ -532,11 +532,36 @@ func TestSSELargeEventExceedsScannerLimit(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
-		t.Fatalf("get: %v", err)
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
+	if err == nil {
+		t.Fatal("expected oversized SSE line error")
 	}
-	if !strings.Contains(out.String(), largePayload[:1024]) {
-		t.Fatalf("expected large SSE payload in output")
+	if !strings.Contains(err.Error(), "SSE stream line exceeds") {
+		t.Fatalf("expected SSE line limit error, got %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("expected no output for oversized line, got %q", out.String())
+	}
+}
+
+func TestSSEEventDataLimit(t *testing.T) {
+	chunk := strings.Repeat("x", 600*1024)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\ndata: %s\n\n", chunk, chunk)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
+	if err == nil {
+		t.Fatal("expected oversized SSE event error")
+	}
+	if !strings.Contains(err.Error(), "SSE event data exceeds") {
+		t.Fatalf("expected SSE event limit error, got %v", err)
 	}
 }
 
@@ -557,6 +582,28 @@ func TestSSEMalformedLinesDoNotAbortStream(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"n":1`) {
 		t.Fatalf("expected event after malformed line, got %q", out.String())
+	}
+}
+
+func TestSSECommentsAndRetryParsing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, ": ignore this comment\n")
+		fmt.Fprint(w, "retry: 250\n")
+		fmt.Fprint(w, "retry: nope\n")
+		fmt.Fprint(w, "data: {\"n\":1}\n\n")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", ".body.retry", "-o", "lines"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "250" {
+		t.Fatalf("retry output = %q, want 250", got)
 	}
 }
 
