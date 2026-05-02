@@ -18,6 +18,11 @@ demonstrate or render those behaviors, but it should consume documented
 examples or generated data where practical rather than reimplementing CLI
 rules.
 
+Embedding lifecycle behavior, including whether a `CLI` instance installs
+process-level SIGINT/SIGTERM handling, is also owned by the Go API. Site or
+playground JavaScript must not duplicate signal-control semantics or present
+them as browser-runtime behavior.
+
 ## Review Scope
 
 Review the JavaScript implementation and docs-site integration for:

@@ -71,6 +71,8 @@ type testHooks struct {
 	PluginManifestCachePath string
 	// RetryBaseDelay overrides the 1 s default backoff base for retries.
 	RetryBaseDelay time.Duration
+	// SignalAwareContext overrides signal-aware root context creation in tests.
+	SignalAwareContext func() (context.Context, context.CancelFunc)
 }
 
 // CLI holds all state for a Restish instance. Using a struct instead of
@@ -108,6 +110,7 @@ type CLI struct {
 	requestClosers      []requestCloserEntry
 	explicitConfigFile  bool
 	retryUnsafeWarned   bool
+	signalHandling      bool
 }
 
 type requestCloserEntry struct {
@@ -118,14 +121,15 @@ type requestCloserEntry struct {
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
 func New() *CLI {
 	return &CLI{
-		Stdin:       os.Stdin,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Paths:       config.NewPaths(),
-		content:     content.Default(),
-		loaders:     spec.DefaultLoaders(),
-		linkParsers: hypermedia.DefaultParsers(),
-		formatters:  output.DefaultFormatters(),
+		Stdin:          os.Stdin,
+		Stdout:         os.Stdout,
+		Stderr:         os.Stderr,
+		Paths:          config.NewPaths(),
+		content:        content.Default(),
+		loaders:        spec.DefaultLoaders(),
+		linkParsers:    hypermedia.DefaultParsers(),
+		formatters:     output.DefaultFormatters(),
+		signalHandling: true,
 	}
 }
 
@@ -201,6 +205,14 @@ func (c *CLI) SetCommandDescription(short, long string) {
 // SetVersion changes the version shown by this CLI instance.
 func (c *CLI) SetVersion(version string) {
 	c.commandVersion = strings.TrimSpace(version)
+}
+
+// SetSignalHandling controls whether Run installs process-level SIGINT/SIGTERM
+// handling for this CLI instance. It is enabled by default for the stock CLI.
+// Embedders that already own process signal handling can disable it so Restish
+// does not register competing process signal handlers.
+func (c *CLI) SetSignalHandling(enabled bool) {
+	c.signalHandling = enabled
 }
 
 // SetDefaultConfig installs in-memory API/profile defaults that are merged
@@ -376,10 +388,9 @@ func (c *CLI) baseHTTPTransport() http.RoundTripper {
 
 // Run executes the CLI with the provided arguments (pass os.Args from main).
 func (c *CLI) Run(args []string) error {
-	// Install a signal-aware context so that Ctrl-C / SIGTERM propagates to all
-	// in-flight requests and spec discovery without needing explicit signal
-	// handling elsewhere.
-	ctx, cancel := signalAwareContext()
+	// Build the root context once so requests, discovery, plugins, and
+	// formatters all share the same cancellation source.
+	ctx, cancel := c.rootContext()
 	defer cancel()
 
 	c.retryUnsafeWarned = false
@@ -537,6 +548,16 @@ func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []strin
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
 	return root.ExecuteContext(ctx)
+}
+
+func (c *CLI) rootContext() (context.Context, context.CancelFunc) {
+	if !c.signalHandling {
+		return context.WithCancel(context.Background())
+	}
+	if c.hooks.SignalAwareContext != nil {
+		return c.hooks.SignalAwareContext()
+	}
+	return signalAwareContext()
 }
 
 func isBootstrapCommand(args []string) bool {

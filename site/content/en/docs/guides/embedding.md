@@ -31,6 +31,15 @@ func main() {
 }
 ```
 
+`Run` installs SIGINT/SIGTERM handling by default so Ctrl-C cancels in-flight
+requests in the stock CLI. If your application already owns process signal
+handling, disable Restish's handler before running:
+
+```go
+cli := restish.New()
+cli.SetSignalHandling(false)
+```
+
 ## Custom Auth
 
 Register an auth handler under the `auth.type` name your config will use:

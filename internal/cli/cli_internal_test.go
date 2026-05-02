@@ -88,6 +88,38 @@ func TestIsSignalCancellationRequiresSignalCause(t *testing.T) {
 	}
 }
 
+func TestRootContextUsesSignalHandlingByDefault(t *testing.T) {
+	c := New()
+	called := false
+	c.hooks.SignalAwareContext = func() (context.Context, context.CancelFunc) {
+		called = true
+		return context.WithCancel(context.Background())
+	}
+
+	_, cancel := c.rootContext()
+	cancel()
+
+	if !called {
+		t.Fatal("default CLI should install signal-aware context")
+	}
+}
+
+func TestSetSignalHandlingFalseUsesPlainContext(t *testing.T) {
+	c := New()
+	c.SetSignalHandling(false)
+	c.hooks.SignalAwareContext = func() (context.Context, context.CancelFunc) {
+		t.Fatal("signal-aware context should not be installed when signal handling is disabled")
+		return context.WithCancel(context.Background())
+	}
+
+	ctx, cancel := c.rootContext()
+	cancel()
+
+	if isSignalCancellation(context.Canceled, ctx) {
+		t.Fatal("plain cancellation should not map to signal exit")
+	}
+}
+
 func TestGeneratedAPINames_FastPath(t *testing.T) {
 	cfg := &config.Config{
 		APIs: map[string]*config.APIConfig{

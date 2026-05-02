@@ -168,8 +168,11 @@ construction must be offline-safe.
 
 ### 6. Dispatch
 
-Command execution begins with a root context derived from signal-aware
-cancellation. Every later context should derive from that root.
+Command execution begins with a root context. The stock CLI derives that
+context from signal-aware cancellation so SIGINT/SIGTERM propagate through
+in-flight work. Embedders may disable Restish's process-level signal handling
+for an individual `CLI` instance when the host application already owns signal
+policy. Every later context should derive from the chosen root.
 
 ### 7. Teardown
 
