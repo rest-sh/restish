@@ -55,6 +55,7 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	}
 
 	prepared, err := c.prepareRequest(
+		context.Background(),
 		"svc/items",
 		"default",
 		request.Options{
@@ -109,6 +110,7 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 func TestPrepareRequestBypassesCacheBeforeTransportForUnnamespacedAuth(t *testing.T) {
 	c := New()
 	prepared, err := c.prepareRequest(
+		context.Background(),
 		"https://api.example.com/items",
 		"default",
 		request.Options{
@@ -173,22 +175,23 @@ func TestApplyAPIProfileMergesProfileTLSWithFlagPrecedence(t *testing.T) {
 	}
 }
 
-func TestClosePreparedTransportUnregistersRequestCloser(t *testing.T) {
+func TestClosePreparedTransportStopsContextCloser(t *testing.T) {
 	c := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	closer := &countingCloser{}
-	closerID := c.registerRequestCloser(closer)
+	stopClose := context.AfterFunc(ctx, func() {
+		_ = closer.Close()
+	})
 
-	c.closePreparedTransport(&preparedRequest{closer: closer, closerID: closerID})
+	c.closePreparedTransport(&preparedRequest{closer: closer, stopClose: stopClose})
 	if closer.closes != 1 {
 		t.Fatalf("Close calls = %d, want 1", closer.closes)
 	}
-	if len(c.requestClosers) != 0 {
-		t.Fatalf("requestClosers length = %d, want 0", len(c.requestClosers))
-	}
 
-	c.closeRequestClosers()
+	cancel()
 	if closer.closes != 1 {
-		t.Fatalf("closeRequestClosers closed unregistered closer again: %d", closer.closes)
+		t.Fatalf("context cancellation closed transport again: %d", closer.closes)
 	}
 }
 
@@ -223,7 +226,7 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 		},
 	}
 
-	prepared, err := c.prepareRequest("svc/items", "default", request.Options{}, nil, nil, true, authHandlerOptions{}, nil)
+	prepared, err := c.prepareRequest(context.Background(), "svc/items", "default", request.Options{}, nil, nil, true, authHandlerOptions{}, nil)
 	if err != nil {
 		t.Fatalf("prepareRequest() error = %v", err)
 	}
@@ -342,7 +345,7 @@ func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := c.prepareRequest("svc/items", "missing", request.Options{}, nil, nil, false, authHandlerOptions{}, nil)
+	_, err := c.prepareRequest(context.Background(), "svc/items", "missing", request.Options{}, nil, nil, false, authHandlerOptions{}, nil)
 	if err == nil {
 		t.Fatal("expected missing profile to return an error")
 	}

@@ -46,7 +46,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 
 	profileName := c.profileFromCmd(cmd)
 	opts.ContentType = ""
-	prepared, err := c.prepareRequest(rawURL, profileName, opts, nil, nil, false, authHandlerOptions{}, nil)
+	prepared, err := c.prepareRequest(requestContext(cmd), rawURL, profileName, opts, nil, nil, false, authHandlerOptions{}, nil)
 	if err != nil {
 		return err
 	}

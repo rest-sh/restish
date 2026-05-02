@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -89,33 +88,25 @@ type CLI struct {
 	// a custom instance.
 	Paths *config.Paths
 
-	cfg                 *config.Config
-	defaultConfig       *config.Config
-	commandName         string
-	commandShort        string
-	commandLong         string
-	commandVersion      string
-	content             *content.Registry
-	loaders             []spec.Loader
-	linkParsers         []hypermedia.Parser
-	formatters          map[string]output.Formatter
-	plugins             []internalplugin.Plugin
-	pluginsByHook       map[string][]internalplugin.Plugin
-	pluginCommandNames  map[string]string
-	authPluginsByAPI    map[string][]internalplugin.Plugin
-	globalAuthPlugins   []internalplugin.Plugin
-	customAuthHandlers  map[string]auth.Handler
-	requestClosersMu    sync.Mutex
-	nextRequestCloserID uint64
-	requestClosers      []requestCloserEntry
-	explicitConfigFile  bool
-	retryUnsafeWarned   bool
-	signalHandling      bool
-}
-
-type requestCloserEntry struct {
-	id     uint64
-	closer io.Closer
+	cfg                *config.Config
+	defaultConfig      *config.Config
+	commandName        string
+	commandShort       string
+	commandLong        string
+	commandVersion     string
+	content            *content.Registry
+	loaders            []spec.Loader
+	linkParsers        []hypermedia.Parser
+	formatters         map[string]output.Formatter
+	plugins            []internalplugin.Plugin
+	pluginsByHook      map[string][]internalplugin.Plugin
+	pluginCommandNames map[string]string
+	authPluginsByAPI   map[string][]internalplugin.Plugin
+	globalAuthPlugins  []internalplugin.Plugin
+	customAuthHandlers map[string]auth.Handler
+	explicitConfigFile bool
+	retryUnsafeWarned  bool
+	signalHandling     bool
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -394,8 +385,6 @@ func (c *CLI) Run(args []string) error {
 	defer cancel()
 
 	c.retryUnsafeWarned = false
-	c.requestClosers = nil
-	defer c.closeRequestClosers()
 
 	if c.hooks.ConfigPath == "" {
 		if configPath, ok := explicitConfigPathFromArgs(args); ok {
@@ -750,45 +739,6 @@ func rootHasCommand(root *cobra.Command, name string) bool {
 		}
 	}
 	return false
-}
-
-func (c *CLI) registerRequestCloser(closer io.Closer) uint64 {
-	if closer == nil {
-		return 0
-	}
-	c.requestClosersMu.Lock()
-	defer c.requestClosersMu.Unlock()
-	c.nextRequestCloserID++
-	id := c.nextRequestCloserID
-	c.requestClosers = append(c.requestClosers, requestCloserEntry{id: id, closer: closer})
-	return id
-}
-
-func (c *CLI) unregisterRequestCloser(id uint64) {
-	if id == 0 {
-		return
-	}
-	c.requestClosersMu.Lock()
-	defer c.requestClosersMu.Unlock()
-	for i, item := range c.requestClosers {
-		if item.id != id {
-			continue
-		}
-		last := len(c.requestClosers) - 1
-		c.requestClosers[i] = c.requestClosers[last]
-		c.requestClosers[last] = requestCloserEntry{}
-		c.requestClosers = c.requestClosers[:last]
-		return
-	}
-}
-
-func (c *CLI) closeRequestClosers() {
-	c.requestClosersMu.Lock()
-	defer c.requestClosersMu.Unlock()
-	for i := len(c.requestClosers) - 1; i >= 0; i-- {
-		_ = c.requestClosers[i].closer.Close()
-	}
-	c.requestClosers = nil
 }
 
 // builtinCommands is the set of top-level subcommand names registered by the

@@ -15,16 +15,17 @@ import (
 )
 
 type preparedRequest struct {
-	rawURL   string
-	apiName  string
-	opts     request.Options
-	body     io.Reader
-	bodyRaw  []byte
-	closer   io.Closer
-	closerID uint64
+	rawURL    string
+	apiName   string
+	opts      request.Options
+	body      io.Reader
+	bodyRaw   []byte
+	closer    io.Closer
+	stopClose func() bool
 }
 
 func (c *CLI) prepareRequest(
+	ctx context.Context,
 	rawURL, profileName string,
 	opts request.Options,
 	bodyValue any,
@@ -94,10 +95,12 @@ func (c *CLI) prepareRequest(
 	// connection pool via the returned opts value.
 	opts.Transport = request.BuildTransport(opts)
 	var transportCloser io.Closer
-	var transportCloserID uint64
+	var stopTransportClose func() bool
 	if closer, ok := opts.Transport.(io.Closer); ok {
 		transportCloser = closer
-		transportCloserID = c.registerRequestCloser(closer)
+		stopTransportClose = context.AfterFunc(ctx, func() {
+			_ = closer.Close()
+		})
 	}
 
 	// Chain request-middleware plugins after auth.
@@ -121,13 +124,13 @@ func (c *CLI) prepareRequest(
 	}
 
 	return &preparedRequest{
-		rawURL:   rawURL,
-		apiName:  apiName,
-		opts:     opts,
-		body:     body,
-		bodyRaw:  bodyRaw,
-		closer:   transportCloser,
-		closerID: transportCloserID,
+		rawURL:    rawURL,
+		apiName:   apiName,
+		opts:      opts,
+		body:      body,
+		bodyRaw:   bodyRaw,
+		closer:    transportCloser,
+		stopClose: stopTransportClose,
 	}, nil
 }
 
@@ -256,10 +259,11 @@ func (c *CLI) closePreparedTransport(prepared *preparedRequest) {
 	if prepared == nil || prepared.closer == nil {
 		return
 	}
-	_ = prepared.closer.Close()
-	c.unregisterRequestCloser(prepared.closerID)
+	if prepared.stopClose == nil || prepared.stopClose() {
+		_ = prepared.closer.Close()
+	}
 	prepared.closer = nil
-	prepared.closerID = 0
+	prepared.stopClose = nil
 }
 
 func (c *CLI) normalizeHTTPResponse(httpResp *http.Response, maxBodyBytes int64) (*output.Response, error) {
