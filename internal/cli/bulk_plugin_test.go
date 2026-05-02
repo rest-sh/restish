@@ -294,6 +294,25 @@ func TestBulkPluginWorkflow(t *testing.T) {
 	}
 }
 
+func TestBulkPluginUserRSHManifestFlagDoesNotTriggerStartupMode(t *testing.T) {
+	installBulkPlugin(t)
+	withWorkingDir(t)
+
+	srv := newBulkServer(t, []*bulkItem{
+		{User: "a", ID: "a1", Version: "a11", Body: map[string]any{"id": "a1"}, ETag: "a11"},
+	})
+
+	c, _, errBuf := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--rsh-plugin-manifest"})
+	if err == nil {
+		t.Fatal("expected bulk command to reject unknown user flag")
+	}
+	if !strings.Contains(errBuf.String(), "unknown flag: --rsh-plugin-manifest") {
+		t.Fatalf("expected bulk command error on stderr, got err=%v stderr=%q", err, errBuf.String())
+	}
+}
+
 func TestBulkPluginRemoteDeleteLocalEditConflictIsSafe(t *testing.T) {
 	installBulkPlugin(t)
 	withWorkingDir(t)

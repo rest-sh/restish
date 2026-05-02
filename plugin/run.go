@@ -4,19 +4,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
-// HandleStartupFlags checks os.Args for StartupFlagManifest or
-// StartupFlagCommands. If either flag is found the appropriate CBOR
-// response is written to w and the function returns true — the caller should
-// return from main immediately.
+// HandleStartupFlags checks the Restish-injected startup prefix in os.Args for
+// StartupFlagManifest or StartupFlagCommands. If either flag is found the
+// appropriate CBOR response is written to w and the function returns true —
+// the caller should return from main immediately.
 //
 //	func main() {
 //	    if plugin.HandleStartupFlags(os.Stdout, manifest, cmds) { return }
 //	    // ... command dispatch
 //	}
 func HandleStartupFlags(w io.Writer, m Manifest, cmds []CommandDecl) bool {
-	for _, arg := range os.Args[1:] {
+	args := os.Args[1:]
+	for _, arg := range args[:startupPrefixEnd(args)] {
 		switch arg {
 		case StartupFlagManifest:
 			if err := WriteManifest(w, m); err != nil {
@@ -33,6 +35,32 @@ func HandleStartupFlags(w io.Writer, m Manifest, cmds []CommandDecl) bool {
 		}
 	}
 	return false
+}
+
+// ArgsWithoutStartupFlags strips Restish-injected startup and terminal flags
+// from the beginning of args. Flags with the same names after the first user
+// argument are preserved as user input.
+func ArgsWithoutStartupFlags(args []string) []string {
+	return args[startupPrefixEnd(args):]
+}
+
+func startupPrefixEnd(args []string) int {
+	for i, arg := range args {
+		if !isStartupPrefixArg(arg) {
+			return i
+		}
+	}
+	return len(args)
+}
+
+func isStartupPrefixArg(arg string) bool {
+	switch arg {
+	case StartupFlagManifest, StartupFlagCommands:
+		return true
+	}
+	return strings.HasPrefix(arg, StartupFlagColor+"=") ||
+		strings.HasPrefix(arg, StartupFlagStdoutTTY+"=") ||
+		strings.HasPrefix(arg, StartupFlagStderrTTY+"=")
 }
 
 // Run is the complete main-loop for simple command plugins. It handles

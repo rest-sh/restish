@@ -220,6 +220,71 @@ func TestLargeMessageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestHandleStartupFlagsOnlyUsesInjectedPrefix(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+
+	manifest := plugin.Manifest{Name: "demo", RestishAPIVersion: 2}
+
+	t.Run("manifest in prefix", func(t *testing.T) {
+		os.Args = []string{"restish-demo", plugin.StartupFlagColor + "=true", plugin.StartupFlagManifest, "ignored"}
+		var out bytes.Buffer
+		if !plugin.HandleStartupFlags(&out, manifest, nil) {
+			t.Fatal("expected startup flag to be handled")
+		}
+		var got plugin.Manifest
+		if err := plugin.ReadMessage(&out, &got); err != nil {
+			t.Fatalf("ReadMessage: %v", err)
+		}
+		if got.Name != "demo" {
+			t.Fatalf("manifest name = %q, want demo", got.Name)
+		}
+	})
+
+	t.Run("manifest after user arg", func(t *testing.T) {
+		os.Args = []string{"restish-demo", plugin.StartupFlagColor + "=true", "run", plugin.StartupFlagManifest}
+		var out bytes.Buffer
+		if plugin.HandleStartupFlags(&out, manifest, nil) {
+			t.Fatal("startup flag after user arg should not be handled")
+		}
+		if out.Len() != 0 {
+			t.Fatalf("unexpected output: %x", out.Bytes())
+		}
+	})
+}
+
+func TestTerminalContextFromArgsOnlyUsesInjectedPrefix(t *testing.T) {
+	ctx := plugin.TerminalContextFromArgs([]string{
+		plugin.StartupFlagColor + "=true",
+		plugin.StartupFlagStdoutTTY + "=true",
+		"run",
+		plugin.StartupFlagColor + "=false",
+		plugin.StartupFlagStderrTTY + "=true",
+	})
+	if !ctx.Color {
+		t.Fatal("expected color from injected prefix")
+	}
+	if !ctx.StdoutTTY {
+		t.Fatal("expected stdout tty from injected prefix")
+	}
+	if ctx.StderrTTY {
+		t.Fatal("stderr tty after user arg should be ignored")
+	}
+}
+
+func TestArgsWithoutStartupFlagsPreservesUserRSHFlags(t *testing.T) {
+	got := plugin.ArgsWithoutStartupFlags([]string{
+		plugin.StartupFlagColor + "=true",
+		plugin.StartupFlagStdoutTTY + "=false",
+		"run",
+		plugin.StartupFlagManifest,
+	})
+	want := []string{"run", plugin.StartupFlagManifest}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
 // TestDecoderSequentialPipe verifies that NewDecoder correctly reads multiple
 // CBOR items sent sequentially through an os.Pipe, simulating the subprocess
 // stdin/stdout channel used by command and TLS-signer plugins.

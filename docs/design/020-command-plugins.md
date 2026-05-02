@@ -147,6 +147,12 @@ Restish also passes simple terminal context flags on plugin startup:
 That gives plugins enough signal to adapt interactive behavior without coupling
 them tightly to the terminal implementation.
 
+These flags live in the host-injected argv prefix. Plugins must parse terminal
+context only until the first non-startup argument and then treat the rest of
+argv as user input. This prevents commands such as
+`restish bulk init URL --rsh-plugin-manifest` from switching the plugin into
+manifest discovery mode or overriding the terminal context.
+
 Command discovery responses include a `protocol_version` field. Version `0` is
 treated as the initial command-plugin discovery shape for compatibility with
 older helpers, and versions greater than the host's current command-plugin

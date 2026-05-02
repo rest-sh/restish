@@ -21,7 +21,7 @@ type TerminalContext struct {
 //	ctx := plugin.TerminalContextFromArgs(os.Args[1:])
 func TerminalContextFromArgs(args []string) TerminalContext {
 	var ctx TerminalContext
-	for _, arg := range args {
+	for _, arg := range args[:startupPrefixEnd(args)] {
 		if v, ok := strings.CutPrefix(arg, StartupFlagColor+"="); ok {
 			ctx.Color = v == "true"
 		} else if v, ok := strings.CutPrefix(arg, StartupFlagStdoutTTY+"="); ok {

@@ -99,6 +99,13 @@ authors. They should have godoc that explains behavior and compatibility
 expectations, and exported constants should be used for host-provided startup
 flags instead of duplicating string literals across plugins.
 
+Startup flags are an internal argv prefix contract. The Restish host may inject
+`--rsh-plugin-manifest`, `--rsh-plugin-commands`, terminal context flags, or
+future `--rsh-*` startup fields before the first user argument. Public plugin
+helpers must only inspect that contiguous prefix. Once the first non-startup
+argument appears, later `--rsh-*` tokens belong to the user's command and must
+not trigger manifest mode or spoof host terminal state.
+
 ## Transport
 
 The host/plugin transport uses self-delimiting CBOR messages over stdio.

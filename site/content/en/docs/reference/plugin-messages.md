@@ -20,6 +20,12 @@ discovery includes:
 Restish treats omitted `protocol_version` as the initial command-plugin
 protocol, and rejects future versions that require a newer host.
 
+Startup flags are only recognized in the host-injected argv prefix, before the
+first user argument. For command plugins, later arguments such as
+`--rsh-plugin-manifest`, `--rsh-color`, `--rsh-stdout-tty`, or
+`--rsh-stderr-tty` remain user arguments and must not affect startup mode or
+terminal context.
+
 ## Command Plugin Messages
 
 Plugin to host:
