@@ -284,8 +284,8 @@ func TestGeneratedQueryParamSerialization(t *testing.T) {
 		if err != nil {
 			t.Fatalf("space serialize: %v", err)
 		}
-		if got := encodeGeneratedQuery(parts); got != "ids=a+b" {
-			t.Fatalf("space query = %q, want ids=a+b", got)
+		if got := encodeGeneratedQuery(parts); got != "ids=a%20b" {
+			t.Fatalf("space query = %q, want ids=a%%20b", got)
 		}
 
 		pipe := &paramInfo{name: "ids", in: "query", typ: "array", style: "pipeDelimited"}
@@ -307,6 +307,31 @@ func TestGeneratedQueryParamSerialization(t *testing.T) {
 			t.Fatalf("deep object query = %q", got)
 		}
 	})
+}
+
+func TestEncodeGeneratedQueryValueReservedBytes(t *testing.T) {
+	tests := []struct {
+		name          string
+		value         string
+		allowReserved bool
+		want          string
+	}{
+		{name: "literal plus stays encoded", value: "a+b", allowReserved: true, want: "a%2Bb"},
+		{name: "space uses percent encoding", value: "a b", allowReserved: true, want: "a%20b"},
+		{name: "encoded plus input preserves percent", value: "a%2Bb", allowReserved: true, want: "a%252Bb"},
+		{name: "slash allowed", value: "a/b", allowReserved: true, want: "a/b"},
+		{name: "comma allowed", value: "a,b", allowReserved: true, want: "a,b"},
+		{name: "reserved set allowed", value: ":/?#[]@!$&'()*+,;=", allowReserved: true, want: ":/?#[]@!$&'()*%2B,;="},
+		{name: "slash encoded without allow reserved", value: "a/b", allowReserved: false, want: "a%2Fb"},
+		{name: "comma encoded without allow reserved", value: "a,b", allowReserved: false, want: "a%2Cb"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := encodeGeneratedQueryValue(tc.value, tc.allowReserved); got != tc.want {
+				t.Fatalf("encodeGeneratedQueryValue(%q, %v) = %q, want %q", tc.value, tc.allowReserved, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestGeneratedPathHeaderCookieAndContentParamSerialization(t *testing.T) {

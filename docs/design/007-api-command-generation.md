@@ -199,6 +199,12 @@ Generated commands honor OpenAPI parameter serialization rules where practical:
 - cookie `form`;
 - JSON parameter `content`.
 
+Query values are encoded byte-by-byte with RFC 3986 percent encoding. When
+`allowReserved` is true, literal OpenAPI reserved characters may remain
+unescaped, except `+` is still encoded as `%2B` so it cannot be confused with a
+space by form-style decoders. Literal percent sequences in user input remain
+literal input and are percent-encoded rather than treated as pre-escaped bytes.
+
 Unsupported styles should warn or be visible in help and then use the closest
 safe default for the parameter location. Required path substitutions must never
 be corrupted by fallback behavior.

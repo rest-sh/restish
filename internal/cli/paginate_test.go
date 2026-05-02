@@ -122,23 +122,30 @@ func TestPaginationStopsOnCrossOriginNextURL(t *testing.T) {
 	}
 }
 
-// TestPaginationAllowsHTTPToHTTPSUpgrade verifies that pagination from HTTP
-// to HTTPS on the same host is permitted (scheme upgrade is safe).
-func TestPaginationAllowsHTTPToHTTPSUpgrade(t *testing.T) {
+// TestPaginationBlocksHTTPToHTTPSSchemeChange verifies that pagination compares
+// full URL origins, including scheme, before following a next link.
+func TestPaginationBlocksHTTPToHTTPSSchemeChange(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	upgradeRequests := 0
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		headers := http.Header{"Content-Type": []string{"application/json"}}
-		body := `[2]`
-		if r.URL.Scheme == "http" {
-			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
-			body = `[1]`
+		if r.URL.Scheme == "https" {
+			upgradeRequests++
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`[999]`)),
+				Request:    r,
+			}, nil
 		}
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
 		return &http.Response{
 			StatusCode: 200,
 			Proto:      "HTTP/1.1",
 			Header:     headers,
-			Body:       io.NopCloser(strings.NewReader(body)),
+			Body:       io.NopCloser(strings.NewReader(`[1]`)),
 			Request:    r,
 		}, nil
 	})
@@ -146,12 +153,14 @@ func TestPaginationAllowsHTTPToHTTPSUpgrade(t *testing.T) {
 	if err := c.Run([]string{"restish", "get", "http://api.example.com/items"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	got := out.String()
-	if !strings.Contains(got, "1") || !strings.Contains(got, "2") {
-		t.Fatalf("expected both pages after http->https same-host pagination, got:\n%s", got)
+	if upgradeRequests != 0 {
+		t.Fatalf("scheme-changed page requested %d times, want 0", upgradeRequests)
 	}
-	if strings.Contains(errOut.String(), "crosses origin") || strings.Contains(errOut.String(), "downgrades") {
-		t.Fatalf("unexpected pagination warning:\n%s", errOut.String())
+	if strings.Contains(out.String(), "999") {
+		t.Fatalf("scheme-changed page leaked into output:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "pagination next URL crosses origin") {
+		t.Fatalf("expected scheme-change pagination warning, got:\n%s", errOut.String())
 	}
 }
 
@@ -192,7 +201,7 @@ func TestPaginationBlocksHTTPSToHTTPDowngrade(t *testing.T) {
 	if strings.Contains(out.String(), "999") {
 		t.Fatalf("downgraded page leaked into output:\n%s", out.String())
 	}
-	if !strings.Contains(errOut.String(), "downgrades HTTPS to HTTP") {
+	if !strings.Contains(errOut.String(), "pagination next URL crosses origin") {
 		t.Fatalf("expected HTTPS downgrade warning, got:\n%s", errOut.String())
 	}
 }

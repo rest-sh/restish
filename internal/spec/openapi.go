@@ -15,6 +15,7 @@ import (
 
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -161,26 +162,7 @@ func openAPIRemoteURLHandler(opts LoadOptions) func(string) (*http.Response, err
 }
 
 func sameOrigin(a, b *url.URL) bool {
-	return strings.EqualFold(a.Scheme, b.Scheme) &&
-		strings.EqualFold(a.Hostname(), b.Hostname()) &&
-		effectivePort(a) == effectivePort(b)
-}
-
-func effectivePort(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	if port := u.Port(); port != "" {
-		return port
-	}
-	switch strings.ToLower(u.Scheme) {
-	case "http":
-		return "80"
-	case "https":
-		return "443"
-	default:
-		return ""
-	}
+	return request.SameOrigin(a, b)
 }
 
 type openAPIRefSource struct {

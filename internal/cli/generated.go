@@ -1153,14 +1153,34 @@ func encodeGeneratedQuery(parts []generatedQueryParam) string {
 const openAPIReservedChars = ":/?#[]@!$&'()*+,;="
 
 func encodeGeneratedQueryValue(value string, allowReserved bool) string {
-	encoded := url.QueryEscape(value)
-	if !allowReserved {
-		return encoded
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if isQueryUnreserved(ch) || (allowReserved && ch != '+' && strings.ContainsRune(openAPIReservedChars, rune(ch))) {
+			b.WriteByte(ch)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[ch>>4])
+		b.WriteByte(hex[ch&0x0f])
 	}
-	for _, r := range openAPIReservedChars {
-		encoded = strings.ReplaceAll(encoded, url.QueryEscape(string(r)), string(r))
+	return b.String()
+}
+
+func isQueryUnreserved(ch byte) bool {
+	switch {
+	case ch >= 'A' && ch <= 'Z':
+		return true
+	case ch >= 'a' && ch <= 'z':
+		return true
+	case ch >= '0' && ch <= '9':
+		return true
+	case ch == '-' || ch == '.' || ch == '_' || ch == '~':
+		return true
+	default:
+		return false
 	}
-	return encoded
 }
 
 // extractPathParamNames returns path parameter names in left-to-right order

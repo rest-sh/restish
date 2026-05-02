@@ -133,8 +133,11 @@ commands:
 - cookie: `form`
 - JSON parameter `content` for `application/json` and `+json` media types
 
-For query parameters with `allowReserved: true`, reserved URL characters are
-kept unescaped in the generated query value.
+For query parameters with `allowReserved: true`, literal reserved URL
+characters are kept unescaped in the generated query value where safe. Literal
+`+` is still encoded as `%2B`, and literal `%` is encoded as `%25`, so plus
+signs and pre-escaped-looking input are not confused with spaces or decoded
+twice.
 
 OpenAPI header parameters named `Accept`, `Content-Type`, or `Authorization`
 are ignored by generated commands. Configure response negotiation, request body
@@ -214,7 +217,8 @@ Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
 `https://api.example.com/root/v2`.
 
-Absolute server URLs are used only when they match the configured API origin.
+Absolute server URLs are used only when they match the configured API origin:
+scheme, hostname, and effective port all match.
 If a same-origin server points outside the configured base path, Restish keeps
 the selected API profile and resolves the generated operation to that path. If
 no OpenAPI server matches the configured origin, Restish falls back to

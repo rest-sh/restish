@@ -106,6 +106,35 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	}
 }
 
+func TestPrepareRequestBypassesCacheBeforeTransportForUnnamespacedAuth(t *testing.T) {
+	c := New()
+	prepared, err := c.prepareRequest(
+		"https://api.example.com/items",
+		"default",
+		request.Options{
+			CacheDir: t.TempDir(),
+			OnRequest: func(req *http.Request) error {
+				req.Header.Set("Authorization", "Bearer secret")
+				return nil
+			},
+		},
+		nil,
+		nil,
+		false,
+		authHandlerOptions{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("prepareRequest() error = %v", err)
+	}
+	if !prepared.opts.NoCache {
+		t.Fatal("expected auth-bearing request without cache namespace to bypass cache before transport construction")
+	}
+	if prepared.opts.Transport == nil {
+		t.Fatal("expected transport to be built")
+	}
+}
+
 func TestApplyAPIProfileMergesProfileTLSWithFlagPrecedence(t *testing.T) {
 	c := New()
 	c.cfg = &config.Config{

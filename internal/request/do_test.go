@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -294,6 +295,63 @@ func TestDo_SameOriginRedirectKeepsCredentialHeaders(t *testing.T) {
 	defer resp.Body.Close()
 	if gotAPIKey != "secret" {
 		t.Fatalf("X-API-Key = %q, want secret", gotAPIKey)
+	}
+}
+
+func TestSameOriginUsesSchemeHostAndEffectivePort(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want bool
+	}{
+		{name: "https default explicit", a: "https://example.com", b: "https://example.com:443/path", want: true},
+		{name: "http default explicit", a: "http://example.com", b: "http://example.com:80/path", want: true},
+		{name: "scheme differs", a: "https://example.com", b: "http://example.com", want: false},
+		{name: "port differs", a: "https://example.com:444", b: "https://example.com", want: false},
+		{name: "unknown scheme no port", a: "wss://example.com", b: "wss://example.com", want: false},
+		{name: "unknown scheme explicit port", a: "wss://example.com:443", b: "wss://example.com:443", want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := url.Parse(tc.a)
+			if err != nil {
+				t.Fatalf("parse a: %v", err)
+			}
+			b, err := url.Parse(tc.b)
+			if err != nil {
+				t.Fatalf("parse b: %v", err)
+			}
+			if got := request.SameOrigin(a, b); got != tc.want {
+				t.Fatalf("SameOrigin(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEffectivePort(t *testing.T) {
+	tests := []struct {
+		raw    string
+		want   string
+		wantOK bool
+	}{
+		{raw: "http://example.com", want: "80", wantOK: true},
+		{raw: "https://example.com", want: "443", wantOK: true},
+		{raw: "https://example.com:8443", want: "8443", wantOK: true},
+		{raw: "wss://example.com", want: "", wantOK: false},
+		{raw: "wss://example.com:443", want: "443", wantOK: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.raw, func(t *testing.T) {
+			u, err := url.Parse(tc.raw)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			got, ok := request.EffectivePort(u)
+			if got != tc.want || ok != tc.wantOK {
+				t.Fatalf("EffectivePort(%q) = %q, %v; want %q, %v", tc.raw, got, ok, tc.want, tc.wantOK)
+			}
+		})
 	}
 }
 

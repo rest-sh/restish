@@ -176,8 +176,9 @@ Supported query parameter styles:
 - `spaceDelimited` arrays;
 - `pipeDelimited` arrays;
 - `deepObject` objects;
-- `allowReserved` values, preserving reserved characters that OpenAPI says may
-  remain unescaped.
+- `allowReserved` values, preserving literal reserved characters that OpenAPI
+  says may remain unescaped, while still encoding literal `+` as `%2B` and
+  literal `%` as `%25` to avoid ambiguous or double-decoded query bytes.
 
 Supported path parameter styles:
 
@@ -299,6 +300,9 @@ Restish falls back to `base_url`.
 
 An untrusted spec must not be able to redirect authenticated generated commands
 to another origin by declaring a different server URL.
+The origin comparison is shared with request redirects, external ref loading,
+and pagination: scheme, hostname, and effective port must match. Unknown schemes
+without explicit ports are not treated as same-origin.
 
 ## Security Policy
 

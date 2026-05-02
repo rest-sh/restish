@@ -16,9 +16,9 @@ restish https://api.rest.sh/images -f body.self -o lines
 
 When a response exposes a `next` link, Restish follows it until there are no
 more pages or a configured limit is reached.
-Next-page URLs may change scheme, such as `http` to `https`, as long as the
-host and port stay the same. Pagination stops with a warning when the next page
-points at a different host or port.
+Next-page URLs must stay on the same origin: scheme, hostname, and effective
+port must match. Pagination stops with a warning before following a link that
+changes any of those origin components.
 
 ## Inspect One Page
 

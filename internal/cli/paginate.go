@@ -183,11 +183,8 @@ func (c *CLI) runPagination(
 }
 
 // paginationCrossesOrigin reports whether following nextURL from firstURL
-// should be blocked. It returns (true, displayURL, reason) when:
-//   - the host or port differs (reason: "crosses origin")
-//   - the scheme is downgraded from HTTPS to HTTP (reason: "downgrades HTTPS to HTTP")
-//
-// HTTP-to-HTTPS upgrades on the same host are permitted.
+// should be blocked. It returns (true, displayURL, "crosses origin") when
+// scheme, host, or effective port differ.
 func paginationCrossesOrigin(firstURL, nextURL string) (bool, string, string) {
 	base, err := url.Parse(firstURL)
 	if err != nil || base.Host == "" {
@@ -200,21 +197,10 @@ func paginationCrossesOrigin(firstURL, nextURL string) (bool, string, string) {
 	if !next.IsAbs() {
 		next = base.ResolveReference(next)
 	}
-	if !sameHostPort(base, next) {
+	if !request.SameOrigin(base, next) {
 		return true, next.String(), "crosses origin"
 	}
-	// Block HTTPS → HTTP scheme downgrade; HTTP → HTTPS upgrade is permitted.
-	if strings.EqualFold(base.Scheme, "https") && strings.EqualFold(next.Scheme, "http") {
-		return true, next.String(), "downgrades HTTPS to HTTP"
-	}
 	return false, next.String(), ""
-}
-
-func sameHostPort(a, b *url.URL) bool {
-	if a == nil || b == nil {
-		return false
-	}
-	return strings.EqualFold(a.Host, b.Host)
 }
 
 func (c *CLI) paginationStatusError(cmd *cobra.Command, page, status int) error {

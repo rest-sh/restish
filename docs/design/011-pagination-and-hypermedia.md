@@ -108,9 +108,10 @@ design layer rather than smuggled into the current `rel -> uri` contract.
 Pagination execution uses the normalized link map plus optional per-API config.
 For GET requests, if a `next` link is present, Restish can continue fetching
 pages automatically.
-Pagination treats URLs with the same host and port as followable even when the
-scheme changes, which supports APIs and proxies that move a first `http` page
-to later `https` pages. A different host or port still stops pagination.
+Pagination only follows `next` URLs on the same origin: scheme, hostname, and
+effective port must match. Unknown schemes without an explicit port are treated
+conservatively and are not same-origin. Any scheme, host, or port change stops
+pagination before the follow-up request is sent.
 
 Per-API pagination config can refine how page data is interpreted:
 

@@ -380,25 +380,32 @@ func SameOrigin(a, b *url.URL) bool {
 	if a == nil || b == nil {
 		return false
 	}
+	aPort, aOK := EffectivePort(a)
+	bPort, bOK := EffectivePort(b)
 	return strings.EqualFold(a.Scheme, b.Scheme) &&
 		strings.EqualFold(a.Hostname(), b.Hostname()) &&
-		effectivePort(a) == effectivePort(b)
+		aOK && bOK &&
+		aPort == bPort
 }
 
-func effectivePort(u *url.URL) string {
+// EffectivePort returns the explicit or scheme-default port used for origin
+// comparison. Unknown schemes without an explicit port have no safe effective
+// port and return ok=false.
+func EffectivePort(u *url.URL) (port string, ok bool) {
 	if u == nil {
-		return ""
+		return "", false
 	}
 	if port := u.Port(); port != "" {
-		return port
+		return port, true
 	}
 	switch strings.ToLower(u.Scheme) {
 	case "http":
-		return "80"
+		return "80", true
 	case "https":
-		return "443"
+		return "443", true
+	default:
+		return "", false
 	}
-	return ""
 }
 
 // newTransport returns an HTTP transport based on http.DefaultTransport.

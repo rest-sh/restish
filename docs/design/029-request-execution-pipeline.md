@@ -121,6 +121,12 @@ That includes:
 - constructing the request body from shorthand, stdin, files, or raw input
 - deriving content negotiation headers from the content registry
 
+If auth hooks, credential headers, credential-looking query parameters, or
+request-middleware plugins may add credentials and the request has no
+API/profile cache namespace, cache bypass is decided before transport
+construction. That prevents a prebuilt cache transport from storing
+unnamespaced credentialed responses.
+
 OpenAPI server resolution and `operation_base` handling should already have
 produced an API-relative or absolute-safe path before preparation. Preparation
 still owns final URL joining and path cleaning so relative same-origin escapes
@@ -246,6 +252,8 @@ Bounded GET responses may trigger follow-up work:
 
 Pagination must reuse the same request context and transport policy as the first
 page. That means auth, retry, TLS, and cache semantics stay consistent.
+Pagination follow-up URLs must remain same-origin with the first page using the
+shared origin helper: scheme, hostname, and effective port all match.
 
 Follow-up workflow requests, including `edit` PUT/PATCH requests and
 command-plugin delegated HTTP, must also reuse the prepared request options

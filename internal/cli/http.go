@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	urlpath "path"
@@ -1060,31 +1059,7 @@ func matchURLBase(rawURL, rawBase string) (int, bool) {
 }
 
 func sameURLOrigin(a, b *url.URL) bool {
-	if a == nil || b == nil {
-		return false
-	}
-	return strings.EqualFold(a.Scheme, b.Scheme) &&
-		strings.EqualFold(a.Hostname(), b.Hostname()) &&
-		effectivePort(a) == effectivePort(b)
-}
-
-func effectivePort(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	if port := u.Port(); port != "" {
-		return port
-	}
-	switch strings.ToLower(u.Scheme) {
-	case "http":
-		return "80"
-	case "https":
-		return "443"
-	}
-	if _, port, err := net.SplitHostPort(u.Host); err == nil {
-		return port
-	}
-	return ""
+	return request.SameOrigin(a, b)
 }
 
 // mergeTLSSignerParams merges src entries into dst, not overwriting existing
