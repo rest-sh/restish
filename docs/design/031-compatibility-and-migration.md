@@ -100,6 +100,12 @@ The implemented v2 behavior is:
   on startup or first write
 - automatically migrate v1 `apis.json` and `config.json` into `restish.json`
   when safe
+- copy legacy files into an atomic backup directory before writing v2 config;
+  reuse a matching `.bak.v1` backup during recovery, or create a numbered
+  `.bak.v1.N` backup when the existing backup has different contents
+- remove legacy `apis.json` and `config.json` after the new `restish.json` has
+  been written and parsed successfully, so deleting `restish.json` later does
+  not silently re-import stale v1 state
 - treat `RSH_CONFIG_DIR` as a clean v2 config root; it does not scan or mutate
   platform legacy locations
 - preserve comments where possible
@@ -117,6 +123,12 @@ Explicit config file selection is intentionally stricter. If `--rsh-config` or
 `RSH_CONFIG` names a file that does not exist, Restish errors instead of falling
 back to global config or running default-location migration. That makes project
 configs predictable and prevents accidental writes to the wrong config file.
+
+If no config root can be resolved from explicit config, `RSH_CONFIG_DIR`,
+`XDG_CONFIG_HOME`, platform user directories, or `HOME`, Restish should fail
+with a setup error instead of creating relative config state in the current
+working directory. Cache-only state can use a temporary fallback, but persistent
+configuration cannot.
 
 ### API Registrations
 

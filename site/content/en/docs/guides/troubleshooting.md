@@ -48,6 +48,39 @@ restish https://api.rest.sh/images -o json
 
 **Related docs:** [Output](/docs/guides/output/), [Output Defaults](/docs/reference/output-defaults/).
 
+## Config Directory Cannot Be Determined
+
+**Symptom:** Restish says it cannot determine the config directory.
+
+**Likely cause:** The environment has no explicit config path and no usable
+home or platform config directory.
+
+**Fix:** Set one of these before running Restish:
+
+```bash
+export RSH_CONFIG_DIR="$HOME/.config/restish"
+export RSH_CACHE_DIR="$HOME/.cache/restish"
+```
+
+For project-local config, use `RSH_CONFIG=/absolute/path/restish.json` or
+`--rsh-config /absolute/path/restish.json`.
+
+**Related docs:** [Config](/docs/reference/config/), [Environment Variables](/docs/reference/environment-variables/).
+
+## v1 Migration Backup Already Exists
+
+**Symptom:** A v1-to-v2 migration mentions a `.bak.v1` backup, or you are
+recovering after an interrupted migration.
+
+**Likely cause:** Restish found a prior v1 backup directory.
+
+**Fix:** Run Restish again. Matching backups are reused; different existing
+backups are preserved and a numbered backup such as `.bak.v1.2` is created.
+After migration, the old `apis.json` and `config.json` are removed from the
+legacy location so they are not imported again.
+
+**Related docs:** [Upgrade From v1](/docs/getting-started/upgrade-from-v1/).
+
 ## Content Negotiation Returned A Different Format
 
 **Symptom:** The server returns CBOR, YAML, or another structured media type

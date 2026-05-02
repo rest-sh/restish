@@ -369,7 +369,7 @@ func TestHelpDoesNotExposeRetrySentinelValue(t *testing.T) {
 	if strings.Contains(out.String(), "default -1") || strings.Contains(out.String(), "(default -1)") {
 		t.Fatalf("help leaked sentinel retry value:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "Maximum retry attempts for network errors and 5xx responses (default: 2; 0 = disable)") {
+	if !strings.Contains(out.String(), "Maximum retry attempts for network errors and transient HTTP responses (default: 2; 0 = disable)") {
 		t.Fatalf("expected user-facing retry default in help, got:\n%s", out.String())
 	}
 }

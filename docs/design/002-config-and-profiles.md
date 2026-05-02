@@ -91,6 +91,17 @@ Cache directory selection mirrors config selection with `RSH_CACHE_DIR`,
 `XDG_CACHE_HOME/restish`, `~/.cache/restish` on Unix-like systems, and the
 Windows user cache directory on Windows.
 
+If Restish cannot determine a config directory from an explicit config file,
+`RSH_CONFIG_DIR`, `XDG_CONFIG_HOME`, the platform user-config directory, or
+`HOME`, it must fail with a clear setup error instead of falling back to a
+relative `./.restish` directory. Cache state may fall back to
+`os.TempDir()/restish` so one-off requests can still run, but that fallback is
+diagnostic-only and should direct operators to set `RSH_CACHE_DIR`,
+`XDG_CACHE_HOME`, or `HOME` for persistent cache state.
+
+Config writes preserve permissions on an existing config directory. Missing
+config directories are created with the restrictive default mode.
+
 ## Primary Config Shape
 
 The primary top-level keys are:
@@ -302,6 +313,10 @@ Migration expectations:
 
 - detect legacy locations on supported platforms
 - migrate or import on first use when safe
+- write v1 backups atomically, using `.bak.v1` or a numbered `.bak.v1.N`
+  directory when an existing backup contains different data
+- remove the migrated v1 `apis.json` and `config.json` after the v2
+  `restish.json` has been written and parsed successfully
 - preserve API registrations, profiles, and auth config
 - preserve comments when practical
 - emit a clear hint when automatic migration is not possible

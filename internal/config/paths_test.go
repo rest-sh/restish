@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -157,10 +158,51 @@ func TestPaths_FallbackWhenUserDirsFail(t *testing.T) {
 	}()
 
 	p := NewPaths()
-	if got, want := p.Config(), ".restish"; got != want {
-		t.Fatalf("Config() = %q, want %q", got, want)
+	if got := p.Config(); got != "" {
+		t.Fatalf("Config() = %q, want empty when config root cannot be determined", got)
 	}
-	if got, want := p.Cache(), filepath.Join(".restish", "cache"); got != want {
+	if err := p.ConfigError(); err == nil {
+		t.Fatalf("expected config path error, got %v", err)
+	}
+	if got, want := p.Cache(), filepath.Join(os.TempDir(), "restish"); got != want {
 		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
+	if err := p.CacheError(); err == nil {
+		t.Fatal("expected cache fallback warning error")
+	}
+}
+
+func TestPaths_ExplicitOverridesAvoidNoHomeErrors(t *testing.T) {
+	oldGOOS := runtimeGOOS
+	oldUserConfig := userConfigDirFunc
+	oldUserCache := userCacheDirFunc
+	oldUserHome := userHomeDirFunc
+	runtimeGOOS = "darwin"
+	userConfigDirFunc = func() (string, error) { return "", errors.New("no dir") }
+	userCacheDirFunc = func() (string, error) { return "", errors.New("no dir") }
+	userHomeDirFunc = func() (string, error) { return "", errors.New("no home") }
+	t.Setenv("RSH_CONFIG_DIR", "/tmp/restish-config")
+	t.Setenv("RSH_CACHE_DIR", "/tmp/restish-cache")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	defer func() {
+		runtimeGOOS = oldGOOS
+		userConfigDirFunc = oldUserConfig
+		userCacheDirFunc = oldUserCache
+		userHomeDirFunc = oldUserHome
+	}()
+
+	p := NewPaths()
+	if err := p.ConfigError(); err != nil {
+		t.Fatalf("ConfigError() = %v, want nil", err)
+	}
+	if err := p.CacheError(); err != nil {
+		t.Fatalf("CacheError() = %v, want nil", err)
+	}
+	if got := p.Config(); got != "/tmp/restish-config" {
+		t.Fatalf("Config() = %q", got)
+	}
+	if got := p.Cache(); got != "/tmp/restish-cache" {
+		t.Fatalf("Cache() = %q", got)
 	}
 }

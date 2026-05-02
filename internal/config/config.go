@@ -214,7 +214,12 @@ func Save(path string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
-	return atomicWriteFile(path, append(data, '\n'), 0o600, 0o700)
+	lock, err := lockConfigFile(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	return atomicWriteFileLocked(path, append(data, '\n'), 0o600, 0o700, false)
 }
 
 // Load reads and parses the JSONC config file at path.
@@ -515,6 +520,11 @@ func extractJSONErrorPosition(err error, data []byte) (int, int) {
 	var syntaxErr *json.SyntaxError
 	if errors.As(err, &syntaxErr) {
 		line, col := byteOffsetToLineColumn(data, syntaxErr.Offset)
+		return line, col
+	}
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		line, col := byteOffsetToLineColumn(data, typeErr.Offset)
 		return line, col
 	}
 	return 0, 0

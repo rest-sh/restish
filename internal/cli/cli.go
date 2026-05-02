@@ -394,6 +394,9 @@ func (c *CLI) Run(args []string) error {
 			c.explicitConfigFile = true
 		}
 	}
+	if pathErr := c.paths().ConfigError(); pathErr != nil && c.hooks.ConfigPath == "" && !c.explicitConfigFile && !isBootstrapCommand(args) {
+		return pathErr
+	}
 
 	if !output.IsTerminal(c.Stdout) {
 		origStdout := c.Stdout
@@ -407,12 +410,14 @@ func (c *CLI) Run(args []string) error {
 
 	// On first run (no config file yet), suggest shell setup if on a supported
 	// shell so users discover the noglob alias before hitting the foot-gun.
-	if _, statErr := os.Stat(c.configFilePath()); errors.Is(statErr, os.ErrNotExist) {
-		if os.Getenv("RSH_CONFIG_DIR") != "" && !c.explicitConfigFile {
-			c.infof("no config at %s; using defaults", c.configFilePath())
-		}
-		if output.IsTerminal(c.Stderr) {
-			c.hintShellSetup()
+	if cfgPath := c.configFilePath(); cfgPath != "" {
+		if _, statErr := os.Stat(cfgPath); errors.Is(statErr, os.ErrNotExist) {
+			if os.Getenv("RSH_CONFIG_DIR") != "" && !c.explicitConfigFile {
+				c.infof("no config at %s; using defaults", c.configFilePath())
+			}
+			if output.IsTerminal(c.Stderr) {
+				c.hintShellSetup()
+			}
 		}
 	}
 

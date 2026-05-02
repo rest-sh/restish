@@ -29,7 +29,9 @@ If Restish migrates your config, it prints a one-time notice like:
 Migrated config from v1 at /path/to/restish; kept backup at /path/to/restish.bak.v1
 ```
 
-That backup directory contains copies of your original v1 files.
+That backup directory contains copies of your original v1 files. After the new
+`restish.json` is safely written, Restish removes the migrated `apis.json` and
+`config.json` so stale v1 state is not imported again later.
 
 Migration warnings are printed after the notice when v1 values cannot be
 carried over safely. For example, v2 only accepts `operation_base` as an
@@ -49,9 +51,12 @@ legacy v1 config locations:
 
 It reads `apis.json` and `config.json`, converts supported API/profile settings
 into the v2 shape, writes the new `restish.json`, and keeps a `.bak.v1` backup
-of the original directory. On macOS this means v1 files can be found in the old
-`Application Support` location while the v2 config is written to the
-developer-friendly `~/.config/restish/` location.
+of the original files. If `.bak.v1` already exists and contains matching files,
+Restish reuses it to recover an interrupted migration. If it exists with
+different content, Restish writes a numbered backup such as `.bak.v1.2`. On
+macOS this means v1 files can be found in the old `Application Support` backup
+while the v2 config is written to the developer-friendly `~/.config/restish/`
+location.
 
 Explicit config selection is different. If you pass `--rsh-config ./restish.json`
 or set `RSH_CONFIG`, that exact file must already exist. Restish does not use
@@ -68,8 +73,8 @@ The migration carries over the main API-specific settings:
 - auth type and auth params
 - PKCS#11 TLS signer settings
 
-Comments from the v1 files are preserved in the generated `restish.json` as
-commented reference blocks at the top of the file.
+Comments from the v1 files remain in the backup copies. The generated
+`restish.json` includes a short migration header and converted v2 config.
 
 ## Deliberate Behavior Changes
 

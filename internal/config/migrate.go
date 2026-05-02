@@ -136,17 +136,12 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 		return nil, err
 	}
 
-	backupDir := source.dir + ".bak.v1"
-	if _, err := os.Stat(backupDir); err == nil {
-		return nil, fmt.Errorf("config: backup directory %s already exists; remove or rename it before retrying migration", backupDir)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("config: check backup directory %s: %w", backupDir, err)
-	}
-	if err := backupLegacyFiles(source, backupDir); err != nil {
+	backupDir, err := prepareLegacyBackup(source, source.dir+".bak.v1")
+	if err != nil {
 		return nil, err
 	}
 
-	data, err := renderMigratedConfig(cfg, source)
+	data, err := renderMigratedConfig(cfg, backupDir)
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +153,7 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 	if err != nil {
 		return nil, err
 	}
+	warnings = append(warnings, cleanupLegacyFiles(source)...)
 	loaded.Migration = &MigrationInfo{
 		SourcePath: source.dir,
 		BackupPath: backupDir,
@@ -323,30 +319,107 @@ func cloneStringMap(values map[string]string) map[string]string {
 	return out
 }
 
+func prepareLegacyBackup(source *legacyConfigSource, preferredDir string) (string, error) {
+	if _, err := os.Stat(preferredDir); err == nil {
+		if ok, matchErr := legacyBackupMatches(source, preferredDir); matchErr != nil {
+			return "", matchErr
+		} else if ok {
+			return preferredDir, nil
+		}
+		backupDir, err := nextLegacyBackupDir(preferredDir)
+		if err != nil {
+			return "", err
+		}
+		if err := backupLegacyFiles(source, backupDir); err != nil {
+			return "", err
+		}
+		return backupDir, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("config: check backup directory %s: %w", preferredDir, err)
+	}
+	if err := backupLegacyFiles(source, preferredDir); err != nil {
+		return "", err
+	}
+	return preferredDir, nil
+}
+
+func legacyBackupMatches(source *legacyConfigSource, backupDir string) (bool, error) {
+	for _, file := range legacyBackupFiles(source) {
+		if len(file.data) == 0 {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(backupDir, file.name))
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("config: read existing backup %s: %w", file.name, err)
+		}
+		if !bytes.Equal(data, file.data) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func nextLegacyBackupDir(preferredDir string) (string, error) {
+	for i := 2; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s.%d", preferredDir, i)
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil {
+			return "", fmt.Errorf("config: check backup directory %s: %w", candidate, err)
+		}
+	}
+	return "", fmt.Errorf("config: cannot find available v1 backup directory near %s; move old backup directories and retry migration", preferredDir)
+}
+
+func legacyBackupFiles(source *legacyConfigSource) []struct {
+	name string
+	path string
+	data []byte
+} {
+	return []struct {
+		name string
+		path string
+		data []byte
+	}{
+		{name: "apis.json", path: source.apisPath, data: source.apisData},
+		{name: "config.json", path: source.configPath, data: source.configData},
+	}
+}
+
 func backupLegacyFiles(source *legacyConfigSource, backupDir string) error {
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		return fmt.Errorf("config: backup mkdir: %w", err)
 	}
 
-	for _, file := range []struct {
-		name string
-		data []byte
-	}{
-		{name: "apis.json", data: source.apisData},
-		{name: "config.json", data: source.configData},
-	} {
+	for _, file := range legacyBackupFiles(source) {
 		if len(file.data) == 0 {
 			continue
 		}
 		target := filepath.Join(backupDir, file.name)
-		if err := os.WriteFile(target, file.data, 0o600); err != nil {
+		if err := atomicWriteFile(target, file.data, 0o600, 0o700); err != nil {
 			return fmt.Errorf("config: backup %s: %w", file.name, err)
 		}
 	}
 	return nil
 }
 
-func renderMigratedConfig(cfg *Config, source *legacyConfigSource) ([]byte, error) {
+func cleanupLegacyFiles(source *legacyConfigSource) []string {
+	var warnings []string
+	for _, file := range legacyBackupFiles(source) {
+		if len(file.data) == 0 {
+			continue
+		}
+		if err := os.Remove(file.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			warnings = append(warnings, fmt.Sprintf("could not remove legacy %s after migration: %v", file.path, err))
+		}
+	}
+	return warnings
+}
+
+func renderMigratedConfig(cfg *Config, backupDir string) ([]byte, error) {
 	body, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("config: marshal migrated config: %w", err)
@@ -354,7 +427,7 @@ func renderMigratedConfig(cfg *Config, source *legacyConfigSource) ([]byte, erro
 
 	var out bytes.Buffer
 	out.WriteString("// Migrated from Restish v1.\n")
-	out.WriteString("// Original v1 files were copied to the .bak.v1 backup directory.\n")
+	fmt.Fprintf(&out, "// Original v1 files were copied to %s.\n", backupDir)
 	out.WriteString("// Secrets are intentionally not duplicated in comments.\n")
 	out.Write(body)
 	out.WriteByte('\n')

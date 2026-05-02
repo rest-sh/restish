@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,12 +22,14 @@ type Paths struct {
 	// 2. XDG_CONFIG_HOME/restish
 	// 3. ~/.config/restish on Unix-like systems, os.UserConfigDir()/restish on Windows
 	configDir string
+	configErr error
 
 	// CacheDir overrides (in order of precedence):
 	// 1. RSH_CACHE_DIR env var
 	// 2. XDG_CACHE_HOME/restish
 	// 3. ~/.cache/restish on Unix-like systems, os.UserCacheDir()/restish on Windows
 	cacheDir string
+	cacheErr error
 	// ConfigFile is the explicit config file path when RSH_CONFIG or
 	// --rsh-config selects a file instead of the platform default directory.
 	configFile string
@@ -38,9 +41,13 @@ func NewPaths() *Paths {
 	if file := os.Getenv("RSH_CONFIG"); file != "" {
 		return NewPathsWithConfigFile(file)
 	}
+	configDir, configErr := computeConfigDir()
+	cacheDir, cacheErr := computeCacheDir()
 	return &Paths{
-		configDir: computeConfigDir(),
-		cacheDir:  computeCacheDir(),
+		configDir: configDir,
+		configErr: configErr,
+		cacheDir:  cacheDir,
+		cacheErr:  cacheErr,
 	}
 }
 
@@ -48,10 +55,12 @@ func NewPaths() *Paths {
 // state stored in the config directory, such as token caches and external-tool
 // approvals, follows the selected config file.
 func NewPathsWithConfigFile(path string) *Paths {
+	cacheDir, cacheErr := computeCacheDir()
 	return &Paths{
 		configDir:  filepath.Dir(path),
 		configFile: path,
-		cacheDir:   computeCacheDir(),
+		cacheDir:   cacheDir,
+		cacheErr:   cacheErr,
 	}
 }
 
@@ -61,10 +70,26 @@ func (p *Paths) Config() string {
 	return p.configDir
 }
 
+// ConfigError returns why the config directory could not be determined, if any.
+func (p *Paths) ConfigError() error {
+	if p == nil {
+		return nil
+	}
+	return p.configErr
+}
+
 // Cache returns the cache directory path for HTTP responses and other
 // transient data.
 func (p *Paths) Cache() string {
 	return p.cacheDir
+}
+
+// CacheError returns why the cache directory used a fallback, if any.
+func (p *Paths) CacheError() error {
+	if p == nil {
+		return nil
+	}
+	return p.cacheErr
 }
 
 // SpecCache returns the subdirectory for cached API spec files.
@@ -92,38 +117,39 @@ func (p *Paths) ConfigFile() string {
 
 // computeConfigDir determines the configuration directory, respecting Restish's
 // explicit override before using the default config directory.
-func computeConfigDir() string {
+func computeConfigDir() (string, error) {
 	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
-		return dir
+		return dir, nil
 	}
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" && filepath.IsAbs(dir) {
-		return filepath.Join(dir, "restish")
+		return filepath.Join(dir, "restish"), nil
 	}
 	if runtimeGOOS == "windows" {
 		if dir, err := userConfigDirFunc(); err == nil && dir != "" {
-			return filepath.Join(dir, "restish")
+			return filepath.Join(dir, "restish"), nil
 		}
 	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
-		return filepath.Join(home, ".config", "restish")
+		return filepath.Join(home, ".config", "restish"), nil
 	}
-	return ".restish"
+	return "", fmt.Errorf("config: cannot determine config directory; set RSH_CONFIG, RSH_CONFIG_DIR, XDG_CONFIG_HOME, or HOME")
 }
 
 // computeCacheDir determines the cache directory, respecting Restish's explicit
 // override before using the default cache directory.
-func computeCacheDir() string {
+func computeCacheDir() (string, error) {
 	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
-		return dir
+		return dir, nil
 	}
 	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" && filepath.IsAbs(dir) {
-		return filepath.Join(dir, "restish")
+		return filepath.Join(dir, "restish"), nil
 	}
 	if runtimeGOOS == "windows" {
 		if dir, err := userCacheDirFunc(); err == nil && dir != "" {
-			return filepath.Join(dir, "restish")
+			return filepath.Join(dir, "restish"), nil
 		}
 	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
-		return filepath.Join(home, ".cache", "restish")
+		return filepath.Join(home, ".cache", "restish"), nil
 	}
-	return filepath.Join(".restish", "cache")
+	fallback := filepath.Join(os.TempDir(), "restish")
+	return fallback, fmt.Errorf("config: cannot determine cache directory; using %s; set RSH_CACHE_DIR, XDG_CACHE_HOME, or HOME for persistent cache state", fallback)
 }

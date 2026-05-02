@@ -65,11 +65,26 @@ func TestLoad_MissingFile(t *testing.T) {
 	}
 }
 
-func TestSaveChmodsExistingConfigDir(t *testing.T) {
+func TestSavePreservesExistingConfigDirMode(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "config")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
+	path := filepath.Join(dir, "restish.json")
+	if err := config.Save(path, &config.Config{}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o755 {
+		t.Fatalf("dir mode = %#o, want 0755", got)
+	}
+}
+
+func TestSaveCreatesMissingConfigDirSecurely(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "config")
 	path := filepath.Join(dir, "restish.json")
 	if err := config.Save(path, &config.Config{}); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -344,6 +359,28 @@ func TestLoad_InvalidJSON(t *testing.T) {
 	}
 	if parseErr.Line == 0 || parseErr.Column == 0 {
 		t.Fatalf("expected line:column in parse error, got %d:%d", parseErr.Line, parseErr.Column)
+	}
+}
+
+func TestLoad_UnmarshalTypeErrorIncludesLineColumn(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "spec_files": "spec.yaml"
+    }
+  }
+}`)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected error for wrong field type, got nil")
+	}
+	var parseErr *config.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("expected *config.ParseError, got %T: %v", err, err)
+	}
+	if parseErr.Line != 5 || parseErr.Column == 0 {
+		t.Fatalf("expected line 5/column for type error, got %d:%d", parseErr.Line, parseErr.Column)
 	}
 }
 
@@ -666,7 +703,7 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	text := string(data)
 	for _, want := range []string{
 		"// Migrated from Restish v1.",
-		"// Original v1 files were copied to the .bak.v1 backup directory.",
+		"// Original v1 files were copied to " + legacyDir + ".bak.v1.",
 		"// Secrets are intentionally not duplicated in comments.",
 		"\"base_url\": \"https://api.example.com\"",
 	} {
@@ -686,25 +723,65 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 			t.Fatalf("expected backup file %s: %v", backupPath, err)
 		}
 	}
+	for _, legacyPath := range []string{
+		filepath.Join(legacyDir, "apis.json"),
+		filepath.Join(legacyDir, "config.json"),
+	} {
+		if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected legacy file %s to be removed, got %v", legacyPath, err)
+		}
+	}
 }
 
-func TestLoad_MigrationRefusesExistingBackupDir(t *testing.T) {
+func TestLoad_MigrationReusesMatchingExistingBackupDir(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	legacyAPIs := `{
+  "example": { "base": "https://api.example.com" }
+}`
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), legacyAPIs)
+	writeFile(t, filepath.Join(legacyDir+".bak.v1", "apis.json"), legacyAPIs)
+
+	cfg, err := config.Load(filepath.Join(legacyDir, "restish.json"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Migration == nil || cfg.Migration.BackupPath != legacyDir+".bak.v1" {
+		t.Fatalf("Migration = %#v, want existing backup path", cfg.Migration)
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir, "apis.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected legacy apis.json to be removed after recovery, got %v", err)
+	}
+}
+
+func TestLoad_MigrationUsesNumberedBackupWhenExistingDiffers(t *testing.T) {
 	home := t.TempDir()
 	setLegacyConfigEnv(t, home)
 	legacyDir := filepath.Join(home, ".config", "restish")
 	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
   "example": { "base": "https://api.example.com" }
 }`)
-	if err := os.MkdirAll(legacyDir+".bak.v1", 0o700); err != nil {
-		t.Fatalf("mkdir backup: %v", err)
-	}
+	writeFile(t, filepath.Join(legacyDir+".bak.v1", "apis.json"), `{
+  "old": { "base": "https://old.example.com" }
+}`)
 
-	_, err := config.Load(filepath.Join(legacyDir, "restish.json"))
-	if err == nil {
-		t.Fatal("expected existing backup directory error")
+	cfg, err := config.Load(filepath.Join(legacyDir, "restish.json"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("unexpected error: %v", err)
+	if cfg.Migration == nil || cfg.Migration.BackupPath != legacyDir+".bak.v1.2" {
+		t.Fatalf("Migration = %#v, want numbered backup path", cfg.Migration)
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1.2", "apis.json")); err != nil {
+		t.Fatalf("expected numbered backup apis.json: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(legacyDir+".bak.v1.2", "*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected no temp backup files left behind, got %v", matches)
 	}
 }
 
@@ -926,6 +1003,39 @@ func TestLoad_MigratesLegacyLinuxConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(legacyDir+".bak.v1", "apis.json")); err != nil {
 		t.Fatalf("expected apis.json backup: %v", err)
+	}
+}
+
+func TestLoad_MigrationRerunAfterDeletedV2DoesNotReuseRemovedLegacy(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "demo": { "base": "https://demo.example.com" }
+}`)
+
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	path := config.DefaultPath()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("first Load: %v", err)
+	}
+	if cfg.Migration == nil || cfg.APIs["demo"] == nil {
+		t.Fatalf("expected first load to migrate demo, got cfg=%#v", cfg)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove migrated restish.json: %v", err)
+	}
+
+	cfg, err = config.Load(path)
+	if err != nil {
+		t.Fatalf("second Load: %v", err)
+	}
+	if cfg.Migration != nil {
+		t.Fatalf("expected no second migration after legacy cleanup, got %#v", cfg.Migration)
+	}
+	if cfg.APIs["demo"] != nil {
+		t.Fatalf("expected empty config after deleting v2 file because legacy files were cleaned up")
 	}
 }
 

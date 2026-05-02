@@ -37,6 +37,13 @@ An explicit config file is the whole source of truth for that invocation. If
 that file is missing, Restish errors instead of falling back to your user
 config.
 
+If Restish cannot determine a default config directory because the environment
+has no usable `RSH_CONFIG_DIR`, `XDG_CONFIG_HOME`, platform user directory, or
+`HOME`, set `RSH_CONFIG` or `RSH_CONFIG_DIR` explicitly. Restish will not create
+a relative `./.restish` config directory in the current working directory.
+Cache-only state may use a temporary directory until you set `RSH_CACHE_DIR` or
+`XDG_CACHE_HOME`.
+
 Inspect the active path from the CLI:
 
 ```bash
