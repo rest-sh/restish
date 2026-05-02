@@ -66,6 +66,8 @@ In auto mode:
 - otherwise treat it as jq
 - if jq parsing fails and the expression is plausibly shorthand, fall back to
   shorthand instead of reporting a jq parse error
+- if both jq parsing and shorthand fallback fail, report both errors so users
+  can see which language was attempted and why each path failed
 
 Typical shorthand expressions:
 
@@ -215,6 +217,7 @@ The cache is an implementation detail. The design requirement is:
 
 - repeated use of the same jq expression should not require recompilation every
   time
+- frequently reused jq expressions should survive cache churn when possible
 - long-lived processes should not leak memory via unbounded expression caches
 
 ## Examples

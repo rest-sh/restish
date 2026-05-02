@@ -67,6 +67,11 @@ restish https://api.rest.sh/images --rsh-filter-lang shorthand -f 'body.self'
 restish https://api.rest.sh/images --rsh-filter-lang jq -f '.body[] | .self'
 ```
 
+In the default `auto` mode, Restish tries jq first for expressions that do not
+start with a normalized-response root. If jq parsing fails, Restish also tries
+shorthand; when both fail, the error includes both parser messages. Use
+`--rsh-filter-lang` when you want only one language's error.
+
 ## Pagination And Collecting
 
 Default pagination streams items as they arrive. Use `--rsh-collect` when the

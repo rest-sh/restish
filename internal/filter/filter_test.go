@@ -1,6 +1,7 @@
 package filter_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/filter"
@@ -65,6 +66,20 @@ func TestAutoDetectFallsBackToShorthandWhenJQCannotParse(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected shorthand fallback result")
+	}
+}
+
+func TestAutoDetectReturnsJQAndShorthandErrorsWhenBothFail(t *testing.T) {
+	_, err := filter.Apply("..[", testDoc(), filter.LangAuto)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "jq parse:") {
+		t.Fatalf("expected jq parse error, got %q", msg)
+	}
+	if !strings.Contains(msg, "shorthand:") {
+		t.Fatalf("expected shorthand error, got %q", msg)
 	}
 }
 
@@ -143,5 +158,19 @@ func TestJQ_SelectFilter(t *testing.T) {
 	}
 	if result != "foo" {
 		t.Errorf("got %v, want foo", result)
+	}
+}
+
+func TestJQForcedParseErrorDoesNotIncludeShorthandFallback(t *testing.T) {
+	_, err := filter.Apply("..[", testDoc(), filter.LangJQ)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "jq parse:") {
+		t.Fatalf("expected jq parse error, got %q", msg)
+	}
+	if strings.Contains(msg, "shorthand:") {
+		t.Fatalf("forced jq should not include shorthand fallback error, got %q", msg)
 	}
 }

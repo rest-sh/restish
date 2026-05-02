@@ -2,6 +2,8 @@
 package filter
 
 import (
+	"container/list"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -33,8 +35,14 @@ const jqCacheMaxSize = 1024
 
 var (
 	jqCacheMu sync.Mutex
-	jqCache   = make(map[string]*gojq.Code, jqCacheMaxSize)
+	jqCache   = make(map[string]*list.Element, jqCacheMaxSize)
+	jqLRU     = list.New()
 )
+
+type jqCacheEntry struct {
+	expr string
+	code *gojq.Code
+}
 
 // Apply runs expr against doc using the chosen language and returns the result.
 // doc should be a map[string]any with keys "body", "headers", "links",
@@ -57,7 +65,11 @@ func Apply(expr string, doc map[string]any, lang Lang) (any, error) {
 		if err == nil || lang != LangAuto || !strings.Contains(err.Error(), "jq parse:") {
 			return result, err
 		}
-		return applyShorthand(expr, doc)
+		shorthandResult, shorthandErr := applyShorthand(expr, doc)
+		if shorthandErr != nil {
+			return nil, errors.Join(err, shorthandErr)
+		}
+		return shorthandResult, nil
 	}
 }
 
@@ -134,13 +146,11 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 
 func compiledJQ(expr string) (*gojq.Code, error) {
 	jqCacheMu.Lock()
-	if code, ok := jqCache[expr]; ok {
+	if elem, ok := jqCache[expr]; ok {
+		jqLRU.MoveToBack(elem)
+		code := elem.Value.(jqCacheEntry).code
 		jqCacheMu.Unlock()
 		return code, nil
-	}
-	// Evict entire cache when the cap is reached; simple but avoids unbounded growth.
-	if len(jqCache) >= jqCacheMaxSize {
-		jqCache = make(map[string]*gojq.Code, jqCacheMaxSize)
 	}
 	jqCacheMu.Unlock()
 
@@ -154,11 +164,22 @@ func compiledJQ(expr string) (*gojq.Code, error) {
 	}
 
 	jqCacheMu.Lock()
-	if existing, ok := jqCache[expr]; ok {
+	if elem, ok := jqCache[expr]; ok {
+		jqLRU.MoveToBack(elem)
+		existing := elem.Value.(jqCacheEntry).code
 		jqCacheMu.Unlock()
 		return existing, nil
 	}
-	jqCache[expr] = code
+	for len(jqCache) >= jqCacheMaxSize {
+		oldest := jqLRU.Front()
+		if oldest == nil {
+			break
+		}
+		entry := oldest.Value.(jqCacheEntry)
+		delete(jqCache, entry.expr)
+		jqLRU.Remove(oldest)
+	}
+	jqCache[expr] = jqLRU.PushBack(jqCacheEntry{expr: expr, code: code})
 	jqCacheMu.Unlock()
 	return code, nil
 }
