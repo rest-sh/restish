@@ -77,9 +77,9 @@ func TestCSVFormatterStreamWritesHeaderOnce(t *testing.T) {
 	}
 }
 
-func TestCSVFormatterStreamRejectsSchemaDrift(t *testing.T) {
-	var out strings.Builder
-	f := newCSVFormatter(&out)
+func TestCSVFormatterWarnsAndIgnoresLateColumns(t *testing.T) {
+	var out, diag strings.Builder
+	f := newCSVFormatterWithDiagnostics(&out, &diag)
 
 	if err := f.Handle(plugin.FormatterRequest{
 		Event:    "item",
@@ -87,11 +87,48 @@ func TestCSVFormatterStreamRejectsSchemaDrift(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("first row: %v", err)
 	}
-	err := f.Handle(plugin.FormatterRequest{
+	if err := f.Handle(plugin.FormatterRequest{
 		Event:    "item",
 		Response: plugin.FormatterResponse{Body: map[string]any{"id": float64(2), "name": "beta"}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "unexpected fields") {
-		t.Fatalf("expected schema drift error, got %v", err)
+	}); err != nil {
+		t.Fatalf("item with extra field: %v", err)
+	}
+	if err := f.Handle(plugin.FormatterRequest{Event: "end"}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+
+	if got, want := out.String(), "id\n1\n2\n"; got != want {
+		t.Fatalf("output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+	if got := diag.String(); !strings.Contains(got, "ignoring fields not present in header: name") {
+		t.Fatalf("expected schema drift warning, got %q", got)
+	}
+}
+
+func TestCSVFormatterPadsMissingFieldsInLaterRows(t *testing.T) {
+	var out, diag strings.Builder
+	f := newCSVFormatterWithDiagnostics(&out, &diag)
+
+	if err := f.Handle(plugin.FormatterRequest{
+		Event:    "start",
+		Response: plugin.FormatterResponse{Body: map[string]any{"id": float64(1), "name": "first"}},
+	}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := f.Handle(plugin.FormatterRequest{
+		Event:    "item",
+		Response: plugin.FormatterResponse{Body: map[string]any{"id": float64(2)}},
+	}); err != nil {
+		t.Fatalf("item with missing field: %v", err)
+	}
+	if err := f.Handle(plugin.FormatterRequest{Event: "end"}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+
+	if got, want := out.String(), "id,name\n1,first\n2,\n"; got != want {
+		t.Fatalf("output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+	if diag.String() != "" {
+		t.Fatalf("unexpected diagnostics: %q", diag.String())
 	}
 }

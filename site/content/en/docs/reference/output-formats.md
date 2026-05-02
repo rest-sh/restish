@@ -56,6 +56,11 @@ restish https://api.rest.sh/images -f body.self -o lines
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
 
+The CSV formatter freezes its header from the first object batch. Later rows
+that omit known fields get empty cells. Later rows that introduce new fields are
+still emitted, but the new fields are ignored with a warning because CSV cannot
+add columns after the header has already been written.
+
 ## Tables
 
 ```bash

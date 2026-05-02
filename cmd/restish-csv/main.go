@@ -66,13 +66,19 @@ func main() {
 }
 
 type csvFormatter struct {
-	writer  *csv.Writer
-	headers []string
-	index   map[string]struct{}
+	writer       *csv.Writer
+	diagnostics  io.Writer
+	headers      []string
+	index        map[string]struct{}
+	warnedExtras map[string]struct{}
 }
 
 func newCSVFormatter(w io.Writer) *csvFormatter {
-	return &csvFormatter{writer: csv.NewWriter(w)}
+	return newCSVFormatterWithDiagnostics(w, os.Stderr)
+}
+
+func newCSVFormatterWithDiagnostics(w, diagnostics io.Writer) *csvFormatter {
+	return &csvFormatter{writer: csv.NewWriter(w), diagnostics: diagnostics}
 }
 
 // FormatCSV formats one value as CSV using the same logic the formatter
@@ -126,9 +132,7 @@ func (f *csvFormatter) writeValue(value any) error {
 	}
 
 	for i, row := range rows {
-		if err := f.ensureStableColumns(row); err != nil {
-			return fmt.Errorf("write row %d: %w", i, err)
-		}
+		f.warnExtraColumns(row)
 		record := make([]string, len(f.headers))
 		for j, header := range f.headers {
 			record[j] = csvCell(row[header])
@@ -144,7 +148,7 @@ func (f *csvFormatter) writeValue(value any) error {
 	return nil
 }
 
-func (f *csvFormatter) ensureStableColumns(row map[string]any) error {
+func (f *csvFormatter) warnExtraColumns(row map[string]any) {
 	var extra []string
 	for key := range row {
 		if _, ok := f.index[key]; !ok {
@@ -152,10 +156,24 @@ func (f *csvFormatter) ensureStableColumns(row map[string]any) error {
 		}
 	}
 	if len(extra) == 0 {
-		return nil
+		return
 	}
 	sort.Strings(extra)
-	return fmt.Errorf("csv formatter requires stable columns after the header; unexpected fields: %s", strings.Join(extra, ", "))
+	if f.warnedExtras == nil {
+		f.warnedExtras = map[string]struct{}{}
+	}
+	var unseen []string
+	for _, key := range extra {
+		if _, ok := f.warnedExtras[key]; ok {
+			continue
+		}
+		f.warnedExtras[key] = struct{}{}
+		unseen = append(unseen, key)
+	}
+	if len(unseen) == 0 || f.diagnostics == nil {
+		return
+	}
+	fmt.Fprintf(f.diagnostics, "warning: csv formatter ignoring fields not present in header: %s\n", strings.Join(unseen, ", "))
 }
 
 func csvRows(value any) ([]map[string]any, error) {

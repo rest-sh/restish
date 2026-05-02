@@ -25,5 +25,8 @@ restish https://api.rest.sh/images -o csv
 This works best for arrays of similarly shaped objects. If the response is
 nested, filter it first so the formatter sees only the fields you want, as shown
 in the [Filtering guide](/docs/guides/filtering/).
+For paginated or streamed data, the CSV header is fixed from the first batch.
+Missing fields become empty cells; newly appearing fields are ignored with a
+warning.
 
 Related: [Install and Use Plugins](/docs/plugins/install-and-use/), [Output Formats](/docs/reference/output-formats/).

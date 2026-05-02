@@ -108,15 +108,18 @@ For paginated and event-stream output:
 3. The first object(s) it receives determine the CSV header.
 4. The plugin writes one header row, then one data row per streamed object.
 
-The streaming path is intentionally stricter than the one-shot path:
+The streaming path is intentionally more constrained than the one-shot path:
 
 - it accepts either one object or an array of objects per `item` message
-- once the header is written, later objects may not introduce new fields
+- once the header is written, later objects cannot add new CSV columns
+- newly introduced fields are ignored with a diagnostic warning
+- missing fields are emitted as empty cells
 
 That tradeoff keeps the formatter genuinely stream-friendly. CSV requires a
 header before later rows can be emitted, so a plugin that wants true streaming
 must either freeze the schema early or buffer indefinitely. `restish-csv`
-chooses the former and errors on schema drift.
+chooses the former and warns on schema drift rather than corrupting already
+emitted CSV.
 
 ## Schema Freeze Rule
 
@@ -130,7 +133,7 @@ After header emission:
 
 - accept only rows whose keys are a subset of the frozen header
 - write missing fields as empty cells
-- reject newly introduced columns
+- warn once for newly introduced columns and ignore those cells
 
 This is the key design choice that lets the plugin stay incremental.
 
@@ -140,7 +143,6 @@ The plugin should fail clearly for:
 
 - unsupported input shape
 - mixed arrays containing non-object items
-- schema drift after header freeze
 - malformed formatter messages
 
 Once bytes have already been written, these errors are still real failures. The
