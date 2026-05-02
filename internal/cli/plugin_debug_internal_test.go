@@ -44,6 +44,28 @@ func TestDecodePluginDebugStreamEmitsBeforeEOF(t *testing.T) {
 	}
 }
 
+func TestDecodePluginDebugStreamReturnsMalformedCBORAfterDrain(t *testing.T) {
+	var input strings.Builder
+	var valid strings.Builder
+	if err := pluginwire.WriteMessage(&valid, pluginwire.ProgressMsg{Type: pluginwire.MsgTypeProgress, Text: "starting"}); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+	input.WriteString(valid.String())
+	input.WriteString("\xff\xffnot-cbor")
+
+	out := &lockedStringWriter{}
+	_, err := decodePluginDebugStream(strings.NewReader(input.String()), out)
+	if err == nil {
+		t.Fatal("expected malformed CBOR error")
+	}
+	if !strings.Contains(err.Error(), "decode stdout") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), `"text": "starting"`) {
+		t.Fatalf("expected valid message before decode error, got %q", out.String())
+	}
+}
+
 type lockedStringWriter struct {
 	mu sync.Mutex
 	b  strings.Builder

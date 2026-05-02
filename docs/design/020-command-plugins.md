@@ -67,6 +67,9 @@ sends `done` or dies.
 The host owns session lifetime. "Sent `done`" is not enough by itself if the
 process refuses to exit; the host must still close stdin and use a bounded wait
 before killing the process.
+All command-plugin paths should share one wait result for the subprocess so
+startup cleanup, cancellation, and normal shutdown cannot call `Wait` twice and
+turn the real exit status into "wait was already called".
 
 ### Messages From Plugin To Restish
 
@@ -173,6 +176,7 @@ Termination should include:
 - bounded wait for clean exit
 - force kill if needed
 - surfacing non-zero exit after `done` when it indicates a late crash
+- flushing any buffered plugin stderr line before returning
 
 ## Error Model
 

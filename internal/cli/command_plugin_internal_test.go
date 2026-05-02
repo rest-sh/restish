@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -157,6 +158,56 @@ func TestStreamPluginStdinCancellationStabilizesPipeReaders(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("goroutine count did not stabilize: before=%d after=%d", base, runtime.NumGoroutine())
+}
+
+func TestCommandPluginWaiterReturnsSameResult(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish-wait")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+	cmd := exec.Command(path)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waiter := newCommandPluginWaiter(cmd)
+	first := waiter.Wait(time.Second)
+	second := waiter.Wait(time.Second)
+	if first == nil || second == nil {
+		t.Fatalf("expected exit errors, got first=%v second=%v", first, second)
+	}
+	if first.Error() != second.Error() {
+		t.Fatalf("wait results differ: first=%v second=%v", first, second)
+	}
+}
+
+func TestLineBufferedCommandPluginStderrDoesNotFlushPartialLines(t *testing.T) {
+	var display bytes.Buffer
+	var capture bytes.Buffer
+	syncDisplay := &commandPluginWriter{w: &display}
+	stderr := &lineBufferedCommandPluginStderr{display: syncDisplay, capture: &capture}
+
+	if _, err := stderr.Write([]byte("plugin partial")); err != nil {
+		t.Fatalf("write partial: %v", err)
+	}
+	if display.Len() != 0 {
+		t.Fatalf("partial plugin line was displayed early: %q", display.String())
+	}
+	if _, err := syncDisplay.Write([]byte("cobra warning\n")); err != nil {
+		t.Fatalf("write cobra: %v", err)
+	}
+	if _, err := stderr.Write([]byte(" line\n")); err != nil {
+		t.Fatalf("write rest: %v", err)
+	}
+	if got := display.String(); got != "cobra warning\nplugin partial line\n" {
+		t.Fatalf("display = %q", got)
+	}
+	if got := capture.String(); got != "plugin partial line\n" {
+		t.Fatalf("capture = %q", got)
+	}
 }
 
 func TestValidatePluginCommandNameRejectsCollisions(t *testing.T) {

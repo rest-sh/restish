@@ -43,6 +43,8 @@ var supportedRequiredFeatures = map[string]bool{
 	pluginwire.FeatureRequestFinalBody:         true,
 }
 
+var renameManifestCacheFile = os.Rename
+
 // Manifest is an alias for the canonical plugin.Manifest defined in the public
 // plugin package. Using the same type eliminates the dual-maintenance risk that
 // arose when the two structs diverged.
@@ -74,7 +76,8 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 		info, statErr := os.Stat(path)
 		if statErr == nil && manifestCacheFile != "" {
 			mtime := info.ModTime().UnixNano()
-			if entry, ok := cache[path]; ok && entry.Mtime == mtime {
+			size := info.Size()
+			if entry, ok := cache[path]; ok && entry.Mtime == mtime && entry.Size == size {
 				m := entry.Manifest
 				return &m, nil
 			}
@@ -82,7 +85,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 			if err != nil {
 				return nil, err
 			}
-			cache[path] = manifestCacheEntry{Mtime: mtime, Manifest: *m}
+			cache[path] = manifestCacheEntry{Mtime: mtime, Size: size, Manifest: *m}
 			cacheUpdated = true
 			return m, nil
 		}
@@ -215,6 +218,7 @@ func validateManifest(m Manifest) error {
 // modification time of the executable at the time it was cached.
 type manifestCacheEntry struct {
 	Mtime    int64    `cbor:"mtime"`
+	Size     int64    `cbor:"size,omitempty"`
 	Manifest Manifest `cbor:"manifest"`
 }
 
@@ -258,11 +262,50 @@ func saveManifestCache(cachePath string, cache manifestCache, w io.Writer) {
 		}
 		return
 	}
-	if err := os.WriteFile(cachePath, data, 0o600); err != nil {
+	if err := atomicWriteManifestCache(cachePath, data); err != nil {
 		if w != nil {
 			fmt.Fprintf(w, "warning: manifest cache: write: %v\n", err)
 		}
 	}
+}
+
+func atomicWriteManifestCache(cachePath string, data []byte) error {
+	dir := filepath.Dir(cachePath)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(cachePath)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := renameManifestCacheFile(tmpName, cachePath); err != nil {
+		return err
+	}
+	renamed = true
+	if dirFile, err := os.Open(dir); err == nil {
+		_ = dirFile.Sync()
+		_ = dirFile.Close()
+	}
+	return nil
 }
 
 // DefaultPluginDir returns the default directory for installed plugins.

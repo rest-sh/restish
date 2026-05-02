@@ -822,6 +822,7 @@ func decodePluginDebugStream(r io.Reader, w io.Writer) (int64, error) {
 		if err := dec.ReadMessage(&v); err != nil {
 			if !errors.Is(err, io.EOF) {
 				_, _ = io.Copy(io.Discard, counter)
+				return counter.n, fmt.Errorf("plugin debug: decode stdout: %w", err)
 			}
 			return counter.n, nil
 		}

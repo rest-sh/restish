@@ -565,6 +565,86 @@ echo '%s'
 	}
 }
 
+func TestDiscover_InvalidatesManifestCacheOnSizeChange(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	cacheFile := filepath.Join(t.TempDir(), "plugin-manifest-cache.cbor")
+	scriptPath := writeScript(t, dir, "restish-refresh", fmt.Sprintf("#!/bin/sh\necho '%s'\n",
+		jsonManifest(Manifest{Name: "refresh", Version: "v1", RestishAPIVersion: CurrentPluginAPIVersion})))
+	info, err := os.Stat(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plugins := Discover(dir, nil, cacheFile, nil)
+	if len(plugins) != 1 {
+		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
+	}
+
+	updated := fmt.Sprintf("#!/bin/sh\n# size change\n# another line\n echo '%s'\n",
+		jsonManifest(Manifest{Name: "refresh", Version: "v2", RestishAPIVersion: CurrentPluginAPIVersion}))
+	if err := os.WriteFile(scriptPath, []byte(updated), 0o755); err != nil {
+		t.Fatalf("updating plugin script: %v", err)
+	}
+	if err := os.Chtimes(scriptPath, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatalf("restoring plugin mtime: %v", err)
+	}
+
+	plugins = Discover(dir, nil, cacheFile, nil)
+	if len(plugins) != 1 {
+		t.Fatalf("second discover: got %d plugins, want 1", len(plugins))
+	}
+	if got := plugins[0].Manifest.Version; got != "v2" {
+		t.Fatalf("manifest version = %q, want v2", got)
+	}
+}
+
+func TestSaveManifestCacheUsesAtomicRename(t *testing.T) {
+	dir := t.TempDir()
+	cacheFile := filepath.Join(dir, "plugin-manifest-cache.cbor")
+	oldRename := renameManifestCacheFile
+	var sawTemp bool
+	renameManifestCacheFile = func(oldpath, newpath string) error {
+		if filepath.Dir(oldpath) != dir || newpath != cacheFile {
+			t.Fatalf("rename %q -> %q does not use cache temp path", oldpath, newpath)
+		}
+		if !strings.Contains(filepath.Base(oldpath), ".plugin-manifest-cache.cbor-") || !strings.HasSuffix(oldpath, ".tmp") {
+			t.Fatalf("temp name = %q, want cache temp", oldpath)
+		}
+		sawTemp = true
+		return oldRename(oldpath, newpath)
+	}
+	t.Cleanup(func() { renameManifestCacheFile = oldRename })
+
+	saveManifestCache(cacheFile, manifestCache{
+		"/tmp/restish-demo": {
+			Mtime:    1,
+			Size:     2,
+			Manifest: Manifest{Name: "demo", RestishAPIVersion: CurrentPluginAPIVersion},
+		},
+	}, nil)
+	if !sawTemp {
+		t.Fatal("rename hook was not called")
+	}
+	cache := loadManifestCache(cacheFile)
+	if got := cache["/tmp/restish-demo"].Size; got != 2 {
+		t.Fatalf("cached size = %d, want 2", got)
+	}
+}
+
+func TestLoadManifestCacheBadCBORFallsBackToEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plugin-manifest-cache.cbor")
+	if err := os.WriteFile(path, []byte("not cbor"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cache := loadManifestCache(path)
+	if len(cache) != 0 {
+		t.Fatalf("cache = %#v, want empty fallback", cache)
+	}
+}
+
 // TestHookTimeout verifies default and override timeout logic.
 func TestHookTimeout(t *testing.T) {
 	tests := []struct {

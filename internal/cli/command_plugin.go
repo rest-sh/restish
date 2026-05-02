@@ -153,6 +153,89 @@ func (w *commandPluginWriter) WriteMessage(v any) error {
 	return pluginwire.WriteMessage(w.w, v)
 }
 
+type lineBufferedCommandPluginStderr struct {
+	mu      sync.Mutex
+	display io.Writer
+	capture io.Writer
+	buf     bytes.Buffer
+}
+
+func (w *lineBufferedCommandPluginStderr) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.capture != nil {
+		_, _ = w.capture.Write(p)
+	}
+	start := 0
+	for i, b := range p {
+		if b != '\n' {
+			continue
+		}
+		w.buf.Write(p[start : i+1])
+		_, _ = w.display.Write(w.buf.Bytes())
+		w.buf.Reset()
+		start = i + 1
+	}
+	if start < len(p) {
+		w.buf.Write(p[start:])
+	}
+	return len(p), nil
+}
+
+func (w *lineBufferedCommandPluginStderr) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.buf.Len() == 0 {
+		return
+	}
+	_, _ = w.display.Write(w.buf.Bytes())
+	w.buf.Reset()
+}
+
+type commandPluginWaiter struct {
+	cmd    *exec.Cmd
+	done   chan error
+	mu     sync.Mutex
+	err    error
+	waited bool
+}
+
+func newCommandPluginWaiter(cmd *exec.Cmd) *commandPluginWaiter {
+	w := &commandPluginWaiter{cmd: cmd, done: make(chan error, 1)}
+	go func() {
+		w.done <- cmd.Wait()
+	}()
+	return w
+}
+
+func (w *commandPluginWaiter) Wait(grace time.Duration) error {
+	w.mu.Lock()
+	if w.waited {
+		err := w.err
+		w.mu.Unlock()
+		return err
+	}
+	w.mu.Unlock()
+
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+
+	var err error
+	select {
+	case err = <-w.done:
+	case <-timer.C:
+		if w.cmd.Process != nil {
+			_ = w.cmd.Process.Kill()
+		}
+		err = <-w.done
+	}
+	w.mu.Lock()
+	w.err = err
+	w.waited = true
+	w.mu.Unlock()
+	return err
+}
+
 func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
 	syncErr := &commandPluginWriter{w: cmd.ErrOrStderr()}
 	cmd.SetErr(syncErr)
@@ -160,7 +243,11 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
 	procutil.ConfigureCommandTreeKill(cmd.Context(), proc)
 	var pluginStderr bytes.Buffer
-	proc.Stderr = io.MultiWriter(cmd.ErrOrStderr(), &limitedWriter{w: &pluginStderr, limit: maxCommandPluginStderrBytes})
+	stderrWriter := &lineBufferedCommandPluginStderr{
+		display: cmd.ErrOrStderr(),
+		capture: &limitedWriter{w: &pluginStderr, limit: maxCommandPluginStderrBytes},
+	}
+	proc.Stderr = stderrWriter
 
 	stdinPipe, err := proc.StdinPipe()
 	if err != nil {
@@ -176,6 +263,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		_ = stdoutPipe.Close()
 		return fmt.Errorf("command plugin: start: %w", err)
 	}
+	waiter := newCommandPluginWaiter(proc)
 	cancelWatchDone := make(chan struct{})
 	go func() {
 		select {
@@ -192,7 +280,8 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		if proc.Process != nil {
 			_ = proc.Process.Kill()
 		}
-		_ = proc.Wait()
+		_ = waiter.Wait(commandPluginShutdownGrace())
+		stderrWriter.Flush()
 		return cause
 	}
 
@@ -252,6 +341,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 	close(cancelWatchDone)
 	close(stopCh)
 	cancelRequests()
+	stderrWriter.Flush()
 	if loopErr != nil {
 		_ = stdinPipe.Close()
 		requestWG.Wait()
@@ -259,7 +349,7 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		requestWG.Wait()
 		_ = stdinPipe.Close()
 	}
-	waitErr := waitCommandPluginExit(proc, commandPluginShutdownGrace())
+	waitErr := waiter.Wait(commandPluginShutdownGrace())
 	if loopErr == nil && waitErr != nil && !doneReceived {
 		loopErr = fmt.Errorf("command plugin %s: wait: %w", filepath.Base(pluginPath), waitErr)
 	}
@@ -269,26 +359,6 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		c.warnf("command plugin %s exited with error after Done: %v", filepath.Base(pluginPath), waitErr)
 	}
 	return loopErr
-}
-
-func waitCommandPluginExit(proc *exec.Cmd, grace time.Duration) error {
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- proc.Wait()
-	}()
-
-	timer := time.NewTimer(grace)
-	defer timer.Stop()
-
-	select {
-	case err := <-waitCh:
-		return err
-	case <-timer.C:
-		if proc.Process != nil {
-			_ = proc.Process.Kill()
-		}
-		return <-waitCh
-	}
 }
 
 func commandPluginShutdownGrace() time.Duration {

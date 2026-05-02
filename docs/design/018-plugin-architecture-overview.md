@@ -82,6 +82,11 @@ unknown hook, or list an unsupported required feature are rejected during
 manifest loading with a plugin-specific diagnostic. Plugins that only include
 new optional fields remain loadable.
 
+Manifest discovery may use an on-disk cache, but the cache key must include at
+least executable path, modification time, and binary size. Cache writes are
+atomic same-directory temp-file renames so a crash during discovery does not
+leave a corrupt cache that hides fresh plugin manifests.
+
 Known hook names are `auth`, `request-middleware`, `response-middleware`,
 `loader`, `formatter`, `command`, and `tls-signer`. Hook-specific manifest
 fields are part of that declaration: formatter plugins must declare
@@ -243,6 +248,8 @@ universal:
 
 - all plugin processes are tied to a host-owned context
 - the host surfaces plugin stderr when it is helpful for debugging
+- plugin stderr should be serialized by line when it shares a destination with
+  host diagnostics
 - the host should not wait forever on a hung plugin
 - successful completion still requires process cleanup
 - per-request hook plugins should start in under 100 ms; expensive work should
