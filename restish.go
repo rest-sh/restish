@@ -45,11 +45,24 @@ type Encoding = content.Encoding
 // Formatter renders normalized responses for -o/--rsh-output-format.
 type Formatter = output.Formatter
 
+// Response is the normalized HTTP response passed to custom formatters and
+// returned by FetchResponse.
+type Response = output.Response
+
 // LinkParser extracts hypermedia links from response headers or bodies.
 type LinkParser = hypermedia.Parser
 
+// Link is a normalized hypermedia link returned by custom link parsers.
+type Link = hypermedia.Link
+
 // Loader detects and loads OpenAPI-like API descriptions.
 type Loader = spec.Loader
+
+// LoadOptions carries source metadata for custom spec loaders.
+type LoadOptions = spec.LoadOptions
+
+// APISpec is the parsed API description returned by custom spec loaders.
+type APISpec = spec.APISpec
 
 // AuthHandler is implemented by custom authentication schemes.
 type AuthHandler = auth.Handler

@@ -168,7 +168,7 @@ Loaders are registered in priority order. Sources include:
 - built-in loaders
 - plugin-provided loaders
 
-The internal loader interface is options-aware by default:
+The loader interface is options-aware by default:
 
 ```go
 type Loader interface {
@@ -182,7 +182,8 @@ type Loader interface {
 type, and the cross-origin reference policy. This avoids parallel `Load` /
 `LoadWithOptions` APIs and makes reference-resolution context part of the
 canonical loader contract. Concrete loaders may expose local convenience
-methods, but core dispatch should call the options-aware method.
+methods, but core dispatch and the public embedding alias use the options-aware
+method.
 
 Selection rules should be explicit:
 

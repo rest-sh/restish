@@ -49,9 +49,25 @@ cli := restish.New()
 cli.AddAuthHandler("corp-token", corpTokenHandler{})
 ```
 
-The handler implements the auth interfaces from
-`github.com/rest-sh/restish/v2/auth`. It receives the request context, profile
-name, params, token store, and HTTP client used by Restish auth flows.
+The handler implements `restish.AuthHandler`. Use the root package aliases,
+such as `restish.AuthParam` and `restish.AuthContext`, rather than importing an
+auth subpackage:
+
+```go
+type corpTokenHandler struct{}
+
+func (corpTokenHandler) Parameters() []restish.AuthParam {
+	return []restish.AuthParam{{Name: "token", Required: true, Secret: true}}
+}
+
+func (corpTokenHandler) Authenticate(ctx context.Context, req *http.Request, ac restish.AuthContext) error {
+	req.Header.Set("Authorization", "Bearer "+ac.Params["token"])
+	return nil
+}
+```
+
+The handler receives the request context, profile name, params, token store,
+and HTTP client used by Restish auth flows.
 
 ## Custom Content Or Output
 
@@ -60,8 +76,23 @@ encodings, link parsers, loaders, and formatters before running the CLI:
 
 ```go
 cli := restish.New()
-cli.AddContentType("ion", []string{"application/ion"}, ionCodec)
+cli.AddContentType(&restish.ContentType{
+	Name:      "ion",
+	MIMETypes: []string{"application/ion"},
+	Marshal:   marshalIon,
+	Unmarshal: unmarshalIon,
+})
 cli.AddFormatter("corp-table", corpFormatter)
+```
+
+Custom spec loaders implement `restish.Loader`, whose parse method receives
+`restish.LoadOptions` so local paths, source URLs, request context, and
+cross-origin reference policy stay available during loading:
+
+```go
+func (corpLoader) LoadWithOptions(body []byte, opts restish.LoadOptions) (*restish.APISpec, error) {
+	// Parse body and use opts.SourceURL or opts.LocalPath for diagnostics/ref resolution.
+}
 ```
 
 Prefer plugins when the extension should also work with the stock `restish`

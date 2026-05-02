@@ -271,7 +271,8 @@ supported as a product contract. The current intended surface is:
 - `New()` to create an initialized runtime with default streams, paths,
   registries, and signal handling
 - type aliases for config, content-type, encoding, formatter, link-parser,
-  loader, and auth-handler contracts that embedders are expected to implement
+  loader, auth-handler, and the dependent response/link/spec/load-option types
+  those contracts mention
 - registration methods for auth handlers, content types, encodings, link
   parsers, OpenAPI loaders, and output formatters
 - branding methods for command name, description, and version
@@ -307,12 +308,18 @@ pipeline.
 
 ## Refactor Direction
 
-The review surfaced a few architectural pressures that this design now adopts as
-future direction:
+Recent simplification work resolved several architectural pressures that this
+design now treats as invariants:
 
-- split prompt handling behind a `Prompter` interface
-- move global-flag parsing into one structured runtime step
-- reduce public "testing only" runtime fields by hiding them behind test hooks
+- prompt handling is centralized in the runtime-owned prompter path; individual
+  commands may choose default-yes or default-no confirmation semantics, but
+  should not hand-roll prompt scanners
+- pre-Cobra argument inspection flows through one structured scan result for
+  config selection, profile selection, bootstrap commands, and generated API
+  registration
+- request transport cleanup is owned by the request context, so cancellation
+  closes prepared transports without a CLI-wide closer registry
+- public "testing only" runtime fields stay hidden behind test hooks
 - replace ad-hoc boolean parameter lists with options structs in execution code
 - collapse small internal packages only when ownership is obvious; input
   parsing and cache behavior remain separate concerns until a broader request

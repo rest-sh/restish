@@ -102,6 +102,12 @@ diagnostic-only and should direct operators to set `RSH_CACHE_DIR`,
 Config writes preserve permissions on an existing config directory. Missing
 config directories are created with the restrictive default mode.
 
+Config writes should use the shared atomic-write helper used by the rest of
+Restish's local state, while preserving config-specific locking and directory
+permission behavior. The helper exists to keep temp-file creation, file modes,
+sync/rename cleanup, and parent-directory sync consistent across config, token,
+spec, HTTP cache, plugin manifest cache, and shell/completion setup writes.
+
 ## Primary Config Shape
 
 The primary top-level keys are:

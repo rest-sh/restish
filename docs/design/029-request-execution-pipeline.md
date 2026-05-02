@@ -178,6 +178,7 @@ request plan
   -> base transport
   -> retry layer
   -> cache layer
+  -> response observer hooks
   -> http.Client
 ```
 
@@ -186,6 +187,9 @@ Two rules matter:
 - cache sits above retry so cache hits never trigger retry behavior
 - streaming requests must not rely on `http.Client.Timeout` for whole-lifecycle
   enforcement
+- response observers, such as verbose request/response diagnostics, are final
+  transport hooks that observe the raw response without creating a bespoke
+  transport stack for each diagnostic feature
 
 Instead, Restish should use a request context deadline for "time to first
 headers" and then clear or replace that deadline after headers arrive for

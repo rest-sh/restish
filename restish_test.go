@@ -3,7 +3,10 @@ package restish_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +26,27 @@ func (testAuth) Authenticate(_ context.Context, req *http.Request, ac restish.Au
 	return nil
 }
 
+type testFormatter struct{}
+
+func (testFormatter) Format(w io.Writer, resp *restish.Response, _ bool) error {
+	_, err := fmt.Fprint(w, resp.Body)
+	return err
+}
+
+type testLinkParser struct{}
+
+func (testLinkParser) ParseLinks(baseURL *url.URL, _ http.Header, _ any) []restish.Link {
+	return []restish.Link{{Rel: "self", URI: baseURL.String()}}
+}
+
+type testLoader struct{}
+
+func (testLoader) Detect(string, []byte) bool { return false }
+func (testLoader) LoadWithOptions([]byte, restish.LoadOptions) (*restish.APISpec, error) {
+	return nil, nil
+}
+func (testLoader) Priority() int { return 1000 }
+
 func TestPublicAPIEmbeddableCLI(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", configDir)
@@ -40,6 +64,9 @@ func TestPublicAPIEmbeddableCLI(t *testing.T) {
 	})
 	c.AddAuthHandler("test-auth", testAuth{})
 	c.AddContentType(&restish.ContentType{Name: "example"})
+	c.AddFormatter("test", testFormatter{})
+	c.AddLinkParser(testLinkParser{})
+	c.AddLoader(testLoader{})
 	if err := os.WriteFile(filepath.Join(configDir, "restish.json"), []byte(`{"apis":{"user":{"base_url":"https://user.example.com"}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
