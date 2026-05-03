@@ -100,21 +100,15 @@ func decodeBody(resp *http.Response, reg *content.Registry, maxBytes int64) (dec
 	return decoded, raw, err
 }
 
-// StatusToExitCode maps an HTTP status code to a CLI exit code.
+// StatusToExitCode maps an HTTP status code to the Restish runtime-failure
+// exit code. Detailed status is available in output; the process code stays
+// intentionally small and script-friendly.
 //
 //	2xx → 0  (success)
-//	3xx → 3  (redirect — often unintentional in scripts)
-//	4xx → 4  (client error)
-//	5xx → 5  (server error)
+//	other → 1  (runtime failure)
 func StatusToExitCode(status int) int {
-	switch {
-	case status >= 200 && status < 300:
+	if status >= 200 && status < 300 {
 		return 0
-	case status >= 300 && status < 400:
-		return 3
-	case status >= 400 && status < 500:
-		return 4
-	default:
-		return 5
 	}
+	return 1
 }

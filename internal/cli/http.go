@@ -97,6 +97,8 @@ type requestBodyOptions struct {
 	multipartPartContentTypes map[string]string
 	operationAuth             *operationAuthPolicy
 	bodyRequired              bool
+	bodyOverrideSet           bool
+	bodyOverride              any
 }
 
 // runHTTPWithOptions executes one HTTP request through the full pipeline:
@@ -132,14 +134,21 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	}
 	var apiName string
 
-	// Build request body from shorthand args and/or piped stdin.
-	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	bodyVal, bodyInfo, err := input.BodyWithInfo(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
-		SchemaTypes: bodyOpts.schemaTypes,
-		Warnf:       c.warnf,
-	})
-	if err != nil {
-		return fmt.Errorf("building request body: %w", err)
+	var bodyVal any
+	var bodyInfo input.BodyInfo
+	if bodyOpts.bodyOverrideSet {
+		bodyVal = bodyOpts.bodyOverride
+	} else {
+		// Build request body from shorthand args and/or piped stdin.
+		stdinIsTTY := output.IsTerminalReader(c.Stdin)
+		var err error
+		bodyVal, bodyInfo, err = input.BodyWithInfo(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
+			SchemaTypes: bodyOpts.schemaTypes,
+			Warnf:       c.warnf,
+		})
+		if err != nil {
+			return fmt.Errorf("building request body: %w", err)
+		}
 	}
 	if bodyOpts.bodyRequired && bodyVal == nil {
 		return fmt.Errorf("request body is required; pass body arguments, pipe a body on stdin, or run %q for an example", cmd.CommandPath()+" --rsh-generate-body")
@@ -237,7 +246,14 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 			if crossHost {
 				c.warnf("response-middleware follow to different host %q — stripping credentials", followReq.URI)
 			}
-			return c.runHTTPWithOptions(cmd, followReq.Method, []string{followReq.URI}, true, nil, crossHost, firstPartyHost, "", requestBodyOptions{})
+			followHeaders, followContentType := followRequestHeaders(followReq)
+			if followReq.ContentType != "" {
+				followContentType = followReq.ContentType
+			}
+			return c.runHTTPWithOptions(cmd, followReq.Method, []string{followReq.URI}, true, followHeaders, crossHost, firstPartyHost, followContentType, requestBodyOptions{
+				bodyOverrideSet: true,
+				bodyOverride:    followReq.Body,
+			})
 		}
 	}
 
@@ -287,6 +303,22 @@ func followCrossesFirstPartyHost(firstPartyOrigin, followURI string) bool {
 		return !strings.EqualFold(followU.Hostname(), firstPartyOrigin)
 	}
 	return !request.SameOrigin(baseU, followU)
+}
+
+func followRequestHeaders(followReq *HookFollowRequest) ([]string, string) {
+	if followReq == nil || len(followReq.Headers) == 0 {
+		return nil, ""
+	}
+	headers := make([]string, 0, len(followReq.Headers))
+	var contentType string
+	for name, value := range followReq.Headers {
+		if strings.EqualFold(name, "Content-Type") && followReq.Body != nil {
+			contentType = value
+			continue
+		}
+		headers = append(headers, name+": "+value)
+	}
+	return headers, contentType
 }
 
 // formatResponse applies any filter then selects and runs the formatter.

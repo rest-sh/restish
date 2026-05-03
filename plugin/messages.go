@@ -431,10 +431,12 @@ type ResponseMiddlewareInput struct {
 }
 
 // FollowRequest instructs the host to issue a follow-up HTTP request.
-// Only Method and URI are supported.
 type FollowRequest struct {
-	Method string `cbor:"method,omitempty" json:"method,omitempty"`
-	URI    string `cbor:"uri" json:"uri"`
+	Method      string            `cbor:"method,omitempty" json:"method,omitempty"`
+	URI         string            `cbor:"uri" json:"uri"`
+	Headers     map[string]string `cbor:"headers,omitempty" json:"headers,omitempty"`
+	Body        any               `cbor:"body,omitempty" json:"body,omitempty"`
+	ContentType string            `cbor:"content_type,omitempty" json:"content_type,omitempty"`
 }
 
 // HookResponseUpdate carries partial response modifications from a

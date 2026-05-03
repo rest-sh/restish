@@ -70,6 +70,9 @@ commands for registered APIs via OpenAPI 3.`
 			return fmt.Errorf("unknown command %q for %q; run %q to see available commands or use a full URL", args[0], cmd.Name(), cmd.CommandPath()+" --help")
 		},
 	}
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return newUsageError(err)
+	})
 
 	addRootCommandGroups(root)
 	setupGroupedUsage(root)
@@ -170,7 +173,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	}
 	pf.Bool("rsh-retry-unsafe", false, "Allow retries for POST, PUT, PATCH, and DELETE requests")
 	pf.String("rsh-retry-max-wait", "", "Maximum wait for Retry-After/X-Retry-In delays (default: 5m)")
-	pf.Int("rsh-max-events", 0, "Maximum number of SSE events or NDJSON lines to process (0 = unlimited)")
+	pf.Int("rsh-max-events", 1000, "Maximum number of SSE events or NDJSON lines to process (0 = unlimited)")
 	pf.Bool("rsh-no-paginate", false, "Disable automatic pagination (return only the first page)")
 	pf.Bool("rsh-collect", false, "Collect all pages then apply filter (default: stream items as they arrive)")
 	pf.Int("rsh-max-pages", 25, "Maximum number of pages to fetch (0 = unlimited)")

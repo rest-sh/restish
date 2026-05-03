@@ -24,8 +24,9 @@ restish https://api.rest.sh/images -f body.self -o lines
 
 ## Exit Codes
 
-Network and client errors return non-zero. HTTP error statuses also return
-non-zero after the response body is written.
+Restish exits `0` for success, `1` for runtime failures or non-2xx HTTP
+statuses, `2` for usage errors such as missing arguments, and `130` for SIGINT.
+HTTP error statuses still write the response body before returning non-zero.
 
 When a script intentionally handles HTTP status itself, keep the body and force
 a zero exit code:

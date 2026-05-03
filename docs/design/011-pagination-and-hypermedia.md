@@ -142,6 +142,8 @@ Pagination is bounded by safety rules:
 - context cancellation must be checked between pages
 - cycles must be detected by visited-URL tracking
 - `--rsh-max-pages` and `--rsh-max-items` are hard stops
+- hitting `--rsh-max-pages` is a successful bounded stop and must print a
+  stderr warning naming the cap and `0` override
 
 Automatic pagination should never become an accidental infinite loop.
 

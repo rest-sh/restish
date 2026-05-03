@@ -8,12 +8,13 @@ description: Reference for flags shared across most Restish commands.
 Global flags apply across generic requests, generated API commands, utilities,
 and many plugin-delegated requests.
 
-Use the CLI reference command to see the same groups from your installed
-binary:
+Use command help to see the flags supported by your installed binary. Ordinary
+help shows the common global flags; `--help-all` expands the full grouped
+reference:
 
 ```bash
-restish flags
-restish flags output
+restish get --help
+restish get --help-all
 ```
 
 ## Request Construction
@@ -76,6 +77,10 @@ restish https://api.rest.sh/images --rsh-max-items 100
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
 ```
+
+Pagination stops at `--rsh-max-pages=25` by default; pass `0` for unlimited.
+Streaming stops at `--rsh-max-events=1000` by default; pass `0` for unlimited.
+Both bounded stops print a stderr warning and exit successfully.
 
 ## Cache And Retry
 

@@ -150,15 +150,6 @@ restish cache
 
 restish content-types
 
-restish flags
-  request
-  output
-  auth
-  tls
-  pagination
-  cache
-  general
-
 restish plugin
   list
   install <source>
@@ -169,7 +160,7 @@ restish mcp
   serve <api...>
 
 restish bulk ...
-restish completion bash|zsh|fish|powershell|install
+restish shell completion bash|zsh|fish|powershell
 restish shell setup <shell>
 restish doctor [api|plugin|migrate-v1]
 restish cert <uri>
@@ -265,25 +256,21 @@ profiles are not owned by a single API. `--all-profiles` still requires an API
 name and clears the API-prefixed token entries plus shared auth-profile entries
 referenced by that API's profiles.
 
-### Global Flag Discovery Gets Its Own Command
+### Global Flag Discovery Lives In Help
 
-V2 adds:
+V2 uses focused command help by default and expands the full global flag
+surface with:
 
 ```text
-restish flags
-restish flags request
-restish flags output
-restish flags auth
-restish flags tls
-restish flags pagination
-restish flags cache
-restish flags general
+restish <command> --help-all
 ```
 
 Global Restish flags are powerful, but generated operation help should stay
-focused on API parameters. `restish flags` gives users a memorable in-CLI
-reference for the full `--rsh-*` surface while allowing ordinary help output to
-remain readable.
+focused on API parameters. Ordinary help shows common global flags and points
+to `--help-all` for the grouped request, output, auth, TLS, pagination, cache,
+and general reference. The old top-level `flags` command is hidden during v2
+development for compatibility with local scripts, but it is not part of the
+published command surface.
 
 ### MCP Uses An Explicit Service Verb
 

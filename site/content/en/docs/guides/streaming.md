@@ -9,6 +9,10 @@ Restish recognizes Server-Sent Events, NDJSON, and JSON Lines. Streaming
 responses are processed one event or line at a time instead of waiting for a
 complete response body.
 
+Streaming stops at `--rsh-max-events=1000` by default and prints a warning when
+the cap is reached. Pass `--rsh-max-events 0` only when you intentionally want
+to listen until EOF or interruption.
+
 ## Server-Sent Events
 
 Always bound examples you paste into a terminal:

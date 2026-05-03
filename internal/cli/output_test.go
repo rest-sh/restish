@@ -104,7 +104,7 @@ func TestReadableBodyIsValidJSON(t *testing.T) {
 	}
 }
 
-// TestExitCode4xx verifies that a 4xx response returns ExitCodeError{Code:4}.
+// TestExitCode4xx verifies that a 4xx response returns ExitCodeError{Code:1}.
 func TestExitCode4xx(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	useJSONResponse(c, 404, `{"error":"not found"}`)
@@ -114,12 +114,12 @@ func TestExitCode4xx(t *testing.T) {
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
 	}
-	if exitErr.Code != 4 {
-		t.Errorf("expected exit code 4, got %d", exitErr.Code)
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.Code)
 	}
 }
 
-// TestExitCode5xx verifies that a 5xx response returns ExitCodeError{Code:5}.
+// TestExitCode5xx verifies that a 5xx response returns ExitCodeError{Code:1}.
 func TestExitCode5xx(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	useJSONResponse(c, 500, `{"error":"boom"}`)
@@ -129,8 +129,8 @@ func TestExitCode5xx(t *testing.T) {
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
 	}
-	if exitErr.Code != 5 {
-		t.Errorf("expected exit code 5, got %d", exitErr.Code)
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.Code)
 	}
 }
 

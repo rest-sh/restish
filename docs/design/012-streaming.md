@@ -143,7 +143,10 @@ Streaming must remain interruptible and bounded when the user asks for it.
 Important controls:
 
 - context cancellation should interrupt stream reads promptly
-- `--rsh-max-events` provides a simple safety limit for both SSE and NDJSON
+- `--rsh-max-events` defaults to `1000` and provides a simple safety limit for
+  both SSE and NDJSON; `0` means unlimited
+- hitting `--rsh-max-events` is a successful bounded stop and must print a
+  stderr warning naming the cap and `0` override
 - SSE and NDJSON per-line reads are capped by the stream line limit derived
   from `--rsh-max-body-size`
 - SSE accumulated `data:` payload for one event is capped separately by the

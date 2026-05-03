@@ -38,9 +38,6 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 				"  edit",
 				"  links",
 				"  version",
-				"Help",
-				"  completion",
-				"  flags",
 			},
 		},
 		{
@@ -195,7 +192,7 @@ func TestWorkflowCommandHelpSurface(t *testing.T) {
 		{
 			name: "shell setup",
 			args: []string{"restish", "shell", "setup", "--help"},
-			want: []string{"<shell>", "--completion", "--dry-run", "--yes"},
+			want: []string{"<shell>", "--no-completion", "--dry-run", "--yes"},
 		},
 		{
 			name: "edit",

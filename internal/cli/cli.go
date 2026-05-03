@@ -74,6 +74,8 @@ type testHooks struct {
 	SignalAwareContext func() (context.Context, context.CancelFunc)
 	// AuthHookFunc overrides auth hook plugin execution in tests.
 	AuthHookFunc func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error
+	// StdoutIsTerminal overrides doctor text-output channel selection in tests.
+	StdoutIsTerminal func(io.Writer) bool
 }
 
 // CLI holds all state for a Restish instance. Using a struct instead of
@@ -557,7 +559,7 @@ func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []strin
 	}
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
-	return root.ExecuteContext(ctx)
+	return usageExitError(root.ExecuteContext(ctx))
 }
 
 func (c *CLI) rootContext() (context.Context, context.CancelFunc) {

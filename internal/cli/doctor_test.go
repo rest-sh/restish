@@ -18,7 +18,7 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix permission bits not authoritative on Windows")
 	}
-	c, _, errOut := newTestCLI(t)
+	c, out, errOut := newTestCLI(t)
 	tokenPath := c.Hooks().TokenCachePath
 	if err := os.WriteFile(tokenPath, []byte(`{}`), 0o644); err != nil {
 		t.Fatalf("write token cache: %v", err)
@@ -26,10 +26,31 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 	if err := c.Run([]string{"restish", "doctor"}); err != nil {
 		t.Fatalf("doctor returned error: %v", err)
 	}
-	got := errOut.String()
+	got := out.String()
 	if !strings.Contains(got, "Token cache permissions: insecure") ||
 		!strings.Contains(got, "before the next OAuth request") {
 		t.Fatalf("expected token cache remediation, got:\n%s", got)
+	}
+	if !strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+		t.Fatalf("expected redirected-output JSON hint on stderr, got:\n%s", errOut.String())
+	}
+}
+
+func TestDoctorTextWritesToStderrWhenStdoutIsTTY(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+
+	if err := c.Run([]string{"restish", "doctor"}); err != nil {
+		t.Fatalf("doctor returned error: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("doctor should not write text report to tty stdout, got:\n%s", out.String())
+	}
+	if !strings.Contains(errOut.String(), "Config file:") {
+		t.Fatalf("expected text report on stderr, got:\n%s", errOut.String())
+	}
+	if strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+		t.Fatalf("tty doctor should not print redirected-output JSON hint, got:\n%s", errOut.String())
 	}
 }
 

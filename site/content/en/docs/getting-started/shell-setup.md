@@ -19,11 +19,11 @@ restish shell setup bash
 restish shell setup fish
 ```
 
-For zsh and fish, install completion at the same time:
+For zsh and fish, setup installs completion by default. Opt out when you only
+want the wrapper:
 
 ```bash
-restish shell setup zsh --completion
-restish shell setup fish --completion
+restish shell setup zsh --no-completion
 ```
 
 Preview the change first when you want to inspect it:
@@ -59,17 +59,17 @@ setup command makes day-to-day interactive use less brittle.
 Restish also supports shell completion through Cobra:
 
 ```bash
-restish completion zsh
-restish completion bash
-restish completion fish
-restish completion powershell
+restish shell completion zsh
+restish shell completion bash
+restish shell completion fish
+restish shell completion powershell
 ```
 
 For a normal zsh or fish user install, let Restish write the completion script:
 
 ```bash
-restish completion install zsh
-restish completion install fish
+restish shell setup zsh
+restish shell setup fish
 ```
 
 For zsh, the generated script is stored under Restish's config directory and a

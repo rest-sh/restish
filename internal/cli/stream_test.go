@@ -351,7 +351,7 @@ func TestSSEMaxEvents(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	c, out, _ := newTestCLI(t)
+	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-events", "2"}); err != nil {
 		t.Fatalf("get: %v", err)
@@ -367,6 +367,40 @@ func TestSSEMaxEvents(t *testing.T) {
 	}
 	if strings.Contains(got, `"n":3`) {
 		t.Errorf("unexpected event 3 in output (should be stopped by --rsh-max-events 2), got:\n%s", got)
+	}
+	wantWarning := "streaming stopped at --rsh-max-events=2; pass 0 for unlimited"
+	if !strings.Contains(errOut.String(), wantWarning) {
+		t.Fatalf("expected max-events warning %q, got %q", wantWarning, errOut.String())
+	}
+}
+
+func TestNDJSONMaxEventsWarns(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"n":1}`)
+		fmt.Fprintln(w, `{"n":2}`)
+		fmt.Fprintln(w, `{"n":3}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-events", "2"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+		t.Fatalf("expected first two lines, got:\n%s", got)
+	}
+	if strings.Contains(got, `"n":3`) {
+		t.Fatalf("unexpected third line, got:\n%s", got)
+	}
+	wantWarning := "streaming stopped at --rsh-max-events=2; pass 0 for unlimited"
+	if !strings.Contains(errOut.String(), wantWarning) {
+		t.Fatalf("expected max-events warning %q, got %q", wantWarning, errOut.String())
 	}
 }
 
@@ -588,8 +622,8 @@ func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
-	if exitCode(err) != 4 {
-		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %v, want 1 (err=%v)", exitCode(err), err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("expected no stream output before status error, got %q", out.String())

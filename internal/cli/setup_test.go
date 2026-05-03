@@ -16,8 +16,8 @@ func TestCompletionScripts(t *testing.T) {
 		t.Run(shell, func(t *testing.T) {
 			c, out, _ := newTestCLI(t)
 			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-			if err := c.Run([]string{"restish", "completion", shell}); err != nil {
-				t.Fatalf("completion %s: %v", shell, err)
+			if err := c.Run([]string{"restish", "shell", "completion", shell}); err != nil {
+				t.Fatalf("shell completion %s: %v", shell, err)
 			}
 			if out.Len() == 0 {
 				t.Errorf("completion %s: got empty output", shell)
@@ -214,13 +214,13 @@ func TestSetupWritesAlias(t *testing.T) {
 	}
 }
 
-func TestSetupZshWithCompletion(t *testing.T) {
+func TestSetupZshInstallsCompletionByDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
 	c, out, _ := newTestCLI(t)
-	if err := c.Run([]string{"restish", "shell", "setup", "zsh", "--completion", "--yes"}); err != nil {
-		t.Fatalf("setup zsh --completion: %v", err)
+	if err := c.Run([]string{"restish", "shell", "setup", "zsh", "--yes"}); err != nil {
+		t.Fatalf("setup zsh: %v", err)
 	}
 
 	rcPath := filepath.Join(home, ".zshrc")
@@ -245,15 +245,38 @@ func TestSetupZshWithCompletion(t *testing.T) {
 	}
 }
 
-func TestSetupFishWithCompletion(t *testing.T) {
+func TestSetupZshNoCompletion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, _, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "shell", "setup", "zsh", "--no-completion", "--yes"}); err != nil {
+		t.Fatalf("setup zsh --no-completion: %v", err)
+	}
+
+	rcPath := filepath.Join(home, ".zshrc")
+	rc, err := os.ReadFile(rcPath)
+	if err != nil {
+		t.Fatalf("read zshrc: %v", err)
+	}
+	if strings.Contains(string(rc), "# >>> restish completion >>>") {
+		t.Fatalf("did not expect completion block, got:\n%s", string(rc))
+	}
+	scriptPath := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "completions", "_restish.zsh")
+	if _, err := os.Stat(scriptPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no completion script, stat err=%v", err)
+	}
+}
+
+func TestSetupFishInstallsCompletionByDefault(t *testing.T) {
 	home := t.TempDir()
 	configHome := filepath.Join(home, ".config")
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
 	c, out, _ := newTestCLI(t)
-	if err := c.Run([]string{"restish", "shell", "setup", "fish", "--completion", "--yes"}); err != nil {
-		t.Fatalf("setup fish --completion: %v", err)
+	if err := c.Run([]string{"restish", "shell", "setup", "fish", "--yes"}); err != nil {
+		t.Fatalf("setup fish: %v", err)
 	}
 
 	rcPath := filepath.Join(configHome, "fish", "config.fish")

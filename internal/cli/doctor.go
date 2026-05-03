@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/output"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
@@ -157,39 +159,40 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	if doctorJSON(cmd) {
 		return c.writeDoctorJSON(c.doctorRootReport())
 	}
+	out := c.doctorTextOutput()
 	cfgPath := c.configFilePath()
-	fmt.Fprintf(c.Stderr, "Config file: %s\n", cfgPath)
+	fmt.Fprintf(out, "Config file: %s\n", cfgPath)
 	if cfg, err := c.loadConfig(); err != nil {
-		fmt.Fprintf(c.Stderr, "Config parse: invalid\n  %v\n", err)
-		c.printConfigDiagnostics(cfgPath)
+		fmt.Fprintf(out, "Config parse: invalid\n  %v\n", err)
+		c.printConfigDiagnostics(out, cfgPath)
 	} else {
 		apiCount := 0
 		if cfg.APIs != nil {
 			apiCount = len(cfg.APIs)
 		}
-		fmt.Fprintf(c.Stderr, "Config parse: ok (%d APIs)\n", apiCount)
-		c.printConfigDiagnostics(cfgPath)
+		fmt.Fprintf(out, "Config parse: ok (%d APIs)\n", apiCount)
+		c.printConfigDiagnostics(out, cfgPath)
 	}
 	if insecure, err := config.ConfigFileHasInsecurePermissions(cfgPath); err != nil {
-		fmt.Fprintf(c.Stderr, "Config permissions: unknown (%v)\n", err)
+		fmt.Fprintf(out, "Config permissions: unknown (%v)\n", err)
 	} else if insecure {
-		fmt.Fprintf(c.Stderr, "Config permissions: insecure (run chmod 600 %s)\n", cfgPath)
+		fmt.Fprintf(out, "Config permissions: insecure (run chmod 600 %s)\n", cfgPath)
 	} else {
-		fmt.Fprintln(c.Stderr, "Config permissions: ok")
+		fmt.Fprintln(out, "Config permissions: ok")
 	}
-	fmt.Fprintf(c.Stderr, "HTTP cache: %s\n", c.configScopedCacheDir(c.paths().Cache()))
-	fmt.Fprintf(c.Stderr, "Spec cache: %s\n", c.specCacheDir())
+	fmt.Fprintf(out, "HTTP cache: %s\n", c.configScopedCacheDir(c.paths().Cache()))
+	fmt.Fprintf(out, "Spec cache: %s\n", c.specCacheDir())
 	tokenCachePath := c.tokenCachePath()
-	fmt.Fprintf(c.Stderr, "Token cache: %s\n", tokenCachePath)
+	fmt.Fprintf(out, "Token cache: %s\n", tokenCachePath)
 	if insecure, err := config.ConfigFileHasInsecurePermissions(tokenCachePath); err != nil {
-		fmt.Fprintf(c.Stderr, "Token cache permissions: unknown (%v)\n", err)
+		fmt.Fprintf(out, "Token cache permissions: unknown (%v)\n", err)
 	} else if insecure {
-		fmt.Fprintf(c.Stderr, "Token cache permissions: insecure (run chmod 600 %s before the next OAuth request)\n", tokenCachePath)
+		fmt.Fprintf(out, "Token cache permissions: insecure (run chmod 600 %s before the next OAuth request)\n", tokenCachePath)
 	} else {
-		fmt.Fprintln(c.Stderr, "Token cache permissions: ok")
+		fmt.Fprintln(out, "Token cache permissions: ok")
 	}
-	fmt.Fprintf(c.Stderr, "Plugin directory: %s\n", c.pluginDir())
-	c.printShellSetupDiagnostic()
+	fmt.Fprintf(out, "Plugin directory: %s\n", c.pluginDir())
+	c.printShellSetupDiagnostic(out)
 	return nil
 }
 
@@ -197,49 +200,50 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	if doctorJSON(cmd) {
 		return c.writeDoctorJSON(c.doctorAPIReport(cmd, args[0]))
 	}
+	out := c.doctorTextOutput()
 	cfg, err := c.loadConfig()
 	if err != nil {
-		fmt.Fprintf(c.Stderr, "Config parse: invalid\n  %v\n", err)
+		fmt.Fprintf(out, "Config parse: invalid\n  %v\n", err)
 		return nil
 	}
 	name := args[0]
 	api := cfg.APIs[name]
 	if api == nil {
-		fmt.Fprintf(c.Stderr, "API %q: not registered\n", name)
+		fmt.Fprintf(out, "API %q: not registered\n", name)
 		return nil
 	}
-	fmt.Fprintf(c.Stderr, "API %q: registered\n", name)
-	fmt.Fprintf(c.Stderr, "Base URL: %s\n", api.BaseURL)
+	fmt.Fprintf(out, "API %q: registered\n", name)
+	fmt.Fprintf(out, "Base URL: %s\n", api.BaseURL)
 	if api.SpecURL != "" {
-		fmt.Fprintf(c.Stderr, "Spec URL: %s\n", api.SpecURL)
+		fmt.Fprintf(out, "Spec URL: %s\n", api.SpecURL)
 	}
 	if len(api.SpecFiles) > 0 {
-		fmt.Fprintf(c.Stderr, "Spec files: %v\n", api.SpecFiles)
+		fmt.Fprintf(out, "Spec files: %v\n", api.SpecFiles)
 	}
 	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
-		fmt.Fprintln(c.Stderr, "Spec cache: present")
+		fmt.Fprintln(out, "Spec cache: present")
 	} else {
-		fmt.Fprintln(c.Stderr, "Spec cache: missing")
+		fmt.Fprintln(out, "Spec cache: missing")
 	}
 	profileName := c.profileFromCmd(cmd)
 	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
 		BaseURL:       api.BaseURL,
 		OperationBase: api.OperationBase,
 	}); ok {
-		fmt.Fprintf(c.Stderr, "Generated operations: %d available\n", len(set.Operations))
+		fmt.Fprintf(out, "Generated operations: %d available\n", len(set.Operations))
 	} else {
-		fmt.Fprintln(c.Stderr, "Generated operations: unavailable")
+		fmt.Fprintln(out, "Generated operations: unavailable")
 	}
 	if prof := api.Profiles[profileName]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
-		fmt.Fprintln(c.Stderr, "Auth: configured")
+		fmt.Fprintln(out, "Auth: configured")
 	} else {
-		fmt.Fprintln(c.Stderr, "Auth: no profile auth configured")
+		fmt.Fprintln(out, "Auth: no profile auth configured")
 	}
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		c.printAPIReachability(c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
+		c.printAPIReachability(out, c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
 	} else {
-		fmt.Fprintln(c.Stderr, "Reachability: skipped (use --check-network)")
+		fmt.Fprintln(out, "Reachability: skipped (use --check-network)")
 	}
 	return nil
 }
@@ -248,6 +252,7 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 	if doctorJSON(cmd) {
 		return c.writeDoctorJSON(c.doctorPluginReport(args[0]))
 	}
+	out := c.doctorTextOutput()
 	name := args[0]
 	path := name
 	if !filepath.IsAbs(path) && filepath.Base(path) == path {
@@ -255,27 +260,27 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 	}
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(c.Stderr, "Plugin %q: not found at %s\n", name, path)
+		fmt.Fprintf(out, "Plugin %q: not found at %s\n", name, path)
 		return nil
 	}
 	if err != nil {
-		fmt.Fprintf(c.Stderr, "Plugin %q: stat failed: %v\n", name, err)
+		fmt.Fprintf(out, "Plugin %q: stat failed: %v\n", name, err)
 		return nil
 	}
-	fmt.Fprintf(c.Stderr, "Plugin %q: found at %s\n", name, path)
+	fmt.Fprintf(out, "Plugin %q: found at %s\n", name, path)
 	if info.Mode()&0o111 == 0 {
-		fmt.Fprintln(c.Stderr, "Executable: no")
+		fmt.Fprintln(out, "Executable: no")
 	} else {
-		fmt.Fprintln(c.Stderr, "Executable: yes")
+		fmt.Fprintln(out, "Executable: yes")
 	}
 	manifest, err := internalplugin.LoadManifest(path, diagnosticPrefixWriter(c.Stderr))
 	if err != nil {
-		fmt.Fprintf(c.Stderr, "Manifest: invalid (%v)\n", err)
+		fmt.Fprintf(out, "Manifest: invalid (%v)\n", err)
 		return nil
 	}
-	fmt.Fprintf(c.Stderr, "Manifest: %s %s\n", manifest.Name, manifest.Version)
-	fmt.Fprintf(c.Stderr, "Declared capabilities: %s\n", pluginCapabilitySummary(*manifest))
-	fmt.Fprintf(c.Stderr, "Protocol startup: ok (API v%d)\n", manifest.RestishAPIVersion)
+	fmt.Fprintf(out, "Manifest: %s %s\n", manifest.Name, manifest.Version)
+	fmt.Fprintf(out, "Declared capabilities: %s\n", pluginCapabilitySummary(*manifest))
+	fmt.Fprintf(out, "Protocol startup: ok (API v%d)\n", manifest.RestishAPIVersion)
 	return nil
 }
 
@@ -283,29 +288,45 @@ func (c *CLI) runDoctorMigrateV1(cmd *cobra.Command, args []string) error {
 	if doctorJSON(cmd) {
 		return c.writeDoctorJSON(c.doctorMigrationReport())
 	}
+	out := c.doctorTextOutput()
 	if c.explicitConfigFile {
-		fmt.Fprintln(c.Stderr, "Migration: skipped (explicit config file selected)")
+		fmt.Fprintln(out, "Migration: skipped (explicit config file selected)")
 		return nil
 	}
 	if _, err := os.Stat(c.configFilePath()); err == nil {
-		fmt.Fprintf(c.Stderr, "Migration: skipped (%s already exists)\n", c.configFilePath())
+		fmt.Fprintf(out, "Migration: skipped (%s already exists)\n", c.configFilePath())
 		return nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(c.Stderr, "Migration: cannot inspect %s: %v\n", c.configFilePath(), err)
+		fmt.Fprintf(out, "Migration: cannot inspect %s: %v\n", c.configFilePath(), err)
 		return nil
 	}
 	cfg, err := c.loadConfig()
 	if err != nil {
-		fmt.Fprintf(c.Stderr, "Migration: failed\n  %v\n", err)
+		fmt.Fprintf(out, "Migration: failed\n  %v\n", err)
 		return nil
 	}
 	if cfg.Migration == nil {
-		fmt.Fprintln(c.Stderr, "Migration: no eligible v1 config found")
+		fmt.Fprintln(out, "Migration: no eligible v1 config found")
 		return nil
 	}
-	fmt.Fprintf(c.Stderr, "Migration: migrated v1 config from %s\n", cfg.Migration.SourcePath)
-	fmt.Fprintf(c.Stderr, "Backup: %s\n", cfg.Migration.BackupPath)
+	fmt.Fprintf(out, "Migration: migrated v1 config from %s\n", cfg.Migration.SourcePath)
+	fmt.Fprintf(out, "Backup: %s\n", cfg.Migration.BackupPath)
 	return nil
+}
+
+func (c *CLI) doctorTextOutput() io.Writer {
+	if c.doctorStdoutIsTerminal() {
+		return c.Stderr
+	}
+	fmt.Fprintln(c.Stderr, "Use --json for machine-readable output.")
+	return c.Stdout
+}
+
+func (c *CLI) doctorStdoutIsTerminal() bool {
+	if c.hooks.StdoutIsTerminal != nil {
+		return c.hooks.StdoutIsTerminal(c.Stdout)
+	}
+	return output.IsTerminal(c.Stdout)
 }
 
 func doctorJSON(cmd *cobra.Command) bool {
@@ -504,41 +525,41 @@ func configFileExists(path string) (os.FileInfo, bool) {
 	return info, err == nil
 }
 
-func (c *CLI) printConfigDiagnostics(path string) {
+func (c *CLI) printConfigDiagnostics(out io.Writer, path string) {
 	diags, err := config.DiagnoseConfig(path)
 	if err != nil {
 		return
 	}
 	for _, diag := range diags.UnknownFields {
 		if diag.Line > 0 {
-			fmt.Fprintf(c.Stderr, "Unknown field: %s at %d:%d\n", diag.Path, diag.Line, diag.Column)
+			fmt.Fprintf(out, "Unknown field: %s at %d:%d\n", diag.Path, diag.Line, diag.Column)
 		} else {
-			fmt.Fprintf(c.Stderr, "Unknown field: %s\n", diag.Path)
+			fmt.Fprintf(out, "Unknown field: %s\n", diag.Path)
 		}
 		if diag.Suggestion != "" {
-			fmt.Fprintf(c.Stderr, "  Did you mean %q?\n", diag.Suggestion)
+			fmt.Fprintf(out, "  Did you mean %q?\n", diag.Suggestion)
 		}
 		if diag.Hint != "" {
-			fmt.Fprintf(c.Stderr, "  %s\n", diag.Hint)
+			fmt.Fprintf(out, "  %s\n", diag.Hint)
 		}
 	}
 }
 
-func (c *CLI) printShellSetupDiagnostic() {
+func (c *CLI) printShellSetupDiagnostic(out io.Writer) {
 	shell, source := detectRunningShell()
 	if shell == "" {
-		fmt.Fprintln(c.Stderr, "Shell setup: unknown")
+		fmt.Fprintln(out, "Shell setup: unknown")
 		return
 	}
 	if _, ok := shellSetups[shell]; !ok {
-		fmt.Fprintf(c.Stderr, "Shell setup: unsupported shell %s\n", shell)
+		fmt.Fprintf(out, "Shell setup: unsupported shell %s\n", shell)
 		return
 	}
 	if source == "$SHELL" {
-		fmt.Fprintf(c.Stderr, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble (detected via $SHELL)\n", shell)
+		fmt.Fprintf(out, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble (detected via $SHELL)\n", shell)
 		return
 	}
-	fmt.Fprintf(c.Stderr, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble\n", shell)
+	fmt.Fprintf(out, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble\n", shell)
 }
 
 func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
@@ -587,29 +608,29 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *
 	return report
 }
 
-func (c *CLI) printAPIReachability(report doctorReachabilityReport) {
+func (c *CLI) printAPIReachability(out io.Writer, report doctorReachabilityReport) {
 	switch report.Status {
 	case "skipped":
 		if report.Note == "no base URL" {
-			fmt.Fprintln(c.Stderr, "Reachability: skipped (no base URL)")
+			fmt.Fprintln(out, "Reachability: skipped (no base URL)")
 		} else {
-			fmt.Fprintln(c.Stderr, "Reachability: skipped (use --check-network)")
+			fmt.Fprintln(out, "Reachability: skipped (use --check-network)")
 		}
 	case "invalid_url":
-		fmt.Fprintf(c.Stderr, "Reachability: invalid base URL (%v)\n", report.Error)
+		fmt.Fprintf(out, "Reachability: invalid base URL (%v)\n", report.Error)
 	case "failed":
-		fmt.Fprintf(c.Stderr, "Reachability: failed (%v)\n", report.Error)
+		fmt.Fprintf(out, "Reachability: failed (%v)\n", report.Error)
 	case "ok":
 		if report.StatusCode == http.StatusMethodNotAllowed {
-			fmt.Fprintf(c.Stderr, "Reachability: HTTP %s (network ok; HEAD not allowed)\n", report.HTTPStatus)
+			fmt.Fprintf(out, "Reachability: HTTP %s (network ok; HEAD not allowed)\n", report.HTTPStatus)
 			return
 		}
-		fmt.Fprintf(c.Stderr, "Reachability: HTTP %s\n", report.HTTPStatus)
+		fmt.Fprintf(out, "Reachability: HTTP %s\n", report.HTTPStatus)
 	case "warn":
 		if report.Note != "" {
-			fmt.Fprintf(c.Stderr, "Reachability: HTTP %s (%s)\n", report.HTTPStatus, report.Note)
+			fmt.Fprintf(out, "Reachability: HTTP %s (%s)\n", report.HTTPStatus, report.Note)
 			return
 		}
-		fmt.Fprintf(c.Stderr, "Reachability: HTTP %s (warning)\n", report.HTTPStatus)
+		fmt.Fprintf(out, "Reachability: HTTP %s (warning)\n", report.HTTPStatus)
 	}
 }

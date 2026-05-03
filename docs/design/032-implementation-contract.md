@@ -43,7 +43,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. |
 | `--rsh-retry-unsafe` | | bool | `RSH_RETRY_UNSAFE` | false | Replay POST/PUT/PATCH/DELETE on retryable failures. |
 | `--rsh-retry-max-wait` | | duration | `RSH_RETRY_MAX_WAIT` | `5m` | Cap server-provided retry waits. |
-| `--rsh-max-events` | | int | | 0 | Streaming event/line cap. |
+| `--rsh-max-events` | | int | | 1000 | Streaming event/line cap; `0` means unlimited. |
 | `--rsh-no-paginate` | | bool | | false | Disable automatic pagination. |
 | `--rsh-collect` | | bool | | false | Collect pages before filtering. |
 | `--rsh-max-pages` | | int | | 25 | `0` means unlimited. |

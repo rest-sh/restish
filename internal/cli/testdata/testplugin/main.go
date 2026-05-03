@@ -244,6 +244,19 @@ func runResponseMiddleware(raw []byte) {
 	switch {
 	case behavior == "drop":
 		_ = plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{Drop: true})
+	case strings.HasPrefix(behavior, "follow-body:"):
+		uri := strings.TrimPrefix(behavior, "follow-body:")
+		_ = plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{
+			Follow: &plugin.FollowRequest{
+				Method: "POST",
+				URI:    uri,
+				Headers: map[string]string{
+					"Content-Type":   "application/json",
+					"X-Follow-Token": "hook-token",
+				},
+				Body: map[string]any{"from": "plugin"},
+			},
+		})
 	case strings.HasPrefix(behavior, "follow:"):
 		uri := strings.TrimPrefix(behavior, "follow:")
 		_ = plugin.WriteMessage(os.Stdout, plugin.ResponseMiddlewareOutput{

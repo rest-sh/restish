@@ -43,7 +43,10 @@ restish https://api.rest.sh/images --rsh-max-items 100
 restish https://api.rest.sh/images --rsh-max-pages 3
 ```
 
-`--rsh-max-pages` protects you from unexpectedly large collections.
+`--rsh-max-pages` protects you from unexpectedly large collections. It defaults
+to `25`; pass `--rsh-max-pages 0` for unlimited pagination. When the cap is
+reached, Restish prints a warning and exits successfully with the pages already
+processed.
 `--rsh-max-items` bounds the total logical items Restish processes.
 If a later page returns an HTTP error, Restish stops and returns that status
 instead of formatting a partial collection as if it were complete.

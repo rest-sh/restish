@@ -57,10 +57,10 @@ That keeps Restish aligned with standard Go CLI behavior and automatically
 covers both built-in commands and generated commands that are part of the Cobra
 tree.
 
-`completion <shell>` remains a stdout generator so package managers, shell
+`shell completion <shell>` is the stdout generator so package managers, shell
 frameworks, and advanced users can install the script using their preferred
-mechanism. Restish also provides `completion install zsh` for common standalone
-user installs where dumping a script is not enough guidance.
+mechanism. The hidden top-level `completion` command remains as a compatibility
+alias during v2 development.
 
 Completion should reflect the real command tree, which means it can include:
 
@@ -75,11 +75,11 @@ Where Restish has enough metadata, completion should also surface:
 - profile names and similar finite sets
 - API-aware URL paths from generated operation metadata
 
-For zsh, `completion install zsh` writes the generated script under Restish's
-effective config directory, not the cache directory, then adds a managed source
-block to `~/.zshrc`. The script is generated state, but shell startup depends
-on it being present; cache cleanup should not break completion. Fish is simpler:
-`completion install fish` writes the generated script to fish's user completions
+For zsh, `shell setup zsh` writes the generated script under Restish's effective
+config directory, not the cache directory, then adds a managed source block to
+`~/.zshrc`. The script is generated state, but shell startup depends on it
+being present; cache cleanup should not break completion. Fish is simpler:
+`shell setup fish` writes the generated script to fish's user completions
 directory, respecting `XDG_CONFIG_HOME` and falling back to `~/.config`.
 
 ### API-Aware URL Completion
@@ -196,21 +196,21 @@ before Restish ever sees them. Setup exists to reduce that day-to-day friction.
 Generate a completion script:
 
 ```bash
-restish completion zsh
-restish completion bash
-restish completion fish
+restish shell completion zsh
+restish shell completion bash
+restish shell completion fish
 ```
 
 Install zsh completion for a user-managed Restish install:
 
 ```bash
-restish completion install zsh
+restish shell setup zsh
 ```
 
 Install fish completion:
 
 ```bash
-restish completion install fish
+restish shell setup fish
 ```
 
 Configure the shell alias:
@@ -219,11 +219,10 @@ Configure the shell alias:
 restish shell setup zsh
 ```
 
-Configure the shell wrapper and completion together:
+Configure only the shell wrapper:
 
 ```bash
-restish shell setup zsh --completion
-restish shell setup fish --completion
+restish shell setup zsh --no-completion
 ```
 
 which appends a line like:

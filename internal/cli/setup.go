@@ -49,16 +49,21 @@ func (c *CLI) addShellCommand(root *cobra.Command) {
 	}
 	setupCmd := &cobra.Command{
 		Use:       "setup <shell>",
-		Short:     "Configure your shell for restish (writes a noglob alias)",
-		Long:      fmt.Sprintf("Appends a noglob alias for restish to your shell rc file.\nSupported shells: %s", strings.Join(shells, ", ")),
+		Short:     "Configure your shell for restish",
+		Long:      fmt.Sprintf("Appends a noglob alias for restish to your shell rc file and installs completion for supported shells.\nSupported shells: %s", strings.Join(shells, ", ")),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: shells,
 		RunE:      c.runSetup,
 	}
 	setupCmd.Flags().Bool("dry-run", false, "Show what would be written without modifying files")
 	setupCmd.Flags().BoolP("yes", "y", false, "Apply changes without confirmation prompt")
-	setupCmd.Flags().Bool("completion", false, "Also install shell completion when supported")
-	shellCmd.AddCommand(setupCmd)
+	setupCmd.Flags().Bool("no-completion", false, "Do not install shell completion")
+	setupCmd.Flags().Bool("completion", false, "Install shell completion when supported")
+	_ = setupCmd.Flags().MarkHidden("completion")
+	completionCmd := c.newCompletionCommand(root)
+	completionCmd.Short = "Generate shell completion scripts"
+	completionCmd.GroupID = ""
+	shellCmd.AddCommand(setupCmd, completionCmd)
 	root.AddCommand(shellCmd)
 }
 
@@ -67,7 +72,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	shell := strings.ToLower(args[0])
 	setup, ok := shellSetups[shell]
 	if !ok {
-		return fmt.Errorf("unsupported shell %q; supported: zsh, bash, fish", shell)
+		return newUsageError(fmt.Errorf("unsupported shell %q; supported: zsh, bash, fish", shell))
 	}
 
 	home, err := os.UserHomeDir()
@@ -79,7 +84,12 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	line := "\n" + setup.alias + "\n"
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	autoYes, _ := cmd.Flags().GetBool("yes")
-	withCompletion, _ := cmd.Flags().GetBool("completion")
+	noCompletion, _ := cmd.Flags().GetBool("no-completion")
+	completionFlag, _ := cmd.Flags().GetBool("completion")
+	withCompletion := !noCompletion && (shell == "zsh" || shell == "fish")
+	if completionFlag {
+		withCompletion = shell == "zsh" || shell == "fish"
+	}
 	if withCompletion && shell != "zsh" && shell != "fish" {
 		return fmt.Errorf("setup: --completion is currently supported for zsh and fish")
 	}

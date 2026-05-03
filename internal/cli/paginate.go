@@ -124,7 +124,7 @@ func (c *CLI) runPagination(
 		}
 		// Safety: max pages check (page is 1-indexed, firstResp is page 1).
 		if maxPages > 0 && page >= maxPages {
-			c.warnf("reached --rsh-max-pages limit (%d); stopping pagination", maxPages)
+			c.warnf("pagination stopped at --rsh-max-pages=%d; pass 0 for unlimited", maxPages)
 			break
 		}
 		if seenPage, ok := visited[nextURL]; ok {

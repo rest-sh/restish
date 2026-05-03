@@ -153,8 +153,11 @@ func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
 // HookFollowRequest is returned by response-middleware plugins that want to
 // chain a new request.
 type HookFollowRequest struct {
-	Method string
-	URI    string
+	Method      string
+	URI         string
+	Headers     map[string]string
+	Body        any
+	ContentType string
 }
 
 // runResponseMiddlewarePlugins invokes all "response-middleware" hook plugins.
@@ -193,7 +196,13 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 			if method == "" {
 				method = "GET"
 			}
-			return false, &HookFollowRequest{Method: method, URI: out.Follow.URI}, nil
+			return false, &HookFollowRequest{
+				Method:      method,
+				URI:         out.Follow.URI,
+				Headers:     out.Follow.Headers,
+				Body:        out.Follow.Body,
+				ContentType: out.Follow.ContentType,
+			}, nil
 		}
 
 		if out.Response != nil {

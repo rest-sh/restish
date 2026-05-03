@@ -184,7 +184,7 @@ func globalFlagsFromContext(ctx context.Context) GlobalFlags {
 	if gf, ok := ctx.Value(globalFlagsContextKey{}).(GlobalFlags); ok {
 		return gf
 	}
-	return GlobalFlags{Retry: -1, MaxPages: 25}
+	return GlobalFlags{Retry: -1, MaxEvents: 1000, MaxPages: 25}
 }
 
 func requestContext(cmd *cobra.Command) context.Context {

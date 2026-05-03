@@ -161,20 +161,13 @@ Redaction rules are defined in design 030 and apply here.
 
 ## Exit Code Matrix
 
-Restish uses both HTTP-derived and local-process-derived exit semantics.
-
-Recommended mapping:
+Restish uses a small stable exit-code policy:
 
 - `0` for success
-- `3` for HTTP 3xx when surfaced as final status
-- `4` for HTTP 4xx
-- `5` for HTTP 5xx
 - `1` for generic local runtime failure
-- `2` for local usage or validation failure where a distinct code is useful
+- `1` for non-2xx HTTP final status when `--rsh-ignore-status-code` is not set
+- `2` for usage or validation failure before execution
 - `130` for SIGINT / canceled interactive execution
-
-The exact non-HTTP local mapping may evolve, but Restish should clearly
-distinguish "the server returned an error" from "the CLI failed locally."
 
 Recommended local categories are:
 
@@ -182,14 +175,14 @@ Recommended local categories are:
 - local runtime/setup failure during execution
 - cancellation/interruption
 
-Whether usage failures collapse into `1` or use `2`, the mapping should remain
-stable and documented once finalized.
+The response body and verbose diagnostics carry details such as exact HTTP
+status. The process exit code stays intentionally compact for script branches.
 
 ## Output Versus Exit Status
 
 Restish may still write the response body to stdout even if the final exit code
-is HTTP-derived non-zero. This is a useful contract for inspecting failure
-responses.
+is non-zero because the final HTTP status was not 2xx. This is a useful
+contract for inspecting failure responses.
 
 Two explicit flags modify the normal behavior:
 
@@ -308,8 +301,9 @@ Design requirements:
   schema information, and operation-local flags by default
 - `--help-all` should expand inherited Restish request, output, auth, TLS,
   pagination, cache, and config flags
-- `restish flags` should be the in-CLI reference for the complete `--rsh-*`
-  surface so ordinary command help can stay focused
+- ordinary help should show common global flags plus a pointer to `--help-all`
+  so the complete `--rsh-*` surface remains discoverable without a separate
+  top-level command
 - completion output should be machine-oriented when emitted for shell
   integration, not decorated with human commentary
 

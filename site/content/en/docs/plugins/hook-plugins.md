@@ -43,6 +43,11 @@ or `null`; `null` deletes that header from the prepared request. Response
 middleware that returns `response_headers` replaces the normalized response
 headers, so include any original headers the plugin wants to keep.
 
+Response middleware can also return a `follow` object with `method`, `uri`,
+optional `headers`, optional `body`, and optional `content_type`. Restish sends
+that follow-up request through the normal host pipeline, including TLS, retries,
+auth for same-origin follows, and credential stripping for cross-host follows.
+
 Auth hooks run after built-in auth has prepared the request. For generated
 operations that require more than one credential, Restish applies all selected
 credentials and invokes auth hooks once with the final request. In that

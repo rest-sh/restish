@@ -255,8 +255,9 @@ func TestPaginationMaxPages(t *testing.T) {
 	}
 
 	// Warning must appear on stderr.
-	if !strings.Contains(errOut.String(), "max-pages") {
-		t.Errorf("expected max-pages warning on stderr, got: %q", errOut.String())
+	wantWarning := "pagination stopped at --rsh-max-pages=1; pass 0 for unlimited"
+	if !strings.Contains(errOut.String(), wantWarning) {
+		t.Errorf("expected max-pages warning %q on stderr, got: %q", wantWarning, errOut.String())
 	}
 }
 
@@ -756,8 +757,8 @@ func TestPaginationLaterPageErrorFailsCollectedOutput(t *testing.T) {
 	})
 
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
-	if exitCode(err) != 5 {
-		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
 	}
 	if out.String() != "" {
 		t.Fatalf("collected pagination should not emit partial JSON document, got %q", out.String())
@@ -793,8 +794,8 @@ func TestPaginationLaterPageErrorKeepsStreamedPartialOutput(t *testing.T) {
 	})
 
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson"})
-	if exitCode(err) != 5 {
-		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
 	}
 	if !strings.Contains(out.String(), `"id":1`) {
 		t.Fatalf("expected first page item to remain streamed, got %q", out.String())

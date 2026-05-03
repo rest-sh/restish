@@ -178,18 +178,21 @@ func TestRunRejectsInsecureConfigPermissions(t *testing.T) {
 }
 
 func TestDoctorReportsInvalidConfigWithoutFailing(t *testing.T) {
-	c, _, errOut := newTestCLI(t)
+	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte("{\n  \"apiss\": {}\n}"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if err := c.Run([]string{"restish", "doctor"}); err != nil {
 		t.Fatalf("doctor returned error with invalid config: %v", err)
 	}
-	got := errOut.String()
+	got := out.String()
 	if !strings.Contains(got, "Config parse: invalid") ||
 		!strings.Contains(got, c.Hooks().ConfigPath) ||
 		!strings.Contains(got, "did you mean \"apis\"") {
 		t.Fatalf("unexpected doctor output:\n%s", got)
+	}
+	if !strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+		t.Fatalf("expected redirected-output JSON hint on stderr, got:\n%s", errOut.String())
 	}
 }
 

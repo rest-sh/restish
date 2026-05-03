@@ -112,7 +112,9 @@ Flags:
 {{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasAvailableInheritedFlags}}{{with rshInheritedFlagUsages . .InheritedFlags}}
 
 Global Flags:
-{{. | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasHelpSubCommands}}
+{{. | trimTrailingWhitespaces}}{{end}}{{if not (rshShowAllInheritedFlags .)}}
+
+Use "{{.CommandPath}} --help-all" to show every Restish global flag.{{end}}{{end}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
@@ -138,6 +140,7 @@ func setupGroupedUsage(root *cobra.Command) {
 		cobra.AddTemplateFunc("rshFlagUsages", groupedFlagUsages)
 		cobra.AddTemplateFunc("rshLocalFlagUsages", groupedLocalFlagUsages)
 		cobra.AddTemplateFunc("rshInheritedFlagUsages", groupedInheritedFlagUsages)
+		cobra.AddTemplateFunc("rshShowAllInheritedFlags", showAllInheritedFlags)
 	})
 	root.SetUsageTemplate(groupedUsageTemplate)
 }

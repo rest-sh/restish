@@ -12,10 +12,10 @@ operation parameters.
 ## Generate Completion Scripts
 
 ```bash
-restish completion zsh
-restish completion bash
-restish completion fish
-restish completion powershell
+restish shell completion zsh
+restish shell completion bash
+restish shell completion fish
+restish shell completion powershell
 ```
 
 Install the output according to your shell's completion mechanism.
@@ -26,18 +26,15 @@ For normal user-managed zsh and fish setups, Restish can install completion for
 you:
 
 ```bash
-restish completion install zsh
-restish completion install fish
+restish shell setup zsh
+restish shell setup fish
 ```
 
 For zsh, this writes the generated script under Restish's config directory and
 adds a managed source block to `~/.zshrc`. For fish, it writes to the shell's
 user completions directory. Preview the files first:
 
-```bash
-restish completion install zsh --dry-run
-restish completion install fish --dry-run
-```
+Use `restish shell setup <shell> --dry-run` to preview the files first.
 
 ## Configure Shell Safety Too
 
@@ -47,11 +44,10 @@ Completion does not prevent glob expansion. Run setup for interactive use:
 restish shell setup zsh
 ```
 
-Or install completion while configuring the shell wrapper:
+For zsh and fish, setup installs completion by default. Opt out when needed:
 
 ```bash
-restish shell setup zsh --completion
-restish shell setup fish --completion
+restish shell setup zsh --no-completion
 ```
 
 ## Generated API Completion

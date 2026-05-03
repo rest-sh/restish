@@ -3,6 +3,7 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -273,6 +274,51 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 	}
 }
 
+func TestResponseMiddlewarePluginFollowWithHeadersAndBody(t *testing.T) {
+	installHookPlugin(t)
+
+	var gotMethod string
+	var gotToken string
+	var gotContentType string
+	var gotBody map[string]any
+	follow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotToken = r.Header.Get("X-Follow-Token")
+		gotContentType = r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode follow body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"from":"follow"}`)
+	}))
+	t.Cleanup(follow.Close)
+
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "follow-body:"+follow.URL)
+
+	first := hookJSONServer(t, 200, `{"from":"first"}`)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotMethod != http.MethodPost {
+		t.Fatalf("follow method = %q, want POST", gotMethod)
+	}
+	if gotToken != "hook-token" {
+		t.Fatalf("X-Follow-Token = %q, want hook-token", gotToken)
+	}
+	if !strings.HasPrefix(gotContentType, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", gotContentType)
+	}
+	if gotBody["from"] != "plugin" {
+		t.Fatalf("follow body = %#v, want from=plugin", gotBody)
+	}
+	if !strings.Contains(out.String(), "follow") {
+		t.Errorf("expected follow-target response in output, got:\n%s", out.String())
+	}
+}
+
 func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t *testing.T) {
 	installHookPlugin(t)
 
@@ -280,17 +326,23 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 	var gotAuthorization string
 	var gotAPIKey string
 	var gotTrace string
+	var gotMethod string
+	var gotBody map[string]any
 	follow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
 		gotAuthorization = r.Header.Get("Authorization")
 		gotAPIKey = r.Header.Get("X-Api-Key")
 		gotTrace = r.Header.Get("X-Trace-Id")
+		gotMethod = r.Method
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode follow body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"from":"follow"}`)
 	}))
 	t.Cleanup(follow.Close)
 
-	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "follow:"+follow.URL)
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "follow-body:"+follow.URL)
 	t.Setenv("RSH_HOOK_REQUEST_AUTH", "1")
 
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
@@ -340,6 +392,12 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 	}
 	if gotTrace != "" {
 		t.Fatalf("request middleware ran on cross-host follow, X-Trace-Id=%q", gotTrace)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("follow method = %q, want POST", gotMethod)
+	}
+	if gotBody["from"] != "plugin" {
+		t.Fatalf("follow body = %#v, want from=plugin", gotBody)
 	}
 }
 

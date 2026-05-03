@@ -27,6 +27,7 @@ func (c *CLI) addFlagsCommand(root *cobra.Command) {
 		Use:     "flags",
 		Short:   "Show Restish global flag reference",
 		GroupID: rootGroupHelp,
+		Hidden:  true,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.printFlagReference(cmd.Root().PersistentFlags(), "")

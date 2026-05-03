@@ -37,13 +37,13 @@ A bare URL is a generic GET.
 - `doctor`: diagnose config, runtime paths, APIs, plugins, and v1 migration state
 - `edit`: fetch, edit, and update a resource
 - `links`: print normalized hypermedia links
-- `completion`: generate shell completion scripts
-- `flags`: show the global flag reference
+- `shell completion`: generate shell completion scripts
 
 Use `api auth inspect` to inspect configured API auth material.
 
-`doctor` writes human diagnostics to stderr by default. Use `--json` for a
-machine-readable report:
+`doctor` writes its human report to stderr on an interactive terminal. When
+stdout is redirected, the human report goes to stdout and stderr prints a hint
+to use `--json` for machine-readable output:
 
 ```bash
 restish doctor --json

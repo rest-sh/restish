@@ -35,7 +35,8 @@ source code to distinguish those cases.
 - separate read-only diagnostics from mutating repair commands
 - make network checks opt-in and bounded
 - return success for diagnostic findings that were reported cleanly
-- keep machine-readable stdout free for future structured modes
+- keep machine-readable JSON available explicitly without making redirected
+  human reports disappear from pipelines
 
 ## Non-Goals
 
@@ -55,9 +56,12 @@ restish doctor plugin <name>
 restish doctor migrate-v1
 ```
 
-`doctor` is a diagnostic command, so it writes its report to stderr. That is
-intentional: diagnostics, warnings, prompts, and progress belong on stderr
-across Restish.
+`doctor` is a diagnostic command. When stdout is a terminal, it writes the
+human report to stderr to match the rest of Restish's diagnostic channel
+policy. When stdout is redirected, it writes the human report to stdout and
+prints a one-line stderr hint pointing to `--json` for machine-readable output.
+This makes `restish doctor > report.txt` capture the report users intended to
+share while preserving stderr for diagnostics about doctor itself.
 
 `--json` is the explicit machine mode for the entire command family. In JSON
 mode, `doctor`, `doctor api`, `doctor plugin`, and `doctor migrate-v1` write
@@ -165,7 +169,9 @@ inputs or an invalid command invocation. This keeps doctor usable in support
 sessions: users can paste the report without first deciding which findings were
 fatal.
 
-The absence of stdout is not a bug. Stderr carries the human report.
+When stdout is a terminal, the absence of stdout is not a bug: stderr carries
+the human report. When stdout is redirected, stdout carries the human report so
+redirection captures it naturally.
 
 ## Relationship To Other Designs
 

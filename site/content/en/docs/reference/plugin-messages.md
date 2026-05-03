@@ -66,6 +66,10 @@ Host to plugin:
 
 Hook plugins are short-lived. They receive one focused request, response, auth,
 loader, formatter, or TLS signer task and return one result or error.
+Response middleware may return `follow` with `method`, `uri`, optional
+`headers`, optional `body`, and optional `content_type`; the host performs the
+follow-up request and skips response middleware on that follow-up to avoid
+loops.
 
 ## Debugging
 

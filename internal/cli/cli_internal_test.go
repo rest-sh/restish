@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -117,6 +118,42 @@ func TestSetSignalHandlingFalseUsesPlainContext(t *testing.T) {
 
 	if isSignalCancellation(context.Canceled, ctx) {
 		t.Fatal("plain cancellation should not map to signal exit")
+	}
+}
+
+func TestUsageErrorExitsTwo(t *testing.T) {
+	c := New()
+	c.hooks.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+
+	err := c.Run([]string{"restish", "get"})
+	var exitErr *ExitCodeError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 2 {
+		t.Fatalf("exit code = %d, want 2", exitErr.Code)
+	}
+}
+
+func TestSignalCancellationExits130FromRun(t *testing.T) {
+	c := New()
+	c.hooks.ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.hooks.SignalAwareContext = func() (context.Context, context.CancelFunc) {
+		ctx, cancelCause := context.WithCancelCause(context.Background())
+		cancelCause(signalCancelError{signal: os.Interrupt})
+		return ctx, func() {}
+	}
+	c.hooks.HTTPTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, context.Canceled
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	var exitErr *ExitCodeError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitCodeError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 130 {
+		t.Fatalf("exit code = %d, want 130", exitErr.Code)
 	}
 }
 

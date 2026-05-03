@@ -146,14 +146,18 @@ plugin replace those individual response header values, while omitted inbound
 headers remain unchanged.
 
 The follow-up path is especially important: the plugin asks Restish to issue
-the request, so auth, retries, TLS, and other core behaviors still apply.
+the request, so auth, retries, TLS, credential stripping, and other core
+behaviors still apply. A `follow` request carries:
 
-**Known limitation:** the `follow` message only carries `method` and `uri`.
-There is no way to attach a request body or additional headers to the
-follow-up request. Follow is therefore only appropriate for bodyless
-redirects (e.g. redirecting a GET to a different endpoint). If a plugin
-needs to issue a follow-up request with a body, it should use the command
-plugin protocol instead.
+- `method`, defaulting to `GET`
+- `uri`
+- optional `headers`
+- optional `body`
+- optional `content_type`, or a `Content-Type` header when a body is present
+
+The host encodes the body through the content registry just like normal request
+bodies. Response middleware does not run again for the follow-up request, which
+prevents accidental loops.
 
 ### Loader Hook
 

@@ -28,6 +28,12 @@ type completionInstallOptions struct {
 }
 
 func (c *CLI) addCompletionCommand(root *cobra.Command) {
+	completionCmd := c.newCompletionCommand(root)
+	completionCmd.Hidden = true
+	root.AddCommand(completionCmd)
+}
+
+func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	var noDesc bool
 	completionCmd := &cobra.Command{
 		Use:   "completion",
@@ -115,7 +121,7 @@ only when the shell requires it.`,
 	installCmd.Flags().Bool("no-descriptions", false, "disable completion descriptions")
 
 	completionCmd.AddCommand(bash, zsh, fish, powershell, installCmd)
-	root.AddCommand(completionCmd)
+	return completionCmd
 }
 
 func (c *CLI) completeRootURL(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

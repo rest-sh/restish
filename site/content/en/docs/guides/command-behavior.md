@@ -10,15 +10,15 @@ verbose diagnostics are part of the interface.
 
 ## Exit Codes
 
-HTTP status families map to CLI exit codes:
+Restish uses a compact exit-code policy:
 
-| HTTP status | Exit code |
+| Case | Exit code |
 | --- | --- |
-| `2xx` | `0` |
-| `3xx` | `3` |
-| `4xx` | `4` |
-| `5xx` | `5` |
+| Success and `2xx` HTTP status | `0` |
+| Non-2xx HTTP status | `1` |
 | Network, parse, config, or command errors | `1` |
+| Usage errors, such as missing args or unknown flags | `2` |
+| Interrupted with SIGINT | `130` |
 
 Inspect an error body without failing the shell command:
 

@@ -149,6 +149,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 
 	if err := scanner.Err(); err != nil {
 		if stoppedByMax {
+			c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
 			return nil
 		}
 		if strings.Contains(err.Error(), "token too long") {
@@ -160,6 +161,8 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 		if err := flush(); err != nil {
 			return err
 		}
+	} else {
+		c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
 	}
 
 	return nil
@@ -221,9 +224,13 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 
 	if err := scanner.Err(); err != nil {
 		if stoppedByMax {
+			c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
 			return nil
 		}
 		return fmt.Errorf("NDJSON stream error: %w", err)
+	}
+	if stoppedByMax {
+		c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
 	}
 	return nil
 }
