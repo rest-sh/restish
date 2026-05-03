@@ -17,6 +17,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 
+	openapiparam "github.com/rest-sh/restish/v2/internal/openapi"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/rest-sh/restish/v2/plugin"
 )
@@ -710,7 +711,7 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 			if err != nil {
 				return nil, err
 			}
-			path = strings.ReplaceAll(path, "{"+param.Name+"}", url.PathEscape(text))
+			path = strings.ReplaceAll(path, "{"+param.Name+"}", text)
 		case "query":
 			parts, err := serializeMCPQueryParam(param, value)
 			if err != nil {
@@ -730,7 +731,7 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 			if err != nil {
 				return nil, err
 			}
-			cookies = append(cookies, param.Name+"="+url.QueryEscape(text))
+			cookies = append(cookies, text)
 		}
 	}
 	if len(cookies) > 0 {
@@ -895,133 +896,118 @@ type mcpQueryParam struct {
 	value string
 }
 
+func mcpParamDescriptor(p Param) openapiparam.Param {
+	return openapiparam.Param{
+		Name:          p.Name,
+		In:            p.In,
+		Type:          p.Type,
+		Style:         p.Style,
+		Explode:       p.Explode,
+		AllowReserved: p.AllowReserved,
+	}
+}
+
 func serializeMCPPathParam(p Param, value any) (string, error) {
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
-	if values, ok, err := arrayStrings(value); err != nil {
+	paramValue, err := mcpParamValue(p, value)
+	if err != nil {
 		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
-	} else if ok {
-		style := defaultMCPParamStyle(p)
-		if style != "simple" {
-			return "", fmt.Errorf("parameter %q: unsupported path array style %q", p.Name, style)
-		}
-		return strings.Join(values, ","), nil
 	}
-	text, ok := scalarValueString(value)
-	if !ok {
-		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	if p.Type == "array" && openapiparam.DefaultParamStyle(mcpParamDescriptor(p)) != "simple" {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, openapiparam.UnsupportedArrayStyleError(mcpParamDescriptor(p)))
 	}
-	return text, nil
+	return openapiparam.SerializePathParam(mcpParamDescriptor(p), paramValue)
 }
 
 func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
 	if isObjectValue(value) {
 		return nil, fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
-	if values, ok, err := arrayStrings(value); err != nil {
+	paramValue, err := mcpParamValue(p, value)
+	if err != nil {
 		return nil, fmt.Errorf("parameter %q: %w", p.Name, err)
-	} else if ok {
-		style := defaultMCPParamStyle(p)
-		explode := mcpParamExplode(p)
-		switch style {
-		case "form":
-			if explode {
-				out := make([]mcpQueryParam, 0, len(values))
-				for _, value := range values {
-					out = append(out, mcpQueryParam{name: p.Name, value: value})
-				}
-				return out, nil
-			}
-			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, ",")}}, nil
-		case "spaceDelimited":
-			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, " ")}}, nil
-		case "pipeDelimited":
-			return []mcpQueryParam{{name: p.Name, value: strings.Join(values, "|")}}, nil
+	}
+	if p.Type == "array" {
+		switch openapiparam.DefaultParamStyle(mcpParamDescriptor(p)) {
+		case "form", "spaceDelimited", "pipeDelimited":
 		default:
-			return nil, fmt.Errorf("parameter %q: unsupported query array style %q", p.Name, style)
+			return nil, fmt.Errorf("parameter %q: %w", p.Name, openapiparam.UnsupportedArrayStyleError(mcpParamDescriptor(p)))
 		}
 	}
-	text, ok := scalarValueString(value)
-	if !ok {
-		return nil, fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	parts, err := openapiparam.SerializeQueryParam(mcpParamDescriptor(p), paramValue)
+	if err != nil {
+		return nil, err
 	}
-	return []mcpQueryParam{{name: p.Name, value: text}}, nil
+	out := make([]mcpQueryParam, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, mcpQueryParam{name: part.Name, value: part.Value})
+	}
+	return out, nil
 }
 
 func serializeMCPHeaderParam(p Param, value any) (string, error) {
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
-	if values, ok, err := arrayStrings(value); err != nil {
+	paramValue, err := mcpParamValue(p, value)
+	if err != nil {
 		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
-	} else if ok {
-		style := defaultMCPParamStyle(p)
-		if style != "simple" {
-			return "", fmt.Errorf("parameter %q: unsupported header array style %q", p.Name, style)
-		}
-		return strings.Join(values, ","), nil
 	}
-	text, ok := scalarValueString(value)
-	if !ok {
-		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
+	if p.Type == "array" && openapiparam.DefaultParamStyle(mcpParamDescriptor(p)) != "simple" {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, openapiparam.UnsupportedArrayStyleError(mcpParamDescriptor(p)))
 	}
-	return text, nil
+	values, err := openapiparam.SerializeHeaderParam(mcpParamDescriptor(p), paramValue)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(values, ","), nil
 }
 
 func serializeMCPCookieParam(p Param, value any) (string, error) {
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
-	if values, ok, err := arrayStrings(value); err != nil {
+	paramValue, err := mcpParamValue(p, value)
+	if err != nil {
 		return "", fmt.Errorf("parameter %q: %w", p.Name, err)
-	} else if ok {
-		style := defaultMCPParamStyle(p)
-		if style != "form" {
-			return "", fmt.Errorf("parameter %q: unsupported cookie array style %q", p.Name, style)
+	}
+	if p.Type == "array" && openapiparam.DefaultParamStyle(mcpParamDescriptor(p)) != "form" {
+		return "", fmt.Errorf("parameter %q: %w", p.Name, openapiparam.UnsupportedArrayStyleError(mcpParamDescriptor(p)))
+	}
+	values, err := openapiparam.SerializeCookieParam(mcpParamDescriptor(p), paramValue)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(values, "; "), nil
+}
+
+func mcpParamValue(p Param, value any) (openapiparam.Value, error) {
+	if p.Type != "array" {
+		text, ok := scalarValueString(value)
+		if !ok {
+			return openapiparam.Value{}, errors.New("unsupported value type")
 		}
-		return strings.Join(values, ","), nil
+		return openapiparam.ScalarValue(text), nil
 	}
-	text, ok := scalarValueString(value)
+	items, ok := value.([]any)
 	if !ok {
-		return "", fmt.Errorf("parameter %q: unsupported value type", p.Name)
-	}
-	return text, nil
-}
-
-func defaultMCPParamStyle(p Param) string {
-	if p.Style != "" {
-		return p.Style
-	}
-	switch p.In {
-	case "query", "cookie":
-		return "form"
-	default:
-		return "simple"
-	}
-}
-
-func mcpParamExplode(p Param) bool {
-	if p.Explode != nil {
-		return *p.Explode
-	}
-	return defaultMCPParamStyle(p) == "form"
-}
-
-func arrayStrings(v any) ([]string, bool, error) {
-	items, ok := v.([]any)
-	if !ok {
-		return nil, false, nil
+		text, ok := scalarValueString(value)
+		if !ok {
+			return openapiparam.Value{}, errors.New("unsupported value type")
+		}
+		return openapiparam.ArrayValue(openapiparam.NormalizeArrayValues([]string{text})), nil
 	}
 	out := make([]string, 0, len(items))
 	for _, item := range items {
 		text, ok := scalarValueString(item)
 		if !ok {
-			return nil, true, errors.New("array items must be scalar values")
+			return openapiparam.Value{}, errors.New("array items must be scalar values")
 		}
 		out = append(out, text)
 	}
-	return out, true, nil
+	return openapiparam.ArrayValue(out), nil
 }
 
 func isObjectValue(v any) bool {

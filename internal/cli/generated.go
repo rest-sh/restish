@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/rest-sh/restish/v2/internal/config"
+	openapiparam "github.com/rest-sh/restish/v2/internal/openapi"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -801,6 +802,17 @@ type generatedQueryParam struct {
 	allowReserved bool
 }
 
+func generatedParamDescriptor(p *paramInfo) openapiparam.Param {
+	return openapiparam.Param{
+		Name:          p.name,
+		In:            p.in,
+		Type:          p.typ,
+		Style:         p.style,
+		Explode:       p.explode,
+		AllowReserved: p.allowReserved,
+	}
+}
+
 func addGeneratedParam(path string, q []generatedQueryParam, extraHeaders []string, p *paramInfo, values []string) (string, []generatedQueryParam, []string, error) {
 	if len(values) == 0 {
 		return path, q, extraHeaders, nil
@@ -846,42 +858,11 @@ func serializeGeneratedPathParam(p *paramInfo, values []string) (string, error) 
 		}
 		return url.PathEscape(encoded), nil
 	}
-	style := defaultParamStyle(p)
-	explode := paramExplode(p)
-	switch style {
-	case "label":
-		return "." + pathDelimitedParamValue(p, values, ".", explode), nil
-	case "matrix":
-		switch {
-		case p.typ == "array" && explode:
-			parts := normalizeGeneratedArrayValues(values)
-			var b strings.Builder
-			for _, value := range parts {
-				b.WriteString(";")
-				b.WriteString(url.PathEscape(p.name))
-				b.WriteString("=")
-				b.WriteString(url.PathEscape(value))
-			}
-			return b.String(), nil
-		case p.typ == "object" && explode:
-			fields, err := generatedObjectFields(values)
-			if err != nil {
-				return "", err
-			}
-			var b strings.Builder
-			for _, field := range fields {
-				b.WriteString(";")
-				b.WriteString(url.PathEscape(field.key))
-				b.WriteString("=")
-				b.WriteString(url.PathEscape(field.value))
-			}
-			return b.String(), nil
-		default:
-			return ";" + url.PathEscape(p.name) + "=" + pathDelimitedParamValue(p, values, ",", false), nil
-		}
-	default:
-		return pathDelimitedParamValue(p, values, ",", explode), nil
+	value, err := generatedParamValue(p, values)
+	if err != nil {
+		return "", err
 	}
+	return openapiparam.SerializePathParam(generatedParamDescriptor(p), value)
 }
 
 func serializeGeneratedQueryParam(p *paramInfo, values []string) ([]generatedQueryParam, error) {
@@ -892,50 +873,19 @@ func serializeGeneratedQueryParam(p *paramInfo, values []string) ([]generatedQue
 		}
 		return []generatedQueryParam{{name: p.name, value: encoded, allowReserved: p.allowReserved}}, nil
 	}
-	style := defaultParamStyle(p)
-	explode := paramExplode(p)
-	switch {
-	case p.typ == "array":
-		parts := normalizeGeneratedArrayValues(values)
-		switch style {
-		case "spaceDelimited":
-			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, " "), allowReserved: p.allowReserved}}, nil
-		case "pipeDelimited":
-			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, "|"), allowReserved: p.allowReserved}}, nil
-		default:
-			if explode {
-				out := make([]generatedQueryParam, 0, len(parts))
-				for _, part := range parts {
-					out = append(out, generatedQueryParam{name: p.name, value: part, allowReserved: p.allowReserved})
-				}
-				return out, nil
-			}
-			return []generatedQueryParam{{name: p.name, value: strings.Join(parts, ","), allowReserved: p.allowReserved}}, nil
-		}
-	case p.typ == "object":
-		fields, err := generatedObjectFields(values)
-		if err != nil {
-			return nil, err
-		}
-		switch {
-		case style == "deepObject":
-			out := make([]generatedQueryParam, 0, len(fields))
-			for _, field := range fields {
-				out = append(out, generatedQueryParam{name: p.name + "[" + field.key + "]", value: field.value, allowReserved: p.allowReserved})
-			}
-			return out, nil
-		case explode:
-			out := make([]generatedQueryParam, 0, len(fields))
-			for _, field := range fields {
-				out = append(out, generatedQueryParam{name: field.key, value: field.value, allowReserved: p.allowReserved})
-			}
-			return out, nil
-		default:
-			return []generatedQueryParam{{name: p.name, value: commaDelimitedObject(fields), allowReserved: p.allowReserved}}, nil
-		}
-	default:
-		return []generatedQueryParam{{name: p.name, value: values[0], allowReserved: p.allowReserved}}, nil
+	value, err := generatedParamValue(p, values)
+	if err != nil {
+		return nil, err
 	}
+	parts, err := openapiparam.SerializeQueryParam(generatedParamDescriptor(p), value)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]generatedQueryParam, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, generatedQueryParam{name: part.Name, value: part.Value, allowReserved: part.AllowReserved})
+	}
+	return out, nil
 }
 
 func serializeGeneratedHeaderParam(p *paramInfo, values []string) ([]string, error) {
@@ -946,24 +896,11 @@ func serializeGeneratedHeaderParam(p *paramInfo, values []string) ([]string, err
 		}
 		return []string{encoded}, nil
 	}
-	if p.typ == "object" {
-		fields, err := generatedObjectFields(values)
-		if err != nil {
-			return nil, err
-		}
-		if paramExplode(p) {
-			parts := make([]string, 0, len(fields))
-			for _, field := range fields {
-				parts = append(parts, field.key+"="+field.value)
-			}
-			return []string{strings.Join(parts, ",")}, nil
-		}
-		return []string{commaDelimitedObject(fields)}, nil
+	value, err := generatedParamValue(p, values)
+	if err != nil {
+		return nil, err
 	}
-	if p.typ == "array" {
-		return []string{strings.Join(normalizeGeneratedArrayValues(values), ",")}, nil
-	}
-	return []string{values[0]}, nil
+	return openapiparam.SerializeHeaderParam(generatedParamDescriptor(p), value)
 }
 
 func serializeGeneratedCookieParam(p *paramInfo, values []string) ([]string, error) {
@@ -974,127 +911,32 @@ func serializeGeneratedCookieParam(p *paramInfo, values []string) ([]string, err
 		}
 		return []string{p.name + "=" + url.QueryEscape(encoded)}, nil
 	}
-	if p.typ == "object" {
-		fields, err := generatedObjectFields(values)
-		if err != nil {
-			return nil, err
-		}
-		if paramExplode(p) {
-			out := make([]string, 0, len(fields))
-			for _, field := range fields {
-				out = append(out, url.QueryEscape(field.key)+"="+url.QueryEscape(field.value))
-			}
-			return out, nil
-		}
-		return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(commaDelimitedObject(fields))}, nil
+	value, err := generatedParamValue(p, values)
+	if err != nil {
+		return nil, err
 	}
-	if p.typ == "array" {
-		parts := normalizeGeneratedArrayValues(values)
-		if paramExplode(p) {
-			out := make([]string, 0, len(parts))
-			for _, value := range parts {
-				out = append(out, url.QueryEscape(p.name)+"="+url.QueryEscape(value))
-			}
-			return out, nil
-		}
-		return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(strings.Join(parts, ","))}, nil
-	}
-	return []string{url.QueryEscape(p.name) + "=" + url.QueryEscape(values[0])}, nil
+	return openapiparam.SerializeCookieParam(generatedParamDescriptor(p), value)
 }
 
-func defaultParamStyle(p *paramInfo) string {
-	if p.style != "" {
-		return p.style
-	}
-	switch p.in {
-	case "query", "cookie":
-		return "form"
-	case "path", "header":
-		return "simple"
-	default:
-		return "form"
-	}
-}
-
-func paramExplode(p *paramInfo) bool {
-	if p.explode != nil {
-		return *p.explode
-	}
-	return defaultParamStyle(p) == "form"
-}
-
-func pathDelimitedParamValue(p *paramInfo, values []string, delimiter string, explode bool) string {
+func generatedParamValue(p *paramInfo, values []string) (openapiparam.Value, error) {
 	switch p.typ {
 	case "array":
-		parts := normalizeGeneratedArrayValues(values)
-		escaped := make([]string, 0, len(parts))
-		for _, value := range parts {
-			escaped = append(escaped, url.PathEscape(value))
-		}
-		return strings.Join(escaped, delimiter)
+		return openapiparam.ArrayValue(openapiparam.NormalizeArrayValues(values)), nil
 	case "object":
 		fields, err := generatedObjectFields(values)
 		if err != nil {
-			return url.PathEscape(strings.Join(values, " "))
+			return openapiparam.Value{}, err
 		}
-		parts := make([]string, 0, len(fields)*2)
-		for _, field := range fields {
-			if explode {
-				parts = append(parts, url.PathEscape(field.key)+"="+url.PathEscape(field.value))
-				continue
-			}
-			parts = append(parts, url.PathEscape(field.key), url.PathEscape(field.value))
-		}
-		return strings.Join(parts, delimiter)
+		return openapiparam.ObjectValue(fields), nil
 	default:
-		return url.PathEscape(values[0])
+		if len(values) == 0 {
+			return openapiparam.ScalarValue(""), nil
+		}
+		return openapiparam.ScalarValue(values[0]), nil
 	}
 }
 
-func normalizeGeneratedArrayValues(values []string) []string {
-	if len(values) == 1 {
-		parts := splitEscapedComma(values[0])
-		if len(parts) > 1 {
-			return parts
-		}
-	}
-	return values
-}
-
-func splitEscapedComma(value string) []string {
-	var parts []string
-	var b strings.Builder
-	escaped := false
-	for _, r := range value {
-		if escaped {
-			b.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		if r == ',' {
-			parts = append(parts, strings.TrimSpace(b.String()))
-			b.Reset()
-			continue
-		}
-		b.WriteRune(r)
-	}
-	if escaped {
-		b.WriteRune('\\')
-	}
-	parts = append(parts, strings.TrimSpace(b.String()))
-	return parts
-}
-
-type objectField struct {
-	key   string
-	value string
-}
-
-func generatedObjectFields(values []string) ([]objectField, error) {
+func generatedObjectFields(values []string) ([]openapiparam.Field, error) {
 	parsed, err := shorthand.Unmarshal(strings.Join(values, " "), shorthand.ParseOptions{EnableObjectDetection: true}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("parse structured parameter: %w", err)
@@ -1117,19 +959,11 @@ func generatedObjectFields(values []string) ([]objectField, error) {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	out := make([]objectField, 0, len(keys))
+	out := make([]openapiparam.Field, 0, len(keys))
 	for _, key := range keys {
-		out = append(out, objectField{key: key, value: fields[key]})
+		out = append(out, openapiparam.Field{Key: key, Value: fields[key]})
 	}
 	return out, nil
-}
-
-func commaDelimitedObject(fields []objectField) string {
-	parts := make([]string, 0, len(fields)*2)
-	for _, field := range fields {
-		parts = append(parts, field.key, field.value)
-	}
-	return strings.Join(parts, ",")
 }
 
 func serializeGeneratedContentParam(p *paramInfo, values []string) (string, error) {

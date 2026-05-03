@@ -263,6 +263,29 @@ func TestToolRequestSerializesArrayParameters(t *testing.T) {
 	}
 }
 
+func TestToolRequestSerializesCookieParameters(t *testing.T) {
+	explode := true
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items",
+		Params: []Param{
+			{Name: "session", In: "cookie", Type: "string"},
+			{Name: "tag", In: "cookie", Type: "array", Style: "form", Explode: &explode},
+		},
+	}
+	req, err := tool.Request(map[string]any{
+		"session": "a/b",
+		"tag":     []any{"red", "blue"},
+	})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if got := req.Headers["Cookie"]; got != "session=a%2Fb; tag=red; tag=blue" {
+		t.Fatalf("Cookie = %q, want encoded cookie pairs", got)
+	}
+}
+
 func TestToolRequestRejectsObjectParameter(t *testing.T) {
 	tool := &Tool{
 		APIName: "demo",
