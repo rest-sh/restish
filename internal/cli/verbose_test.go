@@ -80,6 +80,55 @@ func TestVerboseOutputSortsHeaders(t *testing.T) {
 	assertLineOrder(t, stderr, "< Content-Type: application/json", "< X-Alpha: first", "< X-Zeta: last")
 }
 
+func TestVerboseShowsAutoFilterLanguage(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "shorthand",
+			args: []string{"restish", "get", "-v", "-f", "{id: body.id}", "https://api.example.com/hello"},
+			want: "* Filter: shorthand (auto)",
+		},
+		{
+			name: "jq",
+			args: []string{"restish", "get", "-v", "-f", "{id: .body.id}", "https://api.example.com/hello"},
+			want: "* Filter: jq (auto)",
+		},
+		{
+			name: "forced jq",
+			args: []string{"restish", "get", "-v", "--rsh-filter-lang", "jq", "-f", "{id: .body.id}", "https://api.example.com/hello"},
+			want: "* Filter: jq",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, errOut := newTestCLI(t)
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: 200,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"id":42}`)),
+					Request:    r,
+				}, nil
+			})
+
+			if err := c.Run(tt.args); err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if stderr := errOut.String(); !strings.Contains(stderr, tt.want) {
+				t.Fatalf("expected verbose filter language %q, got:\n%s", tt.want, stderr)
+			}
+			if strings.Contains(out.String(), "* Filter:") {
+				t.Fatalf("verbose filter language leaked to stdout:\n%s", out.String())
+			}
+		})
+	}
+}
+
 // TestNonVerboseOutputClean verifies that without -v, stderr is empty for
 // a successful request.
 func TestNonVerboseOutputClean(t *testing.T) {

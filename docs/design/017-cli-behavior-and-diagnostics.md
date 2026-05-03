@@ -128,6 +128,7 @@ At `-v`, users should see at least:
 - bounded redacted request and response bodies when available
 - response protocol and status
 - response headers
+- resolved filter language when an explicit filter is present
 - pagination or retry progress when relevant
 
 At higher verbosity, Restish may add:

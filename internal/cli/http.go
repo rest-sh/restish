@@ -349,9 +349,13 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		"body":        resp.Body,
 	}
 
-	filtered, err := filter.Apply(filterExpr, doc, lang)
+	filterResult, err := filter.ApplyWithInfo(filterExpr, doc, lang)
 	if err != nil {
 		return fmt.Errorf("filter: %w", err)
+	}
+	filtered := filterResult.Value
+	if explicitFilter && gf.Verbose >= 1 {
+		c.logVerboseFilter(lang, filterResult.Lang)
 	}
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
@@ -382,6 +386,14 @@ func firstHeaderValues(headers map[string][]string) map[string]string {
 		}
 	}
 	return out
+}
+
+func (c *CLI) logVerboseFilter(requested, resolved filter.Lang) {
+	if requested == filter.LangAuto {
+		fmt.Fprintf(c.Stderr, "* Filter: %s (auto)\n", resolved)
+		return
+	}
+	fmt.Fprintf(c.Stderr, "* Filter: %s\n", requested)
 }
 
 func explicitOutputFilter(gf GlobalFlags) bool {

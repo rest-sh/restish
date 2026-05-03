@@ -100,6 +100,9 @@ restish -vv https://api.rest.sh/headers
 restish --rsh-config ./restish.json api list
 ```
 
+With `-v`, explicit filters report whether Restish evaluated them as
+shorthand or jq.
+
 ## Related Pages
 
 - [Requests](/docs/guides/requests/)

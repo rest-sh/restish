@@ -26,6 +26,23 @@ const (
 	LangJQ
 )
 
+func (l Lang) String() string {
+	switch l {
+	case LangShorthand:
+		return "shorthand"
+	case LangJQ:
+		return "jq"
+	default:
+		return "auto"
+	}
+}
+
+// Result is a filtered value with metadata about how the filter was evaluated.
+type Result struct {
+	Value any
+	Lang  Lang
+}
+
 // jqCacheMaxSize caps the number of compiled jq programs kept in the global
 // cache so long-running embedders don't grow unboundedly.
 const jqCacheMaxSize = 1024
@@ -45,20 +62,32 @@ type jqCacheEntry struct {
 // doc should be a map[string]any with keys "body", "headers", "links",
 // "status", "proto" — i.e. the full normalised Response map.
 func Apply(expr string, doc map[string]any, lang Lang) (any, error) {
+	result, err := ApplyWithInfo(expr, doc, lang)
+	if err != nil {
+		return nil, err
+	}
+	return result.Value, nil
+}
+
+// ApplyWithInfo runs expr against doc and returns the filtered value plus the
+// language that was ultimately used.
+func ApplyWithInfo(expr string, doc map[string]any, lang Lang) (Result, error) {
 	if expr == "" || expr == "@" {
-		return doc, nil
+		return Result{Value: doc, Lang: resolvedExplicitLang(lang)}, nil
 	}
 	if lang != LangJQ {
 		if value, ok := headerField(expr, doc); ok {
-			return value, nil
+			return Result{Value: value, Lang: LangShorthand}, nil
 		}
 	}
 
 	switch lang {
 	case LangShorthand:
-		return applyShorthand(expr, doc)
+		value, err := applyShorthand(expr, doc)
+		return Result{Value: value, Lang: LangShorthand}, err
 	case LangJQ:
-		return applyJQ(expr, doc)
+		value, err := applyJQ(expr, doc)
+		return Result{Value: value, Lang: LangJQ}, err
 	default:
 		return applyAuto(expr, doc)
 	}
@@ -92,28 +121,35 @@ func headerField(expr string, doc map[string]any) (any, bool) {
 	return nil, false
 }
 
-func applyAuto(expr string, doc map[string]any) (any, error) {
+func resolvedExplicitLang(lang Lang) Lang {
+	if lang == LangJQ {
+		return LangJQ
+	}
+	return LangShorthand
+}
+
+func applyAuto(expr string, doc map[string]any) (Result, error) {
 	shorthandResult, shorthandErr := applyShorthand(expr, doc)
 	jqResult, jqErr := applyJQ(expr, doc)
 
 	switch {
 	case shorthandErr == nil && jqErr != nil:
-		return shorthandResult, nil
+		return Result{Value: shorthandResult, Lang: LangShorthand}, nil
 	case jqErr == nil && shorthandErr != nil:
-		return jqResult, nil
+		return Result{Value: jqResult, Lang: LangJQ}, nil
 	}
 
 	preferred := preferredLang(expr)
 	if shorthandErr == nil && jqErr == nil {
 		if preferred == LangJQ {
-			return jqResult, nil
+			return Result{Value: jqResult, Lang: LangJQ}, nil
 		}
-		return shorthandResult, nil
+		return Result{Value: shorthandResult, Lang: LangShorthand}, nil
 	}
 	if preferred == LangJQ {
-		return nil, errors.Join(jqErr, shorthandErr)
+		return Result{Lang: LangJQ}, errors.Join(jqErr, shorthandErr)
 	}
-	return nil, errors.Join(shorthandErr, jqErr)
+	return Result{Lang: LangShorthand}, errors.Join(shorthandErr, jqErr)
 }
 
 func preferredLang(expr string) Lang {
