@@ -59,8 +59,8 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 
 			if len(args) == 1 {
 				apiName := args[0]
-				if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-					return fmt.Errorf("unknown API %q", apiName)
+				if _, err := c.requireAPI(apiName); err != nil {
+					return err
 				}
 				if err := dc.ClearNamespacePrefix(apiName + ":"); err != nil {
 					return err

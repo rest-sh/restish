@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
-	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -113,22 +112,7 @@ func (c *CLI) runConfigSet(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	oldCfg := c.cfg
-	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
-		return err
-	}
-	newCfg, err := config.Load(cfgPath)
-	if err != nil {
-		return err
-	}
-	for _, apiName := range apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg) {
-		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
-			return fmt.Errorf("config set: invalidate spec cache for %q: %w", apiName, err)
-		}
-	}
-	c.cfg = newCfg
-	return nil
+	return c.saveConfigValues("config set", ops)
 }
 
 func configSetPath(key string) []string {

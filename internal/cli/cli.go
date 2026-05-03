@@ -344,10 +344,10 @@ func mergeDefaultConfigForEmbedding(defaults, loaded *config.Config) *config.Con
 
 // discoverSpec runs spec discovery for the named API using the registered loaders.
 func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, error) {
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
+	api, err := c.requireAPI(apiName)
+	if err != nil {
 		return nil, nil
 	}
-	api := c.cfg.APIs[apiName]
 	transport, closer, err := c.discoveryTransport(ctx, api, "default")
 	if err != nil {
 		return nil, err

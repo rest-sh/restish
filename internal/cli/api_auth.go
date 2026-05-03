@@ -435,10 +435,10 @@ func selectedOperationAuthConfigs(selected []selectedOperationAuth) []*config.Au
 }
 
 func (c *CLI) apiProfileForAuth(apiName, profileName string) (*config.APIConfig, *config.ProfileConfig, error) {
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return nil, nil, fmt.Errorf("unknown API %q; run \"restish api list\" to see configured APIs", apiName)
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w; run \"restish api list\" to see configured APIs", err)
 	}
-	apiCfg := c.cfg.APIs[apiName]
 	if apiCfg.Profiles == nil || apiCfg.Profiles[profileName] == nil {
 		return nil, nil, fmt.Errorf("API %q has no profile %q; configured profiles: %s", apiName, profileName, profileNames(apiCfg.Profiles))
 	}
@@ -641,13 +641,5 @@ func (c *CLI) cachedAuthConfigForCredential(apiName string, apiCfg *config.APICo
 }
 
 func (c *CLI) saveAPIAuthConfig(apiName string, apiCfg *config.APIConfig) error {
-	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		return config.SaveAPIConfig(cfgPath, apiName, apiCfg)
-	}
-	if c.cfg.APIs == nil {
-		c.cfg.APIs = map[string]*config.APIConfig{}
-	}
-	c.cfg.APIs[apiName] = apiCfg
-	return config.Save(cfgPath, c.cfg)
+	return c.saveAPIConfig("api auth", apiName, c.cfg, apiCfg)
 }

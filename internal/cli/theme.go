@@ -5,10 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 
-	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -37,22 +35,11 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if c.cfg == nil {
-		c.cfg = &config.Config{}
-	}
-	c.cfg.Theme = map[string]string(entries)
 	if err := output.SetTheme(entries); err != nil {
 		return err
 	}
 
-	cfgPath := c.configFilePath()
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		if err := config.Save(cfgPath, c.cfg); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return fmt.Errorf("config theme set: stat config: %w", err)
-	} else if err := config.SaveConfigValue(cfgPath, []string{"theme"}, map[string]string(entries)); err != nil {
+	if err := c.saveThemeConfig(map[string]string(entries)); err != nil {
 		return err
 	}
 

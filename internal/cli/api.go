@@ -98,8 +98,9 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("api auth clear-cache requires an API name or --auth-profile <name>")
 	}
 	apiName := args[0]
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
+		return err
 	}
 
 	profileName := c.profileFromCmd(cmd)
@@ -109,7 +110,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 		if err := tc.DeletePrefix(apiName + ":"); err != nil {
 			return fmt.Errorf("auth clear-cache: %w", err)
 		}
-		for _, prof := range c.cfg.APIs[apiName].Profiles {
+		for _, prof := range apiCfg.Profiles {
 			resolved, err := c.resolveProfileAuth(apiName, "", prof)
 			if err != nil {
 				return err
@@ -127,7 +128,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 	if err := tc.Delete(key); err != nil {
 		return fmt.Errorf("auth clear-cache: %w", err)
 	}
-	if prof := c.cfg.APIs[apiName].Profiles[profileName]; prof != nil {
+	if prof := apiCfg.Profiles[profileName]; prof != nil {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
 		if err != nil {
 			return err
@@ -145,10 +146,10 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 // runAPISync force-invalidates the cached spec for an API and fetches a fresh one.
 func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
+		return err
 	}
-	apiCfg := c.cfg.APIs[apiName]
 
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, c.profileFromCmd(cmd))
@@ -214,7 +215,6 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid API name %q: %w", apiName, err)
 	}
 
-	cfgPath := c.configFilePath()
 	cfg, err := c.loadConfig()
 	if err != nil {
 		return err
@@ -306,20 +306,9 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		c.printAuthCoverage("default", discovery, configuredCredentials(apiCfg, "default"))
 	}
 
-	// Load, update, and save the config.
-	if cfg.APIs == nil {
-		cfg.APIs = make(map[string]*config.APIConfig)
-	}
-	cfg.APIs[apiName] = apiCfg
-
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
-			return err
-		}
-	} else if err := config.Save(cfgPath, cfg); err != nil {
+	if err := c.saveAPIConfig("api connect", apiName, cfg, apiCfg); err != nil {
 		return err
 	}
-	c.cfg = cfg
 	if len(preservedProfiles) > 0 {
 		fmt.Fprintf(c.Stdout, "Preserved existing profile(s): %s (use --replace to recreate from discovered defaults)\n", strings.Join(preservedProfiles, ", "))
 	}
@@ -847,12 +836,13 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 // with secret auth params replaced by "***".
 func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
+		return err
 	}
 
 	// Round-trip through JSON so we can redact secrets without modifying the live config.
-	raw, err := json.Marshal(c.cfg.APIs[apiName])
+	raw, err := json.Marshal(apiCfg)
 	if err != nil {
 		return err
 	}
@@ -860,7 +850,7 @@ func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(raw, &view); err != nil {
 		return err
 	}
-	c.redactAPIShowSecrets(c.cfg.APIs[apiName], view)
+	c.redactAPIShowSecrets(apiCfg, view)
 
 	data, err := json.MarshalIndent(view, "", "  ")
 	if err != nil {
@@ -911,10 +901,7 @@ func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any
 // runConfigEdit opens the restish config file in $VISUAL or $EDITOR.
 func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	cfgPath := c.configFilePath()
-	oldCfg, err := config.Load(cfgPath)
-	if err != nil {
-		return err
-	}
+	oldCfg := c.cfg
 	editorCmd, err := c.editorCommand(cfgPath)
 	if err != nil {
 		return err
@@ -925,17 +912,7 @@ func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	if err := editorCmd.Run(); err != nil {
 		return err
 	}
-	newCfg, err := config.Load(cfgPath)
-	if err != nil {
-		return err
-	}
-	for _, apiName := range apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg) {
-		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
-			return fmt.Errorf("config edit: invalidate spec cache for %q: %w", apiName, err)
-		}
-	}
-	c.cfg = newCfg
-	return nil
+	return c.reloadConfigAfterMutation("config edit", oldCfg)
 }
 
 func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []string {
@@ -981,8 +958,8 @@ func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []strin
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+	if _, err := c.requireAPI(apiName); err != nil {
+		return err
 	}
 
 	exprs, err := parseAPISetExpressions(args[1:])
@@ -998,17 +975,7 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValues(cfgPath, ops); err != nil {
-		return err
-	}
-	if apiSpecCacheRelevantFieldsChanged(c.cfg.APIs[apiName], work.APIs[apiName]) {
-		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
-			return fmt.Errorf("api set: invalidate spec cache: %w", err)
-		}
-	}
-	c.cfg = work
-	return nil
+	return c.saveConfigValues("api set", ops)
 }
 
 func apiSpecCacheRelevantFieldsChanged(oldAPI, newAPI *config.APIConfig) bool {
@@ -1914,16 +1881,15 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 // runAPIRemove removes a configured API and saves the updated config.
 func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	if c.cfg == nil || c.cfg.APIs[apiName] == nil {
-		return fmt.Errorf("unknown API %q", apiName)
+	if _, err := c.requireAPI(apiName); err != nil {
+		return err
+	}
+	oldCfg, err := cloneConfig(c.cfg)
+	if err != nil {
+		return err
 	}
 	delete(c.cfg.APIs, apiName)
-	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		if err := config.DeleteAPIConfig(cfgPath, apiName); err != nil {
-			return err
-		}
-	} else if err := config.Save(cfgPath, c.cfg); err != nil {
+	if err := c.deleteAPIConfig("api remove", apiName, c.cfg, oldCfg); err != nil {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "Removed API %q\n", apiName)
