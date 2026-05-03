@@ -105,6 +105,11 @@ Verbose diagnostics go to stderr, so body redirects stay clean:
 restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 ```
 
+Sensitive headers such as `Authorization`, `Cookie`, `Proxy-Authorization`,
+`Set-Cookie`, and common API-key headers are redacted in verbose diagnostics and
+in human/table response preambles. Use explicit body or header filters when you
+need a specific non-sensitive field.
+
 ## Images In The Terminal
 
 Image responses can render in capable terminals:

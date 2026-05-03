@@ -100,6 +100,7 @@ func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
 	resp.Headers = map[string][]string{
 		"Content-Type": {"application/json"},
 		"Date":         {"Mon, 02 Jan 2006 15:04:05 GMT"},
+		"Set-Cookie":   {"session=secret"},
 	}
 
 	var buf bytes.Buffer
@@ -111,12 +112,16 @@ func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
 		"HTTP/1.1 200 OK",
 		"Content-Type: application/json",
 		"Date: Mon, 02 Jan 2006 15:04:05 GMT",
+		"Set-Cookie: <redacted>",
 		"Alice",
 		"Bob",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in table output:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "session=secret") {
+		t.Fatalf("sensitive header leaked in table output:\n%s", got)
 	}
 }
 

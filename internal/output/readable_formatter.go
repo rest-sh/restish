@@ -15,6 +15,7 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/rest-sh/restish/v2/internal/content"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"golang.org/x/term"
 )
 
@@ -278,6 +279,9 @@ func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
 	sort.Strings(keys)
 	for _, k := range keys {
 		for _, value := range resp.Headers[k] {
+			if secrets.IsHeaderName(k) {
+				value = "<redacted>"
+			}
 			fmt.Fprintf(&preamble, "%s: %s\n", k, value)
 		}
 	}
