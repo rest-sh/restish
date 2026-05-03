@@ -129,6 +129,54 @@ func TestVerboseShowsAutoFilterLanguage(t *testing.T) {
 	}
 }
 
+func TestVerboseShowsRequestAndPipelineTrace(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	configPath := t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = configPath
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":42}`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{
+		"restish", "post", "-v",
+		"-H", "Authorization: Bearer secret",
+		"-f", "{id: body.id}",
+		"-o", "json",
+		"https://api.example.com/items",
+		"id:", "42",
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	stderr := errOut.String()
+	for _, want := range []string{
+		"* Config: " + configPath,
+		"* Profile: default",
+		"* Auth: enabled",
+		"* Input: args",
+		"* Request body: application/json",
+		"* Decode: application/json",
+		"* Filter: shorthand (auto)",
+		"* Output: json",
+		"* Pipeline: args -> application/json -> auth -> HTTP -> application/json -> shorthand(auto) -> json",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected verbose trace %q, got:\n%s", want, stderr)
+		}
+	}
+	assertLineOrder(t, stderr, "* Config: "+configPath, "> POST")
+	if strings.Contains(out.String(), "* Pipeline:") {
+		t.Fatalf("verbose trace leaked to stdout:\n%s", out.String())
+	}
+}
+
 // TestNonVerboseOutputClean verifies that without -v, stderr is empty for
 // a successful request.
 func TestNonVerboseOutputClean(t *testing.T) {

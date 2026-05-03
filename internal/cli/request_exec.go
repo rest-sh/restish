@@ -15,13 +15,15 @@ import (
 )
 
 type preparedRequest struct {
-	rawURL    string
-	apiName   string
-	opts      request.Options
-	body      io.Reader
-	bodyRaw   []byte
-	closer    io.Closer
-	stopClose func() bool
+	rawURL          string
+	apiName         string
+	opts            request.Options
+	body            io.Reader
+	bodyRaw         []byte
+	bodyContentType string
+	authEnabled     bool
+	closer          io.Closer
+	stopClose       func() bool
 }
 
 func (c *CLI) prepareRequest(
@@ -65,6 +67,22 @@ func (c *CLI) prepareRequest(
 	if err != nil {
 		return nil, err
 	}
+	if opts.TLSSignerPath != "" {
+		if trace := requestTraceFromContext(ctx); trace != nil {
+			name := opts.TLSSignerName
+			if name == "" {
+				name = opts.TLSSignerPath
+			}
+			trace.AddInfo("Plugin", "tls-signer "+name)
+			trace.Step("tls-signer")
+		}
+	}
+
+	authEnabled := !noAuth && (opts.OnRequest != nil ||
+		opts.OnUnauthorized != nil ||
+		requestOptionHeadersContainCredentials(opts.Headers) ||
+		requestOptionQueryContainsCredentials(opts.Query) ||
+		rawURLQueryContainsCredentials(rawURL))
 
 	// When following a cross-host redirect, strip credentials to prevent
 	// a compromised plugin from issuing credentialed requests to arbitrary hosts.
@@ -114,7 +132,7 @@ func (c *CLI) prepareRequest(
 		return c.runRequestMiddlewarePlugins(req)
 	}
 
-	bodyRaw, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)
+	bodyRaw, bodyContentType, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request body: %w", err)
 	}
@@ -124,13 +142,15 @@ func (c *CLI) prepareRequest(
 	}
 
 	return &preparedRequest{
-		rawURL:    rawURL,
-		apiName:   apiName,
-		opts:      opts,
-		body:      body,
-		bodyRaw:   bodyRaw,
-		closer:    transportCloser,
-		stopClose: stopTransportClose,
+		rawURL:          rawURL,
+		apiName:         apiName,
+		opts:            opts,
+		body:            body,
+		bodyRaw:         bodyRaw,
+		bodyContentType: bodyContentType,
+		authEnabled:     authEnabled,
+		closer:          transportCloser,
+		stopClose:       stopTransportClose,
 	}, nil
 }
 
@@ -208,9 +228,9 @@ func cloneRequestOptions(opts request.Options) request.Options {
 	return cloned
 }
 
-func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]string) ([]byte, error) {
+func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]string) ([]byte, string, error) {
 	if bodyValue == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	ct := contentType
@@ -223,10 +243,10 @@ func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]str
 	}
 	encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyValue)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	*headers = append(*headers, "Content-Type: "+actualContentType)
-	return encoded, nil
+	return encoded, actualContentType, nil
 }
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {

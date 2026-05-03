@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/output"
@@ -95,6 +96,10 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 	plugins := append([]plugin.Plugin(nil), c.globalAuthPlugins...)
 	plugins = append(plugins, c.authPluginsByAPI[apiName]...)
 	for _, p := range plugins {
+		if trace := requestTraceFromContext(req.Context()); trace != nil {
+			trace.AddInfo("Plugin", pluginInvocationTrace("auth", p))
+			trace.Step("auth-plugin")
+		}
 		params := rawParams
 		if !p.Manifest.NeedsAuthSecrets && len(secretKeys) > 0 {
 			redacted := make(map[string]string, len(rawParams))
@@ -125,6 +130,10 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 // The returned headers from each plugin are applied to req.
 func (c *CLI) runRequestMiddlewarePlugins(req *http.Request) error {
 	for _, p := range c.pluginsByHook["request-middleware"] {
+		if trace := requestTraceFromContext(req.Context()); trace != nil {
+			trace.AddInfo("Plugin", pluginInvocationTrace("request", p))
+			trace.Step("request-plugin")
+		}
 		in := pluginwire.RequestMiddlewareInput{
 			Type:    "request-middleware",
 			Request: hookRequestForPlugin(req, p),
@@ -150,6 +159,10 @@ type HookFollowRequest struct {
 // non-nil when the plugin wants Restish to issue a new request.
 func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsByHook["response-middleware"] {
+		if trace := requestTraceFromContext(req.Context()); trace != nil {
+			trace.AddInfo("Plugin", pluginInvocationTrace("response", p))
+			trace.Step("response-plugin")
+		}
 		responseHeaders := cloneHeaderMap(resp.Headers)
 		if !p.Manifest.NeedsAuthSecrets {
 			redactCredentialHeaders(responseHeaders)
@@ -208,6 +221,14 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 		}
 	}
 	return false, nil, nil
+}
+
+func pluginInvocationTrace(kind string, p plugin.Plugin) string {
+	name := p.Manifest.Name
+	if name == "" {
+		name = filepath.Base(p.Path)
+	}
+	return kind + " " + name
 }
 
 // applyRequestUpdate merges headers from a hook plugin reply into req.

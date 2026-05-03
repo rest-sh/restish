@@ -100,8 +100,10 @@ restish -vv https://api.rest.sh/headers
 restish --rsh-config ./restish.json api list
 ```
 
-With `-v`, explicit filters report whether Restish evaluated them as
-shorthand or jq.
+With `-v`, Restish prints a terse request trace to stderr: config path, profile,
+auth state, input source, request and response media types, filter language,
+output format, plugin invocations, and a compact pipeline summary when those
+details apply.
 
 ## Related Pages
 

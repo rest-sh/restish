@@ -123,19 +123,25 @@ breaking stdout contracts.
 
 At `-v`, users should see at least:
 
+- resolved config path, profile, and whether auth is enabled before the request
+- request input source and encoded request body media type
 - request method and URL
 - selected headers with sensitive values redacted
 - bounded redacted request and response bodies when available
 - response protocol and status
 - response headers
+- response decode media type
 - resolved filter language when an explicit filter is present
+- output format, including formatter plugin use when selected
+- plugin invocations by hook family/name
+- a terse pipeline summary for the request/response path
 - pagination or retry progress when relevant
 
 At higher verbosity, Restish may add:
 
 - TLS/certificate details
 - cache hit/miss detail
-- plugin lifecycle traces
+- more detailed plugin lifecycle traces
 
 If help text advertises a verbosity level, the behavior should exist.
 

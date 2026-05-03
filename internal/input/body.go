@@ -18,6 +18,12 @@ type BodyOptions struct {
 	Warnf       func(string, ...any)
 }
 
+// BodyInfo describes which CLI input sources contributed to the returned body.
+type BodyInfo struct {
+	UsedStdin bool
+	UsedArgs  bool
+}
+
 // Body parses positional CLI args (shorthand syntax) and/or stdin into a
 // request body. The rules are:
 //
@@ -34,43 +40,54 @@ type BodyOptions struct {
 // stdinReader is cli.Stdin; pass strings.NewReader("") with stdinIsTTY=true
 // in tests to simulate an empty terminal.
 func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string, bodyOpts BodyOptions) (any, error) {
+	body, _, err := BodyWithInfo(stdinReader, stdinIsTTY, args, contentType, bodyOpts)
+	return body, err
+}
+
+// BodyWithInfo is like Body, but also reports which input sources contributed
+// to the returned body.
+func BodyWithInfo(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType string, bodyOpts BodyOptions) (any, BodyInfo, error) {
 	opts := shorthand.ParseOptions{
 		EnableFileInput:       enableFileInput(contentType),
 		EnableObjectDetection: true,
 	}
 
 	var base any
+	var info BodyInfo
 
 	if !stdinIsTTY {
 		data, err := io.ReadAll(io.LimitReader(stdinReader, MaxStdinBodyBytes+1))
 		if err != nil {
-			return nil, err
+			return nil, info, err
 		}
 		if len(data) > MaxStdinBodyBytes {
-			return nil, fmt.Errorf("stdin body exceeds %d bytes; use @file input or reduce stdin size", MaxStdinBodyBytes)
+			return nil, info, fmt.Errorf("stdin body exceeds %d bytes; use @file input or reduce stdin size", MaxStdinBodyBytes)
 		}
 		if len(data) > 0 {
+			info.UsedStdin = true
 			parsed, serr := shorthand.Unmarshal(string(data), opts, nil)
 			if serr != nil {
 				// Not parseable as structured data — return raw string so the
 				// content registry passes it through as the request body.
 				if len(args) == 0 {
-					return string(data), nil
+					return string(data), info, nil
 				}
 				if bodyOpts.Warnf != nil {
 					bodyOpts.Warnf("stdin body could not be parsed as structured shorthand; applying body arguments only")
 				}
+				info.UsedStdin = false
 				// Can't patch non-structured stdin; treat it as args-only.
 			} else {
 				if len(args) == 0 {
 					coerceSchemaTypes(parsed, bodyOpts.SchemaTypes)
-					return parsed, nil
+					return parsed, info, nil
 				}
 				if !isStructuredBody(parsed) {
 					if bodyOpts.Warnf != nil {
 						bodyOpts.Warnf("stdin body is not a structured object or array; applying body arguments only")
 					}
 					parsed = nil
+					info.UsedStdin = false
 				}
 				base = parsed
 			}
@@ -78,7 +95,7 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType str
 	}
 
 	if len(args) == 0 {
-		return nil, nil
+		return nil, info, nil
 	}
 
 	// Args are shell-split tokens; join with spaces to reconstruct the
@@ -86,10 +103,11 @@ func Body(stdinReader io.Reader, stdinIsTTY bool, args []string, contentType str
 	// → "name: Alice, age: 30").
 	result, err := shorthand.Unmarshal(strings.Join(args, " "), opts, base)
 	if err != nil {
-		return nil, err
+		return nil, info, err
 	}
 	coerceSchemaTypes(result, bodyOpts.SchemaTypes)
-	return result, nil
+	info.UsedArgs = true
+	return result, info, nil
 }
 
 func isStructuredBody(value any) bool {

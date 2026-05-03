@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	urlpath "path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/input"
 	"github.com/rest-sh/restish/v2/internal/output"
+	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/spf13/cobra"
@@ -109,6 +112,7 @@ type requestBodyOptions struct {
 // redirect to a different host, preventing credentialed SSRF via a compromised
 // response-middleware plugin.
 func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
+	trace := ensureRequestTrace(cmd)
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
 
@@ -130,7 +134,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
+	bodyVal, bodyInfo, err := input.BodyWithInfo(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
 		SchemaTypes: bodyOpts.schemaTypes,
 		Warnf:       c.warnf,
 	})
@@ -143,6 +147,10 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	if len(bodyOpts.multipartPartContentTypes) > 0 && strings.HasPrefix(strings.ToLower(opts.ContentType), "multipart/form-data") {
 		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}
 	}
+	inputSource := traceInputSource(bodyInfo, bodyVal != nil)
+	if bodyVal != nil {
+		trace.Step(inputSource)
+	}
 
 	prepared, err := c.prepareRequest(requestContext(cmd), rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)
 	if err != nil {
@@ -152,6 +160,8 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	rawURL = prepared.rawURL
 	apiName = prepared.apiName
 	opts = prepared.opts
+	c.populateRequestTrace(trace, apiName, profileName, inputSource, prepared)
+	trace.RenderBefore(c.Stderr, globalFlagsFromContext(requestContext(cmd)).Verbose)
 	c.warnRetryUnsafe(method, opts)
 	if firstPartyHost == "" {
 		if u, parseErr := url.Parse(prepared.rawURL); parseErr == nil {
@@ -166,9 +176,11 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		}
 		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
 	}
+	trace.Step("HTTP")
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		traceContentDecode(trace, httpResp.Header.Get("Content-Type"))
 		if gf := globalFlagsFromContext(requestContext(cmd)); gf.Raw {
 			if err := validateRawOutputOptions(gf); err != nil {
 				_ = httpResp.Body.Close()
@@ -178,6 +190,9 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 			if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
 				return err
 			}
+			trace.Info("Output", "raw")
+			trace.Step("raw")
+			trace.RenderAfter(c.Stderr, gf.Verbose)
 			_, err := io.Copy(c.Stdout, httpResp.Body)
 			return err
 		}
@@ -202,6 +217,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	if err != nil {
 		return err
 	}
+	traceContentDecode(trace, output.Header(resp.Headers, "Content-Type"))
 	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
 		c.logVerboseResponseBody(resp)
 	}
@@ -292,9 +308,17 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	tty := output.IsTerminal(c.Stdout)
 
 	if gf.Raw {
+		trace := requestTraceFromContext(requestContext(cmd))
+		trace.Info("Output", "raw")
+		trace.Step("raw")
+		trace.RenderAfter(c.Stderr, gf.Verbose)
 		return c.writeRawBytes(resp.Raw)
 	}
 	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(output.Header(resp.Headers, "Content-Type"), "image/") {
+		trace := requestTraceFromContext(requestContext(cmd))
+		trace.Info("Output", "raw image (auto)")
+		trace.Step("raw")
+		trace.RenderAfter(c.Stderr, gf.Verbose)
 		_, err := c.Stdout.Write(resp.Raw)
 		return err
 	}
@@ -324,6 +348,10 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		formatter, err := c.selectFormatter(cmd, fmtName, tty)
 		if err != nil {
 			return err
+		}
+		traceOutputFormatter(cmd, fmtName, tty, formatter)
+		if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+			trace.RenderAfter(c.Stderr, gf.Verbose)
 		}
 		return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
 	}
@@ -355,7 +383,8 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 	filtered := filterResult.Value
 	if explicitFilter && gf.Verbose >= 1 {
-		c.logVerboseFilter(lang, filterResult.Lang)
+		trace := requestTraceFromContext(requestContext(cmd))
+		traceFilter(trace, lang, filterResult.Lang)
 	}
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
@@ -375,6 +404,10 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return err
 	}
 
+	traceOutputFormatter(cmd, fmtName, tty, formatter)
+	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+		trace.RenderAfter(c.Stderr, gf.Verbose)
+	}
 	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
 }
 
@@ -388,12 +421,188 @@ func firstHeaderValues(headers map[string][]string) map[string]string {
 	return out
 }
 
-func (c *CLI) logVerboseFilter(requested, resolved filter.Lang) {
-	if requested == filter.LangAuto {
-		fmt.Fprintf(c.Stderr, "* Filter: %s (auto)\n", resolved)
+func (c *CLI) populateRequestTrace(trace *requestTrace, apiName, profileName, inputSource string, prepared *preparedRequest) {
+	if trace == nil || prepared == nil {
 		return
 	}
-	fmt.Fprintf(c.Stderr, "* Filter: %s\n", requested)
+	trace.InfoBefore("Config", c.configFilePath())
+	if apiName != "" {
+		trace.InfoBefore("API", apiName)
+	}
+	trace.InfoBefore("Profile", profileName)
+	if prepared.authEnabled {
+		trace.InfoBefore("Auth", "enabled")
+	} else {
+		trace.InfoBefore("Auth", "none")
+	}
+	trace.InfoBefore("Input", inputSource)
+	if prepared.bodyContentType != "" {
+		trace.InfoBefore("Request body", traceMediaType(prepared.bodyContentType))
+		trace.Step(traceMediaType(prepared.bodyContentType))
+	} else {
+		trace.InfoBefore("Request body", "none")
+	}
+	if prepared.authEnabled {
+		trace.Step("auth")
+	}
+	if len(c.pluginsByHook["request-middleware"]) > 0 {
+		trace.DebugBefore("Request plugins", pluginNameList(c.pluginsByHook["request-middleware"]))
+	}
+}
+
+func traceInputSource(info input.BodyInfo, hasBody bool) string {
+	switch {
+	case !hasBody:
+		return "none"
+	case info.UsedStdin && info.UsedArgs:
+		return "stdin + args"
+	case info.UsedStdin:
+		return "stdin"
+	case info.UsedArgs:
+		return "args"
+	default:
+		return "none"
+	}
+}
+
+func traceContentDecode(trace *requestTrace, contentType string) {
+	mediaType := traceMediaType(contentType)
+	if mediaType == "" {
+		mediaType = "identity"
+	}
+	trace.Info("Decode", mediaType)
+	trace.Step(mediaType)
+}
+
+func traceFilter(trace *requestTrace, requested, resolved filter.Lang) {
+	if trace == nil {
+		return
+	}
+	if requested == filter.LangAuto {
+		value := fmt.Sprintf("%s (auto)", resolved)
+		trace.Info("Filter", value)
+		trace.Step(filterPipelineStep(resolved, true))
+		return
+	}
+	trace.Info("Filter", requested.String())
+	trace.Step(filterPipelineStep(requested, false))
+}
+
+func filterPipelineStep(lang filter.Lang, auto bool) string {
+	if auto {
+		return fmt.Sprintf("%s(auto)", lang)
+	}
+	return lang.String()
+}
+
+func traceMediaType(contentType string) string {
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		return ""
+	}
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		return mediaType
+	}
+	return strings.Split(contentType, ";")[0]
+}
+
+func pluginNameList(plugins []internalplugin.Plugin) string {
+	names := make([]string, 0, len(plugins))
+	for _, p := range plugins {
+		if p.Manifest.Name != "" {
+			names = append(names, p.Manifest.Name)
+			continue
+		}
+		names = append(names, filepath.Base(p.Path))
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+func traceOutputFormatter(cmd *cobra.Command, fmtName string, tty bool, formatter output.Formatter) {
+	trace := requestTraceFromContext(requestContext(cmd))
+	if trace == nil {
+		return
+	}
+	name := resolvedOutputFormatName(fmtName, tty)
+	value := outputTraceLabel(name, formatter)
+	if fmtName == "" {
+		value += " (auto)"
+	}
+	trace.Info("Output", value)
+	if _, ok := formatter.(*output.PluginFormatter); ok {
+		trace.AddInfo("Plugin", "formatter "+name)
+	}
+	trace.Step(outputPipelineStep(name, formatter))
+}
+
+func (c *CLI) traceValueOutput(cmd *cobra.Command, value any, plainScalars bool) {
+	trace := requestTraceFromContext(requestContext(cmd))
+	if trace == nil {
+		return
+	}
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Silent {
+		trace.Info("Output", "silent")
+		trace.Step("silent")
+		return
+	}
+	if gf.Raw {
+		trace.Info("Output", "raw")
+		trace.Step("raw")
+		return
+	}
+
+	fmtName := gf.OutputFormat
+	if fmtName == "" && plainScalars && output.IsLineScalar(value) {
+		trace.Info("Output", "lines (auto)")
+		trace.Step("lines")
+		return
+	}
+	if fmtName == "" {
+		if output.IsTerminal(c.Stdout) {
+			trace.Info("Output", "readable (auto)")
+			trace.Step("readable")
+			return
+		}
+		trace.Info("Output", "json (auto)")
+		trace.Step("json")
+		return
+	}
+	if formatter := c.formatters[fmtName]; formatter != nil {
+		trace.Info("Output", outputTraceLabel(fmtName, formatter))
+		if _, ok := formatter.(*output.PluginFormatter); ok {
+			trace.AddInfo("Plugin", "formatter "+fmtName)
+		}
+		trace.Step(outputPipelineStep(fmtName, formatter))
+		return
+	}
+	trace.Info("Output", fmtName)
+	trace.Step(fmtName)
+}
+
+func resolvedOutputFormatName(fmtName string, tty bool) string {
+	if fmtName != "" {
+		return fmtName
+	}
+	if tty {
+		return "readable"
+	}
+	return "json"
+}
+
+func outputTraceLabel(name string, formatter output.Formatter) string {
+	if _, ok := formatter.(*output.PluginFormatter); ok {
+		return name + " plugin"
+	}
+	return name
+}
+
+func outputPipelineStep(name string, formatter output.Formatter) string {
+	if _, ok := formatter.(*output.PluginFormatter); ok {
+		return name + "(plugin)"
+	}
+	return name
 }
 
 func explicitOutputFilter(gf GlobalFlags) bool {
@@ -429,6 +638,10 @@ func (c *CLI) renderValue(cmd *cobra.Command, value any, plainScalars bool) erro
 		return err
 	}
 	defer renderer.Close()
+	c.traceValueOutput(cmd, value, plainScalars)
+	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+		trace.RenderAfter(c.Stderr, globalFlagsFromContext(requestContext(cmd)).Verbose)
+	}
 	return renderer.Render(value)
 }
 

@@ -42,8 +42,10 @@ restish -v https://api.rest.sh/headers
 restish -vv https://api.rest.sh/headers
 ```
 
-`-v` shows request and response headers. When a filter is present, it also shows
-the filter language Restish used. `-vv` adds more TLS detail.
+`-v` shows request and response headers plus the resolved config path, profile,
+auth state, input source, request body media type, response decode media type,
+filter language, output format, plugin invocations, and a compact pipeline
+summary when those details apply. `-vv` adds more TLS detail.
 
 ## Redirects
 

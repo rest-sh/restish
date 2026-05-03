@@ -254,20 +254,29 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	result := item
 	if filterExpr != "" {
 		doc := map[string]any{"body": item}
-		filtered, err := filter.Apply(filterExpr, doc, filter.LangAuto)
+		filterResult, err := filter.ApplyWithInfo(filterExpr, doc, filter.LangAuto)
 		if err != nil {
 			return fmt.Errorf("filter: %w", err)
 		}
-		result = filtered
+		traceFilter(requestTraceFromContext(requestContext(cmd)), filter.LangAuto, filterResult.Lang)
+		result = filterResult.Value
 	}
 
 	tty := output.IsTerminal(c.Stdout)
 	if fmtName == "readable" || (fmtName == "" && tty) {
 		if !parsedJSON {
+			c.traceValueOutput(cmd, result, false)
+			if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+				trace.RenderAfter(c.Stderr, gf.Verbose)
+			}
 			return c.writePlainValue(result)
 		}
 	}
 
+	c.traceValueOutput(cmd, result, filterExpr != "")
+	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+		trace.RenderAfter(c.Stderr, gf.Verbose)
+	}
 	if err := renderer.Render(result); err != nil {
 		return err
 	}
