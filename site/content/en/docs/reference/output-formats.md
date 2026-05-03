@@ -29,7 +29,9 @@ restish https://api.rest.sh/example -o gron
 restish https://api.rest.sh/images/png -o image
 ```
 
-For file redirects, image responses already write body bytes:
+For file redirects, binary responses already write body bytes. This includes
+`image/*`, `application/octet-stream`, `application/zip`, and unknown
+non-text payloads:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg

@@ -291,7 +291,9 @@ type declared by the spec.
 
 For `application/octet-stream` and other binary request media, Restish preserves
 raw bytes from files or stdin rather than re-encoding them as structured text.
-Unknown binary responses follow the same preservation rule.
+When stdout is not a terminal and no explicit filter or output format is set,
+binary responses default to raw byte passthrough. This includes `image/*`,
+`application/octet-stream`, `application/zip`, and unknown non-text payloads.
 
 ## Compression And Body Limits
 

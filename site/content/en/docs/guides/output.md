@@ -82,13 +82,15 @@ as JSON.
 
 ## Raw Bytes And Files
 
-Image responses redirect as body bytes by default:
+Binary responses redirect as body bytes by default. This includes images,
+octet streams, zip files, and unknown non-text payloads:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish https://api.rest.sh/bytes/64 > sample.bin
 ```
 
-For generic byte streams, use raw output explicitly:
+Use raw output explicitly when you want bytes regardless of content type:
 
 ```bash
 restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin

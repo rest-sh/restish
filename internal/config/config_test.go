@@ -104,7 +104,8 @@ func TestLoadExplicit_MissingFileErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing explicit config to error")
 	}
-	if !strings.Contains(err.Error(), "explicit config file") {
+	if !strings.Contains(err.Error(), "--rsh-config") ||
+		!strings.Contains(err.Error(), "v2 does not fall back to the default config") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

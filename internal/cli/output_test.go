@@ -171,8 +171,26 @@ func TestRawOutputFormatRemoved(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for -o raw, got nil")
 	}
-	if !strings.Contains(err.Error(), `raw response body bytes`) {
-		t.Fatalf("expected -r hint, got: %v", err)
+	if !strings.Contains(err.Error(), `raw response body bytes`) ||
+		!strings.Contains(err.Error(), `-o lines`) {
+		t.Fatalf("expected -r and -o lines hints, got: %v", err)
+	}
+}
+
+func TestRawWithFilterSuggestsOutputModes(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"id":1}`)
+	err := c.Run([]string{"restish", "get", "-r", "-f", "body.id", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected -r with filter error")
+	}
+	for _, want := range []string{
+		"For shell-friendly scalar output use: -o lines",
+		"For JSON use: -o json",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected %q hint, got: %v", want, err)
+		}
 	}
 }
 
@@ -382,5 +400,40 @@ func TestImageResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	}
 	if _, err := png.Decode(bytes.NewReader(out.Bytes())); err != nil {
 		t.Fatalf("output is not a valid png: %v", err)
+	}
+}
+
+func TestBinaryResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
+	data := []byte{0x00, 0x01, 0xff, 0x7f}
+	for _, contentType := range []string{"application/octet-stream", "application/zip", "application/x-custom"} {
+		t.Run(contentType, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: 200,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": []string{contentType}},
+					Body:       io.NopCloser(bytes.NewReader(data)),
+					Request:    r,
+				}, nil
+			})
+			if err := c.Run([]string{"restish", "get", "https://api.example.com/file"}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !bytes.Equal(out.Bytes(), data) {
+				t.Fatalf("bytes changed: got %v, want %v", out.Bytes(), data)
+			}
+		})
+	}
+}
+
+func TestStructuredResponseDefaultNonTTYStillWritesJSON(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"ok":true}`)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"ok":true`) {
+		t.Fatalf("expected formatted JSON document, got %q", out.String())
 	}
 }

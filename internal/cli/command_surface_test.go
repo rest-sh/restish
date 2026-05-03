@@ -58,9 +58,9 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 			args: []string{"restish", "api", "auth", "--help"},
 			want: []string{
 				"add",
-				"clear-cache",
 				"inspect",
 				"list",
+				"logout",
 				"remove",
 			},
 		},

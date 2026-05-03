@@ -77,8 +77,8 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	root.AddCommand(apiCmd)
 }
 
-// runClearAuthCache deletes the token cache entry for the named API+profile.
-func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
+// runAPIAuthLogout deletes the token cache entry for the named API+profile.
+func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 	authProfile, _ := cmd.Flags().GetString("auth-profile")
 	tc := auth.NewTokenCache(c.tokenCachePath())
 	if authProfile != "" {
@@ -89,13 +89,13 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("unknown auth profile %q", authProfile)
 		}
 		if err := tc.DeletePrefix("auth_profile:" + authProfile + ":"); err != nil {
-			return fmt.Errorf("auth clear-cache: %w", err)
+			return fmt.Errorf("auth logout: %w", err)
 		}
 		fmt.Fprintf(c.Stdout, "Cleared auth cache for auth profile %q\n", authProfile)
 		return nil
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("api auth clear-cache requires an API name or --auth-profile <name>")
+		return fmt.Errorf("api auth logout requires an API name or --auth-profile <name>")
 	}
 	apiName := args[0]
 	apiCfg, err := c.requireAPI(apiName)
@@ -108,7 +108,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 
 	if allProfiles {
 		if err := tc.DeletePrefix(apiName + ":"); err != nil {
-			return fmt.Errorf("auth clear-cache: %w", err)
+			return fmt.Errorf("auth logout: %w", err)
 		}
 		for _, prof := range apiCfg.Profiles {
 			resolved, err := c.resolveProfileAuth(apiName, "", prof)
@@ -117,7 +117,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 			}
 			if resolved.Ref != "" {
 				if err := tc.DeletePrefix("auth_profile:" + resolved.Ref + ":"); err != nil {
-					return fmt.Errorf("auth clear-cache: %w", err)
+					return fmt.Errorf("auth logout: %w", err)
 				}
 			}
 		}
@@ -126,7 +126,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 	}
 	key := apiName + ":" + profileName
 	if err := tc.Delete(key); err != nil {
-		return fmt.Errorf("auth clear-cache: %w", err)
+		return fmt.Errorf("auth logout: %w", err)
 	}
 	if prof := apiCfg.Profiles[profileName]; prof != nil {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
@@ -135,7 +135,7 @@ func (c *CLI) runAPIAuthClearCache(cmd *cobra.Command, args []string) error {
 		}
 		if resolved.CacheKey != "" {
 			if err := tc.Delete(resolved.CacheKey); err != nil {
-				return fmt.Errorf("auth clear-cache: %w", err)
+				return fmt.Errorf("auth logout: %w", err)
 			}
 		}
 	}

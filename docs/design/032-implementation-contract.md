@@ -116,7 +116,7 @@ Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
 `api`, `cache`, `cert`, `completion`, `config`, `content-types`, `doctor`,
 `edit`, `flags`, `help`, `links`, `plugin`, `shell`, and `version`.
 
-`api auth clear-cache` accepts either one API argument or `--auth-profile
+`api auth logout` accepts either one API argument or `--auth-profile
 <name>`. The API argument is required unless `--auth-profile` is supplied.
 `--all-profiles` applies only to API-scoped cache clearing.
 

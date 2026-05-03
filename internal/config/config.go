@@ -233,7 +233,7 @@ func Load(path string) (*Config, error) {
 func LoadExplicit(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("config: explicit config file %s does not exist", path)
+		return nil, fmt.Errorf("config: --rsh-config %s does not exist; v2 does not fall back to the default config — run \"restish doctor migrate-v1 --to %s\" or remove the flag", path, path)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)

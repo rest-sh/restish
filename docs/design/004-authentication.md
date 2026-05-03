@@ -356,6 +356,19 @@ The design allows:
 Anything beyond one controlled retry should be left to the normal retry design,
 not embedded in auth handlers.
 
+## Operation Credential Coverage
+
+Generated operations may require credential IDs and requirement values such as
+OAuth scopes. A profile credential binding may declare those values explicitly
+with `satisfies`. Explicit `satisfies` always wins.
+
+When `satisfies` is omitted and the resolved auth profile has
+`params.scopes`, Restish derives the covered requirement values from that
+space-delimited scope string at request-build time. This keeps shared
+`auth_profiles` useful without forcing users to duplicate OAuth scopes in every
+credential binding. If neither explicit `satisfies` nor derived scopes cover
+the operation's requirements, the strict pre-flight error remains.
+
 ## Auth Inspection
 
 `restish api auth inspect <api>` reuses the same auth resolution path as real

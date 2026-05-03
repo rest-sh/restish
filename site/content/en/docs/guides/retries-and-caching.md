@@ -87,6 +87,9 @@ restish cache clear
 restish cache clear example
 ```
 
+`cache clear` removes HTTP response cache entries only. Use
+`restish api auth logout` when you need to delete cached OAuth/auth tokens.
+
 ## Conditional Requests
 
 Use ETag fixtures when testing conditional behavior:

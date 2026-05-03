@@ -34,14 +34,25 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE:  c.runAPIAuthRemove,
 	})
-	clearCacheCmd := &cobra.Command{
-		Use:   "clear-cache [api]",
+	logoutCmd := &cobra.Command{
+		Use:   "logout [api]",
 		Short: "Delete cached API auth tokens",
 		Args:  cobra.MaximumNArgs(1),
-		RunE:  c.runAPIAuthClearCache,
+		RunE:  c.runAPIAuthLogout,
 	}
-	clearCacheCmd.Flags().Bool("all-profiles", false, "Delete cached auth tokens for every profile of the named API")
-	clearCacheCmd.Flags().String("auth-profile", "", "Delete cached auth tokens for a shared auth profile instead of an API")
+	addAPIAuthLogoutFlags(logoutCmd)
+	cmd.AddCommand(logoutCmd)
+	clearCacheCmd := &cobra.Command{
+		Use:    "clear-cache [api]",
+		Short:  "Delete cached API auth tokens",
+		Hidden: true,
+		Args:   cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c.warnf("api auth clear-cache is deprecated; use api auth logout")
+			return c.runAPIAuthLogout(cmd, args)
+		},
+	}
+	addAPIAuthLogoutFlags(clearCacheCmd)
 	cmd.AddCommand(clearCacheCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
@@ -54,6 +65,11 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	inspectCmd.Flags().String("raw-header", "", "Print one raw header value for scripts, e.g. Authorization")
 	cmd.AddCommand(inspectCmd)
 	return cmd
+}
+
+func addAPIAuthLogoutFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("all-profiles", false, "Delete cached auth tokens for every profile of the named API")
+	cmd.Flags().String("auth-profile", "", "Delete cached auth tokens for a shared auth profile instead of an API")
 }
 
 func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
@@ -169,6 +185,9 @@ func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 
 func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
+	if looksLikeURLArgument(apiName) {
+		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth inspect <api-name> --raw-header Authorization")
+	}
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName)
 	if err != nil {
@@ -313,6 +332,10 @@ func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *con
 	default:
 		return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass --rsh-credential <id>", profileName, apiName, strings.Join(ids, ", "))
 	}
+}
+
+func looksLikeURLArgument(arg string) bool {
+	return strings.Contains(arg, "://") || strings.HasPrefix(arg, "/") || strings.ContainsAny(arg, "?#")
 }
 
 func configuredCredentialIDs(prof *config.ProfileConfig) []string {

@@ -49,11 +49,6 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 				missing = append(missing, requirement.ID)
 				continue
 			}
-			if err := credentialSatisfies(requirement, credential); err != nil {
-				alternativeNeedErrors = true
-				needErrors = append(needErrors, err.Error())
-				continue
-			}
 			resolved, err := c.resolveCredentialAuth(apiName, profileName, requirement.ID, credential)
 			if err != nil {
 				return nil, false, err
@@ -61,6 +56,11 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 			if resolved.Config == nil {
 				alternativeMissing = true
 				missing = append(missing, requirement.ID)
+				continue
+			}
+			if err := credentialSatisfies(requirement, credential, resolved.Config); err != nil {
+				alternativeNeedErrors = true
+				needErrors = append(needErrors, err.Error())
 				continue
 			}
 			selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved})
@@ -149,16 +149,16 @@ func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *conf
 			missing = append(missing, requirement.ID)
 			continue
 		}
-		if err := credentialSatisfies(requirement, credential); err != nil {
-			needErrors = append(needErrors, err.Error())
-			continue
-		}
 		resolved, err := c.resolveCredentialAuth(apiName, profileName, requirement.ID, credential)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if resolved.Config == nil {
 			missing = append(missing, requirement.ID)
+			continue
+		}
+		if err := credentialSatisfies(requirement, credential, resolved.Config); err != nil {
+			needErrors = append(needErrors, err.Error())
 			continue
 		}
 		selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved})
@@ -294,12 +294,16 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 	return nil
 }
 
-func credentialSatisfies(requirement spec.CredentialRequirement, credential *config.CredentialConfig) error {
+func credentialSatisfies(requirement spec.CredentialRequirement, credential *config.CredentialConfig, authCfg *config.AuthConfig) error {
 	if len(requirement.Needs) == 0 {
 		return nil
 	}
-	have := make(map[string]bool, len(credential.Satisfies))
-	for _, value := range credential.Satisfies {
+	satisfies := credential.Satisfies
+	if len(satisfies) == 0 && authCfg != nil && authCfg.Params != nil {
+		satisfies = strings.Fields(authCfg.Params["scopes"])
+	}
+	have := make(map[string]bool, len(satisfies))
+	for _, value := range satisfies {
 		have[value] = true
 	}
 	var missing []string

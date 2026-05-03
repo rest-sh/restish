@@ -31,7 +31,7 @@ func TestPlanOperationAuthRejectsMissingRequirementValues(t *testing.T) {
 	prof := &config.ProfileConfig{
 		Credentials: map[string]*config.CredentialConfig{
 			"UserOAuth": {
-				Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-User-Key", "value": "secret"}},
+				Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-User-Key", "value": "secret", "scopes": "items:read"}},
 				Satisfies: []string{"items:write"},
 			},
 		},
@@ -46,6 +46,33 @@ func TestPlanOperationAuthRejectsMissingRequirementValues(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "do not satisfy") || !strings.Contains(err.Error(), "items:read") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPlanOperationAuthDerivesSatisfiesFromAuthProfileScopes(t *testing.T) {
+	c := &CLI{cfg: &config.Config{
+		AuthProfiles: map[string]*config.AuthConfig{
+			"shared-oauth": {
+				Type:   "api-key",
+				Params: map[string]string{"in": "header", "name": "Authorization", "value": "Bearer token", "scopes": "items:read items:write"},
+			},
+		},
+	}}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"UserOAuth": {AuthRef: "shared-oauth"},
+		},
+	}
+	policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{{
+		{ID: "UserOAuth", Needs: []string{"items:read"}},
+	}}}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 1 || selected[0].resolved.Ref != "shared-oauth" {
+		t.Fatalf("selected = %#v handled=%v, want shared auth profile", selected, handled)
 	}
 }
 

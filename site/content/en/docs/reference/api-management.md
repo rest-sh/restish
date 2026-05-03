@@ -70,13 +70,17 @@ restish api remove example
 
 Removes a configured API. It does not delete remote resources.
 
-## Clear Auth Cache
+## Logout
 
 ```bash
-restish api auth clear-cache example
+restish api auth logout example
+restish api auth logout example --all-profiles
+restish api auth logout --auth-profile shared
 ```
 
-Use after OAuth credentials or token state need a fresh flow.
+Deletes cached OAuth/auth tokens so the next request performs a fresh auth
+flow. This is separate from `cache clear`, which only deletes HTTP response
+cache entries.
 
 ## Auth
 

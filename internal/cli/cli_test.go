@@ -353,7 +353,9 @@ func TestExplicitConfigMissingErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing explicit config to error")
 	}
-	if !strings.Contains(err.Error(), "explicit config file") {
+	if !strings.Contains(err.Error(), "--rsh-config") ||
+		!strings.Contains(err.Error(), "v2 does not fall back to the default config") ||
+		!strings.Contains(err.Error(), `restish doctor migrate-v1 --to`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

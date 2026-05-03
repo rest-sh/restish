@@ -135,7 +135,7 @@ restish api
     add <api> <credential-id>
     remove <api> <credential-id>
     inspect <api>
-    clear-cache [api]
+    logout [api]
 
 restish config
   path
@@ -241,9 +241,9 @@ the output is a raw serialization of the stored config file.
 V2 uses:
 
 ```text
-restish api auth clear-cache <api>
-restish api auth clear-cache <api> --all-profiles
-restish api auth clear-cache --auth-profile <name>
+restish api auth logout <api>
+restish api auth logout <api> --all-profiles
+restish api auth logout --auth-profile <name>
 ```
 
 OAuth token cache state is authentication state. Keeping cache recovery beside
@@ -323,7 +323,7 @@ Important v1-to-v2 command moves:
 | --- | --- |
 | `api show <name>` | `api inspect <name>` |
 | `api edit` | `config edit` |
-| `api clear-auth-cache <name>` | `api auth clear-cache <name>` |
+| `api clear-auth-cache <name>` | `api auth logout <name>` |
 | `api content-types` | `content-types` |
 | top-level shell/setup guidance | `shell setup <shell>` plus `completion ...` |
 | direct plugin service command | explicit service verb such as `mcp serve` |

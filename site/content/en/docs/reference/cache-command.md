@@ -19,7 +19,8 @@ restish cache clear example
 
 Use `cache info` first. It gives you the cache location, size, and entry count.
 Use `cache clear` to clear everything, or pass an API name when you only want to
-clear entries for one configured API.
+clear entries for one configured API. It does not delete OAuth/auth tokens; use
+`restish api auth logout` for token cache state.
 
 ## Notes
 

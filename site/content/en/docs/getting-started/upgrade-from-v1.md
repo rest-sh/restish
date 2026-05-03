@@ -81,9 +81,22 @@ Comments from the v1 files remain in the backup copies. The generated
 These changes are intentional in v2 and are not treated as regressions:
 
 - v0-style slug aliases are gone and are not auto-created in v2
-- config is centered on `restish.json` instead of separate global and API files
+- config is centered on `~/.config/restish/restish.json` instead of separate
+  global and API files; on macOS this moves v2 config out of
+  `~/Library/Application Support`
+- `--rsh-config` and `RSH_CONFIG` select one exact config file and no longer
+  overlay or fall back to the default config when that file is missing
 - generated command names are derived directly from the current spec instead of
   preserving older alias behavior
+- redirected non-TTY output is structured JSON for known structured responses,
+  not raw bytes by default; binary responses still pass through as bytes when
+  the response is `image/*`, `application/octet-stream`, `application/zip`, or
+  an unknown non-text payload
+- filter language is auto-detected between shorthand and jq; use
+  `--rsh-filter-lang` only when a filter is ambiguous
+- automatic pagination follows `next` links only on the same origin. Cross-host
+  pagination stops with a warning unless a command has an explicit opt-in for
+  that discovery path.
 - plugin executables must speak the v2 plugin protocol
 
 ## Accidental Regressions Already Fixed
@@ -112,6 +125,8 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | old interactive API setup    | `restish api connect <name> <url>`        | v2 expects the base URL explicitly |
 | n/a                            | `restish api connect <name> <url> 'path:value'` | fast one-shot registration with shorthand expressions |
 | n/a                            | `restish api set <name> 'path:value'`       | shorthand updates support set/append/delete           |
+| `restish api clear-auth-cache <name>` | `restish api auth logout <name>`   | Token cache state lives under `api auth`              |
+| `restish api auth inspect <uri>` | `restish api auth inspect <api> --raw-header Authorization` | URL form was replaced by API/profile-aware inspection |
 | `auth.name`                    | `auth.type`                                 | Profile auth config field renamed                     |
 | profile `base`                 | profile `base_url`                          | API/profile base field renamed                        |
 | API `base`                     | API `base_url`                              | API base field renamed                                |

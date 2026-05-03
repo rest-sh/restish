@@ -405,9 +405,9 @@ func TestOAuthExpiredToken_RefetchesToken(t *testing.T) {
 	}
 }
 
-// TestClearAuthCache_RemovesEntry verifies that "api auth clear-cache <name>"
+// TestAuthLogout_RemovesEntry verifies that "api auth logout <name>"
 // deletes the cached token for the named API.
-func TestClearAuthCache_RemovesEntry(t *testing.T) {
+func TestAuthLogout_RemovesEntry(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 	tc := auth.NewTokenCache(cacheFile)
 	_ = tc.Set("myapi:default", auth.CachedToken{AccessToken: "tok"})
@@ -417,7 +417,7 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
-	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "myapi"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "logout", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), `profile "default"`) {
@@ -434,6 +434,24 @@ func TestClearAuthCache_RemovesEntry(t *testing.T) {
 	}
 }
 
+func TestClearAuthCache_DeprecatedAliasWarns(t *testing.T) {
+	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
+	tc := auth.NewTokenCache(cacheFile)
+	_ = tc.Set("myapi:default", auth.CachedToken{AccessToken: "tok"})
+
+	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = cacheFile
+
+	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "myapi"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "api auth clear-cache is deprecated; use api auth logout") {
+		t.Fatalf("expected deprecation warning, got %q", errOut.String())
+	}
+}
+
 func TestClearAuthCache_AllProfiles(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 	tc := auth.NewTokenCache(cacheFile)
@@ -446,7 +464,7 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = cacheFile
 
-	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "--all-profiles", "myapi"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "logout", "--all-profiles", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out.String(), "all profiles") {
@@ -507,9 +525,9 @@ func TestClearAuthCache_SharedAuthProfile(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"restish", "get", "myapi/items"},
-		{"restish", "api", "auth", "clear-cache", "myapi"},
+		{"restish", "api", "auth", "logout", "myapi"},
 		{"restish", "get", "myapi/items"},
-		{"restish", "api", "auth", "clear-cache", "--auth-profile", "shared"},
+		{"restish", "api", "auth", "logout", "--auth-profile", "shared"},
 		{"restish", "get", "myapi/items"},
 	} {
 		c, _, _ := newTestCLI(t)
@@ -525,15 +543,15 @@ func TestClearAuthCache_SharedAuthProfile(t *testing.T) {
 	}
 }
 
-// TestClearAuthCache_UnknownAPI verifies that clearing the cache for an
+// TestAuthLogout_UnknownAPI verifies that clearing the cache for an
 // unregistered API returns an error.
-func TestClearAuthCache_UnknownAPI(t *testing.T) {
+func TestAuthLogout_UnknownAPI(t *testing.T) {
 	cfg := `{"apis": {}}`
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
 
-	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "noapi"}); err == nil {
+	if err := c.Run([]string{"restish", "api", "auth", "logout", "noapi"}); err == nil {
 		t.Fatal("expected error for unknown API, got nil")
 	}
 }

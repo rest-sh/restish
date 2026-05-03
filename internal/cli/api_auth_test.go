@@ -88,6 +88,17 @@ func TestAPIAuthInspectCredentialAPIKey(t *testing.T) {
 	}
 }
 
+func TestAPIAuthInspectURLSuggestsV2Form(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "api", "auth", "inspect", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected URL argument error")
+	}
+	if !strings.Contains(err.Error(), "v2 form: restish api auth inspect <api-name> --raw-header Authorization") {
+		t.Fatalf("expected v2 form hint, got: %v", err)
+	}
+}
+
 func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {

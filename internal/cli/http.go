@@ -346,9 +346,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		trace.RenderAfter(c.Stderr, gf.Verbose)
 		return c.writeRawBytes(resp.Raw)
 	}
-	if !tty && !explicitFilter && fmtName == "" && strings.HasPrefix(output.Header(resp.Headers, "Content-Type"), "image/") {
+	if !tty && !explicitFilter && fmtName == "" && defaultRawBytesResponse(resp) {
 		trace := requestTraceFromContext(requestContext(cmd))
-		trace.Info("Output", "raw image (auto)")
+		trace.Info("Output", "raw bytes (auto)")
 		trace.Step("raw")
 		trace.RenderAfter(c.Stderr, gf.Verbose)
 		_, err := c.Stdout.Write(resp.Raw)
@@ -480,6 +480,22 @@ func (c *CLI) populateRequestTrace(trace *requestTrace, apiName, profileName, in
 	if len(c.pluginsByHook["request-middleware"]) > 0 {
 		trace.DebugBefore("Request plugins", pluginNameList(c.pluginsByHook["request-middleware"]))
 	}
+}
+
+func defaultRawBytesResponse(resp *output.Response) bool {
+	if resp == nil || len(resp.Raw) == 0 {
+		return false
+	}
+	contentType := output.Header(resp.Headers, "Content-Type")
+	base, _, _ := mime.ParseMediaType(contentType)
+	switch {
+	case strings.HasPrefix(base, "image/"):
+		return true
+	case base == "application/octet-stream" || base == "application/zip":
+		return true
+	}
+	_, bodyIsBytes := resp.Body.([]byte)
+	return bodyIsBytes
 }
 
 func traceInputSource(info input.BodyInfo, hasBody bool) string {
@@ -646,7 +662,7 @@ func validateRawOutputOptions(gf GlobalFlags) error {
 		return nil
 	}
 	if explicitOutputFilter(gf) {
-		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers; use -o lines for shell-friendly filtered values")
+		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers\nFor shell-friendly scalar output use: -o lines\nFor JSON use: -o json")
 	}
 	if gf.OutputFormat != "" {
 		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-output-format; raw output writes the response body bytes")
@@ -823,7 +839,7 @@ func (c *CLI) writeJSONValue(value any) error {
 
 func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
 	if fmtName == "raw" {
-		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw response body bytes`)
+		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw response body bytes or -o lines for shell-friendly text`)
 	}
 
 	fmts := c.formatters

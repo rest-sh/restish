@@ -48,7 +48,7 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 func (c *CLI) newCacheClearCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clear [api]",
-		Short: "Delete cached responses (all, or for a specific registered API)",
+		Short: "Delete cached HTTP responses, not OAuth tokens (all, or for a specific registered API)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := c.cacheDir()
