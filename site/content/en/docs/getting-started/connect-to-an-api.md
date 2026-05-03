@@ -47,12 +47,20 @@ Both commands below call the example API:
 
 ```bash
 restish https://api.rest.sh/images/jpeg
+restish example/images/jpeg
 restish example get-image jpeg
 ```
 
 Use the generic form for one-off exploration. Use the generated command when
 you want discoverable help, completion, profile-aware config, and less URL
 assembly.
+
+After the API is synced, both styles participate in completion:
+
+```bash
+restish example/<TAB>
+restish example get-image <TAB>
+```
 
 ## Explicit Spec URLs
 

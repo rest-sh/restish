@@ -73,7 +73,8 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 			Annotations: map[string]string{
 				requestHelpAnnotation: "true",
 			},
-			Args: cobra.MinimumNArgs(1),
+			Args:              cobra.MinimumNArgs(1),
+			ValidArgsFunction: c.completeHTTPURL(method),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.runHTTP(cmd, method, args)
 			},

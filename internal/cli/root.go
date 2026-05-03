@@ -47,7 +47,8 @@ commands for registered APIs via OpenAPI 3.`
 		// ArbitraryArgs prevents cobra's legacyArgs validator from rejecting
 		// unrecognised args before our RunE can inspect them (which we need for
 		// bare-URL dispatch: "restish https://api.example.com").
-		Args: cobra.ArbitraryArgs,
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: c.completeRootURL,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			gf, err := parseGlobalFlags(cmd)
 			if err != nil {

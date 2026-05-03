@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -112,6 +116,305 @@ only when the shell requires it.`,
 
 	completionCmd.AddCommand(bash, zsh, fish, powershell, installCmd)
 	root.AddCommand(completionCmd)
+}
+
+func (c *CLI) completeRootURL(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	if !looksLikeURLCompletion(toComplete) {
+		return nil, cobra.ShellCompDirectiveDefault
+	}
+	return c.completeOperationURLs(cmd, "GET", args, toComplete, false)
+}
+
+func (c *CLI) completeHTTPURL(method string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return c.completeOperationURLs(cmd, method, args, toComplete, true)
+	}
+}
+
+func (c *CLI) completeOperationURLs(cmd *cobra.Command, method string, _ []string, toComplete string, seedAPIs bool) ([]string, cobra.ShellCompDirective) {
+	if c == nil || c.cfg == nil || len(c.cfg.APIs) == 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	profileName := completionProfileName(cmd)
+	method = strings.ToUpper(method)
+
+	var out []string
+	seen := map[string]bool{}
+	add := func(value, desc string) {
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		if desc != "" {
+			value += "\t" + completionDescription(desc)
+		}
+		out = append(out, value)
+	}
+
+	names := sortedAPINames(c.cfg)
+	for _, apiName := range names {
+		apiCfg := c.cfg.APIs[apiName]
+		if apiCfg == nil {
+			continue
+		}
+		if seedAPIs && (toComplete == "" || (!strings.Contains(toComplete, "/") && strings.HasPrefix(apiName+"/", toComplete))) {
+			add(apiName+"/", "API URL paths")
+			continue
+		}
+
+		set, ok := c.completionOperationSet(cmd, apiName, apiCfg, profileName)
+		if !ok {
+			continue
+		}
+		for _, op := range set.Operations {
+			if op.XCLI.Hidden || !strings.EqualFold(op.Method, method) {
+				continue
+			}
+			desc := op.Summary
+			if desc == "" {
+				desc = fmt.Sprintf("%s %s", op.Method, op.Path)
+			}
+			for _, candidate := range c.operationURLCompletionCandidates(apiName, apiCfg, profileName, op.Path) {
+				completed, ok := completeURLTemplate(toComplete, candidate)
+				if ok {
+					add(completed, desc)
+				}
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return completionValue(out[i]) < completionValue(out[j])
+	})
+
+	directive := cobra.ShellCompDirectiveNoFileComp
+	if len(out) > 0 && allCompletionValuesAreAPISeeds(out) {
+		directive |= cobra.ShellCompDirectiveNoSpace
+	}
+	return out, directive
+}
+
+func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
+	opOpts := spec.OperationOptions{
+		BaseURL:         apiCfg.BaseURL,
+		OperationBase:   apiCfg.OperationBase,
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
+	}
+	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
+		return set, true
+	}
+	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	if err != nil {
+		return spec.OperationSet{}, false
+	}
+	if s == nil && spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
+		s, err = c.discoverSpec(cmd.Context(), apiName)
+	}
+	if err != nil || s == nil {
+		return spec.OperationSet{}, false
+	}
+	set, err := s.OperationSet(opOpts)
+	if err != nil {
+		return spec.OperationSet{}, false
+	}
+	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opOpts, set)
+	return set, true
+}
+
+func (c *CLI) operationURLCompletionCandidates(apiName string, apiCfg *config.APIConfig, profileName, opPath string) []string {
+	baseURL, operationBase := completionOperationBase(apiCfg, profileName)
+	var candidates []string
+	if shortPath := shortOperationCompletionPath(baseURL, operationBase, opPath); shortPath != "" {
+		candidates = append(candidates, apiName+"/"+strings.TrimLeft(shortPath, "/"))
+	}
+	if full := fullOperationCompletionURL(baseURL, operationBase, opPath); full != "" {
+		candidates = append(candidates, full)
+		if scheme, rest, ok := strings.Cut(full, "://"); ok && (scheme == "http" || scheme == "https") {
+			candidates = append(candidates, rest)
+		}
+	}
+	return candidates
+}
+
+func completionOperationBase(apiCfg *config.APIConfig, profileName string) (string, string) {
+	if apiCfg == nil {
+		return "", ""
+	}
+	baseURL := apiCfg.BaseURL
+	operationBase := apiCfg.OperationBase
+	if prof := profileForName(apiCfg, profileName); prof != nil {
+		if prof.BaseURL != "" {
+			baseURL = prof.BaseURL
+		}
+		if prof.OperationBase != "" {
+			operationBase = prof.OperationBase
+		}
+	}
+	return baseURL, operationBase
+}
+
+func shortOperationCompletionPath(baseURL, operationBase, opPath string) string {
+	if operationBase == "" {
+		return opPath
+	}
+	full := fullOperationCompletionURL(baseURL, operationBase, opPath)
+	base, baseErr := url.Parse(baseURL)
+	target, targetErr := url.Parse(full)
+	if baseErr != nil || targetErr != nil || !base.IsAbs() || !target.IsAbs() || !sameURLOrigin(base, target) {
+		return ""
+	}
+	basePath := strings.TrimRight(base.EscapedPath(), "/")
+	if basePath == "" {
+		basePath = "/"
+	}
+	targetPath := target.EscapedPath()
+	if targetPath == "" {
+		targetPath = "/"
+	}
+	rel := relativeURLPath(basePath, targetPath)
+	if rel == "." {
+		return "/"
+	}
+	return rel
+}
+
+func relativeURLPath(basePath, targetPath string) string {
+	baseParts := splitCleanURLPath(basePath)
+	targetParts := splitCleanURLPath(targetPath)
+	i := 0
+	for i < len(baseParts) && i < len(targetParts) && baseParts[i] == targetParts[i] {
+		i++
+	}
+	parts := make([]string, 0, len(baseParts)-i+len(targetParts)-i)
+	for j := i; j < len(baseParts); j++ {
+		parts = append(parts, "..")
+	}
+	parts = append(parts, targetParts[i:]...)
+	if len(parts) == 0 {
+		return "."
+	}
+	return strings.Join(parts, "/")
+}
+
+func splitCleanURLPath(raw string) []string {
+	raw = strings.Trim(raw, "/")
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, "/")
+}
+
+func fullOperationCompletionURL(baseURL, operationBase, opPath string) string {
+	if baseURL == "" {
+		return ""
+	}
+	if operationBase != "" {
+		resolved, err := config.ResolveOperationBaseURL(baseURL, operationBase)
+		if err != nil {
+			return ""
+		}
+		return cleanCompletionURL(strings.TrimRight(resolved, "/") + opPath)
+	}
+	return cleanCompletionURL(strings.TrimRight(baseURL, "/") + opPath)
+}
+
+func cleanCompletionURL(rawURL string) string {
+	cleaned := cleanExpandedAPIURL(rawURL)
+	cleaned = strings.ReplaceAll(cleaned, "%7B", "{")
+	cleaned = strings.ReplaceAll(cleaned, "%7D", "}")
+	return cleaned
+}
+
+func completeURLTemplate(toComplete, template string) (string, bool) {
+	if toComplete == "" {
+		return template, true
+	}
+	if strings.Contains(toComplete, "?") || strings.Contains(toComplete, "#") {
+		return "", false
+	}
+	inParts := strings.Split(toComplete, "/")
+	tplParts := strings.Split(template, "/")
+	if len(inParts) > len(tplParts) {
+		return "", false
+	}
+	last := len(inParts) - 1
+	for i, part := range inParts {
+		if i >= len(tplParts) {
+			return "", false
+		}
+		tplPart := tplParts[i]
+		if templatePathPart(tplPart) {
+			if part != "" {
+				tplParts[i] = part
+			}
+			continue
+		}
+		if i == last {
+			if !strings.HasPrefix(tplPart, part) {
+				return "", false
+			}
+			continue
+		}
+		if part != tplPart {
+			return "", false
+		}
+	}
+	return strings.Join(tplParts, "/"), true
+}
+
+func templatePathPart(part string) bool {
+	return strings.Contains(part, "{") && strings.Contains(part, "}")
+}
+
+func looksLikeURLCompletion(toComplete string) bool {
+	if toComplete == "" {
+		return false
+	}
+	if strings.Contains(toComplete, "://") || strings.ContainsAny(toComplete, ".:") {
+		return true
+	}
+	apiName, _, ok := strings.Cut(toComplete, "/")
+	return ok && apiName != ""
+}
+
+func completionProfileName(cmd *cobra.Command) string {
+	if cmd != nil {
+		if flag := cmd.Flag("rsh-profile"); flag != nil && flag.Value.String() != "" {
+			return flag.Value.String()
+		}
+		if root := cmd.Root(); root != nil {
+			if flag := root.Flag("rsh-profile"); flag != nil && flag.Value.String() != "" {
+				return flag.Value.String()
+			}
+		}
+	}
+	if profile := os.Getenv("RSH_PROFILE"); profile != "" {
+		return profile
+	}
+	return "default"
+}
+
+func completionDescription(desc string) string {
+	return strings.Join(strings.Fields(desc), " ")
+}
+
+func completionValue(value string) string {
+	value, _, _ = strings.Cut(value, "\t")
+	return value
+}
+
+func allCompletionValuesAreAPISeeds(values []string) bool {
+	for _, value := range values {
+		if !strings.HasSuffix(completionValue(value), "/") {
+			return false
+		}
+	}
+	return len(values) > 0
 }
 
 func shellCompletionLong(shell, installExample string) string {

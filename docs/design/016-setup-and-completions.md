@@ -73,6 +73,7 @@ Where Restish has enough metadata, completion should also surface:
 - enum-backed parameter values
 - known output-format names
 - profile names and similar finite sets
+- API-aware URL paths from generated operation metadata
 
 For zsh, `completion install zsh` writes the generated script under Restish's
 effective config directory, not the cache directory, then adds a managed source
@@ -80,6 +81,39 @@ block to `~/.zshrc`. The script is generated state, but shell startup depends
 on it being present; cache cleanup should not break completion. Fish is simpler:
 `completion install fish` writes the generated script to fish's user completions
 directory, respecting `XDG_CONFIG_HOME` and falling back to `~/.config`.
+
+### API-Aware URL Completion
+
+Generated API commands are not the only interactive surface for operation
+metadata. Users may also prefer generic URL requests such as:
+
+```bash
+restish example/images/<TAB>
+restish get example/images/<TAB>
+restish delete example/items/abc/<TAB>
+```
+
+URL completion uses cached OpenAPI operation metadata to suggest operation URL
+templates for the active HTTP method. It must not perform network discovery
+during shell completion. Local spec files and already-cached remote specs may
+be parsed or upgraded into cached operation metadata, but missing remote specs
+should produce no URL candidates until the user runs `api sync`.
+
+The completion resolver preserves the form the user started with:
+
+- API short-name paths complete as `example/...`
+- full URLs complete as full URLs
+- scheme-less URLs complete without adding `https://`
+
+Path template variables are carried forward when the user has already typed a
+segment value. For example, `example/items/my-id` can complete to
+`example/items/my-id/tags/{tag-id}`. Candidate descriptions come from the
+operation summary when available, and otherwise fall back to `METHOD /path`.
+
+URL completion follows the same profile, server-variable, and `operation_base`
+selection rules as generated operations. Hidden generated operations are not
+shown. Generic verb commands filter candidates by verb, while the root bare-URL
+form uses `GET`.
 
 ## Setup Design
 

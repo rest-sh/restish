@@ -81,7 +81,11 @@ Generated API commands participate in completion after an API is configured:
 ```bash
 restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
 restish example <TAB>
+restish example/<TAB>
 ```
+
+Use the command form when you want generated help and flags. Use the URL form
+when you want to explore operation paths with generic HTTP requests.
 
 ## Recommended Habit
 
