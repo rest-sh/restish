@@ -338,6 +338,32 @@ func TestEditCommandFallsBackToIfUnmodifiedSince(t *testing.T) {
 	}
 }
 
+func TestEditCommandWarnsWithoutPreconditionValidator(t *testing.T) {
+	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := errOut.String(); !strings.Contains(got, "not guarded against concurrent edits") {
+		t.Fatalf("expected no-precondition warning, got %q", got)
+	}
+}
+
 func TestEditCommandDryRunShowsDiffWithoutSending(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 
