@@ -17,7 +17,6 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/mattn/go-isatty v0.0.20
 	github.com/pb33f/libopenapi v0.35.0
-	github.com/peterhellberg/link v1.2.0
 	github.com/shamaton/msgpack/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9
