@@ -32,7 +32,7 @@ func (c *CLI) tryPaginate(
 	}
 
 	c.ensureBodyLinks(firstResp)
-	nextURL, err := resolveNextURL(firstResp, pagCfg)
+	nextURL, err := resolveNextURL(firstResp, pagCfg, firstURL)
 	if err != nil {
 		return false, err
 	}
@@ -175,7 +175,7 @@ func (c *CLI) runPagination(
 			streamedCount += len(items)
 		}
 		c.ensureBodyLinks(resp)
-		nextURL, err = resolveNextURL(resp, pagCfg)
+		nextURL, err = resolveNextURL(resp, pagCfg, nextURL)
 		if err != nil {
 			return err
 		}
@@ -549,7 +549,7 @@ func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 }
 
 // resolveNextURL returns the next-page URL from resp.Links or pagCfg.NextPath.
-func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) (string, error) {
+func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig, currentURL string) (string, error) {
 	// 1. Standard link relation "next".
 	if resp.Links != nil {
 		if next, ok := resp.Links["next"].(string); ok && next != "" {
@@ -574,10 +574,22 @@ func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) (str
 			return "", fmt.Errorf("pagination: next_path %q returned %T instead of a string", pagCfg.NextPath, result)
 		}
 		if s != "" {
-			return s, nil
+			return resolvePaginationURL(currentURL, s)
 		}
 	}
 	return "", nil
+}
+
+func resolvePaginationURL(currentURL, next string) (string, error) {
+	base, err := url.Parse(currentURL)
+	if err != nil {
+		return "", fmt.Errorf("pagination: current URL %q: %w", currentURL, err)
+	}
+	ref, err := url.Parse(next)
+	if err != nil {
+		return "", fmt.Errorf("pagination: next URL %q: %w", next, err)
+	}
+	return base.ResolveReference(ref).String(), nil
 }
 
 // applyItemLimits truncates items to stay within maxItems. Returns the

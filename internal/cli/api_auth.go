@@ -450,8 +450,8 @@ func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig,
 		return spec.OperationSet{}, false
 	}
 	return spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	})
 }

@@ -391,7 +391,7 @@ func configuredCredentials(apiCfg *config.APIConfig, profileName string) map[str
 		return out
 	}
 	for id, credential := range apiCfg.Profiles[profileName].Credentials {
-		if credential != nil && credential.Auth != nil {
+		if credential != nil && (credential.Auth != nil || credential.AuthRef != "") {
 			out[id] = true
 		}
 	}

@@ -195,6 +195,22 @@ func TestLoadManifest_NonZeroExit(t *testing.T) {
 	}
 }
 
+func TestLoadManifest_NonZeroExitIncludesStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	p := writeScript(t, dir, "restish-fail-stderr", "#!/bin/sh\necho manifest exploded >&2\nexit 1")
+
+	_, err := LoadManifest(p, nil)
+	if err == nil {
+		t.Fatal("expected error for non-zero exit")
+	}
+	if !strings.Contains(err.Error(), "stderr: manifest exploded") {
+		t.Fatalf("expected stderr excerpt, got %v", err)
+	}
+}
+
 func TestLoadManifest_FutureRequiredVersionFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")

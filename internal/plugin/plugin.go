@@ -4,6 +4,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,8 @@ import (
 // a minimum required version, so a plugin built against a future Restish can
 // still load when it only needs features this host supports.
 const CurrentPluginAPIVersion = 2
+
+const maxManifestStderrBytes = 8 << 10
 
 var knownHooks = map[string]bool{
 	"auth":                true,
@@ -150,10 +153,15 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagManifest)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
-	out, err := cmd.Output()
+	var stdout bytes.Buffer
+	stderr := &limitedBuffer{limit: maxManifestStderrBytes}
+	cmd.Stdout = &stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("plugin %s: manifest exec: %w", filepath.Base(path), err)
+		return nil, manifestExecError(filepath.Base(path), err, stderr)
 	}
+	out := stdout.Bytes()
 	if len(out) == 0 {
 		return nil, fmt.Errorf("plugin %s: empty manifest", filepath.Base(path))
 	}
@@ -180,6 +188,50 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 	}
 
 	return &m, nil
+}
+
+func manifestExecError(name string, err error, stderr *limitedBuffer) error {
+	excerpt := stderrExcerpt(stderr)
+	if excerpt == "" {
+		return fmt.Errorf("plugin %s: manifest exec: %w", name, err)
+	}
+	return fmt.Errorf("plugin %s: manifest exec: %w: stderr: %s", name, err, excerpt)
+}
+
+type limitedBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	remaining := b.limit - b.buf.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			_, _ = b.buf.Write(p[:remaining])
+			b.truncated = true
+			return len(p), nil
+		}
+		return b.buf.Write(p)
+	}
+	if len(p) > 0 {
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
+func stderrExcerpt(stderr *limitedBuffer) string {
+	if stderr == nil {
+		return ""
+	}
+	excerpt := strings.TrimSpace(stderr.buf.String())
+	if excerpt == "" {
+		return ""
+	}
+	if stderr.truncated {
+		excerpt += "..."
+	}
+	return excerpt
 }
 
 func validateManifest(m Manifest) error {

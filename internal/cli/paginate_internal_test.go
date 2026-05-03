@@ -172,6 +172,61 @@ func TestPaginationItemCapacity(t *testing.T) {
 	}
 }
 
+func TestResolveNextURLResolvesNextPathAgainstCurrentURL(t *testing.T) {
+	tests := []struct {
+		name string
+		next string
+		want string
+	}{
+		{
+			name: "root relative",
+			next: "/items?page=2",
+			want: "https://api.example.com/items?page=2",
+		},
+		{
+			name: "path relative",
+			next: "items?page=2",
+			want: "https://api.example.com/v1/items?page=2",
+		},
+		{
+			name: "absolute",
+			next: "https://api.example.com/absolute?page=2",
+			want: "https://api.example.com/absolute?page=2",
+		},
+		{
+			name: "cross origin remains absolute",
+			next: "https://other.example.com/items?page=2",
+			want: "https://other.example.com/items?page=2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := &output.Response{
+				Body: map[string]any{"next": tc.next},
+			}
+			got, err := resolveNextURL(resp, &config.PaginationConfig{NextPath: "next"}, "https://api.example.com/v1/current?page=1")
+			if err != nil {
+				t.Fatalf("resolveNextURL: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("resolveNextURL = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolvedNextPathCrossOriginIsBlockedBySafetyCheck(t *testing.T) {
+	resp := &output.Response{Body: map[string]any{"next": "https://other.example.com/items?page=2"}}
+	next, err := resolveNextURL(resp, &config.PaginationConfig{NextPath: "next"}, "https://api.example.com/items?page=1")
+	if err != nil {
+		t.Fatalf("resolveNextURL: %v", err)
+	}
+	if crosses, _, _ := paginationCrossesOrigin("https://api.example.com/items?page=1", next); !crosses {
+		t.Fatalf("expected %q to cross origin", next)
+	}
+}
+
 func TestRunPaginationHonorsContextCancellation(t *testing.T) {
 	c := New()
 	ctx, cancel := context.WithCancel(context.Background())

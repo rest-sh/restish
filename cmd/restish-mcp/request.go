@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -29,7 +30,7 @@ type HTTPResponse struct {
 
 func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 	path := t.Path
-	query := url.Values{}
+	var query []mcpQueryParam
 	headers := map[string]string{}
 	var cookies []string
 
@@ -54,7 +55,7 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 				return nil, err
 			}
 			for _, part := range parts {
-				query.Add(part.name, part.value)
+				query = append(query, part)
 			}
 		case "header":
 			text, err := serializeMCPHeaderParam(param, value)
@@ -74,7 +75,7 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 		headers["Cookie"] = strings.Join(cookies, "; ")
 	}
 	rawURL := t.APIName + path
-	if qs := query.Encode(); qs != "" {
+	if qs := encodeMCPQuery(query); qs != "" {
 		rawURL += "?" + qs
 	}
 
@@ -95,8 +96,9 @@ func (t *Tool) Request(args map[string]any) (*HTTPRequest, error) {
 }
 
 type mcpQueryParam struct {
-	name  string
-	value string
+	name          string
+	value         string
+	allowReserved bool
 }
 
 func mcpParamDescriptor(p Param) openapiparam.Param {
@@ -125,9 +127,6 @@ func serializeMCPPathParam(p Param, value any) (string, error) {
 }
 
 func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
-	if isObjectValue(value) {
-		return nil, fmt.Errorf("parameter %q: object values are not supported", p.Name)
-	}
 	paramValue, err := mcpParamValue(p, value)
 	if err != nil {
 		return nil, fmt.Errorf("parameter %q: %w", p.Name, err)
@@ -145,7 +144,7 @@ func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
 	}
 	out := make([]mcpQueryParam, 0, len(parts))
 	for _, part := range parts {
-		out = append(out, mcpQueryParam{name: part.Name, value: part.Value})
+		out = append(out, mcpQueryParam{name: part.Name, value: part.Value, allowReserved: part.AllowReserved})
 	}
 	return out, nil
 }
@@ -187,6 +186,13 @@ func serializeMCPCookieParam(p Param, value any) (string, error) {
 }
 
 func mcpParamValue(p Param, value any) (openapiparam.Value, error) {
+	if p.Type == "object" {
+		fields, ok := objectValueFields(value)
+		if !ok {
+			return openapiparam.Value{}, errors.New("object value must be an object")
+		}
+		return openapiparam.ObjectValue(fields), nil
+	}
 	if p.Type != "array" {
 		text, ok := scalarValueString(value)
 		if !ok {
@@ -216,6 +222,63 @@ func mcpParamValue(p Param, value any) (openapiparam.Value, error) {
 func isObjectValue(v any) bool {
 	_, ok := v.(map[string]any)
 	return ok
+}
+
+func objectValueFields(value any) ([]openapiparam.Field, bool) {
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	keys := make([]string, 0, len(raw))
+	for key := range raw {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	fields := make([]openapiparam.Field, 0, len(keys))
+	for _, key := range keys {
+		text, ok := scalarValueString(raw[key])
+		if !ok {
+			return nil, false
+		}
+		fields = append(fields, openapiparam.Field{Key: key, Value: text})
+	}
+	return fields, true
+}
+
+func encodeMCPQuery(parts []mcpQueryParam) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, url.QueryEscape(part.name)+"="+encodeMCPQueryValue(part.value, part.allowReserved))
+	}
+	return strings.Join(out, "&")
+}
+
+const openAPIReservedChars = ":/?#[]@!$&'()*+,;="
+
+func encodeMCPQueryValue(value string, allowReserved bool) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if isMCPQueryUnreserved(ch) || (allowReserved && ch != '+' && strings.ContainsRune(openAPIReservedChars, rune(ch))) {
+			b.WriteByte(ch)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[ch>>4])
+		b.WriteByte(hex[ch&0x0f])
+	}
+	return b.String()
+}
+
+func isMCPQueryUnreserved(ch byte) bool {
+	return ch >= 'A' && ch <= 'Z' ||
+		ch >= 'a' && ch <= 'z' ||
+		ch >= '0' && ch <= '9' ||
+		ch == '-' || ch == '.' || ch == '_' || ch == '~'
 }
 
 func scalarValueString(v any) (string, bool) {

@@ -30,6 +30,8 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: command discovery stdout: %w", filepath.Base(path), err)
 	}
+	stderr := &cappedBuffer{limit: maxCommandPluginStderrBytes}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("plugin %s: command discovery start: %w", filepath.Base(path), err)
 	}
@@ -43,14 +45,25 @@ func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
 	}
 	if waitErr != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("plugin %s: command discovery timed out after %s: %w", filepath.Base(path), timeout, ctx.Err())
+			return nil, commandPluginDiscoveryError(filepath.Base(path), fmt.Sprintf("command discovery timed out after %s", timeout), ctx.Err(), stderr)
 		}
-		return nil, fmt.Errorf("plugin %s: command discovery: %w", filepath.Base(path), waitErr)
+		return nil, commandPluginDiscoveryError(filepath.Base(path), "command discovery", waitErr, stderr)
 	}
 	if len(out) == 0 {
 		return nil, nil
 	}
 	return decodeCommandPluginDiscovery(filepath.Base(path), out)
+}
+
+func commandPluginDiscoveryError(pluginName, action string, err error, stderr *cappedBuffer) error {
+	excerpt := strings.TrimSpace(string(stderr.Bytes()))
+	if excerpt == "" {
+		return fmt.Errorf("plugin %s: %s: %w", pluginName, action, err)
+	}
+	if stderr.Truncated() {
+		excerpt += "..."
+	}
+	return fmt.Errorf("plugin %s: %s: %w: stderr: %s", pluginName, action, err, redactDiagnosticSecretText(excerpt))
 }
 
 func decodeCommandPluginDiscovery(pluginName string, out []byte) ([]pluginwire.CommandDecl, error) {

@@ -286,12 +286,44 @@ func TestToolRequestSerializesCookieParameters(t *testing.T) {
 	}
 }
 
-func TestToolRequestRejectsObjectParameter(t *testing.T) {
+func TestToolRequestSerializesDeepObjectQueryParameter(t *testing.T) {
 	tool := &Tool{
 		APIName: "demo",
 		Method:  "GET",
 		Path:    "/items",
-		Params:  []Param{{Name: "filter", In: "query", Type: "object"}},
+		Params:  []Param{{Name: "filter", In: "query", Type: "object", Style: "deepObject"}},
+	}
+	req, err := tool.Request(map[string]any{"filter": map[string]any{"status": "open", "limit": float64(10)}})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if req.URI != "demo/items?filter%5Blimit%5D=10&filter%5Bstatus%5D=open" {
+		t.Fatalf("URI = %q, want deepObject query", req.URI)
+	}
+}
+
+func TestToolRequestPreservesAllowReservedQueryCharacters(t *testing.T) {
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items",
+		Params:  []Param{{Name: "q", In: "query", Type: "string", AllowReserved: true}},
+	}
+	req, err := tool.Request(map[string]any{"q": "a/b?c=d,e"})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if req.URI != "demo/items?q=a/b?c=d,e" {
+		t.Fatalf("URI = %q, want allowReserved query", req.URI)
+	}
+}
+
+func TestToolRequestRejectsObjectPathParameter(t *testing.T) {
+	tool := &Tool{
+		APIName: "demo",
+		Method:  "GET",
+		Path:    "/items/{filter}",
+		Params:  []Param{{Name: "filter", In: "path", Type: "object"}},
 	}
 	_, err := tool.Request(map[string]any{"filter": map[string]any{"status": "open"}})
 	if err == nil {

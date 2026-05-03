@@ -2,9 +2,13 @@ package cli_test
 
 import (
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -144,6 +148,55 @@ func TestDoctorAPIJSONWarnsOnServerErrorReachability(t *testing.T) {
 		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.Reachability.Status != "warn" || report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusInternalServerError || !strings.Contains(report.Reachability.Note, "server error") {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}
+
+func TestDoctorAPIReachabilityUsesProfileCACert(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodHead {
+			t.Fatalf("doctor reachability used %s, want HEAD", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	caPath := filepath.Join(t.TempDir(), "server-ca.pem")
+	if err := os.WriteFile(caPath, caPEM, 0o600); err != nil {
+		t.Fatalf("write CA: %v", err)
+	}
+
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(fmt.Sprintf(`{
+  "apis": {
+    "demo": {
+      "base_url": %q,
+      "profiles": {
+        "default": {"ca_cert": %q}
+      }
+    }
+  }
+}`, srv.URL, caPath)), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Reachability struct {
+			Status     string `json:"status"`
+			Reachable  bool   `json:"reachable"`
+			StatusCode int    `json:"status_code"`
+		} `json:"reachability"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.Reachability.Status != "ok" || !report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusNoContent {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
 	}
 }

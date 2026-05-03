@@ -221,6 +221,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(c.Stderr, "Spec cache: missing")
 	}
+	profileName := c.profileFromCmd(cmd)
 	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
 		BaseURL:       api.BaseURL,
 		OperationBase: api.OperationBase,
@@ -229,14 +230,14 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(c.Stderr, "Generated operations: unavailable")
 	}
-	if prof := api.Profiles[c.profileFromCmd(cmd)]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
+	if prof := api.Profiles[profileName]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
 		fmt.Fprintln(c.Stderr, "Auth: configured")
 	} else {
 		fmt.Fprintln(c.Stderr, "Auth: no profile auth configured")
 	}
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		c.printAPIReachability(c.checkAPIReachability(requestContext(cmd), api.BaseURL))
+		c.printAPIReachability(c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
 	} else {
 		fmt.Fprintln(c.Stderr, "Reachability: skipped (use --check-network)")
 	}
@@ -410,20 +411,21 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
 		report.SpecCache = doctorStatusReport{Status: "present"}
 	}
+	profileName := c.profileFromCmd(cmd)
 	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
 		BaseURL:       api.BaseURL,
 		OperationBase: api.OperationBase,
 	}); ok {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{Status: "available", Count: len(set.Operations)}
 	}
-	if prof := api.Profiles[c.profileFromCmd(cmd)]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
+	if prof := api.Profiles[profileName]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
 		report.Auth = doctorAuthReport{Status: "configured"}
 	} else {
 		report.Auth = doctorAuthReport{Status: "none"}
 	}
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		report.Reachability = c.checkAPIReachability(requestContext(cmd), api.BaseURL)
+		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
 	}
 	return report
 }
@@ -539,7 +541,7 @@ func (c *CLI) printShellSetupDiagnostic() {
 	fmt.Fprintf(c.Stderr, "Shell setup: run `restish shell setup %s` if glob expansion causes trouble\n", shell)
 }
 
-func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string) doctorReachabilityReport {
+func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
 	if baseURL == "" {
 		return doctorReachabilityReport{Status: "skipped", Checked: false, Note: "no base URL"}
 	}
@@ -549,7 +551,14 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string) doctorRe
 	if err != nil {
 		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: err.Error()}
 	}
-	resp, err := (&http.Client{Transport: c.baseHTTPTransport()}).Do(req)
+	transport, closer, err := c.discoveryTransport(ctx, apiCfg, profileName)
+	if err != nil {
+		return doctorReachabilityReport{Status: "tls_config_error", Checked: false, Method: http.MethodHead, Error: err.Error(), Note: "profile TLS settings could not be resolved"}
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		return doctorReachabilityReport{Status: "failed", Checked: true, Method: http.MethodHead, Error: err.Error()}
 	}

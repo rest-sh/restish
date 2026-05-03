@@ -67,6 +67,26 @@ func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 	}
 }
 
+func TestLoadCommandPluginCommandsReturnsExecErrorWithStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish-broken-stderr")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\necho discovery exploded >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+
+	_, err := loadCommandPluginCommands(path)
+	if err == nil {
+		t.Fatal("expected command discovery error")
+	}
+	if !strings.Contains(err.Error(), "stderr: discovery exploded") {
+		t.Fatalf("expected stderr excerpt, got: %v", err)
+	}
+}
+
 func TestDecodeCommandPluginDiscoveryRejectsFutureProtocol(t *testing.T) {
 	raw, err := cbor.Marshal(pluginwire.CommandDiscoveryResponse{
 		ProtocolVersion: pluginwire.CommandPluginProtocolVersion + 1,

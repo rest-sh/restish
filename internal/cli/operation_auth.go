@@ -209,7 +209,7 @@ func (c *CLI) operationAuthCallbacks(apiName, profileName string, selected []sel
 					return err
 				}
 			}
-			return nil
+			return c.runOperationAuthHookPlugins(req, steps)
 		},
 	}
 	for _, step := range steps {
@@ -220,12 +220,27 @@ func (c *CLI) operationAuthCallbacks(apiName, profileName string, selected []sel
 						return err
 					}
 				}
-				return nil
+				return c.runOperationAuthHookPlugins(req, steps)
 			}
 			break
 		}
 	}
 	return callbacks, nil
+}
+
+func (c *CLI) runOperationAuthHookPlugins(req *http.Request, steps []operationAuthStep) error {
+	if len(steps) == 0 {
+		return nil
+	}
+	rawParams, secretKeys := operationAuthHookContext(steps)
+	return c.runAuthHookPlugins(steps[0].apiName, steps[0].profileName, rawParams, secretKeys, req)
+}
+
+func operationAuthHookContext(steps []operationAuthStep) (map[string]string, map[string]bool) {
+	if len(steps) != 1 {
+		return nil, nil
+	}
+	return steps[0].rawParams, steps[0].secretKeys
 }
 
 type operationAuthStep struct {
@@ -276,7 +291,7 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 	if err := s.handler.Authenticate(req.Context(), req, c.authContext(req.Context(), s.apiName, s.profileName, params, s.cacheKey, force)); err != nil {
 		return err
 	}
-	return c.runAuthHookPlugins(s.apiName, s.profileName, s.rawParams, s.secretKeys, req)
+	return nil
 }
 
 func credentialSatisfies(requirement spec.CredentialRequirement, credential *config.CredentialConfig) error {

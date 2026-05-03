@@ -120,6 +120,42 @@ func TestBareURL(t *testing.T) {
 	}
 }
 
+func TestAPIShortNameAcceptsQueryAndFragmentSuffix(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		path string
+		raw  string
+		frag string
+	}{
+		{name: "explicit query", args: []string{"restish", "get", "svc?limit=1"}, path: "/api", raw: "limit=1"},
+		{name: "explicit fragment", args: []string{"restish", "get", "svc#frag"}, path: "/api", frag: "frag"},
+		{name: "explicit path query", args: []string{"restish", "get", "svc/path?limit=1"}, path: "/api/path", raw: "limit=1"},
+		{name: "bare query", args: []string{"restish", "svc?limit=1"}, path: "/api", raw: "limit=1"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var rr requestRecorder
+			c, _, _ := newTestCLI(t)
+			if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"svc":{"base_url":"https://api.example.com/api"}}}`), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				rr.capture(r)
+				return jsonResponse(200, `{}`), nil
+			})
+			if err := c.Run(tc.args); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			got := rr.Last().URL
+			if got.Path != tc.path || got.RawQuery != tc.raw || got.Fragment != tc.frag {
+				t.Fatalf("URL = path:%q query:%q fragment:%q, want path:%q query:%q fragment:%q", got.Path, got.RawQuery, got.Fragment, tc.path, tc.raw, tc.frag)
+			}
+		})
+	}
+}
+
 func TestHTTPResponseContentTypeIdentity(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {

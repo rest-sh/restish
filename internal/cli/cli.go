@@ -72,6 +72,8 @@ type testHooks struct {
 	RetryBaseDelay time.Duration
 	// SignalAwareContext overrides signal-aware root context creation in tests.
 	SignalAwareContext func() (context.Context, context.CancelFunc)
+	// AuthHookFunc overrides auth hook plugin execution in tests.
+	AuthHookFunc func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error
 }
 
 // CLI holds all state for a Restish instance. Using a struct instead of

@@ -43,6 +43,13 @@ or `null`; `null` deletes that header from the prepared request. Response
 middleware that returns `response_headers` replaces the normalized response
 headers, so include any original headers the plugin wants to keep.
 
+Auth hooks run after built-in auth has prepared the request. For generated
+operations that require more than one credential, Restish applies all selected
+credentials and invokes auth hooks once with the final request. In that
+multi-credential case the hook input does not include individual credential
+params; single-credential auth continues to include params with secrets redacted
+unless the manifest opts into auth secrets.
+
 ## Pitfalls
 
 - Keep hooks narrow and deterministic.

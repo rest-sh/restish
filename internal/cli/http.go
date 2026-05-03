@@ -1060,10 +1060,14 @@ func isSensitiveHeader(name string) bool {
 	return secrets.IsHeaderName(name)
 }
 
-// isAPIShortName reports whether arg (with no path separator) exactly matches a
-// registered API name in the config.
+// isAPIShortName reports whether arg begins with a registered API name and an
+// API-name delimiter or exactly matches a registered API name.
 func (c *CLI) isAPIShortName(arg string) bool {
-	return c.cfg != nil && c.cfg.APIs[arg] != nil
+	if c.cfg == nil {
+		return false
+	}
+	apiName, _ := splitAPIShortNameSuffix(arg)
+	return c.cfg.APIs[apiName] != nil
 }
 
 // applyAPIProfile checks whether rawURL begins with a registered API short
@@ -1144,7 +1148,7 @@ type apiProfileMatch struct {
 }
 
 func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool, error) {
-	apiName, rest, _ := strings.Cut(rawURL, "/")
+	apiName, suffix := splitAPIShortNameSuffix(rawURL)
 	if api := c.cfg.APIs[apiName]; api != nil {
 		baseURL := api.BaseURL
 		prof := profileForName(api, profileName)
@@ -1152,9 +1156,7 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 			baseURL = prof.BaseURL
 		}
 		expanded := strings.TrimRight(baseURL, "/")
-		if rest != "" {
-			expanded += "/" + rest
-		}
+		expanded += suffix
 		expanded = cleanExpandedAPIURL(expanded)
 		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true, nil
 	}
@@ -1188,6 +1190,14 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 		return apiProfileMatch{}, false, fmt.Errorf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", rawURL, strings.Join(ties, ", "))
 	}
 	return best, best.apiName != "", nil
+}
+
+func splitAPIShortNameSuffix(raw string) (string, string) {
+	idx := strings.IndexAny(raw, "/?#")
+	if idx < 0 {
+		return raw, ""
+	}
+	return raw[:idx], raw[idx:]
 }
 
 func profileForName(api *config.APIConfig, profileName string) *config.ProfileConfig {

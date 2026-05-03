@@ -95,6 +95,14 @@ merged into the outbound request before it is sent.
 This keeps external auth providers inside the same request-hook stage as
 built-in auth handlers.
 
+When generated-operation auth selects multiple credential bindings for one
+request, Restish applies every built-in credential first and then invokes auth
+hook plugins once with the final prepared request. The hook input omits
+per-credential `params` in that multi-credential case until the protocol grows
+an explicit combined credential context; single-credential auth continues to
+send the credential params with secrets redacted according to the plugin
+manifest.
+
 Provider-specific OAuth token exchange is a good fit for this hook/plugin
 boundary when the built-in OAuth flows are too small. The plugin can own the
 provider-specific token exchange and return ordinary request updates, while the

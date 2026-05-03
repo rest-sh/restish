@@ -19,10 +19,14 @@ type PluginFormatter struct {
 	Context    context.Context
 }
 
+var startPluginFormatterStream = func(ctx context.Context, path string, w io.Writer, in any) (formatterStream, error) {
+	return plugin.StartFormatterStream(ctx, path, w, in)
+}
+
 // Format sends the response to the plugin using the formatter session protocol
 // and copies the plugin's raw output to w.
 func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Color:  color,
@@ -38,16 +42,12 @@ func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error 
 	if err != nil {
 		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
 	}
-	if err := stream.Send(pluginwire.FormatterRequest{
+	if err := finishPluginFormatterSession(f.FormatName, stream, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Event:  "end",
 	}); err != nil {
-		_ = stream.Close()
-		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
-	}
-	if err := stream.Close(); err != nil {
-		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
+		return err
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error 
 // FormatValue renders a body/sub-value through a short formatter session,
 // without implying that the value is a full HTTP response.
 func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error {
-	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:     "formatter",
 		Format:   f.FormatName,
 		Color:    color,
@@ -73,26 +73,21 @@ func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error 
 			Body: value,
 		},
 	}); err != nil {
-		_ = stream.Close()
-		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
+		return finishPluginFormatterSession(f.FormatName, stream, nil, err)
 	}
-	if err := stream.Send(pluginwire.FormatterRequest{
+	if err := finishPluginFormatterSession(f.FormatName, stream, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Event:  "end",
 	}); err != nil {
-		_ = stream.Close()
-		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
-	}
-	if err := stream.Close(); err != nil {
-		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
+		return err
 	}
 	return nil
 }
 
 // StartValueStream starts a long-lived formatter plugin session.
 func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
-	stream, err := plugin.StartFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
+	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Color:  color,
@@ -112,6 +107,18 @@ func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bo
 		formatName: f.FormatName,
 		stream:     stream,
 	}, nil
+}
+
+func finishPluginFormatterSession(formatName string, stream formatterStream, final any, priorErr ...error) error {
+	var sendErr error
+	if final != nil {
+		sendErr = stream.Send(final)
+	}
+	closeErr := stream.Close()
+	if joined := errors.Join(append(priorErr, sendErr, closeErr)...); joined != nil {
+		return fmt.Errorf("formatter plugin %s: %w", formatName, joined)
+	}
+	return nil
 }
 
 func (f *PluginFormatter) context() context.Context {
@@ -147,14 +154,9 @@ func (s *pluginFormatterStream) WriteValue(value any) error {
 }
 
 func (s *pluginFormatterStream) Close() error {
-	sendErr := s.stream.Send(pluginwire.FormatterRequest{
+	return finishPluginFormatterSession(s.formatName, s.stream, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: s.formatName,
 		Event:  "end",
 	})
-	closeErr := s.stream.Close()
-	if sendErr != nil || closeErr != nil {
-		return fmt.Errorf("formatter plugin %s: %w", s.formatName, errors.Join(sendErr, closeErr))
-	}
-	return nil
 }

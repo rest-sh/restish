@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/auth"
@@ -280,5 +281,44 @@ func TestOperationAuthCallbacksForceCapableUnauthorizedRetry(t *testing.T) {
 	}
 	if len(handler.forces) != 2 || handler.forces[0] || !handler.forces[1] {
 		t.Fatalf("forces = %#v, want [false true]", handler.forces)
+	}
+}
+
+func TestOperationAuthCallbacksRunHookOnceForMultipleCredentials(t *testing.T) {
+	c := New()
+	var hookCalls atomic.Int32
+	c.Hooks().AuthHookFunc = func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
+		hookCalls.Add(1)
+		req.Header.Set("X-Hook", "called")
+		return nil
+	}
+	selected := []selectedOperationAuth{
+		{
+			requirement: spec.CredentialRequirement{ID: "FirstKey"},
+			resolved: resolvedAuthConfig{
+				Config: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-First-Key", "value": "one"}},
+			},
+		},
+		{
+			requirement: spec.CredentialRequirement{ID: "SecondKey"},
+			resolved: resolvedAuthConfig{
+				Config: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Second-Key", "value": "two"}},
+			},
+		},
+	}
+
+	callbacks, err := c.operationAuthCallbacks("svc", "default", selected, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("operationAuthCallbacks: %v", err)
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	if err := callbacks.OnRequest(req); err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := hookCalls.Load(); got != 1 {
+		t.Fatalf("hook calls = %d, want 1", got)
+	}
+	if req.Header.Get("X-First-Key") != "one" || req.Header.Get("X-Second-Key") != "two" || req.Header.Get("X-Hook") != "called" {
+		t.Fatalf("headers after operation auth = %#v", req.Header)
 	}
 }

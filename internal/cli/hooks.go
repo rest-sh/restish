@@ -93,6 +93,9 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 // Plugins that declare auth_api_names in their manifest are only called when
 // apiName appears in that list.
 func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
+	if c.hooks.AuthHookFunc != nil {
+		return c.hooks.AuthHookFunc(apiName, profileName, rawParams, secretKeys, req)
+	}
 	plugins := append([]plugin.Plugin(nil), c.globalAuthPlugins...)
 	plugins = append(plugins, c.authPluginsByAPI[apiName]...)
 	for _, p := range plugins {
