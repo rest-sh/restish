@@ -205,10 +205,12 @@ func runHookPlugin() {
 		_ = plugin.DecMode.Unmarshal(raw, &msg)
 		checkSecretHeaders(msg.Type, msg.Request.Headers)
 		checkSecretQuery(msg.Type, msg.Request.URI)
+		headers := map[string]any{"X-Trace-Id": []any{"hook-trace-123"}}
+		if os.Getenv("RSH_HOOK_REQUEST_AUTH") == "1" {
+			headers["Authorization"] = []any{"Bearer request-plugin"}
+		}
 		_ = plugin.WriteMessage(os.Stdout, plugin.RequestMiddlewareOutput{
-			Request: &plugin.HookRequestHeaderUpdate{
-				Headers: map[string]any{"X-Trace-Id": []any{"hook-trace-123"}},
-			},
+			Request: &plugin.HookRequestHeaderUpdate{Headers: headers},
 		})
 	case "response-middleware":
 		runResponseMiddleware(raw)

@@ -150,15 +150,56 @@ func (c *CLI) installResolvedPlugin(resolved resolvedPluginInstallSource, manife
 	if !pathWithinDir(pluginDir, dest) {
 		return "", fmt.Errorf("install: destination %s escapes plugin dir %s", dest, pluginDir)
 	}
-	if err := copyFile(resolved.Path, dest); err != nil {
+	tmpDir, err := os.MkdirTemp(pluginDir, "."+installedName+".install-*")
+	if err != nil {
+		return "", fmt.Errorf("install: cannot create temp plugin dir in %s: %w", pluginDir, err)
+	}
+	tmpPath := filepath.Join(tmpDir, installedName)
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+
+	if err := pluginInstallCopyFile(resolved.Path, tmpPath); err != nil {
 		return "", fmt.Errorf("install: %w", err)
 	}
-	_ = os.Chmod(dest, 0o755)
-	if _, err := plugin.LoadManifest(dest, diagnosticPrefixWriter(c.Stderr)); err != nil {
-		_ = os.Remove(dest)
+	_ = os.Chmod(tmpPath, 0o755)
+	if _, err := plugin.LoadManifest(tmpPath, diagnosticPrefixWriter(c.Stderr)); err != nil {
 		return "", fmt.Errorf("install: %w", err)
 	}
+	if err := replaceInstalledPlugin(tmpPath, dest); err != nil {
+		return "", fmt.Errorf("install: replace %s: %w", dest, err)
+	}
+	cleanupTemp = false
+	_ = os.RemoveAll(tmpDir)
 	return installedName, nil
+}
+
+func replaceInstalledPlugin(tmpPath, dest string) error {
+	if err := os.Rename(tmpPath, dest); err == nil {
+		return nil
+	} else if _, statErr := os.Stat(dest); statErr != nil {
+		return err
+	}
+
+	backup := dest + ".old-" + filepath.Base(tmpPath)
+	if err := os.Rename(dest, backup); err != nil {
+		return err
+	}
+	renamed := false
+	defer func() {
+		if !renamed {
+			_ = os.Rename(backup, dest)
+		}
+	}()
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return err
+	}
+	renamed = true
+	_ = os.Remove(backup)
+	return nil
 }
 
 func installedPluginFileName(manifestName, sourceName string) (string, error) {

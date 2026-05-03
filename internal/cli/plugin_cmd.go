@@ -273,6 +273,8 @@ func terminalContextFlags(c *CLI) []string {
 }
 
 // copyFile copies src to dst, creating dst with the same permissions as src.
+var pluginInstallCopyFile = copyFile
+
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {

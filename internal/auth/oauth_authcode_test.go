@@ -318,7 +318,7 @@ func TestAuthCode_BrowserFlow_TwoStrayPreflightsDoNotDeadlock(t *testing.T) {
 					}
 					resp.Body.Close()
 				}
-				resp, err := http.Get(fmt.Sprintf("%s/callback?state=%s&code=final-code", callbackURL, url.QueryEscape(state)))
+				resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=final-code", callbackURL, url.QueryEscape(state)))
 				if err != nil {
 					t.Errorf("callback request failed: %v", err)
 					return
@@ -454,6 +454,7 @@ func TestAuthCode_PassesThroughAuthorizeAndTokenParams(t *testing.T) {
 func TestAuthCode_RedirectPath(t *testing.T) {
 	var authorizeURL string
 	var gotForm url.Values
+	var wrongPathStatus atomic.Int32
 	h := &AuthorizationCode{
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			if err := r.ParseForm(); err != nil {
@@ -466,6 +467,14 @@ func TestAuthCode_RedirectPath(t *testing.T) {
 			authorizeURL = raw
 			go func() {
 				callbackURL, state := mustCallbackURL(t, raw)
+				wrongURL := strings.Replace(callbackURL, "/oauth/callback", "/callback", 1)
+				wrongResp, err := http.Get(fmt.Sprintf("%s?state=%s&code=wrong-code", wrongURL, url.QueryEscape(state)))
+				if err != nil {
+					t.Errorf("wrong callback request failed: %v", err)
+					return
+				}
+				wrongPathStatus.Store(int32(wrongResp.StatusCode))
+				wrongResp.Body.Close()
 				resp, err := http.Get(fmt.Sprintf("%s?state=%s&code=good-code", callbackURL, url.QueryEscape(state)))
 				if err != nil {
 					t.Errorf("callback request failed: %v", err)
@@ -482,20 +491,23 @@ func TestAuthCode_RedirectPath(t *testing.T) {
 		"authorize_url": "https://auth.example.com/authorize",
 		"token_url":     "https://auth.example.com/token",
 		"redirect_port": availablePort(t),
-		"redirect_path": "/callback",
+		"redirect_path": "/oauth/callback",
 	})
 	if err != nil {
 		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := wrongPathStatus.Load(); got != http.StatusNotFound {
+		t.Fatalf("/callback status = %d, want %d", got, http.StatusNotFound)
 	}
 	parsedAuthorize, err := url.Parse(authorizeURL)
 	if err != nil {
 		t.Fatalf("parse authorize URL: %v", err)
 	}
-	if got := parsedAuthorize.Query().Get("redirect_uri"); !strings.HasSuffix(got, "/callback") {
-		t.Fatalf("authorize redirect_uri = %q, want /callback", got)
+	if got := parsedAuthorize.Query().Get("redirect_uri"); !strings.HasSuffix(got, "/oauth/callback") {
+		t.Fatalf("authorize redirect_uri = %q, want /oauth/callback", got)
 	}
-	if got := gotForm.Get("redirect_uri"); !strings.HasSuffix(got, "/callback") {
-		t.Fatalf("token redirect_uri = %q, want /callback", got)
+	if got := gotForm.Get("redirect_uri"); !strings.HasSuffix(got, "/oauth/callback") {
+		t.Fatalf("token redirect_uri = %q, want /oauth/callback", got)
 	}
 }
 

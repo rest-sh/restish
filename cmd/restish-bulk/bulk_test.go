@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -266,6 +267,13 @@ func TestPullReturnsMetadataSaveError(t *testing.T) {
 	if err := os.MkdirAll(metaDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	formatted, err := reformat([]byte(`{"id":"one"}`))
+	if err != nil {
+		t.Fatalf("reformat file: %v", err)
+	}
+	if err := os.WriteFile("one.json", append(formatted, '\n'), 0o600); err != nil {
+		t.Fatalf("write one.json: %v", err)
+	}
 	oldRename := renameBulkFile
 	renameBulkFile = func(oldpath, newpath string) error {
 		return fmt.Errorf("rename failed")
@@ -283,10 +291,10 @@ func TestPullReturnsMetadataSaveError(t *testing.T) {
 	meta := &Meta{
 		URL: "https://api.example.com/index",
 		Files: map[string]*File{
-			"one.json": {Path: "one.json", URL: "https://api.example.com/items/one", VersionLocal: "v1", VersionRemote: "v1"},
+			"one.json": {Path: "one.json", URL: "https://api.example.com/items/one", VersionLocal: "v1", VersionRemote: "v1", Hash: hashBytes(formatted)},
 		},
 	}
-	err := a.pull(meta, 1)
+	err = a.pull(meta, 1)
 	if err == nil || !strings.Contains(err.Error(), "rename failed") {
 		t.Fatalf("expected metadata save error, got %v", err)
 	}
@@ -388,6 +396,132 @@ func TestPullPersistsMetadataAfterCompletedFileWhenLaterFileFails(t *testing.T) 
 	}
 	if _, err := os.Stat(filepath.Join(metaDir, "one.json")); err != nil {
 		t.Fatalf("expected cached body for one.json: %v", err)
+	}
+}
+
+func TestPullRemoteDeletedFileWithLocalEditsKeepsMetadataAndPushConflicts(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original, err := reformat([]byte(`{"id":"one","name":"old"}`))
+	if err != nil {
+		t.Fatalf("reformat original: %v", err)
+	}
+	if err := os.WriteFile("one.json", []byte(`{"id":"one","name":"local edit"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write local file: %v", err)
+	}
+	meta := &Meta{
+		URL: "https://api.example.com/items",
+		Files: map[string]*File{
+			"one.json": {
+				Path:          "one.json",
+				URL:           "https://api.example.com/items/one",
+				VersionLocal:  "v1",
+				VersionRemote: "v1",
+				Hash:          hashBytes(original),
+			},
+		},
+	}
+	if err := meta.save(); err != nil {
+		t.Fatalf("save meta: %v", err)
+	}
+
+	var wire bytes.Buffer
+	var writes atomic.Int32
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &wire),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			if method != "GET" || uri != "https://api.example.com/items" {
+				writes.Add(1)
+				return &httpResponse{Status: 200, Body: map[string]any{"id": "one"}}, nil
+			}
+			return &httpResponse{Status: 200, Body: []any{}}, nil
+		},
+	}
+	a := &app{client: client}
+	if err := a.pull(meta, 1); err != nil {
+		t.Fatalf("pull remote delete with local edits: %v", err)
+	}
+	if _, err := os.Stat("one.json"); err != nil {
+		t.Fatalf("local edited file should remain: %v", err)
+	}
+	if _, ok := meta.Files["one.json"]; !ok {
+		t.Fatalf("metadata entry was removed: %#v", meta.Files)
+	}
+
+	err = a.push(meta, 1, pushOptions{})
+	if err == nil {
+		t.Fatal("expected push conflict after remote delete")
+	}
+	if !strings.Contains(err.Error(), "remote was removed") {
+		t.Fatalf("expected remote removed conflict, got %v", err)
+	}
+	if got := writes.Load(); got != 0 {
+		t.Fatalf("write requests = %d, want 0", got)
+	}
+}
+
+func TestPullRemoteDeletedFileRemoveFailurePreservesMetadata(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	formatted, err := reformat([]byte(`{"id":"one"}`))
+	if err != nil {
+		t.Fatalf("reformat file: %v", err)
+	}
+	if err := os.WriteFile("one.json", append(formatted, '\n'), 0o600); err != nil {
+		t.Fatalf("write local file: %v", err)
+	}
+	meta := &Meta{
+		URL: "https://api.example.com/items",
+		Files: map[string]*File{
+			"one.json": {
+				Path:          "one.json",
+				URL:           "https://api.example.com/items/one",
+				VersionLocal:  "v1",
+				VersionRemote: "v1",
+				Hash:          hashBytes(formatted),
+			},
+		},
+	}
+	if err := meta.save(); err != nil {
+		t.Fatalf("save meta: %v", err)
+	}
+
+	oldRemove := removeBulkFile
+	removeBulkFile = func(path string) error {
+		if path != "one.json" {
+			t.Fatalf("remove path = %q, want one.json", path)
+		}
+		return errors.New("remove denied")
+	}
+	t.Cleanup(func() { removeBulkFile = oldRemove })
+
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &bytes.Buffer{}),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			return &httpResponse{Status: 200, Body: []any{}}, nil
+		},
+	}
+	a := &app{client: client}
+	err = a.pull(meta, 1)
+	if err == nil || !strings.Contains(err.Error(), "remove denied") {
+		t.Fatalf("expected remove error, got %v", err)
+	}
+	if _, err := os.Stat("one.json"); err != nil {
+		t.Fatalf("local file should remain after failed remove: %v", err)
+	}
+	if _, ok := meta.Files["one.json"]; !ok {
+		t.Fatalf("metadata entry was removed: %#v", meta.Files)
+	}
+	data, err := os.ReadFile(metaFile)
+	if err != nil {
+		t.Fatalf("read meta: %v", err)
+	}
+	if !strings.Contains(string(data), "one.json") {
+		t.Fatalf("saved metadata lost one.json: %s", data)
 	}
 }
 

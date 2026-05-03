@@ -104,7 +104,7 @@ func (c *CLI) prepareRequest(
 		requestOptionHeadersContainCredentials(opts.Headers) ||
 		requestOptionQueryContainsCredentials(opts.Query) ||
 		rawURLQueryContainsCredentials(rawURL) ||
-		len(c.pluginsByHook["request-middleware"]) > 0
+		(!noAuth && len(c.pluginsByHook["request-middleware"]) > 0)
 	if hasCredentialContext && opts.CacheNamespace == "" {
 		opts.NoCache = true
 	}
@@ -122,14 +122,16 @@ func (c *CLI) prepareRequest(
 	}
 
 	// Chain request-middleware plugins after auth.
-	origOnReq := opts.OnRequest
-	opts.OnRequest = func(req *http.Request) error {
-		if origOnReq != nil {
-			if err := origOnReq(req); err != nil {
-				return err
+	if !noAuth {
+		origOnReq := opts.OnRequest
+		opts.OnRequest = func(req *http.Request) error {
+			if origOnReq != nil {
+				if err := origOnReq(req); err != nil {
+					return err
+				}
 			}
+			return c.runRequestMiddlewarePlugins(req)
 		}
-		return c.runRequestMiddlewarePlugins(req)
 	}
 
 	bodyRaw, bodyContentType, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)

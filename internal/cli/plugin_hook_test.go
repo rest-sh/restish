@@ -277,17 +277,24 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 	installHookPlugin(t)
 
 	var gotQuery string
+	var gotAuthorization string
+	var gotAPIKey string
+	var gotTrace string
 	follow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
+		gotAuthorization = r.Header.Get("Authorization")
+		gotAPIKey = r.Header.Get("X-Api-Key")
+		gotTrace = r.Header.Get("X-Trace-Id")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"from":"follow"}`)
 	}))
 	t.Cleanup(follow.Close)
 
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "follow:"+follow.URL)
+	t.Setenv("RSH_HOOK_REQUEST_AUTH", "1")
 
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
-	c, _, _ := newTestCLI(t)
+	c, _, errOut := newTestCLI(t)
 	cfgPath := c.Hooks().ConfigPath
 	if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf(`{
   "apis": {
@@ -295,7 +302,8 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
       "base_url": %q,
       "profiles": {
         "default": {
-          "query": ["api_key=secret", "view=summary"]
+          "headers": ["Authorization: Bearer profile-token", "X-Api-Key: profile-key"],
+          "query": ["api_key=secret", "token=secret", "view=summary"]
         }
       }
     }
@@ -307,6 +315,9 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if !strings.Contains(errOut.String(), "stripping credentials") {
+		t.Fatalf("expected stripping credentials warning, got:\n%s", errOut.String())
+	}
 
 	values, err := url.ParseQuery(gotQuery)
 	if err != nil {
@@ -315,8 +326,20 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 	if got := values.Get("api_key"); got != "" {
 		t.Fatalf("api_key query leaked to follow target: %q", got)
 	}
+	if got := values.Get("token"); got != "" {
+		t.Fatalf("token query leaked to follow target: %q", got)
+	}
 	if got := values.Get("view"); got != "summary" {
 		t.Fatalf("non-sensitive query = %q, want summary (raw %q)", got, gotQuery)
+	}
+	if gotAuthorization != "" {
+		t.Fatalf("Authorization leaked to follow target: %q", gotAuthorization)
+	}
+	if gotAPIKey != "" {
+		t.Fatalf("X-Api-Key leaked to follow target: %q", gotAPIKey)
+	}
+	if gotTrace != "" {
+		t.Fatalf("request middleware ran on cross-host follow, X-Trace-Id=%q", gotTrace)
 	}
 }
 

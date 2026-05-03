@@ -29,7 +29,10 @@ const (
 	defaultJobs = 4
 )
 
-var renameBulkFile = os.Rename
+var (
+	renameBulkFile = os.Rename
+	removeBulkFile = os.Remove
+)
 
 type File struct {
 	Path          string `json:"path"`

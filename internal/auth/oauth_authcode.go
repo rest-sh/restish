@@ -280,7 +280,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
 		}
 		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/" && r.URL.Path != "/callback" {
+			if r.URL.Path != redirectPath {
 				http.NotFound(w, r)
 				return
 			}

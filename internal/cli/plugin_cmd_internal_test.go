@@ -5,8 +5,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -116,11 +120,136 @@ func TestExtractPluginArchiveRejectsTotalExtractedSize(t *testing.T) {
 	}
 }
 
+func TestPluginInstallKeepsExistingBinaryWhenTempManifestFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	original := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  echo '{"name":"atomic","version":"valid-one","restish_api_version":1}'
+fi
+`)
+	replacement := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  case "$0" in
+    */.restish-atomic.install-*/*) echo not-a-manifest ;;
+    *) echo '{"name":"atomic","version":"replacement","restish_api_version":1}' ;;
+  esac
+fi
+`)
+
+	c, _, _ := newInternalTestCLI(t, pluginsParent)
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", original}); err != nil {
+		t.Fatalf("install original plugin: %v", err)
+	}
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", replacement})
+	if err == nil {
+		t.Fatal("expected replacement manifest validation to fail")
+	}
+	installed := filepath.Join(pluginsParent, "plugins", "restish-atomic")
+	data, readErr := os.ReadFile(installed)
+	if readErr != nil {
+		t.Fatalf("read installed plugin: %v", readErr)
+	}
+	if !strings.Contains(string(data), "valid-one") {
+		t.Fatalf("expected original plugin to remain installed, got:\n%s", string(data))
+	}
+	assertNoPluginTemps(t, filepath.Dir(installed))
+}
+
+func TestPluginInstallFailedCopyRemovesTempAndKeepsExistingBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	original := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  echo '{"name":"atomic","version":"valid-one","restish_api_version":1}'
+fi
+`)
+	replacement := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  echo '{"name":"atomic","version":"replacement","restish_api_version":1}'
+fi
+`)
+
+	c, _, _ := newInternalTestCLI(t, pluginsParent)
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", original}); err != nil {
+		t.Fatalf("install original plugin: %v", err)
+	}
+
+	oldCopy := pluginInstallCopyFile
+	pluginInstallCopyFile = func(_, dst string) error {
+		if err := os.WriteFile(dst, []byte("partial"), 0o755); err != nil {
+			t.Fatalf("write partial temp: %v", err)
+		}
+		return errors.New("copy exploded")
+	}
+	t.Cleanup(func() { pluginInstallCopyFile = oldCopy })
+
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", replacement})
+	if err == nil {
+		t.Fatal("expected copy failure")
+	}
+	installed := filepath.Join(pluginsParent, "plugins", "restish-atomic")
+	data, readErr := os.ReadFile(installed)
+	if readErr != nil {
+		t.Fatalf("read installed plugin: %v", readErr)
+	}
+	if !strings.Contains(string(data), "valid-one") {
+		t.Fatalf("expected original plugin to remain installed, got:\n%s", string(data))
+	}
+	assertNoPluginTemps(t, filepath.Dir(installed))
+}
+
 func restorePluginInstallLimits(t *testing.T, limits pluginInstallSizeLimits) {
 	t.Helper()
 	old := pluginInstallLimits
 	pluginInstallLimits = limits
 	t.Cleanup(func() { pluginInstallLimits = old })
+}
+
+func newInternalTestCLI(t *testing.T, stateDir string) (*CLI, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	c := New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	c.Hooks().PassReader = strings.NewReader("")
+	c.Hooks().ConfigPath = filepath.Join(stateDir, "restish.json")
+	c.Hooks().TokenCachePath = filepath.Join(stateDir, "tokens.cbor")
+	c.Hooks().CachePath = filepath.Join(stateDir, "http-cache")
+	c.Hooks().SpecCachePath = filepath.Join(stateDir, "spec-cache")
+	c.Hooks().PluginManifestCachePath = filepath.Join(stateDir, "plugin-manifest.cbor")
+	return c, &stdout, &stderr
+}
+
+func writePluginScript(t *testing.T, dir, name, script string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin script: %v", err)
+	}
+	return path
+}
+
+func assertNoPluginTemps(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read plugin dir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp-") || strings.Contains(entry.Name(), ".install-") {
+			t.Fatalf("expected temp plugin to be removed, found %s", entry.Name())
+		}
+	}
 }
 
 func testTarGzEntry(t *testing.T, name string, data []byte) []byte {

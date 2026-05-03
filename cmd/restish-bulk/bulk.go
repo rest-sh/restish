@@ -143,10 +143,6 @@ func (a *app) pull(m *Meta, jobs int) error {
 	fetches := make([]*File, 0, len(updates))
 	for _, f := range updates {
 		if f.VersionRemote == "" {
-			delete(m.Files, f.Path)
-			if err := m.save(); err != nil {
-				return err
-			}
 			changed, err := f.isChangedLocal(true)
 			if err != nil {
 				if warnErr := a.client.Warn("skipping delete due to invalid local JSON: " + f.Path); warnErr != nil && firstErr == nil {
@@ -155,8 +151,22 @@ func (a *app) pull(m *Meta, jobs int) error {
 				if firstErr == nil {
 					firstErr = err
 				}
-			} else if !changed {
-				_ = os.Remove(f.Path)
+			} else if changed {
+				if warnErr := a.client.Warn("skipping delete due to local edits: " + f.Path + " (remote resource was deleted)"); warnErr != nil && firstErr == nil {
+					firstErr = warnErr
+				}
+			} else if err := removeBulkFile(f.Path); err != nil {
+				if warnErr := a.client.Warn("skipping delete due to remove error: " + f.Path + ": " + err.Error()); warnErr != nil && firstErr == nil {
+					firstErr = warnErr
+				}
+				if firstErr == nil {
+					firstErr = err
+				}
+			} else {
+				delete(m.Files, f.Path)
+				if err := m.save(); err != nil {
+					return err
+				}
 			}
 			continue
 		}
