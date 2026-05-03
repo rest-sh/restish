@@ -22,6 +22,7 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/rest-sh/restish/v2/internal/fileutil"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/spf13/cobra"
 )
 
@@ -464,7 +465,9 @@ func (a *app) pull(m *Meta, jobs int) error {
 	for _, f := range updates {
 		if f.VersionRemote == "" {
 			delete(m.Files, f.Path)
-			_ = m.save()
+			if err := m.save(); err != nil {
+				return err
+			}
 			changed, err := f.isChangedLocal(true)
 			if err != nil {
 				if warnErr := a.client.Warn("skipping delete due to invalid local JSON: " + f.Path); warnErr != nil && firstErr == nil {
@@ -491,7 +494,9 @@ func (a *app) pull(m *Meta, jobs int) error {
 		}
 		f := result.file
 		applyFetchedFile(f, result.fetched)
-		_ = m.save()
+		if err := m.save(); err != nil {
+			return err
+		}
 		changed, err := f.isChangedLocal(true)
 		if err != nil {
 			if warnErr := a.client.Warn("skipping due to invalid local JSON: " + f.Path); warnErr != nil && firstErr == nil {
@@ -515,7 +520,9 @@ func (a *app) pull(m *Meta, jobs int) error {
 			continue
 		}
 		f.VersionLocal = f.VersionRemote
-		_ = m.save()
+		if err := m.save(); err != nil {
+			return err
+		}
 	}
 	if firstErr != nil {
 		return firstErr
@@ -620,7 +627,9 @@ func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 			}
 			if len(result.hash) > 0 {
 				f.Hash = result.hash
-				_ = m.save()
+				if err := m.save(); err != nil {
+					return err
+				}
 			}
 			applyFetchedFile(f, result.fetched)
 			if err := f.write(result.fetched.body); err != nil {
@@ -629,11 +638,15 @@ func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 				}
 				continue
 			}
-			_ = m.save()
+			if err := m.save(); err != nil {
+				return err
+			}
 		case statusRemoved:
 			summary.Deleted++
 			delete(m.Files, f.Path)
-			_ = m.save()
+			if err := m.save(); err != nil {
+				return err
+			}
 		}
 	}
 	_ = a.writePushSummary(summary)
@@ -834,9 +847,6 @@ func (a *app) getChanged(m *Meta, files []string) ([]changedFile, []changedFile,
 	local := []changedFile{}
 	remote := []changedFile{}
 	for _, path := range files {
-		if strings.HasPrefix(path, ".") {
-			continue
-		}
 		if f, ok := m.Files[path]; ok {
 			changed, err := f.isChangedLocal(true)
 			if err != nil {
@@ -1020,13 +1030,10 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 				if path == metaDir {
 					return filepath.SkipDir
 				}
-				if strings.HasPrefix(filepath.Base(path), ".") && path != "." {
-					return filepath.SkipDir
-				}
 				return nil
 			}
 			rel := filepath.ToSlash(path)
-			if strings.HasPrefix(rel, ".") {
+			if rel == metaDir || strings.HasPrefix(rel, metaDir+"/") {
 				return nil
 			}
 			args = append(args, rel)
@@ -1204,6 +1211,9 @@ func commonPrefix(base *url.URL, entries []listEntry) string {
 	if len(resolved) == 0 {
 		return base.String()
 	}
+	if len(resolved) == 1 {
+		return parentURLPrefix(resolved[0])
+	}
 	prefix := strings.Split(resolved[0], "/")
 	for _, entry := range resolved[1:] {
 		parts := strings.Split(entry, "/")
@@ -1219,6 +1229,37 @@ func commonPrefix(base *url.URL, entries []listEntry) string {
 		joined += "/"
 	}
 	return joined
+}
+
+func parentURLPrefix(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	escaped := u.EscapedPath()
+	if escaped == "" {
+		escaped = "/"
+	}
+	escaped = strings.TrimSuffix(escaped, "/")
+	if escaped == "" {
+		escaped = "/"
+	}
+	parent := path.Dir(escaped)
+	if parent == "." {
+		parent = "/"
+	}
+	if !strings.HasSuffix(parent, "/") {
+		parent += "/"
+	}
+	unescaped, err := url.PathUnescape(parent)
+	if err != nil {
+		unescaped = parent
+	}
+	u.Path = unescaped
+	u.RawPath = parent
+	return u.String()
 }
 
 func getFirstKey(item any, keys ...string) string {
@@ -1244,18 +1285,16 @@ func renderURLTemplate(template string, item any) string {
 	}
 	return urlTemplatePlaceholder.ReplaceAllStringFunc(template, func(match string) string {
 		key := strings.Trim(match, "{}")
-		return fmt.Sprintf("%v", m[key])
+		return url.PathEscape(fmt.Sprintf("%v", m[key]))
 	})
 }
 
 func normalizedBaseURL(raw string) string {
-	if strings.Contains(raw, "://") {
+	normalized, err := request.Normalize(raw, "")
+	if err != nil {
 		return raw
 	}
-	if strings.HasPrefix(raw, ":") {
-		return "http://localhost" + raw
-	}
-	return "https://" + raw
+	return normalized
 }
 
 func bulkRelativePath(baseURL, resolvedURL string) (string, error) {

@@ -77,6 +77,18 @@ func TestCommonPrefixResolvesAgainstBaseURL(t *testing.T) {
 	}
 }
 
+func TestCommonPrefixSingleEntryUsesParentPath(t *testing.T) {
+	base, err := url.Parse("https://api.example.com/root/index")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := commonPrefix(base, []listEntry{{URL: "/root/items/two"}})
+	want := "https://api.example.com/root/items/"
+	if got != want {
+		t.Fatalf("commonPrefix = %q, want %q", got, want)
+	}
+}
+
 func TestPullIndexRejectsMalformedEntryURL(t *testing.T) {
 	var out bytes.Buffer
 	client := &pluginClient{
@@ -98,6 +110,39 @@ func TestPullIndexRejectsMalformedEntryURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid bulk resource URL") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPullIndexKeepsStablePathForSingleEntryCollection(t *testing.T) {
+	var out bytes.Buffer
+	items := []any{
+		map[string]any{"url": "/items/one", "version": "v1"},
+		map[string]any{"url": "/items/two", "version": "v2"},
+	}
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			return &httpResponse{Status: 200, Body: items}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{URL: "https://api.example.com/index", Files: map[string]*File{}}
+	if err := a.pullIndex(meta); err != nil {
+		t.Fatalf("pullIndex with two entries: %v", err)
+	}
+	if _, ok := meta.Files["two.json"]; !ok {
+		t.Fatalf("two-entry collection did not track two.json: %#v", meta.Files)
+	}
+
+	items = []any{map[string]any{"url": "/items/two", "version": "v3"}}
+	if err := a.pullIndex(meta); err != nil {
+		t.Fatalf("pullIndex with one entry: %v", err)
+	}
+	if _, ok := meta.Files["two.json"]; !ok {
+		t.Fatalf("single-entry collection changed checkout path: %#v", meta.Files)
+	}
+	if _, ok := meta.Files["items/two.json"]; ok {
+		t.Fatalf("single-entry collection created unstable path: %#v", meta.Files)
 	}
 }
 
@@ -125,6 +170,45 @@ func TestPullIndexResolvesRelativeEntryURLs(t *testing.T) {
 	}
 	if got := meta.Files["two.json"].VersionRemote; got != "v2" {
 		t.Fatalf("two version = %q", got)
+	}
+}
+
+func TestCollectFilesIncludesDotPrefixedResources(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(".well-known", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".well-known/openid-configuration.json", []byte(`{"issuer":"https://api.example.com"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(metaDir, "ignored.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	meta := &Meta{Files: map[string]*File{}}
+	got, err := collectFiles(meta, nil, "", false)
+	if err != nil {
+		t.Fatalf("collectFiles: %v", err)
+	}
+	if len(got) != 1 || got[0] != ".well-known/openid-configuration.json" {
+		t.Fatalf("collectFiles = %#v, want hidden resource only", got)
+	}
+}
+
+func TestNormalizedBaseURLUsesLocalhostHTTP(t *testing.T) {
+	if got, want := normalizedBaseURL("localhost:8080/items"), "http://localhost:8080/items"; got != want {
+		t.Fatalf("normalizedBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestRenderURLTemplateEscapesPathValues(t *testing.T) {
+	item := map[string]any{"id": "a/b?draft=true"}
+	got := renderURLTemplate("https://api.example.com/items/{id}", item)
+	want := "https://api.example.com/items/a%2Fb%3Fdraft=true"
+	if got != want {
+		t.Fatalf("renderURLTemplate = %q, want %q", got, want)
 	}
 }
 
@@ -174,6 +258,37 @@ func TestMetaSaveUsesAtomicRenameAndReplacesExistingFile(t *testing.T) {
 	}
 	if len(matches) != 0 {
 		t.Fatalf("temporary files left behind: %#v", matches)
+	}
+}
+
+func TestPullReturnsMetadataSaveError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	oldRename := renameBulkFile
+	renameBulkFile = func(oldpath, newpath string) error {
+		return fmt.Errorf("rename failed")
+	}
+	t.Cleanup(func() { renameBulkFile = oldRename })
+
+	var out bytes.Buffer
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			return &httpResponse{Status: 200, Body: []any{}}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{
+		URL: "https://api.example.com/index",
+		Files: map[string]*File{
+			"one.json": {Path: "one.json", URL: "https://api.example.com/items/one", VersionLocal: "v1", VersionRemote: "v1"},
+		},
+	}
+	err := a.pull(meta, 1)
+	if err == nil || !strings.Contains(err.Error(), "rename failed") {
+		t.Fatalf("expected metadata save error, got %v", err)
 	}
 }
 
