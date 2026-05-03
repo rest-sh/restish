@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -158,7 +159,7 @@ func setupGeneratedEnv(t *testing.T, mux *http.ServeMux) *generatedEnv {
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	_ = os.WriteFile(cfgFile, cfgData, 0o644)
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 	cacheDir := t.TempDir()
 
 	env := &generatedEnv{cfgFile: cfgFile, cacheDir: cacheDir}
@@ -305,7 +306,7 @@ func TestGeneratedCommandUsesOperationCacheForExternalRefsOffline(t *testing.T) 
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cacheDir := t.TempDir()
@@ -650,7 +651,7 @@ func TestGeneratedCommandsLoadOnlyTargetAPI(t *testing.T) {
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cacheDir := t.TempDir()
@@ -704,7 +705,7 @@ paths: {}`), 0o644); err != nil {
 		},
 	})
 	cfgFile := filepath.Join(t.TempDir(), "restish.json")
-	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1476,6 +1477,7 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
           {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 25}},
           {"name": "score", "in": "query", "schema": {"type": "number"}},
           {"name": "tag", "in": "query", "style": "form", "explode": true, "schema": {"type": "array", "items": {"type": "string"}}},
+          {"name": "region", "in": "query", "style": "form", "explode": true, "schema": {"type": "array", "items": {"type": "string"}, "default": ["us-east-1,blue", "green"]}},
           {"name": "ids", "in": "query", "style": "form", "explode": false, "schema": {"type": "array", "items": {"type": "string"}}}
         ],
         "responses": {"200": {"description": "OK"}}
@@ -1504,6 +1506,9 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	}
 	if got := values["tag"]; strings.Join(got, ",") != "red,blue" {
 		t.Fatalf("tag values = %v, want red and blue", got)
+	}
+	if got := values["region"]; !reflect.DeepEqual(got, []string{"us-east-1,blue", "green"}) {
+		t.Fatalf("region values = %v, want comma-bearing default preserved", got)
 	}
 	if got := values.Get("ids"); got != "1,2" {
 		t.Fatalf("ids = %q, want 1,2", got)
@@ -2930,7 +2935,7 @@ func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 		},
 	})
 	cfgFile := filepath.Join(t.TempDir(), "restish.json")
-	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cacheDir := t.TempDir()

@@ -203,6 +203,7 @@ type paramInfo struct {
 	typ              string
 	itemType         string
 	defaultValue     string
+	defaultValues    []string
 	hasDefault       bool
 	style            string
 	explode          *bool
@@ -264,6 +265,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			typ:              p.Type,
 			itemType:         p.ItemType,
 			defaultValue:     p.Default,
+			defaultValues:    append([]string(nil), p.DefaultValues...),
 			hasDefault:       p.HasDefault,
 			style:            p.Style,
 			explode:          p.Explode,
@@ -379,19 +381,37 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	for _, p := range optional {
 		switch p.typ {
 		case "boolean":
-			def, _ := strconv.ParseBool(p.defaultValue)
+			var def bool
+			if p.hasDefault {
+				var err error
+				def, err = strconv.ParseBool(p.defaultValue)
+				if err != nil {
+					return nil, fmt.Errorf("operation %q parameter %q has invalid boolean default %q", op.ID, p.name, p.defaultValue)
+				}
+			}
 			cmd.Flags().Bool(p.flagName, def, p.desc)
 		case "integer":
-			def, _ := strconv.Atoi(p.defaultValue)
+			var def int
+			if p.hasDefault {
+				var err error
+				def, err = strconv.Atoi(p.defaultValue)
+				if err != nil {
+					return nil, fmt.Errorf("operation %q parameter %q has invalid integer default %q", op.ID, p.name, p.defaultValue)
+				}
+			}
 			cmd.Flags().Int(p.flagName, def, p.desc)
 		case "number":
-			def, _ := strconv.ParseFloat(p.defaultValue, 64)
+			var def float64
+			if p.hasDefault {
+				var err error
+				def, err = strconv.ParseFloat(p.defaultValue, 64)
+				if err != nil {
+					return nil, fmt.Errorf("operation %q parameter %q has invalid number default %q", op.ID, p.name, p.defaultValue)
+				}
+			}
 			cmd.Flags().Float64(p.flagName, def, p.desc)
 		case "array":
-			var def []string
-			if p.hasDefault && p.defaultValue != "" {
-				def = strings.Split(p.defaultValue, ",")
-			}
+			def := append([]string(nil), p.defaultValues...)
 			cmd.Flags().StringArray(p.flagName, def, p.desc)
 		default:
 			cmd.Flags().String(p.flagName, p.defaultValue, p.desc)
@@ -743,8 +763,8 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(values) == 0 && p.hasDefault && p.defaultValue != "" {
-			values = strings.Split(p.defaultValue, ",")
+		if len(values) == 0 && p.hasDefault && len(p.defaultValues) > 0 {
+			values = append([]string(nil), p.defaultValues...)
 		}
 		return values, nil
 	default:

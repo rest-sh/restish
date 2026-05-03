@@ -57,6 +57,24 @@ func TestBuildAPICommandWarnsOnModelFailure(t *testing.T) {
 	}
 }
 
+func TestBuildOperationCommandRejectsInvalidTypedDefault(t *testing.T) {
+	c := New()
+	_, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "search",
+		Method: "GET",
+		Path:   "/search",
+		Parameters: []spec.Param{
+			{Name: "enabled", In: "query", Type: "boolean", Default: "definitely", HasDefault: true},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected invalid default error")
+	}
+	if !strings.Contains(err.Error(), "invalid boolean default") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // ---- Name-collision handling -----------------------------------------------
 
 func buildSpecWithPaths(t *testing.T, yamlBody string) *spec.APISpec {

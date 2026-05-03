@@ -40,6 +40,7 @@ type Param struct {
 	Type             string
 	ItemType         string
 	Default          string
+	DefaultValues    []string
 	HasDefault       bool
 	Style            string
 	Explode          *bool
@@ -277,7 +278,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		if isIgnoredOpenAPIHeaderParameter(p) {
 			continue
 		}
-		var enum []string
+		var enum, defaultValues []string
 		var paramType, itemType, defaultValue, schemaHelp string
 		var hasDefault bool
 		if p.Schema != nil {
@@ -292,6 +293,9 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 				if schema.Default != nil {
 					var decoded any
 					if err := schema.Default.Decode(&decoded); err == nil {
+						if paramType == "array" {
+							defaultValues = scalarStrings(decoded)
+						}
 						defaultValue = scalarString(decoded)
 						hasDefault = true
 					}
@@ -312,6 +316,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			Type:             paramType,
 			ItemType:         itemType,
 			Default:          defaultValue,
+			DefaultValues:    defaultValues,
 			HasDefault:       hasDefault,
 			Style:            p.Style,
 			Explode:          p.Explode,
@@ -664,6 +669,18 @@ func scalarString(value any) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+func scalarStrings(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	values := make([]string, 0, len(items))
+	for _, item := range items {
+		values = append(values, scalarString(item))
+	}
+	return values
 }
 
 func preferredRequestMediaType(op *v3.Operation) string {
