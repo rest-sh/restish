@@ -35,6 +35,7 @@ restish https://api.rest.sh/images -f 'body[name.lower contains dragonfly].self'
 
 ```bash
 restish https://api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish https://api.rest.sh/images -f '{next: links.next, first: body[0].self}'
 restish https://api.rest.sh/example -f 'body..url'
 ```
 
@@ -43,9 +44,27 @@ restish https://api.rest.sh/example -f 'body..url'
 ```bash
 restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
 restish https://api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
+restish https://api.rest.sh/images -f '{next: .links.next, first: .body[0].self}'
+restish https://api.rest.sh/example -f '.. | .url?'
 ```
 
-Use `--rsh-filter-lang` when auto-detection is ambiguous.
+## Auto-Detection
+
+In `auto` mode, Restish tries both shorthand and jq. If both languages can parse
+the expression, bare normalized-response roots such as `links.next` and
+`body[0].self` select shorthand. jq expressions use jq's current-input root,
+such as `.links.next` and `.body[0].self`.
+
+Recursive descent keeps the same distinction:
+
+```bash
+restish https://api.rest.sh/example -f 'body..url'
+restish https://api.rest.sh/example -f '.. | .url?'
+```
+
+When both languages fail, Restish reports the likely parser first and includes
+the other parser's error. Use `--rsh-filter-lang` when you want to force one
+language.
 
 ## Related Pages
 

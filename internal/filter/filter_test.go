@@ -15,7 +15,11 @@ func testDoc() map[string]any {
 		"headers": map[string]any{
 			"Content-Type": "application/json",
 		},
+		"links": map[string]any{
+			"next": "/next",
+		},
 		"body": map[string]any{
+			"id":   float64(42),
 			"name": "Alice",
 			"age":  float64(30),
 			"items": []any{
@@ -67,6 +71,57 @@ func TestAutoDetectTreatsAmbiguousRuntimeJQAsShorthand(t *testing.T) {
 	}
 }
 
+func TestAutoDetectShorthandProjectionObject(t *testing.T) {
+	result, err := filter.Apply("{next: links.next, id: body.id}", testDoc(), filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %T, want map", result)
+	}
+	if m["next"] != "/next" || m["id"] != float64(42) {
+		t.Fatalf("result = %#v, want next and id projection", result)
+	}
+}
+
+func TestAutoDetectJQObjectWithCurrentRoot(t *testing.T) {
+	result, err := filter.Apply("{next: .links.next, id: .body.id}", testDoc(), filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %T, want map", result)
+	}
+	if m["next"] != "/next" || m["id"] != float64(42) {
+		t.Fatalf("result = %#v, want next and id projection", result)
+	}
+}
+
+func TestAutoDetectShorthandRecursiveDescent(t *testing.T) {
+	doc := testDoc()
+	doc["body"].(map[string]any)["example"] = map[string]any{"foo": "found"}
+	result, err := filter.Apply("..foo", doc, filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	values, ok := result.([]any)
+	if !ok || len(values) != 1 || values[0] != "found" {
+		t.Fatalf("result = %#v, want recursive shorthand match", result)
+	}
+}
+
+func TestAutoDetectJQRecursiveDescentPipe(t *testing.T) {
+	result, err := filter.Apply(".. | .id?", map[string]any{"id": "root"}, filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "root" {
+		t.Fatalf("result = %#v, want root id from jq recursive descent", result)
+	}
+}
+
 func TestAutoDetectFallsBackToShorthandWhenJQCannotParse(t *testing.T) {
 	doc := testDoc()
 	doc["body"].(map[string]any)["example"] = map[string]any{"url": "https://github.com/rest-sh/restish"}
@@ -77,6 +132,22 @@ func TestAutoDetectFallsBackToShorthandWhenJQCannotParse(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected shorthand fallback result")
 	}
+}
+
+func TestAutoDetectOrdersJQIntentErrorFirst(t *testing.T) {
+	_, err := filter.Apply("{next: .links[}", testDoc(), filter.LangAuto)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	assertErrorOrder(t, err.Error(), "jq parse:", "shorthand:")
+}
+
+func TestAutoDetectOrdersShorthandIntentErrorFirst(t *testing.T) {
+	_, err := filter.Apply("{next: links[}", testDoc(), filter.LangAuto)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	assertErrorOrder(t, err.Error(), "shorthand:", "jq parse:")
 }
 
 func TestAutoDetectReturnsJQAndShorthandErrorsWhenBothFail(t *testing.T) {
@@ -90,6 +161,18 @@ func TestAutoDetectReturnsJQAndShorthandErrorsWhenBothFail(t *testing.T) {
 	}
 	if !strings.Contains(msg, "shorthand:") {
 		t.Fatalf("expected shorthand error, got %q", msg)
+	}
+}
+
+func assertErrorOrder(t *testing.T, msg, first, second string) {
+	t.Helper()
+	firstIndex := strings.Index(msg, first)
+	secondIndex := strings.Index(msg, second)
+	if firstIndex < 0 || secondIndex < 0 {
+		t.Fatalf("expected %q and %q in %q", first, second, msg)
+	}
+	if firstIndex > secondIndex {
+		t.Fatalf("expected %q before %q in %q", first, second, msg)
 	}
 }
 

@@ -214,8 +214,9 @@ tests or migration notes:
   documented replacement before release
 - `-f headers.Date`, `-f headers`, `-f status`, and `-f @` operate on the
   normalized response envelope rather than the body alone
-- shorthand filters used by v1 examples continue to parse as shorthand when
-  jq parsing fails and the expression is plausibly shorthand
+- shorthand filters used by v1 examples continue to parse as shorthand in auto
+  mode when they use bare normalized-response roots or shorthand recursive
+  descent such as `..url`
 - pagination progress never appears in stdout, and metadata filters do not
   fetch extra pages merely because a body collection has a next link
 - `-r` and redirected image downloads preserve the original response body bytes

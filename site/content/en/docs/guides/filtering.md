@@ -42,6 +42,7 @@ restish https://api.rest.sh/images -f 'body[format = jpeg].self' -o lines
 
 ```bash
 restish https://api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish https://api.rest.sh/images -f '{next: links.next, first: body[0].self}'
 restish https://api.rest.sh/example -f 'body..url'
 ```
 
@@ -50,7 +51,8 @@ responses.
 
 ## jq Filters
 
-Restish auto-detects jq-style filters that start with `.` or use jq operators:
+jq filters use jq's current-input root, operators, functions, and pipeline
+syntax:
 
 {{< restish-example >}}
 restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
@@ -58,19 +60,23 @@ restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .na
 
 ```bash
 restish https://api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
+restish https://api.rest.sh/images -f '{next: .links.next, first: .body[0].self}'
+restish https://api.rest.sh/example -f '.. | .url?'
 ```
 
 Force a language when a filter is ambiguous:
 
 ```bash
-restish https://api.rest.sh/images --rsh-filter-lang shorthand -f 'body.self'
-restish https://api.rest.sh/images --rsh-filter-lang jq -f '.body[] | .self'
+restish https://api.rest.sh/images --rsh-filter-lang shorthand -f '{next: links.next}'
+restish https://api.rest.sh/images --rsh-filter-lang jq -f '{next: .links.next}'
 ```
 
-In the default `auto` mode, Restish tries jq first for expressions that do not
-start with a normalized-response root. If jq parsing fails, Restish also tries
-shorthand; when both fail, the error includes both parser messages. Use
-`--rsh-filter-lang` when you want only one language's error.
+In the default `auto` mode, Restish tries both shorthand and jq. If both
+languages can parse the filter, bare normalized-response roots such as
+`links.next` mean shorthand and jq's current-input root such as `.links.next`
+means jq. Recursive descent follows the same rule: `..url` is shorthand, while
+`.. | .url?` is jq. When both languages fail, Restish reports the likely parser
+first and still includes the other parser's error.
 
 ## Pagination And Collecting
 

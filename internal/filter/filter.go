@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/itchyny/gojq"
@@ -52,19 +54,13 @@ func Apply(expr string, doc map[string]any, lang Lang) (any, error) {
 		}
 	}
 
-	switch resolve(expr, lang) {
+	switch lang {
 	case LangShorthand:
 		return applyShorthand(expr, doc)
+	case LangJQ:
+		return applyJQ(expr, doc)
 	default:
-		result, err := applyJQ(expr, doc)
-		if err == nil || lang != LangAuto || !strings.Contains(err.Error(), "jq parse:") {
-			return result, err
-		}
-		shorthandResult, shorthandErr := applyShorthand(expr, doc)
-		if shorthandErr != nil {
-			return nil, errors.Join(err, shorthandErr)
-		}
-		return shorthandResult, nil
+		return applyAuto(expr, doc)
 	}
 }
 
@@ -96,25 +92,57 @@ func headerField(expr string, doc map[string]any) (any, bool) {
 	return nil, false
 }
 
-// resolve returns the effective language for expr.
-func resolve(expr string, lang Lang) Lang {
-	if lang != LangAuto {
-		return lang
+func applyAuto(expr string, doc map[string]any) (any, error) {
+	shorthandResult, shorthandErr := applyShorthand(expr, doc)
+	jqResult, jqErr := applyJQ(expr, doc)
+
+	switch {
+	case shorthandErr == nil && jqErr != nil:
+		return shorthandResult, nil
+	case jqErr == nil && shorthandErr != nil:
+		return jqResult, nil
 	}
-	trimmed := strings.TrimSpace(expr)
-	if looksLikeJQ(trimmed) {
-		return LangJQ
+
+	preferred := preferredLang(expr)
+	if shorthandErr == nil && jqErr == nil {
+		if preferred == LangJQ {
+			return jqResult, nil
+		}
+		return shorthandResult, nil
 	}
-	return LangShorthand
+	if preferred == LangJQ {
+		return nil, errors.Join(jqErr, shorthandErr)
+	}
+	return nil, errors.Join(shorthandErr, jqErr)
 }
 
-func looksLikeJQ(expr string) bool {
+func preferredLang(expr string) Lang {
+	expr = strings.TrimSpace(expr)
 	if expr == "" {
-		return false
+		return LangShorthand
+	}
+	shorthandScore, jqScore := 0, 0
+
+	if startsWithBareResponseRoot(expr) {
+		shorthandScore += 4
 	}
 	switch expr[0] {
-	case '.', '{', '[':
-		return true
+	case '.':
+		if recursiveDescentShorthand(expr) {
+			shorthandScore += 5
+		} else {
+			jqScore += 4
+		}
+	case '{', '[':
+		if containsJQCurrentRoot(expr) {
+			jqScore += 4
+		}
+		if containsBareResponseRoot(expr) {
+			shorthandScore += 3
+		}
+	}
+	if hasTopLevelJQPipe(expr) {
+		jqScore += 3
 	}
 	jqStarts := []string{
 		"length", "keys", "has(", "map(", "select(", "if ", "try ", "reduce ", "foreach ",
@@ -122,10 +150,186 @@ func looksLikeJQ(expr string) bool {
 	}
 	for _, start := range jqStarts {
 		if expr == start || strings.HasPrefix(expr, start) {
+			jqScore += 4
+			break
+		}
+	}
+	if jqScore > shorthandScore {
+		return LangJQ
+	}
+	return LangShorthand
+}
+
+func recursiveDescentShorthand(expr string) bool {
+	if !strings.HasPrefix(expr, "..") || len(expr) == 2 {
+		return false
+	}
+	r, _ := utf8DecodeRuneInString(expr[2:])
+	return isIdentStart(r)
+}
+
+func startsWithBareResponseRoot(expr string) bool {
+	for _, root := range responseRoots {
+		if hasRootAt(expr, 0, root) {
 			return true
 		}
 	}
 	return false
+}
+
+var responseRoots = []string{"body", "headers", "links", "status", "proto"}
+
+func containsBareResponseRoot(expr string) bool {
+	for i := 0; i < len(expr); {
+		r, size := utf8DecodeRuneInString(expr[i:])
+		if inString, next := skipQuoted(expr, i, r); inString {
+			i = next
+			continue
+		}
+		if !isIdentStart(r) {
+			i += size
+			continue
+		}
+		for _, root := range responseRoots {
+			if hasRootAt(expr, i, root) {
+				return true
+			}
+		}
+		i += size
+	}
+	return false
+}
+
+func hasRootAt(expr string, i int, root string) bool {
+	if !strings.HasPrefix(expr[i:], root) {
+		return false
+	}
+	beforeOK := i == 0 || !isIdentPart(rune(expr[i-1])) && expr[i-1] != '.'
+	if !beforeOK {
+		return false
+	}
+	after := i + len(root)
+	if after == len(expr) {
+		return true
+	}
+	next, _ := utf8DecodeRuneInString(expr[after:])
+	if next == ':' {
+		return false
+	}
+	return !isIdentPart(next)
+}
+
+func containsJQCurrentRoot(expr string) bool {
+	for i := 0; i < len(expr); {
+		r, size := utf8DecodeRuneInString(expr[i:])
+		if inString, next := skipQuoted(expr, i, r); inString {
+			i = next
+			continue
+		}
+		if r != '.' || strings.HasPrefix(expr[i:], "..") {
+			i += size
+			continue
+		}
+		if i == 0 {
+			return true
+		}
+		prev := previousNonSpace(expr, i)
+		if prev < 0 || strings.ContainsRune(":{[|,(=", rune(expr[prev])) {
+			return true
+		}
+		i += size
+	}
+	return false
+}
+
+func hasTopLevelJQPipe(expr string) bool {
+	depth := 0
+	for i := 0; i < len(expr); {
+		r, size := utf8DecodeRuneInString(expr[i:])
+		if inString, next := skipQuoted(expr, i, r); inString {
+			i = next
+			continue
+		}
+		switch r {
+		case '[', '{', '(':
+			depth++
+		case ']', '}', ')':
+			if depth > 0 {
+				depth--
+			}
+		case '|':
+			if depth == 0 && pipeLooksLikeJQ(expr, i) {
+				return true
+			}
+		}
+		i += size
+	}
+	return false
+}
+
+func pipeLooksLikeJQ(expr string, i int) bool {
+	prev := previousNonSpace(expr, i)
+	next := nextNonSpace(expr, i+1)
+	if prev < 0 || next < 0 {
+		return false
+	}
+	if expr[next] == '[' {
+		return false
+	}
+	return unicode.IsSpace(rune(expr[i-1])) || unicode.IsSpace(rune(expr[i+1])) || expr[next] == '.'
+}
+
+func skipQuoted(expr string, i int, r rune) (bool, int) {
+	if r != '"' && r != '\'' {
+		return false, i
+	}
+	quote := r
+	i++
+	for i < len(expr) {
+		next, size := utf8DecodeRuneInString(expr[i:])
+		i += size
+		if next == '\\' {
+			if i < len(expr) {
+				_, size = utf8DecodeRuneInString(expr[i:])
+				i += size
+			}
+			continue
+		}
+		if next == quote {
+			break
+		}
+	}
+	return true, i
+}
+
+func previousNonSpace(expr string, i int) int {
+	for j := i - 1; j >= 0; j-- {
+		if !unicode.IsSpace(rune(expr[j])) {
+			return j
+		}
+	}
+	return -1
+}
+
+func nextNonSpace(expr string, i int) int {
+	for j := i; j < len(expr); j++ {
+		if !unicode.IsSpace(rune(expr[j])) {
+			return j
+		}
+	}
+	return -1
+}
+
+func isIdentStart(r rune) bool {
+	return r == '_' || unicode.IsLetter(r)
+}
+
+func isIdentPart(r rune) bool {
+	return isIdentStart(r) || unicode.IsDigit(r) || r == '-'
+}
+
+func utf8DecodeRuneInString(s string) (rune, int) {
+	return utf8.DecodeRuneInString(s)
 }
 
 func applyShorthand(expr string, doc map[string]any) (any, error) {

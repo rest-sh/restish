@@ -61,13 +61,16 @@ The default filter mode is `auto`.
 
 In auto mode:
 
-- if the expression begins with a recognized normalized-response root, treat it
-  as shorthand
-- otherwise treat it as jq
-- if jq parsing fails and the expression is plausibly shorthand, fall back to
-  shorthand instead of reporting a jq parse error
-- if both jq parsing and shorthand fallback fail, report both errors so users
-  can see which language was attempted and why each path failed
+- try both shorthand and jq
+- if only one language succeeds, use that result
+- if both languages succeed, choose by intent markers: bare normalized-response
+  roots such as `links.next` and `body.id` mean shorthand, while jq's current
+  input marker such as `.links.next` or `.body.id` means jq
+- keep recursive descent distinct: `..url` is shorthand, while `.. | .url?` is
+  jq
+- if both languages fail, use the same intent markers to put the most likely
+  parser error first, then include the other parser error so users can see both
+  failure modes
 
 Typical shorthand expressions:
 
@@ -75,6 +78,7 @@ Typical shorthand expressions:
 - `body.items[0]`
 - `headers.Content-Type`
 - `links.next`
+- `{next: links.next, id: body.id}`
 - `..url|[@ contains github]`
 
 Typical jq expressions:
@@ -82,6 +86,8 @@ Typical jq expressions:
 - `.body.items[] | select(.active)`
 - `.body.items | length`
 - `.body | map(.id)`
+- `{next: .links.next, id: .body.id}`
+- `.. | .url?`
 
 Explicit `--rsh-filter-lang` should always override auto-detection.
 
