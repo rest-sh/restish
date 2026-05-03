@@ -41,10 +41,10 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.NameBuiltin:         "#87afd7",
 	chroma.Operator:            "#d7af5f",
 
-	// Bracket-depth colorization: IndentLevel0/1/2 cycle through three colours.
-	IndentLevel0: "#d78700", // amber
-	IndentLevel1: "#af87af", // mauve
-	IndentLevel2: "#5fafd7", // sky blue
+	// Bracket-depth colorization: indentLevel0/1/2 cycle through three colours.
+	indentLevel0: "#d78700", // amber
+	indentLevel1: "#af87af", // mauve
+	indentLevel2: "#5fafd7", // sky blue
 
 	// HTTP preamble (status line + headers via HTTPPreambleLexer)
 	chroma.NameNamespace:   "#9e9e9e",      // HTTP/x.x  → gray
@@ -61,10 +61,10 @@ var defaultStyleEntries = chroma.StyleEntries{
 	chroma.NameAttribute:     "underline #5fafd7",
 
 	// Diagnostic labels written to stderr.
-	DiagnosticInfo:  "#5fafd7",
-	DiagnosticWarn:  "bold #d78700",
-	DiagnosticError: "bold #ff5f87",
-	DiagnosticHint:  "#d7af5f",
+	diagnosticInfo:  "#5fafd7",
+	diagnosticWarn:  "bold #d78700",
+	diagnosticError: "bold #ff5f87",
+	diagnosticHint:  "#d7af5f",
 }
 
 // restishStyle is the active style for terminal highlighting.
@@ -90,9 +90,9 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"class":            chroma.NameClass,
 	"builtin":          chroma.NameBuiltin,
 	"operator":         chroma.Operator,
-	"bracket_0":        IndentLevel0,
-	"bracket_1":        IndentLevel1,
-	"bracket_2":        IndentLevel2,
+	"bracket_0":        indentLevel0,
+	"bracket_1":        indentLevel1,
+	"bracket_2":        indentLevel2,
 	"http":             chroma.NameNamespace,
 	"status_2xx":       chroma.GenericInserted,
 	"status_3xx":       chroma.GenericOutput,
@@ -104,10 +104,10 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"deleted":          chroma.GenericDeleted,
 	"inserted":         chroma.GenericInserted,
 	"attribute":        chroma.NameAttribute,
-	"diagnostic_info":  DiagnosticInfo,
-	"diagnostic_warn":  DiagnosticWarn,
-	"diagnostic_error": DiagnosticError,
-	"diagnostic_hint":  DiagnosticHint,
+	"diagnostic_info":  diagnosticInfo,
+	"diagnostic_warn":  diagnosticWarn,
+	"diagnostic_error": diagnosticError,
+	"diagnostic_hint":  diagnosticHint,
 }
 
 var markdownThemeAliases = map[string]struct{}{

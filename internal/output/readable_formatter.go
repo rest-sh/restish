@@ -221,7 +221,7 @@ func (s *readableFramedValueStream) writeFrameBracket(bracket string) error {
 		return err
 	}
 	return highlightToken(s.w, chroma.Token{
-		Type:  shiftedIndentToken(IndentLevel0, s.arrayDepth()),
+		Type:  shiftedIndentToken(indentLevel0, s.arrayDepth()),
 		Value: bracket,
 	})
 }
@@ -341,11 +341,11 @@ func indentShiftIterator(iter chroma.Iterator, depth int) chroma.Iterator {
 }
 
 func shiftedIndentToken(tok chroma.TokenType, depth int) chroma.TokenType {
-	if tok < IndentLevel0 || tok > IndentLevel2 {
+	if tok < indentLevel0 || tok > indentLevel2 {
 		return tok
 	}
-	offset := int(tok - IndentLevel0)
-	return IndentLevel0 + chroma.TokenType((offset+depth)%3)
+	offset := int(tok - indentLevel0)
+	return indentLevel0 + chroma.TokenType((offset+depth)%3)
 }
 
 func highlightToken(w io.Writer, token chroma.Token) error {

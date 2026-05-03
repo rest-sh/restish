@@ -9,13 +9,13 @@ import (
 // diagnostics.
 // Brackets alternate through three colours as nesting increases.
 const (
-	IndentLevel0 chroma.TokenType = 9000 + iota
-	IndentLevel1
-	IndentLevel2
-	DiagnosticInfo
-	DiagnosticWarn
-	DiagnosticError
-	DiagnosticHint
+	indentLevel0 chroma.TokenType = 9000 + iota
+	indentLevel1
+	indentLevel2
+	diagnosticInfo
+	diagnosticWarn
+	diagnosticError
+	diagnosticHint
 )
 
 // indentDepthKey is the MutatorContext key used to store per-tokenise-call
@@ -27,7 +27,7 @@ type indentDepthKey struct{}
 //   - ISO 8601 / HTTP dates  → LiteralDate
 //   - URLs                   → LiteralStringSymbol
 //   - Hex binary ("0x…")    → LiteralNumberHex
-//   - Nested bracket pairs   → alternating IndentLevel0/1/2 token types
+//   - Nested bracket pairs   → alternating bracket-depth token types
 //
 // Ported from v1's cli/lexer.go and adapted for chroma v2 + valid JSON output
 // (quoted keys, commas between items).

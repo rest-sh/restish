@@ -33,15 +33,15 @@ func TestReadableFramedValueStreamHighlightsFrameAndNestedItemDepth(t *testing.T
 	}
 
 	var wantOpenArray bytes.Buffer
-	if err := highlightToken(&wantOpenArray, chroma.Token{Type: IndentLevel0, Value: "["}); err != nil {
+	if err := highlightToken(&wantOpenArray, chroma.Token{Type: indentLevel0, Value: "["}); err != nil {
 		t.Fatalf("highlightToken([): %v", err)
 	}
 	var wantItemObject bytes.Buffer
-	if err := highlightToken(&wantItemObject, chroma.Token{Type: IndentLevel1, Value: "{"}); err != nil {
+	if err := highlightToken(&wantItemObject, chroma.Token{Type: indentLevel1, Value: "{"}); err != nil {
 		t.Fatalf("highlightToken({): %v", err)
 	}
 	var wantCloseArray bytes.Buffer
-	if err := highlightToken(&wantCloseArray, chroma.Token{Type: IndentLevel0, Value: "]"}); err != nil {
+	if err := highlightToken(&wantCloseArray, chroma.Token{Type: indentLevel0, Value: "]"}); err != nil {
 		t.Fatalf("highlightToken(]): %v", err)
 	}
 
@@ -75,11 +75,11 @@ func TestReadableFramedValueStreamHighlightsWrappedArrayDepth(t *testing.T) {
 	}
 
 	var wantArray bytes.Buffer
-	if err := highlightToken(&wantArray, chroma.Token{Type: IndentLevel1, Value: "["}); err != nil {
+	if err := highlightToken(&wantArray, chroma.Token{Type: indentLevel1, Value: "["}); err != nil {
 		t.Fatalf("highlightToken([): %v", err)
 	}
 	var wantItemObject bytes.Buffer
-	if err := highlightToken(&wantItemObject, chroma.Token{Type: IndentLevel2, Value: "{"}); err != nil {
+	if err := highlightToken(&wantItemObject, chroma.Token{Type: indentLevel2, Value: "{"}); err != nil {
 		t.Fatalf("highlightToken({): %v", err)
 	}
 
@@ -92,11 +92,11 @@ func TestReadableFramedValueStreamHighlightsWrappedArrayDepth(t *testing.T) {
 }
 
 func TestShiftedIndentTokenCyclesBracketDepth(t *testing.T) {
-	if got := shiftedIndentToken(IndentLevel0, 1); got != IndentLevel1 {
-		t.Fatalf("shiftedIndentToken(0, 1) = %v, want %v", got, IndentLevel1)
+	if got := shiftedIndentToken(indentLevel0, 1); got != indentLevel1 {
+		t.Fatalf("shiftedIndentToken(0, 1) = %v, want %v", got, indentLevel1)
 	}
-	if got := shiftedIndentToken(IndentLevel2, 1); got != IndentLevel0 {
-		t.Fatalf("shiftedIndentToken(2, 1) = %v, want %v", got, IndentLevel0)
+	if got := shiftedIndentToken(indentLevel2, 1); got != indentLevel0 {
+		t.Fatalf("shiftedIndentToken(2, 1) = %v, want %v", got, indentLevel0)
 	}
 	if got := shiftedIndentToken(chroma.NameTag, 1); got != chroma.NameTag {
 		t.Fatalf("shiftedIndentToken(non-indent) = %v, want %v", got, chroma.NameTag)

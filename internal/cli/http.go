@@ -129,7 +129,10 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	// Build request body from shorthand args and/or piped stdin.
 	stdinIsTTY := output.IsTerminalReader(c.Stdin)
-	bodyVal, err := input.BodyWithSchemaTypesAndWarnings(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, bodyOpts.schemaTypes, c.warnf)
+	bodyVal, err := input.Body(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
+		SchemaTypes: bodyOpts.schemaTypes,
+		Warnf:       c.warnf,
+	})
 	if err != nil {
 		return fmt.Errorf("building request body: %w", err)
 	}
