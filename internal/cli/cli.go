@@ -154,6 +154,21 @@ type flushWriter interface {
 	Flush() error
 }
 
+type cascadingFlushWriter struct {
+	*bufio.Writer
+	downstream io.Writer
+}
+
+func (w *cascadingFlushWriter) Flush() error {
+	if err := w.Writer.Flush(); err != nil {
+		return err
+	}
+	if f, ok := w.downstream.(flushWriter); ok {
+		return f.Flush()
+	}
+	return nil
+}
+
 func (c *CLI) flushStdout() error {
 	if f, ok := c.Stdout.(flushWriter); ok {
 		return f.Flush()
@@ -401,7 +416,10 @@ func (c *CLI) Run(args []string) error {
 
 	if !output.IsTerminal(c.Stdout) {
 		origStdout := c.Stdout
-		buf := bufio.NewWriterSize(origStdout, 64*1024)
+		buf := &cascadingFlushWriter{
+			Writer:     bufio.NewWriterSize(origStdout, 64*1024),
+			downstream: origStdout,
+		}
 		c.Stdout = buf
 		defer func() {
 			_ = buf.Flush()

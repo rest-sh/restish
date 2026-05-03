@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -181,6 +182,128 @@ func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, `"n":2`) {
 		t.Fatalf("expected second line after response completed, got:\n%s", got)
+	}
+}
+
+func TestSSEFlushesBeforeResponseCompletes(t *testing.T) {
+	firstEventWritten := make(chan struct{})
+	finishResponse := make(chan struct{})
+	var finishOnce sync.Once
+	finish := func() {
+		finishOnce.Do(func() { close(finishResponse) })
+	}
+	defer finish()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("response writer does not implement http.Flusher")
+		}
+		fmt.Fprint(w, "data: {\"n\":1}\n\n")
+		flusher.Flush()
+		close(firstEventWritten)
+		<-finishResponse
+		fmt.Fprint(w, "data: {\"n\":2}\n\n")
+		flusher.Flush()
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	out := &signalWriter{needle: []byte(`"n":1`), seen: make(chan struct{})}
+	c, _, _ := newTestCLI(t)
+	c.Stdout = out
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- c.Run([]string{"restish", "get", srv.URL + "/events"})
+	}()
+
+	select {
+	case <-firstEventWritten:
+	case <-time.After(time.Second):
+		t.Fatal("server did not write first SSE event")
+	}
+
+	select {
+	case <-out.seen:
+	case err := <-errCh:
+		t.Fatalf("command finished before response completed: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("first SSE event was not rendered before response completed")
+	}
+
+	finish()
+	if err := <-errCh; err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, `"n":2`) {
+		t.Fatalf("expected second event after response completed, got:\n%s", got)
+	}
+}
+
+func TestSSEPlainReadableOutputFlushesBeforeResponseCompletes(t *testing.T) {
+	firstEventWritten := make(chan struct{})
+	finishResponse := make(chan struct{})
+	var finishOnce sync.Once
+	finish := func() {
+		finishOnce.Do(func() { close(finishResponse) })
+	}
+	defer finish()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("response writer does not implement http.Flusher")
+		}
+		fmt.Fprint(w, "data: first\n\n")
+		flusher.Flush()
+		close(firstEventWritten)
+		<-finishResponse
+		fmt.Fprint(w, "data: second\n\n")
+		flusher.Flush()
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	out := &signalWriter{needle: []byte("first\n"), seen: make(chan struct{})}
+	bufferedOut := bufio.NewWriter(out)
+	c, _, _ := newTestCLI(t)
+	c.Stdout = bufferedOut
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"})
+	}()
+
+	select {
+	case <-firstEventWritten:
+	case <-time.After(time.Second):
+		t.Fatal("server did not write first SSE event")
+	}
+
+	select {
+	case <-out.seen:
+	case err := <-errCh:
+		t.Fatalf("command finished before response completed: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("first plain SSE event was not flushed before response completed")
+	}
+
+	finish()
+	if err := <-errCh; err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if err := bufferedOut.Flush(); err != nil {
+		t.Fatalf("flush buffered output: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "second\n") {
+		t.Fatalf("expected second event after response completed, got:\n%s", got)
 	}
 }
 

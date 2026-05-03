@@ -867,13 +867,10 @@ func filterRequestsResponseMetadata(expr string) bool {
 		expr == "proto" || strings.HasPrefix(expr, "proto.") || strings.HasPrefix(expr, "proto[")
 }
 
-// logVerbose prints request and response summary lines to stderr.
+// logVerboseRequest prints request summary lines to stderr.
 // Sensitive request headers (Authorization, Cookie, Set-Cookie,
 // Proxy-Authorization) are redacted to avoid leaking credentials.
-// At verbose >= 2 it also dumps TLS version, cipher suite, and peer
-// certificate chain (subject, issuer, expiry).
-func (c *CLI) logVerbose(resp *http.Response, verbose int) {
-	req := resp.Request
+func (c *CLI) logVerboseRequest(req *http.Request) {
 	if req == nil {
 		return
 	}
@@ -889,6 +886,15 @@ func (c *CLI) logVerbose(resp *http.Response, verbose int) {
 	}
 	c.logVerboseRequestBody(req)
 	fmt.Fprintln(c.Stderr, ">")
+}
+
+// logVerboseResponse prints response summary lines to stderr. At verbose >= 2
+// it also dumps TLS version, cipher suite, and peer certificate chain (subject,
+// issuer, expiry).
+func (c *CLI) logVerboseResponse(resp *http.Response, verbose int) {
+	if resp == nil {
+		return
+	}
 	if resp.Header.Get("X-From-Cache") != "" {
 		fmt.Fprintln(c.Stderr, "* Cache: HIT")
 	}
@@ -1402,9 +1408,14 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		RetryMaxWait:         retryMaxWait,
 		Logger:               diagnosticPrefixWriter(c.Stderr),
+		OnBeforeRequest: func(req *http.Request) {
+			if gf.Verbose > 0 {
+				c.logVerboseRequest(req)
+			}
+		},
 		OnResponse: func(resp *http.Response) {
 			if gf.Verbose > 0 {
-				c.logVerbose(resp, gf.Verbose)
+				c.logVerboseResponse(resp, gf.Verbose)
 			}
 		},
 	}, nil

@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestVerboseOutputToStderr verifies that -v writes request/response details
@@ -357,6 +359,54 @@ func TestVerboseLogsRequestBodyBeforeResponseHeaders(t *testing.T) {
 	}
 	if bodyAt > responseAt {
 		t.Fatalf("expected request body before response headers, got:\n%s", stderr)
+	}
+}
+
+func TestVerboseLogsRequestBeforeResponseArrives(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	requestReachedTransport := make(chan struct{})
+	releaseResponse := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { close(releaseResponse) })
+	}
+	defer release()
+	c.Stderr = &signalWriter{needle: []byte("> GET https://api.example.com/slow"), seen: make(chan struct{})}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		close(requestReachedTransport)
+		<-releaseResponse
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request:    r,
+		}, nil
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- c.Run([]string{"restish", "get", "-v", "https://api.example.com/slow"})
+	}()
+
+	select {
+	case <-requestReachedTransport:
+	case <-time.After(time.Second):
+		t.Fatal("request did not reach transport")
+	}
+
+	select {
+	case <-c.Stderr.(*signalWriter).seen:
+	case err := <-errCh:
+		t.Fatalf("command finished before response was released: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("verbose request was not printed before response arrived")
+	}
+
+	release()
+	if err := <-errCh; err != nil {
+		t.Fatalf("get: %v", err)
 	}
 }
 

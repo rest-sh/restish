@@ -91,6 +91,10 @@ type Options struct {
 	// OnResponse, if non-nil, is called with the raw HTTP response before it is
 	// returned to the caller.
 	OnResponse func(*http.Response)
+	// OnBeforeRequest, if non-nil, is called after all headers, query params,
+	// auth, and request middleware have been applied, immediately before the
+	// request is sent through the transport.
+	OnBeforeRequest func(*http.Request)
 	// OnUnauthorized, when non-nil, is used by callers that want to retry once
 	// after a 401 with freshly acquired credentials.
 	OnUnauthorized func(*http.Request) error
@@ -203,6 +207,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		if err := opts.OnRequest(req); err != nil {
 			return nil, fmt.Errorf("auth: %w", err)
 		}
+	}
+	if opts.OnBeforeRequest != nil {
+		opts.OnBeforeRequest(req)
 	}
 	if opts.CacheNamespace == "" && (requestHasCredentialHeaders(req) || HasCredentialQuery(req.URL)) {
 		// This late cache bypass only affects callers that have not already built

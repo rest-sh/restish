@@ -269,7 +269,10 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 			if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
 				trace.RenderAfter(c.Stderr, gf.Verbose)
 			}
-			return c.writePlainValue(result)
+			if err := c.writePlainValue(result); err != nil {
+				return err
+			}
+			return c.flushStdout()
 		}
 	}
 
