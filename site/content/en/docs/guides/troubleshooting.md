@@ -150,6 +150,31 @@ restish myapi --help
 
 **Related docs:** [API Setup and Discovery](/docs/guides/api-setup-and-discovery/), [OpenAPI and CLI Integration](/docs/guides/openapi-cli-integration/).
 
+## Config Permissions Are Rejected
+
+**Symptom:** Restish exits with a message that `restish.json` is
+group/world-readable.
+
+**Likely cause:** The config file permissions allow other local users to read
+profiles, headers, or auth settings.
+
+**How to confirm:**
+
+```bash
+ls -l ~/.config/restish/restish.json
+```
+
+**Fix:** Restrict the file to your user.
+
+```bash
+chmod 600 ~/.config/restish/restish.json
+```
+
+**Prevention:** Create config through Restish commands when possible; they write
+private files by default.
+
+**Related docs:** [Config](/docs/reference/config/), [Authentication](/docs/guides/authentication/).
+
 ## Pagination Changed My Output Shape
 
 **Symptom:** A paginated endpoint behaves differently from a one-page endpoint.

@@ -111,3 +111,39 @@ func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
 	}
 }
+
+func TestDoctorAPIJSONWarnsOnServerErrorReachability(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Status:     "500 Internal Server Error",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Reachability struct {
+			Status     string `json:"status"`
+			Reachable  bool   `json:"reachable"`
+			StatusCode int    `json:"status_code"`
+			Note       string `json:"note"`
+		} `json:"reachability"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.Reachability.Status != "warn" || report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusInternalServerError || !strings.Contains(report.Reachability.Note, "server error") {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}

@@ -106,8 +106,9 @@ Credential fields under `profiles.<name>.credentials.<id>` are `auth`,
 `auth_ref`, and `satisfies`. Credential inline `auth` and `auth_ref` are also
 mutually exclusive. Auth fields are `type` plus string `params`.
 
-Config files are written private and insecure permissions are warning-only, not
-fatal.
+Config files are written private. On Unix-like systems, group/world-readable
+config permissions are fatal because profiles and auth parameters can contain
+secrets. Users should repair them with `chmod 600`.
 
 ## Command Surface And Precedence
 

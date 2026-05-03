@@ -39,6 +39,8 @@ interactive confirmation.
 When the initial GET returns validators such as `ETag` or `Last-Modified`,
 Restish uses conditional update headers where possible so it does not overwrite
 a resource that changed while you were editing.
+If the response has neither validator, Restish warns before confirmation that
+the update cannot be guarded against concurrent edits.
 
 Use the ETag fixture to understand conditional behavior separately:
 

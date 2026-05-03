@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,7 +25,10 @@ import (
 // DefaultMaxBytes is the default maximum cache size (100 MiB).
 const DefaultMaxBytes = 100 * 1024 * 1024
 
-const cacheKeyLockShards = 64
+const (
+	cacheKeyLockShards      = 64
+	cacheMtimeTouchInterval = 5 * time.Second
+)
 
 var renameCacheFile = os.Rename
 
@@ -40,18 +44,25 @@ type DiskCache struct {
 	evictQueued  atomic.Bool
 	evictWG      sync.WaitGroup
 	keyLocks     [cacheKeyLockShards]sync.Mutex
+	logger       io.Writer
 }
 
 // New returns a DiskCache rooted at dir with the given size cap.
 // dir is created if it does not exist.
 func New(dir string, maxBytes int64, namespace string) (*DiskCache, error) {
+	return NewWithLogger(dir, maxBytes, namespace, nil)
+}
+
+// NewWithLogger returns a DiskCache that writes non-fatal cache diagnostics to
+// logger when provided.
+func NewWithLogger(dir string, maxBytes int64, namespace string, logger io.Writer) (*DiskCache, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("cache: create dir %s: %w", dir, err)
 	}
 	if namespace == "" {
 		namespace = "_"
 	}
-	return &DiskCache{dir: dir, namespace: cachePathComponent(namespace), maxBytes: maxBytes}, nil
+	return &DiskCache{dir: dir, namespace: cachePathComponent(namespace), maxBytes: maxBytes, logger: logger}, nil
 }
 
 // filePath derives the cache file path for a given URL key.
@@ -81,8 +92,10 @@ func (c *DiskCache) Get(key string) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	now := time.Now()
-	_ = os.Chtimes(p, now, now)
+	if info, err := os.Stat(p); err == nil && time.Since(info.ModTime()) >= cacheMtimeTouchInterval {
+		now := time.Now()
+		_ = os.Chtimes(p, now, now)
+	}
 	return data, true
 }
 
@@ -98,6 +111,9 @@ func (c *DiskCache) Set(key string, data []byte) {
 		previousSize = info.Size()
 	}
 	if err := atomicWriteCacheFile(p, data); err != nil {
+		if c.logger != nil {
+			fmt.Fprintf(c.logger, "warning: cache write failed for %s: %v\n", p, err)
+		}
 		return
 	}
 	if previousSize > 0 {
@@ -312,18 +328,40 @@ func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
 		return nil
 	}
 	encodedPrefix := cachePathComponent(prefix)
-	err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || !info.IsDir() {
+	hosts, err := os.ReadDir(c.dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		if strings.HasPrefix(info.Name(), prefix) || strings.HasPrefix(info.Name(), encodedPrefix) {
-			_ = os.RemoveAll(path)
-			return filepath.SkipDir
+		return err
+	}
+	for _, host := range hosts {
+		if !host.IsDir() {
+			continue
 		}
-		return nil
-	})
+		hostPath := filepath.Join(c.dir, host.Name())
+		namespaces, err := os.ReadDir(hostPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		for _, namespace := range namespaces {
+			if !namespace.IsDir() {
+				continue
+			}
+			if stringsHasNamespacePrefix(namespace.Name(), prefix, encodedPrefix) {
+				_ = os.RemoveAll(filepath.Join(hostPath, namespace.Name()))
+			}
+		}
+	}
 	c.recomputeSizeEstimate()
-	return err
+	return nil
+}
+
+func stringsHasNamespacePrefix(name, rawPrefix, encodedPrefix string) bool {
+	return strings.HasPrefix(name, rawPrefix) || strings.HasPrefix(name, encodedPrefix)
 }
 
 func (c *DiskCache) recomputeSizeEstimate() {

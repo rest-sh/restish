@@ -485,7 +485,7 @@ func BuildTransport(opts Options) http.RoundTripper {
 	if maxBytes == 0 {
 		maxBytes = cache.DefaultMaxBytes
 	}
-	dc, err := cache.New(opts.CacheDir, maxBytes, opts.CacheNamespace)
+	dc, err := cache.NewWithLogger(opts.CacheDir, maxBytes, opts.CacheNamespace, opts.Logger)
 	if err != nil {
 		// Cache unavailable; fall back without caching.
 		return finalizeTransport(inner, opts)

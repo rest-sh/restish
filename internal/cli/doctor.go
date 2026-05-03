@@ -557,13 +557,23 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string) doctorRe
 	report := doctorReachabilityReport{
 		Status:     "ok",
 		Checked:    true,
-		Reachable:  true,
 		Method:     http.MethodHead,
 		HTTPStatus: resp.Status,
 		StatusCode: resp.StatusCode,
 	}
-	if resp.StatusCode == http.StatusMethodNotAllowed {
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 400:
+		report.Reachable = true
+	case resp.StatusCode == http.StatusMethodNotAllowed:
+		report.Reachable = true
 		report.Note = "HEAD not allowed, but the server responded"
+	default:
+		report.Status = "warn"
+		if resp.StatusCode >= 500 {
+			report.Note = "server error; base URL may be wrong"
+		} else {
+			report.Note = "HTTP error; base URL may require authentication or may be wrong"
+		}
 	}
 	return report
 }
@@ -586,5 +596,11 @@ func (c *CLI) printAPIReachability(report doctorReachabilityReport) {
 			return
 		}
 		fmt.Fprintf(c.Stderr, "Reachability: HTTP %s\n", report.HTTPStatus)
+	case "warn":
+		if report.Note != "" {
+			fmt.Fprintf(c.Stderr, "Reachability: HTTP %s (%s)\n", report.HTTPStatus, report.Note)
+			return
+		}
+		fmt.Fprintf(c.Stderr, "Reachability: HTTP %s (warning)\n", report.HTTPStatus)
 	}
 }

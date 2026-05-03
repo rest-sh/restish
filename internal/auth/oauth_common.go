@@ -453,8 +453,11 @@ func refreshOAuthToken(ctx context.Context, client *http.Client, params map[stri
 	if err != nil {
 		return CachedToken{}, err
 	}
-	if token.RefreshToken == "" {
+	nextRefreshToken := strings.TrimSpace(token.RefreshToken)
+	if nextRefreshToken == "" || nextRefreshToken == refreshToken {
 		token.RefreshToken = refreshToken
+	} else {
+		token.RefreshToken = nextRefreshToken
 	}
 	return token, nil
 }

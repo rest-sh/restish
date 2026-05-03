@@ -140,6 +140,9 @@ response when possible:
 This helps prevent blind overwrites when the server supports conditional
 updates.
 
+When neither validator is present, Restish warns before confirmation that the
+update is not guarded against concurrent edits.
+
 These concurrency headers are part of the design, not an incidental convenience.
 
 ## Unsupported Content

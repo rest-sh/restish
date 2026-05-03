@@ -151,7 +151,7 @@ func TestConfiguredAPIMissingProfileErrors(t *testing.T) {
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	if err := os.WriteFile(cfgFile, cfgData, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

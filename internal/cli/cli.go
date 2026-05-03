@@ -432,7 +432,7 @@ func (c *CLI) Run(args []string) error {
 		return err
 	}
 	if insecure, permErr := config.ConfigFileHasInsecurePermissions(c.configFilePath()); permErr == nil && insecure {
-		c.warnf("%s is group/world-readable; credentials in config should be kept private (chmod 600)", c.configFilePath())
+		return fmt.Errorf("%s is group/world-readable; credentials in config should be kept private (chmod 600)", c.configFilePath())
 	}
 	c.cfg = cfg
 	if cfg.Migration != nil {

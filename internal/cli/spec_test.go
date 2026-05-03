@@ -49,7 +49,7 @@ func newSpecTestCLI(t *testing.T, apiName, baseURL string) *cli.CLI {
 
 // writeFile writes data to path.
 func writeFile(path string, data []byte) error {
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // TestSpecDiscoveryViaLinkHeader verifies that same-host Link discovery works

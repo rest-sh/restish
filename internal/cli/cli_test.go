@@ -160,6 +160,23 @@ func TestBootstrapCommandsIgnoreInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestRunRejectsInsecureConfigPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits not authoritative on Windows")
+	}
+	c, _, _ := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{}}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	err := c.Run([]string{"restish", "help"})
+	if err == nil {
+		t.Fatal("expected insecure config permissions error")
+	}
+	if !strings.Contains(err.Error(), "chmod 600") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestDoctorReportsInvalidConfigWithoutFailing(t *testing.T) {
 	c, _, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte("{\n  \"apiss\": {}\n}"), 0o600); err != nil {

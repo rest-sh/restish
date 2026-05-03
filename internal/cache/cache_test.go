@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -8,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestNew_CreatesDir(t *testing.T) {
@@ -48,12 +48,29 @@ func TestGet_UpdatesMtime(t *testing.T) {
 	key := "https://api.example.com/v1"
 	c.Set(key, []byte("data"))
 
-	before := time.Now()
 	_, ok := c.Get(key)
 	if !ok {
 		t.Fatal("cache miss")
 	}
-	_ = before // mtime update is best-effort; just verify no error
+	// mtime updates are best-effort and debounced; just verify no error.
+}
+
+func TestSetLogsWriteFailureAndLeavesSizeEstimate(t *testing.T) {
+	var log strings.Builder
+	c, _ := NewWithLogger(t.TempDir(), DefaultMaxBytes, "", &log)
+	oldRename := renameCacheFile
+	renameCacheFile = func(oldpath, newpath string) error {
+		return errors.New("rename failed")
+	}
+	t.Cleanup(func() { renameCacheFile = oldRename })
+
+	c.Set("https://api.example.com/items", []byte("response"))
+	if !strings.Contains(log.String(), "cache write failed") {
+		t.Fatalf("expected cache warning, got %q", log.String())
+	}
+	if got := atomic.LoadInt64(&c.sizeEstimate); got != 0 {
+		t.Fatalf("sizeEstimate = %d, want 0 after failed write", got)
+	}
 }
 
 func TestDelete(t *testing.T) {
@@ -148,6 +165,24 @@ func TestClear_ByHost(t *testing.T) {
 	}
 	if got := atomic.LoadInt64(&c.sizeEstimate); got != total {
 		t.Errorf("sizeEstimate after host clear: got %d, want %d", got, total)
+	}
+}
+
+func TestClearNamespacePrefixOnlyMatchesNamespaceLayer(t *testing.T) {
+	dir := t.TempDir()
+	apiHost, _ := New(dir, DefaultMaxBytes, "profile")
+	apiHost.Set("https://api.example.com/items", []byte("api-host"))
+	otherHost, _ := New(dir, DefaultMaxBytes, "api")
+	otherHost.Set("https://other.example.com/items", []byte("other-host"))
+
+	if err := apiHost.ClearNamespacePrefix("api"); err != nil {
+		t.Fatalf("ClearNamespacePrefix: %v", err)
+	}
+	if _, ok := apiHost.Get("https://api.example.com/items"); !ok {
+		t.Fatal("host directory with matching prefix was removed")
+	}
+	if _, ok := otherHost.Get("https://other.example.com/items"); ok {
+		t.Fatal("namespace with matching prefix was not removed")
 	}
 }
 

@@ -44,6 +44,13 @@ a relative `./.restish` config directory in the current working directory.
 Cache-only state may use a temporary directory until you set `RSH_CACHE_DIR` or
 `XDG_CACHE_HOME`.
 
+On Unix-like systems, Restish refuses to read a config file that is
+group/world-readable because profiles and auth settings can contain secrets:
+
+```bash
+chmod 600 ~/.config/restish/restish.json
+```
+
 Inspect the active path from the CLI:
 
 ```bash

@@ -32,7 +32,7 @@ func setupEnvWithSpec(t *testing.T, mux *http.ServeMux, specFn func(srvURL strin
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	_ = os.WriteFile(cfgFile, cfgData, 0o644)
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 	cacheDir := t.TempDir()
 
 	env := &generatedEnv{cfgFile: cfgFile, cacheDir: cacheDir}

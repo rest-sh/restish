@@ -118,6 +118,34 @@ func TestAuthCode_RefreshPreservesExistingRefreshToken(t *testing.T) {
 	}
 }
 
+func TestAuthCode_RefreshIgnoresWhitespaceRefreshToken(t *testing.T) {
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600,"refresh_token":"   "}`), nil
+	})
+
+	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cacheKey := "myapi:default"
+	_ = cache.Set(cacheKey, CachedToken{
+		AccessToken:  "old-access",
+		RefreshToken: "my-refresh-token",
+		Expiry:       time.Now().Add(-time.Hour),
+	})
+
+	h := &AuthorizationCode{Cache: cache, HTTPClient: client}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	params := map[string]string{"client_id": "id1", "token_url": "https://auth.example.com/token", "_cache_key": cacheKey}
+	if err := h.OnRequest(req, params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cached, err := cache.Get(cacheKey)
+	if err != nil {
+		t.Fatalf("cache.Get: %v", err)
+	}
+	if cached.RefreshToken != "my-refresh-token" {
+		t.Fatalf("RefreshToken = %q, want preserved token", cached.RefreshToken)
+	}
+}
+
 // TestAuthCode_ValidCachedToken verifies that a still-valid cached token is
 // used without contacting any endpoint.
 func TestAuthCode_ValidCachedToken(t *testing.T) {

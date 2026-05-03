@@ -174,6 +174,11 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	hasPrecondition := output.Header(resp.Headers, "Etag") != "" || output.Header(resp.Headers, "Last-Modified") != ""
+	if !hasPrecondition {
+		c.warnf("edit: response did not include ETag or Last-Modified; update is not guarded against concurrent edits")
+	}
+
 	skipPrompt, _ := cmd.Flags().GetBool("rsh-yes")
 	if !skipPrompt {
 		ok, err := c.Confirm(cmd.Context(), "Continue? [Y/n] ")

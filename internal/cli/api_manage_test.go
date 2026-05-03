@@ -717,7 +717,7 @@ func TestAPIInspect(t *testing.T) {
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	_ = os.WriteFile(cfgFile, cfgData, 0o644)
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
@@ -745,7 +745,7 @@ func TestAPISet(t *testing.T) {
 		},
 	})
 	cfgFile := t.TempDir() + "/restish.json"
-	_ = os.WriteFile(cfgFile, cfgData, 0o644)
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
 
 	// Set a new base_url.
 	c, _, _ := newTestCLI(t)
@@ -1743,7 +1743,7 @@ func TestAPIConnectPreservesJSONCComments(t *testing.T) {
 func TestAPIConnectDoesNotOverwriteInvalidConfig(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	invalid := "{\n  \"apis\": {\n"
-	if err := os.WriteFile(cfgFile, []byte(invalid), 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, []byte(invalid), 0o600); err != nil {
 		t.Fatalf("write invalid config: %v", err)
 	}
 
