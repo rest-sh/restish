@@ -15,12 +15,15 @@ request.
 ```bash
 restish edit https://api.rest.sh/types
 restish edit --edit-format yaml https://api.rest.sh/types
+restish edit --no-editor https://api.rest.sh/types
 restish edit --dry-run https://api.rest.sh/types string: changed
 restish edit -y https://api.rest.sh/types string: changed
 ```
 
-Use `--edit-format yaml` when YAML is easier to read than JSON. Use `--dry-run`
-to see the outgoing update without sending it. Use `-y` only when you already
+Use `--edit-format yaml` when YAML is easier to read than JSON. Shorthand patch
+arguments run without opening an editor. Use `--no-editor` without patch args to
+print the editable representation and exit without updating. Use `--dry-run` to
+see the outgoing update without sending it. Use `-y` only when you already
 reviewed the change and want to skip confirmation.
 
 ## Notes

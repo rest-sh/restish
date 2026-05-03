@@ -233,6 +233,7 @@ with a top-level `theme` object in config:
 
 ```json
 {
+  "theme_source": "https://example.com/theme.json",
   "theme": {
     "key": "#5fafd7",
     "string": "#afd787",
@@ -254,8 +255,11 @@ output.
 
 The `restish config theme set <source>` command fetches a theme JSON document,
 validates it, and saves its entries into the top-level config `theme` object
-while preserving JSONC comments where possible. The fetched JSON is a direct
-token map:
+while preserving JSONC comments where possible. It also records the resolved
+source URL in `theme_source` so repeated installs of the same source can run
+without another trust prompt. A first install of a new source prints the
+resolved URL and asks for confirmation before fetching unless `--yes` is set.
+Theme downloads are capped at 256 KiB. The fetched JSON is a direct token map:
 
 ```json
 {

@@ -107,6 +107,61 @@ func TestCommandClientDoSkipsUnknownMessages(t *testing.T) {
 	}
 }
 
+func TestCommandClientStdinHandlerDoesNotBlockReplies(t *testing.T) {
+	hostToPluginR, hostToPluginW := io.Pipe()
+	pluginToHostR, pluginToHostW := io.Pipe()
+	defer hostToPluginR.Close()
+	defer hostToPluginW.Close()
+	defer pluginToHostR.Close()
+	defer pluginToHostW.Close()
+
+	client := NewCommandClient(hostToPluginR, pluginToHostW)
+	blockHandler := make(chan struct{})
+	client.StdinDataHandler = func(data []byte) {
+		<-blockHandler
+	}
+	defer close(blockHandler)
+
+	errCh := make(chan error, 1)
+	go func() {
+		resp, err := client.Do(&HTTPRequestMsg{URI: "https://api.example.com/items"})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if resp.Status != 200 {
+			errCh <- fmt.Errorf("status = %d, want 200", resp.Status)
+			return
+		}
+		errCh <- nil
+	}()
+
+	var req HTTPRequestMsg
+	if err := NewDecoder(pluginToHostR).ReadMessage(&req); err != nil {
+		t.Fatalf("read request: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, StdinDataMsg{Type: MsgTypeStdinData, Data: []byte("blocked")}); err != nil {
+		t.Fatalf("write stdin data: %v", err)
+	}
+	if err := WriteMessage(hostToPluginW, HTTPResponseMsg{
+		Type:      MsgTypeHTTPResponse,
+		RequestID: req.RequestID,
+		Status:    200,
+		Body:      "ok",
+	}); err != nil {
+		t.Fatalf("write response: %v", err)
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Do: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for response while stdin handler was blocked")
+	}
+}
+
 func TestCommandClientDuplicateHTTPResponseDoesNotStopReadLoop(t *testing.T) {
 	hostToPluginR, hostToPluginW := io.Pipe()
 	pluginToHostR, pluginToHostW := io.Pipe()

@@ -32,7 +32,8 @@ The edit flow is:
 1. GET the resource
 2. decode and normalize the body into structured data
 3. choose an editable representation
-4. either open the editor or apply shorthand patch args
+4. open the editor when there are no patch args, print the editable resource
+   when `--no-editor` is set, or apply shorthand patch args in patch-only mode
 5. compare the edited value with the original
 6. show a diff
 7. optionally confirm
@@ -88,7 +89,16 @@ restish edit https://api.example.com/items/123 name: Alice status: active
 
 without opening the editor at all.
 
-This is a fast path, not a separate command family.
+This is a fast path, not a separate command family. Supplying shorthand patch
+args always selects patch-only mode, even when the v1-compatible `-i` flag is
+present.
+
+## No-Editor Review
+
+`--no-editor` suppresses editor launch. When used without patch args, Restish
+prints the normalized editable representation and exits without sending an
+update. This provides a read-only review path for users who want to inspect the
+exact JSON or YAML document that editor mode would have opened.
 
 ## Diff And Review
 
@@ -104,12 +114,12 @@ The diff exists for two reasons:
 
 ## Confirmation Semantics
 
-By default, interactive edit mode should ask for confirmation before sending a
-destructive update unless the workflow or options make that clearly redundant.
+By default, edit mode should ask for confirmation before sending a destructive
+update unless the workflow or options make that clearly redundant.
 
-The v1-compatible `-i` flag selects the interactive edit path. It should remain
-available while `edit` keeps the same command shape, even if editor mode is also
-the default for some invocations.
+The v1-compatible `-i` flag is a no-op compatibility alias. Editor mode is the
+default whenever no shorthand patch args are present and `--no-editor` is not
+set.
 
 `-y` / `--rsh-yes` skips the confirmation prompt for automation.
 
@@ -162,7 +172,7 @@ experience.
 For scripted or piped usage:
 
 - shorthand patch mode should still work
-- editor mode requires an explicit editor environment
+- editor mode requires an explicit editor environment unless `--no-editor` is set
 - confirmation skipping must be explicit
 - dry-run remains safe and useful
 
@@ -186,6 +196,13 @@ Patch with shorthand instead of opening an editor:
 
 ```bash
 restish edit https://api.example.com/items/123 name: Alice
+```
+
+Review the editable representation without opening an editor or sending an
+update:
+
+```bash
+restish edit --no-editor https://api.example.com/items/123
 ```
 
 Preview the diff without sending the update:

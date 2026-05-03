@@ -116,13 +116,15 @@ The primary top-level keys are:
 - `auth_profiles`
 - `cache`
 - `theme`
+- `theme_source`
 - `plugins`
 
 `auth_profiles` stores shared auth configurations that profile-level `auth_ref`
 or credential-level `auth_ref` can point to. `cache` stores global cache
-settings. `theme` stores readable-output style overrides. `plugins` stores raw
-per-plugin JSON config keyed by plugin name so plugin-specific settings do not
-need to become core Restish fields.
+settings. `theme` stores readable-output style overrides. `theme_source`
+records the resolved URL last installed by `config theme set` for first-install
+confirmation. `plugins` stores raw per-plugin JSON config keyed by plugin name
+so plugin-specific settings do not need to become core Restish fields.
 
 Each entry under `apis` is keyed by a short API name and contains the stable
 registration for that API:

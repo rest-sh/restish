@@ -17,6 +17,10 @@ restish edit https://api.rest.sh/types
 Restish uses `$VISUAL`, then `$EDITOR`, and falls back to the platform default
 where possible.
 
+When you pass shorthand patch arguments, Restish stays in patch-only mode and
+does not open an editor. The `-i` flag is accepted for v1 compatibility but does
+not change that behavior.
+
 ## Choose The Edit Format
 
 ```bash
@@ -33,6 +37,13 @@ restish edit -y https://api.rest.sh/types string: changed
 
 Use `--dry-run` to inspect what would be sent. Use `-y` when you want to skip
 interactive confirmation.
+
+Use `--no-editor` without patch args when you only want to review the editable
+representation:
+
+```bash
+restish edit --no-editor https://api.rest.sh/types
+```
 
 ## Conditional Requests
 

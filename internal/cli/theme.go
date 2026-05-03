@@ -11,18 +11,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const maxThemeBytes = 1 << 20
+const maxThemeBytes = 256 << 10
 
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
 func (c *CLI) newThemeSetCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "set <url-or-user/repo> [name]",
 		Short: "Fetch a theme JSON file and save it in config",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runThemeSet,
 	}
+	cmd.Flags().Bool("yes", false, "Fetch and install without confirmation prompt")
+	return cmd
 }
 
 func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
@@ -30,6 +32,19 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(c.Stdout, "Theme URL: %s\n", source)
+
+	yes, _ := cmd.Flags().GetBool("yes")
+	if c.themeSourceNeedsConfirmation(source) && !yes {
+		ok, err := c.Confirm(requestContext(cmd), "Install theme from this source? [Y/n] ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("config theme set: confirmation required; rerun with --yes for automation")
+		}
+	}
+
 	entries, err := c.fetchTheme(cmd, source)
 	if err != nil {
 		return err
@@ -39,12 +54,16 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := c.saveThemeConfig(map[string]string(entries)); err != nil {
+	if err := c.saveThemeConfig(map[string]string(entries), source); err != nil {
 		return err
 	}
 
 	fmt.Fprintf(c.Stdout, "Set theme from %s\n", source)
 	return nil
+}
+
+func (c *CLI) themeSourceNeedsConfirmation(source string) bool {
+	return c.cfg == nil || c.cfg.ThemeSource != source
 }
 
 func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries, error) {

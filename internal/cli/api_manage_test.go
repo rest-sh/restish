@@ -80,6 +80,9 @@ func TestAPIConnect(t *testing.T) {
 	if !strings.Contains(out.String(), "myapi") {
 		t.Errorf("expected confirmation message, got: %q", out.String())
 	}
+	if !strings.Contains(out.String(), "Wrote config: "+cfgFile) {
+		t.Errorf("expected written config path, got: %q", out.String())
+	}
 
 	// Load the written config and verify the fields.
 	written, err := config.Load(cfgFile)

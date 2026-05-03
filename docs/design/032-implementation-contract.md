@@ -25,6 +25,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-filter` | `-f` | string | `RSH_FILTER` | empty | Shorthand/jq auto-detected. |
 | `--rsh-filter-lang` | | string | | auto | `shorthand` or `jq`. |
 | `--rsh-headers` | | bool | | false | Shorthand for `-f headers`. |
+| `--rsh-status` | | bool | | false | Shorthand for `-f status`. |
 | `--rsh-raw` | `-r` | bool | | false | Raw original response body bytes only; incompatible with filters and output formats. |
 | `--rsh-verbose` | `-v` | count | | 0 | `-v` headers, `-vv` TLS details. |
 | `--rsh-insecure` | | bool | `RSH_INSECURE` | false | Warns, then disables TLS verification. |

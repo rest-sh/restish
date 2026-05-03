@@ -296,7 +296,7 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 func validateStreamingOutputMode(cmd *cobra.Command) error {
 	fmtName := globalFlagsFromContext(requestContext(cmd)).OutputFormat
 	if fmtName == "json" {
-		return fmt.Errorf("output format %q requires a complete bounded result; use -o ndjson for streaming records", fmtName)
+		return fmt.Errorf("-o json cannot be used with an unbounded stream response. Try -o ndjson for record-by-record JSON output.")
 	}
 	return nil
 }

@@ -48,6 +48,7 @@ var defaultFlagGroups = map[string]string{
 	"rsh-filter":        flagGroupOutput,
 	"rsh-filter-lang":   flagGroupOutput,
 	"rsh-headers":       flagGroupOutput,
+	"rsh-status":        flagGroupOutput,
 	"rsh-raw":           flagGroupOutput,
 	"rsh-columns":       flagGroupOutput,
 	"rsh-sort-by":       flagGroupOutput,

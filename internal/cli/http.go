@@ -337,6 +337,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	explicitFilter := explicitOutputFilter(gf)
 	filterLang := gf.FilterLang
 	headersOnly := gf.HeadersShorthand
+	statusOnly := gf.StatusShorthand
 	tty := output.IsTerminal(c.Stdout)
 
 	if gf.Raw {
@@ -358,8 +359,18 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	if headersOnly && filterExpr != "" {
 		c.warnf(`--rsh-headers overrides -f; using "headers"`)
 	}
+	if statusOnly && filterExpr != "" {
+		c.warnf(`--rsh-status overrides -f; using "status"`)
+	}
+	if headersOnly && statusOnly {
+		c.warnf(`--rsh-status overrides --rsh-headers; using "status"`)
+		headersOnly = false
+	}
 	if headersOnly {
 		filterExpr = "headers"
+	}
+	if statusOnly {
+		filterExpr = "status"
 	}
 
 	// Default filter: full response on TTY or when using the readable format;
@@ -654,7 +665,7 @@ func outputPipelineStep(name string, formatter output.Formatter) string {
 }
 
 func explicitOutputFilter(gf GlobalFlags) bool {
-	return gf.Filter != "" || gf.HeadersShorthand
+	return gf.Filter != "" || gf.HeadersShorthand || gf.StatusShorthand
 }
 
 func validateRawOutputOptions(gf GlobalFlags) error {
@@ -662,7 +673,7 @@ func validateRawOutputOptions(gf GlobalFlags) error {
 		return nil
 	}
 	if explicitOutputFilter(gf) {
-		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers\nFor shell-friendly scalar output use: -o lines\nFor JSON use: -o json")
+		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter, --rsh-headers, or --rsh-status\nFor shell-friendly scalar output use: -o lines\nFor JSON use: -o json")
 	}
 	if gf.OutputFormat != "" {
 		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-output-format; raw output writes the response body bytes")

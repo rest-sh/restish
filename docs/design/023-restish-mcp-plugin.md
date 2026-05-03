@@ -74,9 +74,12 @@ At startup:
 
 1. Restish sends the command-plugin `init` message.
 2. The plugin parses command flags and selected API names.
-3. The plugin asks Restish for each API spec using `api-spec`.
-4. The plugin converts the specs into MCP tool definitions.
-5. The plugin starts serving MCP stdio traffic.
+3. The plugin starts bounded passthrough-stdin forwarding immediately, so MCP
+   client frames that arrive during spec loading are queued to the server pipe
+   instead of an unbounded buffer.
+4. The plugin asks Restish for each API spec using `api-spec`.
+5. The plugin converts the specs into MCP tool definitions.
+6. The plugin starts serving MCP stdio traffic.
 
 This design keeps spec loading and HTTP transport inside Restish while letting
 the plugin own the MCP-facing protocol. The plugin should use the public

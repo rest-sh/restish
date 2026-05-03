@@ -30,7 +30,8 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 		RunE:    c.runEdit,
 	}
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")
-	cmd.Flags().BoolP("rsh-interactive", "i", false, "Open an interactive editor")
+	cmd.Flags().BoolP("rsh-interactive", "i", false, "Compatibility alias; editor opens by default without patch args")
+	cmd.Flags().Bool("no-editor", false, "Do not open an editor; with no patch args, print the editable resource")
 	cmd.Flags().Bool("dry-run", false, "Show the diff without sending the update")
 	cmd.Flags().BoolP("rsh-yes", "y", false, "Skip the confirmation prompt")
 	root.AddCommand(cmd)
@@ -107,6 +108,14 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("edit: close temp file: %w", err)
 	}
 
+	noEditor, _ := cmd.Flags().GetBool("no-editor")
+	if noEditor && len(patchArgs) == 0 {
+		if _, err := c.Stdout.Write(originalText); err != nil {
+			return fmt.Errorf("edit: write editable resource: %w", err)
+		}
+		return c.flushStdout()
+	}
+
 	editedValue := resp.Body
 	editedText := originalText
 	if len(patchArgs) > 0 {
@@ -123,13 +132,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	interactive, _ := cmd.Flags().GetBool("rsh-interactive")
-	if interactive && len(patchArgs) > 0 {
-		if err := os.WriteFile(tmpPath, editedText, 0o600); err != nil {
-			return fmt.Errorf("edit: write patched temp file: %w", err)
-		}
-	}
-	if interactive || len(patchArgs) == 0 {
+	if len(patchArgs) == 0 {
 		editorCmd, err := c.editorCommand(tmpPath)
 		if err != nil {
 			return err

@@ -92,7 +92,7 @@ The command behavior is now:
 
 - `api connect` preserves comments in an existing JSONC config when adding or
   replacing an API entry, including when setup expressions are supplied on the
-  command line
+  command line, then prints the absolute config file path it wrote
 - `api set` preserves comments when updating a supported config path
 - `api auth add/remove` preserves comments around profile and credential
   entries that it does not change
@@ -102,7 +102,8 @@ The command behavior is now:
 - `config theme set` preserves comments while replacing the `theme` object
 - `config edit` does not patch individual spans, but it validates the edited
   file through the strict config loader and invalidates spec caches when
-  relevant API fields changed
+  relevant API fields changed, then prints the absolute config file path it
+  wrote
 
 The normal `Load` path remains the source of truth for validation and unknown
 field rejection.

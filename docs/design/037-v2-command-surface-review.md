@@ -69,7 +69,7 @@ restish api clear-auth-cache <name>
 restish api content-types
 restish api auth inspect <api-or-uri>
 restish cert <uri>
-restish edit <uri> [patch ...]
+restish edit <uri> [patch ...] [--no-editor]
 restish links <uri> [rel...]
 restish completion <shell>
 restish bulk ...
@@ -165,7 +165,7 @@ restish shell setup <shell>
 restish doctor [api|plugin|migrate-v1]
 restish cert <uri>
 restish links <uri> [rel...]
-restish edit <uri> [patch ...]
+restish edit <uri> [patch ...] [--no-editor]
 restish version
 ```
 

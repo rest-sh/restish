@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -144,5 +145,32 @@ func TestPluginClientStdinForwardingFlushesPrefixBeforeImmediateClose(t *testing
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for stdin data")
+	}
+}
+
+func TestPluginClientStdinQueueIsBoundedBeforeReader(t *testing.T) {
+	var out bytes.Buffer
+	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &out)
+
+	done := make(chan struct{}, 1)
+	go func() {
+		for i := 0; i < stdinForwardQueueSize+2; i++ {
+			client.StdinDataHandler([]byte("firehose"))
+		}
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out forwarding pre-startup stdin")
+	}
+
+	var msg plugin.StderrDataMsg
+	if err := plugin.NewDecoder(bytes.NewReader(out.Bytes())).ReadMessage(&msg); err != nil {
+		t.Fatalf("read stderr message: %v", err)
+	}
+	if !strings.Contains(string(msg.Data), "stdin passthrough queue full") {
+		t.Fatalf("stderr = %q, want queue-full error", string(msg.Data))
 	}
 }

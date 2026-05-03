@@ -42,6 +42,13 @@ restish https://api.rest.sh/images -o table --rsh-columns name,format,self
 restish https://api.rest.sh/images -o ndjson -f body.self
 ```
 
+Use shortcuts for common response metadata:
+
+```bash
+restish https://api.rest.sh/status/204 --rsh-status
+restish https://api.rest.sh/ --rsh-headers
+```
+
 `readable` is the normal interactive default and is optimized for humans on a
 terminal. `json`, `yaml`, and `cbor` are document formats. `ndjson` is a record
 format for structured streams, and `lines` is for shell-friendly scalar values.
@@ -63,6 +70,8 @@ restish https://api.rest.sh/images -o ndjson -f body.self
 
 This distinction matters for pagination and live streams. A live stream may
 never finish, so `-o ndjson` is the right shape for structured stream output.
+Restish rejects `-o json` on stream responses with an error that points to
+`-o ndjson`.
 
 ## Filters Change What Gets Rendered
 

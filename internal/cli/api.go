@@ -309,6 +309,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	if err := c.saveAPIConfig("api connect", apiName, cfg, apiCfg); err != nil {
 		return err
 	}
+	c.printConfigWrittenPath()
 	if len(preservedProfiles) > 0 {
 		fmt.Fprintf(c.Stdout, "Preserved existing profile(s): %s (use --replace to recreate from discovered defaults)\n", strings.Join(preservedProfiles, ", "))
 	}
@@ -912,7 +913,11 @@ func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	if err := editorCmd.Run(); err != nil {
 		return err
 	}
-	return c.reloadConfigAfterMutation("config edit", oldCfg)
+	if err := c.reloadConfigAfterMutation("config edit", oldCfg); err != nil {
+		return err
+	}
+	c.printConfigWrittenPath()
+	return nil
 }
 
 func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []string {

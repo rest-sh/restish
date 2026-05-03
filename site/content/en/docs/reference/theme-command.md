@@ -19,7 +19,9 @@ restish config theme set user/repo dark
 
 `config theme set` fetches a theme JSON file and saves it in the active config.
 GitHub shorthand resolves `user/repo` to a raw `theme.json`, or to
-`<name>.json` when you pass the optional name.
+`<name>.json` when you pass the optional name. Restish prints the resolved URL
+before fetching. The first install of a new source asks for confirmation; pass
+`--yes` for automation. Theme downloads are capped at 256 KiB.
 
 ## Notes
 

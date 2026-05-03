@@ -37,7 +37,8 @@ restish api connect example https://api.rest.sh --spec https://api.rest.sh/opena
 Uses the provided OpenAPI file or URL instead of discovery. Rerun
 `api connect` to refresh generated/default material; pass `--replace` when you
 want the rerun to replace generated profile defaults instead of preserving local
-profile edits.
+profile edits. After writing, `api connect` prints the absolute config file path
+it touched.
 
 ## Sync
 
@@ -61,6 +62,9 @@ restish api set example command_layout: tags
 restish api set example operation_base: /v1
 restish config edit
 ```
+
+`config edit` preserves comments where possible and prints the absolute config
+file path after a successful write.
 
 ## Remove
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -65,7 +65,6 @@ func main() {
 			if server.MaxResultBytes <= 0 {
 				server.MaxResultBytes = DefaultMaxResultBytes
 			}
-			client.startStdinForwarding()
 			err = server.ServeStdio(client.stdinReader, client.StdoutWriter())
 		}
 	}
@@ -77,15 +76,23 @@ func main() {
 	_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone})
 }
 
+const stdinForwardQueueSize = 64
+
+var errStdinForwardQueueFull = errors.New("mcp: stdin passthrough queue full; MCP client is not reading stdin fast enough")
+
+type stdinForwardEvent struct {
+	data  []byte
+	close bool
+}
+
 type pluginClient struct {
 	*plugin.CommandClient
 	stdinPipeW   *io.PipeWriter
 	stdinReader  io.Reader
-	stdinMu      sync.Mutex
 	stdinWriteMu sync.Mutex
-	pendingStdin bytes.Buffer
-	stdinClosed  bool
-	stdinForward bool
+	stdinClose   sync.Once
+	stdinFailure sync.Once
+	stdinQueue   chan stdinForwardEvent
 }
 
 func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
@@ -94,56 +101,64 @@ func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 		CommandClient: plugin.NewCommandClientFromDecoder(dec, out),
 		stdinPipeW:    pw,
 		stdinReader:   pr,
+		stdinQueue:    make(chan stdinForwardEvent, stdinForwardQueueSize),
 	}
+	go client.forwardStdin()
 	client.StdinDataHandler = func(data []byte) {
-		client.stdinMu.Lock()
-		if !client.stdinForward {
-			_, _ = client.pendingStdin.Write(data)
-			client.stdinMu.Unlock()
-			return
-		}
-		client.stdinMu.Unlock()
-		client.stdinWriteMu.Lock()
-		defer client.stdinWriteMu.Unlock()
-		_, _ = client.stdinPipeW.Write(data)
+		client.enqueueStdin(stdinForwardEvent{data: append([]byte(nil), data...)})
 	}
 	client.StdinCloseHandler = func() {
-		client.stdinMu.Lock()
-		if !client.stdinForward {
-			client.stdinClosed = true
-			client.stdinMu.Unlock()
-			return
-		}
-		client.stdinMu.Unlock()
-		client.stdinWriteMu.Lock()
-		defer client.stdinWriteMu.Unlock()
-		_ = client.stdinPipeW.Close()
+		client.enqueueStdin(stdinForwardEvent{close: true})
 	}
 	return client
 }
 
-func (c *pluginClient) startStdinForwarding() {
-	c.stdinMu.Lock()
-	if c.stdinForward {
-		c.stdinMu.Unlock()
-		return
+func (c *pluginClient) enqueueStdin(event stdinForwardEvent) {
+	select {
+	case c.stdinQueue <- event:
+	default:
+		c.failStdinForwarding(errStdinForwardQueueFull)
 	}
-	c.stdinWriteMu.Lock()
-	c.stdinForward = true
-	pending := append([]byte(nil), c.pendingStdin.Bytes()...)
-	closed := c.stdinClosed
-	c.pendingStdin.Reset()
-	c.stdinMu.Unlock()
+}
 
-	go func() {
-		if len(pending) > 0 {
-			_, _ = c.stdinPipeW.Write(pending)
+func (c *pluginClient) forwardStdin() {
+	for event := range c.stdinQueue {
+		if event.close {
+			c.closeStdin(nil)
+			return
 		}
-		if closed {
-			_ = c.stdinPipeW.Close()
+		if len(event.data) == 0 {
+			continue
 		}
+		c.stdinWriteMu.Lock()
+		_, err := c.stdinPipeW.Write(event.data)
 		c.stdinWriteMu.Unlock()
-	}()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (c *pluginClient) failStdinForwarding(err error) {
+	c.stdinFailure.Do(func() {
+		_ = c.WriteStderr([]byte(err.Error() + "\n"))
+		c.closeStdin(err)
+	})
+}
+
+func (c *pluginClient) closeStdin(err error) {
+	c.stdinClose.Do(func() {
+		if err != nil {
+			_ = c.stdinPipeW.CloseWithError(err)
+			return
+		}
+		_ = c.stdinPipeW.Close()
+	})
+}
+
+func (c *pluginClient) startStdinForwarding() {
+	// Compatibility no-op for tests and older call sites. Forwarding starts when
+	// the plugin client is created so pre-startup MCP frames are bounded.
 }
 
 func (c *pluginClient) do(req *HTTPRequest) (*HTTPResponse, error) {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -56,13 +57,24 @@ func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg 
 	return c.reloadConfigAfterMutation(label, oldCfg)
 }
 
-func (c *CLI) saveThemeConfig(entries map[string]string) error {
+func (c *CLI) saveThemeConfig(entries map[string]string, source string) error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValue(cfgPath, []string{"theme"}, entries); err != nil {
+	if err := config.SaveConfigValues(cfgPath, []config.ConfigPatchOperation{
+		{Path: []string{"theme"}, Value: entries},
+		{Path: []string{"theme_source"}, Value: source},
+	}); err != nil {
 		return err
 	}
 	return c.reloadConfigAfterMutation("config theme set", oldCfg)
+}
+
+func (c *CLI) printConfigWrittenPath() {
+	cfgPath := c.configFilePath()
+	if abs, err := filepath.Abs(cfgPath); err == nil {
+		cfgPath = abs
+	}
+	fmt.Fprintf(c.Stdout, "Wrote config: %s\n", cfgPath)
 }
 
 func (c *CLI) reloadConfigAfterMutation(label string, oldCfg *config.Config) error {

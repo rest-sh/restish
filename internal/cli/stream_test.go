@@ -604,8 +604,9 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for -o json on a stream, got nil")
 	}
-	if !strings.Contains(err.Error(), "use -o ndjson") {
-		t.Fatalf("expected ndjson hint in error, got: %v", err)
+	want := "-o json cannot be used with an unbounded stream response. Try -o ndjson for record-by-record JSON output."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 

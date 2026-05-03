@@ -160,6 +160,63 @@ func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
 	}
 }
 
+func TestEditCommandInteractiveFlagIsNoopWithPatchArgs(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+
+	var method string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			method = r.Method
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-i", "-y", srv.URL, "name:", "after"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != http.MethodPut {
+		t.Fatalf("expected patch args to update without editor, got method %q", method)
+	}
+}
+
+func TestEditCommandNoEditorPrintsEditableResource(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"name":"before"}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "--no-editor", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.Join(methods, ","); got != http.MethodGet {
+		t.Fatalf("methods = %q, want GET", got)
+	}
+	if !strings.Contains(out.String(), `"name": "before"`) {
+		t.Fatalf("expected editable JSON on stdout, got %q", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("unexpected stderr: %q", errOut.String())
+	}
+}
+
 func TestEditCommandUpdateUsesProfileHeaders(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 

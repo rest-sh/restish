@@ -26,6 +26,7 @@ type GlobalFlags struct {
 	Filter           string
 	FilterLang       string
 	HeadersShorthand bool // --rsh-headers
+	StatusShorthand  bool // --rsh-status
 	Raw              bool
 	Verbose          int
 	Insecure         bool
@@ -86,6 +87,7 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	// Bool flags
 	gf.Silent, _ = cmd.Flags().GetBool("rsh-silent")
 	gf.HeadersShorthand, _ = cmd.Flags().GetBool("rsh-headers")
+	gf.StatusShorthand, _ = cmd.Flags().GetBool("rsh-status")
 	gf.Raw, _ = cmd.Flags().GetBool("rsh-raw")
 	gf.Insecure, _ = cmd.Flags().GetBool("rsh-insecure")
 	gf.IgnoreStatus, _ = cmd.Flags().GetBool("rsh-ignore-status-code")

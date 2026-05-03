@@ -39,12 +39,13 @@ restish https://api.rest.sh/images -o table --rsh-columns name,format,self
 restish https://api.rest.sh/images -o ndjson -f body.self
 restish https://api.rest.sh/images --rsh-sort-by name -o table
 restish https://api.rest.sh/ --rsh-headers
+restish https://api.rest.sh/status/204 --rsh-status
 restish -S https://api.rest.sh/status/204
 ```
 
 Flags: `-f/--rsh-filter`, `--rsh-filter-lang`, `-o/--rsh-output-format`,
 `-r/--rsh-raw`, `--rsh-columns`, `--rsh-sort-by`, `--rsh-headers`,
-`-S/--rsh-silent`.
+`--rsh-status`, `-S/--rsh-silent`.
 
 ## Auth And Profiles
 

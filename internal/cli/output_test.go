@@ -282,6 +282,17 @@ func TestFilterHeaders(t *testing.T) {
 	}
 }
 
+func TestFilterStatus(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 204, ``)
+	if err := c.Run([]string{"restish", "get", "--rsh-status", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "204" {
+		t.Fatalf("status output = %q, want 204", got)
+	}
+}
+
 func TestFilterHeaderValue(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -333,6 +344,20 @@ func TestHeadersFlagWarnsWhenOverridingFilter(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(errOut.String(), "--rsh-headers overrides -f") {
+		t.Fatalf("expected override warning, got: %q", errOut.String())
+	}
+}
+
+func TestStatusFlagWarnsWhenOverridingFilter(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	useJSONResponse(c, 201, `{"name":"Alice"}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.name", "--rsh-status", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "201" {
+		t.Fatalf("status output = %q, want 201", got)
+	}
+	if !strings.Contains(errOut.String(), "--rsh-status overrides -f") {
 		t.Fatalf("expected override warning, got: %q", errOut.String())
 	}
 }

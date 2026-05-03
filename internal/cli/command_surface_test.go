@@ -197,7 +197,7 @@ func TestWorkflowCommandHelpSurface(t *testing.T) {
 		{
 			name: "edit",
 			args: []string{"restish", "edit", "--help"},
-			want: []string{"<uri> [patch ...]", "--edit-format", "--rsh-interactive", "--dry-run", "--rsh-yes"},
+			want: []string{"<uri> [patch ...]", "--edit-format", "--rsh-interactive", "--no-editor", "--dry-run", "--rsh-yes"},
 		},
 		{
 			name: "links",

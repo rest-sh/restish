@@ -102,6 +102,12 @@ same `request_id` as the original request. The public `CommandClient.Do` helper
 assigns request IDs when needed and routes replies back to the goroutine that
 sent the request.
 
+For `passthrough_stdio`, the public client dispatches `stdin-data` and
+`stdin-close` through a bounded asynchronous queue. Slow stdin consumers must
+not block reply delivery on the command-plugin read loop; if the queue fills,
+the client fails pending requests with a clear queue-full error instead of
+growing memory without bound.
+
 ### Delegated HTTP
 
 The most important design choice is that command plugins delegate HTTP back to

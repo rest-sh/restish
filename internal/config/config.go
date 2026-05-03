@@ -37,6 +37,9 @@ type Config struct {
 	// style descriptors such as "#afd787" or "bold #ff5f87".
 	Theme map[string]string `json:"theme,omitempty"`
 
+	// ThemeSource records the source URL last used by `config theme set`.
+	ThemeSource string `json:"theme_source,omitempty"`
+
 	// Plugins holds per-plugin configuration keyed by plugin name (without the
 	// "restish-" prefix). Each value is stored as raw JSON so that restish
 	// itself does not need to know the shape of each plugin's config.

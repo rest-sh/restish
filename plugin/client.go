@@ -26,12 +26,14 @@ type CommandClient struct {
 	out     io.Writer
 	writeMu sync.Mutex
 
-	readOnce sync.Once
-	readErr  atomic.Value
-	nextID   atomic.Uint64
-	pending  sync.Map
-	specs    sync.Map
-	replies  sync.Map
+	readOnce          sync.Once
+	stdinDispatchOnce sync.Once
+	readErr           atomic.Value
+	nextID            atomic.Uint64
+	pending           sync.Map
+	specs             sync.Map
+	replies           sync.Map
+	stdinEvents       chan stdinDispatchEvent
 
 	// StdinDataHandler is called with each chunk of stdin data received from
 	// the host while Do() is waiting for an http-response. Set this before
@@ -41,6 +43,13 @@ type CommandClient struct {
 	// StdinCloseHandler is called when the host signals that stdin has reached
 	// EOF while Do() is waiting for an http-response.
 	StdinCloseHandler func()
+}
+
+const stdinDispatchQueueSize = 64
+
+type stdinDispatchEvent struct {
+	data  []byte
+	close bool
 }
 
 // NewCommandClient returns a CommandClient backed by the given reader/writer.
@@ -291,14 +300,47 @@ func (c *CommandClient) readLoop() {
 					c.failPending(fmt.Errorf("plugin: decode stdin-data: %w", err))
 					return
 				}
-				c.StdinDataHandler(msg.Data)
+				if err := c.dispatchStdinEvent(stdinDispatchEvent{data: msg.Data}); err != nil {
+					c.failPending(err)
+					return
+				}
 			}
 		case MsgTypeStdinClose:
 			if c.StdinCloseHandler != nil {
-				c.StdinCloseHandler()
+				if err := c.dispatchStdinEvent(stdinDispatchEvent{close: true}); err != nil {
+					c.failPending(err)
+					return
+				}
 			}
 		default:
 			continue
+		}
+	}
+}
+
+func (c *CommandClient) dispatchStdinEvent(event stdinDispatchEvent) error {
+	c.stdinDispatchOnce.Do(func() {
+		c.stdinEvents = make(chan stdinDispatchEvent, stdinDispatchQueueSize)
+		go c.runStdinDispatcher(c.stdinEvents)
+	})
+	select {
+	case c.stdinEvents <- event:
+		return nil
+	default:
+		return fmt.Errorf("plugin: stdin handler queue full; consumer is not reading stdin events fast enough")
+	}
+}
+
+func (c *CommandClient) runStdinDispatcher(events <-chan stdinDispatchEvent) {
+	for event := range events {
+		if event.close {
+			if c.StdinCloseHandler != nil {
+				c.StdinCloseHandler()
+			}
+			continue
+		}
+		if c.StdinDataHandler != nil {
+			c.StdinDataHandler(event.data)
 		}
 	}
 }

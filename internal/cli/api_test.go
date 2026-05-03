@@ -337,6 +337,9 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 	if !strings.Contains(out.String(), "editor-stdout") {
 		t.Errorf("expected editor stdout in c.Stdout, got: %q", out.String())
 	}
+	if !strings.Contains(out.String(), "Wrote config: "+cfgPath) {
+		t.Errorf("expected written config path in c.Stdout, got: %q", out.String())
+	}
 }
 
 func TestAPIEditInvalidatesChangedAPISpecCache(t *testing.T) {

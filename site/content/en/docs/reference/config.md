@@ -66,6 +66,7 @@ restish config show --json
   "apis": {},
   "auth_profiles": {},
   "cache": {},
+  "theme_source": "https://example.com/theme.json",
   "theme": {},
   "plugins": {}
 }
@@ -154,14 +155,14 @@ restish api set example spec_url: https://api.rest.sh/openapi.json
 restish api inspect example
 ```
 
-`config edit` preserves comments where possible. Use `api set` for small scripted
-changes.
+`config edit` preserves comments where possible and prints the absolute config
+file path after a successful write. Use `api set` for small scripted changes.
 
 For global config fields, use `config set`:
 
 ```bash
 restish config set cache.max_size: 250MB
-restish config theme set user/repo dark
+restish config theme set user/repo dark --yes
 ```
 
 ## Related Pages
