@@ -180,9 +180,8 @@ func (c *CLI) completeOperationURLs(cmd *cobra.Command, method string, _ []strin
 			if desc == "" {
 				desc = fmt.Sprintf("%s %s", op.Method, op.Path)
 			}
-			for _, candidate := range c.operationURLCompletionCandidates(apiName, apiCfg, profileName, op.Path) {
-				completed, ok := completeURLTemplate(toComplete, candidate)
-				if ok {
+			for _, candidate := range c.operationURLCompletionCandidates(apiName, apiCfg, profileName, op) {
+				for _, completed := range completeURLTemplate(toComplete, candidate) {
 					add(completed, desc)
 				}
 			}
@@ -193,7 +192,7 @@ func (c *CLI) completeOperationURLs(cmd *cobra.Command, method string, _ []strin
 	})
 
 	directive := cobra.ShellCompDirectiveNoFileComp
-	if len(out) > 0 && allCompletionValuesAreAPISeeds(out) {
+	if len(out) > 0 && allCompletionValuesEndWithSlash(out) {
 		directive |= cobra.ShellCompDirectiveNoSpace
 	}
 	return out, directive
@@ -226,19 +225,40 @@ func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg 
 	return set, true
 }
 
-func (c *CLI) operationURLCompletionCandidates(apiName string, apiCfg *config.APIConfig, profileName, opPath string) []string {
+type operationURLCompletionCandidate struct {
+	template   string
+	pathParams map[string]spec.Param
+}
+
+func (c *CLI) operationURLCompletionCandidates(apiName string, apiCfg *config.APIConfig, profileName string, op spec.Operation) []operationURLCompletionCandidate {
 	baseURL, operationBase := completionOperationBase(apiCfg, profileName)
-	var candidates []string
-	if shortPath := shortOperationCompletionPath(baseURL, operationBase, opPath); shortPath != "" {
-		candidates = append(candidates, apiName+"/"+strings.TrimLeft(shortPath, "/"))
+	pathParams := completionPathParams(op)
+	var candidates []operationURLCompletionCandidate
+	add := func(template string) {
+		if template != "" {
+			candidates = append(candidates, operationURLCompletionCandidate{template: template, pathParams: pathParams})
+		}
 	}
-	if full := fullOperationCompletionURL(baseURL, operationBase, opPath); full != "" {
-		candidates = append(candidates, full)
+	if shortPath := shortOperationCompletionPath(baseURL, operationBase, op.Path); shortPath != "" {
+		add(apiName + "/" + strings.TrimLeft(shortPath, "/"))
+	}
+	if full := fullOperationCompletionURL(baseURL, operationBase, op.Path); full != "" {
+		add(full)
 		if scheme, rest, ok := strings.Cut(full, "://"); ok && (scheme == "http" || scheme == "https") {
-			candidates = append(candidates, rest)
+			add(rest)
 		}
 	}
 	return candidates
+}
+
+func completionPathParams(op spec.Operation) map[string]spec.Param {
+	params := map[string]spec.Param{}
+	for _, p := range op.Parameters {
+		if p.In == "path" {
+			params[p.Name] = p
+		}
+	}
+	return params
 }
 
 func completionOperationBase(apiCfg *config.APIConfig, profileName string) (string, string) {
@@ -330,41 +350,113 @@ func cleanCompletionURL(rawURL string) string {
 	return cleaned
 }
 
-func completeURLTemplate(toComplete, template string) (string, bool) {
+func completeURLTemplate(toComplete string, candidate operationURLCompletionCandidate) []string {
+	template := candidate.template
 	if toComplete == "" {
-		return template, true
+		return completeURLTemplateRemainder(strings.Split(template, "/"), 0)
 	}
 	if strings.Contains(toComplete, "?") || strings.Contains(toComplete, "#") {
-		return "", false
+		return nil
 	}
 	inParts := strings.Split(toComplete, "/")
 	tplParts := strings.Split(template, "/")
 	if len(inParts) > len(tplParts) {
-		return "", false
+		return nil
 	}
 	last := len(inParts) - 1
 	for i, part := range inParts {
 		if i >= len(tplParts) {
-			return "", false
+			return nil
 		}
 		tplPart := tplParts[i]
 		if templatePathPart(tplPart) {
+			param := candidate.pathParams[templatePathName(tplPart)]
+			if i == last {
+				return completeTemplatePathParam(tplParts, i, part, param)
+			}
 			if part != "" {
 				tplParts[i] = part
+				if len(param.Enum) > 0 && !stringInSlice(part, param.Enum) {
+					return nil
+				}
+				continue
 			}
-			continue
+			return nil
 		}
 		if i == last {
 			if !strings.HasPrefix(tplPart, part) {
-				return "", false
+				return nil
 			}
-			continue
+			tplParts[i] = tplPart
+			return completeURLTemplateRemainder(tplParts, i+1)
 		}
 		if part != tplPart {
-			return "", false
+			return nil
 		}
 	}
-	return strings.Join(tplParts, "/"), true
+	return completeURLTemplateRemainder(tplParts, len(inParts))
+}
+
+func completeTemplatePathParam(tplParts []string, idx int, part string, param spec.Param) []string {
+	prefix := completionPrefix(tplParts, idx)
+	if len(param.Enum) > 0 {
+		var out []string
+		for _, value := range param.Enum {
+			if strings.HasPrefix(value, part) {
+				out = append(out, prefix+value)
+			}
+		}
+		return out
+	}
+	if part == "" {
+		return nil
+	}
+	tplParts = append([]string(nil), tplParts...)
+	tplParts[idx] = part
+	return completeURLTemplateRemainder(tplParts, idx+1)
+}
+
+func completeURLTemplateRemainder(tplParts []string, start int) []string {
+	for i := start; i < len(tplParts); i++ {
+		if templatePathPart(tplParts[i]) {
+			return []string{completionPrefix(tplParts, i)}
+		}
+	}
+	return []string{strings.Join(tplParts, "/")}
+}
+
+func completionPrefix(parts []string, end int) string {
+	if end <= 0 {
+		return ""
+	}
+	return strings.Join(parts[:end], "/") + "/"
+}
+
+func templatePathName(part string) string {
+	start := strings.Index(part, "{")
+	end := strings.LastIndex(part, "}")
+	if start < 0 || end <= start {
+		return ""
+	}
+	return part[start+1 : end]
+}
+
+func stringInSlice(needle string, haystack []string) bool {
+	for _, item := range haystack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func allCompletionValuesEndWithSlash(values []string) bool {
+	for _, value := range values {
+		if !strings.HasSuffix(completionValue(value), "/") {
+			return false
+		}
+	}
+	return len(values) > 0
 }
 
 func templatePathPart(part string) bool {

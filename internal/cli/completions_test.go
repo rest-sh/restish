@@ -79,11 +79,14 @@ func TestURLCompletionsForBareGet(t *testing.T) {
 	got := runCompletionForCLI(t, c, out, "demo/items/my-item")
 	for _, want := range []string{
 		"demo/items/my-item/tags\tList item tags",
-		"demo/items/my-item/tags/{tag-id}\tGet tag details",
+		"demo/items/my-item/tags/\tGet tag details",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in bare URL completions, got:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "{tag-id}") {
+		t.Fatalf("path parameter placeholders should not be completed:\n%s", got)
 	}
 	if strings.Contains(got, "demo/items/my-item/hidden") {
 		t.Fatalf("hidden operations should not be completed:\n%s", got)
@@ -142,8 +145,41 @@ func TestURLCompletionsUseProfileBaseURLAndOperationBase(t *testing.T) {
 	})
 
 	got := runCompletionForCLI(t, c, out, "get", "--rsh-profile", "staging", "https://staging.example.com/v2/ite")
-	if !strings.Contains(got, "https://staging.example.com/v2/items/{item-id}/tags\tList item tags") {
+	if !strings.Contains(got, "https://staging.example.com/v2/items/\tList item tags") {
 		t.Fatalf("expected profile/operation_base full URL completion, got:\n%s", got)
+	}
+}
+
+func TestURLCompletionsStopBeforePathParamsAndCompleteEnums(t *testing.T) {
+	c, out := newCompletionFixtureCLI(t, completionFixtureConfig{})
+
+	got := runCompletionForCLI(t, c, out, "demo/for")
+	if !strings.Contains(got, "demo/formats/\tGet format") {
+		t.Fatalf("expected completion to stop before enum path param, got:\n%s", got)
+	}
+	if strings.Contains(got, "{format}") {
+		t.Fatalf("path parameter placeholder should not be completed:\n%s", got)
+	}
+
+	c, out = newCompletionFixtureCLI(t, completionFixtureConfig{})
+	got = runCompletionForCLI(t, c, out, "demo/formats/")
+	for _, want := range []string{
+		"demo/formats/cbor\tGet format",
+		"demo/formats/json\tGet format",
+		"demo/formats/yaml\tGet format",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected enum completion %q, got:\n%s", want, got)
+		}
+	}
+
+	c, out = newCompletionFixtureCLI(t, completionFixtureConfig{})
+	got = runCompletionForCLI(t, c, out, "demo/formats/j")
+	if !strings.Contains(got, "demo/formats/json\tGet format") {
+		t.Fatalf("expected filtered enum completion, got:\n%s", got)
+	}
+	if strings.Contains(got, "demo/formats/yaml") {
+		t.Fatalf("unexpected non-matching enum completion:\n%s", got)
 	}
 }
 
@@ -276,4 +312,18 @@ paths:
       responses:
         "201":
           description: Created
+  /formats/{format}:
+    get:
+      operationId: getFormat
+      summary: Get format
+      parameters:
+        - name: format
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [json, cbor, yaml]
+      responses:
+        "200":
+          description: OK
 `

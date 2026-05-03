@@ -105,10 +105,14 @@ The completion resolver preserves the form the user started with:
 - full URLs complete as full URLs
 - scheme-less URLs complete without adding `https://`
 
-Path template variables are carried forward when the user has already typed a
-segment value. For example, `example/items/my-id` can complete to
-`example/items/my-id/tags/{tag-id}`. Candidate descriptions come from the
-operation summary when available, and otherwise fall back to `METHOD /path`.
+Path template variables are not inserted literally. Completion stops before an
+unfilled path variable, so `example/formats/` stays ready for the user to enter
+the value. When the path parameter has enum values, Restish offers those enum
+values as the next completions. Path template variables are still carried
+forward when the user has already typed a concrete segment value. For example,
+`example/items/my-id` can complete to `example/items/my-id/tags/`. Candidate
+descriptions come from the operation summary when available, and otherwise fall
+back to `METHOD /path`.
 
 URL completion follows the same profile, server-variable, and `operation_base`
 selection rules as generated operations. Hidden generated operations are not

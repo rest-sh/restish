@@ -87,8 +87,13 @@ Completion fills path segments you have already typed:
 restish example/items/docs-demo<TAB>
 ```
 
-can complete to operation paths under `items/docs-demo`, while leaving any
-remaining path variables visible.
+can complete to operation paths under `items/docs-demo`. Restish does not
+insert literal `{parameter}` placeholders into completed URLs. If the OpenAPI
+schema gives enum values for a path parameter, Restish offers those values:
+
+```bash
+restish example/formats/<TAB>
+```
 
 ## Refresh After Spec Changes
 
