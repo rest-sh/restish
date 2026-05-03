@@ -99,3 +99,50 @@ func TestPluginClientCorrelatesHTTPResponsesByRequestID(t *testing.T) {
 		t.Fatalf("request 1 got status %d, want 202", results[1].Status)
 	}
 }
+
+func TestPluginClientStdinForwardingPreservesBufferedPrefix(t *testing.T) {
+	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &bytes.Buffer{})
+	client.StdinDataHandler([]byte("before-"))
+	client.startStdinForwarding()
+
+	readDone := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(client.stdinReader)
+		readDone <- data
+	}()
+
+	client.StdinDataHandler([]byte("after"))
+	client.StdinCloseHandler()
+
+	select {
+	case got := <-readDone:
+		if string(got) != "before-after" {
+			t.Fatalf("stdin data = %q, want before-after", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stdin data")
+	}
+}
+
+func TestPluginClientStdinForwardingFlushesPrefixBeforeImmediateClose(t *testing.T) {
+	client := newPluginClient(plugin.NewDecoder(bytes.NewReader(nil)), &bytes.Buffer{})
+	client.StdinDataHandler([]byte("before"))
+	client.startStdinForwarding()
+
+	readDone := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(client.stdinReader)
+		readDone <- data
+	}()
+
+	client.StdinCloseHandler()
+
+	select {
+	case got := <-readDone:
+		if string(got) != "before" {
+			t.Fatalf("stdin data = %q, want before", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for stdin data")
+	}
+}

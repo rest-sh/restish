@@ -100,7 +100,7 @@ func TestCSVFormatterWarnsAndIgnoresLateColumns(t *testing.T) {
 	if got, want := out.String(), "id\n1\n2\n"; got != want {
 		t.Fatalf("output mismatch:\nwant:\n%s\ngot:\n%s", want, got)
 	}
-	if got := diag.String(); !strings.Contains(got, "ignoring fields not present in header: name") {
+	if got := diag.String(); !strings.Contains(got, "ignoring fields not present in header at row 2: name") {
 		t.Fatalf("expected schema drift warning, got %q", got)
 	}
 }

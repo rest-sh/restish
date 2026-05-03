@@ -82,6 +82,7 @@ type pluginClient struct {
 	stdinPipeW   *io.PipeWriter
 	stdinReader  io.Reader
 	stdinMu      sync.Mutex
+	stdinWriteMu sync.Mutex
 	pendingStdin bytes.Buffer
 	stdinClosed  bool
 	stdinForward bool
@@ -102,6 +103,8 @@ func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 			return
 		}
 		client.stdinMu.Unlock()
+		client.stdinWriteMu.Lock()
+		defer client.stdinWriteMu.Unlock()
 		_, _ = client.stdinPipeW.Write(data)
 	}
 	client.StdinCloseHandler = func() {
@@ -112,6 +115,8 @@ func newPluginClient(dec *plugin.Decoder, out io.Writer) *pluginClient {
 			return
 		}
 		client.stdinMu.Unlock()
+		client.stdinWriteMu.Lock()
+		defer client.stdinWriteMu.Unlock()
 		_ = client.stdinPipeW.Close()
 	}
 	return client
@@ -123,6 +128,7 @@ func (c *pluginClient) startStdinForwarding() {
 		c.stdinMu.Unlock()
 		return
 	}
+	c.stdinWriteMu.Lock()
 	c.stdinForward = true
 	pending := append([]byte(nil), c.pendingStdin.Bytes()...)
 	closed := c.stdinClosed
@@ -136,6 +142,7 @@ func (c *pluginClient) startStdinForwarding() {
 		if closed {
 			_ = c.stdinPipeW.Close()
 		}
+		c.stdinWriteMu.Unlock()
 	}()
 }
 

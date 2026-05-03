@@ -71,6 +71,7 @@ type csvFormatter struct {
 	headers      []string
 	index        map[string]struct{}
 	warnedExtras map[string]struct{}
+	rowNumber    int
 }
 
 func newCSVFormatter(w io.Writer) *csvFormatter {
@@ -132,7 +133,8 @@ func (f *csvFormatter) writeValue(value any) error {
 	}
 
 	for i, row := range rows {
-		f.warnExtraColumns(row)
+		f.rowNumber++
+		f.warnExtraColumns(row, f.rowNumber)
 		record := make([]string, len(f.headers))
 		for j, header := range f.headers {
 			record[j] = csvCell(row[header])
@@ -148,7 +150,7 @@ func (f *csvFormatter) writeValue(value any) error {
 	return nil
 }
 
-func (f *csvFormatter) warnExtraColumns(row map[string]any) {
+func (f *csvFormatter) warnExtraColumns(row map[string]any, rowNumber int) {
 	var extra []string
 	for key := range row {
 		if _, ok := f.index[key]; !ok {
@@ -173,7 +175,7 @@ func (f *csvFormatter) warnExtraColumns(row map[string]any) {
 	if len(unseen) == 0 || f.diagnostics == nil {
 		return
 	}
-	fmt.Fprintf(f.diagnostics, "warning: csv formatter ignoring fields not present in header: %s\n", strings.Join(unseen, ", "))
+	fmt.Fprintf(f.diagnostics, "warning: csv formatter ignoring fields not present in header at row %d: %s\n", rowNumber, strings.Join(unseen, ", "))
 }
 
 func csvRows(value any) ([]map[string]any, error) {
