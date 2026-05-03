@@ -184,6 +184,11 @@ Parameter serialization follows a narrow OpenAPI-compatible subset:
 - object parameters and unsupported array styles fail the tool call with a
   clear MCP error instead of sending Go debug strings such as `[a b]`
 
+MCP uses the same internal OpenAPI parameter serializer as generated CLI
+commands after it validates the JSON tool argument shape. This keeps percent
+encoding, style defaults, and explode handling from drifting between the human
+CLI and model-facing tool surfaces.
+
 Host-resolved operations should carry parameter location, type, item type,
 style, explode, and allow-reserved metadata so the MCP plugin does not need to
 re-parse raw OpenAPI documents when Restish has already resolved the operation.

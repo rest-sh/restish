@@ -170,6 +170,12 @@ as `$select`, `$filter`, `X-Stripe-Account`, and dotted vendor fields.
 Restish serializes parameters according to OpenAPI `style`, `explode`,
 `allowReserved`, and parameter `content` where practical.
 
+Generated CLI commands and MCP tool requests share one implementation for
+location/style/explode serialization of non-`content` parameters. Callers may
+still perform surface-specific validation first: generated commands parse CLI
+strings and shorthand object values, while MCP accepts JSON tool arguments and
+rejects unsupported object shapes or array styles with an MCP error.
+
 Supported query parameter styles:
 
 - `form` with `explode: true` or `false` for scalars, arrays, and objects;

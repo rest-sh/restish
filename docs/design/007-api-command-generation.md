@@ -199,6 +199,12 @@ Generated commands honor OpenAPI parameter serialization rules where practical:
 - cookie `form`;
 - JSON parameter `content`.
 
+The generated CLI and `restish-mcp` must share the same location/style/explode
+serializer for non-`content` parameters. Generated commands still own CLI input
+parsing, shorthand object parsing, and JSON parameter `content` handling, while
+MCP still owns model-facing value validation and may reject shapes outside its
+supported subset before calling the shared serializer.
+
 Query values are encoded byte-by-byte with RFC 3986 percent encoding. When
 `allowReserved` is true, literal OpenAPI reserved characters may remain
 unescaped, except `+` is still encoded as `%2B` so it cannot be confused with a
