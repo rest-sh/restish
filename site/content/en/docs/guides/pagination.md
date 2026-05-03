@@ -47,6 +47,9 @@ restish https://api.rest.sh/images --rsh-max-pages 3
 `--rsh-max-items` bounds the total logical items Restish processes.
 If a later page returns an HTTP error, Restish stops and returns that status
 instead of formatting a partial collection as if it were complete.
+Configured `pagination.items_path` and `pagination.next_path` are strict: a
+typo, missing configured field, wrong body type, or non-string `next_path`
+result returns an error instead of silently truncating the collection.
 
 ## Collect Before Filtering
 

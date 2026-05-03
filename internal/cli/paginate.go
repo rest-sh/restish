@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -31,7 +32,10 @@ func (c *CLI) tryPaginate(
 	}
 
 	c.ensureBodyLinks(firstResp)
-	nextURL := resolveNextURL(firstResp, pagCfg)
+	nextURL, err := resolveNextURL(firstResp, pagCfg)
+	if err != nil {
+		return false, err
+	}
 	if nextURL == "" {
 		return false, nil
 	}
@@ -88,6 +92,9 @@ func (c *CLI) runPagination(
 	// Process first page.
 	items, filterErr := pageItems(firstResp.Body, pagCfg)
 	if filterErr != nil {
+		if isFatalPaginationItemsPathError(filterErr) {
+			return filterErr
+		}
 		c.warnf("pagination items_path: %v", filterErr)
 	}
 	if collect || !streamItems {
@@ -149,6 +156,9 @@ func (c *CLI) runPagination(
 
 		items, filterErr = pageItems(resp.Body, pagCfg)
 		if filterErr != nil {
+			if isFatalPaginationItemsPathError(filterErr) {
+				return filterErr
+			}
 			c.warnf("pagination items_path: %v", filterErr)
 		}
 		existingCount := len(allItems)
@@ -165,7 +175,10 @@ func (c *CLI) runPagination(
 			streamedCount += len(items)
 		}
 		c.ensureBodyLinks(resp)
-		nextURL = resolveNextURL(resp, pagCfg)
+		nextURL, err = resolveNextURL(resp, pagCfg)
+		if err != nil {
+			return err
+		}
 	}
 
 	if done && maxItems > 0 {
@@ -248,6 +261,24 @@ func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {
 		return maxItems
 	}
 	return capacity
+}
+
+type paginationItemsPathError struct {
+	err   error
+	fatal bool
+}
+
+func (e paginationItemsPathError) Error() string {
+	return e.err.Error()
+}
+
+func (e paginationItemsPathError) Unwrap() error {
+	return e.err
+}
+
+func isFatalPaginationItemsPathError(err error) bool {
+	var pathErr paginationItemsPathError
+	return err != nil && errors.As(err, &pathErr) && pathErr.fatal
 }
 
 func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {
@@ -493,19 +524,19 @@ func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 	if pagCfg != nil && pagCfg.ItemsPath != "" {
 		m, ok := body.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("pagination: items_path %q requires an object response body", pagCfg.ItemsPath)
+			return nil, paginationItemsPathError{err: fmt.Errorf("pagination: items_path %q requires an object response body", pagCfg.ItemsPath), fatal: true}
 		}
 		result, err := filter.Apply(pagCfg.ItemsPath, m, filter.LangAuto)
 		if err != nil {
-			return nil, fmt.Errorf("pagination: items_path filter %q: %w", pagCfg.ItemsPath, err)
+			return nil, paginationItemsPathError{err: fmt.Errorf("pagination: items_path filter %q: %w", pagCfg.ItemsPath, err), fatal: true}
 		}
 		switch items := result.(type) {
 		case nil:
-			return nil, fmt.Errorf("pagination: items_path %q returned no items", pagCfg.ItemsPath)
+			return nil, paginationItemsPathError{err: fmt.Errorf("pagination: items_path %q returned no items", pagCfg.ItemsPath), fatal: true}
 		case []any:
 			return items, nil
 		default:
-			return []any{items}, fmt.Errorf("pagination: items_path %q returned %T instead of an array", pagCfg.ItemsPath, result)
+			return []any{items}, paginationItemsPathError{err: fmt.Errorf("pagination: items_path %q returned %T instead of an array", pagCfg.ItemsPath, result), fatal: false}
 		}
 	}
 	if arr, ok := body.([]any); ok {
@@ -518,25 +549,35 @@ func pageItems(body any, pagCfg *config.PaginationConfig) ([]any, error) {
 }
 
 // resolveNextURL returns the next-page URL from resp.Links or pagCfg.NextPath.
-func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) string {
+func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig) (string, error) {
 	// 1. Standard link relation "next".
 	if resp.Links != nil {
 		if next, ok := resp.Links["next"].(string); ok && next != "" {
-			return next
+			return next, nil
 		}
 	}
 	// 2. Per-API next_path override (extracts URL directly from body).
 	if pagCfg != nil && pagCfg.NextPath != "" {
-		if m, ok := resp.Body.(map[string]any); ok {
-			result, err := filter.Apply(pagCfg.NextPath, m, filter.LangAuto)
-			if err == nil {
-				if s, ok := result.(string); ok && s != "" {
-					return s
-				}
-			}
+		m, ok := resp.Body.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("pagination: next_path %q requires an object response body", pagCfg.NextPath)
+		}
+		result, err := filter.Apply(pagCfg.NextPath, m, filter.LangAuto)
+		if err != nil {
+			return "", fmt.Errorf("pagination: next_path filter %q: %w", pagCfg.NextPath, err)
+		}
+		if result == nil {
+			return "", fmt.Errorf("pagination: next_path %q returned no URL", pagCfg.NextPath)
+		}
+		s, ok := result.(string)
+		if !ok {
+			return "", fmt.Errorf("pagination: next_path %q returned %T instead of a string", pagCfg.NextPath, result)
+		}
+		if s != "" {
+			return s, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // applyItemLimits truncates items to stay within maxItems. Returns the

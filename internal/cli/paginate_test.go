@@ -539,6 +539,68 @@ func TestPaginationItemsPathScalarWarns(t *testing.T) {
 	}
 }
 
+func TestPaginationItemsPathNonObjectFails(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"items_path": "data"},
+			},
+		},
+	})
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := os.WriteFile(c.Hooks().ConfigPath, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+			"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[1,2,3]`)),
+			Request:    r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "get", "myapi/items"})
+	if err == nil || !strings.Contains(err.Error(), "items_path") {
+		t.Fatalf("expected items_path error, got %v", err)
+	}
+}
+
+func TestPaginationNextPathNonStringFails(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"items_path": "data", "next_path": "next"},
+			},
+		},
+	})
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := os.WriteFile(c.Hooks().ConfigPath, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":[1],"next":42}`)),
+			Request:    r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "get", "myapi/items"})
+	if err == nil || !strings.Contains(err.Error(), "next_path") {
+		t.Fatalf("expected next_path error, got %v", err)
+	}
+}
+
 // TestPaginationItemsPath verifies that per-API items_path extracts items from
 // a nested field.
 func TestPaginationItemsPath(t *testing.T) {

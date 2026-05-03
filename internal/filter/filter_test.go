@@ -57,6 +57,16 @@ func TestAutoDetect_JQBuiltin(t *testing.T) {
 	}
 }
 
+func TestAutoDetectTreatsAmbiguousRuntimeJQAsShorthand(t *testing.T) {
+	result, err := filter.Apply("body.items[0].id", testDoc(), filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != float64(1) {
+		t.Fatalf("got %v, want 1", result)
+	}
+}
+
 func TestAutoDetectFallsBackToShorthandWhenJQCannotParse(t *testing.T) {
 	doc := testDoc()
 	doc["body"].(map[string]any)["example"] = map[string]any{"url": "https://github.com/rest-sh/restish"}
@@ -80,6 +90,29 @@ func TestAutoDetectReturnsJQAndShorthandErrorsWhenBothFail(t *testing.T) {
 	}
 	if !strings.Contains(msg, "shorthand:") {
 		t.Fatalf("expected shorthand error, got %q", msg)
+	}
+}
+
+func TestHeaderFieldMissingFallsBackToFilterBackend(t *testing.T) {
+	result, err := filter.Apply("headers.Missing", testDoc(), filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("missing header = %#v, want nil", result)
+	}
+}
+
+func TestHeaderFieldReadsMultiValueHeaderMap(t *testing.T) {
+	doc := map[string]any{
+		"headers": map[string][]string{"Set-Cookie": {"a=1", "b=2"}},
+	}
+	result, err := filter.Apply("headers.set-cookie", doc, filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "a=1,b=2" {
+		t.Fatalf("header = %#v, want joined values", result)
 	}
 }
 

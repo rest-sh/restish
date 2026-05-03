@@ -120,6 +120,12 @@ Per-API pagination config can refine how page data is interpreted:
 
 This lets Restish handle both standard hypermedia and APIs whose collection
 wrappers need one extra hint.
+Configured pagination paths are treated as user-authored config, not as
+best-effort guesses. Invalid `items_path` or `next_path` expressions, missing
+configured fields, non-object bodies where an object is required, and
+non-string `next_path` results fail the request instead of silently returning a
+partial collection. A scalar `items_path` result is still rendered as a single
+item with a warning so users can correct the shape without losing the response.
 If a later page returns an HTTP error, Restish stops pagination and returns that
 status instead of discarding the error and formatting a partial collection.
 

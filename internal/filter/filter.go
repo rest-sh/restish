@@ -24,11 +24,6 @@ const (
 	LangJQ
 )
 
-// shorthandRoots are the field names recognised by the auto-detector as
-// shorthand expressions. Any expression starting with one of these is sent
-// to shorthand; everything else goes to jq.
-var shorthandRoots = []string{"body", "headers", "links", "status", "proto", "@"}
-
 // jqCacheMaxSize caps the number of compiled jq programs kept in the global
 // cache so long-running embedders don't grow unboundedly.
 const jqCacheMaxSize = 1024
@@ -91,8 +86,14 @@ func headerField(expr string, doc map[string]any) (any, bool) {
 				return value, true
 			}
 		}
+	case map[string][]string:
+		for key, values := range headers {
+			if strings.EqualFold(key, name) {
+				return strings.Join(values, ","), true
+			}
+		}
 	}
-	return nil, true
+	return nil, false
 }
 
 // resolve returns the effective language for expr.
@@ -100,12 +101,31 @@ func resolve(expr string, lang Lang) Lang {
 	if lang != LangAuto {
 		return lang
 	}
-	for _, root := range shorthandRoots {
-		if expr == root || strings.HasPrefix(expr, root+".") || strings.HasPrefix(expr, root+"[") {
-			return LangShorthand
+	trimmed := strings.TrimSpace(expr)
+	if looksLikeJQ(trimmed) {
+		return LangJQ
+	}
+	return LangShorthand
+}
+
+func looksLikeJQ(expr string) bool {
+	if expr == "" {
+		return false
+	}
+	switch expr[0] {
+	case '.', '{', '[':
+		return true
+	}
+	jqStarts := []string{
+		"length", "keys", "has(", "map(", "select(", "if ", "try ", "reduce ", "foreach ",
+		"true", "false", "null",
+	}
+	for _, start := range jqStarts {
+		if expr == start || strings.HasPrefix(expr, start) {
+			return true
 		}
 	}
-	return LangJQ
+	return false
 }
 
 func applyShorthand(expr string, doc map[string]any) (any, error) {
