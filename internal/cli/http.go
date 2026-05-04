@@ -92,6 +92,10 @@ func (c *CLI) runHTTP(cmd *cobra.Command, method string, args []string) error {
 	return c.runHTTPWithOptions(cmd, method, args, false, nil, false, "", "", requestBodyOptions{})
 }
 
+func (c *CLI) runInferredHTTP(cmd *cobra.Command, args []string) error {
+	return c.runHTTPWithOptions(cmd, "", args, false, nil, false, "", "", requestBodyOptions{})
+}
+
 type requestBodyOptions struct {
 	schemaTypes               map[string]string
 	multipartPartContentTypes map[string]string
@@ -159,6 +163,12 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	inputSource := traceInputSource(bodyInfo, bodyVal != nil)
 	if bodyVal != nil {
 		trace.Step(inputSource)
+	}
+	if method == "" {
+		method = "GET"
+		if bodyVal != nil {
+			method = "POST"
+		}
 	}
 
 	prepared, err := c.prepareRequest(requestContext(cmd), rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)

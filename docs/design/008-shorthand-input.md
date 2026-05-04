@@ -49,6 +49,11 @@ Request body construction follows this decision order:
 4. stdin plus shorthand args -> parse stdin as the base body, then apply the
    shorthand patch
 
+For generic bare-target invocations such as `restish https://api.example.com`
+or `restish my-api`, this body decision also controls method inference: no body
+sends `GET`, while a body from shorthand or stdin sends `POST`. Explicit verb
+commands and generated OpenAPI commands keep their resolved method.
+
 This patching behavior is one of the defining Restish workflows. It lets users
 generate or fetch a document elsewhere, then refine it at the command line
 without rebuilding it from scratch.

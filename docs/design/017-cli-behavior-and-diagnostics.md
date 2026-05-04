@@ -25,14 +25,16 @@ The root command resolves in this order:
 1. built-in commands
 2. generated API command groups
 3. plugin-contributed commands
-4. bare-URL or bare-API GET convenience behavior where applicable
+4. bare-URL or bare-API generic request convenience behavior where applicable
 
 Built-ins must win over generated or plugin names. An API named `cache` should
 not accidentally shadow `restish cache`.
 
-Bare-target GET is a convenience, not a replacement for command parsing. It
-must not bypass the normal subcommand tree in cases where the input is actually
-meant to be a built-in command.
+Bare-target generic requests are a convenience, not a replacement for command
+parsing. They must not bypass the normal subcommand tree in cases where the
+input is actually meant to be a built-in command. When no explicit verb is
+present, the request pipeline infers `GET` if no body is supplied and `POST` if
+shorthand arguments or stdin supply a body.
 
 Resolution should be based on token classification, not vague best effort. A
 practical command planner should:
@@ -43,7 +45,7 @@ practical command planner should:
 4. otherwise attempt generated API command-group resolution
 5. otherwise attempt plugin command resolution
 6. otherwise, if the token is a URL or configured API alias target, interpret it
-   as the convenience GET form
+   as the convenience generic request form
 7. otherwise emit a normal unknown-command or usage error
 
 This ordering ensures user intent is explainable and stable.

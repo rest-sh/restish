@@ -2,7 +2,7 @@
 title: Generic HTTP Commands
 linkTitle: HTTP Commands
 weight: 11
-description: Reference for Restish generic HTTP verbs and the bare-URL GET shortcut.
+description: Reference for Restish generic HTTP verbs and bare-URL method inference.
 ---
 
 Generic HTTP commands work without API registration. They still use Restish
@@ -11,7 +11,7 @@ profiles, auth, TLS, retries, cache, filtering, pagination, and output.
 ## Usage
 
 ```bash
-restish [flags] <url>
+restish [flags] <url> [shorthand ...]
 restish get [flags] <url>
 restish post [flags] <url> [shorthand ...]
 restish put [flags] <url> [shorthand ...]
@@ -25,6 +25,7 @@ restish options [flags] <url>
 
 ```bash
 restish https://api.rest.sh/get
+restish https://api.rest.sh/post 'name: Alice, enabled: true'
 restish post https://api.rest.sh/post 'name: Alice, enabled: true'
 restish put https://api.rest.sh/put name: Alice
 restish patch https://api.rest.sh/patch enabled: false
@@ -32,6 +33,16 @@ restish delete https://api.rest.sh/delete --rsh-ignore-status-code
 restish head https://api.rest.sh/head
 restish options https://api.rest.sh/options
 ```
+
+## Inferred Method
+
+When you omit the verb, Restish chooses the method from the request body:
+
+- no shorthand arguments and no stdin body sends `GET`
+- shorthand arguments or stdin body input sends `POST`
+
+Use an explicit verb when the method itself matters, such as `get` for the rare
+API that expects a `GET` body or `patch` for partial updates.
 
 For CRUD examples with a path resource, use `/items/{item-id}`:
 

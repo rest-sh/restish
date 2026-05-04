@@ -104,7 +104,8 @@ func TestHTTPVerbUppercaseAlias(t *testing.T) {
 	}
 }
 
-// TestBareURL verifies that a URL without an explicit verb is treated as GET.
+// TestBareURL verifies that a URL without an explicit verb and without a body
+// is treated as GET.
 func TestBareURL(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)
@@ -117,6 +118,72 @@ func TestBareURL(t *testing.T) {
 	}
 	if got := rr.Last().Method; got != "GET" {
 		t.Errorf("expected GET for bare URL, got %q", got)
+	}
+}
+
+func TestBareURLWithShorthandInfersPOST(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "https://api.example.com/items", "name:", "Alice"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := rr.Last()
+	if got := req.Method; got != "POST" {
+		t.Fatalf("method = %q, want POST", got)
+	}
+	if got := req.Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.body, &body); err != nil {
+		t.Fatalf("body is not valid JSON: %v — body: %s", err, rr.body)
+	}
+	if body["name"] != "Alice" {
+		t.Fatalf("body[name] = %#v, want Alice", body["name"])
+	}
+}
+
+func TestBareURLWithStdinInfersPOST(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	c.Stdin = strings.NewReader(`{"from":"stdin"}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := rr.Last().Method; got != "POST" {
+		t.Fatalf("method = %q, want POST", got)
+	}
+	if !bytes.Contains(rr.body, []byte(`"from":"stdin"`)) {
+		t.Fatalf("body = %s, want stdin JSON", rr.body)
+	}
+}
+
+func TestExplicitGETWithShorthandKeepsGET(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "q:", "widgets"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := rr.Last().Method; got != "GET" {
+		t.Fatalf("method = %q, want GET", got)
+	}
+	if !bytes.Contains(rr.body, []byte(`"q":"widgets"`)) {
+		t.Fatalf("body = %s, want shorthand JSON", rr.body)
 	}
 }
 
@@ -153,6 +220,28 @@ func TestAPIShortNameAcceptsQueryAndFragmentSuffix(t *testing.T) {
 				t.Fatalf("URL = path:%q query:%q fragment:%q, want path:%q query:%q fragment:%q", got.Path, got.RawQuery, got.Fragment, tc.path, tc.raw, tc.frag)
 			}
 		})
+	}
+}
+
+func TestAPIShortNameWithShorthandInfersPOST(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"svc":{"base_url":"https://api.example.com/items"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "svc", "name:", "Alice"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if got := rr.Last().Method; got != "POST" {
+		t.Fatalf("method = %q, want POST", got)
+	}
+	if !bytes.Contains(rr.body, []byte(`"name":"Alice"`)) {
+		t.Fatalf("body = %s, want shorthand JSON", rr.body)
 	}
 }
 

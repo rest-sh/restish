@@ -122,12 +122,14 @@ Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
 `--all-profiles` applies only to API-scoped cache clearing.
 
 Generated API commands are registered under API short names when cached spec
-metadata is available. Short-name GET fallback commands are registered for APIs
-without generated command groups. Plugin commands are top-level commands but
-must not collide with built-ins, generated APIs, configured API names, or other
-plugin commands.
+metadata is available. Short-name generic fallback commands are registered for
+APIs without generated command groups. Plugin commands are top-level commands
+but must not collide with built-ins, generated APIs, configured API names, or
+other plugin commands.
 
-Bare URLs and registered API short names at root are treated as GET requests.
+Bare URLs and registered API short names at root infer the generic request
+method from body presence: no body sends `GET`; shorthand or stdin body input
+sends `POST`.
 Generated command startup uses a fast path that skips value-taking global flags
 but does not consume bool/count flags such as `-v` or `--rsh-insecure`.
 

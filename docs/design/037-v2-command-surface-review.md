@@ -330,7 +330,8 @@ Important v1-to-v2 command moves:
 
 The request path is intentionally stable:
 
-- bare URLs still perform GET
+- bare URLs without body input still perform GET
+- bare URLs with shorthand or stdin body input infer POST
 - HTTP verb commands remain at the root
 - generated API commands remain at the root under the API name
 - Restish-owned flags retain the `--rsh-*` namespace

@@ -11,7 +11,7 @@ single task, use recipes.
 ## Command And Flag Reference
 
 - [Commands](./commands/) maps the top-level command surface.
-- [HTTP Commands](./http-commands/) covers generic verbs and bare URL GET.
+- [HTTP Commands](./http-commands/) covers generic verbs and bare URL method inference.
 - [Global Flags](./global-flags/) lists shared request, output, auth, TLS, pagination, cache, retry, and config flags.
 - [API Management](./api-management/) covers `restish api ...`.
 - [API Auth Inspect](./api auth inspect-command/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.

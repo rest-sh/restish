@@ -61,11 +61,12 @@ commands for registered APIs via OpenAPI 3.`
 			if len(args) == 0 {
 				return cmd.Help()
 			}
-			// A bare URL (no explicit verb) is treated as GET.
+			// A bare URL (no explicit verb) infers the HTTP method from input:
+			// GET without a body, POST when shorthand or stdin supplies a body.
 			// Anything containing . : or / is likely a URL; a word matching a
-			// registered API name is also routed as a GET request.
+			// registered API name is also routed as an inferred generic request.
 			if strings.ContainsAny(args[0], ".:/") || c.isAPIShortName(args[0]) {
-				return c.runHTTP(cmd, "GET", args)
+				return c.runInferredHTTP(cmd, args)
 			}
 			return fmt.Errorf("unknown command %q for %q; run %q to see available commands or use a full URL", args[0], cmd.Name(), cmd.CommandPath()+" --help")
 		},

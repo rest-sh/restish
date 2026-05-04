@@ -723,9 +723,9 @@ func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
 			continue
 		}
 		apiName := apiName
-		short := "GET requests using the registered API base URL"
+		short := "Generic requests using the registered API base URL"
 		if apiCfg.BaseURL != "" {
-			short = fmt.Sprintf("GET requests using %s", apiCfg.BaseURL)
+			short = fmt.Sprintf("Generic requests using %s", apiCfg.BaseURL)
 		}
 		root.AddCommand(&cobra.Command{
 			Use:     apiName,
@@ -733,7 +733,7 @@ func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
 			GroupID: rootGroupAPI,
 			Args:    cobra.ArbitraryArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return c.runHTTP(cmd, "GET", append([]string{apiName}, args...))
+				return c.runInferredHTTP(cmd, append([]string{apiName}, args...))
 			},
 		})
 	}

@@ -20,7 +20,8 @@ restish head https://api.rest.sh/head
 restish options https://api.rest.sh/options
 ```
 
-A bare URL is a generic GET.
+A bare URL without a body is a generic `GET`. A bare URL with shorthand or stdin
+body input is a generic `POST`.
 
 ## Configuration And Setup
 

@@ -166,6 +166,9 @@
     } else if (looksLikeURL(args[0])) {
       url = args[0];
       bodyArgs = args.slice(1);
+      if (bodyArgs.length) {
+        method = "POST";
+      }
     } else if (args[0] === "example") {
       const mapped = mapExampleCommand(args.slice(1));
       method = mapped.method;

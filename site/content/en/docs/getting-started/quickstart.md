@@ -46,7 +46,7 @@ and renders it.
 
 ## 2. Spell Out The Verb
 
-A bare URL is a `GET` request:
+A bare URL without a body is a `GET` request:
 
 ```bash
 restish https://api.rest.sh/
@@ -74,10 +74,10 @@ The response includes the `X-Demo` header alongside Restish defaults such as
 ## 4. Send A Small Body
 
 For JSON APIs, Restish shorthand is the quickest way to build a structured
-body:
+body. A bare URL with body input sends `POST`:
 
 {{< restish-example >}}
-restish post https://api.rest.sh/post 'name: Alice, active: true'
+restish https://api.rest.sh/post 'name: Alice, active: true'
 {{< /restish-example >}}
 
 The `/post` fixture echoes the parsed body so you can confirm what was sent.

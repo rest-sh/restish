@@ -15,11 +15,12 @@ restish https://api.rest.sh/get
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish post https://api.rest.sh/post 'name: Alice, enabled: true'
+restish https://api.rest.sh/post 'name: Alice, enabled: true'
 {{< /restish-example >}}
 
 Use generic requests when you are exploring, debugging, or calling an endpoint
-that has no useful spec.
+that has no useful spec. A bare target sends `GET` when there is no body and
+`POST` when shorthand arguments or stdin provide a body.
 
 ## Add Headers And Query Params
 
@@ -45,7 +46,7 @@ restish 'https://api.rest.sh/anything/search?search=dragonfly&active=true'
 For small structured bodies, use shorthand:
 
 {{< restish-example >}}
-restish post https://api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
+restish https://api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
 {{< /restish-example >}}
 
 {{< restish-example >}}
@@ -55,13 +56,13 @@ restish -c form post https://api.rest.sh/post 'username: alice, password: secret
 For generated or larger bodies, pipe stdin:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post
+echo '{"name":"Alice","role":"user"}' | restish https://api.rest.sh/post
 ```
 
 Piped structured input can be patched by shorthand arguments:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post role: admin
+echo '{"name":"Alice","role":"user"}' | restish https://api.rest.sh/post role: admin
 ```
 
 ## Use API-Aware Commands

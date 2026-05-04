@@ -52,7 +52,7 @@ By the time the request pipeline begins, Restish has already resolved whether
 the invocation came from:
 
 - a built-in command such as `get` or `post`
-- a bare URL shorthand
+- a bare URL shorthand that may infer its method from body presence
 - a generated API command
 - a workflow command such as `edit`
 - a command plugin asking the host to execute a request
@@ -82,6 +82,12 @@ Planning produces a typed request plan that should contain at least:
 - pagination options
 - caching/retry/timeout options
 - execution mode hints such as "stream expected" or "edit workflow"
+
+Generic bare-target requests may enter planning with no explicit method. After
+body construction, Restish resolves that placeholder to `GET` when the body is
+absent and `POST` when shorthand arguments or stdin produced a body. Explicit
+HTTP verb commands, generated OpenAPI operations, workflow commands, and plugin
+follow-up requests do not use this inference.
 
 For generated commands, planning also resolves OpenAPI-specific inputs into the
 same request-plan fields used by generic commands:
