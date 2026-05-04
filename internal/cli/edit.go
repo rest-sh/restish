@@ -155,6 +155,12 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	normalizedEditedText, err := marshalEditValue(editFormat, editedValue)
+	if err != nil {
+		return fmt.Errorf("edit: marshal edited value: %w", err)
+	}
+	editedText = normalizedEditedText
+
 	if bytes.Equal(originalText, editedText) {
 		fmt.Fprintln(c.Stderr, "No changes made.")
 		return nil

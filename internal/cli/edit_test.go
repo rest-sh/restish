@@ -87,6 +87,41 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	}
 }
 
+func TestEditCommandIgnoresEditorFormattingOnlyChanges(t *testing.T) {
+	installFakeEditor(t, "{\"name\":\"before\"}\n")
+
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			t.Fatalf("did not expect PUT for formatting-only editor save")
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := strings.Join(methods, ","); got != http.MethodGet {
+		t.Fatalf("methods = %q, want GET", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("expected no diff or response on stdout, got %q", out.String())
+	}
+	if got := errOut.String(); !strings.Contains(got, "No changes made.") {
+		t.Fatalf("expected no-changes message, got %q", got)
+	}
+}
+
 func TestEditCommandYAMLEditKeepsOriginalJSONWireType(t *testing.T) {
 	captured := installFakeEditor(t, "name: after\n")
 

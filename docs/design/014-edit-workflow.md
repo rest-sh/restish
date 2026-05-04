@@ -105,6 +105,11 @@ exact JSON or YAML document that editor mode would have opened.
 After the edited value is produced, Restish should compute a diff between the
 original logical value and the edited logical value.
 
+Restish should compare normalized formatted representations of those values,
+not the raw temporary editor file bytes. This preserves the review step for
+real data changes while ignoring editor-only formatting changes such as
+compact JSON, indentation changes, or trailing newline adjustments.
+
 The diff exists for two reasons:
 
 - it gives the user a clear review step

@@ -28,6 +28,9 @@ reviewed the change and want to skip confirmation.
 
 ## Notes
 
+Restish compares the normalized resource value after parsing the edited file.
+Editor-only formatting changes do not produce a diff and do not send an update.
+
 The edit workflow depends on the API supporting a writable representation of the
 resource. Start with a safe or resettable endpoint while learning. The
 [Edit Workflow guide](/docs/guides/edit-workflow/) covers editor selection,
