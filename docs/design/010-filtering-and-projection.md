@@ -62,10 +62,11 @@ The default filter mode is `auto`.
 In auto mode:
 
 - try both shorthand and jq
+- treat jq's current-input field form such as `.links.next` or `.body.id` as
+  jq intent even when shorthand parsing also succeeds
 - if only one language succeeds, use that result
 - if both languages succeed, choose by intent markers: bare normalized-response
-  roots such as `links.next` and `body.id` mean shorthand, while jq's current
-  input marker such as `.links.next` or `.body.id` means jq
+  roots such as `links.next` and `body.id` mean shorthand
 - keep recursive descent distinct: `..url` is shorthand, while `.. | .url?` is
   jq
 - if both languages fail, use the same intent markers to put the most likely

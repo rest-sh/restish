@@ -132,6 +132,13 @@ func applyAuto(expr string, doc map[string]any) (Result, error) {
 	shorthandResult, shorthandErr := applyShorthand(expr, doc)
 	jqResult, jqErr := applyJQ(expr, doc)
 
+	if startsWithJQField(expr) {
+		if jqErr != nil {
+			return Result{Lang: LangJQ}, jqErr
+		}
+		return Result{Value: jqResult, Lang: LangJQ}, nil
+	}
+
 	switch {
 	case shorthandErr == nil && jqErr != nil:
 		return Result{Value: shorthandResult, Lang: LangShorthand}, nil
@@ -194,6 +201,15 @@ func preferredLang(expr string) Lang {
 		return LangJQ
 	}
 	return LangShorthand
+}
+
+func startsWithJQField(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	if !strings.HasPrefix(expr, ".") || strings.HasPrefix(expr, "..") {
+		return false
+	}
+	r, _ := utf8DecodeRuneInString(expr[1:])
+	return isIdentStart(r)
 }
 
 func recursiveDescentShorthand(expr string) bool {

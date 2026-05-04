@@ -71,12 +71,13 @@ restish https://api.rest.sh/images --rsh-filter-lang shorthand -f '{next: links.
 restish https://api.rest.sh/images --rsh-filter-lang jq -f '{next: .links.next}'
 ```
 
-In the default `auto` mode, Restish tries both shorthand and jq. If both
-languages can parse the filter, bare normalized-response roots such as
-`links.next` mean shorthand and jq's current-input root such as `.links.next`
-means jq. Recursive descent follows the same rule: `..url` is shorthand, while
-`.. | .url?` is jq. When both languages fail, Restish reports the likely parser
-first and still includes the other parser's error.
+In the default `auto` mode, Restish tries both shorthand and jq. Bare
+normalized-response roots such as `links.next` mean shorthand. A leading jq
+current-input field such as `.links.next` or `.body[0].self` means jq, even
+when shorthand would also accept the expression. Recursive descent stays
+distinct: `..url` is shorthand, while `.. | .url?` is jq. When both languages
+fail, Restish reports the likely parser first and still includes the other
+parser's error.
 
 ## Pagination And Collecting
 

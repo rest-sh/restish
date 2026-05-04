@@ -53,6 +53,20 @@ func TestAutoDetect_JQDot(t *testing.T) {
 	}
 }
 
+func TestAutoDetect_JQDotFieldDoesNotFallBackToShorthand(t *testing.T) {
+	_, err := filter.Apply(".body.items[].{id}", testDoc(), filter.LangAuto)
+	if err == nil {
+		t.Fatal("expected jq parse error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "jq parse:") {
+		t.Fatalf("expected jq parse error, got %q", msg)
+	}
+	if strings.Contains(msg, "shorthand:") {
+		t.Fatalf("expected leading dot field to be treated as jq only, got %q", msg)
+	}
+}
+
 func TestAutoDetect_JQBuiltin(t *testing.T) {
 	// "length" has no shorthand root → jq
 	_, err := filter.Apply("length", testDoc(), filter.LangAuto)

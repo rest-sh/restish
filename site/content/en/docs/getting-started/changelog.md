@@ -57,8 +57,9 @@ start at [Upgrade From v1](../upgrade-from-v1/).
 - **`--rsh-raw` / `-r`** — raw response body bytes after transport decoding.
 - **`lines` output** — `-o lines` prints filtered scalar values one value per
   line for shell loops.
-- **jq filter support** — filter expressions not starting with a shorthand root
-  are passed to jq automatically.
+- **jq filter support** — filters can use jq syntax, and expressions beginning
+  with jq's current-input field form such as `.body` are treated as jq
+  automatically.
 
 ### Plugins
 

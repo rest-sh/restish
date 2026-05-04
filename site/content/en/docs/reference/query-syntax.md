@@ -50,10 +50,10 @@ restish https://api.rest.sh/example -f '.. | .url?'
 
 ## Auto-Detection
 
-In `auto` mode, Restish tries both shorthand and jq. If both languages can parse
-the expression, bare normalized-response roots such as `links.next` and
-`body[0].self` select shorthand. jq expressions use jq's current-input root,
-such as `.links.next` and `.body[0].self`.
+In `auto` mode, Restish tries both shorthand and jq. Bare normalized-response
+roots such as `links.next` and `body[0].self` select shorthand. jq expressions
+use jq's current-input root, such as `.links.next` and `.body[0].self`; a
+leading `.field` is treated as jq even when shorthand would also accept it.
 
 Recursive descent keeps the same distinction:
 
