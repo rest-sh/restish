@@ -391,6 +391,211 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	}
 }
 
+func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
+	var got []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/basic", func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BasicAuth": {"type": "http", "scheme": "basic"}
+    }
+  },
+  "paths": {
+    "/auth/basic": {
+      "get": {
+        "operationId": "getAuthBasic",
+        "security": [{"BasicAuth": []}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"BasicAuth": {
+								Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", baseURL + "/auth/basic"}); err != nil {
+		t.Fatalf("full URL request failed: %v", err)
+	}
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", strings.TrimPrefix(baseURL, "http://") + "/auth/basic"}); err != nil {
+		t.Fatalf("scheme-less URL request failed: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("requests = %d, want 2", len(got))
+	}
+	for i, auth := range got {
+		if !strings.HasPrefix(auth, "Basic ") {
+			t.Fatalf("request %d Authorization = %q, want Basic auth", i+1, auth)
+		}
+	}
+}
+
+func TestGenericURLMatchedSecurityEmptySuppressesProfileAuth(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/public", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BasicAuth": {"type": "http", "scheme": "basic"}
+    }
+  },
+  "security": [{"BasicAuth": []}],
+  "paths": {
+    "/public": {
+      "get": {
+        "operationId": "getPublic",
+        "security": [],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", baseURL + "/public"}); err != nil {
+		t.Fatalf("generic public request failed: %v", err)
+	}
+	if gotAuth != "" {
+		t.Fatalf("Authorization = %q, want empty for matched security: [] URL", gotAuth)
+	}
+}
+
+func TestGenericURLRouteMatchPrefersExactPathOverTemplate(t *testing.T) {
+	var gotExactAuth, gotTemplateAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/things/me", func(w http.ResponseWriter, r *http.Request) {
+		gotExactAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/things/42", func(w http.ResponseWriter, r *http.Request) {
+		gotTemplateAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BasicAuth": {"type": "http", "scheme": "basic"}
+    }
+  },
+  "security": [{"BasicAuth": []}],
+  "paths": {
+    "/things/{id}": {
+      "get": {
+        "operationId": "getThing",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/things/me": {
+      "get": {
+        "operationId": "getMe",
+        "security": [],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", baseURL + "/things/me"}); err != nil {
+		t.Fatalf("generic exact route request failed: %v", err)
+	}
+	if gotExactAuth != "" {
+		t.Fatalf("Authorization = %q, want exact security: [] route to win over templated secured route", gotExactAuth)
+	}
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", baseURL + "/things/42"}); err != nil {
+		t.Fatalf("generic templated route request failed: %v", err)
+	}
+	if !strings.HasPrefix(gotTemplateAuth, "Basic ") {
+		t.Fatalf("templated route Authorization = %q, want Basic auth", gotTemplateAuth)
+	}
+}
+
 func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T) {
 	var gotAuth string
 	mux := http.NewServeMux()

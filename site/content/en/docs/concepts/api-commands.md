@@ -36,6 +36,13 @@ restish example get-image jpeg
 The generated command can provide help, completion, required path parameters,
 optional flags, and profile-aware base URL selection.
 
+When a generic URL request matches a registered API and one cached OpenAPI
+operation, Restish also uses that operation's auth policy. This means manual URL
+calls such as `restish https://api.rest.sh/auth/basic` can use the same
+configured credentials as `restish example get-auth-basic`. If the operation
+cache is missing or several templates could match the URL, Restish falls back to
+the selected profile's ordinary auth.
+
 ## What Stays The Same
 
 Generated commands still support the same Restish behavior:

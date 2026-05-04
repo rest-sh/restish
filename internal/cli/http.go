@@ -171,7 +171,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		}
 	}
 
-	prepared, err := c.prepareRequest(requestContext(cmd), rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)
+	prepared, err := c.prepareRequest(requestContext(cmd), method, rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)
 	if err != nil {
 		return err
 	}
@@ -1232,6 +1232,11 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 		return apiProfileMatch{apiName: apiName, api: api, profile: prof, rawURL: expanded, score: len(apiName)}, true, nil
 	}
 
+	matchURL := rawURL
+	if normalized, err := request.Normalize(rawURL, ""); err == nil {
+		matchURL = normalized
+	}
+
 	var best apiProfileMatch
 	var ties []string
 	for name, api := range c.cfg.APIs {
@@ -1244,7 +1249,7 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 			c.warnf("API %q: %v", name, err)
 		}
 		for _, base := range bases {
-			score, ok := matchURLBase(rawURL, base)
+			score, ok := matchURLBase(matchURL, base)
 			if !ok || score < best.score {
 				continue
 			}
@@ -1252,13 +1257,13 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 				ties = append(ties, name)
 				continue
 			}
-			best = apiProfileMatch{apiName: name, api: api, profile: prof, rawURL: rawURL, score: score}
+			best = apiProfileMatch{apiName: name, api: api, profile: prof, rawURL: matchURL, score: score}
 			ties = []string{name}
 		}
 	}
 	if best.apiName != "" && len(ties) > 1 {
 		sort.Strings(ties)
-		return apiProfileMatch{}, false, fmt.Errorf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", rawURL, strings.Join(ties, ", "))
+		return apiProfileMatch{}, false, fmt.Errorf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", matchURL, strings.Join(ties, ", "))
 	}
 	return best, best.apiName != "", nil
 }

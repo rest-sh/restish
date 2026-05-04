@@ -28,6 +28,7 @@ type preparedRequest struct {
 
 func (c *CLI) prepareRequest(
 	ctx context.Context,
+	method string,
 	rawURL, profileName string,
 	opts request.Options,
 	bodyValue any,
@@ -44,6 +45,12 @@ func (c *CLI) prepareRequest(
 	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts, authOpts)
 	if err != nil {
 		return nil, err
+	}
+	if !noAuth && operationAuth == nil && apiName != "" {
+		if matched, ok := c.operationAuthForGenericRequest(method, rawURL, apiName, profileName); ok {
+			noAuth = matched.noAuth
+			operationAuth = matched.policy
+		}
 	}
 	if noAuth && operationAuth != nil && strings.TrimSpace(operationAuth.Override) != "" {
 		return nil, fmt.Errorf("auth override %q is not valid for an operation with security: []", operationAuth.Override)

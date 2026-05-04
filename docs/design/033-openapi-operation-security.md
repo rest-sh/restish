@@ -66,15 +66,20 @@ credential inside that profile according to normalized operation requirements.
 ## Current Behavior And Constraints
 
 Restish request auth is profile-driven. Generic requests and generated commands
-select a configured API/profile, then attach profile auth through the shared
-request pipeline.
+select a configured API/profile, then attach auth through the shared request
+pipeline.
+
+Generated commands always know their source operation and apply that
+operation's normalized security policy. Generic URL requests first resolve the
+selected API/profile from the API short name or URL. When the final method and
+URL path unambiguously match cached operation metadata for that API/profile,
+the generic request applies the same operation security policy. If the cache is
+missing or the route match is ambiguous, the request falls back to ordinary
+profile auth behavior.
 
 Generated operations carry `NoAuth` when the OpenAPI operation declares
 `security: []`. In that case request execution suppresses profile auth for that
-operation. Other OpenAPI `security` values, including alternatives, combined
-requirements, and OAuth scopes, are preserved only as metadata or parsed
-indirectly through setup/config prompts. They are not currently enforced per
-operation, and they do not change which selected profile auth is used.
+operation, including matching generic URL requests.
 
 `api connect` can read standard OpenAPI security schemes and the custom
 `x-cli-config` extension to pre-populate a profile. The current extension shape
@@ -352,8 +357,8 @@ diagnostics, and setup.
 
 ## Request-Time Behavior
 
-Generated commands should evaluate the operation security policy before
-auth callbacks are attached.
+Generated commands and unambiguous cached-operation URL matches should evaluate
+the operation security policy before auth callbacks are attached.
 
 The algorithm is:
 
@@ -372,6 +377,13 @@ The algorithm is:
    send the request without auth.
 8. If no alternative is satisfied and anonymous access is not allowed, fail
    before sending the request.
+
+For generic URL requests, operation matching is intentionally offline and
+conservative: Restish uses cached operation metadata, matches by HTTP method and
+path template, prefers more specific static paths over templates, and applies
+operation auth only when one route wins. This keeps manual URL calls consistent
+with generated commands without fetching specs or guessing between overlapping
+templates at request time.
 
 A binding satisfies a requirement when:
 
@@ -821,6 +833,8 @@ scheme.
 - profile-level auth satisfies the only effective credential requirement for
   compatibility;
 - ambiguous profile-level auth does not satisfy multi-credential operations;
+- generic URL requests apply operation security only for unambiguous cached
+  method/path matches and otherwise use ordinary profile auth;
 - first-class API-key auth supports header and query locations and redaction;
 - OpenAPI 3.2 device authorization maps to `oauth-device-code`;
 - OpenAPI 3.2 `oauth2MetadataUrl` participates in OAuth setup;

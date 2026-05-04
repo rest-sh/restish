@@ -87,8 +87,10 @@ restish api connect example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KE
 ```
 
 Generated OpenAPI commands use the operation's effective `security` policy.
-For one global scheme, profile-level `auth` remains enough. For APIs with
-several schemes, configure named credential bindings under the active profile:
+Generic URL requests use the same policy when their method and URL path
+unambiguously match one cached operation for the selected API/profile. For one
+global scheme, profile-level `auth` remains enough. For APIs with several
+schemes, configure named credential bindings under the active profile:
 
 ```jsonc
 {
@@ -116,8 +118,9 @@ several schemes, configure named credential bindings under the active profile:
 ```
 
 `security: []` operations are public and suppress profile auth, auth hooks, and
-sensitive credential headers/query values. Optional anonymous alternatives use
-configured credentials when available and anonymous access as the fallback.
+sensitive credential headers/query values, including for matching generic URL
+requests. Optional anonymous alternatives use configured credentials when
+available and anonymous access as the fallback.
 
 Choose a specific allowed alternative with `--rsh-auth`:
 

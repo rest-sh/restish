@@ -325,11 +325,13 @@ credential alternatives:
   requirements, and the surrounding array is an OR-list.
 
 Generated command execution matches those alternatives against the active
-profile. A single effective credential requirement may use profile-level `auth`
-or `auth_ref` for compatibility. Multiple alternatives or combined requirements
-require explicit `profiles.<name>.credentials.<id>` bindings. Requirement
-values such as OAuth scopes or role strings are matched against a binding's
-`satisfies` list.
+profile. Generic URL requests apply the same operation security when the
+request's API/profile, HTTP method, and URL path unambiguously match cached
+operation metadata; otherwise they keep ordinary profile-auth behavior. A single
+effective credential requirement may use profile-level `auth` or `auth_ref` for
+compatibility. Multiple alternatives or combined requirements require explicit
+`profiles.<name>.credentials.<id>` bindings. Requirement values such as OAuth
+scopes or role strings are matched against a binding's `satisfies` list.
 
 `--rsh-auth` selects one allowed alternative by credential ID set, for
 example `PartnerKey` or `UserOAuth+PartnerKey`. Overrides are rejected for
