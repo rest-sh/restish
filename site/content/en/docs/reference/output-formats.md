@@ -6,7 +6,8 @@ description: Reference for Restish output formats and document-versus-record beh
 ---
 
 Output formats decide how a normalized response is rendered after decoding,
-pagination or streaming, and filtering.
+pagination or streaming, and filtering. They do not change paginated filter
+scope: without `--rsh-collect`, filters run once per item.
 
 ## Document Formats
 
@@ -75,7 +76,7 @@ Tables are for terminal inspection, not stable machine parsing.
 ## Filters And Scalar Lines
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | .name' -o lines
+restish https://api.rest.sh/images -f body.name -o lines
 ```
 
 Explicit scalar filters print without JSON string quotes. `-o lines` prints

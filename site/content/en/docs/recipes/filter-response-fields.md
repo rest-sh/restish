@@ -19,7 +19,7 @@ restish https://api.rest.sh/images -f links.next
 Use jq for richer transforms:
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish https://api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
 ```
 
 Explicit scalar filters print plain text by default. Use `-o lines` when the

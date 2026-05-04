@@ -409,16 +409,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
 	}
 
-	// Resolve filter language.
-	var lang filter.Lang
-	switch strings.ToLower(filterLang) {
-	case "shorthand":
-		lang = filter.LangShorthand
-	case "jq":
-		lang = filter.LangJQ
-	default:
-		lang = filter.LangAuto
-	}
+	lang := resolveFilterLang(filterLang)
 
 	// Build the full response map for filtering.
 	doc := map[string]any{
@@ -472,6 +463,17 @@ func firstHeaderValues(headers map[string][]string) map[string]string {
 		}
 	}
 	return out
+}
+
+func resolveFilterLang(filterLang string) filter.Lang {
+	switch strings.ToLower(filterLang) {
+	case "shorthand":
+		return filter.LangShorthand
+	case "jq":
+		return filter.LangJQ
+	default:
+		return filter.LangAuto
+	}
 }
 
 func (c *CLI) populateRequestTrace(trace *requestTrace, apiName, profileName, inputSource string, prepared *preparedRequest) {

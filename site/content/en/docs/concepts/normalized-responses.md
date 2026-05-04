@@ -46,6 +46,8 @@ features:
 Document formats such as `json`, `yaml`, and `readable` should produce one
 coherent result. Record formats such as `ndjson` can emit one item or event at a
 time. This distinction is important for pagination and live streams.
+For paginated filters, scope is separate from format: filters run per item by
+default, and `--rsh-collect` switches to whole-collection filtering.
 
 ```bash
 restish https://api.rest.sh/images --rsh-collect -o json

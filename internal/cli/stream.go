@@ -261,11 +261,12 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	result := item
 	if filterExpr != "" {
 		doc := map[string]any{"body": item}
-		filterResult, err := filter.ApplyWithInfo(filterExpr, doc, filter.LangAuto)
+		lang := resolveFilterLang(gf.FilterLang)
+		filterResult, err := filter.ApplyWithInfo(filterExpr, doc, lang)
 		if err != nil {
 			return fmt.Errorf("filter: %w", err)
 		}
-		traceFilter(requestTraceFromContext(requestContext(cmd)), filter.LangAuto, filterResult.Lang)
+		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
 		result = filterResult.Value
 	}
 

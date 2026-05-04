@@ -23,6 +23,8 @@ normally.
 - `-o json` and `-o yaml` produce complete documents.
 - `-o ndjson` produces records.
 - `-o lines` produces one scalar value per line.
+- Output format does not change paginated filter scope; use `--rsh-collect`
+  for whole-collection filters.
 
 ## Examples
 

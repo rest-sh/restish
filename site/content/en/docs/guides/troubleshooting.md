@@ -23,7 +23,7 @@ sends a request.
 ```bash
 restish shell setup zsh
 restish 'https://api.rest.sh/images?format=jpeg&limit=1'
-restish https://api.rest.sh/images -f 'body[0].self'
+restish https://api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
 ```
 
 **Prevention:** Quote complex arguments in scripts and run `restish shell setup <shell>` for interactive use.

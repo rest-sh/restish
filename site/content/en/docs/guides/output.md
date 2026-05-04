@@ -73,6 +73,10 @@ never finish, so `-o ndjson` is the right shape for structured stream output.
 Restish rejects `-o json` on stream responses with an error that points to
 `-o ndjson`.
 
+Output format does not change paginated filter scope. Without `--rsh-collect`,
+Restish filters each item; document formats then render the filtered item
+results as one complete document.
+
 ## Filters Change What Gets Rendered
 
 {{< restish-example >}}
@@ -80,7 +84,7 @@ restish https://api.rest.sh/example -f body.basics.profiles
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish https://api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
 restish https://api.rest.sh/ -f headers.Content-Type
 ```
 

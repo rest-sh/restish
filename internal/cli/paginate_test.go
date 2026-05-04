@@ -7,9 +7,26 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rest-sh/restish/v2/internal/cli"
 )
+
+type notifyWriter struct {
+	writer io.Writer
+	writes chan string
+}
+
+func (w notifyWriter) Write(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
+	if n > 0 {
+		select {
+		case w.writes <- string(p[:n]):
+		default:
+		}
+	}
+	return n, err
+}
 
 func useThreePageTransport(c *cli.CLI) {
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -402,7 +419,7 @@ func TestPaginationStreamingAppliesFilterPerItem(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", ".body | map(.id)"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body.id"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -415,6 +432,45 @@ func TestPaginationStreamingAppliesFilterPerItem(t *testing.T) {
 		if values[i] != want {
 			t.Fatalf("values[%d] = %d, want %d", i, values[i], want)
 		}
+	}
+}
+
+func TestPaginationJSONFilterAppliesPerItemWithoutCollect(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body[0]", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var values []any
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid filtered JSON array, got %q: %v", out.String(), err)
+	}
+	if len(values) != 4 {
+		t.Fatalf("values length = %d, want 4: %#v", len(values), values)
+	}
+	for i, value := range values {
+		if value != nil {
+			t.Fatalf("values[%d] = %#v, want nil", i, value)
+		}
+	}
+}
+
+func TestPaginationCollectFilterUsesMergedDocument(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageObjectTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-collect", "-f", "body[0]", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var value map[string]int
+	if err := json.Unmarshal(out.Bytes(), &value); err != nil {
+		t.Fatalf("expected valid filtered JSON object, got %q: %v", out.String(), err)
+	}
+	if value["id"] != 1 {
+		t.Fatalf("id = %d, want 1", value["id"])
 	}
 }
 
@@ -799,6 +855,110 @@ func TestPaginationLaterPageErrorKeepsStreamedPartialOutput(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"id":1`) {
 		t.Fatalf("expected first page item to remain streamed, got %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 500") {
+		t.Fatalf("expected page status warning, got %q", errOut.String())
+	}
+}
+
+func TestPaginationFilteredNDJSONKeepsStreamedPartialOutput(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			return &http.Response{
+				StatusCode: 500,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[{"id":1,"name":"one"}]`)),
+			Request: r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body.{id}", "-o", "ndjson"})
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	}
+	if got, want := out.String(), "{\"id\":1}\n"; got != want {
+		t.Fatalf("expected filtered first-page NDJSON output to remain streamed, got %q", got)
+	}
+	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 500") {
+		t.Fatalf("expected page status warning, got %q", errOut.String())
+	}
+}
+
+func TestPaginationFilteredNDJSONStreamsBeforeNextPageCompletes(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	writes := make(chan string, 4)
+	c.Stdout = &notifyWriter{writer: out, writes: writes}
+	page2Started := make(chan struct{})
+	allowPage2 := make(chan struct{})
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			select {
+			case <-page2Started:
+			default:
+				close(page2Started)
+			}
+			<-allowPage2
+			return &http.Response{
+				StatusCode: 500,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[{"id":1,"name":"one"}]`)),
+			Request: r,
+		}, nil
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- c.Run([]string{"restish", "get", "-f", "body.{id}", "-o", "ndjson", "https://api.example.com/items"})
+	}()
+
+	select {
+	case <-page2Started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for page 2 request")
+	}
+	select {
+	case got := <-writes:
+		if got != "{\"id\":1}\n" {
+			t.Fatalf("streamed write = %q, want filtered first-page NDJSON", got)
+		}
+	case <-time.After(time.Second):
+		close(allowPage2)
+		t.Fatalf("timed out waiting for filtered first-page NDJSON before page 2 completed; stderr=%q", errOut.String())
+	}
+	close(allowPage2)
+	err := <-errCh
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	}
+	if got, want := out.String(), "{\"id\":1}\n"; got != want {
+		t.Fatalf("expected only streamed first-page output, got %q", got)
 	}
 	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 500") {
 		t.Fatalf("expected page status warning, got %q", errOut.String())

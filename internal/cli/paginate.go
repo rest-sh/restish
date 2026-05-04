@@ -72,6 +72,7 @@ func (c *CLI) runPagination(
 	var allItems []any
 	var streamedCount int
 	var renderer valueRenderer
+	perItemFilter := !collect && globalFlagsFromContext(ctx).Filter != ""
 	streamItems, err := c.paginationStreamsItems(cmd, firstResp)
 	if err != nil {
 		return err
@@ -106,6 +107,12 @@ func (c *CLI) runPagination(
 	}
 	items, done := applyItemLimits(items, existingCount, maxItems)
 	if collect || !streamItems {
+		if perItemFilter {
+			items, err = c.filterPaginatedItems(cmd, items)
+			if err != nil {
+				return err
+			}
+		}
 		allItems = append(allItems, items...)
 	} else {
 		if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
@@ -167,6 +174,12 @@ func (c *CLI) runPagination(
 		}
 		items, done = applyItemLimits(items, existingCount, maxItems)
 		if collect || !streamItems {
+			if perItemFilter {
+				items, err = c.filterPaginatedItems(cmd, items)
+				if err != nil {
+					return err
+				}
+			}
 			allItems = append(allItems, items...)
 		} else {
 			if err := c.streamItems(ctx, cmd, renderer, items); err != nil {
@@ -186,6 +199,9 @@ func (c *CLI) runPagination(
 	}
 
 	if collect || !streamItems {
+		if perItemFilter {
+			return c.renderPaginatedFilteredItems(cmd, firstResp, allItems)
+		}
 		synthetic := buildPaginatedResponse(firstResp, pagCfg, allItems)
 		if err := ctx.Err(); err != nil {
 			return err
@@ -193,6 +209,43 @@ func (c *CLI) runPagination(
 		return c.formatResponse(cmd, synthetic)
 	}
 	return nil
+}
+
+func (c *CLI) filterPaginatedItems(cmd *cobra.Command, items []any) ([]any, error) {
+	if len(items) == 0 {
+		return items, nil
+	}
+
+	gf := globalFlagsFromContext(requestContext(cmd))
+	lang := resolveFilterLang(gf.FilterLang)
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		doc := map[string]any{"body": item}
+		filterResult, err := filter.ApplyWithInfo(gf.Filter, doc, lang)
+		if err != nil {
+			return nil, fmt.Errorf("filter: %w", err)
+		}
+		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
+		filtered = append(filtered, filterResult.Value)
+	}
+	return filtered, nil
+}
+
+func (c *CLI) renderPaginatedFilteredItems(cmd *cobra.Command, base *output.Response, items []any) error {
+	if err := requestContext(cmd).Err(); err != nil {
+		return err
+	}
+	gf := globalFlagsFromContext(requestContext(cmd))
+	renderer, err := c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), true)
+	if err != nil {
+		return err
+	}
+	defer renderer.Close()
+	c.traceValueOutput(cmd, items, true)
+	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+		trace.RenderAfter(c.Stderr, gf.Verbose)
+	}
+	return renderer.Render(items)
 }
 
 // paginationCrossesOrigin reports whether following nextURL from firstURL
@@ -247,6 +300,18 @@ func (w contextWriter) Write(p []byte) (int, error) {
 		return n, err
 	}
 	return n, nil
+}
+
+func (w contextWriter) Flush() error {
+	if err := w.ctx.Err(); err != nil {
+		return err
+	}
+	if f, ok := w.writer.(flushWriter); ok {
+		if err := f.Flush(); err != nil {
+			return err
+		}
+	}
+	return w.ctx.Err()
 }
 
 func paginationItemCapacity(firstPageItems, maxPages, maxItems int) int {

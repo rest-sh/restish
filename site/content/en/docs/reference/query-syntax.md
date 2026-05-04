@@ -19,32 +19,32 @@ restish https://api.rest.sh/example -f body.basics.profiles
 ## Paths And Indexes
 
 ```bash
-restish https://api.rest.sh/images -f body[0].name
-restish https://api.rest.sh/images -f body[-1].self
-restish https://api.rest.sh/images -f 'body[0:2].self'
+restish https://api.rest.sh/images --rsh-collect -f body[0].name
+restish https://api.rest.sh/images --rsh-collect -f body[-1].self
+restish https://api.rest.sh/images --rsh-collect -f 'body[0:2].self'
 ```
 
 ## Selection
 
 ```bash
-restish https://api.rest.sh/images -f 'body[format = jpeg].name' -o lines
-restish https://api.rest.sh/images -f 'body[name.lower contains dragonfly].self' -o lines
+restish https://api.rest.sh/images --rsh-collect -f 'body[format = jpeg].name' -o lines
+restish https://api.rest.sh/images --rsh-collect -f 'body[name.lower contains dragonfly].self' -o lines
 ```
 
 ## Projection And Recursive Search
 
 ```bash
 restish https://api.rest.sh/example -f 'body.basics.{name, url, profiles}'
-restish https://api.rest.sh/images -f '{next: links.next, first: body[0].self}'
+restish https://api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[0].self}'
 restish https://api.rest.sh/example -f 'body..url'
 ```
 
 ## jq
 
 ```bash
-restish https://api.rest.sh/images -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish https://api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
 restish https://api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
-restish https://api.rest.sh/images -f '{next: .links.next, first: .body[0].self}'
+restish https://api.rest.sh/images --rsh-no-paginate -f '{next: .links.next, first: .body[0].self}'
 restish https://api.rest.sh/example -f '.. | .url?'
 ```
 
@@ -54,6 +54,10 @@ In `auto` mode, Restish tries both shorthand and jq. Bare normalized-response
 roots such as `links.next` and `body[0].self` select shorthand. jq expressions
 use jq's current-input root, such as `.links.next` and `.body[0].self`; a
 leading `.field` is treated as jq even when shorthand would also accept it.
+
+On auto-paginated responses, filters run once per item unless you pass
+`--rsh-collect`. Use collect mode for array indexes, slices, sorts, counts, and
+other whole-collection expressions.
 
 Recursive descent keeps the same distinction:
 

@@ -131,24 +131,25 @@ The revised rule is:
 Practically, this means users can write:
 
 ```bash
-restish api.rest.sh/images -f '.body | map(.id)' > ids.json
+restish api.rest.sh/images --rsh-collect -f '.body | map(.id)' > ids.json
 ```
 
 without needing to add `-o json`.
 
-### `-o json` Implies Collection Semantics
+### `-o json` Preserves Document Framing
 
-`-o json` should automatically enable `--rsh-collect`-style execution for
-paginated responses.
+`-o json` should always emit one valid JSON document, but it should not change
+what a filter means. Pagination mode determines the data model; output format
+determines the serialization contract.
 
 This keeps the JSON contract simple:
 
-- paginated bounded responses become one valid JSON document
-- filtered collection transforms stay coherent
-- wrapper objects such as `body.items` can be preserved
+- paginated bounded responses can still become one valid JSON document
+- filtered per-item results can be collected into a JSON array
+- collection transforms remain explicit through `--rsh-collect`
 
-It also means `-o json` is never a streaming mode. Users who want JSON values
-incrementally should choose `-o ndjson`.
+It also means `-o json` is never a streaming wire format. Users who want JSON
+values incrementally should choose `-o ndjson`.
 
 ### `ndjson` Is The Explicit Record JSON Format
 
@@ -220,17 +221,21 @@ Per-record filters can compose with record formats and paginated incremental
 execution.
 
 Whole-collection filters require a full logical collection, even when the
-response arrived in pages.
+response arrived in pages. Restish should not try to infer this from the filter
+syntax because shorthand and jq both contain expressions that are hard to
+classify safely and predictably. Users ask for whole-collection semantics with
+`--rsh-collect`.
 
 Restish therefore needs an output planning step that classifies:
 
 - whether the underlying result is bounded or unbounded
 - whether the selected format is document or record oriented
-- whether the filter is per-record or whole-collection
+- whether `--rsh-collect` requests whole-collection evaluation
 - whether pagination needs to preserve a wrapper object via `items_path`
 
-If a filter cannot be safely streamed, Restish should collect automatically or
-surface a clear diagnostic.
+Without `--rsh-collect`, paginated filters run per item. Document formats then
+render the filtered item results as one valid document; record formats can emit
+them as records.
 
 ### Pagination Must Preserve Shape
 
@@ -240,8 +245,8 @@ shape whenever possible:
 - a bare paginated array stays an array in document formats
 - a wrapped object with `items_path: data` should stay an object whose `data`
   field becomes the merged collection
-- paginated filtering should operate on the logical merged shape in document
-  mode, not on a single page at a time
+- paginated filtering should operate on the logical merged shape only when
+  `--rsh-collect` is set
 
 This avoids the surprise where the same endpoint produces an object sometimes
 and a stream of bare items other times depending only on whether a `next` link
@@ -300,10 +305,10 @@ The output planner should make these decisions in order:
    - explicit document format
    - explicit record format
    - adaptive default based on TTY and whether output is still raw
-3. classify the filter as:
+3. decide filter scope:
    - none
-   - per-record
-   - whole-collection
+   - per-record pagination filter
+   - whole-collection filter requested by `--rsh-collect`
 4. decide whether the logical result must preserve a wrapper object via
    pagination config such as `items_path`
 5. choose execution strategy:
@@ -331,8 +336,9 @@ Use when:
 Use when:
 
 - the response is paginated and bounded
-- the selected format is document-oriented, or
-- the filter requires whole-collection semantics
+- `--rsh-collect` requested whole-collection semantics, or
+- no per-record filter transform is active and the selected output contract is
+  a document format
 
 ### Incremental Record Render
 
@@ -373,8 +379,10 @@ Clear failure is better than silently emitting invalid or misleading output.
 
 - default TTY: readable, low-latency human output
 - default non-TTY: JSON document output
-- `-o json`: collect/merge, valid JSON document
-- `-o yaml`: collect/merge, valid YAML document
+- `-o json`: valid JSON document; unfiltered pagination merges items, filtered
+  pagination renders filtered item results
+- `-o yaml`: valid YAML document; unfiltered pagination merges items, filtered
+  pagination renders filtered item results
 - `-o readable`: render progressively for humans
 - `-o ndjson`: stream one item per line
 - `-o lines`: stream scalar values one per line, error on structured values
@@ -391,8 +399,9 @@ Clear failure is better than silently emitting invalid or misleading output.
 ### Filtering
 
 - per-record filter + record format: run incrementally
-- per-record filter + document format: apply over the logical collection shape
-- whole-collection filter + paginated response: collect automatically
+- per-record filter + document format: filter each item, then render those
+  values as a valid document
+- whole-collection filter + paginated response: use `--rsh-collect`
 - `--rsh-collect`: force whole-collection evaluation
 
 ## Examples
@@ -417,11 +426,12 @@ done
 Dump all IDs to a JSON file:
 
 ```bash
-restish api.rest.sh/images -f '.body | map(.id)' > ids.json
+restish api.rest.sh/images --rsh-collect -f '.body | map(.id)' > ids.json
 ```
 
 Because stdout is redirected, Restish should default to document JSON output.
-Because the filter is whole-collection, pagination should collect automatically.
+Because the filter is whole-collection, the command opts into collection
+explicitly.
 
 Export paginated data to CSV:
 
@@ -466,10 +476,13 @@ detail, but they should not define the user-facing output model.
 ## Notes
 
 This design intentionally separates **framing semantics** from **execution
-strategy**:
+strategy** and filter scope:
 
 - framing semantics come from the selected output mode
-- execution strategy is chosen by Restish to satisfy that contract
+- filter scope comes from pagination mode: item-by-item by default,
+  whole-collection with `--rsh-collect`
+- execution strategy is chosen by Restish to satisfy that contract without
+  changing filter meaning
 
 That distinction keeps pagination, filtering, readable rendering, and plugins
 composable without requiring the user to reason about internal control flow.
