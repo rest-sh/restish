@@ -45,7 +45,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	}
 
 	gfSSE := globalFlagsFromContext(requestContext(cmd))
-	maxEvents := gfSSE.MaxEvents
+	maxItems := gfSSE.MaxItems
 	filterExpr := gfSSE.Filter
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), filterExpr != "")
 	if err != nil {
@@ -107,7 +107,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 			if err := flush(); err != nil {
 				return err
 			}
-			if maxEvents > 0 && count >= maxEvents {
+			if maxItems > 0 && count >= maxItems {
 				stoppedByMax = true
 				break
 			}
@@ -149,7 +149,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 
 	if err := scanner.Err(); err != nil {
 		if stoppedByMax {
-			c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
+			c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 			return nil
 		}
 		if strings.Contains(err.Error(), "token too long") {
@@ -162,7 +162,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 			return err
 		}
 	} else {
-		c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
+		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 	}
 
 	return nil
@@ -190,8 +190,8 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		return err
 	}
 
-	maxEvents := globalFlagsFromContext(requestContext(cmd)).MaxEvents
 	gf := globalFlagsFromContext(requestContext(cmd))
+	maxItems := gf.MaxItems
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), gf.Filter != "")
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 			return err
 		}
 		count++
-		if maxEvents > 0 && count >= maxEvents {
+		if maxItems > 0 && count >= maxItems {
 			stoppedByMax = true
 			break
 		}
@@ -224,13 +224,13 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 
 	if err := scanner.Err(); err != nil {
 		if stoppedByMax {
-			c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
+			c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 			return nil
 		}
 		return fmt.Errorf("NDJSON stream error: %w", err)
 	}
 	if stoppedByMax {
-		c.warnf("streaming stopped at --rsh-max-events=%d; pass 0 for unlimited", maxEvents)
+		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 	}
 	return nil
 }

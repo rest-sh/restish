@@ -112,8 +112,8 @@ restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true
 Always bound copy-paste stream examples:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 ```
 
 ## Resilience And HTTP Behavior

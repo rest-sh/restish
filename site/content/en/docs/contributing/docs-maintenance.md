@@ -107,7 +107,7 @@ Good live example candidates include:
 - `/images`, `/images/{type}`, `/example`, `/types`, and `/books` for the core
   repeated docs workflows
 - `/events` and `/logs` for streaming examples, with bounded commands such as
-  `--rsh-max-events`
+  `--rsh-max-items`
 - `/flaky`, `/slow`, `/status/{code}`, `/cache`, `/cached/{seconds}`, and
   `/etag/{etag}` for retry, timeout, cache, and status examples
 - `/formats/{format}`, `/problem`, `/gzip`, `/deflate`, `/brotli`, and

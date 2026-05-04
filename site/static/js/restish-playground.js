@@ -17,8 +17,7 @@
     ["--rsh-timeout", "timeout"],
     ["-t", "timeout"],
     ["--rsh-max-pages", "maxPages"],
-    ["--rsh-max-items", "maxItems"],
-    ["--rsh-max-events", "maxEvents"]
+    ["--rsh-max-items", "maxItems"]
   ]);
   const boolFlags = new Map([
     ["-r", "raw"],

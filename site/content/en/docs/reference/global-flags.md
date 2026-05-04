@@ -76,12 +76,13 @@ restish https://api.rest.sh/images --rsh-no-paginate
 restish https://api.rest.sh/images --rsh-max-pages 3
 restish https://api.rest.sh/images --rsh-max-items 100
 restish https://api.rest.sh/images --rsh-collect -f '.body | length'
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 Pagination stops at `--rsh-max-pages=25` by default; pass `0` for unlimited.
-Streaming stops at `--rsh-max-events=1000` by default; pass `0` for unlimited.
-Both bounded stops print a stderr warning and exit successfully.
+Streams run until EOF, timeout, or interruption by default. `--rsh-max-items`
+caps either paginated items or streamed events/lines and prints a stderr warning
+when reached.
 
 ## Cache And Retry
 

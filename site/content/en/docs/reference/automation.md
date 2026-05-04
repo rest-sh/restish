@@ -49,7 +49,7 @@ Bound pagination and streaming explicitly in automation:
 restish https://api.rest.sh/images --rsh-no-paginate
 restish https://api.rest.sh/images --rsh-max-pages 3
 restish https://api.rest.sh/images --rsh-max-items 100
-restish https://api.rest.sh/events --rsh-max-events 10 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 10 -o ndjson
 ```
 
 ## Stable Request Flags
@@ -61,7 +61,7 @@ These flags are the usual script building blocks:
 - `-o json`, `-o ndjson`, and `-o lines` avoid terminal-oriented formatting.
 - `-r` writes raw response body bytes.
 - `--rsh-no-paginate`, `--rsh-max-pages`, and `--rsh-max-items` bound
-  collection work.
+  collection and stream work.
 
 ## Related Pages
 

@@ -5,19 +5,19 @@ weight: 60
 description: Read a bounded stream and print selected event fields.
 ---
 
-Streams may not have a natural end. Always bound examples with
-`--rsh-max-events` unless you intentionally want to keep listening. Filters let
+Streams may not have a natural end. Bound sample commands with
+`--rsh-max-items`, or omit the cap when you want to keep listening. Filters let
 you select one field from each event as it arrives.
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -o lines
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.type -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 ```
 
 Use NDJSON output for structured event records:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 Use scalar filters with `-o lines` when humans or shell loops need one value

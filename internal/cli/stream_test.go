@@ -341,8 +341,8 @@ func (r errorReader) Read([]byte) (int, error) {
 	return 0, r.err
 }
 
-// TestSSEMaxEvents verifies that --rsh-max-events 2 stops after 2 SSE events.
-func TestSSEMaxEvents(t *testing.T) {
+// TestSSEMaxItems verifies that --rsh-max-items 2 stops after 2 SSE events.
+func TestSSEMaxItems(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -353,7 +353,7 @@ func TestSSEMaxEvents(t *testing.T) {
 
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-events", "2"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-items", "2"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -366,15 +366,15 @@ func TestSSEMaxEvents(t *testing.T) {
 		t.Errorf("expected event 2 in output, got:\n%s", got)
 	}
 	if strings.Contains(got, `"n":3`) {
-		t.Errorf("unexpected event 3 in output (should be stopped by --rsh-max-events 2), got:\n%s", got)
+		t.Errorf("unexpected event 3 in output (should be stopped by --rsh-max-items 2), got:\n%s", got)
 	}
-	wantWarning := "streaming stopped at --rsh-max-events=2; pass 0 for unlimited"
+	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
 	if !strings.Contains(errOut.String(), wantWarning) {
-		t.Fatalf("expected max-events warning %q, got %q", wantWarning, errOut.String())
+		t.Fatalf("expected max-items warning %q, got %q", wantWarning, errOut.String())
 	}
 }
 
-func TestNDJSONMaxEventsWarns(t *testing.T) {
+func TestNDJSONMaxItemsWarns(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
@@ -387,7 +387,7 @@ func TestNDJSONMaxEventsWarns(t *testing.T) {
 
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-events", "2"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-items", "2"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -398,9 +398,38 @@ func TestNDJSONMaxEventsWarns(t *testing.T) {
 	if strings.Contains(got, `"n":3`) {
 		t.Fatalf("unexpected third line, got:\n%s", got)
 	}
-	wantWarning := "streaming stopped at --rsh-max-events=2; pass 0 for unlimited"
+	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
 	if !strings.Contains(errOut.String(), wantWarning) {
-		t.Fatalf("expected max-events warning %q, got %q", wantWarning, errOut.String())
+		t.Fatalf("expected max-items warning %q, got %q", wantWarning, errOut.String())
+	}
+}
+
+func TestNDJSONDefaultHasNoItemCap(t *testing.T) {
+	const records = 1002
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		for i := 1; i <= records; i++ {
+			fmt.Fprintf(w, `{"n":%d}`+"\n", i)
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := strings.TrimSpace(out.String())
+	lines := strings.Split(got, "\n")
+	if len(lines) != records {
+		t.Fatalf("expected %d lines without a default stream cap, got %d", records, len(lines))
+	}
+	if strings.Contains(errOut.String(), "streaming stopped") {
+		t.Fatalf("unexpected stream cap warning: %q", errOut.String())
 	}
 }
 

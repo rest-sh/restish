@@ -33,7 +33,7 @@ restish https://api.rest.sh/images
 restish https://api.rest.sh/images > images.json
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 ## Filtering

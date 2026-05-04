@@ -202,16 +202,17 @@ restish https://api.rest.sh/images --rsh-collect -f '.body | length'
 **Likely cause:** SSE and NDJSON streams may be unbounded, while JSON is a
 document format.
 
-**How to confirm:** Add a max event count.
+**How to confirm:** Add an item cap or a timeout.
 
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
 ```
 
-**Prevention:** Use `--rsh-max-events` in examples and scripts unless EOF is expected.
+**Prevention:** Use `--rsh-max-items` for fixed samples and `--rsh-timeout` for
+time-bounded stream checks.
 
 **Related docs:** [Streaming](/docs/guides/streaming/), [Output Formats](/docs/reference/output-formats/).
 

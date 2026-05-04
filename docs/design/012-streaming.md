@@ -131,7 +131,7 @@ The stream planner should decide:
 1. whether the response is a supported stream type
 2. whether the selected output family can operate incrementally
 3. whether the filter can be evaluated per event
-4. whether the user requested a bounded stop such as `--rsh-max-events`
+4. whether the user requested a bounded stop such as `--rsh-max-items`
 5. whether the requested format must fail because the stream is unbounded
 
 This ties streaming into the same output-family model as design 028.
@@ -143,9 +143,9 @@ Streaming must remain interruptible and bounded when the user asks for it.
 Important controls:
 
 - context cancellation should interrupt stream reads promptly
-- `--rsh-max-events` defaults to `1000` and provides a simple safety limit for
-  both SSE and NDJSON; `0` means unlimited
-- hitting `--rsh-max-events` is a successful bounded stop and must print a
+- `--rsh-max-items` defaults to `0` and provides an explicit record limit for
+  both SSE and NDJSON when the user wants bounded stream processing
+- hitting `--rsh-max-items` is a successful bounded stop and must print a
   stderr warning naming the cap and `0` override
 - SSE and NDJSON per-line reads are capped by the stream line limit derived
   from `--rsh-max-body-size`
@@ -213,7 +213,7 @@ restish get https://api.example.com/events -o ndjson
 To stop after a bounded number of events:
 
 ```bash
-restish get https://api.example.com/events --rsh-max-events 2
+restish get https://api.example.com/events --rsh-max-items 2
 ```
 
 ## Alternatives Considered

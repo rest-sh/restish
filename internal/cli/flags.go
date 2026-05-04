@@ -46,7 +46,6 @@ type GlobalFlags struct {
 	RetryUnsafe      bool
 	RetryMaxWait     string
 	RetryMaxWaitSet  bool
-	MaxEvents        int
 	NoPaginate       bool
 	Collect          bool
 	MaxPages         int
@@ -104,7 +103,6 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	gf.Retry, _ = cmd.Flags().GetInt("rsh-retry")
 	gf.RetryMaxWait, _ = cmd.Flags().GetString("rsh-retry-max-wait")
 	gf.RetryMaxWaitSet = cmd.Flags().Changed("rsh-retry-max-wait")
-	gf.MaxEvents, _ = cmd.Flags().GetInt("rsh-max-events")
 	gf.MaxPages, _ = cmd.Flags().GetInt("rsh-max-pages")
 	gf.MaxItems, _ = cmd.Flags().GetInt("rsh-max-items")
 	gf.MaxBodySize, _ = cmd.Flags().GetInt("rsh-max-body-size")
@@ -186,7 +184,7 @@ func globalFlagsFromContext(ctx context.Context) GlobalFlags {
 	if gf, ok := ctx.Value(globalFlagsContextKey{}).(GlobalFlags); ok {
 		return gf
 	}
-	return GlobalFlags{Retry: -1, MaxEvents: 1000, MaxPages: 25}
+	return GlobalFlags{Retry: -1, MaxPages: 25}
 }
 
 func requestContext(cmd *cobra.Command) context.Context {

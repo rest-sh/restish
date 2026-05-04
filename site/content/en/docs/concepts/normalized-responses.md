@@ -51,7 +51,7 @@ default, and `--rsh-collect` switches to whole-collection filtering.
 
 ```bash
 restish https://api.rest.sh/images --rsh-collect -o json
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 ## Related Pages

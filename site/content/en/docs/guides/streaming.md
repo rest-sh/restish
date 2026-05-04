@@ -2,32 +2,31 @@
 title: Streaming
 linkTitle: Streaming
 weight: 90
-description: Work with SSE and NDJSON streams while keeping output bounded and script-friendly.
+description: Work with SSE and NDJSON streams while keeping output incremental and script-friendly.
 ---
 
 Restish recognizes Server-Sent Events, NDJSON, and JSON Lines. Streaming
 responses are processed one event or line at a time instead of waiting for a
 complete response body.
 
-Streaming stops at `--rsh-max-events=1000` by default and prints a warning when
-the cap is reached. Pass `--rsh-max-events 0` only when you intentionally want
-to listen until EOF or interruption.
+Streams run until EOF, timeout, or interruption by default. Add
+`--rsh-max-items` when you want a sample or a script with a fixed record count.
 
 ## Server-Sent Events
 
-Always bound examples you paste into a terminal:
+Bound examples you paste into a terminal when you only want a sample:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 SSE output includes event metadata and parsed data. Filter the event data when
 you only need fields:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.type -o lines
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.type -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 ```
 
 ## NDJSON
@@ -35,14 +34,14 @@ restish https://api.rest.sh/events --rsh-max-events 3 -f data.user.id -o lines
 The `/logs` endpoint emits line-oriented JSON records:
 
 ```bash
-restish https://api.rest.sh/logs --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/logs --rsh-max-events 3 -f body.user.id -o lines
+restish https://api.rest.sh/logs --rsh-max-items 3 -o ndjson
+restish https://api.rest.sh/logs --rsh-max-items 3 -f body.user.id -o lines
 ```
 
 If an endpoint is slow to emit its first record, add a timeout while debugging:
 
 ```bash
-restish https://api.rest.sh/logs --rsh-max-events 3 --rsh-timeout 5s
+restish https://api.rest.sh/logs --rsh-max-items 3 --rsh-timeout 5s
 ```
 
 Very large NDJSON records use the same per-response cap as bounded responses.
@@ -56,7 +55,7 @@ event, including multi-line events.
 When a server needs a stream-specific `Accept` header, send it explicitly:
 
 ```bash
-restish -H 'Accept: text/event-stream' https://api.rest.sh/events --rsh-max-events 3
+restish -H 'Accept: text/event-stream' https://api.rest.sh/events --rsh-max-items 3
 ```
 
 ## Document Formats On Live Streams
@@ -66,8 +65,8 @@ live streams, prefer `ndjson` for structured records or `lines` for filtered
 scalar values:
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-events 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-events 3 -f data.message -o lines
+restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish https://api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
 ```
 
 ## SSE Parsing Notes

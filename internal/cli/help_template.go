@@ -70,7 +70,6 @@ var defaultFlagGroups = map[string]string{
 	"rsh-collect":     flagGroupPaging,
 	"rsh-max-pages":   flagGroupPaging,
 	"rsh-max-items":   flagGroupPaging,
-	"rsh-max-events":  flagGroupPaging,
 
 	"rsh-no-cache":       flagGroupCache,
 	"rsh-retry":          flagGroupCache,
