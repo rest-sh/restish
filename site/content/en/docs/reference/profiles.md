@@ -10,6 +10,19 @@ profiles are the common case.
 
 ## Example
 
+Create profiles from the command line with `api set`:
+
+```bash
+restish api set example \
+  'profiles.token.auth: {type: bearer, params: {token: env:DOCS_TOKEN}}'
+restish api set example \
+  'profiles.basic.auth: {type: http-basic, params: {username: env:DOCS_USER, password: env:DOCS_PASSWORD}}'
+restish api set example \
+  'profiles.key.auth: {type: api-key, params: {in: header, name: X-API-Key, value: env:DOCS_API_KEY}}'
+```
+
+The same profile data in `restish.json` looks like this:
+
 ```jsonc
 {
   "apis": {
@@ -58,13 +71,9 @@ Command-line profile selection overrides `RSH_PROFILE`.
 
 Auth params can reference environment variables where supported:
 
-```jsonc
-{
-  "auth": {
-    "type": "bearer",
-    "params": { "token": "env:DOCS_TOKEN" }
-  }
-}
+```bash
+restish api set example \
+  'profiles.token.auth: {type: bearer, params: {token: env:DOCS_TOKEN}}'
 ```
 
 For generated APIs with several OpenAPI security schemes, put each operation

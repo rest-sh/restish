@@ -69,8 +69,8 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:  c.runAPIInspect,
 	})
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "set <name> <key> <value> | <name> <path:value>",
-		Short: "Set API config using key/value or shorthand path:value syntax",
+		Use:   "set <name> <patch> [patch...]",
+		Short: "Patch API config using shorthand syntax",
 		Args:  cobra.MinimumNArgs(2),
 		RunE:  c.runAPISet,
 	})
@@ -296,10 +296,11 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	}
 	preservedProfiles := preservedProfileNames(existingAPI, replaceProfiles)
 	if len(setupExprs) > 0 {
-		work := &config.Config{APIs: map[string]*config.APIConfig{apiName: apiCfg}}
-		if _, err := c.buildAPIPatchOperations(work, apiName, setupExprs); err != nil {
+		patched, err := c.applyAPIShorthandConfig(apiName, apiCfg, setupExprs)
+		if err != nil {
 			return err
 		}
+		apiCfg = patched
 	}
 	if apiSpec != nil {
 		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
@@ -412,7 +413,7 @@ type configurePromptAnswers struct {
 	credentials map[string]map[string]map[string]string
 }
 
-func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, []setExpression, error) {
+func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, []string, error) {
 	if len(args) == 0 {
 		return configurePromptAnswers{}, nil, nil
 	}
@@ -424,6 +425,10 @@ func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, [
 	for _, arg := range args {
 		key, raw, appendOp, err := parseShorthandAssignment(arg)
 		if err != nil {
+			if strings.Contains(arg, "^") {
+				patchArgs = append(patchArgs, arg)
+				continue
+			}
 			return configurePromptAnswers{}, nil, err
 		}
 		if !strings.HasPrefix(key, "prompt.") {
@@ -462,11 +467,7 @@ func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, [
 		}
 		answers.profiles[profileName][promptName] = valueString
 	}
-	exprs, err := parseAPISetExpressions(patchArgs)
-	if err != nil {
-		return configurePromptAnswers{}, nil, err
-	}
-	return answers, exprs, nil
+	return answers, patchArgs, nil
 }
 
 func parseCredentialPromptAnswer(answers configurePromptAnswers, trimmed, value string) bool {
@@ -949,38 +950,48 @@ func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []strin
 	return changed
 }
 
-// runAPISet updates a single config field for a named API using a dot-path key.
-// Supported keys: base_url, spec_url, allow_cross_origin_spec, operation_base,
-// server_variables.<name>,
-// pagination.items_path, pagination.next_path,
-// profiles.<name>.base_url, profiles.<name>.auth.type,
-// profiles.<name>.auth.params.<param>, profiles.<name>.tls_signer,
-// profiles.<name>.server_variables.<name>,
-// profiles.<name>.credentials.<id>.auth_ref,
-// profiles.<name>.credentials.<id>.satisfies,
-// profiles.<name>.credentials.<id>.auth.type,
-// profiles.<name>.credentials.<id>.auth.params.<param>.
+// runAPISet patches a named API config using shorthand patch expressions rooted
+// at apis.<name>.
 func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 
 	if _, err := c.requireAPI(apiName); err != nil {
 		return err
 	}
+	patchArgs := args[1:]
+	if err := validateConfigPatchArgs("api set", patchArgs); err != nil {
+		return err
+	}
+	if err := c.saveConfigShorthand("api set", []string{"apis", apiName}, patchArgs); err != nil {
+		return err
+	}
+	c.printConfigWrittenPath()
+	return nil
+}
 
-	exprs, err := parseAPISetExpressions(args[1:])
-	if err != nil {
-		return err
+func validateConfigPatchArgs(label string, args []string) error {
+	for _, arg := range args {
+		if !strings.Contains(arg, ":") && !strings.Contains(arg, "^") {
+			return fmt.Errorf("%s: expected shorthand patch expression %q to contain ':' or '^'", label, arg)
+		}
 	}
-	work, err := cloneConfig(c.cfg)
-	if err != nil {
-		return err
-	}
-	ops, err := c.buildAPIPatchOperations(work, apiName, exprs)
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
-	return c.saveConfigValues("api set", ops)
+func (c *CLI) applyAPIShorthandConfig(apiName string, apiCfg *config.APIConfig, exprs []string) (*config.APIConfig, error) {
+	cfg := &config.Config{APIs: map[string]*config.APIConfig{apiName: apiCfg}}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_, patched, err := config.PatchConfigShorthandBytes(data, []string{"apis", apiName}, exprs)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validateConfigRuntime(patched); err != nil {
+		return nil, err
+	}
+	return patched.APIs[apiName], nil
 }
 
 func apiSpecCacheRelevantFieldsChanged(oldAPI, newAPI *config.APIConfig) bool {
@@ -1018,54 +1029,6 @@ func profileServerVariablesEqual(a, b map[string]*config.ProfileConfig) bool {
 	return true
 }
 
-type setExpression struct {
-	key    string
-	value  any
-	append bool
-	delete bool
-}
-
-func parseAPISetExpressions(args []string) ([]setExpression, error) {
-	if len(args) == 0 {
-		return nil, nil
-	}
-	if len(args) == 2 && !strings.Contains(args[0], ":") {
-		v, err := parseConfigCLIValue(args[1])
-		if err != nil {
-			return nil, err
-		}
-		expr := setExpression{key: args[0], value: v}
-		if strings.TrimSpace(args[1]) == "undefined" {
-			expr.delete = true
-			expr.value = nil
-		}
-		return []setExpression{expr}, nil
-	}
-	out := make([]setExpression, 0, len(args))
-	for _, arg := range args {
-		key, raw, appendOp, err := parseShorthandAssignment(arg)
-		if err != nil {
-			return nil, err
-		}
-		expr := setExpression{key: key, append: appendOp}
-		if strings.TrimSpace(raw) == "undefined" {
-			if appendOp {
-				return nil, fmt.Errorf("invalid shorthand %q: append expressions cannot use undefined", arg)
-			}
-			expr.delete = true
-			out = append(out, expr)
-			continue
-		}
-		v, err := parseConfigCLIValue(raw)
-		if err != nil {
-			return nil, err
-		}
-		expr.value = v
-		out = append(out, expr)
-	}
-	return out, nil
-}
-
 func parseShorthandAssignment(expr string) (string, string, bool, error) {
 	key, raw, ok := strings.Cut(expr, ":")
 	if !ok {
@@ -1099,262 +1062,6 @@ func parseConfigCLIValue(raw string) (any, error) {
 	return raw, nil
 }
 
-type apiConfigKeyKind int
-
-const (
-	apiKeyBaseURL apiConfigKeyKind = iota + 1
-	apiKeySpecURL
-	apiKeyAllowCrossOriginSpec
-	apiKeyOperationBase
-	apiKeyCommandLayout
-	apiKeyServerVariable
-	apiKeyPaginationItemsPath
-	apiKeyPaginationNextPath
-	apiKeyProfileBaseURL
-	apiKeyProfileHeaders
-	apiKeyProfileQuery
-	apiKeyProfileTLSSigner
-	apiKeyProfileServerVariable
-	apiKeyProfileAuthRef
-	apiKeyProfileAuthType
-	apiKeyProfileAuthParam
-	apiKeyProfileCredentialAuthRef
-	apiKeyProfileCredentialAuthType
-	apiKeyProfileCredentialAuthParam
-	apiKeyProfileCredentialSatisfies
-)
-
-type resolvedAPIConfigKey struct {
-	kind         apiConfigKeyKind
-	jsonPath     []string
-	profileName  string
-	credentialID string
-	paramName    string
-	varName      string
-	descriptor   apiSetFieldDescriptor
-}
-
-type apiSetFieldDescriptor struct {
-	Kind    apiConfigKeyKind
-	Pattern string
-	Append  bool
-}
-
-var apiSetFieldDescriptors = []apiSetFieldDescriptor{
-	{Kind: apiKeyBaseURL, Pattern: "base_url"},
-	{Kind: apiKeySpecURL, Pattern: "spec_url"},
-	{Kind: apiKeyAllowCrossOriginSpec, Pattern: "allow_cross_origin_spec"},
-	{Kind: apiKeyOperationBase, Pattern: "operation_base"},
-	{Kind: apiKeyCommandLayout, Pattern: "command_layout"},
-	{Kind: apiKeyServerVariable, Pattern: "server_variables.<var>"},
-	{Kind: apiKeyPaginationItemsPath, Pattern: "pagination.items_path"},
-	{Kind: apiKeyPaginationNextPath, Pattern: "pagination.next_path"},
-	{Kind: apiKeyProfileBaseURL, Pattern: "profiles.<name>.base_url"},
-	{Kind: apiKeyProfileHeaders, Pattern: "profiles.<name>.headers", Append: true},
-	{Kind: apiKeyProfileQuery, Pattern: "profiles.<name>.query", Append: true},
-	{Kind: apiKeyProfileTLSSigner, Pattern: "profiles.<name>.tls_signer"},
-	{Kind: apiKeyProfileServerVariable, Pattern: "profiles.<name>.server_variables.<var>"},
-	{Kind: apiKeyProfileAuthRef, Pattern: "profiles.<name>.auth_ref"},
-	{Kind: apiKeyProfileAuthType, Pattern: "profiles.<name>.auth.type"},
-	{Kind: apiKeyProfileAuthParam, Pattern: "profiles.<name>.auth.params.<param>"},
-	{Kind: apiKeyProfileCredentialAuthRef, Pattern: "profiles.<name>.credentials.<id>.auth_ref"},
-	{Kind: apiKeyProfileCredentialSatisfies, Pattern: "profiles.<name>.credentials.<id>.satisfies"},
-	{Kind: apiKeyProfileCredentialAuthType, Pattern: "profiles.<name>.credentials.<id>.auth.type"},
-	{Kind: apiKeyProfileCredentialAuthParam, Pattern: "profiles.<name>.credentials.<id>.auth.params.<param>"},
-}
-
-var apiSetFieldDescriptorByKind = func() map[apiConfigKeyKind]apiSetFieldDescriptor {
-	out := make(map[apiConfigKeyKind]apiSetFieldDescriptor, len(apiSetFieldDescriptors))
-	for _, desc := range apiSetFieldDescriptors {
-		out[desc.Kind] = desc
-	}
-	return out
-}()
-
-func resolvedAPIKey(kind apiConfigKeyKind, jsonPath []string) resolvedAPIConfigKey {
-	return resolvedAPIConfigKey{kind: kind, jsonPath: jsonPath, descriptor: apiSetFieldDescriptorByKind[kind]}
-}
-
-func apiSetSupportedFields() string {
-	patterns := make([]string, 0, len(apiSetFieldDescriptors))
-	for _, desc := range apiSetFieldDescriptors {
-		patterns = append(patterns, desc.Pattern)
-	}
-	return strings.Join(patterns, ", ")
-}
-
-func resolveAPIConfigKey(apiName, key string) (resolvedAPIConfigKey, error) {
-	parts := strings.SplitN(key, ".", 3)
-	basePath := []string{"apis"}
-	if apiName != "" {
-		basePath = append(basePath, apiName)
-	}
-
-	switch parts[0] {
-	case "base_url":
-		return resolvedAPIKey(apiKeyBaseURL, append(basePath, "base_url")), nil
-	case "spec_url":
-		return resolvedAPIKey(apiKeySpecURL, append(basePath, "spec_url")), nil
-	case "allow_cross_origin_spec":
-		return resolvedAPIKey(apiKeyAllowCrossOriginSpec, append(basePath, "allow_cross_origin_spec")), nil
-	case "operation_base":
-		return resolvedAPIKey(apiKeyOperationBase, append(basePath, "operation_base")), nil
-	case "command_layout":
-		return resolvedAPIKey(apiKeyCommandLayout, append(basePath, "command_layout")), nil
-	case "server_variables":
-		if len(parts) < 2 || parts[1] == "" {
-			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected server_variables.<name>", key)
-		}
-		return resolvedAPIConfigKey{
-			kind:     apiKeyServerVariable,
-			jsonPath: append(basePath, "server_variables", parts[1]),
-			varName:  parts[1],
-		}, nil
-	case "pagination":
-		if len(parts) < 2 {
-			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected pagination.<field>", key)
-		}
-		switch parts[1] {
-		case "items_path":
-			return resolvedAPIConfigKey{kind: apiKeyPaginationItemsPath, jsonPath: append(basePath, "pagination", "items_path")}, nil
-		case "next_path":
-			return resolvedAPIConfigKey{kind: apiKeyPaginationNextPath, jsonPath: append(basePath, "pagination", "next_path")}, nil
-		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported pagination field %q; supported: items_path, next_path", parts[1])
-		}
-	case "profiles":
-		if len(parts) < 3 {
-			return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.<field>", key)
-		}
-		profileName := parts[1]
-		subParts := strings.SplitN(parts[2], ".", 3)
-		switch subParts[0] {
-		case "base_url":
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileBaseURL,
-				jsonPath:    append(basePath, "profiles", profileName, "base_url"),
-				profileName: profileName,
-			}, nil
-		case "headers":
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileHeaders,
-				jsonPath:    append(basePath, "profiles", profileName, "headers"),
-				profileName: profileName,
-			}, nil
-		case "query":
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileQuery,
-				jsonPath:    append(basePath, "profiles", profileName, "query"),
-				profileName: profileName,
-			}, nil
-		case "tls_signer":
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileTLSSigner,
-				jsonPath:    append(basePath, "profiles", profileName, "tls_signer"),
-				profileName: profileName,
-			}, nil
-		case "server_variables":
-			if len(subParts) < 2 || subParts[1] == "" {
-				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.server_variables.<var>", key)
-			}
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileServerVariable,
-				jsonPath:    append(basePath, "profiles", profileName, "server_variables", subParts[1]),
-				profileName: profileName,
-				varName:     subParts[1],
-			}, nil
-		case "auth_ref":
-			return resolvedAPIConfigKey{
-				kind:        apiKeyProfileAuthRef,
-				jsonPath:    append(basePath, "profiles", profileName, "auth_ref"),
-				profileName: profileName,
-			}, nil
-		case "auth":
-			if len(subParts) < 2 {
-				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.<field>", key)
-			}
-			switch subParts[1] {
-			case "type":
-				return resolvedAPIConfigKey{
-					kind:        apiKeyProfileAuthType,
-					jsonPath:    append(basePath, "profiles", profileName, "auth", "type"),
-					profileName: profileName,
-				}, nil
-			case "params":
-				if len(subParts) < 3 {
-					return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.auth.params.<param>", key)
-				}
-				return resolvedAPIConfigKey{
-					kind:        apiKeyProfileAuthParam,
-					jsonPath:    append(basePath, "profiles", profileName, "auth", "params", subParts[2]),
-					profileName: profileName,
-					paramName:   subParts[2],
-				}, nil
-			default:
-				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported auth field %q; supported: type, params.<param>", subParts[1])
-			}
-		case "credentials":
-			if len(subParts) < 3 {
-				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.<field>", key)
-			}
-			credentialID := subParts[1]
-			credentialRest := subParts[2]
-			if credentialID == "" || credentialRest == "" {
-				return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.<field>", key)
-			}
-			credentialParts := strings.SplitN(credentialRest, ".", 3)
-			switch credentialParts[0] {
-			case "auth_ref":
-				return resolvedAPIConfigKey{
-					kind:         apiKeyProfileCredentialAuthRef,
-					jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth_ref"),
-					profileName:  profileName,
-					credentialID: credentialID,
-				}, nil
-			case "satisfies":
-				return resolvedAPIConfigKey{
-					kind:         apiKeyProfileCredentialSatisfies,
-					jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "satisfies"),
-					profileName:  profileName,
-					credentialID: credentialID,
-				}, nil
-			case "auth":
-				if len(credentialParts) < 2 {
-					return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.auth.<field>", key)
-				}
-				switch credentialParts[1] {
-				case "type":
-					return resolvedAPIConfigKey{
-						kind:         apiKeyProfileCredentialAuthType,
-						jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth", "type"),
-						profileName:  profileName,
-						credentialID: credentialID,
-					}, nil
-				case "params":
-					if len(credentialParts) < 3 {
-						return resolvedAPIConfigKey{}, fmt.Errorf("invalid key %q: expected profiles.<name>.credentials.<id>.auth.params.<param>", key)
-					}
-					return resolvedAPIConfigKey{
-						kind:         apiKeyProfileCredentialAuthParam,
-						jsonPath:     append(basePath, "profiles", profileName, "credentials", credentialID, "auth", "params", credentialParts[2]),
-						profileName:  profileName,
-						credentialID: credentialID,
-						paramName:    credentialParts[2],
-					}, nil
-				default:
-					return resolvedAPIConfigKey{}, fmt.Errorf("unsupported credential auth field %q; supported: type, params.<param>", credentialParts[1])
-				}
-			default:
-				return resolvedAPIConfigKey{}, fmt.Errorf("unsupported credential field %q; supported: auth_ref, satisfies, auth.type, auth.params.<param>", credentialParts[0])
-			}
-		default:
-			return resolvedAPIConfigKey{}, fmt.Errorf("unsupported profile field %q; supported: base_url, headers, query, tls_signer, server_variables.<var>, auth_ref, auth.type, auth.params.<param>, credentials.<id>.auth_ref, credentials.<id>.satisfies, credentials.<id>.auth.type, credentials.<id>.auth.params.<param>", parts[2])
-		}
-	default:
-		return resolvedAPIConfigKey{}, fmt.Errorf("unsupported field %q; supported: %s", key, apiSetSupportedFields())
-	}
-}
-
 func cloneConfig(src *config.Config) (*config.Config, error) {
 	if src == nil {
 		return &config.Config{}, nil
@@ -1368,496 +1075,6 @@ func cloneConfig(src *config.Config) (*config.Config, error) {
 		return nil, err
 	}
 	return &dst, nil
-}
-
-func (c *CLI) buildAPIPatchOperations(work *config.Config, apiName string, exprs []setExpression) ([]config.ConfigPatchOperation, error) {
-	if len(exprs) == 0 {
-		return nil, nil
-	}
-	if work.APIs == nil || work.APIs[apiName] == nil {
-		return nil, fmt.Errorf("unknown API %q", apiName)
-	}
-	apiCfg := work.APIs[apiName]
-	ops := make([]config.ConfigPatchOperation, 0, len(exprs))
-	for _, expr := range exprs {
-		resolved, err := resolveAPIConfigKey(apiName, expr.key)
-		if err != nil {
-			return nil, err
-		}
-		resolved.descriptor = apiSetFieldDescriptorByKind[resolved.kind]
-
-		switch {
-		case expr.delete:
-			if err := deleteAPIField(apiCfg, resolved); err != nil {
-				return nil, err
-			}
-			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Delete: true})
-		case expr.append:
-			if err := appendAPIField(apiCfg, resolved, expr.value); err != nil {
-				return nil, err
-			}
-			finalValue, err := apiFieldValue(apiCfg, resolved)
-			if err != nil {
-				return nil, err
-			}
-			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Value: finalValue})
-		default:
-			if err := setAPIFieldValue(c, apiCfg, resolved, expr.value); err != nil {
-				return nil, err
-			}
-			finalValue, err := apiFieldValue(apiCfg, resolved)
-			if err != nil {
-				return nil, err
-			}
-			ops = append(ops, config.ConfigPatchOperation{Path: resolved.jsonPath, Value: finalValue})
-		}
-	}
-	return ops, nil
-}
-
-func ensureProfile(apiCfg *config.APIConfig, profileName string) *config.ProfileConfig {
-	if apiCfg.Profiles == nil {
-		apiCfg.Profiles = make(map[string]*config.ProfileConfig)
-	}
-	if apiCfg.Profiles[profileName] == nil {
-		apiCfg.Profiles[profileName] = &config.ProfileConfig{}
-	}
-	return apiCfg.Profiles[profileName]
-}
-
-func ensureCredential(apiCfg *config.APIConfig, profileName, credentialID string) *config.CredentialConfig {
-	prof := ensureProfile(apiCfg, profileName)
-	if prof.Credentials == nil {
-		prof.Credentials = make(map[string]*config.CredentialConfig)
-	}
-	if prof.Credentials[credentialID] == nil {
-		prof.Credentials[credentialID] = &config.CredentialConfig{}
-	}
-	return prof.Credentials[credentialID]
-}
-
-func deleteAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) error {
-	switch resolved.kind {
-	case apiKeyBaseURL:
-		apiCfg.BaseURL = ""
-	case apiKeySpecURL:
-		apiCfg.SpecURL = ""
-	case apiKeyAllowCrossOriginSpec:
-		apiCfg.AllowCrossOriginSpec = false
-	case apiKeyOperationBase:
-		apiCfg.OperationBase = ""
-	case apiKeyCommandLayout:
-		apiCfg.CommandLayout = ""
-	case apiKeyServerVariable:
-		if apiCfg.ServerVariables != nil {
-			delete(apiCfg.ServerVariables, resolved.varName)
-		}
-	case apiKeyPaginationItemsPath:
-		if apiCfg.Pagination != nil {
-			apiCfg.Pagination.ItemsPath = ""
-		}
-	case apiKeyPaginationNextPath:
-		if apiCfg.Pagination != nil {
-			apiCfg.Pagination.NextPath = ""
-		}
-	case apiKeyProfileBaseURL:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			p.BaseURL = ""
-		}
-	case apiKeyProfileHeaders:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			p.Headers = nil
-		}
-	case apiKeyProfileQuery:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			p.Query = nil
-		}
-	case apiKeyProfileTLSSigner:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			p.TLSSigner = ""
-		}
-	case apiKeyProfileServerVariable:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.ServerVariables != nil {
-			delete(p.ServerVariables, resolved.varName)
-		}
-	case apiKeyProfileAuthType:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil {
-			p.Auth.Type = ""
-		}
-	case apiKeyProfileAuthParam:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil && p.Auth.Params != nil {
-			delete(p.Auth.Params, resolved.paramName)
-		}
-	case apiKeyProfileCredentialAuthRef:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
-			p.Credentials[resolved.credentialID].AuthRef = ""
-		}
-	case apiKeyProfileCredentialAuthType:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
-			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil {
-				credential.Auth.Type = ""
-			}
-		}
-	case apiKeyProfileCredentialAuthParam:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
-			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil && credential.Auth.Params != nil {
-				delete(credential.Auth.Params, resolved.paramName)
-			}
-		}
-	case apiKeyProfileCredentialSatisfies:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
-			p.Credentials[resolved.credentialID].Satisfies = nil
-		}
-	default:
-		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
-	}
-	return nil
-}
-
-func appendAPIField(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey, value any) error {
-	v, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("append expects a string value")
-	}
-	prof := ensureProfile(apiCfg, resolved.profileName)
-	switch resolved.kind {
-	case apiKeyProfileHeaders:
-		if !resolved.descriptor.Append {
-			return fmt.Errorf("append is not supported for %s", resolved.descriptor.Pattern)
-		}
-		prof.Headers = append(prof.Headers, v)
-	case apiKeyProfileQuery:
-		if !resolved.descriptor.Append {
-			return fmt.Errorf("append is not supported for %s", resolved.descriptor.Pattern)
-		}
-		prof.Query = append(prof.Query, v)
-	default:
-		return fmt.Errorf("append is only supported for %s[] and %s[]", apiSetFieldDescriptorByKind[apiKeyProfileHeaders].Pattern, apiSetFieldDescriptorByKind[apiKeyProfileQuery].Pattern)
-	}
-	return nil
-}
-
-func setAPIFieldValue(c *CLI, apiCfg *config.APIConfig, resolved resolvedAPIConfigKey, value any) error {
-	switch resolved.kind {
-	case apiKeyBaseURL:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("base_url must be a string")
-		}
-		apiCfg.BaseURL = v
-	case apiKeySpecURL:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("spec_url must be a string")
-		}
-		apiCfg.SpecURL = v
-	case apiKeyAllowCrossOriginSpec:
-		b, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("allow_cross_origin_spec must be a boolean")
-		}
-		apiCfg.AllowCrossOriginSpec = b
-	case apiKeyOperationBase:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("operation_base must be a string")
-		}
-		if err := config.ValidateOperationBase(v); err != nil {
-			return fmt.Errorf("operation_base %w", err)
-		}
-		apiCfg.OperationBase = v
-	case apiKeyCommandLayout:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("command_layout must be a string")
-		}
-		if err := config.ValidateCommandLayout(v); err != nil {
-			return fmt.Errorf("command_layout %w", err)
-		}
-		apiCfg.CommandLayout = v
-	case apiKeyServerVariable:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("server_variables.%s must be a string", resolved.varName)
-		}
-		if apiCfg.ServerVariables == nil {
-			apiCfg.ServerVariables = map[string]string{}
-		}
-		apiCfg.ServerVariables[resolved.varName] = v
-	case apiKeyPaginationItemsPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("pagination.items_path must be a string")
-		}
-		if apiCfg.Pagination == nil {
-			apiCfg.Pagination = &config.PaginationConfig{}
-		}
-		apiCfg.Pagination.ItemsPath = v
-	case apiKeyPaginationNextPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("pagination.next_path must be a string")
-		}
-		if apiCfg.Pagination == nil {
-			apiCfg.Pagination = &config.PaginationConfig{}
-		}
-		apiCfg.Pagination.NextPath = v
-	case apiKeyProfileBaseURL:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.base_url must be a string", resolved.profileName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		prof.BaseURL = v
-	case apiKeyProfileHeaders:
-		arr, err := anyToStringSlice(value)
-		if err != nil {
-			return fmt.Errorf("profiles.%s.headers must be a string array", resolved.profileName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		prof.Headers = arr
-	case apiKeyProfileQuery:
-		arr, err := anyToStringSlice(value)
-		if err != nil {
-			return fmt.Errorf("profiles.%s.query must be a string array", resolved.profileName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		prof.Query = arr
-	case apiKeyProfileTLSSigner:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.tls_signer must be a string", resolved.profileName)
-		}
-		if v != "" {
-			if _, ok := c.pluginForHook(v, "tls-signer"); !ok {
-				return fmt.Errorf("tls_signer %q is not a registered tls-signer plugin", v)
-			}
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		prof.TLSSigner = v
-	case apiKeyProfileServerVariable:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.server_variables.%s must be a string", resolved.profileName, resolved.varName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		if prof.ServerVariables == nil {
-			prof.ServerVariables = map[string]string{}
-		}
-		prof.ServerVariables[resolved.varName] = v
-	case apiKeyProfileAuthRef:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.auth_ref must be a string", resolved.profileName)
-		}
-		if v != "" && (c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[v] == nil) {
-			return fmt.Errorf("profiles.%s.auth_ref: unknown auth profile %q", resolved.profileName, v)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		if prof.Auth != nil && v != "" {
-			return fmt.Errorf("profiles.%s.auth_ref cannot be set while auth is configured", resolved.profileName)
-		}
-		prof.AuthRef = v
-	case apiKeyProfileAuthType:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.auth.type must be a string", resolved.profileName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		if prof.AuthRef != "" {
-			return fmt.Errorf("profiles.%s.auth cannot be set while auth_ref is configured", resolved.profileName)
-		}
-		if prof.Auth == nil {
-			prof.Auth = &config.AuthConfig{}
-		}
-		candidate := &config.AuthConfig{Type: v, Params: map[string]string{}}
-		if _, err := c.authHandlerFor(candidate, authHandlerOptions{}); err != nil {
-			return fmt.Errorf("invalid auth.type %q: %w", v, err)
-		}
-		prof.Auth.Type = v
-	case apiKeyProfileAuthParam:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.auth.params.%s must be a string", resolved.profileName, resolved.paramName)
-		}
-		prof := ensureProfile(apiCfg, resolved.profileName)
-		if prof.AuthRef != "" {
-			return fmt.Errorf("profiles.%s.auth cannot be set while auth_ref is configured", resolved.profileName)
-		}
-		if prof.Auth == nil {
-			prof.Auth = &config.AuthConfig{}
-		}
-		if prof.Auth.Params == nil {
-			prof.Auth.Params = map[string]string{}
-		}
-		prof.Auth.Params[resolved.paramName] = v
-	case apiKeyProfileCredentialAuthRef:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref must be a string", resolved.profileName, resolved.credentialID)
-		}
-		if v != "" && (c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[v] == nil) {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref: unknown auth profile %q", resolved.profileName, resolved.credentialID, v)
-		}
-		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
-		if credential.Auth != nil && v != "" {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth_ref cannot be set while auth is configured", resolved.profileName, resolved.credentialID)
-		}
-		credential.AuthRef = v
-	case apiKeyProfileCredentialAuthType:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth.type must be a string", resolved.profileName, resolved.credentialID)
-		}
-		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
-		if credential.AuthRef != "" {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth cannot be set while auth_ref is configured", resolved.profileName, resolved.credentialID)
-		}
-		if credential.Auth == nil {
-			credential.Auth = &config.AuthConfig{}
-		}
-		candidate := &config.AuthConfig{Type: v, Params: map[string]string{}}
-		if _, err := c.authHandlerFor(candidate, authHandlerOptions{}); err != nil {
-			return fmt.Errorf("invalid credentials.%s.auth.type %q: %w", resolved.credentialID, v, err)
-		}
-		credential.Auth.Type = v
-	case apiKeyProfileCredentialAuthParam:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth.params.%s must be a string", resolved.profileName, resolved.credentialID, resolved.paramName)
-		}
-		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
-		if credential.AuthRef != "" {
-			return fmt.Errorf("profiles.%s.credentials.%s.auth cannot be set while auth_ref is configured", resolved.profileName, resolved.credentialID)
-		}
-		if credential.Auth == nil {
-			credential.Auth = &config.AuthConfig{}
-		}
-		if credential.Auth.Params == nil {
-			credential.Auth.Params = map[string]string{}
-		}
-		credential.Auth.Params[resolved.paramName] = v
-	case apiKeyProfileCredentialSatisfies:
-		arr, err := anyToStringSlice(value)
-		if err != nil {
-			return fmt.Errorf("profiles.%s.credentials.%s.satisfies must be a string array", resolved.profileName, resolved.credentialID)
-		}
-		credential := ensureCredential(apiCfg, resolved.profileName, resolved.credentialID)
-		credential.Satisfies = arr
-	default:
-		return fmt.Errorf("unsupported field %q", strings.Join(resolved.jsonPath, "."))
-	}
-	return nil
-}
-
-func anyToStringSlice(value any) ([]string, error) {
-	switch v := value.(type) {
-	case string:
-		return []string{v}, nil
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("array element is not a string")
-			}
-			out = append(out, s)
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf("not a string slice")
-	}
-}
-
-func apiFieldValue(apiCfg *config.APIConfig, resolved resolvedAPIConfigKey) (any, error) {
-	switch resolved.kind {
-	case apiKeyBaseURL:
-		return apiCfg.BaseURL, nil
-	case apiKeySpecURL:
-		return apiCfg.SpecURL, nil
-	case apiKeyAllowCrossOriginSpec:
-		return apiCfg.AllowCrossOriginSpec, nil
-	case apiKeyOperationBase:
-		return apiCfg.OperationBase, nil
-	case apiKeyCommandLayout:
-		return apiCfg.CommandLayout, nil
-	case apiKeyServerVariable:
-		if apiCfg.ServerVariables != nil {
-			return apiCfg.ServerVariables[resolved.varName], nil
-		}
-		return "", nil
-	case apiKeyPaginationItemsPath:
-		if apiCfg.Pagination == nil {
-			return "", nil
-		}
-		return apiCfg.Pagination.ItemsPath, nil
-	case apiKeyPaginationNextPath:
-		if apiCfg.Pagination == nil {
-			return "", nil
-		}
-		return apiCfg.Pagination.NextPath, nil
-	case apiKeyProfileBaseURL:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			return p.BaseURL, nil
-		}
-		return "", nil
-	case apiKeyProfileHeaders:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			return p.Headers, nil
-		}
-		return []string{}, nil
-	case apiKeyProfileQuery:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			return p.Query, nil
-		}
-		return []string{}, nil
-	case apiKeyProfileTLSSigner:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil {
-			return p.TLSSigner, nil
-		}
-		return "", nil
-	case apiKeyProfileServerVariable:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.ServerVariables != nil {
-			return p.ServerVariables[resolved.varName], nil
-		}
-		return "", nil
-	case apiKeyProfileAuthType:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil {
-			return p.Auth.Type, nil
-		}
-		return "", nil
-	case apiKeyProfileAuthParam:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Auth != nil && p.Auth.Params != nil {
-			return p.Auth.Params[resolved.paramName], nil
-		}
-		return "", nil
-	case apiKeyProfileCredentialAuthRef:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
-			return p.Credentials[resolved.credentialID].AuthRef, nil
-		}
-		return "", nil
-	case apiKeyProfileCredentialAuthType:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
-			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil {
-				return credential.Auth.Type, nil
-			}
-		}
-		return "", nil
-	case apiKeyProfileCredentialAuthParam:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil {
-			if credential := p.Credentials[resolved.credentialID]; credential != nil && credential.Auth != nil && credential.Auth.Params != nil {
-				return credential.Auth.Params[resolved.paramName], nil
-			}
-		}
-		return "", nil
-	case apiKeyProfileCredentialSatisfies:
-		if p := apiCfg.Profiles[resolved.profileName]; p != nil && p.Credentials != nil && p.Credentials[resolved.credentialID] != nil {
-			return p.Credentials[resolved.credentialID].Satisfies, nil
-		}
-		return []string{}, nil
-	default:
-		return nil, fmt.Errorf("unsupported field")
-	}
 }
 
 // runAPIList prints all configured APIs with their base URL and profile count.

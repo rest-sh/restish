@@ -1,13 +1,21 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/tailscale/hujson"
+	"github.com/tidwall/jsonc"
 )
 
 // ErrPathNotFound reports that a requested JSONC path did not exist.
@@ -76,6 +84,418 @@ func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
 	})
 }
 
+// SaveConfigShorthand applies shorthand patch expressions to the JSONC config
+// file under rootPath, validates the final config, and writes it atomically
+// while preserving comments where possible.
+func SaveConfigShorthand(path string, rootPath []string, exprs []string, validate func(*Config) error) error {
+	if len(exprs) == 0 {
+		return nil
+	}
+	if err := patchConfig(path, true, func(data []byte) ([]byte, error) {
+		patched, cfg, err := PatchConfigShorthandBytes(data, rootPath, exprs)
+		if err != nil {
+			return nil, err
+		}
+		if validate != nil {
+			if err := validate(cfg); err != nil {
+				return nil, err
+			}
+		}
+		return patched, nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// PatchConfigShorthandBytes applies shorthand patch expressions to JSONC config
+// bytes and returns the patched bytes plus the decoded typed config.
+func PatchConfigShorthandBytes(data []byte, rootPath []string, exprs []string) ([]byte, *Config, error) {
+	root, err := genericJSONC(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := shorthand.ParseOptions{
+		EnableObjectDetection: true,
+		ForceStringKeys:       true,
+	}
+	target := root
+	if len(rootPath) > 0 {
+		if existing, ok := genericValueAtPath(root, rootPath); ok {
+			target = existing
+		} else {
+			target = map[string]any{}
+		}
+	}
+	patchExpr := strings.Join(exprs, ", ")
+	doc := shorthand.NewDocument(opts)
+	if err := doc.Parse(patchExpr); err != nil {
+		return nil, nil, fmt.Errorf("invalid shorthand patch %q: %w", patchExpr, err)
+	}
+	target, err = applyShorthandPatch(target, doc.Operations)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid shorthand patch %q: %w", patchExpr, err)
+	}
+	if len(rootPath) > 0 {
+		root = genericSetPath(root, rootPath, target)
+	}
+
+	if err := ValidateShape(root); err != nil {
+		return nil, nil, err
+	}
+
+	raw, err := json.Marshal(root)
+	if err != nil {
+		return nil, nil, fmt.Errorf("config: marshal patched config: %w", err)
+	}
+	cfg, err := parseConfigBytes("", raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	patched, err := jsoncSyncGeneric(data, root)
+	if err != nil {
+		return nil, nil, err
+	}
+	return patched, cfg, nil
+}
+
+type shorthandPathPart struct {
+	key    string
+	index  int
+	isKey  bool
+	append bool
+	insert bool
+}
+
+func applyShorthandPatch(root any, ops []shorthand.Operation) (any, error) {
+	var err error
+	for _, op := range ops {
+		switch op.Kind {
+		case shorthand.OpSet:
+			root, err = setShorthandPath(root, op.Path, op.Value)
+		case shorthand.OpDelete:
+			root, err = deleteShorthandPath(root, op.Path)
+		case shorthand.OpSwap:
+			rightPath, ok := op.Value.(string)
+			if !ok {
+				return nil, fmt.Errorf("swap operation value must be a path string, got %T", op.Value)
+			}
+			root, err = swapShorthandPaths(root, op.Path, rightPath)
+		default:
+			err = fmt.Errorf("unknown operation kind %d", op.Kind)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return root, nil
+}
+
+func swapShorthandPaths(root any, leftPath, rightPath string) (any, error) {
+	left, leftOK, err := shorthand.GetPath(leftPath, root, shorthand.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	right, rightOK, err := shorthand.GetPath(rightPath, root, shorthand.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var applyErr error
+	if rightOK {
+		root, applyErr = setShorthandPath(root, leftPath, right)
+	} else {
+		root, applyErr = deleteShorthandPath(root, leftPath)
+	}
+	if applyErr != nil {
+		return nil, applyErr
+	}
+	if leftOK {
+		return setShorthandPath(root, rightPath, left)
+	}
+	return deleteShorthandPath(root, rightPath)
+}
+
+func setShorthandPath(root any, path string, value any) (any, error) {
+	parts, err := parseShorthandPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return setShorthandPathParts(root, parts, value)
+}
+
+func deleteShorthandPath(root any, path string) (any, error) {
+	parts, err := parseShorthandPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return deleteShorthandPathParts(root, parts)
+}
+
+func setShorthandPathParts(current any, parts []shorthandPathPart, value any) (any, error) {
+	if len(parts) == 0 {
+		return value, nil
+	}
+	part := parts[0]
+	if part.isKey {
+		m, ok := current.(map[string]any)
+		if !ok {
+			m = map[string]any{}
+		}
+		next, err := setShorthandPathParts(m[part.key], parts[1:], value)
+		if err != nil {
+			return nil, err
+		}
+		m[part.key] = next
+		return m, nil
+	}
+
+	s, ok := current.([]any)
+	if !ok {
+		s = []any{}
+	}
+	index, err := resolveSetIndex(len(s), part)
+	if err != nil {
+		return nil, err
+	}
+	origLen := len(s)
+	for len(s) <= index {
+		s = append(s, nil)
+	}
+	if part.insert && index < origLen {
+		s = append(s, nil)
+		copy(s[index+1:], s[index:origLen])
+	}
+	next, err := setShorthandPathParts(s[index], parts[1:], value)
+	if err != nil {
+		return nil, err
+	}
+	s[index] = next
+	return s, nil
+}
+
+func deleteShorthandPathParts(current any, parts []shorthandPathPart) (any, error) {
+	if len(parts) == 0 {
+		return current, nil
+	}
+	part := parts[0]
+	if part.isKey {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return current, nil
+		}
+		if len(parts) == 1 {
+			delete(m, part.key)
+			return m, nil
+		}
+		child, ok := m[part.key]
+		if !ok {
+			return m, nil
+		}
+		next, err := deleteShorthandPathParts(child, parts[1:])
+		if err != nil {
+			return nil, err
+		}
+		m[part.key] = next
+		return m, nil
+	}
+
+	s, ok := current.([]any)
+	if !ok {
+		return current, nil
+	}
+	if part.append {
+		return s, nil
+	}
+	index := part.index
+	if index < 0 {
+		index = len(s) + index
+	}
+	if index < 0 || index >= len(s) {
+		return s, nil
+	}
+	if len(parts) == 1 {
+		return append(s[:index], s[index+1:]...), nil
+	}
+	next, err := deleteShorthandPathParts(s[index], parts[1:])
+	if err != nil {
+		return nil, err
+	}
+	s[index] = next
+	return s, nil
+}
+
+func resolveSetIndex(length int, part shorthandPathPart) (int, error) {
+	if part.append {
+		return length, nil
+	}
+	index := part.index
+	if index < 0 {
+		index = length + index
+	}
+	if index < 0 {
+		return 0, fmt.Errorf("index %d out of range", part.index)
+	}
+	return index, nil
+}
+
+func parseShorthandPath(path string) ([]shorthandPathPart, error) {
+	var parts []shorthandPathPart
+	for i := 0; i < len(path); {
+		switch path[i] {
+		case '.':
+			i++
+		case '[':
+			part, next, err := parseShorthandIndex(path, i)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
+			i = next
+		default:
+			key, next, err := parseShorthandKey(path, i)
+			if err != nil {
+				return nil, err
+			}
+			if key == "" {
+				return nil, fmt.Errorf("empty path component in %q", path)
+			}
+			parts = append(parts, shorthandPathPart{isKey: true, key: key})
+			i = next
+		}
+	}
+	return parts, nil
+}
+
+func parseShorthandIndex(path string, start int) (shorthandPathPart, int, error) {
+	end := strings.IndexByte(path[start:], ']')
+	if end < 0 {
+		return shorthandPathPart{}, 0, fmt.Errorf("missing closing bracket in path %q", path)
+	}
+	content := path[start+1 : start+end]
+	part := shorthandPathPart{}
+	if content == "" {
+		part.append = true
+		return part, start + end + 1, nil
+	}
+	if strings.HasPrefix(content, "^") {
+		part.insert = true
+		content = strings.TrimPrefix(content, "^")
+	}
+	index, err := strconv.Atoi(content)
+	if err != nil {
+		return shorthandPathPart{}, 0, fmt.Errorf("invalid array index %q in path %q", content, path)
+	}
+	part.index = index
+	return part, start + end + 1, nil
+}
+
+func parseShorthandKey(path string, start int) (string, int, error) {
+	var b strings.Builder
+	for i := start; i < len(path); i++ {
+		switch path[i] {
+		case '\\':
+			if i+1 >= len(path) {
+				return "", 0, fmt.Errorf("trailing escape in path %q", path)
+			}
+			b.WriteByte(path[i+1])
+			i++
+		case '"':
+			i++
+			for ; i < len(path); i++ {
+				if path[i] == '\\' {
+					if i+1 >= len(path) {
+						return "", 0, fmt.Errorf("trailing escape in path %q", path)
+					}
+					b.WriteByte(path[i+1])
+					i++
+					continue
+				}
+				if path[i] == '"' {
+					break
+				}
+				b.WriteByte(path[i])
+			}
+			if i >= len(path) || path[i] != '"' {
+				return "", 0, fmt.Errorf("missing closing quote in path %q", path)
+			}
+		case '.', '[':
+			return strings.TrimSpace(b.String()), i, nil
+		default:
+			b.WriteByte(path[i])
+		}
+	}
+	return strings.TrimSpace(b.String()), len(path), nil
+}
+
+func genericValueAtPath(root any, path []string) (any, bool) {
+	current := root
+	for _, key := range path {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		next, ok := m[key]
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func genericSetPath(root any, path []string, value any) any {
+	if len(path) == 0 {
+		return value
+	}
+	m, ok := root.(map[string]any)
+	if !ok {
+		m = map[string]any{}
+	}
+	child := genericSetPath(m[path[0]], path[1:], value)
+	m[path[0]] = child
+	return m
+}
+
+// ConfigShapeError reports one or more structural validation failures.
+type ConfigShapeError struct {
+	Errors []error
+}
+
+func (e *ConfigShapeError) Error() string {
+	var b strings.Builder
+	b.WriteString("config validation failed:")
+	for _, err := range e.Errors {
+		b.WriteString("\n  ")
+		b.WriteString(formatHumaValidationError(err))
+	}
+	return b.String()
+}
+
+// ValidateShape validates generic decoded config data against the Config
+// schema generated from Go structs.
+func ValidateShape(value any) error {
+	errs := huma.NewModelValidator().Validate(reflect.TypeOf(Config{}), value)
+	if len(errs) == 0 {
+		return nil
+	}
+	return &ConfigShapeError{Errors: errs}
+}
+
+func formatHumaValidationError(err error) string {
+	var detailer huma.ErrorDetailer
+	if errors.As(err, &detailer) {
+		d := detailer.ErrorDetail()
+		if d.Location != "" {
+			return d.Location + ": " + d.Message
+		}
+		if d.Message != "" {
+			return d.Message
+		}
+	}
+	return err.Error()
+}
+
 func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, error)) error {
 	lock, err := lockConfigFile(path)
 	if err != nil {
@@ -103,6 +523,141 @@ func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, 
 		return err
 	}
 	return atomicWriteFileLocked(path, patched, 0o600, 0o700, false)
+}
+
+func genericJSONC(data []byte) (any, error) {
+	stripped := jsonc.ToJSON(data)
+	if len(bytes.TrimSpace(stripped)) == 0 {
+		return map[string]any{}, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(stripped))
+	var root any
+	if err := dec.Decode(&root); err != nil {
+		if errors.Is(err, io.EOF) {
+			return map[string]any{}, nil
+		}
+		return nil, fmt.Errorf("config: parse JSONC: %w", err)
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = fmt.Errorf("unexpected trailing content")
+		}
+		return nil, fmt.Errorf("config: parse JSONC: %w", err)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+	return root, nil
+}
+
+func jsoncSyncGeneric(data []byte, value any) ([]byte, error) {
+	v, err := hujson.Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("config: parse JSONC: %w", err)
+	}
+	if err := syncHuJSONValue(&v, value); err != nil {
+		return nil, err
+	}
+	return v.Pack(), nil
+}
+
+func syncHuJSONValue(dst *hujson.Value, value any) error {
+	switch v := value.(type) {
+	case map[string]any:
+		if obj, ok := dst.Value.(*hujson.Object); ok {
+			return syncHuJSONObject(obj, v)
+		}
+		return replaceHuJSONValue(dst, v)
+	case []any:
+		if arr, ok := dst.Value.(*hujson.Array); ok {
+			return syncHuJSONArray(arr, v)
+		}
+		return replaceHuJSONValue(dst, v)
+	default:
+		return replaceHuJSONValue(dst, v)
+	}
+}
+
+func syncHuJSONObject(obj *hujson.Object, value map[string]any) error {
+	seen := map[string]bool{}
+	out := obj.Members[:0]
+	for i := range obj.Members {
+		member := obj.Members[i]
+		key := decodeJSONKey(member.Name.Value)
+		next, ok := value[key]
+		if !ok {
+			continue
+		}
+		if err := syncHuJSONValue(&member.Value, next); err != nil {
+			return err
+		}
+		seen[key] = true
+		out = append(out, member)
+	}
+	obj.Members = out
+
+	var added []string
+	for key := range value {
+		if !seen[key] {
+			added = append(added, key)
+		}
+	}
+	sort.Strings(added)
+	for _, key := range added {
+		val, err := genericHuJSONValue(value[key])
+		if err != nil {
+			return err
+		}
+		obj.Members = append(obj.Members, hujson.ObjectMember{
+			Name:  hujson.Value{Value: hujson.String(key)},
+			Value: val,
+		})
+	}
+	return nil
+}
+
+func syncHuJSONArray(arr *hujson.Array, value []any) error {
+	n := len(value)
+	if len(arr.Elements) > n {
+		arr.Elements = arr.Elements[:n]
+	}
+	for i := 0; i < n; i++ {
+		if i < len(arr.Elements) {
+			if err := syncHuJSONValue(&arr.Elements[i], value[i]); err != nil {
+				return err
+			}
+			continue
+		}
+		val, err := genericHuJSONValue(value[i])
+		if err != nil {
+			return err
+		}
+		arr.Elements = append(arr.Elements, val)
+	}
+	return nil
+}
+
+func replaceHuJSONValue(dst *hujson.Value, value any) error {
+	next, err := genericHuJSONValue(value)
+	if err != nil {
+		return err
+	}
+	next.BeforeExtra = dst.BeforeExtra
+	next.AfterExtra = dst.AfterExtra
+	*dst = next
+	return nil
+}
+
+func genericHuJSONValue(value any) (hujson.Value, error) {
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		return hujson.Value{}, fmt.Errorf("config: marshal value: %w", err)
+	}
+	valueHuJSON, err := hujson.Parse(valueJSON)
+	if err != nil {
+		return hujson.Value{}, fmt.Errorf("config: parse value: %w", err)
+	}
+	return valueHuJSON, nil
 }
 
 // jsoncSetPath updates a nested path in JSONC-formatted bytes while preserving

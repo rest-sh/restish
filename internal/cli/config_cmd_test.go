@@ -65,7 +65,7 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 		t.Fatalf("config show --json did not redact secret:\n%s", got)
 	}
 
-	if err := c.Run([]string{"restish", "config", "set", "cache.max_size", "250MB"}); err != nil {
+	if err := c.Run([]string{"restish", "config", "set", "cache.max_size: 250MB"}); err != nil {
 		t.Fatalf("config set: %v", err)
 	}
 	loaded, err := config.Load(c.Hooks().ConfigPath)
@@ -74,5 +74,50 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 	}
 	if got := loaded.Cache.MaxSize; got != "250MB" {
 		t.Fatalf("cache.max_size = %q, want 250MB", got)
+	}
+}
+
+func TestConfigSetFullAuthObject(t *testing.T) {
+	cfg := `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com"
+    }
+  }
+}`
+	c, _, _ := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Run([]string{
+		"restish", "config", "set",
+		`apis.example.profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:DEMO_PASSWORD}}`,
+	}); err != nil {
+		t.Fatalf("config set full auth object: %v", err)
+	}
+
+	loaded, err := config.Load(c.Hooks().ConfigPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	auth := loaded.APIs["example"].Profiles["demo"].Auth
+	if auth == nil || auth.Type != "http-basic" || auth.Params["username"] != "demo" || auth.Params["password"] != "env:DEMO_PASSWORD" {
+		t.Fatalf("auth = %#v", auth)
+	}
+}
+
+func TestConfigSetRejectsNonPatchForm(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := c.Run([]string{"restish", "config", "set", "cache.max_size", "250MB"})
+	if err == nil {
+		t.Fatal("expected non-patch form to be rejected")
+	}
+	if !strings.Contains(err.Error(), "expected shorthand patch expression") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

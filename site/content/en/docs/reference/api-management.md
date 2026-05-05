@@ -58,13 +58,24 @@ restish api inspect example
 ## Set And Config Edit
 
 ```bash
-restish api set example command_layout: tags
-restish api set example operation_base: /v1
+restish api set example 'command_layout: tags'
+restish api set example 'operation_base: /v1'
+restish api set example \
+  'profiles.demo.auth: {type: bearer, params: {token: env:EXAMPLE_TOKEN}}'
 restish config edit
 ```
 
 `config edit` preserves comments where possible and prints the absolute config
 file path after a successful write.
+
+`api set` uses shorthand patch syntax rooted at `apis.<name>`. This command:
+
+```bash
+restish api set example 'profiles.demo.headers[]: "X-Debug: true"'
+```
+
+is equivalent to patching `apis.example.profiles.demo.headers[]` through
+`config set`. Use `config set` when you need to patch outside one API.
 
 ## Remove
 

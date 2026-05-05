@@ -753,7 +753,7 @@ func TestAPISet(t *testing.T) {
 	// Set a new base_url.
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `base_url: https://new.example.com`}); err != nil {
 		t.Fatalf("api set: %v", err)
 	}
 
@@ -780,7 +780,7 @@ func TestAPISetPreservesJSONCComments(t *testing.T) {
 
 	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `base_url: https://new.example.com`}); err != nil {
 		t.Fatalf("api set: %v", err)
 	}
 
@@ -818,7 +818,7 @@ func TestAPISetCreatesNestedJSONCPath(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "set", "myapi", "profiles.default.auth.params.token", "secret"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `profiles.default.auth.params.token: secret`}); err != nil {
 		t.Fatalf("api set nested: %v", err)
 	}
 
@@ -955,6 +955,82 @@ func TestAPISetShorthandAppendHeaders(t *testing.T) {
 	}
 }
 
+func TestAPISetFullAuthObject(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{
+		"restish", "api", "set", "myapi",
+		`profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:DEMO_PASSWORD}}`,
+	}); err != nil {
+		t.Fatalf("api set full auth object: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	auth := written.APIs["myapi"].Profiles["demo"].Auth
+	if auth == nil || auth.Type != "http-basic" || auth.Params["username"] != "demo" || auth.Params["password"] != "env:DEMO_PASSWORD" {
+		t.Fatalf("auth = %#v", auth)
+	}
+}
+
+func TestAPISetRootedObjectPatch(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{
+		"restish", "api", "set", "myapi",
+		`{profiles: {demo: {headers: ["X-Debug: true"]}}}`,
+	}); err != nil {
+		t.Fatalf("api set rooted object patch: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	got := written.APIs["myapi"].Profiles["demo"].Headers
+	if !reflect.DeepEqual(got, []string{"X-Debug: true"}) {
+		t.Fatalf("headers = %#v", got)
+	}
+}
+
+func TestAPISetRejectsNonPatchForm(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "set", "myapi", "base_url", "https://new.example.com"})
+	if err == nil {
+		t.Fatal("expected non-patch form to be rejected")
+	}
+	if !strings.Contains(err.Error(), "expected shorthand patch expression") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAPISetShorthandDeleteKey(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
@@ -1005,7 +1081,7 @@ func TestAPISetValidatesOperationBasePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected relative operation_base to be rejected")
 	}
-	if !strings.Contains(err.Error(), "operation_base must be an absolute path") {
+	if !strings.Contains(err.Error(), "must be an absolute path") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -1013,7 +1089,7 @@ func TestAPISetValidatesOperationBasePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected URL operation_base to be rejected")
 	}
-	if !strings.Contains(err.Error(), "operation_base must be an absolute path") {
+	if !strings.Contains(err.Error(), "must be an absolute path") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1058,8 +1134,10 @@ func TestAPISetServerVariables(t *testing.T) {
 	if _, ok := written.APIs["myapi"].ServerVariables["env"]; ok {
 		t.Fatal("expected server_variables.env to be deleted")
 	}
-	if _, ok := written.APIs["myapi"].Profiles["staging"].ServerVariables["version"]; ok {
-		t.Fatal("expected profile server variable to be deleted")
+	if prof := written.APIs["myapi"].Profiles["staging"]; prof != nil && prof.ServerVariables != nil {
+		if _, ok := prof.ServerVariables["version"]; ok {
+			t.Fatal("expected profile server variable to be deleted")
+		}
 	}
 }
 

@@ -35,7 +35,7 @@ of falling back to well-known discovery probes.
 ```bash
 restish api list
 restish api inspect example
-restish api set example command_layout: tags
+restish api set example 'command_layout: tags'
 restish config edit
 ```
 
@@ -47,7 +47,7 @@ changes and preserves comments where possible.
 Use `operation_base` when operations live under a path prefix:
 
 ```bash
-restish api set example operation_base: /v1
+restish api set example 'operation_base: /v1'
 ```
 
 Keep it path-only. Use `base_url` for scheme and host.
@@ -75,7 +75,7 @@ OpenAPI extensions that shape the CLI.
 If the API moves its OpenAPI document, update `spec_url` before syncing:
 
 ```bash
-restish api set example spec_url: https://api.rest.sh/openapi.json
+restish api set example 'spec_url: https://api.rest.sh/openapi.json'
 restish api sync example
 ```
 

@@ -60,7 +60,7 @@ Restish defaults to a flat command layout. There is no automatic layout mode.
 APIs with many operations can opt into tag-based layout:
 
 ```bash
-restish api set example command_layout: tags
+restish api set example 'command_layout: tags'
 ```
 
 API authors can improve the generated surface with `operationId`, tags,

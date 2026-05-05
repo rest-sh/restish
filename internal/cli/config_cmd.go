@@ -42,8 +42,8 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		RunE:  c.runConfigEdit,
 	})
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "set <key> <value> | <path:value>",
-		Short: "Set config using key/value or shorthand path:value syntax",
+		Use:   "set <patch> [patch...]",
+		Short: "Patch config using shorthand syntax",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  c.runConfigSet,
 	})
@@ -92,39 +92,14 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runConfigSet(cmd *cobra.Command, args []string) error {
-	exprs, err := parseAPISetExpressions(args)
-	if err != nil {
+	if err := validateConfigPatchArgs("config set", args); err != nil {
 		return err
 	}
-	ops := make([]config.ConfigPatchOperation, 0, len(exprs))
-	for _, expr := range exprs {
-		if expr.append {
-			return fmt.Errorf("config set: append is not supported for arbitrary config paths")
-		}
-		path := configSetPath(expr.key)
-		if len(path) == 0 {
-			return fmt.Errorf("config set: empty path")
-		}
-		ops = append(ops, config.ConfigPatchOperation{
-			Path:   path,
-			Value:  expr.value,
-			Delete: expr.delete,
-		})
+	if err := c.saveConfigShorthand("config set", nil, args); err != nil {
+		return err
 	}
-
-	return c.saveConfigValues("config set", ops)
-}
-
-func configSetPath(key string) []string {
-	parts := strings.Split(key, ".")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
+	c.printConfigWrittenPath()
+	return nil
 }
 
 func redactedConfigView(cfg *config.Config) (map[string]any, error) {

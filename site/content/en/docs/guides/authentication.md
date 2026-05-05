@@ -51,6 +51,15 @@ repeating headers in shell history.
 
 ## Configure Auth In A Profile
 
+Use `api set` to create or update profile auth without opening the config file:
+
+```bash
+restish api set example \
+  'profiles.token.auth: {type: bearer, params: {token: env:RESTISH_DOCS_TOKEN}}'
+```
+
+That writes the same shape you would see in `restish.json`:
+
 ```jsonc
 {
   "apis": {

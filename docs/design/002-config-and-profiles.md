@@ -251,6 +251,49 @@ Size and duration values should surface parse errors. Falling back to a default
 after a malformed cache size, timeout, or similar operator setting hides the
 configuration mistake and makes behavior depend on accident.
 
+## Command-Line Patching
+
+`config set` and `api set` use shorthand patch syntax as their only v2 command
+line patch language. Restish does not keep a second config-specific `key value`
+assignment dialect from pre-release builds.
+
+`config set` applies patch expressions to the whole config object:
+
+```bash
+restish config set \
+  'apis.example.profiles.demo.auth: {type: bearer, params: {token: env:EXAMPLE_TOKEN}}'
+```
+
+`api set <name>` applies the same shorthand patch language with operations
+rooted at `apis.<name>`:
+
+```bash
+restish api set example \
+  'profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:EXAMPLE_PASSWORD}}'
+```
+
+The two commands share shorthand behavior:
+
+- objects merge recursively
+- scalars replace
+- arrays can be set, appended with `[]`, inserted with `[^index]`, and deleted
+  with `undefined`
+- object fields can be deleted with `undefined`
+- values can be swapped or moved with shorthand `^` operations
+
+`api set` must not escape its selected API root. Both sides of a shorthand swap
+are interpreted under `apis.<name>` so an API-scoped command cannot mutate
+global settings or another API.
+
+Validation happens after shorthand has patched the current config object.
+Structural validation runs first using the schema generated from the Go config
+structs, so users can see unknown fields and type problems together when
+possible. Typed decode and `config.Validate` then enforce semantic constraints
+such as mutual exclusion between `auth` and `auth_ref`, valid `operation_base`
+relationships, references to shared auth profiles, and duration parsing.
+Runtime checks that need the active CLI registry, such as available auth
+handlers or TLS signer plugins, stay in the CLI layer.
+
 ## Example
 
 ```jsonc

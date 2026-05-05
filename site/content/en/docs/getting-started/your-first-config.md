@@ -55,7 +55,7 @@ restish -p json example list-images
 ```bash
 restish config edit
 restish api inspect example
-restish api set example spec_url: https://api.rest.sh/openapi.json
+restish api set example 'spec_url: https://api.rest.sh/openapi.json'
 restish api sync example
 ```
 

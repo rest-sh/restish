@@ -127,7 +127,7 @@ restish api
   connect <name> <url> [setup-expression ...]
   list
   inspect <name>
-  set <name> <path:value>
+  set <name> <shorthand-patch> [patch...]
   sync <name>
   remove <name>
   auth
@@ -141,7 +141,7 @@ restish config
   path
   show [--json]
   edit
-  set <path:value>
+  set <shorthand-patch> [patch...]
   theme set <source> [name]
 
 restish cache
@@ -211,7 +211,7 @@ V2 adds `restish config` for configuration work:
 restish config path
 restish config show [--json]
 restish config edit
-restish config set <path:value>
+restish config set <shorthand-patch> [patch...]
 restish config theme set <source> [name]
 ```
 
@@ -220,9 +220,11 @@ distinction matters because the v2 config file contains APIs, profiles,
 plugins, output defaults, theme settings, and other local state. Users should
 not have to learn that `api edit` opens the entire Restish config.
 
-`api set` remains for API-scoped settings. `config set` is for arbitrary local
-configuration. `config show --json` redacts sensitive values so it is safer to
-use in bug reports and support conversations.
+`api set` remains for API-scoped settings and accepts the same shorthand patch
+language rooted at `apis.<name>`. `config set` is for arbitrary local
+configuration. The unreleased pre-v2 `set key value` form is not part of the
+stable v2 contract. `config show --json` redacts sensitive values so it is safer
+to use in bug reports and support conversations.
 
 ### API Inspection Uses `inspect`
 

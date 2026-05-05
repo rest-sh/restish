@@ -665,3 +665,111 @@ func TestSaveConfigValue_RejectsNestedPathThroughArray(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestSaveConfigShorthand_FullObjectPatchPreservesComments(t *testing.T) {
+	path := writeJSONCConfig(t, `{
+  // API registrations
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com" // keep this
+    }
+  }
+}`)
+
+	err := SaveConfigShorthand(path, []string{"apis", "myapi"}, []string{
+		`profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:DEMO_PASSWORD}}`,
+	}, nil)
+	if err != nil {
+		t.Fatalf("SaveConfigShorthand: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// API registrations") || !strings.Contains(got, "// keep this") {
+		t.Fatalf("expected comments to be preserved:\n%s", got)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	auth := cfg.APIs["myapi"].Profiles["demo"].Auth
+	if auth == nil || auth.Type != "http-basic" || auth.Params["username"] != "demo" || auth.Params["password"] != "env:DEMO_PASSWORD" {
+		t.Fatalf("auth = %#v", auth)
+	}
+}
+
+func TestSaveConfigShorthand_ArrayAppendInsertDeleteAndSwap(t *testing.T) {
+	path := writeJSONCConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "headers": ["A: 1", "B: 2"]
+        }
+      }
+    }
+  }
+}`)
+
+	err := SaveConfigShorthand(path, []string{"apis", "myapi"}, []string{
+		`profiles.default.headers[]: "C: 3"`,
+		`profiles.default.headers[^0]: "Z: 0"`,
+		`profiles.default.headers[1]: undefined`,
+	}, nil)
+	if err != nil {
+		t.Fatalf("SaveConfigShorthand: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.APIs["myapi"].Profiles["default"] == nil {
+		data, _ := os.ReadFile(path)
+		t.Fatalf("missing default profile after patch:\n%s", data)
+	}
+	got := cfg.APIs["myapi"].Profiles["default"].Headers
+	want := []string{"Z: 0", "B: 2", "C: 3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("headers = %#v, want %#v", got, want)
+	}
+}
+
+func TestValidateShapeReportsMultipleErrors(t *testing.T) {
+	err := ValidateShape(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":                42,
+				"allow_cross_origin_spec": "yes",
+				"profiles": map[string]any{
+					"default": map[string]any{
+						"auth": map[string]any{
+							"params": map[string]any{"token": 123},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var shapeErr *ConfigShapeError
+	if !errors.As(err, &shapeErr) {
+		t.Fatalf("expected ConfigShapeError, got %T", err)
+	}
+	if len(shapeErr.Errors) < 3 {
+		t.Fatalf("expected multiple validation errors, got %d: %v", len(shapeErr.Errors), err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"base_url", "allow_cross_origin_spec", "auth.params.token"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("validation error missing %q:\n%s", want, msg)
+		}
+	}
+}

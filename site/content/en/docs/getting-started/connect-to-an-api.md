@@ -79,7 +79,7 @@ command metadata.
 Some APIs serve operations under a path prefix. Keep `operation_base` path-only:
 
 ```bash
-restish api set example operation_base: /v1
+restish api set example 'operation_base: /v1'
 ```
 
 Use `base_url` for scheme and host, and `operation_base` for the operation path

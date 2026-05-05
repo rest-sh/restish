@@ -23,6 +23,62 @@ func (c *CLI) saveConfigValues(label string, ops []config.ConfigPatchOperation) 
 	return c.reloadConfigAfterMutation(label, oldCfg)
 }
 
+func (c *CLI) saveConfigShorthand(label string, rootPath []string, exprs []string) error {
+	oldCfg := c.cfg
+	if err := config.SaveConfigShorthand(c.configFilePath(), rootPath, exprs, c.validateConfigRuntime); err != nil {
+		return err
+	}
+	return c.reloadConfigAfterMutation(label, oldCfg)
+}
+
+func (c *CLI) validateConfigRuntime(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for name, authCfg := range cfg.AuthProfiles {
+		if err := c.validateAuthConfig(authCfg); err != nil {
+			return fmt.Errorf("auth_profiles.%s: %w", name, err)
+		}
+	}
+	for apiName, apiCfg := range cfg.APIs {
+		if apiCfg == nil {
+			continue
+		}
+		for profileName, prof := range apiCfg.Profiles {
+			if prof == nil {
+				continue
+			}
+			if err := c.validateAuthConfig(prof.Auth); err != nil {
+				return fmt.Errorf("apis.%s.profiles.%s.auth: %w", apiName, profileName, err)
+			}
+			if prof.TLSSigner != "" {
+				if _, ok := c.pluginForHook(prof.TLSSigner, "tls-signer"); !ok {
+					return fmt.Errorf("apis.%s.profiles.%s.tls_signer: %q is not a registered tls-signer plugin", apiName, profileName, prof.TLSSigner)
+				}
+			}
+			for credentialID, credential := range prof.Credentials {
+				if credential == nil {
+					continue
+				}
+				if err := c.validateAuthConfig(credential.Auth); err != nil {
+					return fmt.Errorf("apis.%s.profiles.%s.credentials.%s.auth: %w", apiName, profileName, credentialID, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CLI) validateAuthConfig(authCfg *config.AuthConfig) error {
+	if authCfg == nil || authCfg.Type == "" {
+		return nil
+	}
+	if _, err := c.authHandlerFor(authCfg, authHandlerOptions{}); err != nil {
+		return fmt.Errorf("invalid auth.type %q: %w", authCfg.Type, err)
+	}
+	return nil
+}
+
 func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *config.APIConfig) error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()

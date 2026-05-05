@@ -279,7 +279,7 @@ Flat layout is the default. Restish does not guess an automatic layout from the
 spec. Tag layout can help large APIs when the tags are stable and useful:
 
 ```bash
-restish api set myapi command_layout: tags
+restish api set myapi 'command_layout: tags'
 ```
 
 Keep tags short and user-facing if you expect them to become command groups.

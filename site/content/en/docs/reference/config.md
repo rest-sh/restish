@@ -151,17 +151,38 @@ elsewhere, with bounded stderr redaction when a command fails.
 
 ```bash
 restish config edit
-restish api set example spec_url: https://api.rest.sh/openapi.json
+restish api set example 'spec_url: https://api.rest.sh/openapi.json'
 restish api inspect example
 ```
 
 `config edit` preserves comments where possible and prints the absolute config
-file path after a successful write. Use `api set` for small scripted changes.
+file path after a successful write. Use `api set` for small scripted changes
+inside one API registration.
+
+`config set` and `api set` accept shorthand patch expressions. Objects merge
+recursively, scalar values replace, `undefined` deletes fields or array items,
+arrays support `[]` append and `[^index]` insertion, and `^` swaps values.
+Restish validates the final patched config and reports multiple structural
+issues when it can.
+
+Create a profile with auth without opening an editor:
+
+```bash
+restish api set example \
+  'profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:EXAMPLE_PASSWORD}}'
+```
+
+The same change from `config set` uses the full config path:
+
+```bash
+restish config set \
+  'apis.example.profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:EXAMPLE_PASSWORD}}'
+```
 
 For global config fields, use `config set`:
 
 ```bash
-restish config set cache.max_size: 250MB
+restish config set 'cache.max_size: 250MB'
 restish config theme set user/repo dark --yes
 ```
 

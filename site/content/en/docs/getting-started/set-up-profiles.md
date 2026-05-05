@@ -13,10 +13,19 @@ or TLS settings change.
 
 ```bash
 restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
-restish config edit
 ```
 
-Add profiles under the API:
+Add profiles under the API with `api set`:
+
+```bash
+restish api set example 'profiles.json.headers[]: "Accept: application/json"'
+restish api set example \
+  'profiles.debug: {headers: ["Accept: application/json", "X-Debug: true"], query: ["trace=docs"]}'
+restish api set example \
+  'profiles.token.auth: {type: bearer, params: {token: env:RESTISH_DOCS_TOKEN}}'
+```
+
+Those commands write profile entries like this:
 
 ```jsonc
 {
@@ -31,6 +40,14 @@ Add profiles under the API:
         "debug": {
           "headers": ["Accept: application/json", "X-Debug: true"],
           "query": ["trace=docs"]
+        },
+        "token": {
+          "auth": {
+            "type": "bearer",
+            "params": {
+              "token": "env:RESTISH_DOCS_TOKEN"
+            }
+          }
         }
       }
     }
@@ -43,6 +60,7 @@ Use a profile with `-p`:
 ```bash
 restish -p json example list-images
 restish -p debug https://api.rest.sh/anything/profile-demo
+RESTISH_DOCS_TOKEN=docs-token restish -p token example get-echo
 ```
 
 ## What Profiles Can Hold

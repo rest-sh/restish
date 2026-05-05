@@ -110,6 +110,19 @@ Config files are written private. On Unix-like systems, group/world-readable
 config permissions are fatal because profiles and auth parameters can contain
 secrets. Users should repair them with `chmod 600`.
 
+`config set <patch> [patch...]` applies shorthand patch expressions to the
+whole config object. `api set <name> <patch> [patch...]` applies the same
+language rooted at `apis.<name>`. Both commands reject the unreleased pre-v2
+`key value` form. Shorthand patch supports recursive object merge, scalar
+replacement, array set/append/insert, `undefined` deletion, and `^` swap/move
+operations. API-scoped patches cannot escape the selected API root.
+
+Command-line config patching validates the final patched object in layers:
+Huma-backed structural validation, typed config decode, `config.Validate`
+semantic validation, then CLI/runtime checks such as registered auth handlers
+and TLS signer plugins. Writes are atomic and are skipped entirely when any
+validation layer fails.
+
 ## Command Surface And Precedence
 
 Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
