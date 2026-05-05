@@ -11,10 +11,16 @@ import (
 type JSONFormatter struct{}
 
 func (f *JSONFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	return enc.Encode(resp.Body)
+	data, err := marshalIndentNoEscape(resp.Body)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if color {
+		return highlight(w, ReadableLexer, data)
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 func marshalNoEscape(value any) ([]byte, error) {

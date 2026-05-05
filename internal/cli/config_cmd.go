@@ -68,12 +68,7 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		data, err := json.MarshalIndent(view, "", "  ")
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(c.Stdout, string(data))
-		return nil
+		return c.writePrettyJSON(view)
 	}
 
 	apiCount := 0

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -73,11 +72,9 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 		links = filtered
 	}
 
-	data, err := json.MarshalIndent(links, "", "  ")
-	if err != nil {
+	if err := c.writePrettyJSON(links); err != nil {
 		return err
 	}
-	fmt.Fprintln(c.Stdout, string(data))
 	return c.statusError(cmd, resp.Status)
 }
 

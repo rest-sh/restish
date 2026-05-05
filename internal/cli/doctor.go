@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -335,12 +334,7 @@ func doctorJSON(cmd *cobra.Command) bool {
 }
 
 func (c *CLI) writeDoctorJSON(report any) error {
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(c.Stdout, string(data))
-	return nil
+	return c.writePrettyJSON(report)
 }
 
 func (c *CLI) doctorRootReport() doctorRootReport {

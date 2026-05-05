@@ -70,8 +70,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	if len(plugins) == 0 {
 		asJSON, _ := cmd.Flags().GetBool("json")
 		if asJSON {
-			fmt.Fprintln(c.Stdout, "[]")
-			return nil
+			return c.writePrettyJSON([]any{})
 		}
 		fmt.Fprintln(c.Stdout, "No plugins found.")
 		return nil
@@ -114,9 +113,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	}
 	asJSON, _ := cmd.Flags().GetBool("json")
 	if asJSON {
-		enc := json.NewEncoder(c.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(entries)
+		return c.writePrettyJSON(entries)
 	}
 
 	for _, entry := range entries {

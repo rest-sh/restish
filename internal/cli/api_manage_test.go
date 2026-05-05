@@ -740,6 +740,40 @@ func TestAPIInspect(t *testing.T) {
 	}
 }
 
+func TestAPIInspectHighlightsJSONWhenColorEnabled(t *testing.T) {
+	t.Setenv("NOCOLOR", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("COLOR", "1")
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+
+	if err := c.Run([]string{"restish", "api", "inspect", "myapi"}); err != nil {
+		t.Fatalf("api inspect: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected ANSI highlighting, got %q", got)
+	}
+	stripped := stripANSI(got)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stripped)), &parsed); err != nil {
+		t.Fatalf("api inspect output is not valid JSON after stripping ANSI: %v\n%s", err, stripped)
+	}
+	if !strings.Contains(stripped, "api.example.com") {
+		t.Fatalf("expected base_url in output, got: %q", stripped)
+	}
+}
+
 // TestAPISet verifies that "api set" updates a field and the change persists.
 func TestAPISet(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{

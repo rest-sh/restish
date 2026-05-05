@@ -202,6 +202,27 @@ func TestJSONFormatter_NilBodyOutputsNull(t *testing.T) {
 	}
 }
 
+func TestYAMLFormatter_OutputsBodyWithoutPreamble(t *testing.T) {
+	resp := &output.Response{
+		Proto:   "HTTP/2.0",
+		Status:  200,
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
+		Body:    map[string]any{"key": "value"},
+	}
+
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["yaml"].Format(&buf, resp, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "HTTP/2.0") || strings.Contains(got, "Content-Type") {
+		t.Fatalf("yaml formatter should output body only, got:\n%s", got)
+	}
+	if !strings.Contains(got, "key: value") {
+		t.Fatalf("yaml formatter missing body value:\n%s", got)
+	}
+}
+
 func TestJSONFormatter_DoesNotEscapeHTML(t *testing.T) {
 	resp := &output.Response{
 		Body: map[string]any{"url": "https://api.example.com?a=1&b=2"},
@@ -215,6 +236,33 @@ func TestJSONFormatter_DoesNotEscapeHTML(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), `\u0026`) {
 		t.Fatalf("expected HTML escaping to be disabled, got %q", buf.String())
+	}
+}
+
+func TestJSONFormatter_WithColorHighlightsBodyOnly(t *testing.T) {
+	resp := &output.Response{
+		Proto:  "HTTP/1.1",
+		Status: 200,
+		Headers: map[string][]string{
+			"Content-Type": {"application/json"},
+		},
+		Body: map[string]any{"colored": true},
+	}
+
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["json"].Format(&buf, resp, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "\x1b[") {
+		t.Fatalf("expected ANSI highlighting, got %q", buf.String())
+	}
+
+	stripped := stripANSI(buf.String())
+	if strings.Contains(stripped, "HTTP/1.1") || strings.Contains(stripped, "Content-Type") {
+		t.Fatalf("json formatter should output body only, got:\n%s", stripped)
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stripped)), new(any)); err != nil {
+		t.Fatalf("colored JSON was not valid after stripping ANSI: %v\n%s", err, stripped)
 	}
 }
 

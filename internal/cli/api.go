@@ -854,12 +854,7 @@ func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 	}
 	c.redactAPIShowSecrets(apiCfg, view)
 
-	data, err := json.MarshalIndent(view, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(c.Stdout, string(data))
-	return nil
+	return c.writePrettyJSON(view)
 }
 
 // redactAPIShowSecrets replaces secret auth param values with "***" in the
