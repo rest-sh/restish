@@ -22,8 +22,8 @@ sends a request.
 
 ```bash
 restish shell setup zsh
-restish 'https://api.rest.sh/images?format=jpeg&limit=1'
-restish https://api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
+restish 'api.rest.sh/images?format=jpeg&limit=1'
+restish api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
 ```
 
 **Prevention:** Quote complex arguments in scripts and run `restish shell setup <shell>` for interactive use.
@@ -41,7 +41,7 @@ restish https://api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/images -o json
+restish api.rest.sh/images -o json
 ```
 
 **Prevention:** Use `-o json` in scripts and redirects when the format matters.
@@ -60,7 +60,7 @@ instead of JSON.
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/content/cbor -o json > response.json
 ```
 
 **Prevention:** Use `-o json` when a file or script needs JSON. Omit `-o` when
@@ -114,8 +114,8 @@ content types with quality values.
 **Fix:**
 
 ```bash
-restish -H 'Accept: application/json' https://api.rest.sh/formats/json
-restish -v https://api.rest.sh/headers
+restish -H 'Accept: application/json' api.rest.sh/formats/json
+restish -v api.rest.sh/headers
 ```
 
 **Prevention:** Set an `Accept` header in a profile for APIs that negotiate aggressively.
@@ -134,10 +134,10 @@ public operation where it should have been suppressed.
 **Fix:**
 
 ```bash
-restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
+restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
 restish api auth inspect example --raw-header Authorization
 restish api auth list example
-restish -v -p token https://api.rest.sh/auth/bearer
+restish -v -p token api.rest.sh/auth/bearer
 ```
 
 For generated OpenAPI commands, errors mentioning missing credential bindings
@@ -205,8 +205,8 @@ document format or collect mode requires buffering.
 **How to confirm:**
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next
-restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish api.rest.sh/images --rsh-no-paginate -f links.next
+restish api.rest.sh/images --rsh-collect -f '.body | length'
 ```
 
 **Fix:** Use `--rsh-no-paginate`, `--rsh-max-pages`, `--rsh-max-items`, or `--rsh-collect` explicitly.
@@ -227,8 +227,8 @@ document format.
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
 ```
 
 **Prevention:** Use `--rsh-max-items` for fixed samples and `--rsh-timeout` for
@@ -247,8 +247,8 @@ time-bounded stream checks.
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/status/404 --rsh-ignore-status-code
-restish https://api.rest.sh/problem --rsh-ignore-status-code
+restish api.rest.sh/status/404 --rsh-ignore-status-code
+restish api.rest.sh/problem --rsh-ignore-status-code
 ```
 
 **Prevention:** Use `--rsh-ignore-status-code` when error bodies are expected data.
@@ -266,7 +266,7 @@ restish https://api.rest.sh/problem --rsh-ignore-status-code
 **Fix:**
 
 ```bash
-restish https://api.rest.sh/cache --rsh-no-cache
+restish api.rest.sh/cache --rsh-no-cache
 restish cache info
 restish cache clear
 ```
@@ -286,7 +286,7 @@ or plugin configuration error.
 **How to confirm:**
 
 ```bash
-restish cert https://api.rest.sh
+restish cert api.rest.sh
 restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 ```
 
@@ -327,7 +327,7 @@ to interact.
 **How to confirm:**
 
 ```bash
-restish https://api.rest.sh/items
+restish api.rest.sh/items
 ```
 
 **Fix:** Use unique IDs for create/update/delete examples, such as `docs-$USER` or a timestamp.

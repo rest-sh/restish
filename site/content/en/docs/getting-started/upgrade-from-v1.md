@@ -169,7 +169,7 @@ restish your-api some-operation
 Or use a generic URL request first if you want a smaller smoke test:
 
 ```bash
-restish https://api.rest.sh/
+restish api.rest.sh/
 ```
 
 ## When To Edit By Hand

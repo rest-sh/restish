@@ -12,7 +12,7 @@ short name.
 ## Register The Example API
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Restish discovers `https://api.rest.sh/openapi.json`, stores the API config,
@@ -46,7 +46,7 @@ Generated commands are API-relative. The image command above maps to
 Both commands below call the example API:
 
 ```bash
-restish https://api.rest.sh/images/jpeg
+restish api.rest.sh/images/jpeg
 restish example/images/jpeg
 restish example get-image jpeg
 ```
@@ -67,7 +67,7 @@ restish example get-image <TAB>
 If discovery is not available, provide the spec location yourself:
 
 ```bash
-restish api connect example https://api.rest.sh --spec https://api.rest.sh/openapi.json
+restish api connect example api.rest.sh --spec https://api.rest.sh/openapi.json
 restish api sync example
 ```
 
@@ -90,7 +90,7 @@ prefix.
 Use an explicit config file when a project should carry its own Restish setup:
 
 ```bash
-restish --rsh-config ./restish.json api connect example https://api.rest.sh
+restish --rsh-config ./restish.json api connect example api.rest.sh
 restish --rsh-config ./restish.json example list-images
 ```
 

@@ -13,11 +13,11 @@ and API-aware commands generated from an API description for repeated work.
 ## Start With A Generic Request
 
 {{< restish-example >}}
-restish https://api.rest.sh/get
+restish api.rest.sh/get
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish https://api.rest.sh/post 'name: Alice, enabled: true'
+restish api.rest.sh/post 'name: Alice, enabled: true'
 {{< /restish-example >}}
 
 Use generic requests when you are exploring, debugging, or calling an endpoint
@@ -31,7 +31,7 @@ restish \
   -H 'Accept: application/json' \
   -H 'X-Demo: requests' \
   -q search=dragonfly \
-  https://api.rest.sh/anything/search
+  api.rest.sh/anything/search
 {{< /restish-example >}}
 
 The `/anything` fixture echoes method, path, query, headers, raw body, and
@@ -40,7 +40,7 @@ parsed body so you can inspect the exact request shape.
 Use quoted URLs when you include query strings directly:
 
 {{< restish-example >}}
-restish 'https://api.rest.sh/anything/search?search=dragonfly&active=true'
+restish 'api.rest.sh/anything/search?search=dragonfly&active=true'
 {{< /restish-example >}}
 
 ## Send Request Bodies
@@ -48,23 +48,23 @@ restish 'https://api.rest.sh/anything/search?search=dragonfly&active=true'
 For small structured bodies, use shorthand:
 
 {{< restish-example >}}
-restish https://api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
+restish api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish -c form post https://api.rest.sh/post 'username: alice, password: secret'
+restish -c form post api.rest.sh/post 'username: alice, password: secret'
 {{< /restish-example >}}
 
 For generated or larger bodies, pipe stdin:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish https://api.rest.sh/post
+echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post
 ```
 
 Piped structured input can be patched by shorthand arguments:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish https://api.rest.sh/post role: admin
+echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post role: admin
 ```
 
 ## Use API-Aware Commands
@@ -72,7 +72,7 @@ echo '{"name":"Alice","role":"user"}' | restish https://api.rest.sh/post role: a
 Register an API when repeated work deserves generated help and completion:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images
 restish example get-image jpeg > dragonfly.jpg
 ```
@@ -97,7 +97,7 @@ If you keep using the override, create a profile instead.
 ## Debug A Request
 
 {{< restish-example >}}
-restish --rsh-ignore-status-code https://api.rest.sh/status/404
+restish --rsh-ignore-status-code api.rest.sh/status/404
 {{< /restish-example >}}
 
 Verbose output goes to stderr so stdout can remain useful for response data.

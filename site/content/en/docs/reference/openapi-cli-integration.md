@@ -43,7 +43,7 @@ Publish the spec at a predictable location such as `/openapi.json`, or expose a
 `service-desc` or `describedby` link from the API root. Verify with:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 
@@ -207,7 +207,7 @@ values when provided, then OpenAPI defaults:
 {
   "apis": {
     "myapi": {
-      "base_url": "https://api.example.com/root",
+      "base_url": "https://api.vendor.test/root",
       "server_variables": {
         "version": "v2"
       }
@@ -218,7 +218,7 @@ values when provided, then OpenAPI defaults:
 
 Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
-`https://api.example.com/root/v2`.
+`https://api.vendor.test/root/v2`.
 
 Absolute server URLs are used only when they match the configured API origin:
 scheme, hostname, and effective port all match.
@@ -234,7 +234,7 @@ override independent of the OpenAPI document:
 {
   "apis": {
     "myapi": {
-      "base_url": "https://api.example.com/root",
+      "base_url": "https://api.vendor.test/root",
       "operation_base": "/"
     }
   }
@@ -242,7 +242,7 @@ override independent of the OpenAPI document:
 ```
 
 With that config, generated operation paths are resolved from
-`https://api.example.com/`.
+`https://api.vendor.test/`.
 
 ## External References
 

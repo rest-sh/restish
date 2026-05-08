@@ -46,9 +46,9 @@ function.
 Without setup, these commands may fail before Restish starts:
 
 ```bash
-restish 'https://api.rest.sh/images?format=jpeg&limit=1'
-restish https://api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
-restish post https://api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
+restish 'api.rest.sh/images?format=jpeg&limit=1'
+restish api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
+restish post api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
 ```
 
 Quoting still works, and it is the most portable habit for shared scripts. The
@@ -79,7 +79,7 @@ written to fish's user completions directory.
 Generated API commands participate in completion after an API is configured:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example <TAB>
 restish example/<TAB>
 ```

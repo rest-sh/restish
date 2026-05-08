@@ -26,7 +26,7 @@ restish bulk --help
 The example API has a books collection used for bulk examples:
 
 ```bash
-restish bulk init https://api.rest.sh/books
+restish bulk init api.rest.sh/books
 ```
 
 The plugin fetches the collection through Restish, writes resources to disk, and

@@ -11,13 +11,13 @@ testing failure handling, and a realistic timeout when the slow response is
 normal for the API.
 
 ```bash
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 ```
 
 Use a larger timeout when the delay is expected:
 
 ```bash
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 3s
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 3s
 ```
 
 The first command should fail quickly because the server waits longer than the

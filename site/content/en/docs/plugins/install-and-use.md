@@ -85,7 +85,7 @@ restish plugin remove restish-csv
 Formatter example:
 
 ```bash
-restish https://api.rest.sh/images -o csv
+restish api.rest.sh/images -o csv
 ```
 
 Command plugin example:

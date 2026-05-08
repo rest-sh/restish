@@ -11,21 +11,21 @@ protocols, and can save the response body bytes when you need a file.
 ## Render A Known Image
 
 ```bash
-restish https://api.rest.sh/images/png -o image
-restish https://api.rest.sh/images/jpeg -o image
+restish api.rest.sh/images/png -o image
+restish api.rest.sh/images/jpeg -o image
 ```
 
 ## Negotiate An Image
 
 ```bash
-restish -H 'Accept: image/png' https://api.rest.sh/image -o image
+restish -H 'Accept: image/png' api.rest.sh/image -o image
 ```
 
 ## Save The Bytes
 
 ```bash
-restish https://api.rest.sh/images/png > image.png
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/images/png > image.png
+restish api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
 Unfiltered responses redirect as body bytes by default, so no output flag is

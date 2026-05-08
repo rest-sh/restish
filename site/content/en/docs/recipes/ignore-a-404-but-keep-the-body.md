@@ -11,7 +11,7 @@ describe a missing optional resource, or a problem response might explain what
 the user should fix.
 
 {{< restish-example >}}
-restish https://api.rest.sh/status/404 --rsh-ignore-status-code
+restish api.rest.sh/status/404 --rsh-ignore-status-code
 {{< /restish-example >}}
 
 Use this when an error body is expected data for your script. The flag changes
@@ -20,7 +20,7 @@ the command exit behavior; it does not pretend the HTTP status was successful.
 For problem details:
 
 {{< restish-example >}}
-restish https://api.rest.sh/problem --rsh-ignore-status-code
+restish api.rest.sh/problem --rsh-ignore-status-code
 {{< /restish-example >}}
 
 Problem responses are structured, so you can filter them or send them to JSON

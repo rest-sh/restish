@@ -11,7 +11,7 @@ script needs Restish to render decoded structured data as one JSON document.
 one logical document before writing the file.
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -o json > images.json
+restish api.rest.sh/images --rsh-collect -o json > images.json
 ```
 
 Open the file with `jq`, an editor, or another tool that expects one complete

@@ -11,7 +11,7 @@ non-2xx status normally makes the command fail. Use this recipe when the error
 document itself is the thing you need to inspect.
 
 ```bash
-restish https://api.rest.sh/problem --rsh-ignore-status-code
+restish api.rest.sh/problem --rsh-ignore-status-code
 ```
 
 Use `--rsh-ignore-status-code` so the response body remains visible even though

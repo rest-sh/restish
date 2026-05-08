@@ -13,7 +13,7 @@ Use limits and collect mode to make the behavior explicit.
 ## Automatic Pagination
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.self -o lines
+restish api.rest.sh/images -f body.self -o lines
 {{< /restish-example >}}
 
 When a response exposes a `next` link, Restish follows it until there are no
@@ -25,11 +25,11 @@ changes any of those origin components.
 ## Inspect One Page
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-no-paginate -f links.next
+restish api.rest.sh/images --rsh-no-paginate -f links.next
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-paginate
+restish api.rest.sh/images --rsh-no-paginate
 ```
 
 Use this when you want to understand the server's paging model before collecting
@@ -38,11 +38,11 @@ more data.
 ## Limit Pagination
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-max-items 100
+restish api.rest.sh/images --rsh-max-items 100
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-max-pages 3
+restish api.rest.sh/images --rsh-max-pages 3
 ```
 
 `--rsh-max-pages` protects you from unexpectedly large collections. It defaults
@@ -64,11 +64,11 @@ they arrive, while `-o json` gathers the filtered item results into one valid
 JSON document. Some filters need the whole collection:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish api.rest.sh/images --rsh-collect -f '.body | length'
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -f '.body | map(.self)'
+restish api.rest.sh/images --rsh-collect -f '.body | map(.self)'
 ```
 
 Without `--rsh-collect`, item-oriented output can start sooner and use less
@@ -77,11 +77,11 @@ memory.
 ## Links Command
 
 {{< restish-example >}}
-restish links https://api.rest.sh/images next
+restish links api.rest.sh/images next
 {{< /restish-example >}}
 
 ```bash
-restish links https://api.rest.sh/images
+restish links api.rest.sh/images
 ```
 
 The `links` command is useful when you only want the normalized hypermedia link

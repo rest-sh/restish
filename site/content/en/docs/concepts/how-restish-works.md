@@ -32,8 +32,8 @@ parsing, formatters, and plugins are owned by the CLI runtime.
 Generic requests need no setup:
 
 ```bash
-restish https://api.rest.sh/anything/demo
-restish post https://api.rest.sh/post 'name: Alice, enabled: true'
+restish api.rest.sh/anything/demo
+restish post api.rest.sh/post 'name: Alice, enabled: true'
 ```
 
 Use them for exploration, odd jobs, and APIs without a useful description.
@@ -43,7 +43,7 @@ Use them for exploration, odd jobs, and APIs without a useful description.
 API commands start with registration:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example list-images
 ```
 
@@ -66,8 +66,8 @@ Restish decodes responses into a stable shape before filtering and formatting.
 That is why filters can address `headers`, `links`, and `body` consistently:
 
 ```bash
-restish https://api.rest.sh/images -f links.next
-restish https://api.rest.sh/example -f body.basics.profiles
+restish api.rest.sh/images -f links.next
+restish api.rest.sh/example -f body.basics.profiles
 ```
 
 ## Plugins

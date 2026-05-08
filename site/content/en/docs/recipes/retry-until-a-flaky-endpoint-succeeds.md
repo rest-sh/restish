@@ -11,13 +11,13 @@ that fails a configurable number of times for a key, which makes retry behavior
 easy to see without waiting for a real outage.
 
 ```bash
-restish 'https://api.rest.sh/flaky?failures=1&key=docs-recipe' --rsh-retry 2
+restish 'api.rest.sh/flaky?failures=1&key=docs-recipe' --rsh-retry 2
 ```
 
 Set retries to zero to confirm the first failure path:
 
 ```bash
-restish 'https://api.rest.sh/flaky?failures=1&key=docs-once' --rsh-retry 0
+restish 'api.rest.sh/flaky?failures=1&key=docs-once' --rsh-retry 0
 ```
 
 The first command has enough retries to recover. The second disables retries so

@@ -27,7 +27,7 @@ restish plugin list
 Verify behavior:
 
 ```bash
-restish https://api.rest.sh/images -o csv
+restish api.rest.sh/images -o csv
 ```
 
 ## Debug Protocol Messages

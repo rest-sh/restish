@@ -10,7 +10,7 @@ file parts. `-c multipart` chooses the request encoding, and `@README.md` tells
 Restish to send the file contents rather than the literal string.
 
 ```bash
-restish post -c multipart https://api.rest.sh/uploads description: docs, file: @README.md
+restish post -c multipart api.rest.sh/uploads description: docs, file: @README.md
 ```
 
 The response echoes multipart fields. If a client sends real file parts,

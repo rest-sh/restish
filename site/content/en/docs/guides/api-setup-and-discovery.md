@@ -13,7 +13,7 @@ profiles, auth setup, spec caching, and completion.
 ## Configure By Discovery
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 
@@ -23,7 +23,7 @@ relations, then caches the spec.
 ## Configure With An Explicit Spec
 
 ```bash
-restish api connect example https://api.rest.sh --spec https://api.rest.sh/openapi.json
+restish api connect example api.rest.sh --spec https://api.rest.sh/openapi.json
 restish api sync example
 ```
 
@@ -57,7 +57,7 @@ Keep it path-only. Use `base_url` for scheme and host.
 ## Project Config Files
 
 ```bash
-restish --rsh-config ./restish.json api connect example https://api.rest.sh
+restish --rsh-config ./restish.json api connect example api.rest.sh
 restish --rsh-config ./restish.json api list
 ```
 

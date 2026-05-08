@@ -17,9 +17,9 @@ plugin diagnostics, migration notices, and warnings are written to stderr.
 Use a machine-oriented format in scripts:
 
 ```bash
-restish https://api.rest.sh/images -o json
-restish https://api.rest.sh/images -o ndjson
-restish https://api.rest.sh/images -f body.self -o lines
+restish api.rest.sh/images -o json
+restish api.rest.sh/images -o ndjson
+restish api.rest.sh/images -f body.self -o lines
 ```
 
 ## Exit Codes
@@ -32,7 +32,7 @@ When a script intentionally handles HTTP status itself, keep the body and force
 a zero exit code:
 
 ```bash
-restish https://api.rest.sh/status/404 --rsh-ignore-status-code -o json
+restish api.rest.sh/status/404 --rsh-ignore-status-code -o json
 ```
 
 ## Quiet And Bounded Runs
@@ -40,16 +40,16 @@ restish https://api.rest.sh/status/404 --rsh-ignore-status-code -o json
 Use `-S` when only the exit code matters:
 
 ```bash
-restish -S https://api.rest.sh/status/204
+restish -S api.rest.sh/status/204
 ```
 
 Bound pagination and streaming explicitly in automation:
 
 ```bash
-restish https://api.rest.sh/images --rsh-no-paginate
-restish https://api.rest.sh/images --rsh-max-pages 3
-restish https://api.rest.sh/images --rsh-max-items 100
-restish https://api.rest.sh/events --rsh-max-items 10 -o ndjson
+restish api.rest.sh/images --rsh-no-paginate
+restish api.rest.sh/images --rsh-max-pages 3
+restish api.rest.sh/images --rsh-max-items 100
+restish api.rest.sh/events --rsh-max-items 10 -o ndjson
 ```
 
 ## Stable Request Flags

@@ -27,7 +27,7 @@ Release archives are published for macOS, Linux, and Windows on `amd64` and
 ## OCI Image
 
 ```bash
-docker run --rm ghcr.io/rest-sh/restish:latest https://api.rest.sh/
+docker run --rm ghcr.io/rest-sh/restish:latest api.rest.sh/
 ```
 
 ## Build From Source
@@ -37,7 +37,7 @@ From this repository:
 ```bash
 go build ./cmd/restish
 ./restish --help
-./restish https://api.rest.sh/
+./restish api.rest.sh/
 ```
 
 To install the binary into your Go bin directory:
@@ -51,7 +51,7 @@ restish --help
 
 ```bash
 restish --help
-restish https://api.rest.sh/
+restish api.rest.sh/
 ```
 
 The request should return an echo-shaped JSON document containing at least

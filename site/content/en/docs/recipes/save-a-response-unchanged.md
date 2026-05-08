@@ -11,14 +11,14 @@ for binary files, structured fixtures such as CBOR, and anything another
 program will parse directly.
 
 ```bash
-restish https://api.rest.sh/bytes/64 > sample.bin
-restish https://api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/bytes/64 > sample.bin
+restish api.rest.sh/content/cbor > response.cbor
 ```
 
 For an image:
 
 ```bash
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
 Use `--rsh-raw` when you want the same body-byte behavior on a terminal. Use

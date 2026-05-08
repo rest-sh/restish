@@ -18,32 +18,41 @@ Streams run until EOF, timeout, or interruption by default. Add
 
 Bound examples you paste into a terminal when you only want a sample:
 
-```bash
-restish https://api.rest.sh/events --rsh-max-items 3
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
-```
+{{< restish-example >}}
+restish api.rest.sh/events --rsh-max-items 3
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
+{{< /restish-example >}}
 
 SSE output includes event metadata and parsed data. Filter the event data when
 you only need fields:
 
+{{< restish-example >}}
+restish api.rest.sh/events --rsh-max-items 3 -f data.type -o lines
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/events --rsh-max-items 3 -f data.type -o lines
-restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 ```
 
 ## NDJSON
 
 The `/logs` endpoint emits line-oriented JSON records:
 
+{{< restish-example >}}
+restish api.rest.sh/logs --rsh-max-items 3 -o ndjson
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/logs --rsh-max-items 3 -o ndjson
-restish https://api.rest.sh/logs --rsh-max-items 3 -f body.user.id -o lines
+restish api.rest.sh/logs --rsh-max-items 3 -f body.user.id -o lines
 ```
 
 If an endpoint is slow to emit its first record, add a timeout while debugging:
 
 ```bash
-restish https://api.rest.sh/logs --rsh-max-items 3 --rsh-timeout 5s
+restish api.rest.sh/logs --rsh-max-items 3 --rsh-timeout 5s
 ```
 
 Very large NDJSON records use the same per-response cap as bounded responses.
@@ -56,9 +65,9 @@ event, including multi-line events.
 
 When a server needs a stream-specific `Accept` header, send it explicitly:
 
-```bash
-restish -H 'Accept: text/event-stream' https://api.rest.sh/events --rsh-max-items 3
-```
+{{< restish-example >}}
+restish -H 'Accept: text/event-stream' api.rest.sh/events --rsh-max-items 3
+{{< /restish-example >}}
 
 ## Document Formats On Live Streams
 
@@ -66,9 +75,12 @@ Document formats such as `json` and `yaml` require one complete document. For
 live streams, prefer `ndjson` for structured records or `lines` for filtered
 scalar values:
 
+{{< restish-example >}}
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
 ```
 
 ## SSE Parsing Notes

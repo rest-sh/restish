@@ -29,16 +29,22 @@ Nested array item links use relation names based on the field, such as
 
 ## Inspect Links
 
+{{< restish-example >}}
+restish links api.rest.sh/images
+{{< /restish-example >}}
+
 ```bash
-restish links https://api.rest.sh/images
-restish links https://api.rest.sh/images next self
+restish links api.rest.sh/images next self
 ```
 
 Filter links from a normal request:
 
+{{< restish-example >}}
+restish api.rest.sh/images -f links.next
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/images -f links.next
-restish https://api.rest.sh/images -f links.self
+restish api.rest.sh/images -f links.self
 ```
 
 ## Pagination Uses Links
@@ -46,9 +52,9 @@ restish https://api.rest.sh/images -f links.self
 Automatic pagination follows normalized `next` links. Disable it when you want
 to inspect only the first page:
 
-```bash
-restish https://api.rest.sh/images --rsh-no-paginate -f links
-```
+{{< restish-example >}}
+restish api.rest.sh/images --rsh-no-paginate -f links
+{{< /restish-example >}}
 
 ## Related Pages
 

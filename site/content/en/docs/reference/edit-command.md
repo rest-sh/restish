@@ -13,11 +13,11 @@ request.
 ## Examples
 
 ```bash
-restish edit https://api.rest.sh/types
-restish edit --edit-format yaml https://api.rest.sh/types
-restish edit --no-editor https://api.rest.sh/types
-restish edit --dry-run https://api.rest.sh/types string: changed
-restish edit -y https://api.rest.sh/types string: changed
+restish edit api.rest.sh/types
+restish edit --edit-format yaml api.rest.sh/types
+restish edit --no-editor api.rest.sh/types
+restish edit --dry-run api.rest.sh/types string: changed
+restish edit -y api.rest.sh/types string: changed
 ```
 
 Use `--edit-format yaml` when YAML is easier to read than JSON. Shorthand patch

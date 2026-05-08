@@ -14,7 +14,7 @@ or TLS settings change.
 ## Start With One API
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Add profiles under the API with `api set`:
@@ -61,7 +61,7 @@ Use a profile with `-p`:
 
 ```bash
 restish -p json example list-images
-restish -p debug https://api.rest.sh/anything/profile-demo
+restish -p debug api.rest.sh/anything/profile-demo
 RESTISH_DOCS_TOKEN=docs-token restish -p token example get-echo
 ```
 

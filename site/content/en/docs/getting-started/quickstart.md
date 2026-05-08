@@ -44,14 +44,14 @@ Restish sends a `GET`, decodes the response, and renders it in a readable
 terminal format.
 
 {{< restish-example >}}
-restish get https://api.rest.sh/types
+restish get api.rest.sh/types
 {{< /restish-example >}}
 
 For quick exploration, the verb and scheme can be optional. These commands are
 equivalent in normal use:
 
 ```bash
-restish get https://api.rest.sh/types
+restish get api.rest.sh/types
 restish https://api.rest.sh/types
 restish api.rest.sh/types
 ```
@@ -70,7 +70,7 @@ error bodies stay decodable when the API returns structured JSON.
 Send a header and inspect the echoed request:
 
 {{< restish-example >}}
-restish -H 'X-Demo: tour' https://api.rest.sh/headers
+restish -H 'X-Demo: tour' api.rest.sh/headers
 {{< /restish-example >}}
 
 For local debugging, add `-v` to see request and response details on stderr
@@ -186,15 +186,15 @@ The browser preview cannot create local files, but it can still show the image
 response headers:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images/jpeg -f headers
+restish api.rest.sh/images/jpeg -f headers
 {{< /restish-example >}}
 
 Run the download locally:
 
 ```bash
 # Redirect output to save the body bytes to a file.
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
-restish https://api.rest.sh/bytes/64 > sample.bin
+restish api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/bytes/64 > sample.bin
 ```
 
 The same rule applies to structured responses. Redirecting without `-o` saves
@@ -203,10 +203,10 @@ supported response format and render JSON for a script:
 
 ```bash
 # Output a JSON representation even if the server sends CBOR or YAML.
-restish https://api.rest.sh/types -o json > types.json
+restish api.rest.sh/types -o json > types.json
 
 # Save the response body bytes.
-restish https://api.rest.sh/content/cbor > types.cbor
+restish api.rest.sh/content/cbor > types.cbor
 ```
 
 Learn more: [Content Types](../../reference/content-types/),
@@ -287,7 +287,7 @@ restish -c form api.rest.sh/login 'username: alice, password: secret'
 Use stdin for larger payloads in the real CLI:
 
 ```bash
-restish post https://api.rest.sh/post < payload.json
+restish post api.rest.sh/post < payload.json
 ```
 
 The stdin payload can be combined with the command-line body for more complex shapes or template scenarios (where appending can come in handy).
@@ -385,21 +385,21 @@ do not hang indefinitely or redo unnecessary network work.
 Use a timeout when a command should fail predictably:
 
 {{< restish-example >}}
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 {{< /restish-example >}}
 
 Restish retries safe transient failures for `GET` and `HEAD`. You can tune the
 attempt count for one command:
 
 {{< restish-example >}}
-restish 'https://api.rest.sh/flaky?failures=1&key=tour' --rsh-retry 2
+restish 'api.rest.sh/flaky?failures=1&key=tour' --rsh-retry 2
 {{< /restish-example >}}
 
 Use cache flags when debugging freshness, and cache commands when you need to
 inspect or clear stored responses:
 
 ```bash
-restish https://api.rest.sh/cache --rsh-no-cache
+restish api.rest.sh/cache --rsh-no-cache
 restish cache info
 ```
 
@@ -414,7 +414,7 @@ configuration, and generates commands from operations when it can.
 
 ```bash
 # Connect to the API and give it a short name `example`.
-restish api connect example https://api.rest.sh
+restish api connect example api.rest.sh
 
 # See the generated commands for the API.
 restish example --help
@@ -601,7 +601,7 @@ conditionals can stop on API failures. When an error response body is the data
 you want to inspect, opt out for that command with `--rsh-ignore-status-code`:
 
 {{< restish-example >}}
-restish https://api.rest.sh/problem --rsh-ignore-status-code
+restish api.rest.sh/problem --rsh-ignore-status-code
 {{< /restish-example >}}
 
 Learn more: [Output](../../guides/output/), [Filtering](../../guides/filtering/),

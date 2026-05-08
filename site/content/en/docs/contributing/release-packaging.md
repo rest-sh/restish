@@ -44,7 +44,7 @@ After updating the formula, verify:
 ```bash
 brew install rest-sh/tap/restish
 restish --version
-restish https://api.rest.sh/
+restish api.rest.sh/
 ```
 
 ## Go Install

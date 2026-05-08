@@ -53,7 +53,7 @@ restish shell setup zsh --no-completion
 ## Generated API Completion
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example <TAB>
 restish example get-image <TAB>
 ```
@@ -69,7 +69,7 @@ request form:
 ```bash
 restish example/<TAB>
 restish get example/<TAB>
-restish get https://api.rest.sh/ima<TAB>
+restish get api.rest.sh/ima<TAB>
 ```
 
 Restish keeps the form you started with. API short-name paths stay short,

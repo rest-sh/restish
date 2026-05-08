@@ -23,37 +23,43 @@ rate-limit wait.
 
 Use the flaky fixture to see recovery:
 
-```bash
-restish 'https://api.rest.sh/flaky?failures=1&key=docs-retry' --rsh-retry 2
-```
+{{< restish-example >}}
+restish 'api.rest.sh/flaky?failures=1&key=docs-retry' --rsh-retry 2
+{{< /restish-example >}}
 
 Opt into replaying an unsafe method only when the endpoint is idempotent enough
 for your use case:
 
 ```bash
-restish post https://api.example.com/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
+restish post https://api.vendor.test/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
 ```
 
 Disable retries for strict single-attempt debugging:
 
-```bash
-restish 'https://api.rest.sh/flaky?failures=1&key=docs-once' --rsh-retry 0
-```
+{{< restish-example >}}
+restish 'api.rest.sh/flaky?failures=1&key=docs-once' --rsh-retry 0
+{{< /restish-example >}}
 
 ## Timeouts
 
+{{< restish-example >}}
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+{{< /restish-example >}}
+
 ```bash
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 3s
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 3s
 ```
 
 Use timeouts in scripts and CI so slow services fail predictably.
 
 ## Status Fixtures
 
+{{< restish-example >}}
+restish api.rest.sh/status/429 --rsh-retry 2 --rsh-ignore-status-code
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/status/429 --rsh-retry 2 --rsh-ignore-status-code
-restish https://api.rest.sh/status/503 --rsh-retry 2 --rsh-ignore-status-code
+restish api.rest.sh/status/503 --rsh-retry 2 --rsh-ignore-status-code
 ```
 
 `--rsh-ignore-status-code` lets you inspect error bodies while keeping the CLI
@@ -63,15 +69,15 @@ exit code from stopping a shell pipeline.
 
 Bypass cache reads and writes for one command:
 
-```bash
-restish https://api.rest.sh/cache --rsh-no-cache
-```
+{{< restish-example >}}
+restish api.rest.sh/cache --rsh-no-cache
+{{< /restish-example >}}
 
 Use verbose output to see cache diagnostics:
 
-```bash
-restish https://api.rest.sh/cached/60 -v
-```
+{{< restish-example >}}
+restish api.rest.sh/cached/60 -v
+{{< /restish-example >}}
 
 Credentialed API-profile requests are cached inside that API/profile namespace.
 Direct URL requests that put credentials in headers or query parameters bypass
@@ -94,9 +100,12 @@ restish cache clear example
 
 Use ETag fixtures when testing conditional behavior:
 
+{{< restish-example >}}
+restish api.rest.sh/etag/docs
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/etag/docs
-restish -H 'If-None-Match: "docs"' https://api.rest.sh/etag/docs --rsh-ignore-status-code
+restish -H 'If-None-Match: "docs"' api.rest.sh/etag/docs --rsh-ignore-status-code
 ```
 
 ## Related Pages

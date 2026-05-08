@@ -10,7 +10,7 @@ description: Reference for registering APIs, syncing specs, editing config, and 
 ## Connect
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 ```
 
 Discovers a spec, builds initial config, prompts for setup where needed, and
@@ -25,13 +25,13 @@ Use `--no-discover` when you only want to save a local base URL without network
 spec discovery:
 
 ```bash
-restish api connect example https://api.rest.sh --no-discover
+restish api connect example api.rest.sh --no-discover
 ```
 
 ## Explicit Spec
 
 ```bash
-restish api connect example https://api.rest.sh --spec https://api.rest.sh/openapi.json
+restish api connect example api.rest.sh --spec https://api.rest.sh/openapi.json
 ```
 
 Uses the provided OpenAPI file or URL instead of discovery. Rerun

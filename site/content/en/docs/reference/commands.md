@@ -10,14 +10,14 @@ Restish commands fall into a few groups.
 ## Generic HTTP Commands
 
 ```bash
-restish https://api.rest.sh/
-restish get https://api.rest.sh/get
-restish post https://api.rest.sh/post name: Alice
-restish put https://api.rest.sh/put name: Alice
-restish patch https://api.rest.sh/patch enabled: false
-restish delete https://api.rest.sh/delete --rsh-ignore-status-code
-restish head https://api.rest.sh/head
-restish options https://api.rest.sh/options
+restish api.rest.sh/
+restish get api.rest.sh/get
+restish post api.rest.sh/post name: Alice
+restish put api.rest.sh/put name: Alice
+restish patch api.rest.sh/patch enabled: false
+restish delete api.rest.sh/delete --rsh-ignore-status-code
+restish head api.rest.sh/head
+restish options api.rest.sh/options
 ```
 
 A bare URL without a body is a generic `GET`. A bare URL with shorthand or stdin
@@ -56,7 +56,7 @@ restish doctor api example --check-network --json
 After configuration, an API name becomes a command group:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 restish example list-images
 restish example get-image jpeg

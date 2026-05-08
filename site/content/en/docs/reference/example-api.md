@@ -5,24 +5,29 @@ weight: 15
 description: Canonical api.rest.sh endpoints and commands used throughout the Restish docs.
 ---
 
-The docs use `https://api.rest.sh` whenever a live endpoint makes a Restish
-workflow clearer. The API is intentionally broad: it has OpenAPI discovery,
-request echoing, auth fixtures, forms, uploads, streaming, pagination, retries,
-content negotiation, binary responses, redirects, and safe CRUD examples.
+The docs use `api.rest.sh` whenever a live endpoint makes a Restish workflow
+clearer. Restish infers `https://` for host-like request targets, while config
+values and OpenAPI metadata still use full URLs. The API is intentionally broad:
+it has OpenAPI discovery, request echoing, auth fixtures, forms, uploads,
+streaming, pagination, retries, content negotiation, binary responses,
+redirects, and safe CRUD examples.
 
 Configure it once when you want short API-aware commands:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 
-Use full URLs when you want to stay in generic HTTP mode:
+Use a host-like URL when you want to stay in generic HTTP mode:
 
-```bash
-restish https://api.rest.sh/
-restish https://api.rest.sh/images -o table --rsh-columns name,format,self
-```
+{{< restish-example >}}
+restish api.rest.sh/
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish api.rest.sh/images -o table --rsh-columns name,format,self
+{{< /restish-example >}}
 
 ## First Requests And Inspection
 
@@ -35,19 +40,28 @@ restish https://api.rest.sh/images -o table --rsh-columns name,format,self
 | `/anything` and `/anything/{path}` | Echo method, URL, path, query, headers, and body. |
 | `/get`, `/post`, `/put`, `/patch`, `/delete`, `/head`, `/options` | Focused generic HTTP verb examples. |
 
-```bash
-restish https://api.rest.sh/
-restish -H 'X-Demo: docs' 'https://api.rest.sh/anything/docs?active=true'
-```
+{{< restish-example >}}
+restish api.rest.sh/
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish -H 'X-Demo: docs' 'api.rest.sh/anything/docs?active=true'
+{{< /restish-example >}}
 
 ## API-Aware Commands
 
 The API publishes an OpenAPI document at `/openapi.json`. After configuration,
 Restish generates commands such as:
 
-```bash
+{{< restish-example >}}
 restish example list-images
+{{< /restish-example >}}
+
+{{< restish-example >}}
 restish example get-image jpeg
+{{< /restish-example >}}
+
+```bash
 restish example get-types-example
 restish example get-status 404 --rsh-ignore-status-code
 ```
@@ -64,10 +78,13 @@ profile-aware auth. Use generic URLs for quick exploration.
 | `/login` | URL-encoded form login examples. |
 | `/uploads` | Multipart form echo examples, including file metadata when the client sends file parts. |
 
-```bash
-restish post https://api.rest.sh/post 'name: Alice, enabled: true'
-restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
-```
+{{< restish-example >}}
+restish post api.rest.sh/post 'name: Alice, enabled: true'
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish post -c form api.rest.sh/login 'username: alice, password: secret'
+{{< /restish-example >}}
 
 ## Auth Sandbox
 
@@ -80,10 +97,13 @@ The auth endpoints require credentials but return only safe summaries.
 | `/auth/api-key-header` | `X-API-Key` header |
 | `/auth/api-key-query` | `api_key` query parameter |
 
-```bash
-restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
-restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
-```
+{{< restish-example >}}
+restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish -H 'X-API-Key: docs-key' api.rest.sh/auth/api-key-header
+{{< /restish-example >}}
 
 ## Collections, Links, And CRUD
 
@@ -95,10 +115,16 @@ restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
 | `/books` and `/books/{book-id}` | Bulk-management workflows. |
 | `/example` | Nested data for filtering and projection examples. |
 
+{{< restish-example >}}
+restish api.rest.sh/images -f links.next
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish api.rest.sh/example -f body.basics.profiles
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/images -f links.next
-restish https://api.rest.sh/example -f body.basics.profiles
-restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
+restish post api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
 ```
 
 ## Streaming
@@ -111,9 +137,12 @@ restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true
 
 Always bound copy-paste stream examples:
 
+{{< restish-example >}}
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
+{{< /restish-example >}}
+
 ```bash
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
-restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 ```
 
 ## Resilience And HTTP Behavior
@@ -126,10 +155,13 @@ restish https://api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
 | `/cache`, `/cached/{seconds}`, `/etag/{etag}` | HTTP cache and conditional requests. |
 | `/redirect/{n}`, `/relative-redirect/{n}`, `/absolute-redirect/{n}`, `/redirect-to` | Redirect behavior and verbose transcripts. |
 
-```bash
-restish 'https://api.rest.sh/flaky?failures=1&key=docs' --rsh-retry 2
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
-```
+{{< restish-example >}}
+restish 'api.rest.sh/flaky?failures=1&key=docs' --rsh-retry 2
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+{{< /restish-example >}}
 
 ## Content, Binary, And Utilities
 
@@ -143,9 +175,12 @@ restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 | `/xml`, `/html`, `/uuid`, `/ip`, `/base64/encode/{value}`, `/base64/decode/{value}` | Small utility examples. |
 | `/cookies`, `/cookies/set`, `/cookies/delete` | Cookie behavior examples. |
 
+{{< restish-example >}}
+restish -H 'Accept: application/json' api.rest.sh/formats/json
+{{< /restish-example >}}
+
 ```bash
-restish -H 'Accept: application/json' https://api.rest.sh/formats/json
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
 ## Related Pages

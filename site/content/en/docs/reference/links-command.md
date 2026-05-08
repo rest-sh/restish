@@ -12,9 +12,9 @@ common question: "where can this response take me next?"
 ## Examples
 
 ```bash
-restish links https://api.rest.sh/images
-restish links https://api.rest.sh/images next
-restish https://api.rest.sh/images -f links.next
+restish links api.rest.sh/images
+restish links api.rest.sh/images next
+restish api.rest.sh/images -f links.next
 ```
 
 The first command prints all discovered relations. The second prints only the

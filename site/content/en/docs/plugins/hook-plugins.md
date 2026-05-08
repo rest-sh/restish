@@ -23,7 +23,7 @@ file output without owning HTTP, auth, retry, cache, or TLS behavior.
 
 ```bash
 restish plugin list
-restish https://api.rest.sh/images -o csv
+restish api.rest.sh/images -o csv
 ```
 
 ## Middleware Example Shape

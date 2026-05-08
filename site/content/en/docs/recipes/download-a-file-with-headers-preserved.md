@@ -10,7 +10,7 @@ Verbose diagnostics are written to stderr, so you can redirect them to a
 separate file without corrupting the download.
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
+restish -v api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 ```
 
 The body goes to stdout and verbose metadata goes to stderr, so the saved file

@@ -12,8 +12,8 @@ needs: issuer, subject, validity dates, and expiration warnings.
 ## Examples
 
 ```bash
-restish cert https://api.rest.sh
-restish cert --warn-days 14 https://api.rest.sh
+restish cert api.rest.sh
+restish cert --warn-days 14 api.rest.sh
 restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 ```
 

@@ -12,8 +12,8 @@ for those parts.
 ## Inspect A Server Certificate
 
 ```bash
-restish cert https://api.rest.sh
-restish cert --warn-days 14 https://api.rest.sh
+restish cert api.rest.sh
+restish cert --warn-days 14 api.rest.sh
 ```
 
 ## Trust A Custom CA
@@ -54,8 +54,8 @@ restish \
 ## Minimum TLS Version
 
 ```bash
-restish --rsh-tls-min-version TLS1.2 https://api.rest.sh
-restish --rsh-tls-min-version TLS1.3 https://api.rest.sh
+restish --rsh-tls-min-version TLS1.2 api.rest.sh
+restish --rsh-tls-min-version TLS1.3 api.rest.sh
 ```
 
 ## Temporary Insecure Mode

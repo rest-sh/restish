@@ -13,7 +13,7 @@ too slow or too error-prone.
 ## Examples
 
 ```bash
-restish bulk init https://api.rest.sh/books
+restish bulk init api.rest.sh/books
 restish bulk status
 restish bulk pull
 restish bulk diff

@@ -24,14 +24,14 @@ restish options [flags] <url>
 ## Common Examples
 
 ```bash
-restish https://api.rest.sh/get
-restish https://api.rest.sh/post 'name: Alice, enabled: true'
-restish post https://api.rest.sh/post 'name: Alice, enabled: true'
-restish put https://api.rest.sh/put name: Alice
-restish patch https://api.rest.sh/patch enabled: false
-restish delete https://api.rest.sh/delete --rsh-ignore-status-code
-restish head https://api.rest.sh/head
-restish options https://api.rest.sh/options
+restish api.rest.sh/get
+restish api.rest.sh/post 'name: Alice, enabled: true'
+restish post api.rest.sh/post 'name: Alice, enabled: true'
+restish put api.rest.sh/put name: Alice
+restish patch api.rest.sh/patch enabled: false
+restish delete api.rest.sh/delete --rsh-ignore-status-code
+restish head api.rest.sh/head
+restish options api.rest.sh/options
 ```
 
 ## Inferred Method
@@ -47,9 +47,9 @@ API that expects a `GET` body or `patch` for partial updates.
 For CRUD examples with a path resource, use `/items/{item-id}`:
 
 ```bash
-restish post https://api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
-restish patch https://api.rest.sh/items/docs-demo enabled: false
-restish delete https://api.rest.sh/items/docs-demo --rsh-ignore-status-code
+restish post api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
+restish patch api.rest.sh/items/docs-demo enabled: false
+restish delete api.rest.sh/items/docs-demo --rsh-ignore-status-code
 ```
 
 ## Output And Errors

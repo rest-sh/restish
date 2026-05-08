@@ -10,7 +10,7 @@ from each item, and print one plain value per line. It is useful for loops,
 copy-paste, and quick checks.
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.self -o lines
+restish api.rest.sh/images -f body.self -o lines
 {{< /restish-example >}}
 
 Example output:

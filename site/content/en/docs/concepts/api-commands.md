@@ -12,7 +12,7 @@ request behavior.
 ## Start With A Short Name
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish example --help
 ```
 
@@ -24,7 +24,7 @@ The API name becomes a command group. Operations become subcommands such as
 A generic request says exactly where to go:
 
 ```bash
-restish https://api.rest.sh/images/jpeg
+restish api.rest.sh/images/jpeg
 ```
 
 A generated command says what operation to run:
@@ -38,7 +38,7 @@ optional flags, and profile-aware base URL selection.
 
 When a generic URL request matches a registered API and one cached OpenAPI
 operation, Restish also uses that operation's auth policy. This means manual URL
-calls such as `restish https://api.rest.sh/auth/basic` can use the same
+calls such as `restish api.rest.sh/auth/basic` can use the same
 configured credentials as `restish example get-auth-basic`. If the operation
 cache is missing or several templates could match the URL, Restish falls back to
 the selected profile's ordinary auth.

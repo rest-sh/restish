@@ -25,30 +25,30 @@ flowchart LR
 ## Choose A Format
 
 {{< restish-example >}}
-restish https://api.rest.sh/images
+restish api.rest.sh/images
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -o json
+restish api.rest.sh/images -o json
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -o yaml
+restish api.rest.sh/images -o yaml
 {{< /restish-example >}}
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -o table --rsh-columns name,format,self
+restish api.rest.sh/images -o table --rsh-columns name,format,self
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -o ndjson -f body.self
+restish api.rest.sh/images -o ndjson -f body.self
 ```
 
 Use shortcuts for common response metadata:
 
 ```bash
-restish https://api.rest.sh/status/204 --rsh-status
-restish https://api.rest.sh/ --rsh-headers
+restish api.rest.sh/status/204 --rsh-status
+restish api.rest.sh/ --rsh-headers
 ```
 
 `readable` is the normal interactive default and is optimized for humans on a
@@ -61,13 +61,13 @@ Use document output when the next program expects one complete value. Make the
 format explicit in scripts and redirects:
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -o json > images.json
+restish api.rest.sh/images --rsh-collect -o json > images.json
 ```
 
 Use record output when you want one item per line:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -o ndjson -f body.self
+restish api.rest.sh/images -o ndjson -f body.self
 {{< /restish-example >}}
 
 This distinction matters for pagination and live streams. A live stream may
@@ -82,12 +82,12 @@ results as one complete document.
 ## Filters Change What Gets Rendered
 
 {{< restish-example >}}
-restish https://api.rest.sh/example -f body.basics.profiles
+restish api.rest.sh/example -f body.basics.profiles
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
-restish https://api.rest.sh/ -f headers.Content-Type
+restish api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish api.rest.sh/ -f headers.Content-Type
 ```
 
 Explicit scalar filters print without JSON string quotes. Use `-o lines` when
@@ -101,21 +101,21 @@ Unfiltered responses redirect as body bytes by default. This includes JSON,
 CBOR, YAML, images, octet streams, zip files, text, and unknown payloads:
 
 ```bash
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
-restish https://api.rest.sh/bytes/64 > sample.bin
-restish https://api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/bytes/64 > sample.bin
+restish api.rest.sh/content/cbor > response.cbor
 ```
 
 Choose an output format when you want Restish to transform the decoded body:
 
 ```bash
-restish https://api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/content/cbor -o json > response.json
 ```
 
 Use raw output explicitly when you want body bytes even on a terminal:
 
 ```bash
-restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
+restish api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
 
 Raw output bypasses Restish's structured body decoding and formatting for
@@ -126,7 +126,7 @@ filters.
 Verbose diagnostics go to stderr, so body redirects stay clean:
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
+restish -v api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 ```
 
 Sensitive headers such as `Authorization`, `Cookie`, `Proxy-Authorization`,
@@ -139,8 +139,8 @@ need a specific non-sensitive field.
 Image responses can render in capable terminals:
 
 ```bash
-restish https://api.rest.sh/images/png -o image
-restish -H 'Accept: image/png' https://api.rest.sh/image -o image
+restish api.rest.sh/images/png -o image
+restish -H 'Accept: image/png' api.rest.sh/image -o image
 ```
 
 Redirect the response to save the image instead.
@@ -150,7 +150,7 @@ Redirect the response to save the image instead.
 `gron` prints paths and values, which is useful when you do not know the shape:
 
 ```bash
-restish https://api.rest.sh/example -o gron | grep -i github
+restish api.rest.sh/example -o gron | grep -i github
 ```
 
 ## Related Pages

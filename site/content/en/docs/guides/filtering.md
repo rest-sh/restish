@@ -17,36 +17,36 @@ for direct paths and projections; use jq for richer transforms.
 - `body` for decoded response body
 
 {{< restish-example >}}
-restish https://api.rest.sh/ -f headers.Content-Type
+restish api.rest.sh/ -f headers.Content-Type
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images -f links.next
-restish https://api.rest.sh/example -f body.basics.profiles
+restish api.rest.sh/images -f links.next
+restish api.rest.sh/example -f body.basics.profiles
 ```
 
 ## Shorthand Paths
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.name
+restish api.rest.sh/images -f body.name
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -f body[0].name
-restish https://api.rest.sh/images --rsh-collect -f body[-1].self
-restish https://api.rest.sh/example -f body.volunteer[0].organization
+restish api.rest.sh/images --rsh-collect -f body[0].name
+restish api.rest.sh/images --rsh-collect -f body[-1].self
+restish api.rest.sh/example -f body.volunteer[0].organization
 ```
 
 ## Selection And Projection
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-collect -f 'body[format = jpeg].self' -o lines
+restish api.rest.sh/images --rsh-collect -f 'body[format = jpeg].self' -o lines
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/example -f 'body.basics.{name, url, profiles}'
-restish https://api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[0].self}'
-restish https://api.rest.sh/example -f 'body..url'
+restish api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[0].self}'
+restish api.rest.sh/example -f 'body..url'
 ```
 
 Recursive search and projection are useful when exploring unfamiliar API
@@ -58,20 +58,20 @@ jq filters use jq's current-input root, operators, functions, and pipeline
 syntax:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
+restish api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
 {{< /restish-example >}}
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
-restish https://api.rest.sh/images --rsh-no-paginate -f '{next: .links.next, first: .body[0].self}'
-restish https://api.rest.sh/example -f '.. | .url?'
+restish api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
+restish api.rest.sh/images --rsh-no-paginate -f '{next: .links.next, first: .body[0].self}'
+restish api.rest.sh/example -f '.. | .url?'
 ```
 
 Force a language when a filter is ambiguous:
 
 ```bash
-restish https://api.rest.sh/images --rsh-filter-lang shorthand -f '{next: links.next}'
-restish https://api.rest.sh/images --rsh-filter-lang jq -f '{next: .links.next}'
+restish api.rest.sh/images --rsh-filter-lang shorthand -f '{next: links.next}'
+restish api.rest.sh/images --rsh-filter-lang jq -f '{next: .links.next}'
 ```
 
 In the default `auto` mode, Restish tries both shorthand and jq. Bare
@@ -90,13 +90,13 @@ formats collect the filtered item results into one valid document. Use
 `--rsh-collect` when the filter needs the whole collection:
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish api.rest.sh/images --rsh-collect -f '.body | length'
 {{< /restish-example >}}
 
 ## Scalar Lines
 
 {{< restish-example >}}
-restish https://api.rest.sh/images -f body.name -o lines
+restish api.rest.sh/images -f body.name -o lines
 {{< /restish-example >}}
 
 Explicit scalar filters print without JSON string quotes. Use `-o lines` when

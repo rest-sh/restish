@@ -112,7 +112,7 @@ restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 
 ```bash
 restish 'api.rest.sh/flaky?failures=1&key=flags' --rsh-retry 2
-restish post https://api.example.com/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
+restish post https://api.vendor.test/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
 restish api.rest.sh/cache --rsh-no-cache
 ```
 

@@ -21,9 +21,9 @@ Most filters start from one of these roots:
 Examples:
 
 ```bash
-restish https://api.rest.sh/ -f headers.Content-Type
-restish https://api.rest.sh/images -f links.next
-restish https://api.rest.sh/example -f body.basics.profiles
+restish api.rest.sh/ -f headers.Content-Type
+restish api.rest.sh/images -f links.next
+restish api.rest.sh/example -f body.basics.profiles
 ```
 
 For filters, `headers` contains the first value for each response header so
@@ -50,8 +50,8 @@ For paginated filters, scope is separate from format: filters run per item by
 default, and `--rsh-collect` switches to whole-collection filtering.
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect -o json
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish api.rest.sh/images --rsh-collect -o json
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
 ## Related Pages

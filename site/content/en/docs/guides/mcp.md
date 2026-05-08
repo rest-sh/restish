@@ -12,7 +12,7 @@ auth, TLS, retries, and output normalization.
 ## Prerequisites
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 restish plugin list
 ```
 

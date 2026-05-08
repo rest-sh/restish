@@ -11,9 +11,9 @@ example does not collide with someone else's state:
 
 ```bash
 ITEM_ID="docs-$(date +%s)"
-restish post https://api.rest.sh/items "id: $ITEM_ID, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z"
-restish patch "https://api.rest.sh/items/$ITEM_ID" 'enabled: false, tags[]: docs'
-restish delete "https://api.rest.sh/items/$ITEM_ID" --rsh-ignore-status-code
+restish post api.rest.sh/items "id: $ITEM_ID, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z"
+restish patch "api.rest.sh/items/$ITEM_ID" 'enabled: false, tags[]: docs'
+restish delete "api.rest.sh/items/$ITEM_ID" --rsh-ignore-status-code
 ```
 
 The first command creates an item from shorthand fields. The patch command sends
@@ -25,7 +25,7 @@ map to exit codes.
 Check the collection:
 
 ```bash
-restish https://api.rest.sh/items
+restish api.rest.sh/items
 ```
 
 Related: [HTTP Commands](/docs/reference/http-commands/), [Requests](/docs/guides/requests/).

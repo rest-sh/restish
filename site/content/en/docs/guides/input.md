@@ -14,65 +14,65 @@ be encoded as YAML, form data, multipart, CBOR, and other registered types.
 
 ## Object Input
 
-```bash
-restish post https://api.rest.sh/post 'name: Alice, enabled: true' count: 3
-```
+{{< restish-example >}}
+restish post api.rest.sh/post 'name: Alice, enabled: true' count: 3
+{{< /restish-example >}}
 
 The `/post` endpoint echoes the parsed body so you can confirm the result.
 
 ## Nested Objects And Arrays
 
-```bash
-restish post https://api.rest.sh/post \
+{{< restish-example >}}
+restish post api.rest.sh/post \
   user.name: Alice \
   user.roles[]: admin \
   user.roles[]: editor \
   active: true
-```
+{{< /restish-example >}}
 
 Use quotes when your shell would otherwise treat brackets or spaces specially:
 
-```bash
-restish post https://api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
-```
+{{< restish-example >}}
+restish post api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
+{{< /restish-example >}}
 
 ## Strings, Nulls, And Empty Values
 
 Shorthand coerces common scalar values. Force strings with quotes when the exact
 text matters:
 
-```bash
-restish post https://api.rest.sh/post 'enabled: "true", missing: "null", blank: ""'
-```
+{{< restish-example >}}
+restish post api.rest.sh/post 'enabled: "true", missing: "null", blank: ""'
+{{< /restish-example >}}
 
 ## Stdin And Patches
 
 Use stdin for larger payloads:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post
+echo '{"name":"Alice","role":"user"}' | restish post api.rest.sh/post
 ```
 
 When stdin is not structured JSON or YAML, Restish preserves it as a plain text
 request body:
 
 ```bash
-printf 'hello from stdin' | restish post -c text https://api.rest.sh/post
+printf 'hello from stdin' | restish post -c text api.rest.sh/post
 ```
 
 Add shorthand arguments to patch structured stdin before sending:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish post https://api.rest.sh/post role: admin
+echo '{"name":"Alice","role":"user"}' | restish post api.rest.sh/post role: admin
 ```
 
 ## Form Bodies
 
 Use `-c form` for URL-encoded request bodies:
 
-```bash
-restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
-```
+{{< restish-example >}}
+restish post -c form api.rest.sh/login 'username: alice, password: secret'
+{{< /restish-example >}}
 
 Representative output:
 
@@ -90,7 +90,7 @@ Use `-c multipart` for form-style uploads. The example API echoes normal
 fields and reports file metadata when the request contains real file parts:
 
 ```bash
-restish post -c multipart https://api.rest.sh/uploads \
+restish post -c multipart api.rest.sh/uploads \
   description: docs, \
   file: @README.md
 ```
@@ -100,8 +100,8 @@ The response echoes multipart field values. When a client sends real file parts,
 ## File Loading
 
 ```bash
-restish post https://api.rest.sh/post payload: @payload.json
-restish post https://api.rest.sh/post note: @message.txt
+restish post api.rest.sh/post payload: @payload.json
+restish post api.rest.sh/post note: @message.txt
 ```
 
 Structured files are parsed when possible. Quote or force string behavior when a

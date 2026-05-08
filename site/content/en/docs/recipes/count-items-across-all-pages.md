@@ -11,7 +11,7 @@ entire logical result at once. `--rsh-collect` tells Restish to gather the
 paginated response before applying the filter.
 
 {{< restish-example >}}
-restish https://api.rest.sh/images --rsh-collect -f '.body | length'
+restish api.rest.sh/images --rsh-collect -f '.body | length'
 {{< /restish-example >}}
 
 Example output:

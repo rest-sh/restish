@@ -20,9 +20,9 @@ They are useful for learning and testing.
 
 ### Bearer Token
 
-```bash
-restish -H 'Authorization: Bearer docs-token' https://api.rest.sh/auth/bearer
-```
+{{< restish-example >}}
+restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
+{{< /restish-example >}}
 
 Representative output:
 
@@ -34,21 +34,21 @@ subject: "docs-token"
 
 ### API Key Header
 
-```bash
-restish -H 'X-API-Key: docs-key' https://api.rest.sh/auth/api-key-header
-```
+{{< restish-example >}}
+restish -H 'X-API-Key: docs-key' api.rest.sh/auth/api-key-header
+{{< /restish-example >}}
 
 ### API Key Query Param
 
-```bash
-restish 'https://api.rest.sh/auth/api-key-query?api_key=docs-key'
-```
+{{< restish-example >}}
+restish 'api.rest.sh/auth/api-key-query?api_key=docs-key'
+{{< /restish-example >}}
 
 ### Basic Auth
 
-```bash
-restish -H 'Authorization: Basic YWxpY2U6c2VjcmV0' https://api.rest.sh/auth/basic
-```
+{{< restish-example >}}
+restish -H 'Authorization: Basic YWxpY2U6c2VjcmV0' api.rest.sh/auth/basic
+{{< /restish-example >}}
 
 For real APIs, put these values in a profile or use an auth method instead of
 repeating headers in shell history.
@@ -96,7 +96,7 @@ When an OpenAPI spec declares security schemes, `api connect` can prompt for
 values or accept preanswers:
 
 ```bash
-restish api connect example https://api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
+restish api connect example api.rest.sh 'prompt.api_key: env:DOCS_API_KEY'
 ```
 
 Generated OpenAPI commands use the operation's effective `security` policy.
@@ -163,7 +163,7 @@ command knows which auth material to show.
 Use verbose mode when the question is about the whole request:
 
 ```bash
-restish -v -p token https://api.rest.sh/auth/bearer
+restish -v -p token api.rest.sh/auth/bearer
 ```
 
 ## OAuth

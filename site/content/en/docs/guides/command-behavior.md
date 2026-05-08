@@ -25,7 +25,7 @@ Restish uses a compact exit-code policy:
 Inspect an error body without failing the shell command:
 
 ```bash
-restish https://api.rest.sh/status/404 --rsh-ignore-status-code
+restish api.rest.sh/status/404 --rsh-ignore-status-code
 ```
 
 ## Stdout And Stderr
@@ -34,14 +34,14 @@ Response output goes to stdout. Diagnostics, verbose request/response metadata,
 progress, and warnings go to stderr.
 
 ```bash
-restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> headers.txt
+restish -v api.rest.sh/images/jpeg > dragonfly.jpg 2> headers.txt
 ```
 
 ## Verbose Mode
 
 ```bash
-restish -v https://api.rest.sh/headers
-restish -vv https://api.rest.sh/headers
+restish -v api.rest.sh/headers
+restish -vv api.rest.sh/headers
 ```
 
 `-v` shows request and response headers plus the resolved config path, profile,
@@ -54,8 +54,8 @@ summary when those details apply. `-vv` adds more TLS detail.
 Use redirect fixtures to inspect behavior:
 
 ```bash
-restish https://api.rest.sh/redirect/2 -v
-restish 'https://api.rest.sh/redirect-to?url=/get&status_code=307' -v
+restish api.rest.sh/redirect/2 -v
+restish 'api.rest.sh/redirect-to?url=/get&status_code=307' -v
 ```
 
 When auth or custom headers are involved, use verbose mode to confirm what is
@@ -64,7 +64,7 @@ sent after redirects.
 ## Timeouts
 
 ```bash
-restish 'https://api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 ```
 
 Timeouts are useful in scripts where a hanging request is worse than a clear
@@ -75,7 +75,7 @@ failure.
 Use `-S` when only the exit code matters:
 
 ```bash
-restish -S https://api.rest.sh/status/204
+restish -S api.rest.sh/status/204
 ```
 
 ## Related Pages
