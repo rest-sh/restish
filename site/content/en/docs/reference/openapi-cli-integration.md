@@ -1,13 +1,16 @@
 ---
-title: OpenAPI and CLI Integration
-linkTitle: OpenAPI and CLI Integration
-weight: 25
-description: Shape a better Restish command surface from an OpenAPI document.
+title: OpenAPI Extensions and Generated Commands
+linkTitle: OpenAPI
+weight: 16
+description: Reference for shaping generated Restish commands from OpenAPI documents.
+aliases:
+  - /docs/guides/openapi-cli-integration/
 ---
 
-Restish turns OpenAPI operations into CLI commands. API authors can make that
-surface better with clear operation IDs, useful descriptions, parameter schemas,
-security schemes, and a few Restish extensions.
+Restish turns OpenAPI operations into CLI commands. This reference is for API
+authors and maintainers who want the generated command surface to feel natural:
+stable names, useful help, predictable parameters, auth setup, and documented
+Restish extensions.
 
 ## Minimum Good Operation
 
@@ -287,6 +290,6 @@ Keep tags short and user-facing if you expect them to become command groups.
 ## Related Pages
 
 - [API Commands](/docs/concepts/api-commands/)
-- [API Setup and Discovery](../api-setup-and-discovery/)
+- [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
 - [API Management](/docs/reference/api-management/)
-- [MCP](../mcp/)
+- [MCP](/docs/guides/mcp/)

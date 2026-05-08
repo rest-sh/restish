@@ -10,7 +10,7 @@ filters, pagination, and plugins.
 ## Start Here
 
 - New to Restish: [Tour of Restish](./getting-started/quickstart/) -> [Install](./getting-started/install/) -> [Shell Setup](./getting-started/shell-setup/)
-- Already have an OpenAPI-described API: [Connect to an API](./getting-started/connect-to-an-api/) -> [OpenAPI and CLI Integration](./guides/openapi-cli-integration/)
+- Already have an OpenAPI-described API: [Connect to an API](./getting-started/connect-to-an-api/) -> [OpenAPI Reference](./reference/openapi-cli-integration/)
 - Repeating headers, tokens, or environment URLs: [Set Up Profiles](./getting-started/set-up-profiles/) -> [Authentication](./guides/authentication/)
 - Extending Restish: [Install and Use Plugins](./plugins/install-and-use/) -> [Plugin Quickstart](./plugins/quickstart/)
 

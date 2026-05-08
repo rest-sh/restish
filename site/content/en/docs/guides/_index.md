@@ -26,7 +26,7 @@ matches the kind of work you are doing.
 - [Pagination and Links](./pagination/) and [Links and Hypermedia](./links-and-hypermedia/)
 - [Filtering](./filtering/) and [Streaming](./streaming/)
 - [Retries and Caching](./retries-and-caching/) and [Command Behavior](./command-behavior/)
-- [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI and CLI Integration](./openapi-cli-integration/)
+- [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Bulk Management](./bulk-management/) and [MCP](./mcp/)
 - [TLS](./tls/), [Completions](./completions/), [Images in the Terminal](./images-in-the-terminal/), and [Edit Workflow](./edit-workflow/)
 

@@ -465,7 +465,7 @@ restish example get-book the-fabric-of-the-cosmos
 {{< /restish-example >}}
 
 Learn more: [API Commands](../../concepts/api-commands/),
-[OpenAPI and CLI Integration](../../guides/openapi-cli-integration/),
+[OpenAPI Reference](../../reference/openapi-cli-integration/),
 [Commands](../../reference/commands/).
 
 ## Add Authentication
@@ -492,7 +492,7 @@ without leaking the credential into logs. Use `restish api auth inspect example`
 
 Learn more: [Authentication](../../guides/authentication/),
 [Auth Header Command](../../reference/auth-header-command/),
-[OpenAPI and CLI Integration](../../guides/openapi-cli-integration/).
+[OpenAPI Reference](../../reference/openapi-cli-integration/).
 
 ## User Profiles
 
@@ -614,7 +614,7 @@ Choose the next page based on what you are trying to do:
 
 - Install locally: [Install](../install/), then [Shell Setup](../shell-setup/).
 - Make one-off requests: [Requests](../../guides/requests/) and [Input and Shorthand](../../guides/input/).
-- Connect your own API: [Connect to an API](../connect-to-an-api/) and [OpenAPI and CLI Integration](../../guides/openapi-cli-integration/).
+- Connect your own API: [Connect to an API](../connect-to-an-api/) and [OpenAPI Reference](../../reference/openapi-cli-integration/).
 - Configure auth and environments: [Authentication](../../guides/authentication/) and [Set Up Profiles](../set-up-profiles/).
 - Shape output for humans or scripts: [Output](../../guides/output/), [Filtering](../../guides/filtering/), and [Output Formats](../../reference/output-formats/).
 - Debug failures or slow APIs: [Troubleshooting](../../guides/troubleshooting/) and [Retries and Caching](../../guides/retries-and-caching/).

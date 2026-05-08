@@ -72,7 +72,7 @@ without confirmation or where the spec hides important side effects.
 
 ## Related Pages
 
-- [OpenAPI and CLI Integration](../openapi-cli-integration/)
+- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Command Plugins](/docs/plugins/command-plugins/)
 - [Plugin Messages](/docs/reference/plugin-messages/)
 - [Troubleshooting](../troubleshooting/)

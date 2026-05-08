@@ -85,5 +85,5 @@ restish api sync example
 
 - [Connect to an API](/docs/getting-started/connect-to-an-api/)
 - [API Management](/docs/reference/api-management/)
-- [OpenAPI and CLI Integration](../openapi-cli-integration/)
+- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Troubleshooting](../troubleshooting/)

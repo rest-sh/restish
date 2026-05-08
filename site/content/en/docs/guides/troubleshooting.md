@@ -168,7 +168,7 @@ restish myapi --help
 
 **Prevention:** Publish `/openapi.json` or service-description links and keep operation IDs stable.
 
-**Related docs:** [API Setup and Discovery](/docs/guides/api-setup-and-discovery/), [OpenAPI and CLI Integration](/docs/guides/openapi-cli-integration/).
+**Related docs:** [API Setup and Discovery](/docs/guides/api-setup-and-discovery/), [OpenAPI Reference](/docs/reference/openapi-cli-integration/).
 
 ## Config Permissions Are Rejected
 

@@ -104,5 +104,5 @@ remote specs during shell completion.
 ## Related Pages
 
 - [Shell Setup](/docs/getting-started/shell-setup/)
-- [OpenAPI and CLI Integration](../openapi-cli-integration/)
+- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Setup Command](/docs/reference/setup-command/)

@@ -70,6 +70,6 @@ extensions.
 ## Related Pages
 
 - [Connect to an API](/docs/getting-started/connect-to-an-api/)
-- [OpenAPI and CLI Integration](/docs/guides/openapi-cli-integration/)
+- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [API Management](/docs/reference/api-management/)
 - [Commands](/docs/reference/commands/)
