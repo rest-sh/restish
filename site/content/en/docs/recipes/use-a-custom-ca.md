@@ -26,4 +26,4 @@ The `cert` command helps confirm that the server presents the certificate chain
 you expect before you debug application-level behavior. For repeated internal
 requests, store TLS settings in a profile as described in [TLS](/docs/guides/tls/).
 
-Related: [TLS](/docs/guides/tls/), [Cert Command](/docs/reference/cert-command/).
+Related: [TLS](/docs/guides/tls/), [Commands](/docs/reference/commands/).

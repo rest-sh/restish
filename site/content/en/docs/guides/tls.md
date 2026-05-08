@@ -69,7 +69,7 @@ configuration.
 
 ## Related Pages
 
-- [Cert Command](/docs/reference/cert-command/)
+- [Commands](/docs/reference/commands/)
 - [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/)
 - [Use a Custom CA](/docs/recipes/use-a-custom-ca/)
 - [Use mTLS With a TLS Signer](/docs/recipes/use-mtls-with-a-tls-signer/)

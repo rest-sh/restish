@@ -70,7 +70,7 @@ For each user-facing page, verify:
 Before sending a docs change:
 
 1. build the site locally
-2. check changed links
+2. check changed links with `scripts/check-doc-links.rb`
 3. confirm examples are internally consistent
 4. compare command reference changes with current `restish --help` output
 5. prefer `api.rest.sh` examples when a live endpoint makes the explanation
@@ -81,6 +81,7 @@ Local build:
 
 ```bash
 hugo --source site --quiet
+scripts/check-doc-links.rb
 ```
 
 Useful stale-text checks:

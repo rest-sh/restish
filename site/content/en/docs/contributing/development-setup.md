@@ -45,6 +45,7 @@ go test -update ./internal/output/...
 
 ```bash
 hugo --source site --quiet
+scripts/check-doc-links.rb
 ```
 
 For docs changes, also check stale placeholders:

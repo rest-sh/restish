@@ -20,16 +20,12 @@ you need variants or failure guidance.
 - [Save a Response Unchanged](./save-a-response-unchanged/)
 - [Download a File With Headers Preserved](./download-a-file-with-headers-preserved/)
 - [Force JSON Output to a File](./force-json-output-to-a-file/)
-- [Decode an API Problem Response](./decode-an-api-problem-response/)
 
 ## Pagination, Links, Streaming, And Resilience
 
 - [Count Items Across All Pages](./count-items-across-all-pages/)
-- [Retry Until a Flaky Endpoint Succeeds](./retry-until-a-flaky-endpoint-succeeds/)
-- [Limit a Slow Request With a Timeout](./limit-a-slow-request-with-a-timeout/)
-- [Ignore a 404 but Keep the Body](./ignore-a-404-but-keep-the-body/)
 
-## Auth, Profiles, TLS, And Specs
+## Auth And TLS
 
 - [Use External-Tool Auth](./use-external-tool-auth/)
 - [Use a Custom CA](./use-a-custom-ca/)

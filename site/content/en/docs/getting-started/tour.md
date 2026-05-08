@@ -78,7 +78,7 @@ while keeping stdout available for the response body.
 
 Learn more: [Troubleshooting](../../guides/troubleshooting/),
 [Command Behavior](../../guides/command-behavior/),
-[Decode an API Problem Response](../../recipes/decode-an-api-problem-response/).
+[Command Behavior](../../guides/command-behavior/).
 
 ## Filter Responses
 
@@ -353,7 +353,7 @@ in memory.
 
 Learn more: [Pagination and Links](../../guides/pagination/),
 [Links and Hypermedia](../../guides/links-and-hypermedia/),
-[Links Command](../../reference/links-command/).
+[Commands](../../reference/commands/).
 
 ## Stream Events And Logs
 
@@ -404,7 +404,7 @@ restish cache info
 ```
 
 Learn more: [Retries and Caching](../../guides/retries-and-caching/),
-[Cache Command](../../reference/cache-command/), [Global Flags](../../reference/global-flags/).
+[Commands](../../reference/commands/), [Global Flags](../../reference/global-flags/).
 
 ## Register An API
 
@@ -491,7 +491,7 @@ Verbose output redacts sensitive values, so you can confirm that auth was added
 without leaking the credential into logs. Use `restish api auth inspect example` to see configured credentials and what specific header or query parameters they will add to requests.
 
 Learn more: [Authentication](../../guides/authentication/),
-[API Auth Inspect](../../reference/api-auth-inspect/),
+[Commands](../../reference/commands/),
 [OpenAPI Reference](../../reference/openapi-cli-integration/).
 
 ## User Profiles
@@ -537,8 +537,7 @@ Shell setup is especially valuable if you use query strings, array shorthand,
 or filters in an interactive shell. Completion can also use connected APIs so
 generated commands and parameters are easier to discover.
 
-Learn more: [Shell Setup](../shell-setup/), [Completions](../shell-setup/),
-[Theme Command](../../reference/theme-command/).
+Learn more: [Shell Setup](../shell-setup/) and [Commands](../../reference/commands/).
 
 ## Extend With Plugins
 
@@ -606,7 +605,7 @@ restish api.rest.sh/problem --rsh-ignore-status-code
 
 Learn more: [Output](../../guides/output/), [Filtering](../../guides/filtering/),
 [Get One Field From Every Item](../../recipes/get-one-field-from-every-item/),
-[Decode an API Problem Response](../../recipes/decode-an-api-problem-response/).
+[Command Behavior](../../guides/command-behavior/).
 
 ## Where To Go Next
 

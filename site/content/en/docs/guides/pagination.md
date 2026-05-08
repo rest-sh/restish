@@ -74,7 +74,7 @@ restish api.rest.sh/images --rsh-collect -f '.body | map(.self)'
 Without `--rsh-collect`, item-oriented output can start sooner and use less
 memory.
 
-## Links Command
+## Commands
 
 {{< restish-example >}}
 restish links api.rest.sh/images next
@@ -90,6 +90,6 @@ map and not the response body.
 ## Related Pages
 
 - [Links and Hypermedia](../links-and-hypermedia/)
-- [Links Command](/docs/reference/links-command/)
+- [Commands](/docs/reference/commands/)
 - [Output](../output/)
 - [Count Items Across All Pages](/docs/recipes/count-items-across-all-pages/)

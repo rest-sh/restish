@@ -79,7 +79,8 @@ restish api set example \
 
 Common auth types include bearer tokens, basic auth, API keys, OAuth flows, and
 external-tool auth. Auth params may reference environment variables with
-`env:NAME` where supported.
+`env:NAME` where supported. See [Auth](/docs/reference/auth/) for exact auth
+types and params.
 
 For generated APIs with several OpenAPI security schemes, use `credentials`.
 Each key is a security scheme name or normalized credential requirement ID:

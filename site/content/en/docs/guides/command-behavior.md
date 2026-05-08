@@ -5,6 +5,8 @@ weight: 85
 description: Understand exit codes, redirects, diagnostics, stdout, stderr, and script-friendly behavior.
 aliases:
   - /docs/recipes/follow-or-inspect-redirects/
+  - /docs/recipes/decode-an-api-problem-response/
+  - /docs/recipes/ignore-a-404-but-keep-the-body/
 ---
 
 Restish is designed for terminals and scripts. Output channels, exit codes, and
@@ -24,9 +26,18 @@ Restish uses a compact exit-code policy:
 
 Inspect an error body without failing the shell command:
 
-```bash
+{{< restish-example >}}
 restish api.rest.sh/status/404 --rsh-ignore-status-code
-```
+{{< /restish-example >}}
+
+Use the same flag for structured problem responses when the error document is
+the data you need to inspect:
+
+{{< restish-example >}}
+restish api.rest.sh/problem --rsh-ignore-status-code
+{{< /restish-example >}}
+
+Add `-o json` when a script needs the error body as one JSON document.
 
 ## Stdout And Stderr
 

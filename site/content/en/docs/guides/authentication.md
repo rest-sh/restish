@@ -223,7 +223,7 @@ Use `external-tool` when another program owns credentials or signing:
   "auth": {
     "type": "external-tool",
     "params": {
-      "command": ["./scripts/sign-request"]
+      "commandline": "./scripts/sign-request"
     }
   }
 }
@@ -240,6 +240,6 @@ interactive `$SHELL`, and move complex logic into a script.
 
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
-- [API Auth Inspect](/docs/reference/api-auth-inspect/)
+- [Auth Reference](/docs/reference/auth/)
 - [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
 - [Security Design](/docs/contributing/design-records/)

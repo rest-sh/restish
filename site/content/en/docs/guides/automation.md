@@ -1,20 +1,23 @@
 ---
-title: Automation Contract
+title: Scripting and Automation
 linkTitle: Automation
-weight: 24
-description: stdout, stderr, exit-code, and flag contracts for scripts that call Restish.
+weight: 88
+description: Write scripts around Restish using stable stdout, stderr, exit-code, format, retry, timeout, and pagination behavior.
+aliases:
+  - /docs/reference/automation/
 ---
 
-Restish is scriptable when you keep primary data on stdout and diagnostics on
-stderr. This page describes the contracts to rely on in CI, cron jobs, and
-shell pipelines.
+Restish is scriptable when response data stays on stdout, diagnostics stay on
+stderr, and long-running work is bounded. Use this guide for CI, cron jobs,
+shell loops, and small automation around APIs.
 
 ## Output Streams
 
 Response data is written to stdout. Progress, verbose request/response details,
 plugin diagnostics, migration notices, and warnings are written to stderr.
 
-Use a machine-oriented format in scripts:
+Use a machine-oriented format in scripts. `json` is best for one complete
+document, `ndjson` for record streams, and `lines` for scalar values:
 
 ```bash
 restish api.rest.sh/images -o json
@@ -35,6 +38,12 @@ a zero exit code:
 restish api.rest.sh/status/404 --rsh-ignore-status-code -o json
 ```
 
+Structured problem responses decode like JSON-family responses:
+
+{{< restish-example >}}
+restish api.rest.sh/problem --rsh-ignore-status-code
+{{< /restish-example >}}
+
 ## Quiet And Bounded Runs
 
 Use `-S` when only the exit code matters:
@@ -52,6 +61,27 @@ restish api.rest.sh/images --rsh-max-items 100
 restish api.rest.sh/events --rsh-max-items 10 -o ndjson
 ```
 
+Collect before filtering when the script needs the whole logical collection,
+such as a count, sort, or unique operation:
+
+{{< restish-example >}}
+restish api.rest.sh/images --rsh-collect -f '.body | length'
+{{< /restish-example >}}
+
+## Retries And Timeouts
+
+Retries are useful for transient failures, but every script should still have
+a clear bound. Give slow services enough time when the delay is normal, and use
+shorter timeouts when testing failure handling:
+
+```bash
+restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 3s
+restish 'api.rest.sh/flaky?failures=1&key=script' --rsh-retry 2
+```
+
+Automatic retries apply to `GET` and `HEAD` by default. Add
+`--rsh-retry-unsafe` only when a non-idempotent method can tolerate replay.
+
 ## Stable Request Flags
 
 These flags are the usual script building blocks:
@@ -62,10 +92,13 @@ These flags are the usual script building blocks:
 - `-r` writes raw response body bytes.
 - `--rsh-no-paginate`, `--rsh-max-pages`, and `--rsh-max-items` bound
   collection and stream work.
+- `--rsh-timeout`, `--rsh-retry`, and `--rsh-retry-max-wait` keep network work
+  predictable.
 
 ## Related Pages
 
 - [Global Flags](/docs/reference/global-flags/)
 - [Command Behavior](/docs/guides/command-behavior/)
+- [Retries and Caching](/docs/guides/retries-and-caching/)
 - [Requests](/docs/guides/requests/)
 - [Troubleshooting](/docs/guides/troubleshooting/)

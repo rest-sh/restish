@@ -273,7 +273,7 @@ restish cache clear
 
 **Prevention:** Use `--rsh-no-cache` while debugging server state.
 
-**Related docs:** [Retries and Caching](/docs/guides/retries-and-caching/), [Cache Command](/docs/reference/cache-command/).
+**Related docs:** [Retries and Caching](/docs/guides/retries-and-caching/), [Commands](/docs/reference/commands/).
 
 ## TLS Or mTLS Fails
 

@@ -15,12 +15,12 @@ single task, use recipes.
 - [Global Flags](./global-flags/) lists shared request, output, auth, TLS, pagination, cache, retry, and config flags.
 - [API Management](./api-management/) covers `restish api ...`.
 - [OpenAPI](./openapi-cli-integration/) covers generated command behavior and Restish OpenAPI extensions.
-- [API Auth Inspect](./api-auth-inspect/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.
+- [Edit](./edit-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover larger focused commands.
 
 ## Data And Configuration Reference
 
 - [Example API](./example-api/) lists live docs fixtures.
-- [Config](./config/) and [Profiles](./profiles/) describe persistent settings.
+- [Config](./config/), [Profiles](./profiles/), and [Auth](./auth/) describe persistent settings and credentials.
 - [Environment Variables](./environment-variables/) lists env overrides.
 - [Content Types](./content-types/) covers request encoding and response decoding.
 - [Output Defaults](./output-defaults/) and [Output Formats](./output-formats/) explain rendering.

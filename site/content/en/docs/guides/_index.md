@@ -25,7 +25,7 @@ matches the kind of work you are doing.
 
 - [Pagination and Links](./pagination/) and [Links and Hypermedia](./links-and-hypermedia/)
 - [Filtering](./filtering/) and [Streaming](./streaming/)
-- [Retries and Caching](./retries-and-caching/) and [Command Behavior](./command-behavior/)
+- [Retries and Caching](./retries-and-caching/), [Command Behavior](./command-behavior/), and [Scripting and Automation](./automation/)
 - [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [TLS](./tls/), [Shell Setup](/docs/getting-started/shell-setup/), [Output](./output/), and [Edit Workflow](./edit-workflow/)
 

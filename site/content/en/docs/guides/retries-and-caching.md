@@ -3,6 +3,9 @@ title: Retries and Caching
 linkTitle: Retries and Caching
 weight: 80
 description: Control retries, timeouts, HTTP cache behavior, and conditional request examples.
+aliases:
+  - /docs/recipes/retry-until-a-flaky-endpoint-succeeds/
+  - /docs/recipes/limit-a-slow-request-with-a-timeout/
 ---
 
 Restish retries conservative transient failures and uses a disk-backed HTTP
@@ -27,6 +30,9 @@ Use the flaky fixture to see recovery:
 restish 'api.rest.sh/flaky?failures=1&key=docs-retry' --rsh-retry 2
 {{< /restish-example >}}
 
+Use unique keys while experimenting so a previous successful run does not make
+the fixture look less flaky than it is.
+
 Opt into replaying an unsafe method only when the endpoint is idempotent enough
 for your use case:
 
@@ -50,7 +56,9 @@ restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 500ms
 restish 'api.rest.sh/slow?delay=2s' --rsh-timeout 3s
 ```
 
-Use timeouts in scripts and CI so slow services fail predictably.
+The first command should fail quickly because the server waits longer than the
+client allows. The second gives the fixture enough time to respond. Use
+timeouts in scripts and CI so slow services fail predictably.
 
 ## Status Fixtures
 
@@ -110,7 +118,7 @@ restish -H 'If-None-Match: "docs"' api.rest.sh/etag/docs --rsh-ignore-status-cod
 
 ## Related Pages
 
-- [Cache Command](/docs/reference/cache-command/)
+- [Commands](/docs/reference/commands/)
 - [Global Flags](/docs/reference/global-flags/)
 - [Command Behavior](../command-behavior/)
 - [Troubleshooting](../troubleshooting/)

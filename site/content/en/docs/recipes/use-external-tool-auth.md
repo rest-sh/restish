@@ -22,7 +22,7 @@ Config shape:
           "auth": {
             "type": "external-tool",
             "params": {
-              "command": ["./scripts/sign-request"]
+              "commandline": "./scripts/sign-request"
             }
           }
         }
@@ -45,4 +45,4 @@ the helper small and auditable, because it runs locally with the same access as
 your shell. The [Authentication guide](/docs/guides/authentication/) explains
 where external tools fit alongside built-in auth types.
 
-Related: [Authentication](/docs/guides/authentication/), [Security Design](/docs/contributing/design-records/).
+Related: [Authentication](/docs/guides/authentication/), [Auth Reference](/docs/reference/auth/), [Security Design](/docs/contributing/design-records/).
