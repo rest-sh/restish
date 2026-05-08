@@ -487,13 +487,13 @@ restish example get-auth-basic -v
 {{< /restish-example >}}
 
 Verbose output redacts sensitive values, so you can confirm that auth was added
-without leaking the credential into logs.
+without leaking the credential into logs. Use `restish api auth inspect example` to see configured credentials and what specific header or query parameters they will add to requests.
 
 Learn more: [Authentication](../../guides/authentication/),
 [Auth Header Command](../../reference/auth-header-command/),
 [OpenAPI and CLI Integration](../../guides/openapi-cli-integration/).
 
-## Use Profiles
+## User Profiles
 
 Profiles keep environment URLs, headers, auth, and other repeated settings out
 of individual commands. Each API has a `default` profile, and you can add more
@@ -525,8 +525,10 @@ readable output styling, and shell setup protects Restish's bracket-heavy
 filters and shorthand from shell globbing.
 
 ```bash
-restish theme list
-restish theme set default
+# Install and set custom themes from URL or repo
+restish config theme set URL_OR_REPO [name]
+
+# Shell setup (argument processing & command completion)
 restish shell setup zsh
 ```
 
@@ -566,13 +568,13 @@ Learn more: [Install and Use Plugins](../../plugins/install-and-use/),
 
 Restish keeps stdout useful for response data and diagnostics on stderr, so it
 fits normal shell pipelines. The most common scripting pattern is to filter down
-to the values that you need.
+to the values that you need. Scalar values are output without quotes, so they are easy to use in shell assignments:
 
 {{< restish-example >}}
 restish api.rest.sh/types -f body.number
 {{< /restish-example >}}
 
-For a list, filter the field you want:
+For a list, filter the field you want and use the `lines` output format to get one value per line without quotes or JSON array syntax:
 
 {{< restish-example >}}
 restish example list-images -f body.self -o lines
@@ -587,7 +589,9 @@ done
 ```
 
 Use `-o json` when a downstream tool expects structured data, `-o ndjson` for
-records, and `-o lines` only when the filtered output is scalar.
+records, and `-o lines` only when the filtered output is an array of scalar values.
+
+### Exit Codes
 
 Restish exits successfully for successful HTTP responses and uses a non-zero
 exit code for transport failures, command errors, and HTTP error statuses. That
