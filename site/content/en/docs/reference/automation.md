@@ -66,6 +66,6 @@ These flags are the usual script building blocks:
 ## Related Pages
 
 - [Global Flags](/docs/reference/global-flags/)
-- [Command Behavior](/docs/reference/command-behavior/)
+- [Command Behavior](/docs/guides/command-behavior/)
 - [Requests](/docs/guides/requests/)
 - [Troubleshooting](/docs/guides/troubleshooting/)
