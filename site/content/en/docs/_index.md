@@ -1,9 +1,6 @@
 ---
 title: Documentation
 linkTitle: Documentation
-menu:
-  main:
-    weight: 10
 ---
 
 Restish is a CLI for REST-ish HTTP APIs. Start with the browser tour to see the

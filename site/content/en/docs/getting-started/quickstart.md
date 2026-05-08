@@ -32,10 +32,10 @@ brew install rest-sh/tap/restish
 restish --help
 ```
 
-See [Install](../install/) for Homebrew, mise, Nix, Docker, GitHub release, and
-source-build options. If you are already installed, run [Shell Setup](../shell-setup/)
-after the tour so your shell does not rewrite query strings, brackets, or
-filters before Restish sees them.
+See [Install](../install/) for Homebrew, GitHub release archives, the OCI
+image, and source-build options. If you are already installed, run
+[Shell Setup](../shell-setup/) after the tour so your shell does not rewrite
+query strings, brackets, or filters before Restish sees them.
 
 ## Make A Direct Request
 
@@ -308,7 +308,9 @@ The browser preview shows the one-shot edit shape against the docs fixture:
 restish edit api.rest.sh/types 'boolean: false, number: 67.89'
 {{< /restish-example >}}
 
-In a real terminal you will see a diff before submitting the data. You can also use interactive mode to open your editor:
+In a real terminal you will see a diff before submitting the data. With no
+patch arguments, `restish edit` opens your editor by default; `-i` is still
+accepted as a v1 compatibility alias:
 
 ```bash
 restish edit api.rest.sh/types -i
@@ -418,7 +420,7 @@ restish api connect example https://api.rest.sh
 # See the generated commands for the API.
 restish example --help
 
-# See inputs, outputs, schemas, and examplse for a generated command.
+# See inputs, outputs, schemas, and examples for a generated command.
 restish example list-images --help
 ```
 
