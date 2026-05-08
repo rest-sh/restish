@@ -6,84 +6,93 @@ description: Reference for Restish output formats and document-versus-record beh
 ---
 
 Output formats decide how a normalized response is rendered after decoding,
-pagination or streaming, and filtering. They do not change paginated filter
-scope: without `--rsh-collect`, filters run once per item.
+pagination or streaming, and filtering. They do not change request `Accept`
+headers or server-side content negotiation.
 
 ## Document Formats
 
 Document formats produce one coherent result:
 
-- `readable`: human-oriented terminal output
-- `json`: one JSON document
-- `yaml`: one YAML document
-- `cbor`: one CBOR document
-- `image`: terminal image rendering for image responses
-- `gron`: one greppable path/value document
-
-Examples:
-
-```bash
-restish https://api.rest.sh/images -o readable
-restish https://api.rest.sh/images --rsh-collect -o json
-restish https://api.rest.sh/images -o yaml
-restish https://api.rest.sh/example -o gron
-restish https://api.rest.sh/images/png -o image
-```
-
-For file redirects, unfiltered responses already write body bytes. This
-includes structured formats such as JSON and CBOR as well as `image/*`,
-`application/octet-stream`, `application/zip`, text, and unknown payloads:
+| Format | Use |
+| --- | --- |
+| `readable` | Human-oriented terminal output. |
+| `json` | One JSON document. |
+| `yaml` | One YAML document. |
+| `cbor` | One CBOR document. |
+| `gron` | Greppable path/value assignments. |
+| `image` | Terminal image rendering for image responses. |
 
 ```bash
-restish https://api.rest.sh/images/jpeg > dragonfly.jpg
-restish https://api.rest.sh/content/cbor > response.cbor
-restish https://api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/images -o readable
+restish api.rest.sh/images --rsh-collect -o json
+restish api.rest.sh/images -o yaml
+restish api.rest.sh/example -o gron
+restish api.rest.sh/images/png -o image
 ```
 
-Raw output bypasses Restish's structured body decoding and formatting. It still
-uses the body exposed by the HTTP client after any content-encoding
-decompression, so it is not a capture of the exact compressed wire bytes.
-Use `-r` or `--rsh-raw` for raw response body bytes on a terminal; `raw` is not
-an `-o` format.
+For redirects, unfiltered responses already write body bytes:
+
+```bash
+restish api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/content/cbor -o json > response.json
+```
 
 ## Record Formats
 
-Record formats can emit one item or event at a time:
+Record formats emit one item or event at a time:
 
-- `ndjson`: one JSON value per line
-- `lines`: one scalar value per line, without JSON string quotes
-- plugin formats such as `csv` when implemented as record-oriented formatters
+| Format | Use |
+| --- | --- |
+| `ndjson` | One JSON value per line. |
+| `lines` | One scalar value per line without JSON string quotes. |
+| plugin formats such as `csv` | Formatter-specific record output. |
 
 ```bash
-restish https://api.rest.sh/images -o ndjson -f body.self
-restish https://api.rest.sh/images -f body.self -o lines
-restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
+restish api.rest.sh/images -o ndjson -f body.self
+restish api.rest.sh/images -f body.self -o lines
+restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
-The CSV formatter freezes its header from the first object batch. Later rows
-that omit known fields get empty cells. Later rows that introduce new fields are
-still emitted, but the new fields are ignored with a warning because CSV cannot
-add columns after the header has already been written.
+Use record formats for large paginated responses, live streams, and shell
+loops.
 
 ## Tables
 
+Tables are for terminal inspection, not stable machine parsing:
+
 ```bash
-restish https://api.rest.sh/images -o table --rsh-columns name,format,self
-restish https://api.rest.sh/images -o table --rsh-sort-by name
+restish api.rest.sh/images -o table --rsh-columns name,format,self
+restish api.rest.sh/images -o table --rsh-sort-by name
 ```
 
-Tables are for terminal inspection, not stable machine parsing.
+## Images
+
+`image` renders image responses in capable terminals. Redirect the same request
+when you want a file instead.
+
+```bash
+restish api.rest.sh/images/png -o image
+```
 
 ## Filters And Scalar Lines
 
 ```bash
-restish https://api.rest.sh/images -f body.name -o lines
+restish api.rest.sh/images -f body.name -o lines
 ```
 
-Explicit scalar filters print without JSON string quotes. `-o lines` prints
-arrays and streams of scalar values one value per line, and rejects structured
-objects. Without a filter, `-r` writes the response body bytes and cannot be
-combined with `-f`.
+Explicit scalar filters print without JSON string quotes. `-o lines` accepts
+arrays and streams of scalar values and rejects structured objects.
+
+## Raw Output
+
+Raw output is a mode, not an `-o` format:
+
+```bash
+restish api.rest.sh/bytes/64 --rsh-raw > sample.bin
+```
+
+Raw mode writes response body bytes and cannot combine with filters.
 
 ## Related Pages
 

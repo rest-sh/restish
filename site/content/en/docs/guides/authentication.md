@@ -138,9 +138,12 @@ available and anonymous access as the fallback.
 Choose a specific allowed alternative with `--rsh-auth`:
 
 ```bash
-restish example partner-report --rsh-auth PartnerKey
-restish example signed-report --rsh-auth UserOAuth+PartnerKey
+restish myapi partner-report --rsh-auth PartnerKey
+restish myapi signed-report --rsh-auth UserOAuth+PartnerKey
 ```
+
+Those commands use placeholder operation names because the public example API
+does not expose a multi-scheme partner-auth fixture.
 
 ## Inspect The Final Header
 

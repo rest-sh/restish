@@ -2,13 +2,14 @@
 title: Config
 linkTitle: Config
 weight: 20
-description: Reference for Restish configuration files, APIs, profiles, auth, cache, theme, and plugin settings.
+description: Reference for Restish configuration files, APIs, profiles, auth, cache, themes, plugins, and precedence.
 aliases:
   - /docs/getting-started/your-first-config/
 ---
 
-Restish config is the trust boundary for API base URLs, profiles, auth, TLS,
-plugins, and generated command sources.
+Restish config is the trust boundary for API base URLs, generated command
+sources, profiles, auth, TLS, plugins, cache settings, and readable-output
+themes.
 
 ## Location And Selection
 
@@ -19,41 +20,35 @@ Default config lives in a Restish config directory as `restish.json`:
 | macOS, Linux, and other Unix-like systems | `~/.config/restish/restish.json` |
 | Windows | `%APPDATA%\restish\restish.json` |
 
-Restish resolves config paths in this order:
+Config path precedence:
 
 1. `--rsh-config <file>`
 2. `RSH_CONFIG=<file>`
 3. `RSH_CONFIG_DIR=<dir>/restish.json`
 4. `XDG_CONFIG_HOME/restish/restish.json`
-5. the platform default above
-
-Override the config file explicitly when a project, script, or test should not
-use your user config:
+5. platform default
 
 ```bash
 restish --rsh-config ./restish.json api list
 RSH_CONFIG=./restish.json restish api list
 ```
 
-An explicit config file is the whole source of truth for that invocation. If
-that file is missing, Restish errors instead of falling back to your user
-config.
+An explicit config file is the whole source of truth for that invocation. If it
+is missing, Restish errors instead of falling back to user config.
 
-If Restish cannot determine a default config directory because the environment
-has no usable `RSH_CONFIG_DIR`, `XDG_CONFIG_HOME`, platform user directory, or
-`HOME`, set `RSH_CONFIG` or `RSH_CONFIG_DIR` explicitly. Restish will not create
-a relative `./.restish` config directory in the current working directory.
-Cache-only state may use a temporary directory until you set `RSH_CACHE_DIR` or
-`XDG_CACHE_HOME`.
+If no default config directory can be determined, set `RSH_CONFIG` or
+`RSH_CONFIG_DIR`. Restish does not create a relative `./.restish` directory.
+Cache-only state may use a temporary directory until `RSH_CACHE_DIR` or
+`XDG_CACHE_HOME` is available.
 
-On Unix-like systems, Restish refuses to read a config file that is
-group/world-readable because profiles and auth settings can contain secrets:
+On Unix-like systems, Restish refuses group/world-readable config files because
+profiles and auth settings may contain secrets:
 
 ```bash
 chmod 600 ~/.config/restish/restish.json
 ```
 
-Inspect the active path from the CLI:
+Inspect the active config:
 
 ```bash
 restish config path
@@ -61,7 +56,7 @@ restish config show
 restish config show --json
 ```
 
-## Top-Level Shape
+## Top-Level Fields
 
 ```jsonc
 {
@@ -74,6 +69,15 @@ restish config show --json
 }
 ```
 
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `apis` | object | Registered APIs keyed by short name. |
+| `auth_profiles` | object | Shared auth profiles referenced by `auth_ref`. |
+| `cache` | object | HTTP response cache settings. |
+| `theme_source` | URL or GitHub shorthand | Source used by `config theme set`. |
+| `theme` | object | Readable-output highlighting theme. |
+| `plugins` | object | Installed plugin metadata and trust decisions. |
+
 ## API Entries
 
 ```jsonc
@@ -82,8 +86,10 @@ restish config show --json
     "example": {
       "base_url": "https://api.rest.sh",
       "spec_url": "https://api.rest.sh/openapi.json",
+      "spec_files": [],
       "operation_base": "/",
       "command_layout": "flat",
+      "server_variables": {},
       "retry_max_wait": "30s",
       "profiles": {
         "default": {},
@@ -94,103 +100,158 @@ restish config show --json
 }
 ```
 
-Common fields:
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `base_url` | URL | Scheme, host, and optional base path for the API. |
+| `spec_url` | URL or file path | Explicit OpenAPI document source. |
+| `spec_files` | array | Local OpenAPI files merged into the API description. |
+| `operation_base` | path | Path prefix override for generated operations. |
+| `command_layout` | `flat` or `tags` | Generated command grouping. |
+| `server_variables` | object | OpenAPI server variable values. |
+| `retry_max_wait` | duration | API-local cap for `Retry-After` or `X-Retry-In` when no flag/env override is set. |
+| `profiles` | object | API-local profiles. |
 
-| Field | Meaning |
-| --- | --- |
-| `base_url` | Scheme and host for the API. |
-| `spec_url` | Explicit OpenAPI document URL. |
-| `spec_files` | Local spec files. |
-| `operation_base` | Path prefix for operations. |
-| `command_layout` | `flat` or `tags`. |
-| `server_variables` | Configured OpenAPI server variable values. |
-| `retry_max_wait` | API-local cap for `Retry-After`/`X-Retry-In` delays when no flag/env override is set. |
-| `profiles` | API-local profiles. |
+API names may contain Unicode letters, Unicode numbers, combining marks, `-`,
+and `_`, and must start with a letter or number. They cannot collide with
+built-in commands such as `api`, `get`, or `post`.
 
-## Profiles And Auth
+## Profiles
 
-Profiles can hold `base_url`, `headers`, `query`, `auth`, `auth_ref`, TLS
-fields, `server_variables`, and operation credential bindings. Auth params may
-contain secrets, so keep config permissions private.
-
-Credential bindings live under a profile and are keyed by the OpenAPI security
-scheme or normalized credential requirement ID:
+Profiles hold request defaults under an API. See [Profiles](../profiles/) for
+the full field reference.
 
 ```jsonc
 {
-  "credentials": {
-    "PartnerKey": {
+  "profiles": {
+    "default": {},
+    "staging": {
+      "base_url": "https://staging.example.com",
+      "headers": ["Accept: application/json"],
+      "query": ["trace=docs"],
       "auth": {
-        "type": "api-key",
+        "type": "bearer",
         "params": {
-          "in": "header",
-          "name": "X-Partner-Key",
-          "value": "env:PARTNER_KEY"
+          "token": "env:EXAMPLE_TOKEN"
         }
       }
-    },
-    "UserOAuth": {
-      "auth_ref": "work-user-oauth",
-      "satisfies": ["items:read"]
     }
   }
 }
 ```
 
-Each binding may use inline `auth` or `auth_ref`, not both. `satisfies` declares
-the scopes or role values this local credential is allowed to cover.
+## Auth Profiles
 
-OAuth authorization-code auth accepts `redirect_port` and `redirect_path` under
-`auth.params`. `redirect_path` defaults to `/`, must start with `/`, and must
-not include a scheme, host, query string, or fragment. This lets profiles match
-provider registrations such as `http://localhost:8484/callback`.
+Use top-level `auth_profiles` when several APIs or profiles should share one
+credential configuration:
+
+```jsonc
+{
+  "auth_profiles": {
+    "work-user-oauth": {
+      "type": "oauth-authorization-code",
+      "params": {
+        "authorize_url": "https://issuer.test/authorize",
+        "token_url": "https://issuer.test/oauth/token",
+        "client_id": "env:CLIENT_ID",
+        "scopes": "read:items",
+        "redirect_path": "/callback"
+      }
+    }
+  }
+}
+```
+
+Profiles can reference these with `auth_ref`.
 
 Secret params may use `env:NAME` or `command:...`. Command secrets and
 `external-tool` auth snippets run through `cmd /c` on Windows and `/bin/sh -c`
-elsewhere, with bounded stderr redaction when a command fails.
+elsewhere.
+
+## Cache
+
+Cache settings control the HTTP response cache, not OAuth/auth token cache.
+Use `restish cache info` to inspect runtime cache location, size, entry count,
+and oldest entry.
+
+```bash
+restish config set 'cache.max_size: 250MB'
+restish cache info
+restish cache clear
+```
+
+Use `restish api auth logout` for cached auth tokens.
+
+## Theme
+
+Themes affect `readable` output only:
+
+```bash
+restish config theme set user/repo dark --yes
+```
+
+`theme_source` records where the theme came from. `theme` stores the resolved
+highlighting values.
+
+## Plugins
+
+The `plugins` object stores installed plugin metadata and trust decisions.
+Users normally manage it through:
+
+```bash
+restish plugin list
+restish plugin install rest-sh/restish:csv
+restish plugin remove restish-csv
+```
+
+Installed plugins are trusted local executables. Restish checks manifests and
+declared capabilities, but it does not sandbox plugin code.
 
 ## Editing
 
+Use `config edit` for larger changes:
+
 ```bash
 restish config edit
-restish api set example 'spec_url: https://api.rest.sh/openapi.json'
-restish api inspect example
 ```
 
-`config edit` preserves comments where possible and prints the absolute config
-file path after a successful write. Use `api set` for small scripted changes
-inside one API registration.
-
-`config set` and `api set` accept shorthand patch expressions. Objects merge
-recursively, scalar values replace, `undefined` deletes fields or array items,
-arrays support `[]` append and `[^index]` insertion, and `^` swaps values.
-Restish validates the final patched config and reports multiple structural
-issues when it can.
-
-Create a profile with auth without opening an editor:
+Use `api set` for API-scoped patches:
 
 ```bash
+restish api set example 'spec_url: https://api.rest.sh/openapi.json'
 restish api set example \
   'profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:EXAMPLE_PASSWORD}}'
 ```
 
-The same change from `config set` uses the full config path:
+Use `config set` for global patches:
 
 ```bash
 restish config set \
   'apis.example.profiles.demo.auth: {type: http-basic, params: {username: demo, password: env:EXAMPLE_PASSWORD}}'
-```
-
-For global config fields, use `config set`:
-
-```bash
 restish config set 'cache.max_size: 250MB'
-restish config theme set user/repo dark --yes
 ```
+
+`config set` and `api set` use shorthand patch expressions. Objects merge
+recursively, scalars replace, `undefined` deletes fields or array items, `[]`
+appends, `[^index]` inserts before an array index, and `^` moves or swaps
+values. Restish validates the final config before writing.
+
+## Precedence
+
+Request behavior is layered from lower to higher precedence:
+
+1. built-in defaults
+2. API config
+3. selected profile
+4. environment variables
+5. command-line flags
+
+Explicit config selection is not layered. `--rsh-config` or `RSH_CONFIG`
+selects one config file for the invocation.
 
 ## Related Pages
 
 - [Profiles](../profiles/)
 - [Environment Variables](../environment-variables/)
 - [API Management](../api-management/)
+- [Shorthand](../shorthand/)
 - [Security Design](/docs/contributing/design-records/)

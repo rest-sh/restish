@@ -2,98 +2,104 @@
 title: Content Types
 linkTitle: Content Types
 weight: 28
-description: Reference for built-in content types, request encoding, response decoding, and compression.
+description: Reference for built-in content types, request encoding, response decoding, compression, and content plugins.
 aliases:
   - /docs/recipes/request-a-specific-response-format/
 ---
 
-Restish uses a content registry for request bodies, response decoding,
-compression, filters, output formats, and plugins.
+Restish separates two decisions:
 
-Content type handling is what lets one command send JSON, receive CBOR, filter
-the decoded body, and then render readable output. Request encoding and response
-decoding are separate decisions: `-c` controls what Restish sends, while the
-response `Content-Type` controls how Restish decodes what came back.
+- Request encoding: `-c` or `--rsh-content-type` controls how a request body is sent.
+- Response rendering: `-o` controls how a decoded response is printed.
+
+HTTP `Accept` headers ask the server for a representation. Output formats do
+not change what the server sends.
 
 ## Built-In Types
 
-Run the live list from your binary:
+`restish content-types` lists the registered content aliases and MIME types:
 
-```bash
-restish content-types
-```
+| Alias | MIME types |
+| --- | --- |
+| `json` | `application/json` |
+| `ndjson` | `application/x-ndjson`, `application/ndjson`, `application/jsonl`, `application/jsonlines` |
+| `yaml` | `application/yaml`, `application/x-yaml`, `text/yaml`, `text/x-yaml` |
+| `cbor` | `application/cbor` |
+| `msgpack` | `application/msgpack`, `application/x-msgpack`, `application/vnd.msgpack` |
+| `binary` | `application/octet-stream` |
+| `ion` | `application/ion`, `text/ion` |
+| `form` | `application/x-www-form-urlencoded` |
+| `multipart` | `multipart/form-data` |
+| `text` | `text/event-stream`, `text/*` |
 
-Typical built-ins include `json`, `yaml`, `cbor`, `msgpack`, `ion`, `form`,
-`multipart`, `text`, and `binary`.
+JSON-family structured types with `+json`, such as
+`application/problem+json`, decode as JSON.
 
 ## Request Encoding
 
+JSON is the default request body encoding:
+
 ```bash
-restish post -c json https://api.rest.sh/post string: hello
-restish post -c yaml https://api.rest.sh/post string: hello
-restish post -c form https://api.rest.sh/login 'username: alice, password: secret'
-restish post -c multipart https://api.rest.sh/uploads description: docs, file: @README.md
+restish post -c json api.rest.sh/post string: hello
+restish post -c yaml api.rest.sh/post string: hello
+restish post -c form api.rest.sh/login 'username: alice, password: secret'
+restish post -c multipart api.rest.sh/uploads description: docs, file: @README.md
 ```
 
-Use `json` for most API bodies, `form` for older login/token endpoints, and
-`multipart` when a request includes file parts. The [Input guide](/docs/guides/input/)
-shows how shorthand, stdin, and files become request bodies.
-
-Use `binary` or an explicit binary media type when the request should preserve
-raw bytes from stdin or a file instead of encoding a structured value.
+Shorthand builds a logical value. The selected encoder turns that value into
+JSON, YAML, CBOR, form data, multipart parts, text, or raw bytes.
 
 ## Response Decoding
 
-Restish matches response `Content-Type` against registered MIME types, wildcard
-fallbacks such as `text/*`, and structured suffixes such as `+json`.
+Restish decodes supported structured responses before filtering and formatting:
 
 ```bash
-restish https://api.rest.sh/formats/json
-restish https://api.rest.sh/formats/yaml -o yaml
-restish https://api.rest.sh/formats/cbor
-restish https://api.rest.sh/problem --rsh-ignore-status-code
+restish api.rest.sh/formats/json
+restish api.rest.sh/formats/yaml -o yaml
+restish api.rest.sh/formats/cbor
+restish api.rest.sh/problem --rsh-ignore-status-code
 ```
 
-Structured suffix support is why `application/problem+json` and vendor JSON
-types can still be filtered like normal JSON.
+If stdout is redirected and no filter or output format is selected, Restish
+writes the response body bytes instead of reformatting them.
 
 ## Accept Header
 
-Restish sends an `Accept` header built from the registry. Override it when the
-server should prefer a specific representation:
+Use `Accept` when you need to influence server-side content negotiation:
 
 ```bash
-restish -H 'Accept: application/json' https://api.rest.sh/formats/json
-restish -H 'Accept: image/png' https://api.rest.sh/image -o image
+restish -H 'Accept: application/json' api.rest.sh/formats/json
+restish -H 'Accept: image/png' api.rest.sh/image -o image
 ```
 
-Changing `Accept` asks the server for a representation. Changing `-o` only
-changes local rendering after Restish has decoded the response.
+Use `-o` when you want Restish to transform a decoded response after it arrives:
+
+```bash
+restish api.rest.sh/content/cbor -o json > response.json
+```
 
 ## Compression
 
+Restish handles common HTTP content encodings before response decoding:
+
 ```bash
-restish https://api.rest.sh/gzip
-restish https://api.rest.sh/deflate
-restish https://api.rest.sh/brotli
+restish api.rest.sh/gzip
+restish api.rest.sh/deflate
+restish api.rest.sh/brotli
 ```
 
-Restish advertises and decodes supported response encodings through
-`Accept-Encoding` and `Content-Encoding`. Built-in decoding covers gzip,
-deflate, and Brotli before response content-type decoding, filtering, or output
-formatting runs.
+Raw output uses the body exposed after HTTP content-encoding decompression. It
+is not a capture of compressed wire bytes.
 
 ## Plugins
 
-Loader plugins can add spec content types. Formatter plugins can add output
-formats such as `csv` without changing response decoding.
-
-That separation is important for plugin authors: a formatter plugin can render
-an already-decoded response without teaching Restish a new wire format.
+Content plugins can add request encoders, response decoders, and output
+formatters. Use `restish content-types` and `restish plugin list` to confirm
+what your current binary can handle.
 
 ## Related Pages
 
 - [Input and Shorthand](/docs/guides/input/)
 - [Output](/docs/guides/output/)
 - [Output Formats](../output-formats/)
-- [Plugin Manifest](../plugin-manifest/)
+- [Plugins](/docs/plugins/install-and-use/)
