@@ -37,4 +37,4 @@ request/API model, response/data flow, workflows/UX, and extensibility.
 
 - [Docs Maintenance](../docs-maintenance/)
 - [Development Setup](../development-setup/)
-- [How Restish Works](/docs/concepts/how-restish-works/)
+- [Tour of Restish](/docs/getting-started/tour/)

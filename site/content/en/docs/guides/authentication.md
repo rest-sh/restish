@@ -240,6 +240,6 @@ interactive `$SHELL`, and move complex logic into a script.
 
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
-- [API Auth Inspect](/docs/reference/auth-header-command/)
+- [API Auth Inspect](/docs/reference/api-auth-inspect/)
 - [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
 - [Security Design](/docs/contributing/design-records/)

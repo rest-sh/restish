@@ -90,5 +90,5 @@ Non-Go plugins can send the same message families directly:
 ## Related Pages
 
 - [Plugin Messages](/docs/reference/plugin-messages/)
-- [Bulk Management](/docs/guides/bulk-management/)
-- [MCP](/docs/guides/mcp/)
+- [Bulk Management](/docs/plugins/bulk-management/)
+- [MCP](/docs/plugins/mcp/)

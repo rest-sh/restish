@@ -104,7 +104,7 @@ URLs, or query defaults start making commands noisy.
 
 ## Related Pages
 
-- [API Commands](/docs/concepts/api-commands/)
+- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
 - [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [API Management](/docs/reference/api-management/)

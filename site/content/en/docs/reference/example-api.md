@@ -185,7 +185,7 @@ restish api.rest.sh/images/jpeg > dragonfly.jpg
 
 ## Related Pages
 
-- [Tour of Restish](/docs/getting-started/quickstart/)
+- [Tour of Restish](/docs/getting-started/tour/)
 - [Requests](/docs/guides/requests/)
 - [Authentication](/docs/guides/authentication/)
 - [Content Types](/docs/reference/content-types/)

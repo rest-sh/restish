@@ -41,7 +41,7 @@ details live in the author docs.
 ## Related Pages
 
 - [Commands](/docs/reference/commands/)
-- [Bulk Management](/docs/guides/bulk-management/)
+- [Bulk Management](/docs/plugins/bulk-management/)
 - [Install and Use Plugins](/docs/plugins/install-and-use/)
 - [Global Flags](/docs/reference/global-flags/)
 - [Troubleshooting](/docs/guides/troubleshooting/)

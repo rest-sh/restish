@@ -138,6 +138,6 @@ program.
 ## Related Pages
 
 - [Filtering](/docs/guides/filtering/)
-- [Normalized Responses](/docs/concepts/normalized-responses/)
+- [Output](/docs/guides/output/)
 - [Shorthand](../shorthand/)
 - [Output](../output-formats/)

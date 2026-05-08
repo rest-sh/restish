@@ -8,7 +8,7 @@ description: Task-oriented guides for the main Restish workflows.
 Guides help you make choices across several commands. Use recipes when you need
 one narrow command; use reference when you need exact syntax.
 
-If you are new, start with the [Tour of Restish](/docs/getting-started/quickstart/)
+If you are new, start with the [Tour of Restish](/docs/getting-started/tour/)
 so the examples here have familiar pieces: generic requests, generated
 commands, profiles, filtering, and readable output. Then choose the guide that
 matches the kind of work you are doing.
@@ -27,8 +27,7 @@ matches the kind of work you are doing.
 - [Filtering](./filtering/) and [Streaming](./streaming/)
 - [Retries and Caching](./retries-and-caching/) and [Command Behavior](./command-behavior/)
 - [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
-- [Bulk Management](./bulk-management/) and [MCP](./mcp/)
-- [TLS](./tls/), [Completions](./completions/), [Images in the Terminal](./images-in-the-terminal/), and [Edit Workflow](./edit-workflow/)
+- [TLS](./tls/), [Shell Setup](/docs/getting-started/shell-setup/), [Output](./output/), and [Edit Workflow](./edit-workflow/)
 
 Guides often link inline to reference pages when exact flags or config fields
 matter. Treat those links as lookup, not required reading before you can try the

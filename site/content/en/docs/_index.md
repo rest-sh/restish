@@ -9,7 +9,7 @@ filters, pagination, and plugins.
 
 ## Start Here
 
-- New to Restish: [Tour of Restish](./getting-started/quickstart/) -> [Install](./getting-started/install/) -> [Shell Setup](./getting-started/shell-setup/)
+- New to Restish: [Tour of Restish](./getting-started/tour/) -> [Install](./getting-started/install/) -> [Shell Setup](./getting-started/shell-setup/)
 - Already have an OpenAPI-described API: [Connect to an API](./getting-started/connect-to-an-api/) -> [OpenAPI Reference](./reference/openapi-cli-integration/)
 - Repeating headers, tokens, or environment URLs: [Set Up Profiles](./getting-started/set-up-profiles/) -> [Authentication](./guides/authentication/)
 - Extending Restish: [Install and Use Plugins](./plugins/install-and-use/) -> [Plugin Quickstart](./plugins/quickstart/)
@@ -34,7 +34,6 @@ filters, pagination, and plugins.
 ## Sections
 
 - **Getting Started** tours the product, then routes first-time and returning users to install, setup, and API connection workflows.
-- **Concepts** explains the mental model behind the workflows.
 - **Guides** cover multi-step daily work.
 - **Recipes** give command-first answers to narrow tasks.
 - **Reference** is factual lookup for commands, config, formats, and protocols.

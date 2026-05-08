@@ -3,6 +3,8 @@ title: API Auth Inspect
 linkTitle: API Auth Inspect
 weight: 40
 description: Inspect configured API auth without sending the target request.
+aliases:
+  - /docs/reference/auth-header-command/
 ---
 
 `restish api auth inspect` answers the credential debugging question previously

@@ -289,7 +289,7 @@ Keep tags short and user-facing if you expect them to become command groups.
 
 ## Related Pages
 
-- [API Commands](/docs/concepts/api-commands/)
+- [Connect to an API](/docs/getting-started/connect-to-an-api/)
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
 - [API Management](/docs/reference/api-management/)
-- [MCP](/docs/guides/mcp/)
+- [MCP](/docs/plugins/mcp/)

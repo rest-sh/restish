@@ -4,6 +4,7 @@ linkTitle: Output
 weight: 40
 description: Understand how Restish decodes, normalizes, filters, and renders responses.
 aliases:
+  - /docs/guides/output/
   - /docs/recipes/show-only-response-headers/
 ---
 
@@ -155,7 +156,7 @@ restish api.rest.sh/example -o gron | grep -i github
 
 ## Related Pages
 
-- [Normalized Responses](/docs/concepts/normalized-responses/)
+- [Query Syntax](/docs/reference/query-syntax/)
 - [Filtering](../filtering/)
 - [Output Formats](/docs/reference/output-formats/)
 - [Output Defaults](/docs/reference/output-defaults/)

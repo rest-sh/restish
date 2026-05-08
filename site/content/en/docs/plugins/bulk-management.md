@@ -3,6 +3,8 @@ title: Bulk Management
 linkTitle: Bulk Management
 weight: 100
 description: Manage API collections as local files with the restish-bulk command plugin.
+aliases:
+  - /docs/plugins/bulk-management/
 ---
 
 `restish bulk` is a command-plugin workflow for checking out many API resources

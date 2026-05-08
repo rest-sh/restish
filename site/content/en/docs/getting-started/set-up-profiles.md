@@ -110,7 +110,7 @@ task.
 
 ## Related Pages
 
-- [Profiles Concept](/docs/concepts/profiles/)
+- [Profiles Reference](/docs/reference/profiles/)
 - [Profiles Reference](/docs/reference/profiles/)
 - [Config Reference](/docs/reference/config/)
 - [Authentication](/docs/guides/authentication/)

@@ -177,7 +177,7 @@ restish api.rest.sh/images/jpeg
 The command uses Restish's normal output default for an `image/*` response in a terminal. Redirect the response when you want to save the bytes instead.
 
 Learn more: [Output](../../guides/output/), [Output Formats](../../reference/output-formats/),
-[Output Defaults](../../reference/output-defaults/), [Images in the Terminal](../../guides/images-in-the-terminal/).
+[Output Defaults](../../reference/output-defaults/), [Images in the Terminal](../../guides/output/).
 
 ## Saving Files
 
@@ -464,7 +464,7 @@ Try a generated command yourself in the browser:
 restish example get-book the-fabric-of-the-cosmos
 {{< /restish-example >}}
 
-Learn more: [API Commands](../../concepts/api-commands/),
+Learn more: [Connect to an API](../connect-to-an-api/),
 [OpenAPI Reference](../../reference/openapi-cli-integration/),
 [Commands](../../reference/commands/).
 
@@ -491,7 +491,7 @@ Verbose output redacts sensitive values, so you can confirm that auth was added
 without leaking the credential into logs. Use `restish api auth inspect example` to see configured credentials and what specific header or query parameters they will add to requests.
 
 Learn more: [Authentication](../../guides/authentication/),
-[Auth Header Command](../../reference/auth-header-command/),
+[API Auth Inspect](../../reference/api-auth-inspect/),
 [OpenAPI Reference](../../reference/openapi-cli-integration/).
 
 ## User Profiles
@@ -516,7 +516,7 @@ restish example get-auth-basic -p tour
 Profiles are most useful when the command should stay the same while the
 environment or credential changes.
 
-Learn more: [Set Up Profiles](../set-up-profiles/), [Profiles](../../concepts/profiles/),
+Learn more: [Set Up Profiles](../set-up-profiles/),
 [Profiles Reference](../../reference/profiles/).
 
 ## Customize Local Output
@@ -537,7 +537,7 @@ Shell setup is especially valuable if you use query strings, array shorthand,
 or filters in an interactive shell. Completion can also use connected APIs so
 generated commands and parameters are easier to discover.
 
-Learn more: [Shell Setup](../shell-setup/), [Completions](../../guides/completions/),
+Learn more: [Shell Setup](../shell-setup/), [Completions](../shell-setup/),
 [Theme Command](../../reference/theme-command/).
 
 ## Extend With Plugins
@@ -563,7 +563,7 @@ Official plugins include CSV output, MCP tool exposure, bulk resource
 management, and PKCS#11-backed TLS signing.
 
 Learn more: [Install and Use Plugins](../../plugins/install-and-use/),
-[Plugin Concepts](../../concepts/plugins/), [Plugins Reference](../../reference/plugins/).
+[Plugin Command](../../reference/plugin-command/), [Plugin Messages](../../reference/plugin-messages/).
 
 ## Script With Restish
 

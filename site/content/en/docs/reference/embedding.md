@@ -3,6 +3,8 @@ title: Embedding Restish in Go
 linkTitle: Embedding
 weight: 115
 description: Build a custom Go CLI on top of Restish with custom auth, formats, and bundled API defaults.
+aliases:
+  - /docs/reference/embedding/
 ---
 
 Restish can be used as a Go library when an organization wants to ship a

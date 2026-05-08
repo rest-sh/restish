@@ -15,7 +15,7 @@ single task, use recipes.
 - [Global Flags](./global-flags/) lists shared request, output, auth, TLS, pagination, cache, retry, and config flags.
 - [API Management](./api-management/) covers `restish api ...`.
 - [OpenAPI](./openapi-cli-integration/) covers generated command behavior and Restish OpenAPI extensions.
-- [API Auth Inspect](./auth-header-command/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.
+- [API Auth Inspect](./api-auth-inspect/), [Cache](./cache-command/), [Cert](./cert-command/), [Edit](./edit-command/), [Links](./links-command/), [Setup](./setup-command/), [Theme](./theme-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover focused commands.
 
 ## Data And Configuration Reference
 
@@ -25,10 +25,11 @@ single task, use recipes.
 - [Content Types](./content-types/) covers request encoding and response decoding.
 - [Output Defaults](./output-defaults/) and [Output Formats](./output-formats/) explain rendering.
 - [Shorthand](./shorthand/) and [Query Syntax](./query-syntax/) cover input and filters.
+- [Embedding](./embedding/) covers custom Go CLIs built on Restish.
 
 ## Plugin Reference
 
-- [Plugins](./plugins/) for discovery and operating model.
+- [Plugin Command](./plugin-command/) for operator command syntax.
 - [Plugin Manifest](./plugin-manifest/) for manifest fields.
 - [Plugin Messages](./plugin-messages/) for host/plugin protocol families.
 

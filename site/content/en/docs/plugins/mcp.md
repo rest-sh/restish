@@ -3,6 +3,8 @@ title: Serve APIs Over MCP
 linkTitle: MCP
 weight: 105
 description: Expose registered Restish APIs as MCP tools through the restish-mcp command plugin.
+aliases:
+  - /docs/plugins/mcp/
 ---
 
 `restish-mcp` is a command plugin that exposes registered OpenAPI operations as
@@ -75,4 +77,4 @@ without confirmation or where the spec hides important side effects.
 - [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Command Plugins](/docs/plugins/command-plugins/)
 - [Plugin Messages](/docs/reference/plugin-messages/)
-- [Troubleshooting](../troubleshooting/)
+- [Troubleshooting](/docs/guides/troubleshooting/)

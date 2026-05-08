@@ -12,7 +12,7 @@ locally.
 
 ## Start Here
 
-1. Follow the [Tour of Restish](./quickstart/) to try the major workflows in your browser.
+1. Follow the [Tour of Restish](./tour/) to try the major workflows in your browser.
 2. Use [Install](./install/) when you are ready to run Restish locally.
 3. Run [Shell Setup](./shell-setup/) before using filters, query strings, or shorthand heavily.
 4. [Connect to an API](./connect-to-an-api/) when generated commands are useful.
@@ -20,7 +20,7 @@ locally.
 
 ## Pages In This Section
 
-- [Tour of Restish](./quickstart/) is the interactive overview for new users
+- [Tour of Restish](./tour/) is the interactive overview for new users
   and the workflow map for returning users.
 - [Install](./install/) covers managed installs, release archives, containers,
   source builds, and a quick verification request.

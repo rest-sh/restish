@@ -3,6 +3,8 @@ title: Plugins
 linkTitle: Plugins
 weight: 60
 description: Install, operate, debug, and author Restish plugins.
+aliases:
+  - /docs/reference/plugins/
 ---
 
 Plugins are a first-class extension model in Restish v2. They add auth flows,
@@ -16,8 +18,8 @@ Start here when you want to use an existing plugin:
 - [Install and Use Plugins](./install-and-use/) for installation, listing, removal, and debugging.
 - [Built-In Example Plugins](./example-plugins/) to find first-party plugin binaries.
 - [TLS Signer Plugins](./tls-signer-plugins/) for hardware-backed or external mTLS signing.
-- [Bulk Management](/docs/guides/bulk-management/) for `restish-bulk`.
-- [MCP](/docs/guides/mcp/) for `restish-mcp`.
+- [Bulk Management](/docs/plugins/bulk-management/) for `restish-bulk`.
+- [MCP](/docs/plugins/mcp/) for `restish-mcp`.
 
 ## Author Track
 

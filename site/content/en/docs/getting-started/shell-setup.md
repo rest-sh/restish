@@ -3,6 +3,8 @@ title: Shell Setup
 linkTitle: Shell Setup
 weight: 35
 description: Configure your shell so URLs, filters, and shorthand reach Restish unchanged.
+aliases:
+  - /docs/getting-started/shell-setup/
 ---
 
 Restish uses characters that shells also care about: `?`, `&`, `[`, `]`, `*`,
@@ -102,7 +104,7 @@ completion, profiles, and API-specific help.
 
 ## Related Pages
 
-- [Tour of Restish](../quickstart/)
-- [Completions](/docs/guides/completions/)
+- [Tour of Restish](../tour/)
+- [Completions](/docs/getting-started/shell-setup/)
 - [Shorthand](/docs/reference/shorthand/)
 - [Query Syntax](/docs/reference/query-syntax/)

@@ -59,7 +59,7 @@ enableGitInfo = true
 [menu]
   [[menu.main]]
     name = "Tour"
-    url = "/docs/getting-started/quickstart/"
+    url = "/docs/getting-started/tour/"
     weight = 20
   [[menu.main]]
     name = "Guides"

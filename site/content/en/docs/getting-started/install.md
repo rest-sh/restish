@@ -78,12 +78,12 @@ plugins.
 
 If you came here from the tour, continue with [Shell Setup](../shell-setup/) so
 your local shell handles Restish filters, query strings, and shorthand input
-cleanly. If you started with install, take the [Tour of Restish](../quickstart/)
+cleanly. If you started with install, take the [Tour of Restish](../tour/)
 next to see the major workflows before connecting your own APIs.
 
 ## Related Pages
 
-- [Tour of Restish](../quickstart/)
+- [Tour of Restish](../tour/)
 - [Shell Setup](../shell-setup/)
 - [Development Setup](/docs/contributing/development-setup/)
 - [Upgrade From v1](../upgrade-from-v1/)

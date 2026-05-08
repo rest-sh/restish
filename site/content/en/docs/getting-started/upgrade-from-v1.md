@@ -189,6 +189,6 @@ restish config edit
 ## Related Pages
 
 - [Install](../install/)
-- [Tour of Restish](../quickstart/)
+- [Tour of Restish](../tour/)
 - [Config](/docs/reference/config/)
 - [Install And Use Plugins](/docs/plugins/install-and-use/)
