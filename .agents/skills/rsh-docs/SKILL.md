@@ -76,6 +76,32 @@ Use examples that look like real work:
 - Explain intentional placeholders when they might look accidental.
 - Prefer JSONC for config examples when comments clarify fields.
 
+### Shorthand Examples
+
+Restish shorthand examples should be shell-safe and match how the docs display
+them:
+
+- In `restish-example` shortcodes, commands are presented as a single line.
+  Keep the command on one line and quote the entire shorthand expression.
+- Prefer one quoted shorthand expression for related fields:
+  `restish post api.rest.sh/post 'name: Alice, tags[]: docs, active: true'`.
+- Do not split one logical shorthand body into separate quoted fragments such
+  as `'name: Alice,' 'tags[]: docs'` in interactive examples.
+- Do not leave shorthand with spaces unquoted, such as `name: Alice` or
+  `file: @README.md`; the shell splits those tokens and makes the example easy
+  to misread or copy incorrectly.
+- Quote patch arguments after pipes too:
+  `echo '{"role":"user"}' | restish post api.rest.sh/post 'role: admin'`.
+
+Tiny shorthand reference:
+
+- Object assignment: `name: Alice`
+- Nested field: `user.name: Alice`
+- Array append: `tags[]: docs`
+- File reference: `payload: @payload.json`
+- Multiple fields in one expression:
+  `name: Alice, enabled: true, count: 3`
+
 Canonical endpoints:
 
 - `https://api.rest.sh/` for first requests and header inspection.
