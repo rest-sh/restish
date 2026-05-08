@@ -44,7 +44,7 @@ you need variants or failure guidance.
 ## Auth, Profiles, TLS, And Specs
 
 - [Use Multiple Profiles](./use-multiple-profiles/)
-- [Inspect the Auth Header](./inspect-the-api auth inspect/)
+- [Inspect the Auth Header](./inspect-the-auth-header/)
 - [Send an API Key in a Header](./send-an-api-key-in-a-header/)
 - [Send an API Key in a Query Parameter](./send-an-api-key-in-a-query-parameter/)
 - [Use External-Tool Auth](./use-external-tool-auth/)

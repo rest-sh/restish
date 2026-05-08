@@ -16,13 +16,6 @@ brew install rest-sh/tap/restish
 restish --version
 ```
 
-Existing v1 users who need the legacy binary can install the keg-only v1 formula
-from the same tap:
-
-```bash
-brew install rest-sh/tap/restish@1
-```
-
 ## GitHub Release Archives
 
 Download the archive for your OS and CPU from GitHub Releases, unpack it, and
@@ -83,8 +76,10 @@ plugins.
 
 ## Next Step
 
-Follow the [Tour of Restish](../quickstart/) to try the major workflows in your
-browser, then run the same examples locally.
+If you came here from the tour, continue with [Shell Setup](../shell-setup/) so
+your local shell handles Restish filters, query strings, and shorthand input
+cleanly. If you started with install, take the [Tour of Restish](../quickstart/)
+next to see the major workflows before connecting your own APIs.
 
 ## Related Pages
 

@@ -2,12 +2,13 @@
 title: Getting Started
 linkTitle: Getting Started
 weight: 10
-description: Install Restish, make a request, register the example API, and learn the shortest path to daily use.
+description: Tour Restish, install locally, connect APIs, and configure daily-use profiles.
 ---
 
-This section starts with an interactive browser tour, then helps you install
-Restish and turn one-off requests into a useful API-specific workflow. If you
-do not know what to choose, follow the default path in order.
+This section is the on-ramp for Restish. Start with the interactive tour when
+you want the fastest overview of what Restish can do, then use the remaining
+pages as focused setup tasks when you are ready to run the same workflows
+locally.
 
 ## Start Here
 
@@ -17,12 +18,23 @@ do not know what to choose, follow the default path in order.
 4. [Connect to an API](./connect-to-an-api/) when generated commands are useful.
 5. [Set Up Profiles](./set-up-profiles/) for environments, auth, and defaults.
 
-## Common First Wins
+## Pages In This Section
 
-- See what Restish sends: `restish https://api.rest.sh/`
-- Register the docs API: `restish api connect example https://api.rest.sh 'prompt.api_key: docs-key'`
-- Use a generated command: `restish example list-images`
-- Filter a response: `restish https://api.rest.sh/images -f body.self -o lines`
+- [Tour of Restish](./quickstart/) is the interactive overview for new users
+  and the workflow map for returning users.
+- [Install](./install/) covers managed installs, release archives, containers,
+  source builds, and a quick verification request.
+- [Shell Setup](./shell-setup/) helps your shell pass filters, query strings,
+  and shorthand input to Restish unchanged.
+- [Connect to an API](./connect-to-an-api/) turns an OpenAPI description into
+  generated commands for an API.
+- [Set Up Profiles](./set-up-profiles/) explains named API environments, auth,
+  and reusable defaults.
+- [Your First Config](./your-first-config/) shows where local config lives and
+  how to recognize the pieces Restish writes there.
+- [Upgrade From v1](./upgrade-from-v1/) covers migration notes for existing
+  Restish users.
+- [Changelog](./changelog/) summarizes user-visible changes.
 
 ## Existing v1 Users
 
