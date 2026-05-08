@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/danielgtaylor/huma/v2 v2.37.3
 	github.com/danielgtaylor/mexpr v1.10.1
-	github.com/danielgtaylor/shorthand/v2 v2.3.0
+	github.com/danielgtaylor/shorthand/v2 v2.4.0
 	github.com/fxamacker/cbor/v2 v2.9.1
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
