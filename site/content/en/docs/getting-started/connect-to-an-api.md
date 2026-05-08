@@ -12,7 +12,7 @@ short name.
 ## Register The Example API
 
 ```bash
-restish api connect example api.rest.sh 'prompt.api_key: docs-key'
+restish api connect example api.rest.sh
 ```
 
 Restish discovers `https://api.rest.sh/openapi.json`, stores the API config,

@@ -100,39 +100,25 @@ These changes are intentional in v2 and are not treated as regressions:
   that discovery path.
 - plugin executables must speak the v2 plugin protocol
 
-## Accidental Regressions Already Fixed
-
-Several upgrade pain points from early v2 builds have already been restored or
-fixed:
-
-- missing `operationId` values now fall back to generated command names again
-- path-level parameters are merged correctly into generated commands
-- required headers are marked required instead of silently optional
-- `servers[]` base-path handling works again
-- structured `+json` and related content types decode correctly
-- invalid profile names error again instead of silently falling back
-
-If you hit one of those in an older v2 build, upgrade before debugging further.
-
 ## Command And Flag Mapping
 
 Use this as the fast lookup table when muscle memory collides with v2.
 
-| v1                             | v2                                          | Notes                                                 |
-| ------------------------------ | ------------------------------------------- | ----------------------------------------------------- |
-| `apis.json`                    | `restish.json`                              | API config now lives under top-level `apis`           |
-| `config.json`                  | `restish.json`                              | v2 uses one config file                               |
-| `restish api edit`             | `restish config edit`                          | Config editing moved under `config`                |
-| old interactive API setup    | `restish api connect <name> <url>`        | v2 expects the base URL explicitly |
-| n/a                            | `restish api connect <name> <url> 'path:value'` | fast one-shot registration with shorthand expressions |
-| n/a                            | `restish api set <name> 'path:value'`       | shorthand updates support set/append/delete           |
-| `restish api clear-auth-cache <name>` | `restish api auth logout <name>`   | Token cache state lives under `api auth`              |
-| `restish api auth inspect <uri>` | `restish api auth inspect <api> --raw-header Authorization` | URL form was replaced by API/profile-aware inspection |
-| `auth.name`                    | `auth.type`                                 | Profile auth config field renamed                     |
-| profile `base`                 | profile `base_url`                          | API/profile base field renamed                        |
-| API `base`                     | API `base_url`                              | API base field renamed                                |
-| `-p`, `--rsh-profile`          | `-p`, `--rsh-profile`                       | Same flag, but invalid profile names now error        |
-| v1 plugin binaries             | v2 plugin binaries                          | Rebuild or replace plugins for the v2 protocol        |
+| v1                                    | v2                                                          | Notes                                                 |
+| ------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
+| `apis.json`                           | `restish.json`                                              | API config now lives under top-level `apis`           |
+| `config.json`                         | `restish.json`                                              | v2 uses one config file                               |
+| `restish api edit`                    | `restish config edit`                                       | Config editing moved under `config`                   |
+| old interactive API setup             | `restish api connect <name> <url>`                          | v2 expects the base URL explicitly                    |
+| n/a                                   | `restish api connect <name> <url> 'path:value'`             | fast one-shot registration with shorthand expressions |
+| n/a                                   | `restish api set <name> 'path:value'`                       | shorthand updates support set/append/delete           |
+| `restish api clear-auth-cache <name>` | `restish api auth logout <name>`                            | Token cache state lives under `api auth`              |
+| `restish api auth inspect <uri>`      | `restish api auth inspect <api> --raw-header Authorization` | URL form was replaced by API/profile-aware inspection |
+| `auth.name`                           | `auth.type`                                                 | Profile auth config field renamed                     |
+| profile `base`                        | profile `base_url`                                          | API/profile base field renamed                        |
+| API `base`                            | API `base_url`                                              | API base field renamed                                |
+| `-p`, `--rsh-profile`                 | `-p`, `--rsh-profile`                                       | Same flag, but invalid profile names now error        |
+| v1 plugin binaries                    | v2 plugin binaries                                          | Rebuild or replace plugins for the v2 protocol        |
 
 ## Plugin Changes
 
