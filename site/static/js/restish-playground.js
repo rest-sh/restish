@@ -17,16 +17,120 @@
     ["--rsh-timeout", "timeout"],
     ["-t", "timeout"],
     ["--rsh-max-pages", "maxPages"],
-    ["--rsh-max-items", "maxItems"]
+    ["--rsh-max-items", "maxItems"],
+    ["--rsh-retry", "retry"],
+    ["--rsh-retry-max-wait", "retryMaxWait"]
   ]);
   const boolFlags = new Map([
+    ["-v", "verbose"],
+    ["--verbose", "verbose"],
     ["-r", "raw"],
     ["--rsh-raw", "raw"],
     ["--rsh-headers", "headersOnly"],
+    ["--rsh-no-cache", "noCache"],
     ["--rsh-no-paginate", "noPaginate"],
     ["--rsh-ignore-status-code", "ignoreStatus"],
-    ["--rsh-collect", "collect"]
+    ["--rsh-collect", "collect"],
+    ["--rsh-retry-unsafe", "retryUnsafe"]
   ]);
+  const generatedValueFlags = new Map([
+    ["--api-key", "api_key"],
+    ["--api_key", "api_key"],
+    ["--chunk-size", "chunk_size"],
+    ["--chunk_size", "chunk_size"],
+    ["--count", "count"],
+    ["--cursor", "cursor"],
+    ["--delay", "delay"],
+    ["--duration", "duration"],
+    ["--failures", "failures"],
+    ["--format", "format"],
+    ["--key", "key"],
+    ["--limit", "limit"],
+    ["--numbytes", "numbytes"],
+    ["--per-page", "per_page"],
+    ["--per_page", "per_page"],
+    ["--retry-after", "retry-after"],
+    ["--search", "search"],
+    ["--seed", "seed"],
+    ["--status", "status"],
+    ["--status-code", "status_code"],
+    ["--status_code", "status_code"],
+    ["--x-retry-in", "x-retry-in"]
+  ]);
+  const generatedBoolFlags = new Map([
+    ["--private", "private"]
+  ]);
+  const exampleOperations = new Map(Object.entries({
+    "create-item": { method: "POST", path: "/items" },
+    "delete-book": { method: "DELETE", path: "/books/{book-id}", pathParams: ["book-id"] },
+    "delete-echo": { method: "DELETE", path: "/" },
+    "delete-item": { method: "DELETE", path: "/items/{item-id}", pathParams: ["item-id"] },
+    "delete-method": { method: "DELETE", path: "/delete" },
+    "get-absolute-redirect": { method: "GET", path: "/absolute-redirect/{n}", pathParams: ["n"] },
+    "get-accept-image": { method: "GET", path: "/image" },
+    "get-anything": { method: "GET", path: "/anything" },
+    "get-anything-path": { method: "GET", path: "/anything/{path}", pathParams: ["path"] },
+    "get-auth-api-key-header": { method: "GET", path: "/auth/api-key-header", headers: [["X-API-Key", "docs-key"]] },
+    "get-auth-api-key-query": { method: "GET", path: "/auth/api-key-query", query: [["api_key", "docs-query-key"]] },
+    "get-auth-basic": { method: "GET", path: "/auth/basic", headers: [["Authorization", "Basic ZG9jczpkb2Nz"]] },
+    "get-auth-bearer": { method: "GET", path: "/auth/bearer", headers: [["Authorization", "Bearer docs-token"]] },
+    "get-base64-decode": { method: "GET", path: "/base64/decode/{value}", pathParams: ["value"] },
+    "get-base64-encode": { method: "GET", path: "/base64/encode/{value}", pathParams: ["value"] },
+    "get-book": { method: "GET", path: "/books/{book-id}", pathParams: ["book-id"] },
+    "get-brotli": { method: "GET", path: "/brotli" },
+    "get-bytes": { method: "GET", path: "/bytes/{n}", pathParams: ["n"] },
+    "get-cache": { method: "GET", path: "/cache" },
+    "get-cached": { method: "GET", path: "/cached/{seconds}", pathParams: ["seconds"] },
+    "get-cookies": { method: "GET", path: "/cookies" },
+    "get-cookies-delete": { method: "GET", path: "/cookies/delete" },
+    "get-cookies-set": { method: "GET", path: "/cookies/set" },
+    "get-deflate": { method: "GET", path: "/deflate" },
+    "get-drip": { method: "GET", path: "/drip" },
+    "get-echo": { method: "GET", path: "/" },
+    "get-etag": { method: "GET", path: "/etag/{etag}", pathParams: ["etag"] },
+    "get-events": { method: "GET", path: "/events" },
+    "get-example": { method: "GET", path: "/example" },
+    "get-flaky": { method: "GET", path: "/flaky" },
+    "get-format": { method: "GET", path: "/formats/{format}", pathParams: ["format"] },
+    "get-gzip": { method: "GET", path: "/gzip" },
+    "get-headers": { method: "GET", path: "/headers" },
+    "get-html": { method: "GET", path: "/html" },
+    "get-image": { method: "GET", path: "/images/{type}", pathParams: ["type"], defaults: { type: "jpeg" } },
+    "get-ip": { method: "GET", path: "/ip" },
+    "get-item": { method: "GET", path: "/items/{item-id}", pathParams: ["item-id"] },
+    "get-logs": { method: "GET", path: "/logs" },
+    "get-method": { method: "GET", path: "/get" },
+    "get-problem": { method: "GET", path: "/problem" },
+    "get-range": { method: "GET", path: "/range/{n}", pathParams: ["n"] },
+    "get-redirect": { method: "GET", path: "/redirect/{n}", pathParams: ["n"] },
+    "get-redirect-to": { method: "GET", path: "/redirect-to", requiredQuery: ["url"] },
+    "get-relative-redirect": { method: "GET", path: "/relative-redirect/{n}", pathParams: ["n"] },
+    "get-response-headers": { method: "GET", path: "/response-headers" },
+    "get-slow": { method: "GET", path: "/slow" },
+    "get-sse-metrics": { method: "GET", path: "/sse/metrics" },
+    "get-status": { method: "GET", path: "/status/{code}", pathParams: ["code"], defaults: { code: "200" } },
+    "get-stream-bytes": { method: "GET", path: "/stream-bytes/{n}", pathParams: ["n"] },
+    "get-types-example": { method: "GET", path: "/types" },
+    "get-user-agent": { method: "GET", path: "/user-agent" },
+    "get-uuid": { method: "GET", path: "/uuid" },
+    "get-xml": { method: "GET", path: "/xml" },
+    "head-method": { method: "HEAD", path: "/head" },
+    "list-books": { method: "GET", path: "/books" },
+    "list-images": { method: "GET", path: "/images" },
+    "list-items": { method: "GET", path: "/items" },
+    "options-method": { method: "OPTIONS", path: "/options" },
+    "patch-book": { method: "PATCH", path: "/books/{book-id}", pathParams: ["book-id"] },
+    "patch-echo": { method: "PATCH", path: "/" },
+    "patch-item": { method: "PATCH", path: "/items/{item-id}", pathParams: ["item-id"] },
+    "patch-method": { method: "PATCH", path: "/patch" },
+    "post-echo": { method: "POST", path: "/" },
+    "post-login": { method: "POST", path: "/login" },
+    "post-method": { method: "POST", path: "/post" },
+    "put-book": { method: "PUT", path: "/books/{book-id}", pathParams: ["book-id"] },
+    "put-echo": { method: "PUT", path: "/" },
+    "put-method": { method: "PUT", path: "/put" },
+    "put-types-example": { method: "PUT", path: "/types" }
+  }));
 
   function shellWords(input) {
     const words = [];
@@ -81,11 +185,14 @@
 
   function parseCommand(command) {
     const cleanCommand = command.trim().replace(/^\$\s*/, "");
-    if (/[|;&<>`$]/.test(cleanCommand)) {
+    if (hasUnsupportedShellSyntax(cleanCommand)) {
       throw new Error("Shell pipes, redirects, substitutions, and environment expansion require the real Restish CLI.");
     }
 
     const tokens = shellWords(cleanCommand);
+    if (tokens.includes("|")) {
+      throw new Error("Shell pipes, redirects, substitutions, and environment expansion require the real Restish CLI.");
+    }
     if (tokens[0] !== "restish") {
       throw new Error("This preview only runs commands that start with `restish`.");
     }
@@ -100,8 +207,18 @@
       columns: "",
       sortBy: "",
       timeout: "",
+      maxPages: "",
+      maxItems: "",
+      retry: "",
+      retryMaxWait: "",
+      generatedParams: [],
+      verbose: false,
       raw: false,
-      headersOnly: false
+      headersOnly: false,
+      noCache: false,
+      noPaginate: false,
+      collect: false,
+      retryUnsafe: false
     };
     const args = [];
 
@@ -135,6 +252,23 @@
         flags[boolFlags.get(token)] = true;
         continue;
       }
+      if (generatedBoolFlags.has(token)) {
+        const value = inlineValue ? parseBoolFlagValue(token, inlineValue) : true;
+        flags.generatedParams.push([generatedBoolFlags.get(token), String(value)]);
+        continue;
+      }
+      if (generatedValueFlags.has(token)) {
+        const name = generatedValueFlags.get(token);
+        const value = inlineValue || tokens[i + 1];
+        if (!value) {
+          throw new Error(`${token} needs a value.`);
+        }
+        if (!inlineValue) {
+          i += 1;
+        }
+        flags.generatedParams.push([name, value]);
+        continue;
+      }
       if (token.startsWith("-")) {
         throw new Error(`${token} is not supported in the browser preview. Use the real Restish CLI for this feature.`);
       }
@@ -162,17 +296,40 @@
       mode = "links";
       url = args[1] || "";
       linkRels = args.slice(2);
+    } else if (args[0] === "edit") {
+      mode = "edit";
+      method = "GET";
+      url = args[1] || "";
+      bodyArgs = args.slice(2);
     } else if (looksLikeURL(args[0])) {
+      if (flags.generatedParams.length) {
+        throw new Error("Generated operation parameter flags such as `--format` or `--limit` only work with `restish example ...` in the browser preview.");
+      }
       url = args[0];
       bodyArgs = args.slice(1);
       if (bodyArgs.length) {
         method = "POST";
       }
     } else if (args[0] === "example") {
-      const mapped = mapExampleCommand(args.slice(1));
+      const mapped = mapExampleCommand(args.slice(1), flags.generatedParams);
       method = mapped.method;
       url = mapped.url;
       bodyArgs = mapped.bodyArgs;
+      for (const header of mapped.headers || []) {
+        flags.headers.push(`${header[0]}: ${header[1]}`);
+      }
+      for (const query of mapped.query || []) {
+        flags.query.push(`${query[0]}=${query[1]}`);
+      }
+    } else if (/^example\//.test(args[0])) {
+      if (flags.generatedParams.length) {
+        throw new Error("Generated operation parameter flags such as `--format` or `--limit` only work with `restish example <operation>` in the browser preview.");
+      }
+      url = `https://api.rest.sh/${args[0].slice("example/".length)}`;
+      bodyArgs = args.slice(1);
+      if (bodyArgs.length) {
+        method = "POST";
+      }
     } else if (args[0] === "api" || args[0] === "plugin" || args[0] === "shell" || args[0] === "config" || args[0] === "cache") {
       throw new Error(`\`restish ${args[0]}\` changes local CLI state or setup. Run it in a terminal.`);
     } else {
@@ -188,6 +345,47 @@
     }
 
     return { method, url, bodyArgs, flags, mode, linkRels };
+  }
+
+  function parseBoolFlagValue(name, value) {
+    if (/^(true|1|yes|on)$/i.test(value)) {
+      return true;
+    }
+    if (/^(false|0|no|off)$/i.test(value)) {
+      return false;
+    }
+    throw new Error(`${name} needs a boolean value when using ${name}=value.`);
+  }
+
+  function hasUnsupportedShellSyntax(input) {
+    let quote = "";
+    let escaped = false;
+    for (const ch of input) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) {
+          quote = "";
+        } else if (quote === "\"" && (ch === "$" || ch === "`")) {
+          return true;
+        }
+        continue;
+      }
+      if (ch === "'" || ch === "\"") {
+        quote = ch;
+        continue;
+      }
+      if (/[|;&<>`$]/.test(ch)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function normalizeURL(value) {
@@ -208,20 +406,51 @@
     return /^(([a-z0-9-]+\.)+[a-z0-9-]+|localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?([/?#].*)?$/i.test(value);
   }
 
-  function mapExampleCommand(args) {
+  function mapExampleCommand(args, generatedParams) {
     const op = args[0];
-    if (op === "list-images") {
-      return { method: "GET", url: "https://api.rest.sh/images", bodyArgs: args.slice(1) };
+    if (op === "post-upload") {
+      throw new Error("`restish example post-upload` needs multipart file handling. Run it in the real Restish CLI.");
     }
-    if (op === "get-image") {
-      const format = args[1] || "jpeg";
-      return { method: "GET", url: `https://api.rest.sh/images/${encodeURIComponent(format)}`, bodyArgs: args.slice(2) };
+    const operation = exampleOperations.get(op);
+    if (!operation) {
+      throw new Error(`\`example ${op || ""}\` is not mapped in the browser preview yet.`);
     }
-    if (op === "get-status") {
-      const status = args[1] || "200";
-      return { method: "GET", url: `https://api.rest.sh/status/${encodeURIComponent(status)}`, bodyArgs: args.slice(2) };
+    const pathParams = operation.pathParams || [];
+    const queryParams = (generatedParams || []).slice();
+    let index = 1;
+    let path = operation.path;
+    for (const name of pathParams) {
+      const fallback = operation.defaults && operation.defaults[name];
+      const value = args[index] || fallback;
+      if (!value) {
+        throw new Error(`\`restish example ${op}\` needs a \`${name}\` value.`);
+      }
+      path = path.replace(`{${name}}`, encodeURIComponent(value));
+      index += args[index] ? 1 : 0;
     }
-    throw new Error(`\`example ${op || ""}\` is not mapped in the browser preview yet.`);
+    const url = new URL(path, "https://api.rest.sh");
+    for (const name of operation.requiredQuery || []) {
+      const value = args[index];
+      if (!value) {
+        throw new Error(`\`restish example ${op}\` needs a \`${toKebab(name)}\` value.`);
+      }
+      url.searchParams.append(name, value);
+      index += 1;
+    }
+    for (const [key, value] of queryParams) {
+      url.searchParams.append(key, value);
+    }
+    return {
+      method: operation.method,
+      url: url.toString(),
+      bodyArgs: args.slice(index),
+      headers: operation.headers || [],
+      query: operation.query || []
+    };
+  }
+
+  function toKebab(value) {
+    return String(value).replace(/_/g, "-");
   }
 
   function buildRequest(plan) {
@@ -236,12 +465,18 @@
 
     const headers = new Headers();
     headers.set("Accept", "application/json, application/yaml;q=0.5, text/*;q=0.2");
+    if (plan.flags.noCache) {
+      headers.set("Cache-Control", "no-cache");
+    }
     for (const item of plan.flags.headers) {
       const idx = item.indexOf(":");
       if (idx < 1) {
         throw new Error(`Invalid header \`${item}\`; expected Name: Value.`);
       }
       headers.set(item.slice(0, idx).trim(), item.slice(idx + 1).trim());
+    }
+    if (url.hostname === "api.rest.sh" && url.pathname === "/flaky" && url.searchParams.get("key") === "tour") {
+      url.searchParams.set("key", `tour-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     }
 
     const init = { method: plan.method, mode: "cors", headers };
@@ -250,20 +485,35 @@
     }
     if (["POST", "PUT", "PATCH"].includes(plan.method) && plan.bodyArgs.length) {
       const contentType = plan.flags.contentType || "json";
+      const body = parseBodyArgs(plan.bodyArgs);
       if (contentType === "json") {
         headers.set("Content-Type", "application/json");
-        init.body = JSON.stringify(parseShorthand(plan.bodyArgs));
+        init.body = JSON.stringify(body);
       } else if (contentType === "form") {
         headers.set("Content-Type", "application/x-www-form-urlencoded");
-        init.body = new URLSearchParams(flattenForm(parseShorthand(plan.bodyArgs))).toString();
+        init.body = new URLSearchParams(flattenForm(body)).toString();
       } else {
         throw new Error(`Content type \`${contentType}\` requires the real Restish CLI in this preview.`);
       }
-    } else if (plan.bodyArgs.length) {
+    } else if (plan.bodyArgs.length && plan.mode !== "edit") {
       throw new Error("Request bodies are only supported for POST, PUT, and PATCH in the browser preview.");
     }
 
     return { url, init };
+  }
+
+  function parseBodyArgs(parts) {
+    if (parts.length === 1) {
+      const trimmed = parts[0].trim();
+      if (/^[\[{]/.test(trimmed)) {
+        try {
+          return JSON.parse(trimmed);
+        } catch (error) {
+          throw new Error(`Could not parse JSON body: ${error.message}`);
+        }
+      }
+    }
+    return parseShorthand(parts);
   }
 
   function parseShorthand(parts) {
@@ -432,28 +682,38 @@
     return value;
   }
 
-  async function run(command) {
+  async function run(command, options) {
+    const callbacks = options || {};
     const plan = parseCommand(command);
     const request = buildRequest(plan);
+    if (plan.mode === "edit") {
+      return render(editPreviewResponse(plan, request), plan);
+    }
+    const preview = docsFixtureResponse(plan, request);
+    if (preview && preview.previewOnly) {
+      return render(preview, plan);
+    }
     let response;
     let raw;
     try {
-      response = await fetch(request.url, request.init);
-      raw = await response.text();
+      response = await fetchWithRetries(request, plan);
     } catch (error) {
+      if (isAbortError(error) || /timed out after/i.test(error.message || "")) {
+        throw error;
+      }
       const fixture = docsFixtureResponse(plan, request);
       if (fixture) {
         return render(fixture, plan);
       }
       throw error;
     }
-    const headers = {};
-    response.headers.forEach((value, key) => {
-      headers[key.replace(/(^|-)([a-z])/g, function (_, prefix, letter) {
-        return prefix + letter.toUpperCase();
-      })] = value;
-    });
+    const headers = responseHeadersObject(response.headers);
 
+    if (isStreamingContentType(headers["Content-Type"] || "")) {
+      return render(await readStreamingResponse(response, headers, plan, request.url, callbacks.onStream), plan);
+    }
+
+    raw = await response.text();
     const body = decodeBody(raw, headers["Content-Type"] || "");
     let normalized = {
       proto: "HTTP/2.0",
@@ -461,11 +721,306 @@
       headers,
       links: parseLinkHeader(headers.Link || "", request.url),
       body,
-      raw
+      raw,
+      sourceURL: request.url.toString()
     };
     normalized = await maybePaginate(normalized, plan, request);
 
     return render(normalized, plan);
+  }
+
+  async function fetchWithRetries(request, plan) {
+    const maxRetries = parseNonNegativeInteger(plan.flags.retry);
+    const canRetry = plan.method === "GET" || plan.method === "HEAD" || plan.flags.retryUnsafe;
+    let attempt = 0;
+    let lastError;
+
+    while (attempt <= maxRetries) {
+      try {
+        const response = await fetch(request.url, request.init);
+        if (!canRetry || attempt >= maxRetries || !isRetryableStatus(response.status)) {
+          return response;
+        }
+        await discardResponse(response);
+        await sleep(retryDelay(response, attempt, plan));
+      } catch (error) {
+        if (isAbortError(error) && plan.flags.timeout) {
+          throw new Error(`Request timed out after ${plan.flags.timeout}.`);
+        }
+        lastError = error;
+        if (!canRetry || attempt >= maxRetries) {
+          throw error;
+        }
+        await sleep(retryDelay(null, attempt, plan));
+      }
+      attempt += 1;
+    }
+    throw lastError || new Error("Request failed after retry attempts.");
+  }
+
+  function parseNonNegativeInteger(value) {
+    if (value === "" || value === undefined || value === null) {
+      return 0;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error("Retry count must be a non-negative number.");
+    }
+    return Math.floor(parsed);
+  }
+
+  function isRetryableStatus(status) {
+    return status === 408 ||
+      status === 425 ||
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504;
+  }
+
+  function retryDelay(response, attempt, plan) {
+    const headerDelay = response ? parseRetryHeader(response.headers.get("Retry-After") || response.headers.get("X-Retry-In")) : 0;
+    const fallbackDelay = Math.min(1000, 100 * Math.pow(2, attempt));
+    const maxWait = plan.flags.retryMaxWait ? parseDuration(plan.flags.retryMaxWait) : 0;
+    const delay = headerDelay || fallbackDelay;
+    return maxWait > 0 ? Math.min(delay, maxWait) : delay;
+  }
+
+  function parseRetryHeader(value) {
+    if (!value) {
+      return 0;
+    }
+    if (/^\d+(\.\d+)?$/.test(value)) {
+      return Number(value) * 1000;
+    }
+    const duration = parseDuration(value);
+    if (duration) {
+      return duration;
+    }
+    const date = Date.parse(value);
+    return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+  }
+
+  async function discardResponse(response) {
+    try {
+      await response.text();
+    } catch (_) {
+      if (response.body && response.body.cancel) {
+        try {
+          await response.body.cancel();
+        } catch (_) {
+          // Ignore cleanup failures while preparing for a retry.
+        }
+      }
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, Math.max(0, ms || 0));
+    });
+  }
+
+  function isAbortError(error) {
+    return error && (error.name === "AbortError" || /aborted/i.test(error.message || ""));
+  }
+
+  async function readStreamingResponse(response, headers, plan, url, onStream) {
+    const contentType = headers["Content-Type"] || "";
+    const maxItems = plan.flags.maxItems ? Number(plan.flags.maxItems) : 25;
+    const records = [];
+    let raw = "";
+    const emit = function () {
+      if (typeof onStream !== "function") {
+        return;
+      }
+      onStream(render({
+        proto: "HTTP/2.0",
+        status: response.status,
+        headers,
+        links: {},
+        body: records.slice(0, maxItems),
+        raw,
+        sourceURL: url.toString()
+      }, plan));
+    };
+
+    if (!response.body || !response.body.getReader) {
+      raw = await response.text();
+      records.push(...decodeStreamRecords(raw, contentType));
+      emit();
+    } else {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        emit();
+        while (records.length < maxItems) {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            break;
+          }
+          const previousCount = records.length;
+          const text = decoder.decode(chunk.value, { stream: true });
+          raw += text;
+          buffer += text;
+          buffer = drainStreamBuffer(buffer, contentType, records, maxItems);
+          if (records.length > previousCount) {
+            emit();
+          }
+        }
+      } finally {
+        if (records.length >= maxItems) {
+          await reader.cancel();
+        }
+      }
+      const tail = decoder.decode();
+      if (tail) {
+        raw += tail;
+        buffer += tail;
+      }
+      if (buffer.trim() && records.length < maxItems) {
+        const previousCount = records.length;
+        records.push(...decodeStreamRecords(buffer, contentType).slice(0, maxItems - records.length));
+        if (records.length > previousCount) {
+          emit();
+        }
+      }
+    }
+
+    return {
+      proto: "HTTP/2.0",
+      status: response.status,
+      headers,
+      links: {},
+      body: records.slice(0, maxItems),
+      raw,
+      sourceURL: url.toString()
+    };
+  }
+
+  function isStreamingContentType(contentType) {
+    const value = contentType.toLowerCase();
+    return value.includes("text/event-stream") ||
+      value.includes("application/x-ndjson") ||
+      value.includes("application/ndjson") ||
+      value.includes("application/jsonl") ||
+      value.includes("application/json-seq");
+  }
+
+  function drainStreamBuffer(buffer, contentType, records, maxItems) {
+    if (contentType.toLowerCase().includes("text/event-stream")) {
+      let boundary = eventBoundary(buffer);
+      while (boundary >= 0 && records.length < maxItems) {
+        const block = buffer.slice(0, boundary);
+        const event = parseSSEEvent(block);
+        if (event) {
+          records.push(event);
+        }
+        buffer = buffer.slice(buffer.charAt(boundary) === "\r" ? boundary + 4 : boundary + 2);
+        boundary = eventBoundary(buffer);
+      }
+      return buffer;
+    }
+
+    const lines = buffer.split(/\r?\n/);
+    const tail = lines.pop() || "";
+    for (const line of lines) {
+      if (records.length >= maxItems) {
+        return tail;
+      }
+      const record = parseNDJSONLine(line);
+      if (record !== undefined) {
+        records.push(record);
+      }
+    }
+    return tail;
+  }
+
+  function eventBoundary(buffer) {
+    const lf = buffer.indexOf("\n\n");
+    const crlf = buffer.indexOf("\r\n\r\n");
+    if (lf < 0) return crlf;
+    if (crlf < 0) return lf;
+    return Math.min(lf, crlf);
+  }
+
+  function decodeStreamRecords(text, contentType) {
+    if (contentType.toLowerCase().includes("text/event-stream")) {
+      return text.split(/\r?\n\r?\n/).map(parseSSEEvent).filter(Boolean);
+    }
+    return text.split(/\r?\n/).map(parseNDJSONLine).filter((item) => item !== undefined);
+  }
+
+  function parseNDJSONLine(line) {
+    const text = line.trim();
+    if (!text) {
+      return undefined;
+    }
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
+  function parseSSEEvent(block) {
+    const lines = block.split(/\r?\n/);
+    const event = {};
+    const data = [];
+    for (const line of lines) {
+      if (!line || line.startsWith(":")) {
+        continue;
+      }
+      const idx = line.indexOf(":");
+      const field = idx >= 0 ? line.slice(0, idx) : line;
+      let value = idx >= 0 ? line.slice(idx + 1) : "";
+      if (value.startsWith(" ")) {
+        value = value.slice(1);
+      }
+      if (field === "data") {
+        data.push(value);
+      } else if (field) {
+        event[field] = value;
+      }
+    }
+    if (!data.length && !Object.keys(event).length) {
+      return null;
+    }
+    if (data.length) {
+      const payload = data.join("\n");
+      event.data = parseNDJSONLine(payload);
+    }
+    return event;
+  }
+
+  function editPreviewResponse(plan, request) {
+    const current = fixtureBodyForPath(request.url.pathname) || {};
+    const changes = plan.bodyArgs.length ? parseBodyArgs(plan.bodyArgs) : {};
+    return jsonResponse(200, {
+      resource: request.url.toString(),
+      workflow: "GET, edit locally, then PUT the changed representation",
+      current,
+      changes,
+      updated: mergeObjects(current, changes),
+      note: "Browser preview only. Run `restish edit` locally for editor integration, diffs, confirmations, and real PUT requests."
+    }, {}, { previewOnly: true });
+  }
+
+  function mergeObjects(base, patch) {
+    if (!base || typeof base !== "object" || Array.isArray(base)) {
+      return patch;
+    }
+    const out = { ...base };
+    for (const [key, value] of Object.entries(patch || {})) {
+      if (value && typeof value === "object" && !Array.isArray(value) && out[key] && typeof out[key] === "object" && !Array.isArray(out[key])) {
+        out[key] = mergeObjects(out[key], value);
+      } else {
+        out[key] = value;
+      }
+    }
+    return out;
   }
 
   async function maybePaginate(first, plan, request) {
@@ -490,12 +1045,7 @@
       };
       const nextResponse = await fetch(nextURL, nextInit);
       const nextRaw = await nextResponse.text();
-      const nextHeaders = {};
-      nextResponse.headers.forEach((value, key) => {
-        nextHeaders[key.replace(/(^|-)([a-z])/g, function (_, prefix, letter) {
-          return prefix + letter.toUpperCase();
-        })] = value;
-      });
+      const nextHeaders = responseHeadersObject(nextResponse.headers);
       const nextBody = decodeBody(nextRaw, nextHeaders["Content-Type"] || "");
       current = {
         proto: "HTTP/2.0",
@@ -538,8 +1088,16 @@
       baseBody.query = Object.fromEntries(request.url.searchParams.entries());
     }
 
-    if (path === "/" || path === "/get" || path === "/headers" || path.startsWith("/anything")) {
+    if (path === "/" || path === "/get" || path === "/head" || path === "/options" || path === "/headers" || path.startsWith("/anything")) {
       return jsonResponse(200, baseBody);
+    }
+
+    if (path === "/types") {
+      return jsonResponse(200, fixtureBodyForPath(path));
+    }
+
+    if (path === "/example") {
+      return jsonResponse(200, fixtureBodyForPath(path));
     }
 
     if (["/post", "/put", "/patch", "/delete"].includes(path)) {
@@ -567,8 +1125,24 @@
 
     if (path === "/auth/api-key-query") {
       return jsonResponse(200, {
-        authenticated: request.url.searchParams.get("api_key") === "docs-key",
+        authenticated: ["docs-key", "docs-query-key"].includes(request.url.searchParams.get("api_key") || ""),
         scheme: "api-key-query"
+      });
+    }
+
+    if (path === "/auth/bearer") {
+      return jsonResponse(200, {
+        authenticated: /^Bearer\s+\S+/.test(requestHeaders.Authorization || ""),
+        scheme: "bearer",
+        subject: "docs-token"
+      });
+    }
+
+    if (path === "/auth/basic") {
+      return jsonResponse(200, {
+        authenticated: /^Basic\s+\S+/.test(requestHeaders.Authorization || ""),
+        scheme: "http-basic",
+        subject: "docs-user"
       });
     }
 
@@ -578,6 +1152,52 @@
         title: "Example problem",
         status: 400,
         detail: "Fixture problem response rendered by the docs browser preview."
+      });
+    }
+
+    if (path === "/slow") {
+      return jsonResponse(200, {
+        delay: request.url.searchParams.get("delay") || "0s",
+        ok: true
+      });
+    }
+
+    if (path === "/flaky") {
+      return jsonResponse(200, {
+        attempt: 2,
+        failures: Number(request.url.searchParams.get("failures") || "1"),
+        key: request.url.searchParams.get("key") || "docs",
+        ok: true
+      });
+    }
+
+    if (path === "/cache") {
+      return jsonResponse(200, {
+        generated: "2026-04-27T00:00:00Z",
+        until: "2026-04-27T00:05:00Z"
+      }, {
+        "Cache-Control": "public, max-age=300",
+        ETag: "\"docs-cache\""
+      });
+    }
+
+    const cachedMatch = path.match(/^\/cached\/(\d+)$/);
+    if (cachedMatch) {
+      return jsonResponse(200, {
+        generated: "2026-04-27T00:00:00Z",
+        until: `2026-04-27T00:00:${String(Math.min(Number(cachedMatch[1]), 59)).padStart(2, "0")}Z`
+      }, {
+        "Cache-Control": `${request.url.searchParams.get("private") === "true" ? "private" : "public"}, max-age=${cachedMatch[1]}`
+      });
+    }
+
+    const etagMatch = path.match(/^\/etag\/([^/]+)$/);
+    if (etagMatch) {
+      return jsonResponse(200, {
+        etag: decodeURIComponent(etagMatch[1]),
+        ok: true
+      }, {
+        ETag: `"${decodeURIComponent(etagMatch[1])}"`
       });
     }
 
@@ -600,6 +1220,68 @@
       });
     }
 
+    if (path === "/items") {
+      if (plan.method === "POST") {
+        return jsonResponse(200, decodeRequestBody(request.init.body, requestHeaders["Content-Type"] || "") || fixtureBodyForPath("/items/docs-demo"));
+      }
+      return jsonResponse(200, [
+        fixtureBodyForPath("/items/docs-demo"),
+        fixtureBodyForPath("/items/docs-second")
+      ]);
+    }
+
+    const itemMatch = path.match(/^\/items\/([^/]+)$/);
+    if (itemMatch) {
+      const id = decodeURIComponent(itemMatch[1]);
+      if (plan.method === "DELETE") {
+        return jsonResponse(200, { deleted: id });
+      }
+      if (plan.method === "PATCH") {
+        return jsonResponse(200, mergeObjects(fixtureBodyForPath(`/items/${id}`), decodeRequestBody(request.init.body, requestHeaders["Content-Type"] || "") || {}));
+      }
+      return jsonResponse(200, fixtureBodyForPath(`/items/${id}`));
+    }
+
+    if (path === "/books") {
+      return jsonResponse(200, [
+        { url: "/books/restish-tour", version: "1", modified: "2026-04-27T00:00:00Z" },
+        { url: "/books/api-field-guide", version: "1", modified: "2026-04-27T00:00:00Z" }
+      ]);
+    }
+
+    const bookMatch = path.match(/^\/books\/([^/]+)$/);
+    if (bookMatch) {
+      const id = decodeURIComponent(bookMatch[1]);
+      const body = decodeRequestBody(request.init.body, requestHeaders["Content-Type"] || "") || {};
+      if (plan.method === "DELETE") {
+        return jsonResponse(200, { deleted: id });
+      }
+      if (["PUT", "PATCH"].includes(plan.method)) {
+        return jsonResponse(200, mergeObjects(fixtureBodyForPath(`/books/${id}`), body));
+      }
+      return jsonResponse(200, fixtureBodyForPath(`/books/${id}`));
+    }
+
+    if (path === "/logs") {
+      return jsonResponse(200, [
+        { type: "info", message: "worker started", user: { id: "docs-1" } },
+        { type: "info", message: "image indexed", user: { id: "docs-2" } },
+        { type: "warn", message: "retry scheduled", user: { id: "docs-1" } }
+      ], {
+        "Content-Type": "application/x-ndjson"
+      });
+    }
+
+    if (path === "/events" || path === "/sse/metrics") {
+      return jsonResponse(200, [
+        { event: "metric", data: { type: "counter", message: "requests total", user: { id: "docs-1" }, value: 42 } },
+        { event: "metric", data: { type: "gauge", message: "queue depth", user: { id: "docs-2" }, value: 7 } },
+        { event: "metric", data: { type: "counter", message: "cache hits", user: { id: "docs-1" }, value: 19 } }
+      ], {
+        "Content-Type": "text/event-stream"
+      });
+    }
+
     const statusMatch = path.match(/^\/status\/(\d{3})$/);
     if (statusMatch) {
       const status = Number(statusMatch[1]);
@@ -610,14 +1292,98 @@
       } : null);
     }
 
-    if (path.startsWith("/images/") || path.startsWith("/bytes/")) {
-      throw new Error("Binary and image responses require the real Restish CLI in this preview.");
+    if (path.startsWith("/images/")) {
+      return {
+        proto: "HTTP",
+        status: 200,
+        headers: {
+          "Content-Type": `image/${path.slice("/images/".length) || "jpeg"}`,
+          "Content-Length": "12345"
+        },
+        links: {},
+        body: "(binary image data)",
+        raw: "(binary image data)",
+        sourceURL: request.url.toString(),
+        previewOnly: true
+      };
+    }
+
+    if (path.startsWith("/bytes/")) {
+      throw new Error("Binary byte responses require the real Restish CLI in this preview.");
     }
 
     return null;
   }
 
-  function jsonResponse(status, body, extraHeaders) {
+  function fixtureBodyForPath(path) {
+    if (path === "/types") {
+      return {
+        boolean: true,
+        number: 123.45,
+        string: "Hello from api.rest.sh",
+        array: ["one", "two", "three"],
+        object: {
+          nested: "value"
+        }
+      };
+    }
+    if (path === "/example") {
+      return {
+        basics: {
+          name: "Restish Docs",
+          url: "https://rest.sh/",
+          profiles: ["github", "docs", "api"]
+        },
+        volunteer: [
+          {
+            organization: "Open Source Collective",
+            summary: "Maintains API tooling and documentation examples."
+          },
+          {
+            organization: "Local Library",
+            summary: "Builds small services for catalog and event data."
+          }
+        ],
+        skills: [
+          {
+            name: "API Technologies",
+            keywords: ["OpenAPI", "HTTP", "JSON", "SSE"]
+          },
+          {
+            name: "Developer Tools",
+            keywords: ["CLI", "Testing", "Documentation"]
+          }
+        ]
+      };
+    }
+    if (path.startsWith("/items/")) {
+      const id = decodeURIComponent(path.slice("/items/".length)) || "docs-demo";
+      return {
+        id,
+        name: id === "docs-second" ? "Second docs item" : "Docs demo item",
+        enabled: true,
+        tags: ["docs", "tour"],
+        updated: "2026-04-27T00:00:00Z"
+      };
+    }
+    if (path.startsWith("/books/")) {
+      const id = decodeURIComponent(path.slice("/books/".length)) || "restish-tour";
+      return {
+        title: id === "api-field-guide" ? "API Field Guide" : "Tour of Restish",
+        author: "Restish Docs",
+        published: "2026-04-27T00:00:00Z",
+        rating_average: 4.8,
+        ratings: 42,
+        recent_ratings: [
+          { date: "2026-04-27T00:00:00Z", rating: 5 },
+          { date: "2026-04-26T00:00:00Z", rating: 4.5 }
+        ]
+      };
+    }
+    return null;
+  }
+
+  function jsonResponse(status, body, extraHeaders, options) {
     return {
       proto: "HTTP",
       status,
@@ -627,11 +1393,22 @@
       },
       links: parseLinkHeader((extraHeaders && extraHeaders.Link) || "", new URL("https://api.rest.sh/")),
       body,
-      raw: JSON.stringify(body)
+      raw: JSON.stringify(body),
+      ...(options || {})
     };
   }
 
   function requestHeadersObject(headers) {
+    const out = {};
+    headers.forEach((value, key) => {
+      out[key.replace(/(^|-)([a-z])/g, function (_, prefix, letter) {
+        return prefix + letter.toUpperCase();
+      })] = value;
+    });
+    return out;
+  }
+
+  function responseHeadersObject(headers) {
     const out = {};
     headers.forEach((value, key) => {
       out[key.replace(/(^|-)([a-z])/g, function (_, prefix, letter) {
@@ -738,16 +1515,57 @@
     if (flags.outputFormat === "table") {
       return tableOutput(value, flags.columns, flags.sortBy);
     }
+    if ((flags.outputFormat === "" || flags.outputFormat === "image") && !explicitFilter && isImageResponse(doc)) {
+      return imageOutput(doc);
+    }
+    if (flags.outputFormat === "gron") {
+      return gronOutput(value);
+    }
+    if (flags.outputFormat === "csv") {
+      return csvOutput(value, flags.columns);
+    }
     if (explicitFilter) {
       return renderValue(value, flags);
     }
     return readableResponse(doc);
   }
 
+  function isImageResponse(doc) {
+    return contentType(doc).startsWith("image/");
+  }
+
+  function contentType(doc) {
+    const headers = doc.headers || {};
+    const key = Object.keys(headers).find((name) => name.toLowerCase() === "content-type");
+    return key ? String(headers[key]).toLowerCase() : "";
+  }
+
+  function imageOutput(doc) {
+    const format = contentType(doc).split(";")[0] || "image/*";
+    const lines = [`${doc.proto || "HTTP/2.0"} ${doc.status} ${statusText(doc.status)}`];
+    const headers = demoHeaders(doc.headers);
+    for (const key of Object.keys(headers).sort()) {
+      lines.push(`${key}: ${headers[key]}`);
+    }
+    lines.push("");
+    return {
+      kind: "image",
+      text: lines.join("\n").replace(/\n?$/, "\n"),
+      url: doc.sourceURL || "",
+      alt: `Response image (${format})`
+    };
+  }
+
   function applyFilter(doc, filter) {
     const expr = filter.trim().replace(/^\./, "");
     if (expr === "@") {
       return doc;
+    }
+    const firstItemMatch = expr.match(/^(.*?)\|\[0\]\.(.+)$/);
+    if (firstItemMatch) {
+      const selected = walk(doc, pathParts(firstItemMatch[1]));
+      const first = Array.isArray(selected) ? selected[0] : undefined;
+      return walk(first, pathParts(firstItemMatch[2]));
     }
     if (expr.startsWith("body |") || expr.startsWith("body[]") || expr.startsWith(".body")) {
       return applyJQishFilter(doc, expr);
@@ -776,6 +1594,9 @@
       return value;
     }
     const [first, ...rest] = parts;
+    if (first.startsWith("{") && first.endsWith("}")) {
+      return projectValue(value, first.slice(1, -1), rest);
+    }
     if (first.startsWith("[") && first.endsWith("]")) {
       return applyBracket(value, first.slice(1, -1), rest);
     }
@@ -789,6 +1610,24 @@
     return undefined;
   }
 
+  function projectValue(value, rawKeys, rest) {
+    const keys = rawKeys.split(",").map((key) => key.trim()).filter(Boolean);
+    if (Array.isArray(value)) {
+      return value.map((item) => projectValue(item, rawKeys, rest));
+    }
+    if (!value || typeof value !== "object") {
+      return undefined;
+    }
+    const out = {};
+    for (const wanted of keys) {
+      const key = Object.keys(value).find((candidate) => candidate.toLowerCase() === wanted.toLowerCase());
+      if (key) {
+        out[key] = rest.length ? walk(value[key], rest) : value[key];
+      }
+    }
+    return out;
+  }
+
   function applyBracket(value, expr, rest) {
     if (!Array.isArray(value)) {
       return undefined;
@@ -800,9 +1639,21 @@
       }
       return walk(value[index], rest);
     }
-    const match = expr.match(/^([A-Za-z0-9_-]+)\s*=\s*['"]?([^'"]+)['"]?$/);
+    const match = expr.match(/^([A-Za-z0-9_-]+)\s*={1,2}\s*['"]?([^'"]+)['"]?$/);
     if (match) {
-      return value.map((item) => item && item[match[1]] === match[2] ? walk(item, rest) : undefined).filter((item) => item !== undefined);
+      const selected = [];
+      for (const item of value) {
+        if (!item || item[match[1]] !== match[2]) {
+          continue;
+        }
+        const result = walk(item, rest);
+        if (Array.isArray(result)) {
+          selected.push(...result);
+        } else if (result !== undefined) {
+          selected.push(result);
+        }
+      }
+      return selected;
     }
     return undefined;
   }
@@ -855,7 +1706,20 @@
     if (flags.outputFormat === "yaml") {
       return yamlOutput(value);
     }
-    return readableOutput(value);
+    if (flags.outputFormat === "gron") {
+      return gronOutput(value);
+    }
+    if (flags.outputFormat === "csv") {
+      return csvOutput(value, flags.columns);
+    }
+    return readableFilteredOutput(value);
+  }
+
+  function readableFilteredOutput(value) {
+    if (value === undefined) {
+      return "null\n";
+    }
+    return JSON.stringify(value, null, 2) + "\n";
   }
 
   function readableResponse(doc) {
@@ -928,6 +1792,59 @@
   function ndjsonOutput(value) {
     const rows = Array.isArray(value) ? value : [value];
     return rows.map((row) => JSON.stringify(row)).join("\n") + "\n";
+  }
+
+  function csvOutput(value, columns) {
+    const rows = Array.isArray(value) ? value : [value];
+    const objects = rows.filter((row) => row && typeof row === "object" && !Array.isArray(row));
+    if (!objects.length) {
+      throw new Error("csv: CSV output requires object rows.");
+    }
+    const cols = columns ? columns.split(",").map((item) => item.trim()).filter(Boolean) : inferColumns(objects);
+    const lines = [cols.map(csvCell).join(",")];
+    for (const row of objects) {
+      lines.push(cols.map((col) => csvCell(row[col])).join(","));
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  function csvCell(value) {
+    const text = value === undefined || value === null
+      ? ""
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value);
+    if (/[",\n\r]/.test(text)) {
+      return `"${text.replace(/"/g, "\"\"")}"`;
+    }
+    return text;
+  }
+
+  function gronOutput(value) {
+    const lines = [];
+    writeGron("json", value, lines);
+    return lines.join("\n") + (lines.length ? "\n" : "");
+  }
+
+  function writeGron(path, value, lines) {
+    if (Array.isArray(value)) {
+      lines.push(`${path} = [];`);
+      value.forEach((item, index) => writeGron(`${path}[${index}]`, item, lines));
+      return;
+    }
+    if (value && typeof value === "object") {
+      lines.push(`${path} = {};`);
+      const keys = Object.keys(value);
+      for (const key of keys) {
+        writeGron(`${path}.${gronKey(key)}`, value[key], lines);
+      }
+      return;
+    }
+    lines.push(`${path} = ${JSON.stringify(value)};`);
+  }
+
+  function gronKey(key) {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : `[${JSON.stringify(key)}]`;
   }
 
   function tableScalar(value) {
@@ -1088,18 +2005,35 @@
     return first ? Object.keys(first).slice(0, 4) : [];
   }
 
-  function setOutput(node, text, isError) {
-    node.textContent = text;
+  function setOutput(node, output, isError) {
+    node.replaceChildren();
+    if (output && typeof output === "object" && output.kind === "image") {
+      node.textContent = output.text || "";
+      if (window.Prism) {
+        Prism.highlightElement(node);
+      }
+      if (output.url) {
+        const image = document.createElement("img");
+        image.className = "restish-playground__terminal-image";
+        image.src = output.url;
+        image.alt = output.alt || "Response image";
+        image.loading = "lazy";
+        node.appendChild(image);
+      }
+    } else {
+      node.textContent = output;
+    }
     const pane = node.parentElement;
     pane.hidden = false;
     pane.classList.toggle("restish-playground__output--error", Boolean(isError));
-    if (window.Prism) {
+    pane.scrollTop = pane.scrollHeight;
+    if (window.Prism && typeof output === "string") {
       Prism.highlightElement(node);
     }
   }
 
   function hideOutput(node) {
-    node.textContent = "";
+    node.replaceChildren();
     const pane = node.parentElement;
     pane.hidden = true;
     pane.classList.remove("restish-playground__output--error");
@@ -1133,8 +2067,19 @@
       setState(state, "Running", "running");
       runButton.disabled = true;
       try {
-        const text = await run(command.value);
-        setOutput(output, text, false);
+        let streamed = false;
+        const text = await run(command.value, {
+          onStream: function (text) {
+            streamed = true;
+            setOutput(output, text, false);
+            setState(state, "Streaming", "running");
+          }
+        });
+        if (!streamed) {
+          setOutput(output, text, false);
+        } else if (output.textContent !== text) {
+          setOutput(output, text, false);
+        }
         setState(state, "Live", "ok");
       } catch (error) {
         const hint = error && error.message && error.message.includes("Failed to fetch")

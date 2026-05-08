@@ -102,7 +102,7 @@ completion, profiles, and API-specific help.
 
 ## Related Pages
 
-- [Quickstart](../quickstart/)
+- [Tour of Restish](../quickstart/)
 - [Completions](/docs/guides/completions/)
 - [Shorthand](/docs/reference/shorthand/)
 - [Query Syntax](/docs/reference/query-syntax/)

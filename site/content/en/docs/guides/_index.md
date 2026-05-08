@@ -8,8 +8,8 @@ description: Task-oriented guides for the main Restish workflows.
 Guides help you make choices across several commands. Use recipes when you need
 one narrow command; use reference when you need exact syntax.
 
-If you are new, finish the [Quickstart](/docs/getting-started/quickstart/)
-first so the examples here have familiar pieces: generic requests, generated
+If you are new, start with the [Tour of Restish](/docs/getting-started/quickstart/)
+so the examples here have familiar pieces: generic requests, generated
 commands, profiles, filtering, and readable output. Then choose the guide that
 matches the kind of work you are doing.
 

@@ -83,12 +83,12 @@ plugins.
 
 ## Next Step
 
-Follow the [Quickstart](../quickstart/) to make your first request and register
-the live example API.
+Follow the [Tour of Restish](../quickstart/) to try the major workflows in your
+browser, then run the same examples locally.
 
 ## Related Pages
 
-- [Quickstart](../quickstart/)
+- [Tour of Restish](../quickstart/)
 - [Shell Setup](../shell-setup/)
 - [Development Setup](/docs/contributing/development-setup/)
 - [Upgrade From v1](../upgrade-from-v1/)

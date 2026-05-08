@@ -55,6 +55,6 @@ the API description to expose a named command.
 
 ## Related Pages
 
-- [Quickstart](/docs/getting-started/quickstart/)
+- [Tour of Restish](/docs/getting-started/quickstart/)
 - [Requests](../requests/)
 - [API Commands](/docs/concepts/api-commands/)

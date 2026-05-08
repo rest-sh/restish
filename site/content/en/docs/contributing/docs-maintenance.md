@@ -19,6 +19,8 @@ Check the nearby docs before changing one page in isolation:
 
 - the section landing page
 - related getting-started pages, guides, recipes, and reference pages
+- the Tour of Restish when the change affects a major workflow, first-click
+  onboarding, or browser-runnable examples
 - plugin operator or author docs if the behavior touches plugins
 - design records under `docs/design/` when architecture or invariants matter
 - the v1 tag or source archive when older example coverage may have been
@@ -51,6 +53,9 @@ For each user-facing page, verify:
 - interactive examples use the default readable output unless the page is
   specifically teaching JSON, scripting, redirects, or exact machine-readable
   response shape
+- the Tour of Restish keeps browser examples runnable where practical and
+  clearly labels local-only setup, config, plugin, shell, and credential
+  workflows
 - examples omit flags that Restish handles by default; for example, image
   responses redirect as body bytes without an output flag
 - prerequisites, auth, config, and private-infrastructure assumptions are
