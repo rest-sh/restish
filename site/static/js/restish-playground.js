@@ -23,6 +23,7 @@
   ]);
   const boolFlags = new Map([
     ["-v", "verbose"],
+    ["-vv", "verbose"],
     ["--verbose", "verbose"],
     ["-r", "raw"],
     ["--rsh-raw", "raw"],
@@ -687,11 +688,11 @@
     const plan = parseCommand(command);
     const request = buildRequest(plan);
     if (plan.mode === "edit") {
-      return render(editPreviewResponse(plan, request), plan);
+      return renderWithVerbose(editPreviewResponse(plan, request), plan, request);
     }
     const preview = docsFixtureResponse(plan, request);
     if (preview && preview.previewOnly) {
-      return render(preview, plan);
+      return renderWithVerbose(preview, plan, request);
     }
     let response;
     let raw;
@@ -703,14 +704,14 @@
       }
       const fixture = docsFixtureResponse(plan, request);
       if (fixture) {
-        return render(fixture, plan);
+        return renderWithVerbose(fixture, plan, request);
       }
       throw error;
     }
     const headers = responseHeadersObject(response.headers);
 
     if (isStreamingContentType(headers["Content-Type"] || "")) {
-      return render(await readStreamingResponse(response, headers, plan, request.url, callbacks.onStream), plan);
+      return renderWithVerbose(await readStreamingResponse(response, headers, plan, request, callbacks.onStream), plan, request);
     }
 
     raw = await response.text();
@@ -726,7 +727,7 @@
     };
     normalized = await maybePaginate(normalized, plan, request);
 
-    return render(normalized, plan);
+    return renderWithVerbose(normalized, plan, request);
   }
 
   async function fetchWithRetries(request, plan) {
@@ -826,7 +827,7 @@
     return error && (error.name === "AbortError" || /aborted/i.test(error.message || ""));
   }
 
-  async function readStreamingResponse(response, headers, plan, url, onStream) {
+  async function readStreamingResponse(response, headers, plan, request, onStream) {
     const contentType = headers["Content-Type"] || "";
     const maxItems = plan.flags.maxItems ? Number(plan.flags.maxItems) : 25;
     const records = [];
@@ -835,15 +836,15 @@
       if (typeof onStream !== "function") {
         return;
       }
-      onStream(render({
+      onStream(renderWithVerbose({
         proto: "HTTP/2.0",
         status: response.status,
         headers,
         links: {},
         body: records.slice(0, maxItems),
         raw,
-        sourceURL: url.toString()
-      }, plan));
+        sourceURL: request.url.toString()
+      }, plan, request));
     };
 
     if (!response.body || !response.body.getReader) {
@@ -896,7 +897,7 @@
       links: {},
       body: records.slice(0, maxItems),
       raw,
-      sourceURL: url.toString()
+      sourceURL: request.url.toString()
     };
   }
 
@@ -1473,6 +1474,88 @@
       key === "vary" ||
       key === "via" ||
       key === "x-request-id";
+  }
+
+  function renderWithVerbose(doc, plan, request) {
+    const output = render(doc, plan);
+    if (!plan.flags.verbose) {
+      return output;
+    }
+    const trace = verboseTrace(doc, plan, request);
+    if (output && typeof output === "object" && output.kind === "image") {
+      return {
+        ...output,
+        text: trace + output.text
+      };
+    }
+    return trace + output;
+  }
+
+  function verboseTrace(doc, plan, request) {
+    const flags = plan.flags;
+    const lines = [
+      "verbose preview",
+      "config: browser preview",
+      "profile: default",
+      `auth: ${requestHasAuth(request) ? "configured" : "none"}`,
+      `input: ${request.init.body ? "body arguments" : "none"}`,
+      `filter: ${flags.headersOnly ? "headers" : flags.filter || "none"}`,
+      `output: ${verboseOutputFormat(doc, plan)}`,
+      `> ${plan.method} ${request.url.toString()}`
+    ];
+
+    const requestHeaders = demoRequestHeaders(requestHeadersObject(request.init.headers));
+    for (const key of Object.keys(requestHeaders).sort()) {
+      lines.push(`> ${key}: ${requestHeaders[key]}`);
+    }
+    if (request.init.body) {
+      const length = typeof request.init.body === "string" ? request.init.body.length : 0;
+      lines.push(`> Content-Length: ${length}`);
+    }
+
+    lines.push(`< ${doc.proto || "HTTP/2.0"} ${doc.status} ${statusText(doc.status)}`);
+    const responseHeaders = demoHeaders(doc.headers);
+    for (const key of Object.keys(responseHeaders).sort()) {
+      lines.push(`< ${key}: ${responseHeaders[key]}`);
+    }
+    lines.push("");
+    return lines.join("\n") + "\n";
+  }
+
+  function requestHasAuth(request) {
+    const headers = requestHeadersObject(request.init.headers);
+    if (Object.keys(headers).some((name) => isSensitiveRequestHeader(name))) {
+      return true;
+    }
+    return request.url.searchParams.has("api_key") || request.url.searchParams.has("access_token");
+  }
+
+  function demoRequestHeaders(headers) {
+    const out = {};
+    for (const [key, value] of Object.entries(headers || {})) {
+      out[key] = isSensitiveRequestHeader(key) ? "<redacted>" : value;
+    }
+    return out;
+  }
+
+  function isSensitiveRequestHeader(name) {
+    const key = name.toLowerCase();
+    return key === "authorization" ||
+      key === "cookie" ||
+      key === "proxy-authorization" ||
+      key === "x-api-key" ||
+      key.includes("token") ||
+      key.includes("secret");
+  }
+
+  function verboseOutputFormat(doc, plan) {
+    const flags = plan.flags;
+    if (flags.raw) return "raw";
+    if (flags.headersOnly) return "headers";
+    if (flags.outputFormat) return flags.outputFormat;
+    if (!flags.filter && isImageResponse(doc)) return "image";
+    if (flags.filter) return "filtered";
+    return "readable";
   }
 
   function render(doc, plan) {
