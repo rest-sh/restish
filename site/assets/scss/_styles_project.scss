@@ -275,6 +275,11 @@ body.td-home .td-navbar__search .td-search-input {
   -webkit-box-decoration-break: clone;
 }
 
+.td-content > .highlight,
+.td-content > pre {
+  max-width: none;
+}
+
 .td-content .mermaid {
   margin: 1rem 0 1.6rem;
   padding: 0.85rem;
