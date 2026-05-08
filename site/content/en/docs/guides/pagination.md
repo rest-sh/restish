@@ -3,6 +3,8 @@ title: Pagination and Links
 linkTitle: Pagination and Links
 weight: 50
 description: Follow collection pages, inspect links, and choose streaming or collection behavior.
+aliases:
+  - /docs/recipes/browse-a-paginated-api-one-page-at-a-time/
 ---
 
 Restish follows recognized `next` links for collection responses by default.

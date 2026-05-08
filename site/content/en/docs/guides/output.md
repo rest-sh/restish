@@ -3,6 +3,8 @@ title: Output
 linkTitle: Output
 weight: 40
 description: Understand how Restish decodes, normalizes, filters, and renders responses.
+aliases:
+  - /docs/recipes/show-only-response-headers/
 ---
 
 Restish output is built around one rule: document formats produce one coherent

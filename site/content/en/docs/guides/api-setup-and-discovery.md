@@ -3,6 +3,8 @@ title: API Setup and Discovery
 linkTitle: API Setup and Discovery
 weight: 15
 description: Register APIs, discover OpenAPI specs, manage generated command sources, and sync changes.
+aliases:
+  - /docs/recipes/re-sync-a-changed-spec/
 ---
 
 Restish can call any URL, but registering an API gives you generated commands,

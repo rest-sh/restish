@@ -3,6 +3,10 @@ title: Authentication
 linkTitle: Authentication
 weight: 20
 description: Configure Restish auth with profiles, generated API setup, safe auth fixtures, OAuth, and external tools.
+aliases:
+  - /docs/recipes/send-an-api-key-in-a-header/
+  - /docs/recipes/send-an-api-key-in-a-query-parameter/
+  - /docs/recipes/inspect-the-auth-header/
 ---
 
 Auth belongs with the request context. In Restish that usually means a profile,
@@ -233,6 +237,6 @@ interactive `$SHELL`, and move complex logic into a script.
 
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
-- [Inspect the Auth Header](/docs/recipes/inspect-the-auth-header/)
+- [API Auth Inspect](/docs/reference/auth-header-command/)
 - [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
 - [Security Design](/docs/contributing/design-records/)

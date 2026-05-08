@@ -3,6 +3,8 @@ title: Filtering
 linkTitle: Filtering
 weight: 45
 description: Select headers, links, and body fields with shorthand queries or jq filters.
+aliases:
+  - /docs/recipes/filter-response-fields/
 ---
 
 Filtering trims a normalized Restish response before formatting. Use shorthand
@@ -107,4 +109,3 @@ preserve array or object shape.
 - [Query Syntax](/docs/reference/query-syntax/)
 - [Output](../output/)
 - [Pagination](../pagination/)
-- [Filter Response Fields](/docs/recipes/filter-response-fields/)

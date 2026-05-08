@@ -3,6 +3,8 @@ title: Upgrade From v1
 linkTitle: Upgrade From v1
 weight: 40
 description: Move from Restish v1 to v2 with the config migration behavior, command changes, and the main workflow differences in one place.
+aliases:
+  - /docs/getting-started/changelog/
 ---
 
 This page is the shortest path for existing Restish v1 users who want to know
@@ -186,9 +188,7 @@ restish config edit
 
 ## Related Pages
 
-- [Changelog](../changelog/)
 - [Install](../install/)
 - [Tour of Restish](../quickstart/)
-- [Your First API Config](../your-first-config/)
 - [Config](/docs/reference/config/)
 - [Install And Use Plugins](/docs/plugins/install-and-use/)

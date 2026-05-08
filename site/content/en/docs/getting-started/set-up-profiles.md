@@ -3,6 +3,8 @@ title: Set Up Profiles
 linkTitle: Set Up Profiles
 weight: 45
 description: Use profiles to switch environments, auth contexts, headers, query defaults, and TLS settings.
+aliases:
+  - /docs/recipes/use-multiple-profiles/
 ---
 
 Profiles are named request defaults under an API. Use them when a command should

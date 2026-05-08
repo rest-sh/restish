@@ -3,6 +3,9 @@ title: Links and Hypermedia
 linkTitle: Links and Hypermedia
 weight: 55
 description: Inspect normalized links from headers and response bodies.
+aliases:
+  - /docs/recipes/inspect-response-links/
+  - /docs/recipes/show-links-for-one-relation/
 ---
 
 Restish normalizes hypermedia links so filters, pagination, and the `links`

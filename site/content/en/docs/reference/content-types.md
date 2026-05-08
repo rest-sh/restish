@@ -3,6 +3,8 @@ title: Content Types
 linkTitle: Content Types
 weight: 28
 description: Reference for built-in content types, request encoding, response decoding, and compression.
+aliases:
+  - /docs/recipes/request-a-specific-response-format/
 ---
 
 Restish uses a content registry for request bodies, response decoding,

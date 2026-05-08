@@ -3,6 +3,8 @@ title: Streaming
 linkTitle: Streaming
 weight: 90
 description: Work with SSE and NDJSON streams while keeping output incremental and script-friendly.
+aliases:
+  - /docs/recipes/stream-events-and-select-fields/
 ---
 
 Restish recognizes Server-Sent Events, NDJSON, and JSON Lines. Streaming
@@ -83,4 +85,3 @@ restish https://api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
 - [Output](../output/)
 - [Filtering](../filtering/)
 - [Output Formats](/docs/reference/output-formats/)
-- [Stream Events and Select Fields](/docs/recipes/stream-events-and-select-fields/)

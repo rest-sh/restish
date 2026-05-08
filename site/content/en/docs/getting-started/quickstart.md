@@ -374,7 +374,6 @@ restish api.rest.sh/events --rsh-max-items 4 -f 'body.data.{message, timestamp}'
 {{< /restish-example >}}
 
 Learn more: [Streaming](../../guides/streaming/),
-[Stream Events And Select Fields](../../recipes/stream-events-and-select-fields/),
 [Output Formats](../../reference/output-formats/).
 
 ## Bound Slow Or Flaky APIs

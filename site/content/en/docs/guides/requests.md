@@ -3,6 +3,8 @@ title: Requests
 linkTitle: Requests
 weight: 10
 description: Build Restish requests with generic HTTP verbs, generated API commands, headers, query params, bodies, and profiles.
+aliases:
+  - /docs/recipes/call-a-json-api/
 ---
 
 Restish supports two request styles: generic HTTP requests for immediate access

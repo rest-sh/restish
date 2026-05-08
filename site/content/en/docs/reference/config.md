@@ -3,6 +3,8 @@ title: Config
 linkTitle: Config
 weight: 20
 description: Reference for Restish configuration files, APIs, profiles, auth, cache, theme, and plugin settings.
+aliases:
+  - /docs/getting-started/your-first-config/
 ---
 
 Restish config is the trust boundary for API base URLs, profiles, auth, TLS,

@@ -3,6 +3,9 @@ title: Input and Shorthand
 linkTitle: Input and Shorthand
 weight: 30
 description: Build structured request bodies with shorthand, stdin, forms, multipart uploads, and files.
+aliases:
+  - /docs/recipes/patch-piped-json-with-shorthand/
+  - /docs/recipes/send-a-form-login-request/
 ---
 
 Restish shorthand lets you create structured request bodies directly on the
@@ -109,4 +112,3 @@ literal `@` should be sent as text.
 - [Shorthand Reference](/docs/reference/shorthand/)
 - [Content Types](/docs/reference/content-types/)
 - [Requests](../requests/)
-- [Patch Piped JSON With Shorthand](/docs/recipes/patch-piped-json-with-shorthand/)

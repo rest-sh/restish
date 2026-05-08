@@ -87,6 +87,5 @@ Plugin protocol release checklist:
 ## Related Pages
 
 - [Install](../../getting-started/install/)
-- [Changelog](../../getting-started/changelog/)
 - [Upgrade From v1](../../getting-started/upgrade-from-v1/)
 - [Install and Use Plugins](../../plugins/install-and-use/)

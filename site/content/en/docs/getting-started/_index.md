@@ -30,11 +30,8 @@ locally.
   generated commands for an API.
 - [Set Up Profiles](./set-up-profiles/) explains named API environments, auth,
   and reusable defaults.
-- [Your First Config](./your-first-config/) shows where local config lives and
-  how to recognize the pieces Restish writes there.
 - [Upgrade From v1](./upgrade-from-v1/) covers migration notes for existing
   Restish users.
-- [Changelog](./changelog/) summarizes user-visible changes.
 
 ## Existing v1 Users
 
@@ -45,4 +42,5 @@ If you already have Restish v1 config or plugins, read [Upgrade From v1](./upgra
 - [Requests](/docs/guides/requests/)
 - [Authentication](/docs/guides/authentication/)
 - [Output](/docs/guides/output/)
+- [Config Reference](/docs/reference/config/)
 - [Example API](/docs/reference/example-api/)

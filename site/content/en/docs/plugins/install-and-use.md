@@ -3,6 +3,8 @@ title: Install and Use Plugins
 linkTitle: Install and Use
 weight: 10
 description: Install, list, remove, configure, verify, and debug Restish plugins.
+aliases:
+  - /docs/recipes/convert-array-output-to-csv/
 ---
 
 This is the operator path for using plugins that already exist.

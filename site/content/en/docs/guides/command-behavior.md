@@ -3,6 +3,8 @@ title: Command Behavior
 linkTitle: Command Behavior
 weight: 85
 description: Understand exit codes, redirects, diagnostics, stdout, stderr, and script-friendly behavior.
+aliases:
+  - /docs/recipes/follow-or-inspect-redirects/
 ---
 
 Restish is designed for terminals and scripts. Output channels, exit codes, and
