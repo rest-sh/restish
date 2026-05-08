@@ -17,7 +17,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-header` | `-H` | repeat `Name: Value` | `RSH_HEADER` | empty | Env is comma-separated and prepended. |
 | `--rsh-query` | `-q` | repeat `key=value` | `RSH_QUERY` | empty | Env is comma-separated and prepended. |
 | `--rsh-server` | `-s` | string | | empty | Overrides scheme/host; path prefixes request path. |
-| `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | TTY readable; non-TTY JSON for structured output; `lines` for scalar line output; no `raw` format. |
+| `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | TTY readable; redirected unfiltered output writes body bytes; filtered structured non-TTY values default to JSON; `lines` for scalar line output; no `raw` format. |
 | `--rsh-silent` | `-S` | bool | | false | Suppress output. |
 | `--rsh-columns` | | string | | empty | Table columns. |
 | `--rsh-sort-by` | | string | | empty | Table sort column. |

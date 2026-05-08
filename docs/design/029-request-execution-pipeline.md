@@ -314,7 +314,8 @@ The rendering contract is:
 - stderr is for prompts, warnings, progress, and diagnostics
 - explicit `-o` always wins
 - TTY defaults are human-oriented
-- non-TTY defaults are machine-oriented
+- redirected unfiltered non-TTY output preserves body bytes
+- non-TTY filtered, collected, or formatted output is machine-oriented
 
 The document/record distinction from design 028 is the central rule here.
 

@@ -30,20 +30,21 @@ restish https://api.rest.sh/example -o gron
 restish https://api.rest.sh/images/png -o image
 ```
 
-For file redirects, binary responses already write body bytes. This includes
-`image/*`, `application/octet-stream`, `application/zip`, and unknown
-non-text payloads:
+For file redirects, unfiltered responses already write body bytes. This
+includes structured formats such as JSON and CBOR as well as `image/*`,
+`application/octet-stream`, `application/zip`, text, and unknown payloads:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
-restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
+restish https://api.rest.sh/content/cbor > response.cbor
+restish https://api.rest.sh/content/cbor -o json > response.json
 ```
 
 Raw output bypasses Restish's structured body decoding and formatting. It still
 uses the body exposed by the HTTP client after any content-encoding
 decompression, so it is not a capture of the exact compressed wire bytes.
-Use `-r` or `--rsh-raw` for raw response body bytes; `raw` is not an `-o`
-format.
+Use `-r` or `--rsh-raw` for raw response body bytes on a terminal; `raw` is not
+an `-o` format.
 
 ## Record Formats
 

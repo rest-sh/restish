@@ -219,7 +219,8 @@ tests or migration notes:
   descent such as `..url`
 - pagination progress never appears in stdout, and metadata filters do not
   fetch extra pages merely because a body collection has a next link
-- `-r` and redirected image downloads preserve the original response body bytes
+- `-r` and redirected unfiltered downloads preserve the original response body
+  bytes
 
 Any future v1-docs example that does not work in v2 should be classified before
 release as restored, intentionally changed with documentation, or unsupported.

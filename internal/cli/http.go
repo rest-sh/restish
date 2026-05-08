@@ -269,7 +269,8 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	// Pagination: if this is a GET and there's a next link, paginate.
 	gf := globalFlagsFromContext(requestContext(cmd))
-	if method == "GET" && !gf.Raw && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
+	tty := output.IsTerminal(c.Stdout)
+	if method == "GET" && !gf.Raw && !c.defaultRawBodyOutput(gf, tty) && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
 		var pagCfg *config.PaginationConfig
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
@@ -357,7 +358,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		trace.RenderAfter(c.Stderr, gf.Verbose)
 		return c.writeRawBytes(resp.Raw)
 	}
-	if !tty && !explicitFilter && fmtName == "" && defaultRawBytesResponse(resp) {
+	if c.defaultRawBodyOutput(gf, tty) {
 		trace := requestTraceFromContext(requestContext(cmd))
 		trace.Info("Output", "raw bytes (auto)")
 		trace.Step("raw")
@@ -505,20 +506,14 @@ func (c *CLI) populateRequestTrace(trace *requestTrace, apiName, profileName, in
 	}
 }
 
-func defaultRawBytesResponse(resp *output.Response) bool {
-	if resp == nil || len(resp.Raw) == 0 {
-		return false
-	}
-	contentType := output.Header(resp.Headers, "Content-Type")
-	base, _, _ := mime.ParseMediaType(contentType)
-	switch {
-	case strings.HasPrefix(base, "image/"):
-		return true
-	case base == "application/octet-stream" || base == "application/zip":
-		return true
-	}
-	_, bodyIsBytes := resp.Body.([]byte)
-	return bodyIsBytes
+func (c *CLI) defaultRawBodyOutput(gf GlobalFlags, tty bool) bool {
+	return !tty &&
+		!gf.Raw &&
+		gf.OutputFormat == "" &&
+		!explicitOutputFilter(gf) &&
+		!gf.Collect &&
+		gf.MaxItems == 0 &&
+		len(c.pluginsByHook["response-middleware"]) == 0
 }
 
 func traceInputSource(info input.BodyInfo, hasBody bool) string {

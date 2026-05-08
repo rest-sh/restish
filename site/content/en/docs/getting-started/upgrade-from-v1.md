@@ -88,10 +88,9 @@ These changes are intentional in v2 and are not treated as regressions:
   overlay or fall back to the default config when that file is missing
 - generated command names are derived directly from the current spec instead of
   preserving older alias behavior
-- redirected non-TTY output is structured JSON for known structured responses,
-  not raw bytes by default; binary responses still pass through as bytes when
-  the response is `image/*`, `application/octet-stream`, `application/zip`, or
-  an unknown non-text payload
+- redirected non-TTY output preserves response body bytes when no filter,
+  collection, metadata shortcut, or output format is set; use `-o json` when a
+  script needs Restish to render decoded structured data as JSON
 - filter language is auto-detected between shorthand and jq; use
   `--rsh-filter-lang` only when a filter is ambiguous
 - automatic pagination follows `next` links only on the same origin. Cross-host
@@ -189,7 +188,7 @@ restish config edit
 
 - [Changelog](../changelog/)
 - [Install](../install/)
-- [Quickstart](../quickstart/)
+- [Tour of Restish](../quickstart/)
 - [Your First API Config](../your-first-config/)
 - [Config](/docs/reference/config/)
 - [Install And Use Plugins](/docs/plugins/install-and-use/)

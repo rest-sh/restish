@@ -9,17 +9,15 @@ Restish chooses defaults to be useful interactively and predictable in scripts,
 but an explicit format is better when a script depends on a specific shape.
 
 The defaults are designed around where stdout is going. A terminal should show
-something readable to a human. A pipe or file should usually get a stable
-machine-readable value. Binary image downloads are the exception: when stdout
-is redirected, Restish writes the image body bytes so the saved file opens
-normally.
+something readable to a human. A pipe or file should get the response body
+bytes unless you ask Restish to filter, collect, or format the response.
 
 ## Main Rule
 
 - TTY output defaults to `readable` for structured responses.
-- Non-TTY structured output defaults to JSON.
-- Redirected image responses are written as decoded body bytes.
-- `--rsh-raw` preserves decoded body bytes for generic byte streams.
+- Redirected unfiltered output writes response body bytes.
+- `--rsh-raw` writes response body bytes explicitly and works the same way for
+  JSON, CBOR, images, text, and other response types.
 - `-o json` and `-o yaml` produce complete documents.
 - `-o ndjson` produces records.
 - `-o lines` produces one scalar value per line.
@@ -30,9 +28,10 @@ normally.
 
 ```bash
 restish https://api.rest.sh/images
-restish https://api.rest.sh/images > images.json
+restish https://api.rest.sh/images -o json > images.json
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
-restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
+restish https://api.rest.sh/content/cbor > response.cbor
+restish https://api.rest.sh/content/cbor -o json > response.json
 restish https://api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
@@ -50,9 +49,8 @@ longer asking for response body bytes; you are asking Restish to render the
 selected value.
 
 Raw response output is based on the body after HTTP content-encoding
-decompression, not the exact compressed wire transfer. Use `-r` or
-`--rsh-raw` for raw response body bytes. `raw` is not an `-o` output format,
-and raw mode cannot be combined with filters.
+decompression, not the exact compressed wire transfer. `raw` is not an `-o`
+output format, and raw mode cannot be combined with filters.
 
 ## Related Pages
 

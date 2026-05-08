@@ -50,7 +50,7 @@ func TestCommandContextCancelsPaginationRequests(t *testing.T) {
 
 	root := c.newRootCmd()
 	root.SetContext(ctx)
-	root.SetArgs([]string{"get", "https://api.example.com/items"})
+	root.SetArgs([]string{"get", "https://api.example.com/items", "-o", "json"})
 
 	err := root.Execute()
 	if !errors.Is(err, context.Canceled) {

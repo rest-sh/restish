@@ -172,9 +172,11 @@ Silent discarding of user intent is not acceptable.
 
 ## Raw And Line Output
 
-`--rsh-raw` writes the original response body bytes after transfer decoding. It
-is incompatible with `--rsh-filter` and `--rsh-headers` because filtered values
-are normalized logical values, not byte-preserving response payloads.
+`--rsh-raw` writes the original response body bytes after transfer decoding.
+Redirected stdout uses the same byte-preserving body path when no filter,
+metadata shortcut, collection, or output format is set. Raw output is
+incompatible with `--rsh-filter` and `--rsh-headers` because filtered values are
+normalized logical values, not byte-preserving response payloads.
 
 Filtered scalar values print plainly by default:
 

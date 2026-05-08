@@ -18,7 +18,9 @@ restish -H 'Accept: application/yaml' https://api.rest.sh/formats/yaml -o yaml
 {{< /restish-example >}}
 
 Use this when a server negotiates aggressively or when you need to prove that a
-specific response type decodes correctly. The [Content Types reference](/docs/reference/content-types/)
+specific response type decodes correctly. If you redirect without `-o`, Restish
+saves the response body bytes in the server's format; add `-o json` when the
+file should be JSON. The [Content Types reference](/docs/reference/content-types/)
 lists the built-in decoders.
 
 Related: [Content Types](/docs/reference/content-types/), [Output](/docs/guides/output/).

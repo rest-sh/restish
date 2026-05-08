@@ -77,13 +77,13 @@ func useThreePageObjectTransport(c *cli.CLI) {
 	})
 }
 
-// TestPaginationThreePages verifies that automatic pagination merges all pages
-// into one valid JSON document by default on non-TTY stdout.
-func TestPaginationThreePages(t *testing.T) {
+// TestPaginationThreePagesWithExplicitJSON verifies that automatic pagination
+// merges all pages into one valid JSON document when JSON output is requested.
+func TestPaginationThreePagesWithExplicitJSON(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -96,6 +96,21 @@ func TestPaginationThreePages(t *testing.T) {
 		if values[i] != want {
 			t.Fatalf("values[%d] = %d, want %d", i, values[i], want)
 		}
+	}
+}
+
+func TestPaginationDefaultRedirectPreservesFirstResponseBytes(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useThreePageTransport(c)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got, want := out.String(), `[1,2,3]`; got != want {
+		t.Fatalf("default redirected output = %q, want first response bytes %q", got, want)
+	}
+	if strings.Contains(errOut.String(), "pagination") {
+		t.Fatalf("default redirected raw output should not paginate, got stderr %q", errOut.String())
 	}
 }
 
@@ -125,7 +140,7 @@ func TestPaginationStopsOnCrossOriginNextURL(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if crossOriginRequests != 0 {
@@ -167,7 +182,7 @@ func TestPaginationBlocksHTTPToHTTPSSchemeChange(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "get", "http://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "http://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if upgradeRequests != 0 {
@@ -209,7 +224,7 @@ func TestPaginationBlocksHTTPSToHTTPDowngrade(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if downgradeRequests != 0 {
@@ -254,7 +269,7 @@ func TestPaginationMaxPages(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -545,7 +560,7 @@ func TestPaginationCycleDetection(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if !strings.Contains(errOut.String(), "cycle detected") {
@@ -585,7 +600,7 @@ func TestPaginationItemsPathScalarWarns(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if !strings.Contains(errOut.String(), "items_path") {
@@ -623,7 +638,7 @@ func TestPaginationItemsPathNonObjectFails(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	err := c.Run([]string{"restish", "get", "myapi/items"})
+	err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"})
 	if err == nil || !strings.Contains(err.Error(), "items_path") {
 		t.Fatalf("expected items_path error, got %v", err)
 	}
@@ -652,7 +667,7 @@ func TestPaginationNextPathNonStringFails(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	err := c.Run([]string{"restish", "get", "myapi/items"})
+	err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"})
 	if err == nil || !strings.Contains(err.Error(), "next_path") {
 		t.Fatalf("expected next_path error, got %v", err)
 	}
@@ -705,7 +720,7 @@ func TestPaginationProgressOnStderr(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -812,7 +827,7 @@ func TestPaginationLaterPageErrorFailsCollectedOutput(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"})
 	if exitCode(err) != 1 {
 		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
 	}
@@ -990,10 +1005,14 @@ func TestPaginationLaterPageErrorCanBeIgnored(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-ignore-status-code"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-ignore-status-code", "-o", "json"}); err != nil {
 		t.Fatalf("get with ignore-status failed: %v", err)
 	}
-	if !strings.Contains(out.String(), `"id":1`) || !strings.Contains(out.String(), `"id":2`) {
-		t.Fatalf("expected both pages when status ignored, got %q", out.String())
+	var values []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected JSON output when status ignored, got %q: %v", out.String(), err)
+	}
+	if len(values) != 2 || values[0]["id"] != 1 || values[1]["id"] != 2 {
+		t.Fatalf("expected both pages when status ignored, got %#v", values)
 	}
 }

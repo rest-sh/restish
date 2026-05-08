@@ -128,7 +128,10 @@ The formatting model is intentionally adaptive:
 - explicit `-o <format>` wins
 - TTY + `image/*` content type may dispatch to the image formatter
 - TTY default is `readable`
-- non-TTY defaults distinguish between original raw bytes and normalized data
+- redirected non-TTY output preserves original body bytes when no filter,
+  metadata shortcut, pagination collection, or explicit output format is set
+- non-TTY filtered or transformed values use formatter defaults, with JSON as
+  the machine-readable default for structured values
 
 Explicit conflicting modes should be surfaced clearly. If one option asks for
 headers-only output and another asks for filtered body projection, the user
@@ -179,18 +182,25 @@ with pagination, streaming, and filtering.
 
 ## Default Output Behavior
 
-When stdout is not a TTY and Restish is writing normalized structured data, the
-default output is JSON rather than raw bytes. Explicit `-r` remains the escape
-hatch for original response-body bytes.
+When stdout is not a TTY and the user has not asked Restish to filter, collect,
+or reformat the response, the default output is the original response body bytes
+after HTTP content-encoding decompression. This keeps shell redirection aligned
+with the common file-saving mental model, even for structured binary formats
+such as CBOR.
+
+Explicit `-r` requests the same original-body byte output regardless of whether
+stdout is a TTY. It remains incompatible with filters and output formats because
+those options ask Restish to render a normalized value rather than preserve the
+response body.
 
 The practical rule is:
 
-- if Restish is still outputting the original payload unchanged, raw output is
-  meaningful
+- if Restish is still outputting the original payload unchanged, write body bytes
 - if Restish is outputting an explicitly filtered scalar, print the scalar
   plainly without JSON string quotes
 - if Restish is outputting a transformed or selected structured value, preserve
-  its shape with the selected/default formatter
+  its shape with the selected/default formatter, defaulting to JSON for
+  structured non-TTY values
 
 ## Readable Output Contract
 
@@ -285,9 +295,8 @@ Output behavior must not corrupt data:
 
 - printable text bodies should render as text in human-oriented formats
 - unknown binary should remain bytes, not coerced strings
-- redirected or piped binary responses, including `image/*`, should write the
-  payload bytes exactly unless the user explicitly selected a different
-  formatter
+- redirected or piped unfiltered responses should write the payload bytes
+  exactly unless the user explicitly selected a different formatter
 - JSON formatters should emit stable JSON without unnecessary HTML escaping
 
 Binary-to-string coercion is a design bug because it damages fidelity and later

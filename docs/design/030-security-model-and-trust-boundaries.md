@@ -178,6 +178,11 @@ distinguish:
 If Restish cannot safely render binary to a TTY, it should use a placeholder or
 require `-r`.
 
+Redirected stdout is different: when no filter, metadata shortcut, pagination
+collection, or output format is set, Restish may write body bytes directly
+because the user is saving or piping the response rather than asking for a TTY
+presentation.
+
 ## Plugin Safety
 
 Plugins are trusted local executables that run at the user's own risk. The host

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
@@ -25,6 +26,24 @@ func useJSONResponse(c *cli.CLI, status int, body string) {
 			Request:    r,
 		}, nil
 	})
+}
+
+func useCBORResponse(t *testing.T, c *cli.CLI, status int, value any) []byte {
+	t.Helper()
+	raw, err := cbor.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal cbor: %v", err)
+	}
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/cbor"}},
+			Body:       io.NopCloser(bytes.NewReader(raw)),
+			Request:    r,
+		}, nil
+	})
+	return raw
 }
 
 func pngBytes(t *testing.T) []byte {
@@ -452,13 +471,40 @@ func TestBinaryResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	}
 }
 
-func TestStructuredResponseDefaultNonTTYStillWritesJSON(t *testing.T) {
+func TestStructuredJSONResponseDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
+	raw := "{\n  \"ok\": true\n}\n"
 	c, out, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{"ok":true}`)
+	useJSONResponse(c, 200, raw)
 	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"ok":true`) {
-		t.Fatalf("expected formatted JSON document, got %q", out.String())
+	if got := out.String(); got != raw {
+		t.Fatalf("default redirected output changed body bytes:\ngot  %q\nwant %q", got, raw)
+	}
+}
+
+func TestStructuredCBORResponseDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	raw := useCBORResponse(t, c, 200, map[string]any{"ok": true})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), raw) {
+		t.Fatalf("default redirected output changed CBOR bytes:\ngot  %x\nwant %x", out.Bytes(), raw)
+	}
+}
+
+func TestExplicitJSONOutputTranscodesStructuredCBOR(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useCBORResponse(t, c, 200, map[string]any{"ok": true})
+	if err := c.Run([]string{"restish", "get", "-o", "json", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got map[string]bool
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("explicit JSON output is not JSON: %q: %v", out.String(), err)
+	}
+	if !got["ok"] {
+		t.Fatalf("explicit JSON output = %#v, want ok=true", got)
 	}
 }

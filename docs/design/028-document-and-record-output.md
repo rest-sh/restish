@@ -109,32 +109,41 @@ That means:
 Pagination may change *how* Restish executes, but not *what contract* the user
 asked for.
 
-### Redirected Output Defaults To JSON Documents
+### Redirected Output Saves Body Bytes By Default
 
-When stdout is not a TTY and Restish is writing normalized structured output,
-the default should be JSON instead of raw bytes.
+When stdout is not a TTY and the user did not request a filter, metadata
+shortcut, pagination collection, or output format, Restish should write the
+response body bytes after HTTP content-encoding decompression. Redirection is
+therefore a byte-preserving save path for JSON, CBOR, YAML, images, text, and
+unknown payloads.
 
-This is a deliberate shift from the earlier v2 behavior. The previous non-TTY
-default of `raw` was good for byte-preserving passthrough, but it interacts
-poorly with pagination, filtering, readable fallbacks, and other operations
-that produce normalized values rather than the original wire payload.
+This keeps a clean product distinction:
 
-The revised rule is:
+- redirection saves the response body bytes
+- `-o <format>` transforms the decoded body or selected value
+- filters and metadata shortcuts render normalized values
+- `--rsh-collect` opts into a synthesized multi-page document
 
-- when Restish is still writing the original unmodified raw payload, raw output
-  remains meaningful and available explicitly through `-r`
+The rule is:
+
+- when Restish is still writing the original unmodified payload, raw body-byte
+  output is meaningful and is also available explicitly through `-r`
 - when an explicit filter selects a scalar, Restish may print the scalar plainly
   because the selected value is already shell-native
-- when Restish is writing a normalized or transformed value, redirected output
-  should default to JSON
+- when Restish is writing a normalized, collected, or transformed structured
+  value without an explicit format, redirected output should default to JSON
 
-Practically, this means users can write:
+Practically, saving a negotiated CBOR response keeps CBOR bytes:
 
 ```bash
-restish api.rest.sh/images --rsh-collect -f '.body | map(.id)' > ids.json
+restish api.rest.sh/content/cbor > response.cbor
 ```
 
-without needing to add `-o json`.
+Converting that same response to JSON is explicit:
+
+```bash
+restish api.rest.sh/content/cbor -o json > response.json
+```
 
 ### `-o json` Preserves Document Framing
 
@@ -378,7 +387,8 @@ Clear failure is better than silently emitting invalid or misleading output.
 ### Paginated Bounded Response
 
 - default TTY: readable, low-latency human output
-- default non-TTY: JSON document output
+- default redirected non-TTY without filters or formats: first response body
+  bytes, with automatic pagination skipped
 - `-o json`: valid JSON document; unfiltered pagination merges items, filtered
   pagination renders filtered item results
 - `-o yaml`: valid YAML document; unfiltered pagination merges items, filtered
@@ -426,12 +436,11 @@ done
 Dump all IDs to a JSON file:
 
 ```bash
-restish api.rest.sh/images --rsh-collect -f '.body | map(.id)' > ids.json
+restish api.rest.sh/images --rsh-collect -f '.body | map(.id)' -o json > ids.json
 ```
 
-Because stdout is redirected, Restish should default to document JSON output.
 Because the filter is whole-collection, the command opts into collection
-explicitly.
+explicitly. `-o json` makes the output serialization explicit for scripts.
 
 Export paginated data to CSV:
 

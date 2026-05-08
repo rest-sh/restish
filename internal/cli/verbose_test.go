@@ -451,7 +451,7 @@ func TestVerboseLogsEveryPaginatedRequest(t *testing.T) {
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageTransport(c)
 
-	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/items", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 

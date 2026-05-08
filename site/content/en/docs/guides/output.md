@@ -55,11 +55,11 @@ format for structured streams, and `lines` is for shell-friendly scalar values.
 
 ## Document vs Record Output
 
-Use document output when the next program expects one complete value. Redirected
-structured output defaults to JSON, so this does not need `-o json`:
+Use document output when the next program expects one complete value. Make the
+format explicit in scripts and redirects:
 
 ```bash
-restish https://api.rest.sh/images --rsh-collect > images.json
+restish https://api.rest.sh/images --rsh-collect -o json > images.json
 ```
 
 Use record output when you want one item per line:
@@ -95,24 +95,31 @@ as JSON.
 
 ## Raw Bytes And Files
 
-Binary responses redirect as body bytes by default. This includes images,
-octet streams, zip files, and unknown non-text payloads:
+Unfiltered responses redirect as body bytes by default. This includes JSON,
+CBOR, YAML, images, octet streams, zip files, text, and unknown payloads:
 
 ```bash
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 restish https://api.rest.sh/bytes/64 > sample.bin
+restish https://api.rest.sh/content/cbor > response.cbor
 ```
 
-Use raw output explicitly when you want bytes regardless of content type:
+Choose an output format when you want Restish to transform the decoded body:
+
+```bash
+restish https://api.rest.sh/content/cbor -o json > response.json
+```
+
+Use raw output explicitly when you want body bytes even on a terminal:
 
 ```bash
 restish https://api.rest.sh/bytes/64 --rsh-raw > sample.bin
 ```
 
-Raw output bypasses Restish's structured body decoding and formatting, but it
-is still based on the body after HTTP content-encoding decompression. Use
-`-r` or `--rsh-raw` for raw response body bytes; `raw` is not an `-o` format
-and raw mode cannot be combined with filters.
+Raw output bypasses Restish's structured body decoding and formatting for
+presentation, but it is still based on the body after HTTP content-encoding
+decompression. `raw` is not an `-o` format and raw mode cannot be combined with
+filters.
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 

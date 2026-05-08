@@ -48,6 +48,26 @@ restish https://api.rest.sh/images -o json
 
 **Related docs:** [Output](/docs/guides/output/), [Output Defaults](/docs/reference/output-defaults/).
 
+## I Redirected Output And Got The Server's Format
+
+**Symptom:** A redirected response is CBOR, YAML, text, or another server format
+instead of JSON.
+
+**Likely cause:** Redirected unfiltered output saves response body bytes.
+
+**How to confirm:** Run with an explicit format.
+
+**Fix:**
+
+```bash
+restish https://api.rest.sh/content/cbor -o json > response.json
+```
+
+**Prevention:** Use `-o json` when a file or script needs JSON. Omit `-o` when
+you want to save the response body unchanged.
+
+**Related docs:** [Output Defaults](/docs/reference/output-defaults/), [Save a Response Unchanged](/docs/recipes/save-a-response-unchanged/).
+
 ## Config Directory Cannot Be Determined
 
 **Symptom:** Restish says it cannot determine the config directory.

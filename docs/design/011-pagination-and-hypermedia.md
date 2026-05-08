@@ -248,11 +248,13 @@ produces a normalized link map like:
 and allows:
 
 ```bash
-restish get https://api.example.com/items
+restish get https://api.example.com/items -o json
 ```
 
-to produce one merged logical result across all pages by default on non-TTY
-output, while `-o ndjson` streams records explicitly.
+to produce one merged logical result across all pages as an explicit JSON
+document, while `-o ndjson` streams records explicitly. A redirected request
+without `-o`, filters, or collection preserves the first response body bytes and
+does not synthesize a paginated document.
 
 For an API with nested collection data, config can guide pagination:
 

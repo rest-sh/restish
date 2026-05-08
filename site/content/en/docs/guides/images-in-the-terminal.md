@@ -28,8 +28,8 @@ restish https://api.rest.sh/images/png > image.png
 restish https://api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
-Image responses redirect as body bytes by default, so no output flag is
-needed when saving them to a file.
+Unfiltered responses redirect as body bytes by default, so no output flag is
+needed when saving an image to a file.
 
 ## Terminal Support
 

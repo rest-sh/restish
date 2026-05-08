@@ -14,8 +14,8 @@ restish -v https://api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.
 ```
 
 The body goes to stdout and verbose metadata goes to stderr, so the saved file
-stays clean. Image responses redirect as body bytes by default; see
+stays clean. Unfiltered responses redirect as body bytes by default; see
 [Output Defaults](/docs/reference/output-defaults/) for how redirects choose
-formats.
+between body bytes and formatted values.
 
 Related: [Command Behavior](/docs/guides/command-behavior/), [Output](/docs/guides/output/).

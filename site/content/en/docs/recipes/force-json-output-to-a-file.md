@@ -5,10 +5,10 @@ weight: 44
 description: Write one JSON document to a file.
 ---
 
-Redirected structured output defaults to JSON, but this recipe is intentionally
-explicit because scripts often need a stable file shape. `--rsh-collect` matters
-when pagination is involved: it asks Restish to build one logical document
-before writing the file.
+Redirected output saves response body bytes by default. Choose `-o json` when a
+script needs Restish to render decoded structured data as one JSON document.
+`--rsh-collect` matters when pagination is involved: it asks Restish to build
+one logical document before writing the file.
 
 ```bash
 restish https://api.rest.sh/images --rsh-collect -o json > images.json
