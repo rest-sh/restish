@@ -26,6 +26,8 @@
       {{ $p := . -}}
       {{ range .Site.Menus.main -}}
       <li class="nav-item">
+        {{ $menuURL := urls.Parse .URL -}}
+        {{ $isExternal := and (ne $menuURL.Host "") (ne $baseURL.Host $menuURL.Host) -}}
         {{ $active := or ($p.IsMenuCurrent "main" .) ($p.HasMenuCurrent "main" .) -}}
         {{ $href := "" -}}
         {{ with .Page -}}
@@ -34,7 +36,9 @@
         {{ else -}}
           {{ $href = .URL | relLangURL -}}
         {{ end -}}
-        {{ $isExternal := ne $baseURL.Host (urls.Parse .URL).Host -}}
+        {{ if and (not $active) (not $isExternal) $href -}}
+          {{ $active = or (eq $.RelPermalink $href) (and (ne $href "/") (strings.HasPrefix $.RelPermalink $href)) -}}
+        {{ end -}}
         <a
           class="nav-link {{- if $active }} active {{- end }}"
           href="{{ $href }}"
