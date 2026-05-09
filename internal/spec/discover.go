@@ -26,6 +26,7 @@ import (
 const maxSpecBytes = 50 * 1024 * 1024
 
 const defaultDiscoverTimeout = 30 * time.Second
+const defaultExplicitSpecDiscoverTimeout = 2 * time.Minute
 
 var ErrNoSpecFound = errors.New("no API spec found")
 
@@ -73,6 +74,11 @@ type DiscoverConfig struct {
 	AllowCrossOrigin bool
 	// ForceRefresh bypasses any cached entry and rebuilds it from the source.
 	ForceRefresh bool
+	// Timeout is used when the caller context has no deadline. Zero selects a
+	// default based on discovery mode.
+	Timeout time.Duration
+	// Trace receives verbose discovery progress messages.
+	Trace func(format string, args ...any)
 }
 
 // Discover returns the APISpec for an API, using cache when available.
@@ -85,9 +91,10 @@ type DiscoverConfig struct {
 func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISpec, error) {
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultDiscoverTimeout)
+		ctx, cancel = context.WithTimeout(ctx, discoverTimeout(cfg))
 		defer cancel()
 	}
+	tracef(cfg.Trace, "OpenAPI discovery for %q: base=%s spec=%s", cfg.APIName, cfg.BaseURL, cfg.SpecURL)
 
 	// 1. Cache check (synchronous, no network).
 	if cfg.CacheDir != "" && !cfg.ForceRefresh {
@@ -101,6 +108,7 @@ func Discover(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*APISp
 			opts := entry.loadOptions()
 			opts.Context = ctx
 			opts.Transport = effectiveTransport(cfg)
+			opts.Trace = cfg.Trace
 			if spec, err := loadWithOptions(entry.contentType(), entry.raw(), loaders, opts); err == nil && spec != nil {
 				return spec, nil
 			}
@@ -175,6 +183,22 @@ loadFresh:
 	}
 
 	return spec, nil
+}
+
+func discoverTimeout(cfg DiscoverConfig) time.Duration {
+	if cfg.Timeout > 0 {
+		return cfg.Timeout
+	}
+	if cfg.SpecURL != "" || len(cfg.SpecFiles) > 0 {
+		return defaultExplicitSpecDiscoverTimeout
+	}
+	return defaultDiscoverTimeout
+}
+
+func tracef(trace func(format string, args ...any), format string, args ...any) {
+	if trace != nil {
+		trace(format, args...)
+	}
 }
 
 func cacheSourceMatches(cfg DiscoverConfig, entry *cacheEntry) bool {
@@ -314,6 +338,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 				SourceURL:        sourceURL,
 				AllowCrossOrigin: cfg.AllowCrossOrigin,
 				Transport:        tr,
+				Trace:            cfg.Trace,
 			})
 			select {
 			case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
@@ -326,7 +351,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	if cfg.SpecURL != "" {
 		u := cfg.SpecURL
 		launch(0, u, func() (string, []byte, time.Duration, error) {
-			ct, body, ttl, err := fetchBytes(ctx, u, tr)
+			ct, body, ttl, err := fetchBytes(ctx, u, tr, cfg.Trace)
 			if errors.Is(err, errNoSpecCandidate) {
 				return "", nil, 0, fmt.Errorf("GET %s: 404 Not Found", u)
 			}
@@ -342,7 +367,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	// Probe base URL: extract Link headers and try the body itself.
 	baseURL := cfg.BaseURL
 	launch(1, baseURL, func() (string, []byte, time.Duration, error) {
-		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr, cfg.AllowCrossOrigin)
+		ct, body, ttl, linkURLs, err := fetchWithLinks(ctx, baseURL, tr, cfg.AllowCrossOrigin, cfg.Trace)
 		if err != nil {
 			return "", nil, 0, err
 		}
@@ -353,7 +378,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		for _, lu := range linkURLs {
 			u := lu
 			launch(1, u, func() (string, []byte, time.Duration, error) {
-				return fetchBytes(ctx, u, tr)
+				return fetchBytes(ctx, u, tr, cfg.Trace)
 			})
 		}
 		return ct, body, ttl, nil
@@ -363,7 +388,7 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 	for _, path := range wellKnownSpecPaths {
 		u := joinURL(cfg.BaseURL, path)
 		launch(1, u, func() (string, []byte, time.Duration, error) {
-			return fetchBytes(ctx, u, tr)
+			return fetchBytes(ctx, u, tr, cfg.Trace)
 		})
 	}
 
@@ -409,13 +434,14 @@ func collectDiscoveryResults(ctx context.Context, cancel context.CancelFunc, ch 
 }
 
 // fetchBytes performs a GET and returns content-type, body, cache TTL, and error.
-func fetchBytes(ctx context.Context, rawURL string, tr http.RoundTripper) (string, []byte, time.Duration, error) {
-	ct, body, ttl, _, err := fetchWithLinks(ctx, rawURL, tr, true)
+func fetchBytes(ctx context.Context, rawURL string, tr http.RoundTripper, trace func(format string, args ...any)) (string, []byte, time.Duration, error) {
+	ct, body, ttl, _, err := fetchWithLinks(ctx, rawURL, tr, true, trace)
 	return ct, body, ttl, err
 }
 
 // fetchWithLinks performs a GET and also returns parsed Link header spec URLs.
-func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper, allowCrossOrigin bool) (ct string, body []byte, ttl time.Duration, links []string, err error) {
+func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper, allowCrossOrigin bool, trace func(format string, args ...any)) (ct string, body []byte, ttl time.Duration, links []string, err error) {
+	tracef(trace, "GET OpenAPI source %s", rawURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", nil, 0, nil, err
@@ -619,7 +645,7 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 				opts.LocalPath = localPath
 			}
 		} else {
-			ct, data, _, err = fetchBytes(ctx, src, tr)
+			ct, data, _, err = fetchBytes(ctx, src, tr, cfg.Trace)
 			opts.SourceURL = src
 			opts.AllowCrossOrigin = cfg.AllowCrossOrigin
 		}
@@ -628,6 +654,7 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 		}
 		opts.Context = ctx
 		opts.Transport = tr
+		opts.Trace = cfg.Trace
 		return loadWithOptions(ct, data, loaders, opts)
 	}
 
@@ -638,7 +665,7 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 		var ct string
 		var data []byte
 		var err error
-		opts := LoadOptions{Context: ctx, Transport: tr}
+		opts := LoadOptions{Context: ctx, Transport: tr, Trace: cfg.Trace}
 
 		if isLocalPath(src) {
 			ct, data, err = readLocalFile(src)
@@ -646,7 +673,7 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 				opts.LocalPath = localPath
 			}
 		} else {
-			ct, data, _, err = fetchBytes(ctx, src, tr)
+			ct, data, _, err = fetchBytes(ctx, src, tr, cfg.Trace)
 			opts.SourceURL = src
 			opts.AllowCrossOrigin = cfg.AllowCrossOrigin
 		}

@@ -257,6 +257,19 @@ func (c *CLI) profileFromCmd(cmd *cobra.Command) string {
 	return "default"
 }
 
+func (c *CLI) discoveryTrace(cmd *cobra.Command) func(format string, args ...any) {
+	return c.contextDiscoveryTrace(requestContext(cmd))
+}
+
+func (c *CLI) contextDiscoveryTrace(ctx context.Context) func(format string, args ...any) {
+	if globalFlagsFromContext(ctx).Verbose <= 0 {
+		return nil
+	}
+	return func(format string, args ...any) {
+		fmt.Fprintf(c.Stderr, "* "+format+"\n", args...)
+	}
+}
+
 // specCacheDir returns the effective directory for API spec CBOR files.
 func (c *CLI) specCacheDir() string {
 	if c.hooks.SpecCachePath != "" {
@@ -385,6 +398,7 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		Version:          Version,
 		Transport:        transport,
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
+		Trace:            c.contextDiscoveryTrace(ctx),
 	}
 	return spec.Discover(ctx, cfg, c.loaders)
 }
@@ -555,6 +569,7 @@ func (c *CLI) Run(args []string) error {
 
 func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []string) error {
 	if len(args) > 0 {
+		args = shieldGeneratedNegativeNumberArgs(root, args)
 		root.SetArgs(args[1:])
 	}
 	root.SetOut(c.Stdout)

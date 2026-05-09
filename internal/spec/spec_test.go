@@ -50,6 +50,13 @@ func TestOpenAPILoader_Detect_EmptyContentType(t *testing.T) {
 	}
 }
 
+func TestOpenAPILoader_Detect_TextPlainOpenAPI(t *testing.T) {
+	l := OpenAPILoader{}
+	if !l.Detect("text/plain", []byte(minimalOpenAPIYAML)) {
+		t.Error("should detect OpenAPI YAML served as text/plain")
+	}
+}
+
 func TestOpenAPILoader_Detect_NotOpenAPI(t *testing.T) {
 	l := OpenAPILoader{}
 	if l.Detect("application/json", []byte(`{"foo":"bar"}`)) {

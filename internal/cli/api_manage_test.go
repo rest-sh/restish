@@ -108,6 +108,103 @@ func TestAPIConnect(t *testing.T) {
 	}
 }
 
+func TestAPIConnectPrimesGeneratedHelp(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	cacheDir := t.TempDir()
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithOperations("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	helpCLI, helpOut, _ := newTestCLI(t)
+	helpCLI.Hooks().ConfigPath = cfgFile
+	helpCLI.Hooks().SpecCachePath = cacheDir
+	useTransport(helpCLI, func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("generated help should use the primed spec cache")
+	})
+
+	if err := helpCLI.Run([]string{"restish", "myapi", "--help"}); err != nil {
+		t.Fatalf("generated help after api connect: %v", err)
+	}
+	help := helpOut.String()
+	if !strings.Contains(help, "list-items") {
+		t.Fatalf("expected generated operation help after api connect, got:\n%s", help)
+	}
+	if strings.Contains(help, "Generic requests using") {
+		t.Fatalf("expected generated API help, got generic short-name help:\n%s", help)
+	}
+}
+
+func TestAPIConnectExplicitSpecServedAsTextPlain(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://raw.example.com/openapi.yml":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}},
+				Body:       io.NopCloser(strings.NewReader(specWithOperations("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--spec", "https://raw.example.com/openapi.yml"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	if strings.Contains(out.String(), "no spec found") {
+		t.Fatalf("expected text/plain explicit spec to be discovered, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "operations discovered") {
+		t.Fatalf("expected discovered operations, got:\n%s", out.String())
+	}
+}
+
 func TestAPIConnectPreservesEmbedderDefaultConfig(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI(t)

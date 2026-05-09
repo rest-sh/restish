@@ -25,8 +25,8 @@ type OpenAPILoader struct{}
 func (OpenAPILoader) Priority() int { return 10 }
 
 // Detect returns true when the content type or body look like an OpenAPI spec.
-// It accepts JSON, YAML, and the official OpenAPI MIME types, then confirms by
-// sniffing for an "openapi:" / `"openapi"` key in the first 512 bytes.
+// It accepts JSON, YAML, text-ish raw files, and the official OpenAPI MIME
+// types, then confirms by sniffing for an "openapi:" / `"openapi"` key.
 func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 	ct := strings.ToLower(contentType)
 	if strings.Contains(ct, "openapi") {
@@ -35,6 +35,7 @@ func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 	// Accept OpenAPI-specific MIME types and common JSON/YAML types.
 	if !strings.Contains(ct, "json") &&
 		!strings.Contains(ct, "yaml") &&
+		!strings.HasPrefix(ct, "text/") &&
 		ct != "" {
 		return false
 	}
@@ -179,6 +180,11 @@ type openAPIRefResolver struct {
 func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 	if opts.SourceURL == "" && opts.LocalPath == "" {
 		return body, nil
+	}
+	if opts.SourceURL != "" {
+		tracef(opts.Trace, "Resolving OpenAPI external refs from %s", opts.SourceURL)
+	} else {
+		tracef(opts.Trace, "Resolving OpenAPI external refs from %s", opts.LocalPath)
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(body, &doc); err != nil {
@@ -356,6 +362,7 @@ func (r *openAPIRefResolver) loadExternalDoc(key string, source openAPIRefSource
 	case source.localPath != "":
 		data, err = os.ReadFile(source.localPath)
 	case source.url != "":
+		tracef(r.opts.Trace, "GET OpenAPI external ref %s", source.url)
 		data, err = r.fetchRemoteDoc(source.url)
 	default:
 		err = fmt.Errorf("OpenAPI external ref has no resolved source")

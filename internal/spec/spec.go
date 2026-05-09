@@ -33,6 +33,7 @@ type LoadOptions struct {
 	LocalPath        string
 	AllowCrossOrigin bool
 	Transport        http.RoundTripper
+	Trace            func(format string, args ...any)
 }
 
 // APISpec is a parsed API specification.

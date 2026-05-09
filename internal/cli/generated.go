@@ -13,10 +13,16 @@ import (
 
 	"github.com/danielgtaylor/shorthand/v2"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 	openapiparam "github.com/rest-sh/restish/v2/internal/openapi"
 	"github.com/rest-sh/restish/v2/internal/spec"
+)
+
+const (
+	generatedOperationRequiredTypesAnnotation = "restish.generated.requiredTypes"
+	generatedNegativeNumberArgPrefix          = "__restish_negative_number_arg__"
 )
 
 // buildAPICommand constructs a Cobra command group for a registered API and
@@ -356,6 +362,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		Hidden:     op.XCLI.Hidden,
 		Deprecated: deprecatedNotice(op.Deprecated),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args = restoreGeneratedNegativeNumberArgs(args)
 			if helpAll, _ := cmd.Flags().GetBool("help-all"); helpAll {
 				return showGeneratedOperationHelpAll(cmd)
 			}
@@ -369,6 +376,16 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		cmd.Annotations = map[string]string{
 			securityCompletionAnnotation: strings.Join(candidates, "\n"),
 		}
+	}
+	if len(required) > 0 {
+		if cmd.Annotations == nil {
+			cmd.Annotations = map[string]string{}
+		}
+		types := make([]string, 0, len(required))
+		for _, p := range required {
+			types = append(types, p.typ)
+		}
+		cmd.Annotations[generatedOperationRequiredTypesAnnotation] = strings.Join(types, "\n")
 	}
 	cmd.Flags().Bool("help-all", false, "Show all inherited Restish flags in help")
 	cmd.SetUsageTemplate(generatedOperationUsageTemplate)
@@ -502,6 +519,170 @@ func generatedOperationArgs(required []*paramInfo, hasBody bool) func(*cobra.Com
 		}
 		return nil
 	}
+}
+
+func shieldGeneratedNegativeNumberArgs(root *cobra.Command, args []string) []string {
+	cmd, opStart := findGeneratedOperationCommand(root, args)
+	if cmd == nil || opStart < 0 {
+		return args
+	}
+	rawTypes := cmd.Annotations[generatedOperationRequiredTypesAnnotation]
+	if rawTypes == "" {
+		return args
+	}
+	requiredTypes := strings.Split(rawTypes, "\n")
+	out := append([]string(nil), args...)
+	pos := 0
+	for i := opStart; i < len(out); i++ {
+		token := out[i]
+		if token == "--" {
+			for j := i + 1; j < len(out); j++ {
+				if shouldShieldGeneratedArg(requiredTypes, pos, out[j]) {
+					out[j] = encodeGeneratedNegativeNumberArg(out[j])
+				}
+				pos++
+			}
+			break
+		}
+		if isFlagLikeToken(token) && !isNegativeNumberToken(token) {
+			if generatedFlagConsumesNext(cmd, token) && i+1 < len(out) {
+				i++
+			}
+			continue
+		}
+		if shouldShieldGeneratedArg(requiredTypes, pos, token) {
+			out[i] = encodeGeneratedNegativeNumberArg(token)
+		}
+		pos++
+	}
+	return out
+}
+
+func findGeneratedOperationCommand(root *cobra.Command, args []string) (*cobra.Command, int) {
+	cmd := root
+	for i := 1; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			return nil, -1
+		}
+		if isFlagLikeToken(token) {
+			if generatedFlagConsumesNext(cmd, token) && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		next := childCommandForToken(cmd, token)
+		if next == nil {
+			return nil, -1
+		}
+		cmd = next
+		if cmd.Annotations[generatedOperationRequiredTypesAnnotation] != "" {
+			return cmd, i + 1
+		}
+	}
+	return nil, -1
+}
+
+func childCommandForToken(cmd *cobra.Command, token string) *cobra.Command {
+	for _, child := range cmd.Commands() {
+		if child.Name() == token {
+			return child
+		}
+		for _, alias := range child.Aliases {
+			if alias == token {
+				return child
+			}
+		}
+	}
+	return nil
+}
+
+func generatedFlagConsumesNext(cmd *cobra.Command, token string) bool {
+	if token == "--" || !isFlagLikeToken(token) || strings.Contains(token, "=") {
+		return false
+	}
+	if strings.HasPrefix(token, "--") {
+		name := strings.TrimPrefix(token, "--")
+		flag := generatedCommandFlag(cmd, name)
+		return flag != nil && flag.NoOptDefVal == ""
+	}
+	name := strings.TrimPrefix(token, "-")
+	if name == "" {
+		return false
+	}
+	flag := generatedCommandShorthandFlag(cmd, name[0])
+	return flag != nil && flag.NoOptDefVal == "" && len(name) == 1
+}
+
+func generatedCommandFlag(cmd *cobra.Command, name string) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		if flag := current.Flags().Lookup(name); flag != nil {
+			return flag
+		}
+		if flag := current.PersistentFlags().Lookup(name); flag != nil {
+			return flag
+		}
+	}
+	return nil
+}
+
+func generatedCommandShorthandFlag(cmd *cobra.Command, shorthand byte) *pflag.Flag {
+	for current := cmd; current != nil; current = current.Parent() {
+		if flag := current.Flags().ShorthandLookup(string(shorthand)); flag != nil {
+			return flag
+		}
+		if flag := current.PersistentFlags().ShorthandLookup(string(shorthand)); flag != nil {
+			return flag
+		}
+	}
+	return nil
+}
+
+func shouldShieldGeneratedArg(requiredTypes []string, pos int, token string) bool {
+	if pos >= len(requiredTypes) || !isGeneratedNumericType(requiredTypes[pos]) {
+		return false
+	}
+	return isNegativeNumberToken(token)
+}
+
+func isGeneratedNumericType(typ string) bool {
+	return typ == "number" || typ == "integer"
+}
+
+func isFlagLikeToken(token string) bool {
+	return strings.HasPrefix(token, "-") && token != "-"
+}
+
+func isNegativeNumberToken(token string) bool {
+	if !strings.HasPrefix(token, "-") || token == "-" || strings.HasPrefix(token, "--") {
+		return false
+	}
+	_, err := strconv.ParseFloat(token, 64)
+	return err == nil
+}
+
+func encodeGeneratedNegativeNumberArg(token string) string {
+	return generatedNegativeNumberArgPrefix + url.QueryEscape(token)
+}
+
+func restoreGeneratedNegativeNumberArgs(args []string) []string {
+	var restored []string
+	for i, arg := range args {
+		if !strings.HasPrefix(arg, generatedNegativeNumberArgPrefix) {
+			continue
+		}
+		if restored == nil {
+			restored = append([]string(nil), args...)
+		}
+		value := strings.TrimPrefix(arg, generatedNegativeNumberArgPrefix)
+		if decoded, err := url.QueryUnescape(value); err == nil {
+			restored[i] = decoded
+		}
+	}
+	if restored != nil {
+		return restored
+	}
+	return args
 }
 
 func showGeneratedOperationHelpAll(cmd *cobra.Command) error {

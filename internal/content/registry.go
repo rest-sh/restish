@@ -4,8 +4,10 @@
 package content
 
 import (
+	"bufio"
 	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
 	"fmt"
 	"io"
 	"mime"
@@ -353,7 +355,27 @@ func defaultGzipDecompress(r io.Reader) (io.ReadCloser, error) {
 	return gzip.NewReader(r)
 }
 
-// defaultDeflateDecompress wraps r with a flate reader.
+// defaultDeflateDecompress wraps r with a deflate reader. HTTP servers use
+// both raw DEFLATE and zlib-wrapped DEFLATE for Content-Encoding: deflate.
 func defaultDeflateDecompress(r io.Reader) (io.ReadCloser, error) {
-	return flate.NewReader(r), nil
+	br := bufio.NewReader(r)
+	header, err := br.Peek(2)
+	if err == nil && looksLikeZlibHeader(header) {
+		return zlib.NewReader(br)
+	}
+	return flate.NewReader(br), nil
+}
+
+func looksLikeZlibHeader(header []byte) bool {
+	if len(header) < 2 {
+		return false
+	}
+	cmf, flg := header[0], header[1]
+	if cmf&0x0f != 8 {
+		return false
+	}
+	if cmf>>4 > 7 {
+		return false
+	}
+	return (uint16(cmf)<<8|uint16(flg))%31 == 0
 }

@@ -1243,6 +1243,75 @@ func TestDiscover_DefaultTimeoutAddsDeadline(t *testing.T) {
 	}
 }
 
+func TestDiscover_ExplicitSpecUsesLongerDefaultTimeout(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		deadline, ok := r.Context().Deadline()
+		if !ok {
+			t.Fatal("expected Discover to add a default deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining < 119*time.Second || remaining > 121*time.Second {
+			t.Fatalf("expected ~120s deadline for explicit spec, got %v", remaining)
+		}
+		return nil, context.DeadlineExceeded
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "timeout",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err == nil {
+		t.Fatal("expected discovery to fail")
+	}
+}
+
+func TestDiscover_TraceExternalRefs(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			return httpResponse(200, "application/yaml", `openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /items:
+    $ref: "./item.yaml"
+`, nil), nil
+		case "/item.yaml":
+			return httpResponse(200, "application/yaml", `get:
+  operationId: listItems
+  responses:
+    "200": {description: OK}
+`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+	var traces []string
+	cfg := DiscoverConfig{
+		APIName:   "trace",
+		BaseURL:   "https://specs.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+		Trace: func(format string, args ...any) {
+			traces = append(traces, fmt.Sprintf(format, args...))
+		},
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	got := strings.Join(traces, "\n")
+	for _, want := range []string{
+		`GET OpenAPI source https://specs.example.com/openapi.yaml`,
+		`Resolving OpenAPI external refs from https://specs.example.com/openapi.yaml`,
+		`GET OpenAPI external ref https://specs.example.com/item.yaml`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("trace missing %q, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestDiscover_UsesCallerDeadlineForHungServer(t *testing.T) {
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()

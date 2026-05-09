@@ -171,6 +171,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		Transport:        transport,
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
 		ForceRefresh:     true,
+		Trace:            c.discoveryTrace(cmd),
 	}
 	apiSpec, err := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 	if err != nil {
@@ -251,6 +252,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			Transport:        transport,
 			AllowCrossOrigin: allowCrossOrigin,
 			ForceRefresh:     true,
+			Trace:            c.discoveryTrace(cmd),
 		}
 		discovered, discoverErr := spec.Discover(requestContext(cmd), discCfg, c.loaders)
 		if discoverErr != nil && !errors.Is(discoverErr, spec.ErrNoSpecFound) {
@@ -309,6 +311,16 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 
 	if err := c.saveAPIConfig("api connect", apiName, cfg, apiCfg); err != nil {
 		return err
+	}
+	if apiSpec != nil {
+		opOpts := spec.OperationOptions{
+			BaseURL:         apiCfg.BaseURL,
+			OperationBase:   apiCfg.OperationBase,
+			ServerVariables: effectiveServerVariables(apiCfg, "default"),
+		}
+		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
+			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
+		}
 	}
 	c.printConfigWrittenPath()
 	if len(preservedProfiles) > 0 {

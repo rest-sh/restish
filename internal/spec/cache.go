@@ -236,6 +236,38 @@ func StoreOperationSetInCache(cacheDir, apiName, version string, opts OperationO
 	return writeCache(cacheDir, apiName, entry)
 }
 
+// StoreSpecInCache writes a parsed API spec and, when possible, extracted
+// operation metadata to the on-disk spec cache. A non-positive ttl uses the
+// default spec-cache lifetime.
+func StoreSpecInCache(cacheDir, apiName, version string, apiSpec *APISpec, specFiles []string, opts OperationOptions, ttl time.Duration) error {
+	if cacheDir == "" || apiSpec == nil {
+		return nil
+	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	if ttl > 0 {
+		expiresAt = time.Now().Add(ttl)
+	}
+	set, _ := apiSpec.OperationSet(opts)
+	entry := &cacheEntry{
+		Version:   version,
+		FetchedAt: time.Now(),
+		ExpiresAt: expiresAt,
+		Spec: cachedRaw{
+			ContentType:      apiSpec.ContentType,
+			Raw:              apiSpec.Raw,
+			DiscoveryBaseURL: opts.BaseURL,
+			SourceURL:        apiSpec.SourceURL,
+			LocalPath:        apiSpec.LocalPath,
+			AllowCrossOrigin: apiSpec.AllowCrossOrigin,
+		},
+	}
+	entry.SpecFiles = cacheSpecFileMetadata(specFiles)
+	if set.Operations != nil {
+		entry.upsertOperationSet(opts, set)
+	}
+	return writeCache(cacheDir, apiName, entry)
+}
+
 func (e *cacheEntry) upsertOperationSet(opts OperationOptions, set OperationSet) {
 	rawHash := cacheRawHash(e.raw())
 	blob := opsBlob{

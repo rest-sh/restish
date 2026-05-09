@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -270,6 +271,26 @@ func TestBuiltInDecompressors(t *testing.T) {
 				t.Fatalf("%s decoded %q, want hello world", encoding, data)
 			}
 		})
+	}
+}
+
+func TestDeflateDecompressionAcceptsZlibWrappedBody(t *testing.T) {
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write([]byte("hello world"))
+	_ = w.Close()
+
+	rc, err := reg.Decompress("deflate", &buf)
+	if err != nil {
+		t.Fatalf("decompress deflate: %v", err)
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read deflate: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Fatalf("deflate decoded %q, want hello world", data)
 	}
 }
 

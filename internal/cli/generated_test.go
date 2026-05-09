@@ -2533,6 +2533,56 @@ func TestGeneratedCommandRequiredQueryIsRequiredArgument(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandRequiredNegativeNumberArgument(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/forecast", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/v1/forecast": {
+      "get": {
+        "operationId": "get-v1-forecast",
+        "parameters": [
+          {"name": "latitude", "in": "query", "required": true, "schema": {"type": "number"}},
+          {"name": "longitude", "in": "query", "required": true, "schema": {"type": "number"}},
+          {"name": "current_weather", "in": "query", "schema": {"type": "boolean"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-v1-forecast", "47.5301", "-122.0326", "--current-weather"}); err != nil {
+		t.Fatalf("get-v1-forecast with negative longitude failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("latitude"); got != "47.5301" {
+		t.Fatalf("latitude = %q, want 47.5301", got)
+	}
+	if got := values.Get("longitude"); got != "-122.0326" {
+		t.Fatalf("longitude = %q, want -122.0326", got)
+	}
+	if got := values.Get("current_weather"); got != "true" {
+		t.Fatalf("current_weather = %q, want true", got)
+	}
+}
+
 func TestGeneratedCommandRequiredCookieIsRequiredArgument(t *testing.T) {
 	var sessionValue string
 	mux := http.NewServeMux()
