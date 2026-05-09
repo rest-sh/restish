@@ -29,6 +29,11 @@ type ConfigPatchOperation struct {
 	Delete bool
 }
 
+type jsoncFormatStyle struct {
+	newline string
+	indent  string
+}
+
 // SaveAPIConfig updates a single API entry in the JSONC config file while
 // preserving surrounding comments and formatting when possible.
 func SaveAPIConfig(path, apiName string, apiCfg *APIConfig) error {
@@ -660,6 +665,44 @@ func genericHuJSONValue(value any) (hujson.Value, error) {
 	return valueHuJSON, nil
 }
 
+func formattedHuJSONValue(value any, depth int, style jsoncFormatStyle) (hujson.Value, error) {
+	valueHuJSON, err := genericHuJSONValue(value)
+	if err != nil {
+		return hujson.Value{}, err
+	}
+	formatCompositeHuJSONValue(&valueHuJSON, depth, style)
+	return valueHuJSON, nil
+}
+
+func formatCompositeHuJSONValue(value *hujson.Value, depth int, style jsoncFormatStyle) {
+	switch v := value.Value.(type) {
+	case *hujson.Object:
+		if len(v.Members) == 0 {
+			v.AfterExtra = nil
+			return
+		}
+		for i := range v.Members {
+			v.Members[i].Name.BeforeExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, depth+1))
+			v.Members[i].Name.AfterExtra = nil
+			v.Members[i].Value.BeforeExtra = hujson.Extra(" ")
+			v.Members[i].Value.AfterExtra = nil
+			formatCompositeHuJSONValue(&v.Members[i].Value, depth+1, style)
+		}
+		v.AfterExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, depth))
+	case *hujson.Array:
+		if len(v.Elements) == 0 {
+			v.AfterExtra = nil
+			return
+		}
+		for i := range v.Elements {
+			v.Elements[i].BeforeExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, depth+1))
+			v.Elements[i].AfterExtra = nil
+			formatCompositeHuJSONValue(&v.Elements[i], depth+1, style)
+		}
+		v.AfterExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, depth))
+	}
+}
+
 // jsoncSetPath updates a nested path in JSONC-formatted bytes while preserving
 // comments and formatting. If the path doesn't exist, it creates nested objects
 // as needed. If a non-object value is encountered on the path (excluding the
@@ -668,6 +711,7 @@ func jsoncSetPath(data []byte, path []string, value any) ([]byte, error) {
 	if len(path) == 0 {
 		return data, nil
 	}
+	style := detectJSONCFormatStyle(data)
 
 	// Parse the JSONC with comment preservation
 	v, err := hujson.Parse(data)
@@ -676,7 +720,7 @@ func jsoncSetPath(data []byte, path []string, value any) ([]byte, error) {
 	}
 
 	// Set the value at the path, modifying the CST
-	if err := setValueAtPath(&v, path, value); err != nil {
+	if err := setValueAtPath(&v, path, value, style); err != nil {
 		return nil, err
 	}
 
@@ -709,7 +753,7 @@ func jsoncDeletePath(data []byte, path []string) ([]byte, error) {
 // setValueAtPath navigates to the specified path in the hujson tree and sets the value.
 // Creates nested objects as needed. Returns an error if a non-object is encountered
 // when trying to descend further.
-func setValueAtPath(root *hujson.Value, path []string, value any) error {
+func setValueAtPath(root *hujson.Value, path []string, value any, style jsoncFormatStyle) error {
 	current := root
 
 	// Navigate/create all but the last key
@@ -792,15 +836,9 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 	// Set the final key
 	lastKey := path[len(path)-1]
 
-	// Marshal the value to JSON and parse it back as a hujson Value
-	valueJSON, err := json.Marshal(value)
+	valueHuJSON, err := formattedHuJSONValue(value, len(path), style)
 	if err != nil {
-		return fmt.Errorf("config: marshal value: %w", err)
-	}
-
-	valueHuJSON, err := hujson.Parse(valueJSON)
-	if err != nil {
-		return fmt.Errorf("config: parse value: %w", err)
+		return err
 	}
 
 	// Find or create the member
@@ -816,18 +854,46 @@ func setValueAtPath(root *hujson.Value, path []string, value any) error {
 		// Replace existing member's value while preserving BeforeExtra from the member
 		oldValue := obj.Members[memberIndex].Value
 		// Preserve the BeforeExtra of the old value (spacing before the value)
-		valueHuJSON.BeforeExtra = oldValue.BeforeExtra
+		if len(oldValue.BeforeExtra) > 0 {
+			valueHuJSON.BeforeExtra = oldValue.BeforeExtra
+		} else {
+			valueHuJSON.BeforeExtra = hujson.Extra(" ")
+		}
 		obj.Members[memberIndex].Value = valueHuJSON
 	} else {
 		// Create new member
+		name := hujson.Value{Value: hujson.String(lastKey)}
+		name.BeforeExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, len(path)))
+		valueHuJSON.BeforeExtra = hujson.Extra(" ")
 		newMember := hujson.ObjectMember{
-			Name:  hujson.Value{Value: hujson.String(lastKey)},
+			Name:  name,
 			Value: valueHuJSON,
 		}
 		obj.Members = append(obj.Members, newMember)
+		obj.AfterExtra = hujson.Extra(style.newline + strings.Repeat(style.indent, len(path)-1))
 	}
 
 	return nil
+}
+
+func detectJSONCFormatStyle(data []byte) jsoncFormatStyle {
+	style := jsoncFormatStyle{newline: "\n", indent: "  "}
+	if bytes.Contains(data, []byte("\r\n")) {
+		style.newline = "\r\n"
+	}
+	lines := bytes.Split(data, []byte(style.newline))
+	for _, line := range lines {
+		trimmed := bytes.TrimLeft(line, " \t")
+		if len(trimmed) == len(line) || len(trimmed) == 0 {
+			continue
+		}
+		first := line[:len(line)-len(trimmed)]
+		if len(first) > 0 {
+			style.indent = string(first)
+			break
+		}
+	}
+	return style
 }
 
 func isJSONNull(value hujson.ValueTrimmed) bool {

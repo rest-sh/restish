@@ -12,7 +12,7 @@ import (
 
 // ThemeEntries maps token names to Chroma style descriptors. Token names may be
 // Chroma token type names (for example, "NameTag") or Restish aliases such as
-// "key", "keyword", "url", and "status_2xx".
+// "key", "header_key", "keyword", "url", and "status_2xx".
 type ThemeEntries map[string]string
 
 // defaultStyleEntries is a 256-color terminal theme for Restish readable
@@ -48,6 +48,7 @@ var defaultStyleEntries = chroma.StyleEntries{
 
 	// HTTP preamble (status line + headers via HTTPPreambleLexer)
 	chroma.NameNamespace:   "#9e9e9e",      // HTTP/x.x  → gray
+	httpHeaderKey:          "#5fafd7",      // response header names
 	chroma.GenericInserted: "bold #afd787", // 2xx       → bold light-green
 	chroma.GenericOutput:   "bold #d78700", // 3xx       → bold amber
 	chroma.GenericError:    "bold #ff5f87", // 4xx/5xx   → bold pink
@@ -94,6 +95,8 @@ var themeTokenAliases = map[string]chroma.TokenType{
 	"bracket_1":        indentLevel1,
 	"bracket_2":        indentLevel2,
 	"http":             chroma.NameNamespace,
+	"header":           httpHeaderKey,
+	"header_key":       httpHeaderKey,
 	"status_2xx":       chroma.GenericInserted,
 	"status_3xx":       chroma.GenericOutput,
 	"status_error":     chroma.GenericError,
@@ -147,6 +150,7 @@ func BuildTheme(entries ThemeEntries) (*chroma.Style, error) {
 	for token, entry := range defaultStyleEntries {
 		styleEntries[token] = entry
 	}
+	headerKeyOverridden := false
 	for name, entry := range entries {
 		if _, ok := markdownThemeAliases[normalizeThemeName(name)]; ok {
 			if _, err := chroma.ParseStyleEntry(entry); err != nil {
@@ -158,7 +162,13 @@ func BuildTheme(entries ThemeEntries) (*chroma.Style, error) {
 		if err != nil {
 			return nil, err
 		}
+		if token == httpHeaderKey {
+			headerKeyOverridden = true
+		}
 		styleEntries[token] = entry
+	}
+	if !headerKeyOverridden {
+		styleEntries[httpHeaderKey] = styleEntries[chroma.NameTag]
 	}
 	style, err := chroma.NewStyle("restish", styleEntries)
 	if err != nil {

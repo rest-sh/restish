@@ -246,6 +246,7 @@ with a top-level `theme` object in config:
   "theme_source": "https://example.com/theme.json",
   "theme": {
     "key": "#5fafd7",
+    "header_key": "#87afd7",
     "string": "#afd787",
     "status_2xx": "bold #afd787"
   }
@@ -254,8 +255,10 @@ with a top-level `theme` object in config:
 
 Theme values are Chroma style descriptors. Keys may be Chroma token names such
 as `NameTag` or Restish aliases such as `key`, `keyword`, `function`, `class`,
-`builtin`, `operator`, `url`, `date`, `bracket_0`, `status_2xx`, `status_3xx`,
-and `status_error`. User entries overlay the built-in theme rather than
+`builtin`, `operator`, `url`, `date`, `bracket_0`, `header_key`, `status_2xx`,
+`status_3xx`, and `status_error`. If `header_key` is omitted, HTTP response
+header names inherit the `key` style for compatibility. User entries overlay
+the built-in theme rather than
 replacing it wholesale, so small config snippets can change one or two colors
 without redefining every token.
 
@@ -263,13 +266,14 @@ Invalid theme keys or invalid style descriptors are config errors. Restish
 should fail early during startup instead of silently producing partially styled
 output.
 
-The `restish config theme set <source>` command fetches a theme JSON document,
-validates it, and saves its entries into the top-level config `theme` object
-while preserving JSONC comments where possible. It also records the resolved
-source URL in `theme_source` so repeated installs of the same source can run
-without another trust prompt. A first install of a new source prints the
-resolved URL and asks for confirmation before fetching unless `--yes` is set.
-Theme downloads are capped at 256 KiB. The fetched JSON is a direct token map:
+The `restish config theme set <source>` command reads a theme JSON document
+from a local path or fetches it from a URL, validates it, and saves its entries
+into the top-level config `theme` object while preserving JSONC comments where
+possible. It also records the resolved source in `theme_source` so repeated
+remote installs of the same source can run without another trust prompt. A
+first install of a new remote source prints the resolved URL and asks for
+confirmation before fetching unless `--yes` is set. Theme files and downloads
+are capped at 256 KiB. The JSON is a direct token map:
 
 ```json
 {
@@ -278,10 +282,11 @@ Theme downloads are capped at 256 KiB. The fetched JSON is a direct token map:
 }
 ```
 
-For convenience, `<source>` may be an `http` or `https` URL, or a GitHub
-`user/repo` shorthand. The shorthand resolves to the repository's root
-`theme.json` through GitHub's raw content host. A GitHub shorthand may also
-include an optional theme name:
+For convenience, `<source>` may be a local path, an `http` or `https` URL, or a
+GitHub `user/repo` shorthand. Local paths are stored as absolute paths. The
+GitHub shorthand resolves to the repository's root `theme.json` through
+GitHub's raw content host. A GitHub shorthand may also include an optional
+theme name:
 
 ```bash
 restish config theme set user/repo dark

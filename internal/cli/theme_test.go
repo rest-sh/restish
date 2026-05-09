@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,6 +52,19 @@ func TestThemeSetFromURL(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "// keep me") {
 		t.Fatalf("config comments were not preserved:\n%s", string(data))
+	}
+	for _, want := range []string{
+		"\"theme_source\": \"https://themes.example.com/theme.json\"",
+		"\"theme\": {",
+		"\n    \"key\": \"#ffffff\"",
+		"\n    \"status_2xx\": \"bold #00ff00\"",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("expected nicely formatted theme config containing %q:\n%s", want, string(data))
+		}
+	}
+	if strings.Contains(string(data), `"theme": {"`) {
+		t.Fatalf("theme config was written compactly:\n%s", string(data))
 	}
 
 	cfg, err := config.Load(cfgFile)
@@ -118,6 +132,67 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 	}
 	if cfg.Theme["key"] != "#111111" {
 		t.Fatalf("theme key = %q, want #111111", cfg.Theme["key"])
+	}
+}
+
+func TestThemeSetFromLocalPath(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "restish.json")
+	themeDir := filepath.Join(dir, "themes")
+	if err := os.Mkdir(themeDir, 0o700); err != nil {
+		t.Fatalf("make theme dir: %v", err)
+	}
+	themeFile := filepath.Join(themeDir, "dark.json")
+	if err := os.WriteFile(themeFile, []byte(`{"key":"#abb2bf","status_2xx":"bold #98c379"}`), 0o600); err != nil {
+		t.Fatalf("write theme file: %v", err)
+	}
+	if err := os.WriteFile(cfgFile, []byte(`{"cache":{"max_size":"10MB"}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldWD); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected theme HTTP fetch: %s", r.URL.String())
+		return nil, nil
+	})
+
+	wantSource, err := filepath.Abs("themes/dark.json")
+	if err != nil {
+		t.Fatalf("resolve theme path: %v", err)
+	}
+	if err := c.Run([]string{"restish", "config", "theme", "set", "themes/dark.json"}); err != nil {
+		t.Fatalf("config theme set: %v", err)
+	}
+	if !strings.Contains(out.String(), "Theme path: "+wantSource) {
+		t.Fatalf("expected resolved theme path, got: %q", out.String())
+	}
+	if strings.Contains(errOut.String(), "Install theme") {
+		t.Fatalf("unexpected confirmation prompt: %q", errOut.String())
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Theme["key"] != "#abb2bf" {
+		t.Fatalf("theme key = %q, want #abb2bf", cfg.Theme["key"])
+	}
+	if cfg.ThemeSource != wantSource {
+		t.Fatalf("theme source = %q, want %q", cfg.ThemeSource, wantSource)
 	}
 }
 

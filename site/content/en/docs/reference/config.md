@@ -186,11 +186,14 @@ Use `restish api auth logout` for cached auth tokens.
 Themes affect `readable` output only:
 
 ```bash
+restish config theme set ./themes/one-dark-pro.json
 restish config theme set user/repo dark --yes
 ```
 
-`theme_source` records where the theme came from. `theme` stores the resolved
-highlighting values.
+`theme_source` records where the theme came from. Local paths are stored as
+absolute paths. `theme` stores the resolved highlighting values. Use
+`header_key` to color HTTP response header names differently from JSON/readable
+object keys.
 
 ## Plugins
 

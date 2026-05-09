@@ -91,14 +91,17 @@ argument wrapper.
 Install readable-output highlighting themes:
 
 ```bash
+restish config theme set ./themes/one-dark-pro.json
 restish config theme set https://example.com/theme.json
 restish config theme set user/repo dark
 ```
 
-GitHub shorthand resolves `user/repo` to a raw `theme.json`, or to
-`<name>.json` when you pass the optional name. Theme downloads are capped at
-256 KiB. Themes affect human-readable terminal output, not `json`, `ndjson`,
-raw bytes, or other machine-oriented formats.
+Local paths are stored as absolute paths. GitHub shorthand resolves `user/repo`
+to a raw `theme.json`, or to `<name>.json` when you pass the optional name.
+Theme files and downloads are capped at 256 KiB. Themes affect human-readable
+terminal output, not `json`, `ndjson`, raw bytes, or other machine-oriented
+formats. Theme authors can use `header_key` to color HTTP response header names
+differently from JSON/readable object keys.
 
 ## Utilities
 

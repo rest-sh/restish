@@ -117,8 +117,8 @@ func (c *CLI) saveThemeConfig(entries map[string]string, source string) error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
 	if err := config.SaveConfigValues(cfgPath, []config.ConfigPatchOperation{
-		{Path: []string{"theme"}, Value: entries},
 		{Path: []string{"theme_source"}, Value: source},
+		{Path: []string{"theme"}, Value: entries},
 	}); err != nil {
 		return err
 	}

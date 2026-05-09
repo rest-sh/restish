@@ -293,6 +293,20 @@ func TestJSONCSetPath_ReplacesValueWithMultilineObject(t *testing.T) {
 	if _, err := parseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
+	out := string(got)
+	for _, want := range []string{
+		"\"myapi\": {",
+		"\n      \"base_url\": \"https://api.example.com\"",
+		"\n      \"profiles\": {",
+		"\n        \"default\": {",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected multiline object formatting containing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `"myapi": {"`) {
+		t.Fatalf("expected replacement object not to be compact:\n%s", out)
+	}
 }
 
 func TestJSONCSetPath_PreservesBlockComment(t *testing.T) {

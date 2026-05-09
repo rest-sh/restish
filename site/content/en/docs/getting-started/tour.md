@@ -526,8 +526,8 @@ readable output styling, and shell setup protects Restish's bracket-heavy
 filters and shorthand from shell globbing.
 
 ```bash
-# Install and set custom themes from URL or repo
-restish config theme set URL_OR_REPO [name]
+# Install and set custom themes from a local path, URL, or repo
+restish config theme set PATH_OR_URL_OR_REPO [name]
 
 # Shell setup (argument processing & command completion)
 restish shell setup zsh

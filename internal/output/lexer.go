@@ -16,6 +16,7 @@ const (
 	diagnosticWarn
 	diagnosticError
 	diagnosticHint
+	httpHeaderKey
 )
 
 // indentDepthKey is the MutatorContext key used to store per-tokenise-call
@@ -171,7 +172,7 @@ var SchemaLexer = lexers.Register(chroma.MustNewLexer(
 //	2xx               → GenericInserted (green)
 //	3xx               → GenericOutput   (amber)
 //	4xx / 5xx         → GenericError    (pink)
-//	header name       → NameTag         (sky blue)
+//	header name       → httpHeaderKey   (sky blue)
 //	: separator       → Punctuation     (gray)
 //	everything else   → Text
 var HTTPPreambleLexer = lexers.Register(chroma.MustNewLexer(
@@ -193,9 +194,8 @@ var HTTPPreambleLexer = lexers.Register(chroma.MustNewLexer(
 			},
 			// headers matches header name: value lines; status code patterns are absent.
 			"headers": {
-				{Pattern: `([\w][\w-]*)(:)`, Type: chroma.ByGroups(chroma.NameTag, chroma.Punctuation)},
+				{Pattern: `([\w][\w-]*)(:)`, Type: chroma.ByGroups(httpHeaderKey, chroma.Punctuation)},
 				{Pattern: `[ \t]+`, Type: chroma.Text},
-				{Pattern: `[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT`, Type: chroma.LiteralDate},
 				{Pattern: `[^\n]+`, Type: chroma.Text},
 				{Pattern: `\n`, Type: chroma.Text},
 			},

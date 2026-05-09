@@ -266,16 +266,33 @@ func TestReadableLexerHighlightsHTTPDate(t *testing.T) {
 	}
 }
 
-func TestHTTPPreambleLexerHighlightsDateHeader(t *testing.T) {
+func TestHTTPPreambleLexerLeavesHeaderValuesPlain(t *testing.T) {
 	iter, err := HTTPPreambleLexer.Tokenise(nil, "HTTP/1.1 200 OK\nDate: Wed, 29 Apr 2026 05:02:53 GMT\n")
 	if err != nil {
 		t.Fatalf("Tokenise: %v", err)
 	}
 
 	tokens := iter.Tokens()
-	want := chroma.Token{Type: chroma.LiteralDate, Value: "Wed, 29 Apr 2026 05:02:53 GMT"}
+	want := chroma.Token{Type: chroma.Text, Value: "Wed, 29 Apr 2026 05:02:53 GMT"}
 	if !tokenSliceContains(tokens, want) {
-		t.Fatalf("expected HTTP date header token %s %q in %#v", want.Type, want.Value, tokens)
+		t.Fatalf("expected plain HTTP header value token %s %q in %#v", want.Type, want.Value, tokens)
+	}
+	unwanted := chroma.Token{Type: chroma.LiteralDate, Value: "Wed, 29 Apr 2026 05:02:53 GMT"}
+	if tokenSliceContains(tokens, unwanted) {
+		t.Fatalf("did not expect highlighted HTTP date header token %s %q in %#v", unwanted.Type, unwanted.Value, tokens)
+	}
+}
+
+func TestHTTPPreambleLexerUsesHeaderKeyToken(t *testing.T) {
+	iter, err := HTTPPreambleLexer.Tokenise(nil, "HTTP/1.1 200 OK\nContent-Type: application/json\n")
+	if err != nil {
+		t.Fatalf("Tokenise: %v", err)
+	}
+
+	tokens := iter.Tokens()
+	want := chroma.Token{Type: httpHeaderKey, Value: "Content-Type"}
+	if !tokenSliceContains(tokens, want) {
+		t.Fatalf("expected HTTP header key token %s %q in %#v", want.Type, want.Value, tokens)
 	}
 }
 
