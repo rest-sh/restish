@@ -295,6 +295,65 @@ func TestNDJSONFormatter_OutputsOneValuePerLine(t *testing.T) {
 	}
 }
 
+func TestNDJSONFormatter_WithColorHighlightsEachLine(t *testing.T) {
+	resp := &output.Response{
+		Body: []any{
+			map[string]any{"id": 1},
+			map[string]any{"id": 2},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["ndjson"].Format(&buf, resp, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "\x1b[") {
+		t.Fatalf("expected ANSI highlighting, got %q", buf.String())
+	}
+
+	stripped := strings.TrimSpace(stripANSI(buf.String()))
+	lines := strings.Split(stripped, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines after stripping ANSI, got %d: %q", len(lines), stripped)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON after stripping ANSI: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
+func TestNDJSONFormatter_StreamWithColorHighlightsEachValue(t *testing.T) {
+	formatter := output.DefaultFormatters()["ndjson"].(output.ValueStreamFormatter)
+	var buf bytes.Buffer
+	stream, err := formatter.StartValueStream(&buf, &output.Response{}, true)
+	if err != nil {
+		t.Fatalf("start stream: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 1}); err != nil {
+		t.Fatalf("write first value: %v", err)
+	}
+	if err := stream.WriteValue(map[string]any{"id": 2}); err != nil {
+		t.Fatalf("write second value: %v", err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("close stream: %v", err)
+	}
+	if !strings.Contains(buf.String(), "\x1b[") {
+		t.Fatalf("expected ANSI highlighting, got %q", buf.String())
+	}
+
+	stripped := strings.TrimSpace(stripANSI(buf.String()))
+	lines := strings.Split(stripped, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines after stripping ANSI, got %d: %q", len(lines), stripped)
+	}
+}
+
 func TestLinesFormatter_OutputsScalarArrayOneValuePerLine(t *testing.T) {
 	resp := &output.Response{Body: []any{"Alice", "Bob", float64(3), true, nil}}
 	var buf bytes.Buffer

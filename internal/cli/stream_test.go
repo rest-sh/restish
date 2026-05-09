@@ -574,6 +574,45 @@ func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
 	}
 }
 
+func TestSSENDJSONOutputWithColor(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseBody(`{"id":1}`))
+		fmt.Fprint(w, sseBody(`{"id":2}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	t.Setenv("NOCOLOR", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("COLOR", "1")
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-items", "2", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected ANSI highlighting, got %q", got)
+	}
+	stripped := strings.TrimSpace(stripANSI(got))
+	lines := strings.Split(stripped, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines after stripping ANSI, got %d:\n%s", len(lines), stripped)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON after stripping ANSI: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
 func TestNDJSONScannerErrorFailsCommand(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
