@@ -207,6 +207,76 @@ func TestThemeSetRejectsNameForURL(t *testing.T) {
 	}
 }
 
+func TestThemeResetRemovesThemeConfig(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, []byte(`{
+  // keep me
+  "theme_source": "https://themes.example.com/theme.json",
+  "theme": {
+    "key": "#ffffff",
+    "status_2xx": "bold #00ff00"
+  },
+  // keep me
+  "cache": {"max_size": "10MB"}
+}
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "config", "theme", "reset"}); err != nil {
+		t.Fatalf("config theme reset: %v", err)
+	}
+	if !strings.Contains(out.String(), "Reset theme to built-in default") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "// keep me") {
+		t.Fatalf("config comments were not preserved:\n%s", got)
+	}
+	if strings.Contains(got, "theme_source") || strings.Contains(got, `"theme"`) {
+		t.Fatalf("expected theme keys to be removed:\n%s", got)
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ThemeSource != "" {
+		t.Fatalf("theme source = %q, want empty", cfg.ThemeSource)
+	}
+	if len(cfg.Theme) != 0 {
+		t.Fatalf("theme = %#v, want empty", cfg.Theme)
+	}
+}
+
+func TestThemeUnsetAliasResetsTheme(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, []byte(`{"theme_source":"local","theme":{"key":"#ffffff"}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "config", "theme", "unset"}); err != nil {
+		t.Fatalf("config theme unset: %v", err)
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ThemeSource != "" || len(cfg.Theme) != 0 {
+		t.Fatalf("theme was not reset: source=%q theme=%#v", cfg.ThemeSource, cfg.Theme)
+	}
+}
+
 func TestThemeSetPromptsBeforeFetchingNewSource(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	var fetched bool

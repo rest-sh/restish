@@ -294,6 +294,11 @@ restish config theme set user/repo dark
 
 which resolves to the repository's root `dark.json`.
 
+The `restish config theme reset` command removes both `theme` and
+`theme_source` from config, preserving unrelated JSONC comments where possible,
+and restores the built-in theme for the current process. `unset` is accepted as
+an alias for users looking for the inverse of `set`.
+
 ## Text And Binary Handling
 
 Output behavior must not corrupt data:

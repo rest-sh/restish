@@ -125,6 +125,18 @@ func (c *CLI) saveThemeConfig(entries map[string]string, source string) error {
 	return c.reloadConfigAfterMutation("config theme set", oldCfg)
 }
 
+func (c *CLI) resetThemeConfig() error {
+	oldCfg := c.cfg
+	cfgPath := c.configFilePath()
+	if err := config.SaveConfigValues(cfgPath, []config.ConfigPatchOperation{
+		{Path: []string{"theme"}, Delete: true},
+		{Path: []string{"theme_source"}, Delete: true},
+	}); err != nil {
+		return err
+	}
+	return c.reloadConfigAfterMutation("config theme reset", oldCfg)
+}
+
 func (c *CLI) printConfigWrittenPath() {
 	cfgPath := c.configFilePath()
 	if abs, err := filepath.Abs(cfgPath); err == nil {

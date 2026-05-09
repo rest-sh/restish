@@ -188,12 +188,13 @@ Themes affect `readable` output only:
 ```bash
 restish config theme set ./themes/one-dark-pro.json
 restish config theme set user/repo dark --yes
+restish config theme reset
 ```
 
 `theme_source` records where the theme came from. Local paths are stored as
 absolute paths. `theme` stores the resolved highlighting values. Use
 `header_key` to color HTTP response header names differently from JSON/readable
-object keys.
+object keys. `reset` removes the saved theme and restores the built-in theme.
 
 ## Plugins
 

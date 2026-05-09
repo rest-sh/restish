@@ -15,11 +15,7 @@
     header: {
       pattern: /^[A-Z][a-zA-Z0-9-]+:.*/m,
       inside: {
-        property: /[A-Z][a-zA-Z0-9-]+(?=:)/,
-        httpdate: {
-          alias: "date",
-          pattern: /"?(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT"?/
-        }
+        property: /[A-Z][a-zA-Z0-9-]+(?=:)/
       }
     },
     property: /^\s+['"]?[a-z0-9-_$]+['"]?(?=:)/im,

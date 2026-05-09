@@ -30,6 +30,16 @@ func (c *CLI) newThemeSetCommand() *cobra.Command {
 	return cmd
 }
 
+func (c *CLI) newThemeResetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "reset",
+		Aliases: []string{"unset"},
+		Short:   "Reset readable output highlighting to the built-in theme",
+		Args:    cobra.NoArgs,
+		RunE:    c.runThemeReset,
+	}
+}
+
 func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 	source, err := resolveThemeSource(args)
 	if err != nil {
@@ -62,6 +72,17 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(c.Stdout, "Set theme from %s\n", source)
+	return nil
+}
+
+func (c *CLI) runThemeReset(cmd *cobra.Command, args []string) error {
+	if err := output.SetTheme(nil); err != nil {
+		return err
+	}
+	if err := c.resetThemeConfig(); err != nil {
+		return err
+	}
+	fmt.Fprintln(c.Stdout, "Reset theme to built-in default")
 	return nil
 }
 
