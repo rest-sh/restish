@@ -7,9 +7,12 @@ import (
 )
 
 func TestParseThemeJSONDirectMap(t *testing.T) {
-	entries, err := ParseThemeJSON([]byte(`{"key":"#ffffff","header_key":"#abcdef","status_2xx":"bold #00ff00","keyword":"#ff0000","function":"#00ffff","class":"#ff00ff","builtin":"#0000ff","operator":"#ffff00","markdown_heading":"#123456","diagnostic_warn":"bold #ffaa00"}`))
+	entries, err := ParseThemeJSON([]byte(`{"text":"#eeeeee","key":"#ffffff","header_key":"#abcdef","status_2xx":"bold #00ff00","keyword":"#ff0000","function":"#00ffff","class":"#ff00ff","builtin":"#0000ff","operator":"#ffff00","markdown_heading":"#123456","diagnostic_warn":"bold #ffaa00"}`))
 	if err != nil {
 		t.Fatalf("ParseThemeJSON: %v", err)
+	}
+	if entries["text"] != "#eeeeee" {
+		t.Fatalf("text entry = %q, want #eeeeee", entries["text"])
 	}
 	if entries["key"] != "#ffffff" {
 		t.Fatalf("key entry = %q, want #ffffff", entries["key"])
@@ -27,6 +30,33 @@ func TestParseThemeJSONDirectMap(t *testing.T) {
 	}
 	if entries["diagnostic_warn"] != "bold #ffaa00" {
 		t.Fatalf("diagnostic_warn entry = %q, want bold #ffaa00", entries["diagnostic_warn"])
+	}
+}
+
+func TestParseThemeJSONAcceptsComments(t *testing.T) {
+	entries, err := ParseThemeJSON([]byte(`{
+		// Base text color.
+		"text": "#eeeeee",
+		"key": "#ffffff" // Object and header keys.
+	}`))
+	if err != nil {
+		t.Fatalf("ParseThemeJSON: %v", err)
+	}
+	if entries["text"] != "#eeeeee" {
+		t.Fatalf("text entry = %q, want #eeeeee", entries["text"])
+	}
+	if entries["key"] != "#ffffff" {
+		t.Fatalf("key entry = %q, want #ffffff", entries["key"])
+	}
+}
+
+func TestBuildThemeTextToken(t *testing.T) {
+	style, err := BuildTheme(ThemeEntries{"text": "#eeeeee"})
+	if err != nil {
+		t.Fatalf("BuildTheme: %v", err)
+	}
+	if got, want := style.Get(chroma.Text).Colour.String(), "#eeeeee"; got != want {
+		t.Fatalf("text color = %q, want %q", got, want)
 	}
 }
 

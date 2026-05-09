@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/tidwall/jsonc"
 )
 
 // ThemeEntries maps token names to Chroma style descriptors. Token names may be
@@ -74,6 +75,7 @@ var currentThemeEntries ThemeEntries
 
 var themeTokenAliases = map[string]chroma.TokenType{
 	"comment":          chroma.Comment,
+	"text":             chroma.Text,
 	"constant":         chroma.KeywordConstant,
 	"punctuation":      chroma.Punctuation,
 	"key":              chroma.NameTag,
@@ -181,11 +183,12 @@ func BuildTheme(entries ThemeEntries) (*chroma.Style, error) {
 	return style, nil
 }
 
-// ParseThemeJSON parses a direct token map and validates it by building a style.
+// ParseThemeJSON parses a direct JSON or JSONC token map and validates it by
+// building a style.
 func ParseThemeJSON(data []byte) (ThemeEntries, error) {
 	var direct ThemeEntries
-	if err := json.Unmarshal(data, &direct); err != nil {
-		return nil, fmt.Errorf("theme: parse JSON: %w", err)
+	if err := json.Unmarshal(jsonc.ToJSON(data), &direct); err != nil {
+		return nil, fmt.Errorf("theme: parse JSONC: %w", err)
 	}
 	if len(direct) == 0 {
 		return nil, fmt.Errorf("theme: expected token map")

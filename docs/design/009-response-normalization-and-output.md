@@ -266,10 +266,10 @@ Invalid theme keys or invalid style descriptors are config errors. Restish
 should fail early during startup instead of silently producing partially styled
 output.
 
-The `restish config theme set <source>` command reads a theme JSON document
-from a local path or fetches it from a URL, validates it, and saves its entries
-into the top-level config `theme` object while preserving JSONC comments where
-possible. It also records the resolved source in `theme_source` so repeated
+The `restish config theme set <source>` command reads a theme JSON or JSONC
+document from a local path or fetches it from a URL, validates it, and saves its
+entries into the top-level config `theme` object while preserving JSONC comments
+where possible. It also records the resolved source in `theme_source` so repeated
 remote installs of the same source can run without another trust prompt. A
 first install of a new remote source prints the resolved URL and asks for
 confirmation before fetching unless `--yes` is set. Theme files and downloads
@@ -292,7 +292,8 @@ theme name:
 restish config theme set user/repo dark
 ```
 
-which resolves to the repository's root `dark.json`.
+which first tries `themes/dark.json`, then falls back to the repository's root
+`dark.json` when the `themes/` path is not found.
 
 The `restish config theme reset` command removes both `theme` and
 `theme_source` from config, preserving unrelated JSONC comments where possible,

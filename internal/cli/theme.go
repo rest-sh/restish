@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,7 +23,7 @@ var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 func (c *CLI) newThemeSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <path-or-url-or-user/repo> [name]",
-		Short: "Install a theme JSON file and save it in config",
+		Short: "Install a theme JSON or JSONC file and save it in config",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runThemeSet,
 	}
@@ -98,6 +99,33 @@ func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries
 		return readThemeFile(source)
 	}
 
+	entries, err := c.fetchThemeURL(cmd, source)
+	if err == nil {
+		return entries, nil
+	}
+	var statusErr themeHTTPStatusError
+	if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
+		if fallback, ok := githubNamedThemeFallbackSource(source); ok {
+			if entries, fallbackErr := c.fetchThemeURL(cmd, fallback); fallbackErr == nil {
+				return entries, nil
+			} else {
+				return nil, fallbackErr
+			}
+		}
+	}
+	return nil, err
+}
+
+type themeHTTPStatusError struct {
+	Source     string
+	StatusCode int
+}
+
+func (e themeHTTPStatusError) Error() string {
+	return fmt.Sprintf("config theme set: fetch %s: HTTP %d", e.Source, e.StatusCode)
+}
+
+func (c *CLI) fetchThemeURL(cmd *cobra.Command, source string) (output.ThemeEntries, error) {
 	u, err := url.Parse(source)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return nil, fmt.Errorf("config theme set: expected http(s) URL or GitHub user/repo shorthand")
@@ -120,7 +148,7 @@ func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("config theme set: fetch %s: HTTP %d", source, resp.StatusCode)
+		return nil, themeHTTPStatusError{Source: source, StatusCode: resp.StatusCode}
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxThemeBytes+1))
@@ -138,6 +166,19 @@ func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries
 	return entries, nil
 }
 
+func githubNamedThemeFallbackSource(source string) (string, bool) {
+	u, err := url.Parse(source)
+	if err != nil || u.Scheme != "https" || u.Host != "raw.githubusercontent.com" {
+		return "", false
+	}
+	const namedThemeDir = "/HEAD/themes/"
+	if !strings.Contains(u.Path, namedThemeDir) {
+		return "", false
+	}
+	u.Path = strings.Replace(u.Path, namedThemeDir, "/HEAD/", 1)
+	return u.String(), true
+}
+
 func resolveThemeSource(args []string) (string, error) {
 	source := args[0]
 	if len(args) == 2 {
@@ -146,7 +187,7 @@ func resolveThemeSource(args []string) (string, error) {
 			if !githubThemeName.MatchString(name) {
 				return "", fmt.Errorf("config theme set: invalid GitHub theme name %q", name)
 			}
-			return "https://raw.githubusercontent.com/" + source + "/HEAD/" + name + ".json", nil
+			return "https://raw.githubusercontent.com/" + source + "/HEAD/themes/" + name + ".json", nil
 		}
 		return "", fmt.Errorf("config theme set: theme name is only supported with GitHub user/repo shorthand")
 	}
@@ -210,7 +251,9 @@ func looksLikeLocalThemePath(source string) bool {
 		strings.HasPrefix(source, "~"+string(filepath.Separator)) {
 		return true
 	}
-	return strings.ContainsAny(source, `/\`) && strings.EqualFold(filepath.Ext(source), ".json")
+	ext := filepath.Ext(source)
+	return strings.ContainsAny(source, `/\`) &&
+		(strings.EqualFold(ext, ".json") || strings.EqualFold(ext, ".jsonc"))
 }
 
 func expandHomePath(path string) string {

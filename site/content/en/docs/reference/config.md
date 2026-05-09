@@ -183,18 +183,28 @@ Use `restish api auth logout` for cached auth tokens.
 
 ## Theme
 
-Themes affect `readable` output only:
+Themes affect `readable` output only. Theme files may be JSON or JSONC:
 
 ```bash
 restish config theme set ./themes/one-dark-pro.json
+restish config theme set ./themes/catppuccin-mocha.json
 restish config theme set user/repo dark --yes
 restish config theme reset
 ```
 
 `theme_source` records where the theme came from. Local paths are stored as
 absolute paths. `theme` stores the resolved highlighting values. Use
-`header_key` to color HTTP response header names differently from JSON/readable
-object keys. `reset` removes the saved theme and restores the built-in theme.
+`text` for the base text color and `header_key` to color HTTP response header
+names differently from JSON/readable object keys. `reset` removes the saved
+theme and restores the built-in theme.
+
+For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`
+first, then falls back to `<name>.json` at the repository root.
+
+The source checkout includes example themes under `themes/`, including
+`catppuccin-mocha`, `dracula`, `github-dark`, `houston`, `minimal`,
+`monokai-pro-dark`, `monokai-pro-light`, `noctis`, `one-dark-pro`,
+`restish-light`, `synthwave-84`, and `vscode-dark`.
 
 ## Plugins
 

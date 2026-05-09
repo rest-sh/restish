@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -110,7 +111,7 @@ func TestThemeSetGithubShorthand(t *testing.T) {
 func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if got, want := r.URL.String(), "https://raw.githubusercontent.com/example/themes/HEAD/dark.json"; got != want {
+		if got, want := r.URL.String(), "https://raw.githubusercontent.com/example/themes/HEAD/themes/dark.json"; got != want {
 			t.Fatalf("URL = %q, want %q", got, want)
 		}
 		return &http.Response{
@@ -135,6 +136,54 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 	}
 }
 
+func TestThemeSetGithubShorthandNamedThemeFallsBackToRoot(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	var requests []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.URL.String())
+		switch r.URL.String() {
+		case "https://raw.githubusercontent.com/example/themes/HEAD/themes/dark.json":
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"text/plain"}},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		case "https://raw.githubusercontent.com/example/themes/HEAD/dark.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"key":"#222222"}`)),
+				Request:    r,
+			}, nil
+		default:
+			t.Fatalf("unexpected URL: %s", r.URL.String())
+			return nil, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "config", "theme", "set", "example/themes", "dark", "--yes"}); err != nil {
+		t.Fatalf("config theme set: %v", err)
+	}
+
+	wantRequests := []string{
+		"https://raw.githubusercontent.com/example/themes/HEAD/themes/dark.json",
+		"https://raw.githubusercontent.com/example/themes/HEAD/dark.json",
+	}
+	if !reflect.DeepEqual(requests, wantRequests) {
+		t.Fatalf("requests = %#v, want %#v", requests, wantRequests)
+	}
+	cfg, err := config.Load(c.Hooks().ConfigPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Theme["key"] != "#222222" {
+		t.Fatalf("theme key = %q, want #222222", cfg.Theme["key"])
+	}
+}
+
 func TestThemeSetFromLocalPath(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "restish.json")
@@ -142,8 +191,13 @@ func TestThemeSetFromLocalPath(t *testing.T) {
 	if err := os.Mkdir(themeDir, 0o700); err != nil {
 		t.Fatalf("make theme dir: %v", err)
 	}
-	themeFile := filepath.Join(themeDir, "dark.json")
-	if err := os.WriteFile(themeFile, []byte(`{"key":"#abb2bf","status_2xx":"bold #98c379"}`), 0o600); err != nil {
+	themeFile := filepath.Join(themeDir, "dark.jsonc")
+	if err := os.WriteFile(themeFile, []byte(`{
+		// Theme authors can explain palette choices.
+		"text": "#eeeeee",
+		"key": "#abb2bf",
+		"status_2xx": "bold #98c379"
+	}`), 0o600); err != nil {
 		t.Fatalf("write theme file: %v", err)
 	}
 	if err := os.WriteFile(cfgFile, []byte(`{"cache":{"max_size":"10MB"}}`), 0o600); err != nil {
@@ -170,11 +224,11 @@ func TestThemeSetFromLocalPath(t *testing.T) {
 		return nil, nil
 	})
 
-	wantSource, err := filepath.Abs("themes/dark.json")
+	wantSource, err := filepath.Abs("themes/dark.jsonc")
 	if err != nil {
 		t.Fatalf("resolve theme path: %v", err)
 	}
-	if err := c.Run([]string{"restish", "config", "theme", "set", "themes/dark.json"}); err != nil {
+	if err := c.Run([]string{"restish", "config", "theme", "set", "themes/dark.jsonc"}); err != nil {
 		t.Fatalf("config theme set: %v", err)
 	}
 	if !strings.Contains(out.String(), "Theme path: "+wantSource) {
@@ -190,6 +244,9 @@ func TestThemeSetFromLocalPath(t *testing.T) {
 	}
 	if cfg.Theme["key"] != "#abb2bf" {
 		t.Fatalf("theme key = %q, want #abb2bf", cfg.Theme["key"])
+	}
+	if cfg.Theme["text"] != "#eeeeee" {
+		t.Fatalf("theme text = %q, want #eeeeee", cfg.Theme["text"])
 	}
 	if cfg.ThemeSource != wantSource {
 		t.Fatalf("theme source = %q, want %q", cfg.ThemeSource, wantSource)
