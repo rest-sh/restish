@@ -51,6 +51,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Use:   "theme",
 		Short: "Manage readable output highlighting theme",
 	}
+	themeCmd.AddCommand(c.newThemeListCommand())
 	themeCmd.AddCommand(c.newThemeSetCommand())
 	themeCmd.AddCommand(c.newThemeResetCommand())
 	configCmd.AddCommand(themeCmd)

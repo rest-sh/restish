@@ -130,6 +130,8 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 			name: "config theme",
 			args: []string{"restish", "config", "theme", "--help"},
 			want: []string{
+				"list",
+				"reset",
 				"set",
 			},
 		},
@@ -197,7 +199,7 @@ func TestWorkflowCommandHelpSurface(t *testing.T) {
 		{
 			name: "edit",
 			args: []string{"restish", "edit", "--help"},
-			want: []string{"<uri> [patch ...]", "--edit-format", "--rsh-interactive", "--no-editor", "--dry-run", "--rsh-yes"},
+			want: []string{"<uri> [patch ...]", "--edit-format", "--no-editor", "--dry-run", "--rsh-yes"},
 		},
 		{
 			name: "links",

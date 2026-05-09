@@ -16,19 +16,43 @@ import (
 )
 
 const maxThemeBytes = 256 << 10
+const officialThemeRepo = "rest-sh/restish"
 
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+var officialThemeNames = []string{
+	"catppuccin-mocha",
+	"dracula",
+	"github-dark",
+	"houston",
+	"minimal",
+	"monokai-pro-dark",
+	"monokai-pro-light",
+	"noctis",
+	"one-dark-pro",
+	"restish-light",
+	"synthwave-84",
+	"vscode-dark",
+}
 
 func (c *CLI) newThemeSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "set <path-or-url-or-user/repo> [name]",
+		Use:   "set <theme|path-or-url-or-user/repo> [name]",
 		Short: "Install a theme JSON or JSONC file and save it in config",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runThemeSet,
 	}
 	cmd.Flags().Bool("yes", false, "Fetch and install without confirmation prompt")
 	return cmd
+}
+
+func (c *CLI) newThemeListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List official theme names",
+		Args:  cobra.NoArgs,
+		RunE:  c.runThemeList,
+	}
 }
 
 func (c *CLI) newThemeResetCommand() *cobra.Command {
@@ -39,6 +63,22 @@ func (c *CLI) newThemeResetCommand() *cobra.Command {
 		Args:    cobra.NoArgs,
 		RunE:    c.runThemeReset,
 	}
+}
+
+func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
+	current := ""
+	if c.cfg != nil {
+		current = c.cfg.ThemeSource
+	}
+	for _, name := range officialThemeNames {
+		source := officialThemeSource(name)
+		marker := " "
+		if current == source {
+			marker = "*"
+		}
+		fmt.Fprintf(c.Stdout, "%s %s\n", marker, name)
+	}
+	return nil
 }
 
 func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
@@ -199,7 +239,23 @@ func resolveThemeSource(args []string) (string, error) {
 	if githubThemeShorthand.MatchString(source) {
 		return "https://raw.githubusercontent.com/" + source + "/HEAD/theme.json", nil
 	}
+	if isOfficialThemeName(source) {
+		return officialThemeSource(source), nil
+	}
 	return source, nil
+}
+
+func officialThemeSource(name string) string {
+	return "https://raw.githubusercontent.com/" + officialThemeRepo + "/HEAD/themes/" + name + ".json"
+}
+
+func isOfficialThemeName(name string) bool {
+	for _, official := range officialThemeNames {
+		if name == official {
+			return true
+		}
+	}
+	return false
 }
 
 func readThemeFile(path string) (output.ThemeEntries, error) {

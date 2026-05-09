@@ -133,6 +133,15 @@ func TestAcceptHeader(t *testing.T) {
 	}
 }
 
+func TestTextAliasUsesPlainText(t *testing.T) {
+	if got, want := reg.MIMETypeForName("text"), "text/plain"; got != want {
+		t.Fatalf("MIMETypeForName(text) = %q, want %q", got, want)
+	}
+	if got, want := reg.MIMETypeForName("sse"), "text/event-stream"; got != want {
+		t.Fatalf("MIMETypeForName(sse) = %q, want %q", got, want)
+	}
+}
+
 func TestDecodeNDJSON(t *testing.T) {
 	out, err := reg.Decode("application/x-ndjson", []byte("{\"n\":1}\n{\"n\":2}\n"))
 	if err != nil {

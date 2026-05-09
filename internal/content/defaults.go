@@ -213,8 +213,23 @@ func Default() *Registry {
 	})
 
 	r.AddContentType(&ContentType{
+		Name:      "sse",
+		MIMETypes: []string{"text/event-stream"},
+		Quality:   0.2,
+		Marshal: func(v any) ([]byte, error) {
+			if s, ok := v.(string); ok {
+				return []byte(s), nil
+			}
+			return json.Marshal(v)
+		},
+		Unmarshal: func(data []byte) (any, error) {
+			return string(data), nil
+		},
+	})
+
+	r.AddContentType(&ContentType{
 		Name:      "text",
-		MIMETypes: []string{"text/event-stream", "text/*"},
+		MIMETypes: []string{"text/plain", "text/*"},
 		Quality:   0.2,
 		Marshal: func(v any) ([]byte, error) {
 			if s, ok := v.(string); ok {

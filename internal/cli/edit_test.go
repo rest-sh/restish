@@ -169,7 +169,7 @@ func TestEditCommandYAMLEditKeepsOriginalJSONWireType(t *testing.T) {
 	}
 }
 
-func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
+func TestEditCommandOpensEditorWithoutPatchArgs(t *testing.T) {
 	captured := installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +187,7 @@ func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "edit", "-i", "-y", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "edit", "-y", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := os.Stat(captured); err != nil {
@@ -195,7 +195,7 @@ func TestEditCommandInteractiveFlagOpensEditor(t *testing.T) {
 	}
 }
 
-func TestEditCommandInteractiveFlagIsNoopWithPatchArgs(t *testing.T) {
+func TestEditCommandPatchArgsDoNotOpenEditor(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "")
 
@@ -216,7 +216,7 @@ func TestEditCommandInteractiveFlagIsNoopWithPatchArgs(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "edit", "-i", "-y", srv.URL, "name:", "after"}); err != nil {
+	if err := c.Run([]string{"restish", "edit", "-y", srv.URL, "name:", "after"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if method != http.MethodPut {

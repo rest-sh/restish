@@ -30,7 +30,6 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 		RunE:    c.runEdit,
 	}
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")
-	cmd.Flags().BoolP("rsh-interactive", "i", false, "Compatibility alias; editor opens by default without patch args")
 	cmd.Flags().Bool("no-editor", false, "Do not open an editor; with no patch args, print the editable resource")
 	cmd.Flags().Bool("dry-run", false, "Show the diff without sending the update")
 	cmd.Flags().BoolP("rsh-yes", "y", false, "Skip the confirmation prompt")
