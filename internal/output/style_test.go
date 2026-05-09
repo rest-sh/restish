@@ -30,7 +30,20 @@ func TestParseThemeJSONDirectMap(t *testing.T) {
 	}
 }
 
-func TestBuildThemeHeaderKeyFollowsKeyByDefault(t *testing.T) {
+func TestBuildThemeDefaultHeaderKeyCanDifferFromKey(t *testing.T) {
+	style, err := BuildTheme(nil)
+	if err != nil {
+		t.Fatalf("BuildTheme: %v", err)
+	}
+	if got, want := style.Get(httpHeaderKey).Colour.String(), "#6fbfbf"; got != want {
+		t.Fatalf("default header key color = %q, want %q", got, want)
+	}
+	if got, want := style.Get(chroma.NameTag).Colour.String(), "#5fafd7"; got != want {
+		t.Fatalf("default key color = %q, want %q", got, want)
+	}
+}
+
+func TestBuildThemeHeaderKeyFollowsUserKeyByDefault(t *testing.T) {
 	style, err := BuildTheme(ThemeEntries{"key": "#ffffff"})
 	if err != nil {
 		t.Fatalf("BuildTheme: %v", err)
