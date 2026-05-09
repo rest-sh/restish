@@ -574,6 +574,38 @@ func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
 	}
 }
 
+func TestNDJSONOutputHandlesJSONSequenceContentType(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{"id":1}`)
+		fmt.Fprintln(w, `{"id":2}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := strings.TrimSpace(out.String())
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), got)
+	}
+	for i, line := range lines {
+		var item map[string]int
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatalf("line %d is not valid JSON: %q: %v", i+1, line, err)
+		}
+		if item["id"] != i+1 {
+			t.Fatalf("line %d id = %d, want %d", i+1, item["id"], i+1)
+		}
+	}
+}
+
 func TestSSENDJSONOutputWithColor(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {

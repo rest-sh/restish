@@ -741,6 +741,7 @@ func (r valueStreamRenderer) Close() error {
 }
 
 func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainScalars bool) (valueRenderer, error) {
+	streaming := base != nil
 	if base == nil {
 		base = &output.Response{}
 	}
@@ -798,13 +799,15 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainS
 	if err != nil {
 		return nil, err
 	}
-	if streamFormatter, ok := formatter.(output.ValueStreamFormatter); ok {
-		stream, err := streamFormatter.StartValueStream(c.Stdout, base, color)
-		if err != nil {
-			return nil, err
-		}
-		if stream != nil {
-			return valueStreamRenderer{stream: stream}, nil
+	if streaming {
+		if streamFormatter, ok := formatter.(output.ValueStreamFormatter); ok {
+			stream, err := streamFormatter.StartValueStream(c.Stdout, base, color)
+			if err != nil {
+				return nil, err
+			}
+			if stream != nil {
+				return valueStreamRenderer{stream: stream}, nil
+			}
 		}
 	}
 	if valueFormatter, ok := formatter.(output.ValueFormatter); ok {

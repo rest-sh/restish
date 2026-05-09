@@ -43,6 +43,9 @@ func Default() *Registry {
 		Unmarshal: func(data []byte) (any, error) {
 			var v any
 			if err := json.Unmarshal(data, &v); err != nil {
+				if seq, seqErr := unmarshalJSONSequence(data); seqErr == nil {
+					return seq, nil
+				}
 				return nil, err
 			}
 			return v, nil
@@ -243,6 +246,25 @@ func Default() *Registry {
 	})
 
 	return r
+}
+
+func unmarshalJSONSequence(data []byte) ([]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	out := make([]any, 0)
+	for {
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	if len(out) < 2 {
+		return nil, fmt.Errorf("JSON sequence must contain at least two values")
+	}
+	return out, nil
 }
 
 func marshalNDJSON(v any) ([]byte, error) {

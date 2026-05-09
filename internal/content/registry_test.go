@@ -150,6 +150,30 @@ func TestDecodeNDJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONSequence(t *testing.T) {
+	out, err := reg.Decode("application/json", []byte("{\"n\":1}\n{\"n\":2}\n"))
+	if err != nil {
+		t.Fatalf("Decode(application/json sequence): %v", err)
+	}
+	items, ok := out.([]any)
+	if !ok {
+		t.Fatalf("decoded JSON sequence type = %T, want []any", out)
+	}
+	if len(items) != 2 {
+		t.Fatalf("decoded JSON sequence length = %d, want 2", len(items))
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok || first["n"] != float64(1) {
+		t.Fatalf("first JSON sequence item = %#v", items[0])
+	}
+}
+
+func TestDecodeInvalidJSONStillFails(t *testing.T) {
+	if _, err := reg.Decode("application/json", []byte("{\"n\":1}\nnot-json\n")); err == nil {
+		t.Fatal("expected invalid JSON to fail")
+	}
+}
+
 func TestEncodeNDJSON(t *testing.T) {
 	data, err := reg.Encode("application/x-ndjson", []map[string]int{{"n": 1}, {"n": 2}})
 	if err != nil {
