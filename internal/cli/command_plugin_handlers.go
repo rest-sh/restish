@@ -241,6 +241,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Con
 		RequestID: msg.RequestID,
 		Status:    resp.Status,
 		Headers:   resp.Headers,
+		URL:       resp.URL,
 		Body:      body,
 	})
 }

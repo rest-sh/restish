@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -205,6 +206,41 @@ func TestAPIConnectExplicitSpecServedAsTextPlain(t *testing.T) {
 	}
 }
 
+func TestAPIConnectExplicitSwaggerSpecReportsUnsupported(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/swagger.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"swagger":"2.0","info":{"title":"Old","version":"1.0"},"paths":{}}`)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	err := c.Run([]string{"restish", "api", "connect", "oldapi", "https://api.example.com", "--spec", "https://api.example.com/swagger.json"})
+	if err == nil {
+		t.Fatal("expected unsupported Swagger error")
+	}
+	if !strings.Contains(err.Error(), "Swagger/OpenAPI 2.0 is not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAPIConnectPreservesEmbedderDefaultConfig(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI(t)
@@ -229,6 +265,41 @@ func TestAPIConnectPreservesEmbedderDefaultConfig(t *testing.T) {
 	}
 	if loaded.APIs["newapi"] == nil {
 		t.Fatalf("expected connected API in c.cfg, got %#v", loaded.APIs)
+	}
+}
+
+func TestAPIConnectConcurrentUpdatesPreserveBothAPIs(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+	run := func(name, baseURL string) {
+		defer wg.Done()
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		errCh <- c.Run([]string{"restish", "api", "connect", name, baseURL, "--no-discover"})
+	}
+
+	wg.Add(2)
+	go run("one", "https://one.example.com")
+	go run("two", "https://two.example.com")
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("api connect: %v", err)
+		}
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.APIs["one"] == nil || cfg.APIs["two"] == nil {
+		t.Fatalf("concurrent api connect lost update: %#v", cfg.APIs)
 	}
 }
 
@@ -361,6 +432,54 @@ func TestAPIConnectAllowCrossOriginSpec(t *testing.T) {
 	}
 	if !api.AllowCrossOriginSpec {
 		t.Fatal("expected allow_cross_origin_spec to be persisted")
+	}
+}
+
+func TestAPIConnectPersistsLinkDiscoveredSpecURL(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Link": []string{`<https://api.example.com/linked-openapi.json>; rel="service-desc"`}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/linked-openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].SpecURL; got != "https://api.example.com/linked-openapi.json" {
+		t.Fatalf("spec_url = %q, want discovered Link URL", got)
 	}
 }
 
@@ -834,6 +953,53 @@ func TestAPIInspect(t *testing.T) {
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(got)), &parsed); err != nil {
 		t.Errorf("api inspect output is not valid JSON: %v\n%s", err, got)
+	}
+}
+
+func TestAPIInspectRedactsCredentialSecrets(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{
+							Type: "bearer",
+							Params: map[string]string{
+								"token": "profile-secret",
+							},
+						},
+						Credentials: map[string]*config.CredentialConfig{
+							"service": {
+								Auth: &config.AuthConfig{
+									Type: "bearer",
+									Params: map[string]string{
+										"token": "credential-secret",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+
+	if err := c.Run([]string{"restish", "api", "inspect", "myapi"}); err != nil {
+		t.Fatalf("api inspect: %v", err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "profile-secret") || strings.Contains(got, "credential-secret") {
+		t.Fatalf("api inspect leaked secret:\n%s", got)
+	}
+	if count := strings.Count(got, `"token": "***"`); count != 2 {
+		t.Fatalf("redacted token count = %d, want 2:\n%s", count, got)
 	}
 }
 

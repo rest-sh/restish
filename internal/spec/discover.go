@@ -37,10 +37,11 @@ var lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) 
 }
 
 type discoveryResult struct {
-	spec     *APISpec
-	ttl      time.Duration
-	err      error
-	priority int // 0 = explicit SpecURL (preferred for errors); 1 = heuristic probes
+	spec      *APISpec
+	ttl       time.Duration
+	err       error
+	priority  int // 0 = explicit SpecURL (preferred for errors); 1 = heuristic probes
+	sourceURL string
 }
 
 // DiscoverConfig holds parameters for spec discovery for a single API.
@@ -327,8 +328,15 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 				if priority > 0 && errors.Is(err, errNoSpecCandidate) {
 					return
 				}
+				if ctx.Err() != nil {
+					select {
+					case ch <- discoveryResult{err: err, priority: priority, sourceURL: sourceURL}:
+					default:
+					}
+					return
+				}
 				select {
-				case ch <- discoveryResult{err: err, priority: priority}:
+				case ch <- discoveryResult{err: err, priority: priority, sourceURL: sourceURL}:
 				case <-ctx.Done():
 				}
 				return
@@ -340,8 +348,18 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 				Transport:        tr,
 				Trace:            cfg.Trace,
 			})
+			if spec != nil && spec.SourceURL == "" {
+				spec.SourceURL = sourceURL
+			}
+			if loadErr != nil && ctx.Err() != nil {
+				select {
+				case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority, sourceURL: sourceURL}:
+				default:
+				}
+				return
+			}
 			select {
-			case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority}:
+			case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority, sourceURL: sourceURL}:
 			case <-ctx.Done():
 			}
 		}()
@@ -410,6 +428,9 @@ func collectDiscoveryResults(ctx context.Context, cancel context.CancelFunc, ch 
 	var bestErrs []error
 	for r := range ch {
 		if r.spec != nil {
+			if r.spec.SourceURL == "" {
+				r.spec.SourceURL = r.sourceURL
+			}
 			cancel() // stop remaining probes
 			return r.spec, r.ttl, nil
 		}

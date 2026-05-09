@@ -2761,6 +2761,14 @@ func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
 		t.Fatalf("expected collision warning in output, got:\n%s", out.String())
 	}
 
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "list"}); err != nil {
+		t.Fatalf("api list failed: %v", err)
+	}
+	if strings.Contains(out.String(), "warning: command name collision") {
+		t.Fatalf("unexpected generated warning for unrelated built-in command:\n%s", out.String())
+	}
+
 	c1 := env.newCLI()
 	if err := c1.Run([]string{"restish", "tapi", "list-items"}); err != nil {
 		t.Fatalf("list-items failed: %v", err)

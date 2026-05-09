@@ -41,6 +41,9 @@ func (c *CLI) prepareRequest(
 	if len(extraHeaders) > 0 {
 		opts.Headers = append(opts.Headers, extraHeaders...)
 	}
+	explicitCredentialContext := requestOptionHeadersContainCredentials(opts.Headers) ||
+		requestOptionQueryContainsCredentials(opts.Query) ||
+		rawURLQueryContainsCredentials(rawURL)
 
 	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts, authOpts)
 	if err != nil {
@@ -112,7 +115,7 @@ func (c *CLI) prepareRequest(
 		requestOptionQueryContainsCredentials(opts.Query) ||
 		rawURLQueryContainsCredentials(rawURL) ||
 		(!noAuth && len(c.pluginsByHook["request-middleware"]) > 0)
-	if hasCredentialContext && opts.CacheNamespace == "" {
+	if explicitCredentialContext || (hasCredentialContext && opts.CacheNamespace == "") {
 		opts.NoCache = true
 	}
 

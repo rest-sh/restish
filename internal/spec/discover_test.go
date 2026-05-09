@@ -1312,6 +1312,41 @@ paths:
 	}
 }
 
+func TestDiscover_ExternalRefDeadlineNamesRef(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			return httpResponse(200, "application/yaml", `openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /items:
+    $ref: "./slow-item.yaml"
+`, nil), nil
+		case "/slow-item.yaml":
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+	cfg := DiscoverConfig{
+		APIName:   "timeout-ref",
+		BaseURL:   "https://specs.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := Discover(ctx, cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected external ref timeout")
+	}
+	if got := err.Error(); !strings.Contains(got, "https://specs.example.com/slow-item.yaml") || !strings.Contains(got, "context deadline exceeded") {
+		t.Fatalf("error did not name timed-out ref: %v", err)
+	}
+}
+
 func TestDiscover_UsesCallerDeadlineForHungServer(t *testing.T) {
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()

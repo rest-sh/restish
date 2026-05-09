@@ -75,9 +75,13 @@ func (a *app) pullIndex(m *Meta) error {
 		entries = append(entries, listEntry{URL: rawURL, Version: version})
 	}
 
-	baseURL, err := url.Parse(normalizedBaseURL(m.URL))
+	baseRaw := m.URL
+	if resp.URL != "" {
+		baseRaw = resp.URL
+	}
+	baseURL, err := url.Parse(normalizedBaseURL(baseRaw))
 	if err != nil {
-		return fmt.Errorf("invalid bulk index URL %q: %w", m.URL, err)
+		return fmt.Errorf("invalid bulk index URL %q: %w", baseRaw, err)
 	}
 	m.Base = commonPrefix(baseURL, entries)
 

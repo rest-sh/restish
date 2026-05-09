@@ -77,6 +77,7 @@ type HTTPResponseMsg struct {
 	RequestID string              `cbor:"request_id,omitempty"`
 	Status    int                 `cbor:"status"`
 	Headers   map[string][]string `cbor:"headers,omitempty"`
+	URL       string              `cbor:"url,omitempty"`
 	Body      any                 `cbor:"body"`
 	// Error is set when the HTTP request itself failed.
 	Error string `cbor:"error,omitempty"`

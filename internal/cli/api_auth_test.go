@@ -257,6 +257,50 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	}
 }
 
+func TestAPIAuthListUsesImplicitDefaultProfile(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
+    }
+  },
+  "security": [{"PartnerKey": []}],
+  "paths": {
+    "/partner": {"get": {"operationId": "partnerReport", "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {BaseURL: baseURL},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
+		t.Fatalf("api auth list: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Profile: default",
+		"Profile auth: none",
+		"Credentials: none",
+		"PartnerKey: missing",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("list output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestAPIAuthAddDerivesAuthAndPromptsFromCachedSpec(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
@@ -306,6 +350,70 @@ func TestAPIAuthAddDerivesAuthAndPromptsFromCachedSpec(t *testing.T) {
 	}
 	if credential.Auth.Type != "api-key" || credential.Auth.Params["name"] != "X-Partner-Key" || credential.Auth.Params["value"] != "partner-secret" {
 		t.Fatalf("auth = %#v", credential.Auth)
+	}
+}
+
+func TestAPIAuthInspectOperationFallsBackToRawSpecCache(t *testing.T) {
+	dir := t.TempDir()
+	specPath := dir + "/openapi.yaml"
+	if err := os.WriteFile(specPath, []byte(`openapi: 3.0.3
+info:
+  title: Local Auth API
+  version: "1.0"
+servers:
+  - url: http://127.0.0.1:8898
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+paths:
+  /private:
+    get:
+      operationId: privateEcho
+      responses:
+        "200": {description: OK}
+  /public:
+    get:
+      operationId: publicEcho
+      security: []
+      responses:
+        "200": {description: OK}
+`), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	cfgFile := dir + "/restish.json"
+	if err := os.WriteFile(cfgFile, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := dir + "/spec-cache"
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "connect", "controlauth", "http://127.0.0.1:8898", "--spec", specPath, "--replace", "prompt.credentials.bearer.token: local-secret"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "controlauth", "--rsh-operation", "privateEcho", "--raw-header", "Authorization"}); err != nil {
+		t.Fatalf("api auth inspect private operation: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "Bearer local-secret" {
+		t.Fatalf("Authorization = %q, want Bearer local-secret", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "controlauth", "--rsh-operation", "public-echo"}); err != nil {
+		t.Fatalf("api auth inspect public operation: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "Auth: none") {
+		t.Fatalf("expected no-auth public operation, got:\n%s", got)
 	}
 }
 

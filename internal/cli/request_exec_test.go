@@ -290,6 +290,30 @@ func TestNormalizeHTTPResponseParsesLinks(t *testing.T) {
 	}
 }
 
+func TestNormalizeHTTPResponseDecodeErrorIncludesPrintableExcerpt(t *testing.T) {
+	c := New()
+	req, err := http.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	httpResp := &http.Response{
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader("not actually json")),
+		Request:    req,
+	}
+
+	_, err = c.normalizeHTTPResponse(httpResp, 0)
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "decoding response body as application/json") || !strings.Contains(got, `body starts with "not actually json"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 type countingBodyLinkParser struct {
 	calls int
 }

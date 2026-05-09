@@ -231,6 +231,12 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		}
 		return nil
 	}
+	if handled, streamErr := c.handleMislabeledJSONLines(cmd, httpResp); handled || streamErr != nil {
+		if handled {
+			traceContentDecode(trace, httpResp.Header.Get("Content-Type"))
+		}
+		return streamErr
+	}
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
@@ -359,12 +365,18 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		return c.writeRawBytes(resp.Raw)
 	}
 	if c.defaultRawBodyOutput(gf, tty) {
-		trace := requestTraceFromContext(requestContext(cmd))
-		trace.Info("Output", "raw bytes (auto)")
-		trace.Step("raw")
-		trace.RenderAfter(c.Stderr, gf.Verbose)
-		_, err := c.Stdout.Write(resp.Raw)
-		return err
+		if resp.Raw == nil {
+			if resp.Body == nil {
+				return nil
+			}
+		} else {
+			trace := requestTraceFromContext(requestContext(cmd))
+			trace.Info("Output", "raw bytes (auto)")
+			trace.Step("raw")
+			trace.RenderAfter(c.Stderr, gf.Verbose)
+			_, err := c.Stdout.Write(resp.Raw)
+			return err
+		}
 	}
 
 	if headersOnly && filterExpr != "" {

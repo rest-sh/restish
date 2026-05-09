@@ -42,6 +42,11 @@ func main() {
 	}
 
 	args := initMsg.Args
+	if text, ok := helpText(args); ok {
+		_ = plugin.WriteMessage(os.Stdout, plugin.StdoutDataMsg{Type: plugin.MsgTypeStdoutData, Data: []byte(text)})
+		_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone})
+		return
+	}
 	client := newPluginClient(dec, os.Stdout)
 	cfg, err := ParseArgs(args)
 	if err == nil {
@@ -74,6 +79,31 @@ func main() {
 		return
 	}
 	_ = plugin.WriteMessage(os.Stdout, plugin.DoneMsg{Type: plugin.MsgTypeDone})
+}
+
+func helpText(args []string) (string, bool) {
+	if len(args) == 0 {
+		return "", false
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		return rootHelpText(), true
+	case "serve":
+		for _, arg := range args[1:] {
+			if arg == "-h" || arg == "--help" {
+				return serveHelpText(), true
+			}
+		}
+	}
+	return "", false
+}
+
+func rootHelpText() string {
+	return "Expose registered APIs as MCP tools via Restish-authenticated HTTP delegation.\n\nUsage:\n  restish mcp serve <api...>\n\nCommands:\n  serve    Serve registered APIs over stdio\n"
+}
+
+func serveHelpText() string {
+	return "Serve registered APIs over the Model Context Protocol.\n\nUsage:\n  restish mcp serve [flags] <api...>\n\nFlags:\n  --operations string        Comma-separated operationId allowlist\n  --max-result-bytes int     Maximum tool result payload size\n  --request-timeout int      Per-tool HTTP request timeout in seconds (0 disables)\n  --read-only                Expose only GET/HEAD operations\n  --allow-write-tools        Expose POST, PUT, PATCH, and DELETE operations as MCP tools\n"
 }
 
 const stdinForwardQueueSize = 64

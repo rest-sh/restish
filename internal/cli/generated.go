@@ -94,7 +94,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		}
 		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op)
 		if err != nil {
-			c.warnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
+			c.generatedWarnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
 			continue
 		}
 		if cmd == nil {
@@ -119,7 +119,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 				}
 				disambiguated = fmt.Sprintf("%s-%d", disambiguated, suffix)
 			}
-			c.warnf("command name collision for API %q: %q; using %q for %s %s", apiName, originalName, disambiguated, op.Method, op.Path)
+			c.generatedWarnf("command name collision for API %q: %q; using %q for %s %s", apiName, originalName, disambiguated, op.Method, op.Path)
 			cmd.Use = strings.Replace(cmd.Use, originalName, disambiguated, 1)
 			cmd.Aliases = append(cmd.Aliases, originalName)
 		}
@@ -159,13 +159,20 @@ func (c *CLI) filterGeneratedAliases(apiName string, cmd *cobra.Command, collisi
 			continue
 		}
 		if collisionScope[alias] {
-			c.warnf("command alias collision for API %q: dropping alias %q on %q", apiName, alias, cmd.Name())
+			c.generatedWarnf("command alias collision for API %q: dropping alias %q on %q", apiName, alias, cmd.Name())
 			continue
 		}
 		collisionScope[alias] = true
 		aliases = append(aliases, alias)
 	}
 	return aliases
+}
+
+func (c *CLI) generatedWarnf(format string, args ...any) {
+	if c.quietGeneratedWarnings {
+		return
+	}
+	c.warnf(format, args...)
 }
 
 func generatedTagCommandName(tag string, namesByTag map[string]string, existing map[string]*cobra.Command) string {
@@ -310,6 +317,9 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			continue
 		}
 		optional = append(optional, pi)
+	}
+	if err := validateGeneratedFlagNames(op, optional); err != nil {
+		return nil, err
 	}
 
 	// Build Use string.
@@ -458,6 +468,24 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 	}
 	return cmd, nil
+}
+
+func validateGeneratedFlagNames(op spec.Operation, optional []*paramInfo) error {
+	seen := map[string]*paramInfo{}
+	for _, p := range optional {
+		if p.flagName == "" {
+			continue
+		}
+		if prev := seen[p.flagName]; prev != nil {
+			opID := op.ID
+			if opID == "" {
+				opID = op.Method + " " + op.Path
+			}
+			return fmt.Errorf("operation %q has duplicate generated flag --%s for %s parameter %q and %s parameter %q", opID, p.flagName, prev.in, prev.name, p.in, p.name)
+		}
+		seen[p.flagName] = p
+	}
+	return nil
 }
 
 func paramKey(in, name string) string {
@@ -1233,6 +1261,7 @@ func extractPathParamNames(path string) []string {
 // toKebabCase converts a camelCase or PascalCase identifier to kebab-case.
 // "getItemById" → "get-item-by-id", "ListUsers" → "list-users".
 func toKebabCase(s string) string {
+	s = normalizeKnownIdentifierAcronyms(s)
 	var b strings.Builder
 	var prev rune
 	for i, r := range s {
@@ -1250,6 +1279,24 @@ func toKebabCase(s string) string {
 		prev = r
 	}
 	return slugify(b.String())
+}
+
+func normalizeKnownIdentifierAcronyms(s string) string {
+	replacements := []struct {
+		from string
+		to   string
+	}{
+		{"OAuth", "Oauth"},
+		{"APIs", "Apis"},
+		{"API", "Api"},
+		{"URLs", "Urls"},
+		{"URL", "Url"},
+		{"JSON", "Json"},
+	}
+	for _, repl := range replacements {
+		s = strings.ReplaceAll(s, repl.from, repl.to)
+	}
+	return s
 }
 
 func fallbackOperationName(method, path string) string {

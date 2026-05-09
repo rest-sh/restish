@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/rest-sh/restish/v2/internal/content"
 )
@@ -97,7 +100,48 @@ func decodeBody(resp *http.Response, reg *content.Registry, maxBytes int64) (dec
 
 	ct := resp.Header.Get("Content-Type")
 	decoded, err = reg.Decode(ct, raw)
+	if err != nil {
+		return nil, raw, responseDecodeError(ct, raw, err)
+	}
 	return decoded, raw, err
+}
+
+func responseDecodeError(contentType string, raw []byte, err error) error {
+	if excerpt, ok := printableBodyExcerpt(raw, 240); ok {
+		return fmt.Errorf("decoding response body as %s: %w; body starts with %s", contentTypeForError(contentType), err, strconv.Quote(excerpt))
+	}
+	return fmt.Errorf("decoding response body as %s: %w", contentTypeForError(contentType), err)
+}
+
+func contentTypeForError(contentType string) string {
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		return "unknown content type"
+	}
+	return contentType
+}
+
+func printableBodyExcerpt(raw []byte, max int) (string, bool) {
+	if len(raw) == 0 || !utf8.Valid(raw) {
+		return "", false
+	}
+	s := string(raw)
+	for _, r := range s {
+		if r == '\n' || r == '\r' || r == '\t' {
+			continue
+		}
+		if r < 0x20 {
+			return "", false
+		}
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	if len(s) > max {
+		s = s[:max] + "..."
+	}
+	return s, true
 }
 
 // StatusToExitCode maps an HTTP status code to the Restish runtime-failure

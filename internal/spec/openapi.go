@@ -46,7 +46,9 @@ func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 	sniff := body
 	low := bytes.ToLower(sniff)
 	return bytes.Contains(low, []byte(`"openapi"`)) ||
-		bytes.Contains(low, []byte("openapi:"))
+		bytes.Contains(low, []byte("openapi:")) ||
+		bytes.Contains(low, []byte(`"swagger"`)) ||
+		bytes.Contains(low, []byte("swagger:"))
 }
 
 // Load parses body as an OpenAPI 3.x document.
@@ -57,6 +59,9 @@ func (OpenAPILoader) Load(body []byte) (*APISpec, error) {
 // LoadWithOptions parses body as an OpenAPI 3.x document, using source
 // metadata to resolve supported external references.
 func (OpenAPILoader) LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, error) {
+	if isSwagger2Document(body) {
+		return nil, &LoadError{Errors: []string{"Swagger/OpenAPI 2.0 is not supported; Restish requires OpenAPI 3.x"}}
+	}
 	resolvedBody, err := resolveOpenAPIExternalRefs(body, opts)
 	if err != nil {
 		return nil, &LoadError{Errors: []string{err.Error()}}
@@ -68,11 +73,32 @@ func (OpenAPILoader) LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, e
 	return &APISpec{Raw: body, Document: doc}, nil
 }
 
+func isSwagger2Document(body []byte) bool {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(body, &doc); err != nil {
+		return false
+	}
+	root := &doc
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
+		root = doc.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "swagger" && strings.TrimSpace(root.Content[i+1].Value) == "2.0" {
+			return true
+		}
+	}
+	return false
+}
+
 func openAPIConfig(opts LoadOptions) *datamodel.DocumentConfiguration {
 	cfg := datamodel.NewDocumentConfiguration()
 	cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	cfg.ExtractRefsSequentially = true
 	cfg.ResolveNestedRefsWithDocumentContext = true
+	cfg.SkipCircularReferenceCheck = true
 
 	if opts.LocalPath != "" {
 		localPath := filepath.Clean(opts.LocalPath)
@@ -392,7 +418,7 @@ func (r *openAPIRefResolver) fetchRemoteDoc(rawURL string) ([]byte, error) {
 	handler := openAPIRemoteURLHandler(opts)
 	resp, err := handler(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GET %s: %w", rawURL, err)
 	}
 	if resp == nil {
 		return nil, fmt.Errorf("GET %s: no response", rawURL)
@@ -403,7 +429,7 @@ func (r *openAPIRefResolver) fetchRemoteDoc(rawURL string) ([]byte, error) {
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSpecBytes+1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GET %s: %w", rawURL, err)
 	}
 	if int64(len(data)) > maxSpecBytes {
 		return nil, fmt.Errorf("OpenAPI external ref %q exceeds limit of %d bytes", rawURL, maxSpecBytes)

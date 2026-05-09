@@ -291,6 +291,9 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+	if apiSpec != nil && apiCfg.SpecURL == "" && len(apiCfg.SpecFiles) == 0 && apiSpec.SourceURL != "" {
+		apiCfg.SpecURL = apiSpec.SourceURL
+	}
 	if !replaceProfiles {
 		if err := preserveExistingProfiles(apiCfg, existingAPI); err != nil {
 			return err
@@ -864,47 +867,9 @@ func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(raw, &view); err != nil {
 		return err
 	}
-	c.redactAPIShowSecrets(apiCfg, view)
+	redactSensitiveConfigValue(view)
 
 	return c.writePrettyJSON(view)
-}
-
-// redactAPIShowSecrets replaces secret auth param values with "***" in the
-// JSON view map so they are not printed in plaintext.
-func (c *CLI) redactAPIShowSecrets(apiCfg *config.APIConfig, view map[string]any) {
-	profiles, _ := view["profiles"].(map[string]any)
-	if profiles == nil {
-		return
-	}
-	for profName, profAny := range profiles {
-		profMap, _ := profAny.(map[string]any)
-		if profMap == nil {
-			continue
-		}
-		authMap, _ := profMap["auth"].(map[string]any)
-		if authMap == nil {
-			continue
-		}
-		params, _ := authMap["params"].(map[string]any)
-		if params == nil {
-			continue
-		}
-		prof := apiCfg.Profiles[profName]
-		if prof == nil || prof.Auth == nil {
-			continue
-		}
-		handler, err := c.authHandlerFor(prof.Auth, authHandlerOptions{})
-		if err != nil {
-			continue
-		}
-		for _, p := range handler.Parameters() {
-			if p.Secret {
-				if _, ok := params[p.Name]; ok {
-					params[p.Name] = "***"
-				}
-			}
-		}
-	}
 }
 
 // runConfigEdit opens the restish config file in $VISUAL or $EDITOR.

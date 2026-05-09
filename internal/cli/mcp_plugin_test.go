@@ -57,6 +57,32 @@ func TestMCPRequiresAPIName(t *testing.T) {
 	}
 }
 
+func TestMCPPluginHelp(t *testing.T) {
+	pluginsParent := installMCPPlugin(t)
+	cfgPath := filepath.Join(pluginsParent, "restish.json")
+	if err := os.WriteFile(cfgPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgPath
+	if err := c.Run([]string{"restish", "mcp", "--help"}); err != nil {
+		t.Fatalf("mcp --help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "restish mcp serve <api...>") {
+		t.Fatalf("unexpected mcp help:\n%s", got)
+	}
+
+	c, out, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = cfgPath
+	if err := c.Run([]string{"restish", "mcp", "serve", "--help"}); err != nil {
+		t.Fatalf("mcp serve --help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "--allow-write-tools") {
+		t.Fatalf("unexpected mcp serve help:\n%s", got)
+	}
+}
+
 func TestMCPServeToolCall(t *testing.T) {
 	pluginsParent := installMCPPlugin(t)
 

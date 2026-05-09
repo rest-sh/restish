@@ -11,6 +11,7 @@ type pluginClient struct {
 type httpResponse struct {
 	Status  int
 	Headers map[string][]string
+	URL     string
 	Body    any
 	Error   string
 }
@@ -37,6 +38,7 @@ func (c *pluginClient) request(method, uri string, headers map[string]string, bo
 	resp := &httpResponse{
 		Status:  reply.Status,
 		Headers: reply.Headers,
+		URL:     reply.URL,
 		Body:    reply.Body,
 		Error:   reply.Error,
 	}

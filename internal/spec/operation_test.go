@@ -696,6 +696,42 @@ components:
 	}
 }
 
+func TestOperationSetToleratesCircularSchemas(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Circular
+  version: "1.0.0"
+paths:
+  /nodes:
+    get:
+      operationId: listNodes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+components:
+  schemas:
+    Node:
+      type: object
+      properties:
+        child:
+          $ref: "#/components/schemas/Node"`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	set, err := loaded.OperationSet(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operation set: %v", err)
+	}
+	if len(set.Operations) != 1 || set.Operations[0].ID != "listNodes" {
+		t.Fatalf("operations = %#v", set.Operations)
+	}
+}
+
 func TestOpenAPI31PatchVersionLoads(t *testing.T) {
 	raw := `openapi: "3.1.1"
 info:

@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
@@ -33,6 +35,46 @@ func streamingContentType(ct string) string {
 		return "ndjson"
 	}
 	return ""
+}
+
+func (c *CLI) handleMislabeledJSONLines(cmd *cobra.Command, resp *http.Response) (bool, error) {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.MaxItems <= 0 {
+		return false, nil
+	}
+	base, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if base != "application/json" || resp.Body == nil {
+		return false, nil
+	}
+
+	original := resp.Body
+	reader := bufio.NewReader(original)
+	line, err := reader.ReadSlice('\n')
+	if err != nil {
+		resp.Body = &readCloser{Reader: io.MultiReader(bytes.NewReader(line), reader), Closer: original}
+		return false, nil
+	}
+	lineCopy := append([]byte(nil), line...)
+	trimmed := strings.TrimSpace(string(lineCopy))
+	if !strings.HasPrefix(trimmed, "{") {
+		resp.Body = &readCloser{Reader: io.MultiReader(bytes.NewReader(lineCopy), reader), Closer: original}
+		return false, nil
+	}
+	if _, parsedJSON := parseJSONOrString(trimmed); !parsedJSON {
+		resp.Body = &readCloser{Reader: io.MultiReader(bytes.NewReader(lineCopy), reader), Closer: original}
+		return false, nil
+	}
+	resp.Body = &readCloser{Reader: io.MultiReader(bytes.NewReader(lineCopy), reader), Closer: original}
+	if err := c.statusError(cmd, resp.StatusCode); err != nil {
+		_ = resp.Body.Close()
+		return true, err
+	}
+	return true, c.handleNDJSON(cmd, resp)
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // handleSSE reads a text/event-stream response body, emitting each event's

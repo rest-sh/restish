@@ -92,25 +92,26 @@ type CLI struct {
 	// a custom instance.
 	Paths *config.Paths
 
-	cfg                *config.Config
-	defaultConfig      *config.Config
-	commandName        string
-	commandShort       string
-	commandLong        string
-	commandVersion     string
-	content            *content.Registry
-	loaders            []spec.Loader
-	linkParsers        []hypermedia.Parser
-	formatters         map[string]output.Formatter
-	plugins            []internalplugin.Plugin
-	pluginsByHook      map[string][]internalplugin.Plugin
-	pluginCommandNames map[string]string
-	authPluginsByAPI   map[string][]internalplugin.Plugin
-	globalAuthPlugins  []internalplugin.Plugin
-	customAuthHandlers map[string]auth.Handler
-	explicitConfigFile bool
-	retryUnsafeWarned  bool
-	signalHandling     bool
+	cfg                    *config.Config
+	defaultConfig          *config.Config
+	commandName            string
+	commandShort           string
+	commandLong            string
+	commandVersion         string
+	content                *content.Registry
+	loaders                []spec.Loader
+	linkParsers            []hypermedia.Parser
+	formatters             map[string]output.Formatter
+	plugins                []internalplugin.Plugin
+	pluginsByHook          map[string][]internalplugin.Plugin
+	pluginCommandNames     map[string]string
+	authPluginsByAPI       map[string][]internalplugin.Plugin
+	globalAuthPlugins      []internalplugin.Plugin
+	customAuthHandlers     map[string]auth.Handler
+	explicitConfigFile     bool
+	retryUnsafeWarned      bool
+	signalHandling         bool
+	quietGeneratedWarnings bool
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -518,6 +519,7 @@ func (c *CLI) Run(args []string) error {
 	}
 
 	root := c.newRootCmd()
+	c.quietGeneratedWarnings = argScan.FirstCommand == "" || isBuiltinCommandName(argScan.FirstCommand)
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that

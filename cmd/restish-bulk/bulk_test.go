@@ -174,6 +174,33 @@ func TestPullIndexResolvesRelativeEntryURLs(t *testing.T) {
 	}
 }
 
+func TestPullIndexResolvesRelativeEntryURLsAgainstResponseURL(t *testing.T) {
+	var out bytes.Buffer
+	client := &pluginClient{
+		CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), &out),
+		requestFunc: func(method, uri string, headers map[string]string, body any) (*httpResponse, error) {
+			if uri != "control/bulk-relative" {
+				t.Fatalf("uri = %q", uri)
+			}
+			return &httpResponse{
+				Status: 200,
+				URL:    "http://127.0.0.1:8899/bulk/index",
+				Body: []any{
+					map[string]any{"url": "items/one", "version": "v1"},
+				},
+			}, nil
+		},
+	}
+	a := &app{client: client}
+	meta := &Meta{URL: "control/bulk-relative", Files: map[string]*File{}}
+	if err := a.pullIndex(meta); err != nil {
+		t.Fatalf("pullIndex: %v", err)
+	}
+	if got := meta.Files["one.json"].URL; got != "http://127.0.0.1:8899/bulk/items/one" {
+		t.Fatalf("one URL = %q", got)
+	}
+}
+
 func TestCollectFilesIncludesDotPrefixedResources(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.MkdirAll(".well-known", 0o700); err != nil {

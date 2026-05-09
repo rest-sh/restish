@@ -75,6 +75,40 @@ func TestBuildOperationCommandRejectsInvalidTypedDefault(t *testing.T) {
 	}
 }
 
+func TestBuildOperationCommandRejectsDuplicateFlagNames(t *testing.T) {
+	c := New()
+	_, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "search",
+		Method: "GET",
+		Path:   "/search",
+		Parameters: []spec.Param{
+			{Name: "start_time", In: "query", Type: "string"},
+			{Name: "start-time", In: "query", Type: "string"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate generated flag error")
+	}
+	if !strings.Contains(err.Error(), "duplicate generated flag --start-time") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestToKebabCaseKnownAcronyms(t *testing.T) {
+	tests := map[string]string{
+		"listAPIs":      "list-apis",
+		"getURL":        "get-url",
+		"parseJSONBody": "parse-json-body",
+		"OAuthToken":    "oauth-token",
+		"listItems":     "list-items",
+	}
+	for input, want := range tests {
+		if got := toKebabCase(input); got != want {
+			t.Fatalf("toKebabCase(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 // ---- Name-collision handling -----------------------------------------------
 
 func buildSpecWithPaths(t *testing.T, yamlBody string) *spec.APISpec {

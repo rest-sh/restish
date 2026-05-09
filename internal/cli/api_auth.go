@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -75,7 +76,7 @@ func addAPIAuthLogoutFlags(cmd *cobra.Command) {
 func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName)
+	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 	apiName, credentialID := args[0], args[1]
 	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName)
+	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, true)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 	apiName, credentialID := args[0], args[1]
 	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName)
+	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth inspect <api-name> --raw-header Authorization")
 	}
 	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName)
+	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
 	if err != nil {
 		return err
 	}
@@ -457,10 +458,31 @@ func selectedOperationAuthConfigs(selected []selectedOperationAuth) []*config.Au
 	return configs
 }
 
-func (c *CLI) apiProfileForAuth(apiName, profileName string) (*config.APIConfig, *config.ProfileConfig, error) {
+func (c *CLI) apiProfileForAuth(apiName, profileName string, create bool) (*config.APIConfig, *config.ProfileConfig, error) {
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w; run \"restish api list\" to see configured APIs", err)
+	}
+	if apiCfg.Profiles != nil && apiCfg.Profiles[profileName] != nil {
+		return apiCfg, apiCfg.Profiles[profileName], nil
+	}
+	if profileName == "default" {
+		prof := &config.ProfileConfig{}
+		if create {
+			if apiCfg.Profiles == nil {
+				apiCfg.Profiles = map[string]*config.ProfileConfig{}
+			}
+			apiCfg.Profiles[profileName] = prof
+		}
+		return apiCfg, prof, nil
+	}
+	if create {
+		if apiCfg.Profiles == nil {
+			apiCfg.Profiles = map[string]*config.ProfileConfig{}
+		}
+		prof := &config.ProfileConfig{}
+		apiCfg.Profiles[profileName] = prof
+		return apiCfg, prof, nil
 	}
 	if apiCfg.Profiles == nil || apiCfg.Profiles[profileName] == nil {
 		return nil, nil, fmt.Errorf("API %q has no profile %q; configured profiles: %s", apiName, profileName, profileNames(apiCfg.Profiles))
@@ -472,11 +494,40 @@ func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig,
 	if apiCfg == nil {
 		return spec.OperationSet{}, false
 	}
-	return spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, spec.OperationOptions{
+	opts := spec.OperationOptions{
 		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
-	})
+	}
+	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts); ok {
+		return set, true
+	}
+	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	if err != nil || s == nil {
+		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
+			return spec.OperationSet{}, false
+		}
+		var discoverErr error
+		s, discoverErr = spec.Discover(context.Background(), spec.DiscoverConfig{
+			APIName:         apiName,
+			BaseURL:         apiCfg.BaseURL,
+			SpecFiles:       apiCfg.SpecFiles,
+			CacheDir:        c.specCacheDir(),
+			OperationBase:   apiCfg.OperationBase,
+			ServerVariables: effectiveServerVariables(apiCfg, profileName),
+			Version:         Version,
+			ForceRefresh:    true,
+		}, c.loaders)
+		if discoverErr != nil || s == nil {
+			return spec.OperationSet{}, false
+		}
+	}
+	set, err := s.OperationSet(opts)
+	if err != nil {
+		return spec.OperationSet{}, false
+	}
+	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opts, set)
+	return set, true
 }
 
 func (c *CLI) cachedOperationForAPI(apiName string, apiCfg *config.APIConfig, profileName, value string) (spec.Operation, bool, error) {

@@ -404,6 +404,36 @@ func TestNDJSONMaxItemsWarns(t *testing.T) {
 	}
 }
 
+func TestMislabeledJSONLinesMaxItemsStreams(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{"n":1}`)
+		fmt.Fprintln(w, `{"n":2}`)
+		fmt.Fprintln(w, `{"n":3}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-items", "2"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+		t.Fatalf("expected first two lines, got:\n%s", got)
+	}
+	if strings.Contains(got, `"n":3`) {
+		t.Fatalf("unexpected third line, got:\n%s", got)
+	}
+	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
+	if !strings.Contains(errOut.String(), wantWarning) {
+		t.Fatalf("expected max-items warning %q, got %q", wantWarning, errOut.String())
+	}
+}
+
 func TestNDJSONDefaultHasNoItemCap(t *testing.T) {
 	const records = 1002
 

@@ -90,6 +90,56 @@ func TestCacheAuthenticatedProfileRequestUsesProfileNamespace(t *testing.T) {
 	}
 }
 
+func TestCacheExplicitAuthorizationHeaderBypassesAPINamespaceCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=3600")
+		if r.Header.Get("Authorization") != "" {
+			_, _ = w.Write([]byte(`{"mode":"auth"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"mode":"anonymous"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cacheDir := t.TempDir()
+	cfgFile := t.TempDir() + "/restish.json"
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"svc": map[string]any{"base_url": srv.URL},
+		},
+	})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c1, out1, _ := newTestCLI(t)
+	c1.Hooks().ConfigPath = cfgFile
+	c1.Hooks().CachePath = cacheDir
+	if err := c1.Run([]string{"restish", "get", "svc/items"}); err != nil {
+		t.Fatalf("anonymous request failed: %v", err)
+	}
+	if !strings.Contains(out1.String(), "anonymous") {
+		t.Fatalf("anonymous response = %q", out1.String())
+	}
+
+	c2, out2, _ := newTestCLI(t)
+	c2.Hooks().ConfigPath = cfgFile
+	c2.Hooks().CachePath = cacheDir
+	if err := c2.Run([]string{"restish", "get", "-H", "Authorization: Bearer secret", "svc/items"}); err != nil {
+		t.Fatalf("authorized request failed: %v", err)
+	}
+	if !strings.Contains(out2.String(), "auth") {
+		t.Fatalf("authorized response = %q", out2.String())
+	}
+
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("authorized request should bypass anonymous API cache entry, got %d server hits", n)
+	}
+}
+
 func TestCacheCredentialQueryBypassesCache(t *testing.T) {
 	var hits atomic.Int32
 	srv := newCacheableServer(t, &hits)

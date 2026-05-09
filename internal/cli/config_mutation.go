@@ -82,21 +82,8 @@ func (c *CLI) validateAuthConfig(authCfg *config.AuthConfig) error {
 func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *config.APIConfig) error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
-			return err
-		}
-	} else {
-		if cfg == nil {
-			cfg = &config.Config{}
-		}
-		if cfg.APIs == nil {
-			cfg.APIs = map[string]*config.APIConfig{}
-		}
-		cfg.APIs[apiName] = apiCfg
-		if err := config.Save(cfgPath, cfg); err != nil {
-			return err
-		}
+	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
+		return err
 	}
 	return c.reloadConfigAfterMutation(label, oldCfg)
 }
