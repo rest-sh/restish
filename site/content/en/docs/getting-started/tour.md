@@ -18,12 +18,21 @@ have only a URL, and it can also learn an API from OpenAPI so repeated work gets
 generated commands, auth, profiles, completions, filtering, pagination, and
 output formats.
 
+In this tour:
+
+- make direct requests, inspect errors, filter responses, and choose output
+- send data, edit resources, paginate collections, and read streams
+- register an API, use generated commands, configure auth and profiles
+- customize local output, install plugins, and script with Restish
+
 ## Try It Here Or Locally
 
 The browser examples are previews of the real CLI. They make live requests to
 the docs API when the browser can do that safely, and they use small built-in
 fixtures for local-only or streaming behavior that a web page cannot reproduce
-exactly. The Go CLI remains the source of truth for command behavior.
+exactly. Browser previews cannot read stdin or write local files; otherwise the
+commands are the same. The Go CLI remains the source of truth for command
+behavior.
 
 To follow along locally, install Restish and verify the binary:
 
@@ -78,7 +87,7 @@ while keeping stdout available for the response body.
 
 Learn more: [Troubleshooting](../../guides/troubleshooting/),
 [Command Behavior](../../guides/command-behavior/),
-[Command Behavior](../../guides/command-behavior/).
+[Output](../../guides/output/).
 
 ## Filter Responses
 
@@ -112,6 +121,7 @@ making you write a full query program:
 
 - `body.user.email` selects one field
 - `body.items[0].id` selects one array item's `id` field
+- `body.items[name == "demo"]|[0]` filters an array and picks the first match
 - `body.items.{id, name}` keeps a few fields from each item
 - `body.items[name == "demo"]` filters array items
 - `links.next` or `headers.Content-Type` inspects response metadata
@@ -143,9 +153,10 @@ Learn more: [Filtering](../../guides/filtering/), [Query Syntax](../../reference
 
 ## Choose Output Formats
 
-Interactive terminals default to Restish's readable format, similar to JSON. When stdout is not a
-terminal, the CLI defaults toward machine-readable JSON. You can choose the
-format directly with `-o`.
+Interactive terminals default to Restish's readable format: syntax-highlighted,
+JSON-like output optimized for humans. When stdout is not a terminal, the CLI
+defaults toward machine-readable JSON. You can choose the format directly with
+`-o`.
 
 JSON is the safest handoff to other structured tools:
 
@@ -156,7 +167,7 @@ restish api.rest.sh/images -o json
 Tables are useful when you want to scan a collection. You can optionally choose which fields to show as columns with `--rsh-columns`:
 
 {{< restish-example >}}
-restish api.rest.sh/images -o table
+restish api.rest.sh/images -o table --rsh-columns name,format,self
 {{< /restish-example >}}
 
 `gron` flattens JSON into assignment-like lines that are easy to search with `grep` as they give you the full path to the found item:
@@ -181,9 +192,8 @@ Learn more: [Output](../../guides/output/), [Output Formats](../../reference/out
 
 ## Saving Files
 
-For binary responses, the real CLI can write response bytes directly to a file.
-The browser preview cannot create local files, but it can still show the image
-response headers:
+For binary responses, the local CLI can write response bytes directly to a
+file. The browser preview still shows the image response headers:
 
 {{< restish-example >}}
 restish api.rest.sh/images/jpeg -f headers
@@ -193,7 +203,7 @@ Run the download locally:
 
 ```bash
 # Redirect output to save the body bytes to a file.
-restish api.rest.sh/images/jpeg > dragonfly.jpg
+restish api.rest.sh/images/jpeg > image.jpg
 restish api.rest.sh/bytes/64 > sample.bin
 ```
 
@@ -278,13 +288,16 @@ might interpret.
 restish api.rest.sh/ -f body.parsed 'user.name: Alice, active: true, tags[]: docs'
 {{< /restish-example >}}
 
+The docs echo endpoint returns the parsed request body under `body.parsed`, so
+the filter shows exactly what Restish sent.
+
 For forms, choose the content type and keep the same shorthand body model:
 
 {{< restish-example >}}
 restish -c form api.rest.sh/login 'username: alice, password: secret'
 {{< /restish-example >}}
 
-Use stdin for larger payloads in the real CLI:
+Use stdin for larger payloads in a local terminal:
 
 ```bash
 restish post api.rest.sh/post < payload.json
@@ -303,17 +316,18 @@ That is useful when an API exposes whole-resource updates and you want a safer
 workflow than hand-building a large `PUT`.
 
 The browser preview shows the one-shot edit shape against the docs fixture:
+`GET /types` returns a small JSON document with fields such as `boolean` and
+`number`, so the patch below has visible fields to update.
 
 {{< restish-example >}}
 restish edit api.rest.sh/types 'boolean: false, number: 67.89'
 {{< /restish-example >}}
 
 In a real terminal you will see a diff before submitting the data. With no
-patch arguments, `restish edit` opens your editor by default; `-i` is still
-accepted as a v1 compatibility alias:
+patch arguments, `restish edit` opens your editor by default:
 
 ```bash
-restish edit api.rest.sh/types -i
+restish edit api.rest.sh/types
 ```
 
 If the API provides a `$schema` link in the returned resource body, your editor may be able to use that for live validation and completion as you edit the resource. It will be able to validate things like the data structure shape, required fields, field types, enum values, min/max values, and more depending on the schema and editor.
@@ -362,6 +376,8 @@ records as they arrive instead of waiting for a complete document, and JSON
 event payloads can be filtered like normal responses.
 
 Always bound stream examples when you only want a sample:
+The `/logs` endpoint emits records with fields such as `message` and
+`timestamp`.
 
 {{< restish-example >}}
 restish api.rest.sh/logs --rsh-max-items 4 -f 'body.{message, timestamp}'
@@ -376,7 +392,7 @@ restish api.rest.sh/events --rsh-max-items 4 -f 'body.data.{message, timestamp}'
 Learn more: [Streaming](../../guides/streaming/),
 [Output Formats](../../reference/output-formats/).
 
-## Bound Slow Or Flaky APIs
+## Handle Slow Or Flaky APIs
 
 Daily API work needs guardrails. Restish supports timeouts, conservative
 retries, HTTP caching, and cache management so scripts and interactive sessions
@@ -395,8 +411,9 @@ attempt count for one command:
 restish 'api.rest.sh/flaky?failures=1&key=tour' --rsh-retry 2
 {{< /restish-example >}}
 
-Use cache flags when debugging freshness, and cache commands when you need to
-inspect or clear stored responses:
+Use cache commands when you need to inspect or clear stored responses. Add
+`--rsh-no-cache` to a request only when you want to bypass a cached response
+while debugging freshness:
 
 ```bash
 restish api.rest.sh/cache --rsh-no-cache
@@ -488,7 +505,10 @@ restish example get-auth-basic -v
 {{< /restish-example >}}
 
 Verbose output redacts sensitive values, so you can confirm that auth was added
-without leaking the credential into logs. Use `restish api auth inspect example` to see configured credentials and what specific header or query parameters they will add to requests.
+without leaking the credential into logs.
+
+Use `restish api auth inspect example` to see configured credentials and what
+specific header or query parameters they will add to requests.
 
 Learn more: [Authentication](../../guides/authentication/),
 [Commands](../../reference/commands/),
@@ -526,8 +546,13 @@ readable output styling, and shell setup protects Restish's bracket-heavy
 filters and shorthand from shell globbing.
 
 ```bash
+# See official theme names, then set one
+restish config theme list
+restish config theme set one-dark-pro
+
 # Install and set custom themes from a local path, URL, or repo
-restish config theme set PATH_OR_URL_OR_REPO [name]
+restish config theme set ./theme.json
+restish config theme set rest-sh/restish dracula
 
 # Shell setup (argument processing & command completion)
 restish shell setup zsh

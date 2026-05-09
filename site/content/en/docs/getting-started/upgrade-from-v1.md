@@ -76,7 +76,9 @@ The migration carries over the main API-specific settings:
 - PKCS#11 TLS signer settings
 
 Comments from the v1 files remain in the backup copies. The generated
-`restish.json` includes a short migration header and converted v2 config.
+`restish.json` is JSONC: it includes a short migration header, converted v2
+config, and comments that Restish preserves during later config edits where
+possible.
 
 ## Deliberate Behavior Changes
 
@@ -104,7 +106,7 @@ These changes are intentional in v2 and are not treated as regressions:
 
 Use this as the fast lookup table when muscle memory collides with v2.
 
-| v1                                    | v2                                                          | Notes                                                 |
+| v1                                    | v2                                                          | Status                                                |
 | ------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
 | `apis.json`                           | `restish.json`                                              | API config now lives under top-level `apis`           |
 | `config.json`                         | `restish.json`                                              | v2 uses one config file                               |
@@ -118,7 +120,7 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | profile `base`                        | profile `base_url`                                          | API/profile base field renamed                        |
 | API `base`                            | API `base_url`                                              | API base field renamed                                |
 | `-p`, `--rsh-profile`                 | `-p`, `--rsh-profile`                                       | Same flag, but invalid profile names now error        |
-| v1 plugin binaries                    | v2 plugin binaries                                          | Rebuild or replace plugins for the v2 protocol        |
+| v1 plugin binaries                    | Rebuild or install v2-compatible plugin binaries            | v1 plugin binaries do not load unchanged              |
 
 ## Plugin Changes
 

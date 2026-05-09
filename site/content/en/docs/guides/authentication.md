@@ -135,14 +135,15 @@ sensitive credential headers/query values, including for matching generic URL
 requests. Optional anonymous alternatives use configured credentials when
 available and anonymous access as the fallback.
 
-Choose a specific allowed alternative with `--rsh-auth`:
+For an API that defines several allowed auth alternatives, choose one with
+`--rsh-auth`:
 
 ```bash
 restish myapi partner-report --rsh-auth PartnerKey
 restish myapi signed-report --rsh-auth UserOAuth+PartnerKey
 ```
 
-Those commands use placeholder operation names because the public example API
+These commands use placeholder operation names because the public example API
 does not expose a multi-scheme partner-auth fixture.
 
 ## Inspect The Final Header

@@ -18,7 +18,8 @@ restish --version
 
 ## GitHub Release Archives
 
-Download the archive for your OS and CPU from GitHub Releases, unpack it, and
+Download the archive for your OS and CPU from
+[GitHub Releases](https://github.com/rest-sh/restish/releases), unpack it, and
 put the `restish` binary on your `PATH`.
 
 Release archives are published for macOS, Linux, and Windows on `amd64` and
@@ -50,7 +51,7 @@ restish --help
 ## Verify The Install
 
 ```bash
-restish --help
+restish --version
 restish api.rest.sh/
 ```
 

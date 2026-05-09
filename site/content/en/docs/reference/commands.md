@@ -124,6 +124,9 @@ restish cert --warn-days 14 api.rest.sh
 restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 ```
 
+The `service.internal.test` command is illustrative; replace it with a host
+your network can reach.
+
 Use `cert` before changing request TLS flags. It reports issuer, subject,
 validity dates, and expiration warnings using the same custom CA file you would
 use for a request.
@@ -152,6 +155,8 @@ to use `--json` for machine-readable output:
 ```bash
 restish doctor --json
 restish doctor api example --check-network --json
+restish doctor plugin ./restish-csv --json
+restish doctor migrate-v1 --json
 ```
 
 ## Generated API Commands

@@ -106,6 +106,5 @@ URLs, or query defaults start making commands noisy.
 
 - [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
-- [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [API Management](/docs/reference/api-management/)
 - [Example API](/docs/reference/example-api/)

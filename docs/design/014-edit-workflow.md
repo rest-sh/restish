@@ -90,8 +90,7 @@ restish edit https://api.example.com/items/123 name: Alice status: active
 without opening the editor at all.
 
 This is a fast path, not a separate command family. Supplying shorthand patch
-args always selects patch-only mode, even when the v1-compatible `-i` flag is
-present.
+args always selects patch-only mode.
 
 ## No-Editor Review
 
@@ -122,9 +121,8 @@ The diff exists for two reasons:
 By default, edit mode should ask for confirmation before sending a destructive
 update unless the workflow or options make that clearly redundant.
 
-The v1-compatible `-i` flag is a no-op compatibility alias. Editor mode is the
-default whenever no shorthand patch args are present and `--no-editor` is not
-set.
+Editor mode is the default whenever no shorthand patch args are present and
+`--no-editor` is not set.
 
 `-y` / `--rsh-yes` skips the confirmation prompt for automation.
 

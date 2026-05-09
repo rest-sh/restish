@@ -105,6 +105,5 @@ completion, profiles, and API-specific help.
 ## Related Pages
 
 - [Tour of Restish](../tour/)
-- [Completions](/docs/getting-started/shell-setup/)
 - [Shorthand](/docs/reference/shorthand/)
 - [Query Syntax](/docs/reference/query-syntax/)

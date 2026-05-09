@@ -140,11 +140,13 @@ need a specific non-sensitive field.
 Image responses can render in capable terminals:
 
 ```bash
-restish api.rest.sh/images/png -o image
-restish -H 'Accept: image/png' api.rest.sh/image -o image
+restish api.rest.sh/images/png
+restish -H 'Accept: image/png' api.rest.sh/images/png
 ```
 
-Redirect the response to save the image instead.
+The readable default renders `image/*` responses on an interactive terminal.
+Use `-o image` only when you need to force image rendering for an ambiguous
+response. Redirect the response to save the image instead.
 
 ## Greppable Output
 

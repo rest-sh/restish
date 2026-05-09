@@ -20,6 +20,7 @@ Document formats produce one coherent result:
 | `yaml` | One YAML document. |
 | `cbor` | One CBOR document. |
 | `gron` | Greppable path/value assignments. |
+| `table` | Terminal table output for records or object collections. |
 | `image` | Terminal image rendering for image responses. |
 
 ```bash
@@ -27,7 +28,7 @@ restish api.rest.sh/images -o readable
 restish api.rest.sh/images --rsh-collect -o json
 restish api.rest.sh/images -o yaml
 restish api.rest.sh/example -o gron
-restish api.rest.sh/images/png -o image
+restish api.rest.sh/images/png
 ```
 
 For redirects, unfiltered responses already write body bytes:
@@ -68,11 +69,12 @@ restish api.rest.sh/images -o table --rsh-sort-by name
 
 ## Images
 
-`image` renders image responses in capable terminals. Redirect the same request
-when you want a file instead.
+The readable default renders `image/*` responses in capable interactive
+terminals. Use `-o image` to force image rendering when the default would be
+something else. Redirect the same request when you want a file instead.
 
 ```bash
-restish api.rest.sh/images/png -o image
+restish api.rest.sh/images/png
 ```
 
 ## Filters And Scalar Lines

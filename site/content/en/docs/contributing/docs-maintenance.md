@@ -84,6 +84,16 @@ hugo --source site --quiet
 scripts/check-doc-links.rb
 ```
 
+Generated help audit:
+
+```bash
+restish --help
+restish api --help
+restish plugin --help
+restish shell setup --help
+restish content-types
+```
+
 Useful stale-text checks:
 
 ```bash

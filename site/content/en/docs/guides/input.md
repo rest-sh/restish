@@ -50,7 +50,7 @@ echo '{"name":"Alice","role":"user"}' | restish post api.rest.sh/post
 ```
 
 When stdin is not structured JSON or YAML, Restish preserves it as a plain text
-request body:
+request body. `-c text` sends `Content-Type: text/plain`:
 
 ```bash
 printf 'hello from stdin' | restish post -c text api.rest.sh/post

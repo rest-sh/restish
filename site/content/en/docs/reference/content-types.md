@@ -30,7 +30,8 @@ not change what the server sends.
 | `ion` | `application/ion`, `text/ion` |
 | `form` | `application/x-www-form-urlencoded` |
 | `multipart` | `multipart/form-data` |
-| `text` | `text/event-stream`, `text/*` |
+| `sse` | `text/event-stream` |
+| `text` | `text/plain`, `text/*` |
 
 JSON-family structured types with `+json`, such as
 `application/problem+json`, decode as JSON.
@@ -48,6 +49,8 @@ restish post -c multipart api.rest.sh/uploads description: docs, file: @README.m
 
 Shorthand builds a logical value. The selected encoder turns that value into
 JSON, YAML, CBOR, form data, multipart parts, text, or raw bytes.
+Use `-c text` for plain text request bodies; SSE responses still decode from
+`text/event-stream`.
 
 ## Response Decoding
 
@@ -69,7 +72,7 @@ Use `Accept` when you need to influence server-side content negotiation:
 
 ```bash
 restish -H 'Accept: application/json' api.rest.sh/formats/json
-restish -H 'Accept: image/png' api.rest.sh/image -o image
+restish -H 'Accept: image/png' api.rest.sh/images/png
 ```
 
 Use `-o` when you want Restish to transform a decoded response after it arrives:

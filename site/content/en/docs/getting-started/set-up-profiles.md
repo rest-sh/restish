@@ -100,7 +100,8 @@ restish -p prod-readonly myapi get-user 123
 Profiles can contain secrets, especially for basic auth, API keys, and OAuth
 client credentials. Keep config files private and prefer environment-variable
 references or external tools when your team does not want secrets in
-`restish.json`.
+`restish.json`. Use `env:VAR` in a shorthand value when Restish should read a
+secret from the environment at request time.
 
 ## Next Step
 
@@ -110,7 +111,6 @@ task.
 
 ## Related Pages
 
-- [Profiles Reference](/docs/reference/profiles/)
 - [Profiles Reference](/docs/reference/profiles/)
 - [Config Reference](/docs/reference/config/)
 - [Authentication](/docs/guides/authentication/)

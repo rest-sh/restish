@@ -38,14 +38,15 @@ restish api.rest.sh/images --rsh-collect -f 'body[0:2].self'
 ```
 
 Negative indexes count from the end. Slices need the whole collection, so use
-`--rsh-collect` for paginated arrays.
+`--rsh-collect` for paginated arrays. Slice bounds are inclusive:
+`body[0:2]` selects indexes `0`, `1`, and `2`.
 
 ## Selection
 
 Selection filters array items:
 
 ```bash
-restish api.rest.sh/images --rsh-collect -f 'body[format = jpeg].name' -o lines
+restish api.rest.sh/images --rsh-collect -f 'body[format == jpeg].name' -o lines
 restish api.rest.sh/images --rsh-collect -f 'body[name.lower contains dragonfly].self' -o lines
 ```
 

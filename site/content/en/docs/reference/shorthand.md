@@ -98,7 +98,7 @@ Scalar values replace. Fields not mentioned in the patch remain.
 
 ```bash
 echo '{"name":"Alice","role":"user"}' |
-  restish post api.rest.sh/post role: admin
+  restish post api.rest.sh/post 'role: admin'
 ```
 
 The request body keeps `name` and changes `role`.
@@ -150,11 +150,14 @@ patches it:
 
 ```bash
 echo '{"name":"Alice","role":"user"}' |
-  restish post api.rest.sh/post role: admin
+  restish post api.rest.sh/post 'role: admin'
 ```
 
 When stdin is not JSON, YAML, or shorthand-shaped structured data, Restish sends
 it as text unless body arguments force a structured patch workflow.
+
+When shorthand is used as a response query, array slices use inclusive bounds:
+`body[0:2]` selects indexes `0`, `1`, and `2`.
 
 ## Request vs Config Patches
 

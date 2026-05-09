@@ -41,8 +41,8 @@ explicitly says otherwise:
 - manual header override semantics, especially for `Accept`
 - documented environment input shapes such as comma-separated `RSH_HEADER`
 - headless-friendly auth paths for remote or SSH usage
-- interactive edit workflows, including v1-compatible shorthand flags where
-  the command still exists
+- interactive edit workflows and the documented replacement for removed v1
+  aliases
 - response metadata filtering such as `headers.Date`
 - explicit full-response filters such as `-f @`
 - shorthand filter examples from the v1 docs when the syntax is clearly
@@ -210,8 +210,8 @@ tests or migration notes:
   of appending to the generated Restish accept string
 - `RSH_HEADER=header1:value1,header2:value2` produces multiple headers unless
   a future design replaces that input shape with a documented alternative
-- `restish edit -i ...` enters the supported interactive edit path or has a
-  documented replacement before release
+- `restish edit ...` without patch args enters the supported interactive edit
+  path; the v1 `-i` alias is removed before release
 - `-f headers.Date`, `-f headers`, `-f status`, and `-f @` operate on the
   normalized response envelope rather than the body alone
 - shorthand filters used by v1 examples continue to parse as shorthand in auto

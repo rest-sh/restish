@@ -186,8 +186,9 @@ Use `restish api auth logout` for cached auth tokens.
 Themes affect `readable` output only. Theme files may be JSON or JSONC:
 
 ```bash
-restish config theme set ./themes/one-dark-pro.json
-restish config theme set ./themes/catppuccin-mocha.json
+restish config theme list
+restish config theme set one-dark-pro
+restish config theme set ./theme.json
 restish config theme set user/repo dark --yes
 restish config theme reset
 ```
@@ -199,9 +200,10 @@ names differently from JSON/readable object keys. `reset` removes the saved
 theme and restores the built-in theme.
 
 For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`
-first, then falls back to `<name>.json` at the repository root.
+first, then falls back to `<name>.json` at the repository root. Name-only
+theme installation resolves to the official Restish repository.
 
-The source checkout includes example themes under `themes/`, including
+`theme list` shows the official theme names:
 `catppuccin-mocha`, `dracula`, `github-dark`, `houston`, `minimal`,
 `monokai-pro-dark`, `monokai-pro-light`, `noctis`, `one-dark-pro`,
 `restish-light`, `synthwave-84`, and `vscode-dark`.

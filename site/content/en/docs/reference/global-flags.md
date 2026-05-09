@@ -33,6 +33,10 @@ restish post -c form api.rest.sh/login 'username: alice, password: secret'
 restish --rsh-server https://staging.example.com example list-images
 ```
 
+Generated operation commands may also expose `--rsh-generate-body` when the
+OpenAPI operation has a request body schema. That flag prints an example body
+for the generated operation instead of sending the request.
+
 ## Output And Filtering
 
 | Flag | Type | Default | Notes |

@@ -40,7 +40,7 @@ restish api.rest.sh/example -f body.volunteer[0].organization
 ## Selection And Projection
 
 {{< restish-example >}}
-restish api.rest.sh/images --rsh-collect -f 'body[format = jpeg].self' -o lines
+restish api.rest.sh/images --rsh-collect -f 'body[format == jpeg].self' -o lines
 {{< /restish-example >}}
 
 ```bash
@@ -49,6 +49,7 @@ restish api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[
 restish api.rest.sh/example -f 'body..url'
 ```
 
+Recursive search (`..`) walks every matching field below the current path.
 Recursive search and projection are useful when exploring unfamiliar API
 responses.
 

@@ -228,11 +228,12 @@ document format.
 
 ```bash
 restish api.rest.sh/events --rsh-max-items 3 -o ndjson
-restish api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f body.data.message -o lines
 ```
 
 **Prevention:** Use `--rsh-max-items` for fixed samples and `--rsh-timeout` for
-time-bounded stream checks.
+time-bounded stream checks. For SSE, parsed event payload fields live under
+`body.data`; for NDJSON records, fields live directly under `body`.
 
 **Related docs:** [Streaming](/docs/guides/streaming/), [Output Formats](/docs/reference/output-formats/).
 
@@ -289,6 +290,9 @@ or plugin configuration error.
 restish cert api.rest.sh
 restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 ```
+
+Replace `service.internal.test` with a reachable internal service before
+running the custom-CA example.
 
 **Fix:** Use the correct CA, client certificate, key, or TLS signer parameters.
 Avoid `--rsh-insecure` except for short debugging.

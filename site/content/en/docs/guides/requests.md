@@ -64,7 +64,7 @@ echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post
 Piped structured input can be patched by shorthand arguments:
 
 ```bash
-echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post role: admin
+echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post 'role: admin'
 ```
 
 ## Use API-Aware Commands
@@ -89,7 +89,7 @@ Use `--rsh-server` when a generated command should hit a different host for one
 invocation:
 
 ```bash
-restish --rsh-server https://api.rest.sh example list-images
+restish --rsh-server https://staging.example.com example list-images
 ```
 
 If you keep using the override, create a profile instead.

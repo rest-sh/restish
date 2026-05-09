@@ -142,7 +142,7 @@ restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 {{< /restish-example >}}
 
 ```bash
-restish api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f body.data.user.id -o lines
 ```
 
 ## Resilience And HTTP Behavior

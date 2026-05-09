@@ -22,8 +22,7 @@ resource value. If the editor only changed whitespace, indentation, key spacing,
 or trailing newlines, Restish reports no changes and does not send an update.
 
 When you pass shorthand patch arguments, Restish stays in patch-only mode and
-does not open an editor. The `-i` flag is accepted for v1 compatibility but does
-not change that behavior.
+does not open an editor.
 
 ## Choose The Edit Format
 

@@ -30,11 +30,11 @@ SSE output includes event metadata and parsed data. Filter the event data when
 you only need fields:
 
 {{< restish-example >}}
-restish api.rest.sh/events --rsh-max-items 3 -f data.type -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f body.data.type -o lines
 {{< /restish-example >}}
 
 ```bash
-restish api.rest.sh/events --rsh-max-items 3 -f data.user.id -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f body.data.user.id -o lines
 ```
 
 ## NDJSON
@@ -80,7 +80,7 @@ restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 {{< /restish-example >}}
 
 ```bash
-restish api.rest.sh/events --rsh-max-items 3 -f data.message -o lines
+restish api.rest.sh/events --rsh-max-items 3 -f body.data.message -o lines
 ```
 
 ## SSE Parsing Notes
