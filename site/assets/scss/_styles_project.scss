@@ -295,6 +295,74 @@ body.td-home .td-navbar__search .td-search-input {
   max-width: none;
 }
 
+.chroma {
+  color: var(--restish-code-text);
+}
+
+.chroma .c,
+.chroma .c1,
+.chroma .cm,
+.chroma .cp,
+.chroma .cs {
+  color: #94a3b8;
+}
+
+.chroma .k,
+.chroma .kc,
+.chroma .kd,
+.chroma .kn,
+.chroma .kp,
+.chroma .kr,
+.chroma .kt {
+  color: #f43f5e;
+}
+
+.chroma .na,
+.chroma .nc,
+.chroma .no,
+.chroma .nt {
+  color: #5fafd7;
+}
+
+.chroma .s,
+.chroma .s1,
+.chroma .s2,
+.chroma .sb,
+.chroma .sc,
+.chroma .sd,
+.chroma .se,
+.chroma .sh,
+.chroma .si,
+.chroma .sr,
+.chroma .ss,
+.chroma .sx {
+  color: #afd787;
+}
+
+.chroma .m,
+.chroma .mb,
+.chroma .mf,
+.chroma .mh,
+.chroma .mi,
+.chroma .mo {
+  color: #d78700;
+}
+
+.chroma .nb,
+.chroma .nf,
+.chroma .nv,
+.chroma .vc,
+.chroma .vg,
+.chroma .vi {
+  color: #d7afc7;
+}
+
+.chroma .o,
+.chroma .ow,
+.chroma .p {
+  color: #d7af5f;
+}
+
 .td-content .mermaid {
   margin: 1rem 0 1.6rem;
   padding: 0.85rem;
@@ -358,13 +426,17 @@ body.td-home .td-navbar__search .td-search-input {
 }
 
 .restish-playground__bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
-  justify-content: space-between;
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid var(--restish-card-border);
   background: rgba(15, 23, 42, 0.035);
+}
+
+.restish-playground__bar > :first-child {
+  min-width: 0;
 }
 
 .restish-playground__eyebrow {
@@ -394,6 +466,8 @@ body.td-home .td-navbar__search .td-search-input {
 .restish-playground__state {
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
+  height: 2.25rem;
   min-height: 2.25rem;
   padding: 0 0.65rem;
   border: 1px solid rgba(15, 23, 42, 0.1);
@@ -425,15 +499,19 @@ body.td-home .td-navbar__search .td-search-input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 6px;
   background: #ffffff;
   color: #0f172a;
   line-height: 1;
+  margin: 0;
+  appearance: none;
 }
 
 .restish-playground__button {
   gap: 0.4rem;
+  height: 2.25rem;
   min-height: 2.25rem;
   padding: 0 0.78rem;
   font-size: 0.9rem;
@@ -454,12 +532,17 @@ body.td-home .td-navbar__search .td-search-input {
   color: var(--restish-nav-hover);
 }
 
-.restish-playground__button:disabled {
+.restish-playground__button:disabled,
+.restish-playground__icon-button:disabled {
   cursor: progress;
   opacity: 0.65;
 }
 
 .restish-playground__terminal-line {
+  --restish-command-row-height: 3.5rem;
+  --restish-command-font-size: 0.92rem;
+  --restish-command-line-height: 1.6;
+  --restish-command-text-height: calc(var(--restish-command-font-size) * var(--restish-command-line-height));
   display: grid;
   grid-template-columns: 2.25rem minmax(0, 1fr);
   align-items: center;
@@ -477,26 +560,89 @@ body.td-home .td-navbar__search .td-search-input {
   font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 0.98rem;
   font-weight: 800;
-  line-height: 3.25rem;
+  line-height: var(--restish-command-row-height);
   text-align: center;
 }
 
-.restish-playground__command {
-  display: block;
-  width: 100%;
-  height: 3.25rem;
-  min-height: 0;
-  padding: 0.875rem 0.875rem 0.875rem 0;
+.restish-playground__command-wrap {
+  position: relative;
+  height: var(--restish-command-row-height);
+  min-width: 0;
+}
+
+.td-content .restish-playground__command-highlight {
+  display: none;
+  align-items: center;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: var(--restish-command-text-height);
+  max-width: none;
+  margin: 0;
+  padding: 0 0.875rem 0 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--restish-code-text);
   font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-  font-size: 0.92rem;
-  line-height: 1.5;
-  overflow: auto hidden;
-  resize: none;
+  font-size: var(--restish-command-font-size);
+  line-height: var(--restish-command-line-height);
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(-50%);
   white-space: pre;
+}
+
+.td-content .restish-playground--command-highlighted .restish-playground__command-highlight {
+  display: flex;
+}
+
+.td-content .restish-playground__command-highlight code {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.restish-playground__command {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: var(--restish-command-text-height);
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 0.875rem 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--restish-code-text);
+  font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: var(--restish-command-font-size);
+  line-height: var(--restish-command-text-height);
+  overflow: hidden;
+  transform: translateY(-50%);
+  appearance: none;
+}
+
+.restish-playground--command-highlighted .restish-playground__command {
+  caret-color: var(--restish-code-text);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.restish-playground--command-highlighted .restish-playground__command::selection {
+  background: transparent;
 }
 
 .restish-playground__command:focus {
@@ -519,6 +665,12 @@ body.td-home .td-navbar__search .td-search-input {
 
 .restish-playground__output[hidden] {
   display: none;
+}
+
+.restish-playground button[class*="copy"]:not([data-restish-copy]),
+.restish-playground button[aria-label*="Copy"]:not([data-restish-copy]),
+.restish-playground button[title*="Copy"]:not([data-restish-copy]) {
+  display: none !important;
 }
 
 @keyframes restish-playground-output-open {
@@ -1341,6 +1493,16 @@ body.td-home .td-navbar__search .td-search-input {
 [data-bs-theme="dark"] .td-content .highlight pre {
   background: #020617;
   border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+[data-bs-theme="dark"] .td-content .restish-playground__command-highlight {
+  background: transparent;
+  border: 0;
+}
+
+[data-bs-theme="dark"] .td-content .restish-playground__command-highlight code {
+  background: transparent;
+  border: 0;
 }
 
 [data-bs-theme="dark"] .td-content table {

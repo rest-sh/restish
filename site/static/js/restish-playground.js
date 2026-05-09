@@ -2136,11 +2136,131 @@
     }
     root.dataset.restishReady = "true";
     const command = root.querySelector("[data-restish-command]");
+    const commandHighlight = root.querySelector("[data-restish-command-highlight]");
     const output = root.querySelector("[data-restish-output]");
     const runButton = root.querySelector("[data-restish-run]");
+    const copyButton = root.querySelector("[data-restish-copy]");
     const resetButton = root.querySelector("[data-restish-reset]");
     const state = root.querySelector("[data-restish-state]");
     const initial = command.value;
+    let commandHighlightReady = false;
+    let copyFeedbackTimer = 0;
+
+    function disableInjectedCopyButtons() {
+      root.querySelectorAll("button").forEach(function (button) {
+        if (button === runButton || button === copyButton || button === resetButton) {
+          return;
+        }
+        const label = [
+          button.textContent,
+          button.getAttribute("aria-label"),
+          button.getAttribute("title"),
+          button.className
+        ].join(" ").toLowerCase();
+        if (!label.includes("copy")) {
+          return;
+        }
+        button.hidden = true;
+        button.tabIndex = -1;
+        button.setAttribute("aria-hidden", "true");
+      });
+    }
+
+    function fallbackCopy(text) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.top = "-9999px";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (!document.execCommand("copy")) {
+          throw new Error("Copy command failed");
+        }
+      } finally {
+        textarea.remove();
+      }
+    }
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      fallbackCopy(text);
+    }
+
+    function flashCopyState(label, mode) {
+      if (!state) {
+        return;
+      }
+      const previousText = state.textContent;
+      const previousMode = state.dataset.mode || "";
+      window.clearTimeout(copyFeedbackTimer);
+      setState(state, label, mode);
+      copyFeedbackTimer = window.setTimeout(function () {
+        if (state.textContent === label) {
+          setState(state, previousText, previousMode);
+        }
+      }, 1200);
+    }
+
+    function resetCommandScroll() {
+      command.scrollLeft = 0;
+      command.scrollTop = 0;
+      if (commandHighlight) {
+        const pane = commandHighlight.parentElement;
+        if (pane) {
+          pane.scrollLeft = 0;
+          pane.scrollTop = 0;
+        }
+      }
+    }
+
+    function renderCommandHighlight() {
+      if (!commandHighlight || !window.Prism) {
+        return;
+      }
+      commandHighlight.textContent = command.value || " ";
+      Prism.highlightElement(commandHighlight);
+    }
+
+    function syncCommandScroll() {
+      if (!commandHighlight) {
+        return;
+      }
+      const pane = commandHighlight.parentElement;
+      if (pane) {
+        pane.scrollLeft = command.scrollLeft;
+        pane.scrollTop = command.scrollTop;
+      }
+    }
+
+    function enableCommandHighlight() {
+      if (commandHighlightReady || !commandHighlight || !window.Prism) {
+        return;
+      }
+      commandHighlightReady = true;
+      root.classList.add("restish-playground--command-highlighted");
+      resetCommandScroll();
+      renderCommandHighlight();
+      command.addEventListener("input", renderCommandHighlight);
+      command.addEventListener("scroll", syncCommandScroll);
+      window.requestAnimationFrame(function () {
+        resetCommandScroll();
+        renderCommandHighlight();
+      });
+    }
+
+    enableCommandHighlight();
+    window.addEventListener("load", enableCommandHighlight, { once: true });
+    disableInjectedCopyButtons();
+    new MutationObserver(disableInjectedCopyButtons).observe(root, {
+      childList: true,
+      subtree: true
+    });
 
     async function runCommand() {
       if (runButton.disabled) {
@@ -2177,7 +2297,34 @@
 
     runButton.addEventListener("click", runCommand);
 
+    if (copyButton) {
+      copyButton.addEventListener("click", async function () {
+        const icon = copyButton.querySelector("i");
+        copyButton.disabled = true;
+        try {
+          await copyText(command.value);
+          flashCopyState("Copied", "ok");
+          if (icon) {
+            icon.className = "fas fa-check";
+          }
+        } catch (error) {
+          flashCopyState("Copy failed", "error");
+        } finally {
+          window.setTimeout(function () {
+            if (icon) {
+              icon.className = "fas fa-copy";
+            }
+            copyButton.disabled = false;
+          }, 1200);
+        }
+      });
+    }
+
     command.addEventListener("keydown", function (event) {
+      if (event.key === "Tab") {
+        resetCommandScroll();
+        return;
+      }
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
         return;
       }
@@ -2185,8 +2332,12 @@
       runCommand();
     });
 
+    command.addEventListener("blur", resetCommandScroll);
+
     resetButton.addEventListener("click", function () {
       command.value = initial;
+      resetCommandScroll();
+      renderCommandHighlight();
       hideOutput(output);
       setState(state, "Ready", "");
       command.focus();
