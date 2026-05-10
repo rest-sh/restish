@@ -296,6 +296,7 @@ func TestDiscover_FindsPluginsInDir(t *testing.T) {
 	m := Manifest{
 		Name:              "myplugin",
 		RestishAPIVersion: CurrentPluginAPIVersion,
+		Hooks:             []string{"auth"},
 	}
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	writeScript(t, dir, "restish-myplugin", script)
@@ -383,7 +384,7 @@ func TestDiscover_DeduplicatesPlugins(t *testing.T) {
 		t.Skip("shell script tests not supported on Windows")
 	}
 	dir := t.TempDir()
-	m := Manifest{Name: "myplugin", RestishAPIVersion: CurrentPluginAPIVersion}
+	m := Manifest{Name: "myplugin", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}}
 	script := fmt.Sprintf("#!/bin/sh\necho '%s'", jsonManifest(m))
 	writeScript(t, dir, "restish-myplugin", script)
 	writeScript(t, dir, "restish-myplugin-copy", script)
@@ -413,6 +414,11 @@ func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
 			name:    "unknown hook",
 			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"request"}},
 			wantErr: `unknown hook "request"`,
+		},
+		{
+			name:    "no capabilities",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion},
+			wantErr: "declares no capabilities",
 		},
 		{
 			name:    "formatter hook requires names",
@@ -473,6 +479,7 @@ func TestDiscover_IgnoresPathPlugins(t *testing.T) {
 		Name:              "dupe",
 		Version:           "path",
 		RestishAPIVersion: CurrentPluginAPIVersion,
+		Hooks:             []string{"auth"},
 	})))
 
 	t.Setenv("PATH", pathDir)
@@ -497,7 +504,7 @@ func TestDiscover_UsesManifestCache(t *testing.T) {
 	dir := t.TempDir()
 	cacheFile := filepath.Join(t.TempDir(), "nested", "plugin-manifest-cache.cbor")
 	counterFile := filepath.Join(dir, "manifest-count")
-	m := Manifest{Name: "cached", RestishAPIVersion: CurrentPluginAPIVersion}
+	m := Manifest{Name: "cached", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}}
 	script := fmt.Sprintf(`#!/bin/sh
 count=0
 if [ -f %q ]; then
@@ -549,7 +556,7 @@ fi
 count=$((count + 1))
 echo "$count" > %q
 echo '%s'
-`, counterFile, counterFile, counterFile, jsonManifest(Manifest{Name: "refresh", RestishAPIVersion: CurrentPluginAPIVersion})))
+`, counterFile, counterFile, counterFile, jsonManifest(Manifest{Name: "refresh", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}})))
 
 	if plugins := Discover(dir, nil, cacheFile, nil); len(plugins) != 1 {
 		t.Fatalf("first discover: got %d plugins, want 1", len(plugins))
@@ -563,7 +570,7 @@ fi
 count=$((count + 1))
 echo "$count" > %q
 echo '%s'
-`, counterFile, counterFile, counterFile, jsonManifest(Manifest{Name: "refresh-v2", RestishAPIVersion: CurrentPluginAPIVersion}))
+`, counterFile, counterFile, counterFile, jsonManifest(Manifest{Name: "refresh-v2", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}}))
 	if err := os.WriteFile(scriptPath, []byte(updated), 0o755); err != nil {
 		t.Fatalf("updating plugin script: %v", err)
 	}
@@ -588,7 +595,7 @@ func TestDiscover_InvalidatesManifestCacheOnSizeChange(t *testing.T) {
 	dir := t.TempDir()
 	cacheFile := filepath.Join(t.TempDir(), "plugin-manifest-cache.cbor")
 	scriptPath := writeScript(t, dir, "restish-refresh", fmt.Sprintf("#!/bin/sh\necho '%s'\n",
-		jsonManifest(Manifest{Name: "refresh", Version: "v1", RestishAPIVersion: CurrentPluginAPIVersion})))
+		jsonManifest(Manifest{Name: "refresh", Version: "v1", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}})))
 	info, err := os.Stat(scriptPath)
 	if err != nil {
 		t.Fatal(err)
@@ -600,7 +607,7 @@ func TestDiscover_InvalidatesManifestCacheOnSizeChange(t *testing.T) {
 	}
 
 	updated := fmt.Sprintf("#!/bin/sh\n# size change\n# another line\n echo '%s'\n",
-		jsonManifest(Manifest{Name: "refresh", Version: "v2", RestishAPIVersion: CurrentPluginAPIVersion}))
+		jsonManifest(Manifest{Name: "refresh", Version: "v2", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}}))
 	if err := os.WriteFile(scriptPath, []byte(updated), 0o755); err != nil {
 		t.Fatalf("updating plugin script: %v", err)
 	}

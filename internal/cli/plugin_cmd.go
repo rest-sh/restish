@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
@@ -94,7 +95,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 			Version:      m.Version,
 			Description:  m.Description,
 			Path:         p.Path,
-			Capabilities: append([]string(nil), m.Hooks...),
+			Capabilities: append([]string{}, m.Hooks...),
 			Formatters:   append([]string(nil), m.FormatterNames...),
 			Loaders:      append([]string(nil), m.LoaderContentTypes...),
 		}
@@ -149,7 +150,10 @@ func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	pluginDir := c.pluginDir()
-	path := filepath.Join(pluginDir, name)
+	path, displayName, err := c.resolveInstalledPluginForRemove(name)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(path); err != nil {
 		if runtime.GOOS == "windows" && filepath.Ext(name) == "" && errors.Is(err, os.ErrNotExist) {
 			if exeErr := os.Remove(path + ".exe"); exeErr == nil {
@@ -164,8 +168,69 @@ func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("remove: %w", err)
 	}
-	fmt.Fprintf(c.Stdout, "Removed plugin %s\n", name)
+	fmt.Fprintf(c.Stdout, "Removed plugin %s\n", displayName)
 	return nil
+}
+
+func (c *CLI) resolveInstalledPluginForRemove(name string) (string, string, error) {
+	pluginDir := c.pluginDir()
+	path := filepath.Join(pluginDir, name)
+	if _, err := os.Stat(path); err == nil {
+		return path, name, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", "", fmt.Errorf("remove: %w", err)
+	}
+	if runtime.GOOS == "windows" && filepath.Ext(name) == "" {
+		if _, err := os.Stat(path + ".exe"); err == nil {
+			return path + ".exe", name, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("remove: %w", err)
+		}
+	}
+
+	entries, err := os.ReadDir(pluginDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", "", fmt.Errorf("remove: plugin %q not found in %s", name, pluginDir)
+		}
+		return "", "", fmt.Errorf("remove: %w", err)
+	}
+	var matches []plugin.Plugin
+	for _, entry := range entries {
+		if entry.IsDir() || !pluginExecutableFileName(entry.Name()) {
+			continue
+		}
+		candidatePath := filepath.Join(pluginDir, entry.Name())
+		manifest, err := plugin.LoadManifest(candidatePath, diagnosticPrefixWriter(c.Stderr))
+		if err != nil {
+			c.warnf("plugin %s: %v", entry.Name(), err)
+			continue
+		}
+		if manifest.Name == name {
+			matches = append(matches, plugin.Plugin{Path: candidatePath, Manifest: *manifest})
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", "", fmt.Errorf("remove: plugin %q not found in %s", name, pluginDir)
+	case 1:
+		return matches[0].Path, name, nil
+	default:
+		var files []string
+		for _, match := range matches {
+			files = append(files, filepath.Base(match.Path))
+		}
+		sort.Strings(files)
+		return "", "", fmt.Errorf("remove: plugin name %q is ambiguous; matching installed files: %s", name, strings.Join(files, ", "))
+	}
+}
+
+func pluginExecutableFileName(name string) bool {
+	base := name
+	if runtime.GOOS == "windows" {
+		base = strings.TrimSuffix(base, ".exe")
+	}
+	return strings.HasPrefix(base, "restish-")
 }
 
 // runPluginDebug spawns a plugin binary with terminal context flags and tees

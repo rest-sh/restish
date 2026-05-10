@@ -259,6 +259,9 @@ func validateManifest(m Manifest) error {
 	if !declaredHooks["loader"] && len(m.LoaderContentTypes) > 0 {
 		return fmt.Errorf("manifest sets loader_content_types without declaring loader hook")
 	}
+	if len(declaredHooks) == 0 {
+		return fmt.Errorf("manifest declares no capabilities")
+	}
 	return nil
 }
 

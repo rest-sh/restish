@@ -403,6 +403,97 @@ func TestPluginRemoveRejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestPluginRemoveByManifestName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-csv")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"csv\",\"restish_api_version\":2,\"hooks\":[\"formatter\"],\"formatter_names\":[\"csv\"]}'; exit 0; fi\n"
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := c.Run([]string{"restish", "plugin", "remove", "csv"}); err != nil {
+		t.Fatalf("plugin remove: %v", err)
+	}
+	if !strings.Contains(out.String(), "Removed plugin csv") {
+		t.Fatalf("expected removal output, got:\n%s", out.String())
+	}
+	if _, err := os.Stat(pluginPath); !os.IsNotExist(err) {
+		t.Fatalf("expected installed plugin to be removed, stat err = %v", err)
+	}
+}
+
+func TestPluginRemoveByInstalledFileName(t *testing.T) {
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := "restish-csv"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	pluginPath := filepath.Join(pluginDir, name)
+	if err := os.WriteFile(pluginPath, []byte("installed"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := c.Run([]string{"restish", "plugin", "remove", name}); err != nil {
+		t.Fatalf("plugin remove: %v", err)
+	}
+	if !strings.Contains(out.String(), "Removed plugin "+name) {
+		t.Fatalf("expected removal output, got:\n%s", out.String())
+	}
+	if _, err := os.Stat(pluginPath); !os.IsNotExist(err) {
+		t.Fatalf("expected installed plugin to be removed, stat err = %v", err)
+	}
+}
+
+func TestPluginRemoveAmbiguousManifestName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"dupe\",\"restish_api_version\":2,\"hooks\":[\"auth\"]}'; exit 0; fi\n"
+	for _, name := range []string{"restish-dupe-one", "restish-dupe-two"} {
+		if err := os.WriteFile(filepath.Join(pluginDir, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	err := c.Run([]string{"restish", "plugin", "remove", "dupe"})
+	if err == nil {
+		t.Fatal("expected ambiguous manifest-name removal to fail")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected ambiguity error, got: %v", err)
+	}
+	for _, name := range []string{"restish-dupe-one", "restish-dupe-two"} {
+		if _, statErr := os.Stat(filepath.Join(pluginDir, name)); statErr != nil {
+			t.Fatalf("expected %s to remain, got: %v", name, statErr)
+		}
+	}
+}
+
 func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
@@ -427,6 +518,37 @@ func TestPluginInstallRejectsInvalidPluginBinary(t *testing.T) {
 	installed := filepath.Join(pluginsParent, "plugins", "restish-invalid")
 	if _, statErr := os.Stat(installed); !os.IsNotExist(statErr) {
 		t.Fatalf("expected invalid plugin binary to be removed, got: %v", statErr)
+	}
+}
+
+func TestPluginInstallRejectsManifestWithoutCapabilities(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	sourceDir := t.TempDir()
+	source := filepath.Join(sourceDir, "restish-minimal")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"minimal\",\"restish_api_version\":2}'; exit 0; fi\n"
+	if err := os.WriteFile(source, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pluginsParent := t.TempDir()
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", source})
+	if err == nil {
+		t.Fatal("expected capability-less plugin install to fail")
+	}
+	if !strings.Contains(err.Error(), "declares no capabilities") {
+		t.Fatalf("expected capability error, got: %v", err)
+	}
+
+	installed := filepath.Join(pluginsParent, "plugins", "restish-minimal")
+	if _, statErr := os.Stat(installed); !os.IsNotExist(statErr) {
+		t.Fatalf("expected capability-less plugin not to be installed, got: %v", statErr)
 	}
 }
 
