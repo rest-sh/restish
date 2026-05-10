@@ -104,6 +104,21 @@ func (c *CLI) promptSource() (io.Reader, func()) {
 	return c.Stdin, func() {}
 }
 
+func (c *CLI) canPromptInteractively() bool {
+	if c.hooks.PromptFunc != nil || c.hooks.SecretFunc != nil || c.hooks.PassReader != nil {
+		return true
+	}
+	if output.IsTerminalReader(c.Stdin) {
+		return true
+	}
+	f, err := promptOpenTTY()
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return true
+}
+
 func readPromptValue(prompt string, src io.Reader, stderr io.Writer, hidden bool) (string, error) {
 	fmt.Fprint(stderr, prompt)
 

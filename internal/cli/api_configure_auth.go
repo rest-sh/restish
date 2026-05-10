@@ -194,7 +194,14 @@ func (c *CLI) promptAuthParams(ctx context.Context, profileName, credentialID st
 	if err != nil {
 		return err
 	}
-	for _, p := range configureAuthPromptParams(handler, defaultNeeds) {
+	promptParams := configureAuthPromptParams(handler, defaultNeeds)
+	if !c.canPromptInteractively() {
+		missing := missingAuthSetupExpressionKeys(profileName, credentialID, ac, promptParams, answers)
+		if len(missing) > 0 {
+			return fmt.Errorf("missing required auth setup value(s) for credential %s: provide %s", credentialID, strings.Join(missing, ", "))
+		}
+	}
+	for _, p := range promptParams {
 		if ac.Params[p.Name] != "" {
 			continue
 		}
@@ -214,6 +221,27 @@ func (c *CLI) promptAuthParams(ctx context.Context, profileName, credentialID st
 		}
 	}
 	return nil
+}
+
+func missingAuthSetupExpressionKeys(profileName, credentialID string, ac *config.AuthConfig, params []auth.Param, answers configurePromptAnswers) []string {
+	var missing []string
+	for _, p := range params {
+		if !p.Required || ac.Params[p.Name] != "" {
+			continue
+		}
+		if answer, ok := answers.answerCredential(profileName, credentialID, p.Name); ok && strings.TrimSpace(answer) != "" {
+			continue
+		}
+		missing = append(missing, authSetupExpressionKey(profileName, credentialID, p.Name))
+	}
+	return missing
+}
+
+func authSetupExpressionKey(profileName, credentialID, paramName string) string {
+	if profileName == "" || profileName == "default" {
+		return fmt.Sprintf("prompt.credentials.%s.%s:<value>", credentialID, paramName)
+	}
+	return fmt.Sprintf("prompt.%s.credentials.%s.%s:<value>", profileName, credentialID, paramName)
 }
 
 func configureAuthPromptParams(handler auth.Handler, defaultNeeds []string) []auth.Param {
