@@ -570,9 +570,14 @@ func validateConfiguredServerVariables(servers []*v3.Server, values map[string]s
 		declared := false
 		allowedByAnyEnum := false
 		hasEnum := false
+		hasDeclaredVariables := false
 		for _, server := range servers {
 			if server == nil || server.Variables == nil {
 				continue
+			}
+			for range server.Variables.FromOldest() {
+				hasDeclaredVariables = true
+				break
 			}
 			variable := server.Variables.GetOrZero(configuredName)
 			if variable == nil {
@@ -592,6 +597,9 @@ func validateConfiguredServerVariables(servers []*v3.Server, values map[string]s
 			}
 		}
 		if !declared {
+			if !hasDeclaredVariables {
+				continue
+			}
 			return fmt.Errorf("server variable %q is configured but not declared by the OpenAPI servers", configuredName)
 		}
 		if hasEnum && !allowedByAnyEnum {

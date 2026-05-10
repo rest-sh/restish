@@ -255,6 +255,55 @@ paths:
 	}
 }
 
+func TestOperationsServerVariablesDoNotBreakOperationLevelServers(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: /{version}
+    variables:
+      version:
+        default: v1
+paths:
+  /doc-server:
+    get:
+      operationId: docServer
+      responses:
+        "200":
+          description: OK
+  /op-server:
+    post:
+      operationId: opServer
+      servers:
+        - url: /
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations(OperationOptions{
+		BaseURL:         "https://api.example.com",
+		ServerVariables: map[string]string{"version": "v2"},
+	})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	paths := map[string]string{}
+	for _, op := range ops {
+		paths[op.ID] = op.Path
+	}
+	if got := paths["docServer"]; got != "/v2/doc-server" {
+		t.Fatalf("docServer path = %q, want /v2/doc-server", got)
+	}
+	if got := paths["opServer"]; got != "/op-server" {
+		t.Fatalf("opServer path = %q, want /op-server", got)
+	}
+}
+
 func TestOperationsUsesEffectivePathAndOperationServers(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
