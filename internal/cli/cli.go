@@ -579,7 +579,76 @@ func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []strin
 	}
 	root.SetOut(c.Stdout)
 	root.SetErr(c.Stderr)
+	setupHelpAllExecution(root)
 	return usageExitError(root.ExecuteContext(ctx))
+}
+
+const helpAllExecutionWrappedAnnotation = "restish.helpAllExecutionWrapped"
+
+func setupHelpAllExecution(root *cobra.Command) {
+	for _, cmd := range commandTree(root) {
+		if cmd.Annotations != nil && cmd.Annotations[helpAllExecutionWrappedAnnotation] == "true" {
+			continue
+		}
+		if cmd.Annotations == nil {
+			cmd.Annotations = map[string]string{}
+		}
+		cmd.Annotations[helpAllExecutionWrappedAnnotation] = "true"
+
+		origArgs := cmd.Args
+		cmd.Args = func(cmd *cobra.Command, args []string) error {
+			if commandHelpAllRequested(cmd) {
+				return nil
+			}
+			if origArgs != nil {
+				return origArgs(cmd, args)
+			}
+			return nil
+		}
+
+		if origRunE := cmd.RunE; origRunE != nil {
+			cmd.RunE = func(cmd *cobra.Command, args []string) error {
+				if commandHelpAllRequested(cmd) {
+					return cmd.Help()
+				}
+				return origRunE(cmd, args)
+			}
+			continue
+		}
+		if origRun := cmd.Run; origRun != nil {
+			cmd.RunE = func(cmd *cobra.Command, args []string) error {
+				if commandHelpAllRequested(cmd) {
+					return cmd.Help()
+				}
+				origRun(cmd, args)
+				return nil
+			}
+		}
+	}
+}
+
+func commandTree(root *cobra.Command) []*cobra.Command {
+	var commands []*cobra.Command
+	var walk func(*cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		if cmd == nil {
+			return
+		}
+		commands = append(commands, cmd)
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(root)
+	return commands
+}
+
+func commandHelpAllRequested(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	helpAll, err := cmd.Flags().GetBool("help-all")
+	return err == nil && helpAll
 }
 
 func (c *CLI) rootContext() (context.Context, context.CancelFunc) {

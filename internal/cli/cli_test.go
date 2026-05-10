@@ -136,6 +136,44 @@ func TestRequestHelpShowsRequestFlagsAndHelpAllExpandsNonRequestHelp(t *testing.
 	}
 }
 
+func TestHelpAllBypassesValidationAndExecution(t *testing.T) {
+	for _, args := range [][]string{
+		{"restish", "get", "--help-all"},
+		{"restish", "api", "connect", "--help-all"},
+		{"restish", "links", "--help-all"},
+		{"restish", "cert", "--help-all"},
+		{"restish", "shell", "setup", "--help-all"},
+		{"restish", "config", "theme", "reset", "--help-all"},
+		{"restish", "config", "path", "--help-all"},
+		{"restish", "config", "show", "--help-all"},
+	} {
+		c, out, _ := newTestCLI(t)
+		if err := c.Run(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		got := out.String()
+		if !strings.Contains(got, "Usage:") || !strings.Contains(got, "--rsh-header") {
+			t.Fatalf("%v should show expanded help, got:\n%s", args, got)
+		}
+	}
+
+	c, out, _ := newTestCLI(t)
+	called := false
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		called = true
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--help-all"}); err != nil {
+		t.Fatalf("get URL --help-all: %v", err)
+	}
+	if called {
+		t.Fatal("help-all after URL should not execute the HTTP request")
+	}
+	if got := out.String(); !strings.Contains(got, "Perform an HTTP GET request") || !strings.Contains(got, "--rsh-header") {
+		t.Fatalf("expected GET help-all output, got:\n%s", got)
+	}
+}
+
 func TestBootstrapCommandsIgnoreInvalidConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name string

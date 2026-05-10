@@ -21,10 +21,11 @@ const (
 )
 
 type completionInstallOptions struct {
-	Shell  string
-	DryRun bool
-	Yes    bool
-	NoDesc bool
+	Shell               string
+	DryRun              bool
+	Yes                 bool
+	NoDesc              bool
+	SuppressRestartHint bool
 }
 
 func (c *CLI) addCompletionCommand(root *cobra.Command) {
@@ -600,7 +601,7 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 		}
 		if !ok {
 			fmt.Fprintln(c.Stdout, "Cancelled.")
-			return nil
+			return fmt.Errorf("completion install: cancelled")
 		}
 	}
 
@@ -622,7 +623,9 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 	if rcChanged {
 		fmt.Fprintf(c.Stdout, "Updated %s\n", rcPath)
 	}
-	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
+	if !opts.SuppressRestartHint {
+		fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
+	}
 	return nil
 }
 
@@ -657,7 +660,7 @@ func (c *CLI) installFishCompletion(cmd *cobra.Command, opts completionInstallOp
 		}
 		if !ok {
 			fmt.Fprintln(c.Stdout, "Cancelled.")
-			return nil
+			return fmt.Errorf("completion install: cancelled")
 		}
 	}
 

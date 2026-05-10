@@ -58,6 +58,9 @@ func TestCompletionInstallZshWritesScriptAndRCBlock(t *testing.T) {
 	if !strings.Contains(out.String(), "Installed zsh completion") {
 		t.Fatalf("expected install confirmation, got: %q", out.String())
 	}
+	if count := strings.Count(out.String(), "Restart your shell or run: source "+rcPath); count != 1 {
+		t.Fatalf("expected one restart instruction, got %d:\n%s", count, out.String())
+	}
 }
 
 func TestCompletionInstallZshIdempotent(t *testing.T) {
@@ -101,6 +104,24 @@ func TestCompletionInstallZshDryRunDoesNotWrite(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Would write zsh completion script") {
 		t.Fatalf("expected dry-run output, got: %q", out.String())
+	}
+}
+
+func TestCompletionInstallZshDeclineReturnsError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().PassReader = strings.NewReader("n\n")
+	err := c.Run([]string{"restish", "completion", "install", "zsh"})
+	if err == nil {
+		t.Fatal("expected declined completion install to return an error")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("expected cancellation output, got:\n%s", out.String())
 	}
 }
 
@@ -182,6 +203,26 @@ func TestCompletionInstallFishDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestCompletionInstallFishDeclineReturnsError(t *testing.T) {
+	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().PassReader = strings.NewReader("n\n")
+	err := c.Run([]string{"restish", "completion", "install", "fish"})
+	if err == nil {
+		t.Fatal("expected declined completion install to return an error")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("expected cancellation output, got:\n%s", out.String())
+	}
+}
+
 // TestSetupWritesAlias verifies that "setup zsh" appends the noglob alias to
 // the shell rc file.
 func TestSetupWritesAlias(t *testing.T) {
@@ -242,6 +283,44 @@ func TestSetupZshInstallsCompletionByDefault(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Installed zsh completion") {
 		t.Fatalf("expected completion install confirmation, got: %q", out.String())
+	}
+	if count := strings.Count(out.String(), "Restart your shell or run: source "+rcPath); count != 1 {
+		t.Fatalf("expected one restart instruction, got %d:\n%s", count, out.String())
+	}
+}
+
+func TestSetupDeclineReturnsError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().PassReader = strings.NewReader("n\n")
+	err := c.Run([]string{"restish", "shell", "setup", "zsh"})
+	if err == nil {
+		t.Fatal("expected declined setup to return an error")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Cancelled.") {
+		t.Fatalf("expected cancellation output, got:\n%s", out.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(home, ".zshrc")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no zshrc after cancelled setup, stat err = %v", statErr)
+	}
+}
+
+func TestSetupEOFReturnsError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "shell", "setup", "zsh"})
+	if err == nil {
+		t.Fatal("expected noninteractive setup to return an error")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

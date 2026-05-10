@@ -126,7 +126,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		}
 		if !ok {
 			fmt.Fprintln(c.Stdout, "Cancelled.")
-			return nil
+			return fmt.Errorf("setup: cancelled")
 		}
 	}
 
@@ -146,7 +146,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	if withCompletion {
-		if err := c.installCompletion(cmd, completionInstallOptions{Shell: shell, Yes: true}); err != nil {
+		if err := c.installCompletion(cmd, completionInstallOptions{Shell: shell, Yes: true, SuppressRestartHint: shell == "zsh"}); err != nil {
 			return err
 		}
 	}
