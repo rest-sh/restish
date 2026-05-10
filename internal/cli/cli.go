@@ -606,6 +606,9 @@ func setupHelpAllExecution(root *cobra.Command) {
 			return nil
 		}
 
+		if cmd.LocalFlags().Lookup("help-all") != nil {
+			continue
+		}
 		if origRunE := cmd.RunE; origRunE != nil {
 			cmd.RunE = func(cmd *cobra.Command, args []string) error {
 				if commandHelpAllRequested(cmd) {

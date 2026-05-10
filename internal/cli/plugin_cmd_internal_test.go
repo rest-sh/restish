@@ -129,14 +129,14 @@ func TestPluginInstallKeepsExistingBinaryWhenTempManifestFails(t *testing.T) {
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	original := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
 if [ "$1" = "--rsh-plugin-manifest" ]; then
-  echo '{"name":"atomic","version":"valid-one","restish_api_version":1}'
+  echo '{"name":"atomic","version":"valid-one","restish_api_version":1,"hooks":["auth"]}'
 fi
 `)
 	replacement := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
 if [ "$1" = "--rsh-plugin-manifest" ]; then
   case "$0" in
     */.restish-atomic.install-*/*) echo not-a-manifest ;;
-    *) echo '{"name":"atomic","version":"replacement","restish_api_version":1}' ;;
+    *) echo '{"name":"atomic","version":"replacement","restish_api_version":1,"hooks":["auth"]}' ;;
   esac
 fi
 `)
@@ -169,12 +169,12 @@ func TestPluginInstallFailedCopyRemovesTempAndKeepsExistingBinary(t *testing.T) 
 	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
 	original := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
 if [ "$1" = "--rsh-plugin-manifest" ]; then
-  echo '{"name":"atomic","version":"valid-one","restish_api_version":1}'
+  echo '{"name":"atomic","version":"valid-one","restish_api_version":1,"hooks":["auth"]}'
 fi
 `)
 	replacement := writePluginScript(t, t.TempDir(), "restish-atomic", `#!/bin/sh
 if [ "$1" = "--rsh-plugin-manifest" ]; then
-  echo '{"name":"atomic","version":"replacement","restish_api_version":1}'
+  echo '{"name":"atomic","version":"replacement","restish_api_version":1,"hooks":["auth"]}'
 fi
 `)
 

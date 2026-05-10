@@ -589,7 +589,7 @@ func TestPluginInstallRejectsManifestNameTraversal(t *testing.T) {
 
 	sourceDir := t.TempDir()
 	source := filepath.Join(sourceDir, "restish-traverse")
-	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"../victim\",\"restish_api_version\":1}'; exit 0; fi\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"--rsh-plugin-manifest\" ]; then echo '{\"name\":\"../victim\",\"restish_api_version\":1,\"hooks\":[\"auth\"]}'; exit 0; fi\n"
 	if err := os.WriteFile(source, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
