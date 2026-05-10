@@ -318,6 +318,9 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 		optional = append(optional, pi)
 	}
+	for _, warning := range disambiguateGeneratedFlagNames(optional) {
+		c.generatedWarnf("operation %q parameter flag collision: %s", operationDisplayID(op), warning)
+	}
 	if err := validateGeneratedFlagNames(op, optional); err != nil {
 		return nil, err
 	}
@@ -486,6 +489,165 @@ func validateGeneratedFlagNames(op spec.Operation, optional []*paramInfo) error 
 		seen[p.flagName] = p
 	}
 	return nil
+}
+
+func disambiguateGeneratedFlagNames(optional []*paramInfo) []string {
+	groups := map[string][]*paramInfo{}
+	order := []string{}
+	for _, p := range optional {
+		if p.flagName == "" {
+			continue
+		}
+		if _, ok := groups[p.flagName]; !ok {
+			order = append(order, p.flagName)
+		}
+		groups[p.flagName] = append(groups[p.flagName], p)
+	}
+
+	used := map[string]int{}
+	for _, p := range optional {
+		if p.flagName != "" {
+			used[p.flagName]++
+		}
+	}
+
+	var warnings []string
+	for _, originalFlag := range order {
+		group := groups[originalFlag]
+		if len(group) < 2 {
+			continue
+		}
+		for _, p := range group {
+			used[p.flagName]--
+		}
+
+		assigned := map[string]bool{}
+		for i, p := range group {
+			candidate := ""
+			if base, op, ok := comparisonOperatorSuffix(p.name); ok {
+				candidate = toKebabCase(base) + "-" + op
+			}
+			if candidate == "" && !assigned[originalFlag] && used[originalFlag] == 0 {
+				candidate = originalFlag
+			}
+			if candidate == "" || assigned[candidate] || used[candidate] > 0 {
+				candidate = fallbackDisambiguatedFlagName(originalFlag, p.name, i+1, assigned, used)
+				warnings = append(warnings, fmt.Sprintf("using --%s for parameter %q", candidate, p.name))
+			}
+			p.flagName = candidate
+			assigned[candidate] = true
+			used[candidate]++
+		}
+	}
+	return warnings
+}
+
+func comparisonOperatorSuffix(name string) (base, op string, ok bool) {
+	symbols := []struct {
+		suffix string
+		op     string
+	}{
+		{"<=", "lte"},
+		{">=", "gte"},
+		{"==", "eq"},
+		{"!=", "ne"},
+		{"<>", "ne"},
+		{"<", "lt"},
+		{">", "gt"},
+		{"=", "eq"},
+	}
+	for _, symbol := range symbols {
+		if strings.HasSuffix(name, symbol.suffix) {
+			base := strings.TrimSpace(strings.TrimSuffix(name, symbol.suffix))
+			if base != "" {
+				return base, symbol.op, true
+			}
+		}
+	}
+
+	lower := strings.ToLower(name)
+	words := []struct {
+		suffix string
+		op     string
+	}{
+		{"_lte", "lte"},
+		{"-lte", "lte"},
+		{"_gte", "gte"},
+		{"-gte", "gte"},
+		{"_lt", "lt"},
+		{"-lt", "lt"},
+		{"_gt", "gt"},
+		{"-gt", "gt"},
+		{"_eq", "eq"},
+		{"-eq", "eq"},
+		{"_ne", "ne"},
+		{"-ne", "ne"},
+	}
+	for _, word := range words {
+		if strings.HasSuffix(lower, word.suffix) {
+			base := strings.TrimSpace(name[:len(name)-len(word.suffix)])
+			if base != "" {
+				return base, word.op, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func fallbackDisambiguatedFlagName(originalFlag, wireName string, ordinal int, assigned map[string]bool, used map[string]int) string {
+	suffix := escapedFlagSuffix(wireName)
+	if suffix == "" || suffix == originalFlag {
+		suffix = fmt.Sprintf("param-%d", ordinal)
+	}
+	candidate := originalFlag + "-" + suffix
+	for n := 2; assigned[candidate] || used[candidate] > 0; n++ {
+		candidate = fmt.Sprintf("%s-%s-%d", originalFlag, suffix, n)
+	}
+	return candidate
+}
+
+func escapedFlagSuffix(name string) string {
+	parts := make([]string, 0)
+	var b strings.Builder
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+		parts = append(parts, b.String())
+		b.Reset()
+	}
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+			continue
+		}
+		flush()
+		switch r {
+		case '_':
+			parts = append(parts, "underscore")
+		case '-':
+			parts = append(parts, "dash")
+		case '<':
+			parts = append(parts, "lt")
+		case '>':
+			parts = append(parts, "gt")
+		case '=':
+			parts = append(parts, "eq")
+		case '!':
+			parts = append(parts, "bang")
+		default:
+			parts = append(parts, fmt.Sprintf("u%x", r))
+		}
+	}
+	flush()
+	return strings.Join(parts, "-")
+}
+
+func operationDisplayID(op spec.Operation) string {
+	if op.ID != "" {
+		return op.ID
+	}
+	return op.Method + " " + op.Path
 }
 
 func paramKey(in, name string) string {

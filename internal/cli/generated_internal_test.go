@@ -75,9 +75,46 @@ func TestBuildOperationCommandRejectsInvalidTypedDefault(t *testing.T) {
 	}
 }
 
-func TestBuildOperationCommandRejectsDuplicateFlagNames(t *testing.T) {
+func TestBuildOperationCommandDisambiguatesOperatorFlagNames(t *testing.T) {
 	c := New()
-	_, err := c.buildOperationCommand("myapi", "", spec.Operation{
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "search",
+		Method: "GET",
+		Path:   "/search",
+		Parameters: []spec.Param{
+			{Name: "StartTime", In: "query", Type: "string"},
+			{Name: "StartTime<", In: "query", Type: "string"},
+			{Name: "StartTime<=", In: "query", Type: "string"},
+			{Name: "StartTime>", In: "query", Type: "string"},
+			{Name: "StartTime>=", In: "query", Type: "string"},
+			{Name: "StartTime=", In: "query", Type: "string"},
+			{Name: "StartTime!=", In: "query", Type: "string"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
+	}
+	for _, name := range []string{
+		"start-time",
+		"start-time-lt",
+		"start-time-lte",
+		"start-time-gt",
+		"start-time-gte",
+		"start-time-eq",
+		"start-time-ne",
+	} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Fatalf("expected generated flag --%s", name)
+		}
+	}
+}
+
+func TestBuildOperationCommandDisambiguatesNonOperatorFlagNames(t *testing.T) {
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
 		ID:     "search",
 		Method: "GET",
 		Path:   "/search",
@@ -86,11 +123,17 @@ func TestBuildOperationCommandRejectsDuplicateFlagNames(t *testing.T) {
 			{Name: "start-time", In: "query", Type: "string"},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected duplicate generated flag error")
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
 	}
-	if !strings.Contains(err.Error(), "duplicate generated flag --start-time") {
-		t.Fatalf("unexpected error: %v", err)
+	if cmd.Flags().Lookup("start-time") == nil {
+		t.Fatal("expected generated flag --start-time")
+	}
+	if cmd.Flags().Lookup("start-time-start-dash-time") == nil {
+		t.Fatal("expected disambiguated generated flag --start-time-start-dash-time")
+	}
+	if !strings.Contains(errOut.String(), "parameter flag collision") {
+		t.Fatalf("expected fallback warning, got: %q", errOut.String())
 	}
 }
 

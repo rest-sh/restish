@@ -279,3 +279,31 @@ func TestGeneratedAPINames_HelpAndCompletionLoadAll(t *testing.T) {
 		}
 	}
 }
+
+func TestQuietGeneratedWarningsForScan(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	}
+
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "root help", args: []string{"restish", "--help"}, want: true},
+		{name: "builtin help", args: []string{"restish", "get", "--help"}, want: true},
+		{name: "unknown help", args: []string{"restish", "github", "--help"}, want: true},
+		{name: "api help", args: []string{"restish", "myapi", "--help"}, want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := quietGeneratedWarningsForScan(scanCLIArgs(tc.args), cfg)
+			if got != tc.want {
+				t.Fatalf("quietGeneratedWarningsForScan(%v) = %v, want %v", tc.args, got, tc.want)
+			}
+		})
+	}
+}

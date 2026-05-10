@@ -991,6 +991,69 @@ func TestGeneratedCommandOptionalQueryFlag(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandOperatorFlagNamesPreserveWireQueryNames(t *testing.T) {
+	var gotQuery url.Values
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	specDoc := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Operator Params", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/events": {
+      "get": {
+        "operationId": "listEvents",
+        "parameters": [
+          {"name": "StartTime", "in": "query", "schema": {"type": "string"}},
+          {"name": "StartTime<", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL)
+
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specDoc)
+	})
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) })
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	env := &generatedEnv{cfgFile: cfgFile, cacheDir: t.TempDir()}
+
+	syncCLI := env.newCLI()
+	if err := syncCLI.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-events", "--start-time", "2024-01-01", "--start-time-lt", "2024-02-01"}); err != nil {
+		t.Fatalf("list-events with operator flags: %v", err)
+	}
+	if got := gotQuery.Get("StartTime"); got != "2024-01-01" {
+		t.Fatalf("StartTime query = %q, want 2024-01-01 (raw %#v)", got, gotQuery)
+	}
+	if got := gotQuery.Get("StartTime<"); got != "2024-02-01" {
+		t.Fatalf("StartTime< query = %q, want 2024-02-01 (raw %#v)", got, gotQuery)
+	}
+}
+
 // TestGeneratedCommandShorthandBody verifies that positional args after required
 // params are parsed as shorthand and sent as the JSON request body.
 func TestGeneratedCommandShorthandBody(t *testing.T) {

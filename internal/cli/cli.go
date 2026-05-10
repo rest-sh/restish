@@ -522,7 +522,7 @@ func (c *CLI) Run(args []string) error {
 	}
 
 	root := c.newRootCmd()
-	c.quietGeneratedWarnings = argScan.FirstCommand == "" || isBuiltinCommandName(argScan.FirstCommand)
+	c.quietGeneratedWarnings = quietGeneratedWarningsForScan(argScan, cfg)
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
@@ -798,6 +798,14 @@ func isBuiltinCommandName(name string) bool {
 // with "-"; bool/count flags do not consume the API name.
 func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 	return c.generatedAPINamesForScan(scanCLIArgs(args), cfg)
+}
+
+func quietGeneratedWarningsForScan(scan cliArgScan, cfg *config.Config) bool {
+	if scan.FirstCommand == "" || isBuiltinCommandName(scan.FirstCommand) {
+		return true
+	}
+	_, firstIsAPI := cfg.APIs[scan.FirstCommand]
+	return !firstIsAPI
 }
 
 func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
