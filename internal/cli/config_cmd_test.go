@@ -24,6 +24,14 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
       "base_url": "https://api.example.com",
       "profiles": {
         "default": {
+          "headers": [
+            "Authorization: Bearer profile-secret",
+            "X-Trace: visible"
+          ],
+          "query": [
+            "api_key=query-secret",
+            "page=1"
+          ],
           "auth": {
             "type": "api-key",
             "params": {
@@ -63,6 +71,13 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 	}
 	if got := out.String(); strings.Contains(got, "super-secret") || strings.Contains(got, "docs-key") || !strings.Contains(got, `"client_secret": "***"`) || !strings.Contains(got, `"value": "***"`) {
 		t.Fatalf("config show --json did not redact secret:\n%s", got)
+	}
+	if got := out.String(); strings.Contains(got, "profile-secret") || strings.Contains(got, "query-secret") ||
+		!strings.Contains(got, `"Authorization: ***"`) ||
+		!strings.Contains(got, `"api_key=***"`) ||
+		!strings.Contains(got, `"X-Trace: visible"`) ||
+		!strings.Contains(got, `"page=1"`) {
+		t.Fatalf("config show --json did not redact persistent request credentials correctly:\n%s", got)
 	}
 
 	if err := c.Run([]string{"restish", "config", "set", "cache.max_size: 250MB"}); err != nil {

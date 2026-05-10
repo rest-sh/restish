@@ -113,6 +113,37 @@ func SaveConfigShorthand(path string, rootPath []string, exprs []string, validat
 	return nil
 }
 
+// SaveConfigMutation applies a typed config mutation atomically under the
+// config file lock while preserving JSONC comments and formatting where
+// possible.
+func SaveConfigMutation(path string, mutate func(*Config) error, validate func(*Config) error) error {
+	return patchConfig(path, true, func(data []byte) ([]byte, error) {
+		cfg, err := parseConfigBytes(path, data)
+		if err != nil {
+			return nil, err
+		}
+		if mutate != nil {
+			if err := mutate(cfg); err != nil {
+				return nil, err
+			}
+		}
+		if validate != nil {
+			if err := validate(cfg); err != nil {
+				return nil, err
+			}
+		}
+		raw, err := json.Marshal(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("config: marshal patched config: %w", err)
+		}
+		var root any
+		if err := json.Unmarshal(raw, &root); err != nil {
+			return nil, fmt.Errorf("config: unmarshal patched config: %w", err)
+		}
+		return jsoncSyncGeneric(data, root)
+	})
+}
+
 // PatchConfigShorthandBytes applies shorthand patch expressions to JSONC config
 // bytes and returns the patched bytes plus the decoded typed config.
 func PatchConfigShorthandBytes(data []byte, rootPath []string, exprs []string) ([]byte, *Config, error) {

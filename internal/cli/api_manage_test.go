@@ -963,6 +963,14 @@ func TestAPIInspectRedactsCredentialSecrets(t *testing.T) {
 				BaseURL: "https://api.example.com",
 				Profiles: map[string]*config.ProfileConfig{
 					"default": {
+						Headers: []string{
+							"Authorization: Bearer header-secret",
+							"X-Env: staging",
+						},
+						Query: []string{
+							"api_key=query-secret",
+							"page=1",
+						},
 						Auth: &config.AuthConfig{
 							Type: "bearer",
 							Params: map[string]string{
@@ -998,8 +1006,16 @@ func TestAPIInspectRedactsCredentialSecrets(t *testing.T) {
 	if strings.Contains(got, "profile-secret") || strings.Contains(got, "credential-secret") {
 		t.Fatalf("api inspect leaked secret:\n%s", got)
 	}
+	if strings.Contains(got, "header-secret") || strings.Contains(got, "query-secret") {
+		t.Fatalf("api inspect leaked persistent request credentials:\n%s", got)
+	}
 	if count := strings.Count(got, `"token": "***"`); count != 2 {
 		t.Fatalf("redacted token count = %d, want 2:\n%s", count, got)
+	}
+	for _, want := range []string{`"Authorization: ***"`, `"api_key=***"`, `"X-Env: staging"`, `"page=1"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("api inspect missing %q in redacted output:\n%s", want, got)
+		}
 	}
 }
 

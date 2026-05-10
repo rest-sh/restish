@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -101,7 +102,8 @@ type doctorGeneratedOperationsReport struct {
 }
 
 type doctorAuthReport struct {
-	Status string `json:"status"`
+	Status  string   `json:"status"`
+	Sources []string `json:"sources,omitempty"`
 }
 
 type doctorReachabilityReport struct {
@@ -162,6 +164,9 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	cfgPath := c.configFilePath()
 	fmt.Fprintf(out, "Config file: %s\n", cfgPath)
 	if cfg, err := c.loadConfig(); err != nil {
+		fmt.Fprintf(out, "Config parse: invalid\n  %v\n", err)
+		c.printConfigDiagnostics(out, cfgPath)
+	} else if err := c.validateConfigRuntime(cfg); err != nil {
 		fmt.Fprintf(out, "Config parse: invalid\n  %v\n", err)
 		c.printConfigDiagnostics(out, cfgPath)
 	} else {
@@ -233,8 +238,12 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(out, "Generated operations: unavailable")
 	}
-	if prof := api.Profiles[profileName]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
-		fmt.Fprintln(out, "Auth: configured")
+	if auth := doctorAuthForProfile(profileForName(api, profileName)); auth.Status == "configured" {
+		if len(auth.Sources) > 0 {
+			fmt.Fprintf(out, "Auth: configured (%s)\n", strings.Join(auth.Sources, ", "))
+		} else {
+			fmt.Fprintln(out, "Auth: configured")
+		}
 	} else {
 		fmt.Fprintln(out, "Auth: no profile auth configured")
 	}
@@ -357,8 +366,14 @@ func (c *CLI) doctorConfigParseReport(path string) doctorConfigParseReport {
 	if cfg, err := c.loadConfig(); err != nil {
 		report.Status = "invalid"
 		report.Error = err.Error()
-	} else if cfg != nil && cfg.APIs != nil {
-		report.APICount = len(cfg.APIs)
+	} else if cfg != nil {
+		if cfg.APIs != nil {
+			report.APICount = len(cfg.APIs)
+		}
+		if err := c.validateConfigRuntime(cfg); err != nil {
+			report.Status = "invalid"
+			report.Error = err.Error()
+		}
 	}
 	if diags, err := config.DiagnoseConfig(path); err == nil {
 		for _, diag := range diags.UnknownFields {
@@ -433,16 +448,30 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	}); ok {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{Status: "available", Count: len(set.Operations)}
 	}
-	if prof := api.Profiles[profileName]; prof != nil && (prof.Auth != nil || prof.AuthRef != "" || len(prof.Credentials) > 0) {
-		report.Auth = doctorAuthReport{Status: "configured"}
-	} else {
-		report.Auth = doctorAuthReport{Status: "none"}
-	}
+	report.Auth = doctorAuthForProfile(profileForName(api, profileName))
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
 	}
 	return report
+}
+
+func doctorAuthForProfile(prof *config.ProfileConfig) doctorAuthReport {
+	if prof == nil {
+		return doctorAuthReport{Status: "none"}
+	}
+	var sources []string
+	if prof.Auth != nil || prof.AuthRef != "" {
+		sources = append(sources, "profile_auth")
+	}
+	if len(prof.Credentials) > 0 {
+		sources = append(sources, "credentials")
+	}
+	sources = append(sources, profileCredentialSettingSources(prof)...)
+	if len(sources) == 0 {
+		return doctorAuthReport{Status: "none"}
+	}
+	return doctorAuthReport{Status: "configured", Sources: sources}
 }
 
 func (c *CLI) doctorPluginReport(name string) doctorPluginReport {

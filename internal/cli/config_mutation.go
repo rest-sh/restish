@@ -88,6 +88,14 @@ func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *c
 	return c.reloadConfigAfterMutation(label, oldCfg)
 }
 
+func (c *CLI) saveConfigMutation(label string, mutate func(*config.Config) error) error {
+	oldCfg := c.cfg
+	if err := config.SaveConfigMutation(c.configFilePath(), mutate, c.validateConfigRuntime); err != nil {
+		return err
+	}
+	return c.reloadConfigAfterMutation(label, oldCfg)
+}
+
 func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg *config.Config) error {
 	cfgPath := c.configFilePath()
 	if config.NeedsPatchToPreserveFormatting(cfgPath) {

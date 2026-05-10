@@ -157,7 +157,7 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	if err := c.saveAPIAuthConfig(apiName, apiCfg); err != nil {
+	if err := c.saveAPIAuthCredentialConfig(apiName, profileName, credentialID, prof.Credentials[credentialID]); err != nil {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "Added credential %q to API %q profile %q\n", credentialID, apiName, profileName)
@@ -167,17 +167,14 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 	apiName, credentialID := args[0], args[1]
 	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
+	_, prof, err := c.apiProfileForAuth(apiName, profileName, false)
 	if err != nil {
 		return err
 	}
-	if prof.Credentials != nil {
-		delete(prof.Credentials, credentialID)
-		if len(prof.Credentials) == 0 {
-			prof.Credentials = nil
-		}
+	if prof.Credentials == nil || prof.Credentials[credentialID] == nil {
+		return fmt.Errorf("profile %q of API %q has no credential %q", profileName, apiName, credentialID)
 	}
-	if err := c.saveAPIAuthConfig(apiName, apiCfg); err != nil {
+	if err := c.removeAPIAuthCredentialConfig(apiName, profileName, credentialID); err != nil {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "Removed credential %q from API %q profile %q\n", credentialID, apiName, profileName)
@@ -714,6 +711,45 @@ func (c *CLI) cachedAuthConfigForCredential(apiName string, apiCfg *config.APICo
 	return &config.AuthConfig{Type: auth.Type, Params: auth.Params}, true, nil
 }
 
-func (c *CLI) saveAPIAuthConfig(apiName string, apiCfg *config.APIConfig) error {
-	return c.saveAPIConfig("api auth", apiName, c.cfg, apiCfg)
+func (c *CLI) saveAPIAuthCredentialConfig(apiName, profileName, credentialID string, credential *config.CredentialConfig) error {
+	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
+		apiCfg := cfg.APIs[apiName]
+		if apiCfg == nil {
+			return fmt.Errorf("unknown API %q", apiName)
+		}
+		if apiCfg.Profiles == nil {
+			apiCfg.Profiles = map[string]*config.ProfileConfig{}
+		}
+		prof := apiCfg.Profiles[profileName]
+		if prof == nil {
+			prof = &config.ProfileConfig{}
+			apiCfg.Profiles[profileName] = prof
+		}
+		if prof.Credentials == nil {
+			prof.Credentials = map[string]*config.CredentialConfig{}
+		}
+		if credential == nil {
+			credential = &config.CredentialConfig{}
+		}
+		prof.Credentials[credentialID] = credential
+		return nil
+	})
+}
+
+func (c *CLI) removeAPIAuthCredentialConfig(apiName, profileName, credentialID string) error {
+	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
+		apiCfg := cfg.APIs[apiName]
+		if apiCfg == nil {
+			return fmt.Errorf("unknown API %q", apiName)
+		}
+		prof := profileForName(apiCfg, profileName)
+		if prof == nil || prof.Credentials == nil || prof.Credentials[credentialID] == nil {
+			return fmt.Errorf("profile %q of API %q has no credential %q", profileName, apiName, credentialID)
+		}
+		delete(prof.Credentials, credentialID)
+		if len(prof.Credentials) == 0 {
+			prof.Credentials = nil
+		}
+		return nil
+	})
 }

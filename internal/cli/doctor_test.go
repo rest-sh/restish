@@ -87,6 +87,48 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 	}
 }
 
+func TestDoctorJSONReportsUnsupportedReferencedAuthProfile(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{
+  "apis": {
+    "demo": {
+      "base_url": "https://api.example.com",
+      "profiles": {"secondary": {"auth_ref": "shared-basic"}}
+    }
+  },
+  "auth_profiles": {
+    "shared-basic": {
+      "type": "basic",
+      "params": {"username": "demo", "password": "secret"}
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor", "--json"}); err != nil {
+		t.Fatalf("doctor --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		ConfigParse struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		} `json:"config_parse"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.ConfigParse.Status != "invalid" {
+		t.Fatalf("config_parse.status = %q, want invalid", report.ConfigParse.Status)
+	}
+	if !strings.Contains(report.ConfigParse.Error, "auth_profiles.shared-basic") ||
+		!strings.Contains(report.ConfigParse.Error, `unknown auth type "basic"`) {
+		t.Fatalf("unexpected runtime validation error: %q", report.ConfigParse.Error)
+	}
+}
+
 func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
@@ -134,6 +176,55 @@ func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 		report.Reachability.StatusCode != http.StatusMethodNotAllowed ||
 		report.Reachability.Note == "" {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}
+
+func TestDoctorAPIReportsPersistentCredentialSettings(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{
+  "apis": {
+    "demo": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "headers": ["Authorization: Bearer secret", "X-Env: dev"],
+          "query": ["api_key=query-secret", "page=1"]
+        }
+      }
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Auth struct {
+			Status  string   `json:"status"`
+			Sources []string `json:"sources"`
+		} `json:"auth"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.Auth.Status != "configured" {
+		t.Fatalf("auth.status = %q, want configured", report.Auth.Status)
+	}
+	if strings.Join(report.Auth.Sources, ",") != "headers,query" {
+		t.Fatalf("auth.sources = %#v, want headers/query", report.Auth.Sources)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if err := c.Run([]string{"restish", "doctor", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Auth: configured (headers, query)") {
+		t.Fatalf("doctor api text did not report persistent credentials:\n%s", out.String())
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -53,6 +54,88 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 	}
 	if written.APIs["myapi"].Profiles["default"].Credentials != nil {
 		t.Fatalf("expected credentials removed, got %#v", written.APIs["myapi"].Profiles["default"].Credentials)
+	}
+}
+
+func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "credentials": {
+            "PartnerKey": {}
+          }
+        }
+      }
+    }
+  }
+}`)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "auth", "remove", "myapi", "Missing"})
+	if err == nil {
+		t.Fatal("expected missing credential removal to fail")
+	}
+	if !strings.Contains(err.Error(), `profile "default" of API "myapi" has no credential "Missing"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if written.APIs["myapi"].Profiles["default"].Credentials["PartnerKey"] == nil {
+		t.Fatal("existing credential should remain")
+	}
+}
+
+func TestAPIAuthConcurrentAddsPreserveCredentials(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "credentials": {
+            "Existing": {}
+          }
+        }
+      }
+    }
+  }
+}`)
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+	for _, credentialID := range []string{"RaceA", "RaceB"} {
+		credentialID := credentialID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c, _, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = cfgFile
+			errCh <- c.Run([]string{"restish", "api", "auth", "add", "myapi", credentialID})
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("api auth add: %v", err)
+		}
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	creds := written.APIs["myapi"].Profiles["default"].Credentials
+	for _, credentialID := range []string{"Existing", "RaceA", "RaceB"} {
+		if creds[credentialID] == nil {
+			t.Fatalf("credential %q missing after concurrent adds: %#v", credentialID, creds)
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -128,6 +129,10 @@ func redactSensitiveConfigValue(v any) {
 			}
 		}
 		for key, value := range data {
+			if redacted, ok := redactSensitiveConfigStringList(key, value); ok {
+				data[key] = redacted
+				continue
+			}
 			if isSensitiveConfigKey(key) {
 				data[key] = "***"
 				continue
@@ -139,6 +144,89 @@ func redactSensitiveConfigValue(v any) {
 			redactSensitiveConfigValue(item)
 		}
 	}
+}
+
+func redactSensitiveConfigStringList(key string, value any) ([]any, bool) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, false
+	}
+	switch strings.ToLower(key) {
+	case "headers":
+		redacted := make([]any, len(items))
+		for i, item := range items {
+			raw, ok := item.(string)
+			if !ok {
+				redacted[i] = item
+				continue
+			}
+			redacted[i] = redactPersistentHeader(raw)
+		}
+		return redacted, true
+	case "query":
+		redacted := make([]any, len(items))
+		for i, item := range items {
+			raw, ok := item.(string)
+			if !ok {
+				redacted[i] = item
+				continue
+			}
+			redacted[i] = redactPersistentQuery(raw)
+		}
+		return redacted, true
+	default:
+		return nil, false
+	}
+}
+
+func redactPersistentHeader(raw string) string {
+	name, _, ok := strings.Cut(raw, ":")
+	if !ok || !secrets.IsHeaderName(strings.TrimSpace(name)) {
+		return raw
+	}
+	return strings.TrimSpace(name) + ": ***"
+}
+
+func redactPersistentQuery(raw string) string {
+	name, _, ok := strings.Cut(raw, "=")
+	if !ok || !secrets.IsQueryParamName(strings.TrimSpace(name)) {
+		return raw
+	}
+	return strings.TrimSpace(name) + "=***"
+}
+
+func profileCredentialSettingSources(prof *config.ProfileConfig) []string {
+	if prof == nil {
+		return nil
+	}
+	var sources []string
+	if persistentHeadersContainCredentials(prof.Headers) {
+		sources = append(sources, "headers")
+	}
+	if persistentQueryContainCredentials(prof.Query) {
+		sources = append(sources, "query")
+	}
+	return sources
+}
+
+func persistentHeadersContainCredentials(headers []string) bool {
+	for _, header := range headers {
+		name, _, ok := strings.Cut(header, ":")
+		if ok && secrets.IsHeaderName(strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func persistentQueryContainCredentials(query []string) bool {
+	for _, item := range query {
+		name, _, ok := strings.Cut(item, "=")
+		if ok && secrets.IsQueryParamName(strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isSensitiveConfigKey(key string) bool {
