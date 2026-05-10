@@ -632,7 +632,7 @@ func resolveNextURL(resp *output.Response, pagCfg *config.PaginationConfig, curr
 			return "", fmt.Errorf("pagination: next_path filter %q: %w", pagCfg.NextPath, err)
 		}
 		if result == nil {
-			return "", fmt.Errorf("pagination: next_path %q returned no URL", pagCfg.NextPath)
+			return "", nil
 		}
 		s, ok := result.(string)
 		if !ok {

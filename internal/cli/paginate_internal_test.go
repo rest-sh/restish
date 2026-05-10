@@ -216,6 +216,17 @@ func TestResolveNextURLResolvesNextPathAgainstCurrentURL(t *testing.T) {
 	}
 }
 
+func TestResolveNextURLTreatsNullNextPathAsComplete(t *testing.T) {
+	resp := &output.Response{Body: map[string]any{"next": nil}}
+	next, err := resolveNextURL(resp, &config.PaginationConfig{NextPath: "next"}, "https://api.example.com/items?page=3")
+	if err != nil {
+		t.Fatalf("resolveNextURL: %v", err)
+	}
+	if next != "" {
+		t.Fatalf("resolveNextURL = %q, want empty final-page URL", next)
+	}
+}
+
 func TestResolvedNextPathCrossOriginIsBlockedBySafetyCheck(t *testing.T) {
 	resp := &output.Response{Body: map[string]any{"next": "https://other.example.com/items?page=2"}}
 	next, err := resolveNextURL(resp, &config.PaginationConfig{NextPath: "next"}, "https://api.example.com/items?page=1")
