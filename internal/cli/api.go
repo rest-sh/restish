@@ -972,33 +972,7 @@ func apiSpecCacheRelevantFieldsChanged(oldAPI, newAPI *config.APIConfig) bool {
 	}
 	return oldAPI.BaseURL != newAPI.BaseURL ||
 		oldAPI.SpecURL != newAPI.SpecURL ||
-		oldAPI.OperationBase != newAPI.OperationBase ||
-		!reflect.DeepEqual(oldAPI.SpecFiles, newAPI.SpecFiles) ||
-		!reflect.DeepEqual(oldAPI.ServerVariables, newAPI.ServerVariables) ||
-		!profileServerVariablesEqual(oldAPI.Profiles, newAPI.Profiles)
-}
-
-func profileServerVariablesEqual(a, b map[string]*config.ProfileConfig) bool {
-	names := map[string]struct{}{}
-	for name := range a {
-		names[name] = struct{}{}
-	}
-	for name := range b {
-		names[name] = struct{}{}
-	}
-	for name := range names {
-		var av, bv map[string]string
-		if a[name] != nil {
-			av = a[name].ServerVariables
-		}
-		if b[name] != nil {
-			bv = b[name].ServerVariables
-		}
-		if !reflect.DeepEqual(av, bv) {
-			return false
-		}
-	}
-	return true
+		!reflect.DeepEqual(oldAPI.SpecFiles, newAPI.SpecFiles)
 }
 
 func parseShorthandAssignment(expr string) (string, string, bool, error) {

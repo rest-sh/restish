@@ -3162,6 +3162,84 @@ func TestGeneratedCommandsResolveOperationBasePathAgainstBaseURL(t *testing.T) {
 	}
 }
 
+func TestAPISetOperationBaseRegeneratesGeneratedCommandsFromRawCache(t *testing.T) {
+	var lastPath string
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/my-op": {
+      "get": {
+        "operationId": "myOp",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL+"/api/v1")
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	mux.HandleFunc("/override/my-op", func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/api/v1/my-op", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("expected regenerated operation_base path, got %s", r.URL.Path)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNotFound) })
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL + "/api/v1", SpecURL: srv.URL + "/openapi.json"},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "set", "tapi", `operation_base: "/override"`}); err != nil {
+		t.Fatalf("api set operation_base: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "tapi", "my-op"}); err != nil {
+		t.Fatalf("my-op after api set operation_base: %v", err)
+	}
+	if lastPath != "/override/my-op" {
+		t.Fatalf("generated command path = %q, want /override/my-op", lastPath)
+	}
+}
+
 func TestGeneratedCommandsResolveProfileOperationBaseAtExecutionTime(t *testing.T) {
 	var lastPath string
 	mux := http.NewServeMux()

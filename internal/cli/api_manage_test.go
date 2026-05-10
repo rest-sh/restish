@@ -1488,6 +1488,41 @@ func TestAPISetDoesNotInvalidateSpecCacheForUnrelatedFields(t *testing.T) {
 	}
 }
 
+func TestAPISetDoesNotInvalidateSpecCacheForOperationMetadataFields(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"staging": {},
+				},
+			},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+	cacheDir := t.TempDir()
+	cacheFile := cacheDir + "/myapi.cbor"
+	if err := os.WriteFile(cacheFile, []byte("cached"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{
+		"restish", "api", "set", "myapi",
+		`operation_base: "/override"`,
+		`server_variables.version: v2`,
+		`profiles.staging.server_variables.version: v3`,
+	}); err != nil {
+		t.Fatalf("api set: %v", err)
+	}
+	if _, err := os.Stat(cacheFile); err != nil {
+		t.Fatalf("expected raw spec cache to remain for regenerated operation metadata, stat err=%v", err)
+	}
+}
+
 func TestAPISetRejectsUnknownAuthType(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{
