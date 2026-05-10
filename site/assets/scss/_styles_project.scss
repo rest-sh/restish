@@ -543,6 +543,7 @@ body.td-home .td-navbar__search .td-search-input {
   --restish-command-font-size: 0.92rem;
   --restish-command-line-height: 1.6;
   --restish-command-text-height: calc(var(--restish-command-font-size) * var(--restish-command-line-height));
+  --restish-command-baseline-shift: 1px;
   display: grid;
   grid-template-columns: 2.25rem minmax(0, 1fr);
   align-items: center;
@@ -591,7 +592,7 @@ body.td-home .td-navbar__search .td-search-input {
   line-height: var(--restish-command-line-height);
   overflow: hidden;
   pointer-events: none;
-  transform: translateY(-50%);
+  transform: translateY(calc(-50% + var(--restish-command-baseline-shift)));
   white-space: pre;
 }
 
@@ -631,7 +632,7 @@ body.td-home .td-navbar__search .td-search-input {
   font-size: var(--restish-command-font-size);
   line-height: var(--restish-command-text-height);
   overflow: hidden;
-  transform: translateY(-50%);
+  transform: translateY(calc(-50% + var(--restish-command-baseline-shift)));
   appearance: none;
 }
 
