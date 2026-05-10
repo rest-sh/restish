@@ -34,7 +34,9 @@ not change what the server sends.
 | `text` | `text/plain`, `text/*` |
 
 JSON-family structured types with `+json`, such as
-`application/problem+json`, decode as JSON.
+`application/problem+json`, decode as JSON. Structured suffixes win before broad
+wildcards, so a response labeled `text/example+json` is treated as JSON rather
+than plain `text/*` unless an exact handler is registered for that MIME type.
 
 ## Request Encoding
 
@@ -74,6 +76,10 @@ Use `Accept` when you need to influence server-side content negotiation:
 restish -H 'Accept: application/json' api.rest.sh/formats/json
 restish -H 'Accept: image/png' api.rest.sh/images/png
 ```
+
+Restish generates an `Accept` header from registered content types, ordered by
+quality and deduplicated by canonical MIME type. If a plugin registers the same
+MIME type later, that later registration is the effective one.
 
 Use `-o` when you want Restish to transform a decoded response after it arrives:
 

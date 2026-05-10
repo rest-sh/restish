@@ -2,6 +2,7 @@ package cli
 
 import (
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -91,24 +92,59 @@ func TestHookRequestForPluginIncludesBodyHashAndOptInBody(t *testing.T) {
 	}
 }
 
-func TestApplyRequestUpdateNilDeletesHeader(t *testing.T) {
-	req, err := http.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+func TestApplyRequestUpdateHeaderSemantics(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://api.example.com", nil)
 	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
+		t.Fatalf("request: %v", err)
 	}
-	req.Header.Set("X-Remove", "old")
-	req.Header.Set("X-Keep", "old")
+	req.Header.Set("X-Set", "old")
+	req.Header.Set("X-Replace", "old")
+	req.Header.Set("X-Delete", "old")
 
 	applyRequestUpdate(req, &pluginwire.HookRequestHeaderUpdate{Headers: map[string]any{
-		"X-Remove": nil,
-		"X-Keep":   "new",
+		"X-Set":     "new",
+		"X-Replace": []any{"a", "b"},
+		"X-Delete":  nil,
 	}})
 
-	if got := req.Header.Get("X-Remove"); got != "" {
-		t.Fatalf("X-Remove = %q, want deleted", got)
+	if got := req.Header.Values("X-Set"); !reflect.DeepEqual(got, []string{"new"}) {
+		t.Fatalf("X-Set = %#v", got)
 	}
-	if got := req.Header.Get("X-Keep"); got != "new" {
-		t.Fatalf("X-Keep = %q, want new", got)
+	if got := req.Header.Values("X-Replace"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("X-Replace = %#v", got)
+	}
+	if got := req.Header.Values("X-Delete"); len(got) != 0 {
+		t.Fatalf("X-Delete = %#v, want deleted", got)
+	}
+}
+
+func TestHookRequestFinalBodyRequiresFeature(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "https://api.example.com/items", strings.NewReader(`{"secret":true}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer secret")
+
+	withoutFeature := hookRequestForPlugin(req, internalplugin.Plugin{Manifest: internalplugin.Manifest{Name: "plain"}})
+	if withoutFeature.BodySHA256 == "" {
+		t.Fatal("expected body hash without final body feature")
+	}
+	if len(withoutFeature.Body) != 0 {
+		t.Fatalf("body leaked without feature: %q", withoutFeature.Body)
+	}
+	if got := withoutFeature.Headers["Authorization"]; !reflect.DeepEqual(got, []string{"<redacted>"}) {
+		t.Fatalf("Authorization header = %#v, want redacted", got)
+	}
+
+	withFeature := hookRequestForPlugin(req, internalplugin.Plugin{Manifest: internalplugin.Manifest{
+		Name:             "body",
+		RequiredFeatures: []string{pluginwire.FeatureRequestFinalBody},
+	}})
+	if string(withFeature.Body) != `{"secret":true}` {
+		t.Fatalf("body with feature = %q", withFeature.Body)
+	}
+	if got := withFeature.Headers["Authorization"]; !reflect.DeepEqual(got, []string{"<redacted>"}) {
+		t.Fatalf("Authorization header = %#v, want redacted", got)
 	}
 }
 

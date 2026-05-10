@@ -113,7 +113,7 @@ Response decoder selection should follow a stable order:
 4. unknown-content fallback rules
 
 The important design point is determinism. The selected decoder should not
-depend on registration order in ways users cannot reason about.
+depend on incidental registration order in ways users cannot reason about.
 
 If multiple entries could match within the same tier, the implementation should
 apply a stable tie-break order:
@@ -121,9 +121,15 @@ apply a stable tie-break order:
 1. higher explicit specificity over lower specificity
 2. built-in exact registration order only when two handlers are intentionally
    aliases for the same wire format
-3. otherwise treat ambiguous registration as a startup-time bug
+3. later registration wins for an equivalent MIME key
 
-This prevents "last plugin wins" behavior for core media-type resolution.
+The last rule is intentional. Users may install a plugin specifically to replace
+the default behavior for a media type. Restish should make that override
+mechanism explicit and deterministic rather than treating it as an accidental
+registration collision. Override semantics do not change the tier order:
+structured suffixes still win over wildcard fallbacks, so a response such as
+`text/example+json` is decoded by the JSON family unless an exact handler for
+that MIME type is registered.
 
 ## Request Content-Type Selection
 
@@ -216,14 +222,16 @@ The negotiation algorithm is:
 5. emit the resulting header
 
 Implementations should also deduplicate equivalent MIME types after
-normalization. If two plugins register the same canonical media type, the
-registry must resolve that conflict before header generation rather than
-advertising duplicates.
+normalization. If multiple registrations resolve to the same canonical media
+type, header generation should advertise only the effective registration after
+the later-registration-wins override rule has been applied.
 
-A representative built-in header conceptually looks like:
+A representative built-in header conceptually looks like the following. The
+exact list may grow as built-in aliases are added, but the quality order and
+deduplication rules remain stable:
 
 ```text
-application/cbor;q=0.9, application/msgpack;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, text/event-stream;q=0.2, text/*;q=0.2
+application/cbor;q=0.9, application/msgpack;q=0.8, application/x-msgpack;q=0.8, application/vnd.msgpack;q=0.8, application/ion;q=0.8, text/ion;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, application/x-yaml;q=0.5, text/yaml;q=0.5, text/x-yaml;q=0.5, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, text/event-stream;q=0.2, text/*;q=0.2
 ```
 
 Quality ordering should be stable and deliberate.
@@ -251,7 +259,14 @@ br, gzip, deflate
 
 If an operator explicitly overrides `Accept-Encoding`, Restish should treat that
 as a complete override. The registry still governs what the client can decode,
-but automatic header synthesis must not fight explicit user input.
+but automatic header synthesis must not fight explicit user input. Design 029
+owns the request-pipeline rule that explicit request headers replace generated
+headers.
+
+`text/event-stream` may be registered in the content registry so Restish can
+recognize and advertise the wire media type. Streaming behavior itself is owned
+by design 012; the normal text decoder is only the fallback for body decode
+paths that are not planned as streams.
 
 ## Multipart And Dynamic Content Types
 

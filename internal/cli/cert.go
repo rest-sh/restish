@@ -39,13 +39,16 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	targetURL, err := request.Normalize(args[0], opts.Server)
+	targetURL, err := normalizeCertTarget(args[0], opts.Server)
 	if err != nil {
 		return err
 	}
 	u, err := url.Parse(targetURL)
 	if err != nil {
 		return err
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("cert: unsupported non-TLS scheme %q; use an https:// target", u.Scheme)
 	}
 
 	cfg, cleanup, err := request.TLSConfigWithCleanupFromOptions(opts)
@@ -103,6 +106,18 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func normalizeCertTarget(rawURL, serverOverride string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if !strings.Contains(rawURL, "://") {
+		if strings.HasPrefix(rawURL, ":") {
+			rawURL = "https://localhost" + rawURL
+		} else {
+			rawURL = "https://" + rawURL
+		}
+	}
+	return request.Normalize(rawURL, serverOverride)
 }
 
 func certDialAddress(u *url.URL) string {

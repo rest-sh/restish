@@ -199,6 +199,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	// Streaming responses (SSE, NDJSON) are handled before body normalization.
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
+		request.DisableResponseBodyDeadline(httpResp)
 		traceContentDecode(trace, httpResp.Header.Get("Content-Type"))
 		if gf := globalFlagsFromContext(requestContext(cmd)); gf.Raw {
 			if err := validateRawOutputOptions(gf); err != nil {

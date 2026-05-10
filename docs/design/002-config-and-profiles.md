@@ -136,6 +136,7 @@ registration for that API:
 - `operation_base`
 - `command_layout`
 - `server_variables`
+- `retry_max_wait`
 - pagination configuration
 - profile map
 
@@ -154,10 +155,13 @@ This is deliberate because a profile name such as `prod`, `staging`, or
 Profiles may set or override:
 
 - `base_url`
+- `operation_base`
 - persistent headers
 - persistent query parameters
 - profile-level auth configuration or `auth_ref`
 - operation credential bindings
+- CA certificate path
+- client certificate and key paths
 - TLS signer selection and parameters
 - OpenAPI server variable values
 - other request-affecting defaults added in future designs

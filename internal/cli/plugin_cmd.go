@@ -99,7 +99,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 			Loaders:      append([]string(nil), m.LoaderContentTypes...),
 		}
 		if pluginDeclaresHook(m, "command") {
-			decls, err := loadCommandPluginCommands(p.Path)
+			decls, err := loadCommandPluginCommands(cmd.Context(), p.Path)
 			if err != nil {
 				c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
 			}

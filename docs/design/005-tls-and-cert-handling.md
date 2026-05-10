@@ -126,6 +126,9 @@ The preferred model is:
 
 If platform root loading fails, the runtime should surface that local error
 clearly rather than silently falling back to a weaker trust base.
+This is a fail-closed rule: a custom CA bundle does not turn a platform trust
+store failure into permission to continue with only the custom bundle unless a
+future, explicit trust-only-this-bundle mode is designed.
 
 ## `--rsh-insecure`
 
@@ -183,10 +186,14 @@ consumer of the shared TLS configuration model.
 The `cert` command should define a stable target-resolution contract:
 
 1. resolve scheme, host, and port from the target argument
-2. reject unsupported non-TLS schemes early
+2. reject unsupported non-TLS schemes early as usage errors
 3. build the same TLS plan used for requests
 4. perform the handshake without issuing an HTTP application request
 5. render the observed peer chain and local warning state
+
+In particular, `http://` targets are not silently reinterpreted as "dial this
+host on port 443". Certificate inspection is a TLS-only command, so non-TLS
+schemes should fail before any network I/O.
 
 This makes the command useful both as a debugging tool and as a way to confirm
 that profile-driven TLS settings are wired as expected.

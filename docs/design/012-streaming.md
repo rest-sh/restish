@@ -39,6 +39,12 @@ streaming requests must not depend on whole-request `http.Client.Timeout`; they
 need timeout behavior that allows long-lived bodies once headers have been
 received.
 
+For v2, `--rsh-timeout` has split behavior. It can still bound the full
+lifetime of ordinary, bounded responses. For SSE and NDJSON streams, it bounds
+the wait for response headers; after headers identify a supported stream, body
+reads are governed by root command cancellation and stream-specific limits such
+as `--rsh-max-items` and `--rsh-max-body-size`.
+
 ## Stream Execution Path
 
 When a response is identified as streaming, Restish bypasses the normal
@@ -143,6 +149,8 @@ Streaming must remain interruptible and bounded when the user asks for it.
 Important controls:
 
 - context cancellation should interrupt stream reads promptly
+- `--rsh-timeout` should not terminate a healthy stream only because the body
+  has remained open past the header-wait deadline
 - `--rsh-max-items` defaults to `0` and provides an explicit record limit for
   both SSE and NDJSON when the user wants bounded stream processing
 - hitting `--rsh-max-items` is a successful bounded stop and must print a

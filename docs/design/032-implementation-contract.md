@@ -36,12 +36,12 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-ca-cert` | | string | | empty | Extra trusted CA. |
 | `--rsh-tls-min-version` | | string | | empty | `TLS1.2` or `TLS1.3`. |
 | `--rsh-ignore-status-code` | | bool | | false | Suppresses status-derived non-zero exit. |
-| `--rsh-timeout` | `-t` | duration | `RSH_TIMEOUT` | none | Header wait timeout. |
+| `--rsh-timeout` | `-t` | duration | `RSH_TIMEOUT` | none | Bounded request lifetime; for streams, header wait timeout before switching to stream cancellation rules. |
 | `--rsh-profile` | `-p` | string | `RSH_PROFILE` | `default` | Active API profile. |
 | `--rsh-auth` | | string | `RSH_AUTH` | empty | Generated-operation credential alternative override, e.g. `UserOAuth+PartnerKey`. |
 | `--rsh-no-cache` | | bool | `RSH_NO_CACHE` | false | Bypass reads and writes. |
 | `--rsh-no-browser` | | bool | | false | OAuth auth-code browser suppression. |
-| `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. |
+| `--rsh-retry` | | int | `RSH_RETRY` | 2 | `0` disables retries. Internally, `-1` may be used as the unresolved-default sentinel. |
 | `--rsh-retry-unsafe` | | bool | `RSH_RETRY_UNSAFE` | false | Replay POST/PUT/PATCH/DELETE on retryable failures. |
 | `--rsh-retry-max-wait` | | duration | `RSH_RETRY_MAX_WAIT` | `5m` | Cap server-provided retry waits. |
 | `--rsh-no-paginate` | | bool | | false | Disable automatic pagination. |

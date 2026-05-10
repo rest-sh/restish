@@ -197,9 +197,12 @@ Two rules matter:
   transport hooks that observe the raw response without creating a bespoke
   transport stack for each diagnostic feature
 
-Instead, Restish should use a request context deadline for "time to first
-headers" and then clear or replace that deadline after headers arrive for
-long-lived streams.
+For v2, timeout behavior is split by response shape. Bounded requests may keep
+the configured timeout as a whole-request lifetime through body read and output.
+Stream-shaped responses should use the configured timeout for "time to first
+headers" and then clear or replace that deadline after headers arrive so the
+stream can remain long-lived. In both cases, the root command context continues
+to carry cancellation.
 
 ## 5. HTTP Execution
 

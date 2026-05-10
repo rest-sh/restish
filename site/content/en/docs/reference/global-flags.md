@@ -22,7 +22,7 @@ restish get --help-all
 | `-q`, `--rsh-query` | repeatable `key=value` | none | Add query params without hand-editing the URL. |
 | `-c`, `--rsh-content-type` | content alias or MIME | `json` | Request body encoder, such as `json`, `yaml`, `form`, or `multipart`. |
 | `-s`, `--rsh-server` | URL | config/spec server | Override scheme and host for one request. |
-| `-t`, `--rsh-timeout` | duration | transport default | Bound the whole request, for example `500ms` or `30s`. |
+| `-t`, `--rsh-timeout` | duration | transport default | Bound ordinary request lifetime. For SSE/NDJSON streams, bound the wait for response headers before stream rules take over. |
 | `--rsh-max-body-size` | MiB | `100` when `0` | Maximum response body size. |
 | `--rsh-ignore-status-code` | boolean | false | Exit zero even for HTTP error statuses. |
 

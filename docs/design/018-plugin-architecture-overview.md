@@ -54,6 +54,11 @@ Accepted install sources are intentionally explicit:
 - a GitHub latest-release shorthand of the form `owner/repo:plugin`, which
   resolves one release asset for the current `GOOS`/`GOARCH`
 
+The GitHub latest-release shorthand is part of v2 scope because it materially
+improves plugin install usability. It should not be treated as a speculative
+future source format unless implementation uncovers a security or packaging
+blocker that needs a separate design decision.
+
 Archive extraction must be defensive. The installer reads archives into a
 bounded temporary directory, accepts only regular files whose basename matches
 the requested plugin name or the `restish-*` plugin convention, flattens archive

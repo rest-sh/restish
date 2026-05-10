@@ -77,6 +77,18 @@ func TestCertWarnDaysValidLonger(t *testing.T) {
 	}
 }
 
+func TestCertRejectsNonTLSScheme(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "cert", "http://example.com"})
+	if err == nil {
+		t.Fatal("expected non-TLS scheme error")
+	}
+	if !strings.Contains(err.Error(), "unsupported non-TLS scheme") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func newTLSServerWithChain(t *testing.T, leafExpiry time.Time, includeIntermediate bool) (*httptest.Server, string) {
 	t.Helper()
 

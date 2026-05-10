@@ -16,6 +16,9 @@ restish cert api.rest.sh
 restish cert --warn-days 14 api.rest.sh
 ```
 
+`cert` is TLS-only. Bare hosts default to `https://`; `http://` targets are
+rejected before any network connection.
+
 ## Trust A Custom CA
 
 Use this when your organization uses a private CA:
@@ -27,6 +30,8 @@ restish cert --rsh-ca-cert ./corp-ca.pem https://service.internal.test
 
 Prerequisite: `corp-ca.pem` must contain the PEM-encoded CA certificate that
 signed the server certificate.
+If the platform trust store cannot be loaded, Restish fails closed instead of
+continuing with only the custom CA file.
 
 ## Mutual TLS With Files
 

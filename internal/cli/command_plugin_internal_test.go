@@ -58,7 +58,7 @@ func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 		t.Fatalf("write plugin: %v", err)
 	}
 
-	_, err := loadCommandPluginCommands(path)
+	_, err := loadCommandPluginCommands(context.Background(), path)
 	if err == nil {
 		t.Fatal("expected command discovery error")
 	}
@@ -78,7 +78,7 @@ func TestLoadCommandPluginCommandsReturnsExecErrorWithStderr(t *testing.T) {
 		t.Fatalf("write plugin: %v", err)
 	}
 
-	_, err := loadCommandPluginCommands(path)
+	_, err := loadCommandPluginCommands(context.Background(), path)
 	if err == nil {
 		t.Fatal("expected command discovery error")
 	}

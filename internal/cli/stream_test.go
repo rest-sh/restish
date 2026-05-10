@@ -185,6 +185,42 @@ func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
 	}
 }
 
+func TestNDJSONTimeoutOnlyBoundsHeaders(t *testing.T) {
+	secondLine := make(chan struct{})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("response writer does not implement http.Flusher")
+		}
+		fmt.Fprintln(w, `{"n":1}`)
+		flusher.Flush()
+		time.Sleep(75 * time.Millisecond)
+		fmt.Fprintln(w, `{"n":2}`)
+		flusher.Flush()
+		close(secondLine)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "--rsh-timeout", "25ms", "--rsh-max-items", "2", srv.URL + "/stream"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	select {
+	case <-secondLine:
+	default:
+		t.Fatal("server did not write second stream line")
+	}
+	got := out.String()
+	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+		t.Fatalf("expected both stream lines after timeout elapsed, got:\n%s", got)
+	}
+}
+
 func TestSSEFlushesBeforeResponseCompletes(t *testing.T) {
 	firstEventWritten := make(chan struct{})
 	finishResponse := make(chan struct{})

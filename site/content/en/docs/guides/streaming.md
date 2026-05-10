@@ -11,8 +11,11 @@ Restish recognizes Server-Sent Events, NDJSON, and JSON Lines. Streaming
 responses are processed one event or line at a time instead of waiting for a
 complete response body.
 
-Streams run until EOF, timeout, or interruption by default. Add
+Streams run until EOF, interruption, or an explicit stream limit. Add
 `--rsh-max-items` when you want a sample or a script with a fixed record count.
+For streams, `--rsh-timeout` bounds the wait for response headers; once headers
+identify SSE or NDJSON, the body can stay open until EOF, Ctrl-C, or
+`--rsh-max-items`.
 
 ## Server-Sent Events
 
@@ -49,7 +52,7 @@ restish api.rest.sh/logs --rsh-max-items 3 -o ndjson
 restish api.rest.sh/logs --rsh-max-items 3 -f body.user.id -o lines
 ```
 
-If an endpoint is slow to emit its first record, add a timeout while debugging:
+If an endpoint is slow to respond with headers, add a timeout while debugging:
 
 ```bash
 restish api.rest.sh/logs --rsh-max-items 3 --rsh-timeout 5s

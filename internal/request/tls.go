@@ -11,6 +11,8 @@ import (
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 )
 
+var systemCertPool = x509.SystemCertPool
+
 // TLSVersionFromString maps CLI values like TLS1.2 and TLS1.3 to crypto/tls constants.
 func TLSVersionFromString(v string) (uint16, error) {
 	switch strings.ToUpper(strings.TrimSpace(v)) {
@@ -96,8 +98,11 @@ func TLSConfigWithCleanupFromOptions(opts Options) (*tls.Config, io.Closer, erro
 }
 
 func bestEffortSystemCertPool() (*x509.CertPool, error) {
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
+	pool, err := systemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("loading system certificate pool: %w", err)
+	}
+	if pool == nil {
 		return x509.NewCertPool(), nil
 	}
 	return pool, nil

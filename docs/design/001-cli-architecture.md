@@ -55,8 +55,9 @@ configuration, discovers plugins, registers generated commands, tracks request
 closers, and may temporarily wrap stdout for buffered non-TTY output. External
 embedders should create a fresh `CLI` per invocation, set streams and hooks
 before calling `Run`, and avoid sharing one `CLI` concurrently across commands.
-The test hooks exposed by `Hooks()` are intentionally narrow and are not a
-general extension API.
+Internal test hooks are intentionally narrow and are not a general extension
+API. They may be exposed through test-only helpers, but they are not part of the
+public embedding contract.
 
 ### 2. Paths And Persistence
 
@@ -164,7 +165,11 @@ The root Cobra tree is assembled from:
 - command-plugin entry points
 
 Network discovery should not be required at this phase. Startup command
-construction must be offline-safe.
+construction must be offline-safe. Local filesystem work is allowed: for APIs
+configured with local `spec_files`, generated command registration may parse
+those files at startup when the operation cache is missing or stale. That
+carve-out does not permit live network discovery during command-tree
+construction.
 
 ### 6. Dispatch
 
@@ -208,12 +213,17 @@ Everything long-lived should derive from the root command context:
 
 - HTTP requests
 - OAuth waits
+- auth secret commands
 - pagination loops
 - plugin processes
+- command-plugin discovery
 - TLS signer sessions
 
 Using `context.Background()` inside the runtime should be treated as a design
-bug unless there is a very strong documented reason.
+bug unless there is a very strong documented reason. Bounded helper subprocesses
+such as auth secret commands and command-plugin discovery should combine their
+fixed safety timeout with the root command context, so Ctrl-C cancels them
+promptly while the timeout still caps stuck helpers.
 
 ### Startup Discovery Is Additive
 

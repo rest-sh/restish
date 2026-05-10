@@ -754,6 +754,37 @@ func TestSaveConfigShorthand_ArrayAppendInsertDeleteAndSwap(t *testing.T) {
 	}
 }
 
+func TestSaveConfigShorthand_SwapIsRootedAtAPI(t *testing.T) {
+	path := writeJSONCConfig(t, `{
+  "apis": {
+    "myapi": {
+      "profiles": {
+        "default": {
+          "headers": ["A: 1", "B: 2"]
+        }
+      }
+    }
+  }
+}`)
+
+	err := SaveConfigShorthand(path, []string{"apis", "myapi"}, []string{
+		`profiles.default.headers[0] ^ profiles.default.headers[1]`,
+	}, nil)
+	if err != nil {
+		t.Fatalf("SaveConfigShorthand: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	got := cfg.APIs["myapi"].Profiles["default"].Headers
+	want := []string{"B: 2", "A: 1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("headers = %#v, want %#v", got, want)
+	}
+}
+
 func TestValidateShapeReportsMultipleErrors(t *testing.T) {
 	err := ValidateShape(map[string]any{
 		"apis": map[string]any{

@@ -231,7 +231,11 @@ func (c *CLI) resolveAuthParam(value string) (string, error) {
 }
 
 func (c *CLI) runSecretCommand(commandLine string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	parent := c.runCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 
 	cmd := procutil.ShellCommand(ctx, commandLine)

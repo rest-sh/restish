@@ -112,6 +112,7 @@ type CLI struct {
 	retryUnsafeWarned      bool
 	signalHandling         bool
 	quietGeneratedWarnings bool
+	runCtx                 context.Context
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -417,6 +418,8 @@ func (c *CLI) Run(args []string) error {
 	// formatters all share the same cancellation source.
 	ctx, cancel := c.rootContext()
 	defer cancel()
+	c.runCtx = ctx
+	defer func() { c.runCtx = nil }()
 
 	argScan := scanCLIArgs(args)
 	c.retryUnsafeWarned = false

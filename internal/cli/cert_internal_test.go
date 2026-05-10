@@ -26,3 +26,24 @@ func TestCertDialAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeCertTargetDefaultsToHTTPS(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"example.com", "https://example.com"},
+		{"localhost:8443", "https://localhost:8443"},
+		{":8443", "https://localhost:8443"},
+	}
+
+	for _, tt := range tests {
+		got, err := normalizeCertTarget(tt.in, "")
+		if err != nil {
+			t.Fatalf("normalizeCertTarget(%q): %v", tt.in, err)
+		}
+		if got != tt.want {
+			t.Fatalf("normalizeCertTarget(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

@@ -38,6 +38,7 @@ func (c *CLI) prepareRequest(
 	operationAuth *operationAuthPolicy,
 ) (*preparedRequest, error) {
 	opts = cloneRequestOptions(opts)
+	opts.HeaderTimeoutOnly = true
 	if len(extraHeaders) > 0 {
 		opts.Headers = append(opts.Headers, extraHeaders...)
 	}

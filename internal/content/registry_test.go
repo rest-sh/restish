@@ -133,6 +133,42 @@ func TestAcceptHeader(t *testing.T) {
 	}
 }
 
+func TestAcceptHeaderDeduplicatesCanonicalMIMETypes(t *testing.T) {
+	r := content.New()
+	r.AddContentType(&content.ContentType{
+		Name:      "json",
+		MIMETypes: []string{"application/json"},
+		Quality:   0.5,
+	})
+	r.AddContentType(&content.ContentType{
+		Name:      "custom-json",
+		MIMETypes: []string{"Application/JSON"},
+		Quality:   0.7,
+	})
+
+	h := r.AcceptHeader()
+	if strings.Count(strings.ToLower(h), "application/json") != 1 {
+		t.Fatalf("AcceptHeader() should advertise one canonical application/json, got %q", h)
+	}
+	if !strings.Contains(h, "Application/JSON;q=0.7") {
+		t.Fatalf("AcceptHeader() should use later registration quality/name, got %q", h)
+	}
+}
+
+func TestStructuredSuffixPrecedesTextWildcard(t *testing.T) {
+	out, err := reg.Decode("text/example+json", []byte(`{"ok":true}`))
+	if err != nil {
+		t.Fatalf("Decode(text/example+json): %v", err)
+	}
+	m, ok := out.(map[string]any)
+	if !ok {
+		t.Fatalf("Decode(text/example+json) = %T, want map[string]any", out)
+	}
+	if m["ok"] != true {
+		t.Fatalf("decoded JSON suffix body = %#v", out)
+	}
+}
+
 func TestTextAliasUsesPlainText(t *testing.T) {
 	if got, want := reg.MIMETypeForName("text"), "text/plain"; got != want {
 		t.Fatalf("MIMETypeForName(text) = %q, want %q", got, want)

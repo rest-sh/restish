@@ -707,12 +707,16 @@ from standard OpenAPI security schemes:
   location is supported;
 - unsupported schemes appear in setup and coverage diagnostics as unsupported.
 
-## OpenAPI 3.2 And Future-Proofing
+## Future OpenAPI 3.2 Support
 
 OpenAPI 3.2 adds security features that are worth supporting directly, and they
-reinforce the neutral credential-requirement model.
+reinforce the neutral credential-requirement model. These are future-looking
+requirements for v2 rather than release-blocking scope for the first v2
+implementation pass. The v2 design should avoid choices that make these
+features hard to add later.
 
-OAuth2 Device Authorization flow should map to Restish `oauth-device-code`:
+When implemented, OAuth2 Device Authorization flow should map to Restish
+`oauth-device-code`:
 
 ```yaml
 components:
@@ -728,20 +732,20 @@ components:
 ```
 
 OAuth2 security schemes can also provide `oauth2MetadataUrl`, which points at
-authorization server metadata. Restish setup should accept this as discovery
-input and map it to either a dedicated auth param or the existing issuer/metadata
-discovery path, after applying the same HTTPS and endpoint validation rules as
-other OAuth discovery inputs.
+authorization server metadata. A future implementation should accept this as
+discovery input and map it to either a dedicated auth param or the existing
+issuer/metadata discovery path, after applying the same HTTPS and endpoint
+validation rules as other OAuth discovery inputs.
 
-Security Scheme Objects can be marked `deprecated: true`. `api connect` and
-`api auth list` should show deprecated schemes but avoid selecting them by
+Security Scheme Objects can be marked `deprecated: true`. Future setup and
+inspection flows should show deprecated schemes but avoid selecting them by
 default when a non-deprecated alternative is available.
 
 OpenAPI 3.2 also allows security schemes to be referenced by URI rather than
 only by component name. Internally, Restish should preserve both a display ID and
-a canonical ref/URI. Config keys should stay human-friendly when possible, and
-commands such as `api auth add` should handle URI-backed requirements so users
-do not need to hand-type awkward JSON paths.
+a canonical ref/URI when this support is added. Config keys should stay
+human-friendly when possible, and commands such as `api auth add` should handle
+URI-backed requirements so users do not need to hand-type awkward JSON paths.
 
 Security Requirement arrays are not OAuth-only. For `oauth2` and
 `openIdConnect`, array values are scopes. For other security-scheme types, the
@@ -836,10 +840,6 @@ scheme.
 - generic URL requests apply operation security only for unambiguous cached
   method/path matches and otherwise use ordinary profile auth;
 - first-class API-key auth supports header and query locations and redaction;
-- OpenAPI 3.2 device authorization maps to `oauth-device-code`;
-- OpenAPI 3.2 `oauth2MetadataUrl` participates in OAuth setup;
-- deprecated security schemes are shown but de-prioritized during setup;
-- URI-backed security scheme references remain matchable and diagnosable;
 - optional anonymous auth prefers configured credentials before anonymous
   fallback;
 - cached operation metadata preserves effective security policy for offline
@@ -855,6 +855,13 @@ scheme.
   and explicit raw header output;
 - the old API-or-URI, Authorization-header-only `api auth inspect` behavior is
   removed.
+
+Future OpenAPI 3.2 coverage, not required for the first v2 implementation pass:
+
+- device authorization maps to `oauth-device-code`;
+- `oauth2MetadataUrl` participates in OAuth setup;
+- deprecated security schemes are shown but de-prioritized during setup;
+- URI-backed security scheme references remain matchable and diagnosable.
 
 ## Documentation Impact
 

@@ -62,6 +62,12 @@ frameworks, and advanced users can install the script using their preferred
 mechanism. The hidden top-level `completion` command remains as a compatibility
 alias during v2 development.
 
+The v2 completion target is bash, zsh, fish, and PowerShell when PowerShell can
+be supported through Cobra's standard generator without a large custom
+integration. If PowerShell support turns out to require a separate shell setup
+model, narrow `shell completion` to bash/zsh/fish for the initial release and
+document PowerShell completion as future work.
+
 Completion should reflect the real command tree, which means it can include:
 
 - built-in commands
@@ -199,6 +205,7 @@ Generate a completion script:
 restish shell completion zsh
 restish shell completion bash
 restish shell completion fish
+restish shell completion powershell
 ```
 
 Install zsh completion for a user-managed Restish install:

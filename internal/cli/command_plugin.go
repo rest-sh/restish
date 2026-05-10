@@ -19,9 +19,12 @@ import (
 const maxCommandPluginDiscoveryOutputBytes = 1 << 20
 const maxCommandPluginStderrBytes = 64 << 10
 
-func loadCommandPluginCommands(path string) ([]pluginwire.CommandDecl, error) {
+func loadCommandPluginCommands(ctx context.Context, path string) ([]pluginwire.CommandDecl, error) {
 	timeout := commandPluginDiscoveryTimeout()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagCommands)
@@ -90,7 +93,7 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 	seen := map[string]string{}
 	c.pluginCommandNames = map[string]string{}
 	for _, p := range c.pluginsByHook["command"] {
-		cmds, err := loadCommandPluginCommands(p.Path)
+		cmds, err := loadCommandPluginCommands(c.runCtx, p.Path)
 		if err != nil {
 			c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
 			continue

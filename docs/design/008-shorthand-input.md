@@ -66,6 +66,7 @@ When stdin provides the base body, Restish should:
 - preserve plain text as plain text when structured decoding does not apply
 - allow shorthand patching only when the base value can be represented as a
   mutable structured value
+- cap stdin body reads at 16 MiB and fail clearly when the cap is exceeded
 
 With stdin only and no shorthand arguments, non-structured text is still a
 valid request body. It should be sent as a plain string/text value instead of

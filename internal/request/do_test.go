@@ -499,6 +499,46 @@ func TestDo_TimeoutCancelsBodyReads(t *testing.T) {
 	}
 }
 
+func TestDo_HeaderTimeoutOnlyBodyDeadlineCanBeDisabled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resp, err := request.Do(ctx, "GET", "https://api.example.com/items", nil, request.Options{
+		Timeout:           20 * time.Millisecond,
+		HeaderTimeoutOnly: true,
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{},
+				Body: io.NopCloser(readerFunc(func(p []byte) (int, error) {
+					select {
+					case <-time.After(50 * time.Millisecond):
+						copy(p, "hello")
+						return 5, io.EOF
+					case <-r.Context().Done():
+						return 0, r.Context().Err()
+					}
+				})),
+			}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if !request.DisableResponseBodyDeadline(resp) {
+		t.Fatal("expected body deadline to be disabled")
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body after disabling deadline: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("body = %q, want hello", data)
+	}
+}
+
 type readerFunc func([]byte) (int, error)
 
 func (f readerFunc) Read(p []byte) (int, error) {

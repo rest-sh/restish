@@ -115,15 +115,17 @@ tokens between API registrations without duplicating secret-bearing params.
 
 The built-in set should include:
 
+- `api-key`
+- `bearer`
 - `http-basic`
 - `oauth-client-credentials`
 - `oauth-authorization-code`
+- `external-tool`
 - device-code flow when available as part of the OAuth family
 
 The design explicitly leaves room for:
 
 - auth plugins
-- external-tool-backed handlers
 - additional OAuth grant helpers
 
 ## Handler Contract

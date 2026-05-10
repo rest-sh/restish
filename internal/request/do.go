@@ -2,11 +2,13 @@ package request
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gregjones/httpcache"
@@ -46,6 +48,57 @@ func (c *closeAfterBody) Close() error {
 	return err
 }
 
+func (c *closeAfterBody) DisableDeadline() bool {
+	if d, ok := c.ReadCloser.(interface{ DisableDeadline() bool }); ok {
+		return d.DisableDeadline()
+	}
+	return false
+}
+
+type deadlineBody struct {
+	io.ReadCloser
+	stopTimer func() bool
+	fired     *atomic.Bool
+}
+
+func (b *deadlineBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && b.fired != nil && b.fired.Load() && errors.Is(err, context.Canceled) {
+		return n, context.DeadlineExceeded
+	}
+	return n, err
+}
+
+func (b *deadlineBody) Close() error {
+	if b.stopTimer != nil {
+		b.stopTimer()
+	}
+	return b.ReadCloser.Close()
+}
+
+func (b *deadlineBody) DisableDeadline() bool {
+	if b.stopTimer == nil {
+		return false
+	}
+	stopped := b.stopTimer()
+	b.stopTimer = nil
+	return stopped
+}
+
+// DisableResponseBodyDeadline removes a body-read deadline installed by Do when
+// Options.HeaderTimeoutOnly is set. Stream callers use this after classifying a
+// response by headers so a healthy stream is governed by root cancellation,
+// EOF, or explicit stream limits rather than by the header wait timeout.
+func DisableResponseBodyDeadline(resp *http.Response) bool {
+	if resp == nil || resp.Body == nil {
+		return false
+	}
+	if d, ok := resp.Body.(interface{ DisableDeadline() bool }); ok {
+		return d.DisableDeadline()
+	}
+	return false
+}
+
 // Options controls per-request behavior derived from CLI flags.
 type Options struct {
 	// Headers is a list of "Name: Value" header strings to add to the request.
@@ -59,6 +112,11 @@ type Options struct {
 	// Timeout bounds the full request lifetime, including response body reads.
 	// Zero means no timeout.
 	Timeout time.Duration
+	// HeaderTimeoutOnly treats Timeout as a time-to-first-response deadline.
+	// Do still installs a body-read deadline by default so bounded callers keep
+	// whole-request behavior; stream callers can remove it after reading
+	// response headers with DisableResponseBodyDeadline.
+	HeaderTimeoutOnly bool
 	// ClientCertPath is the PEM client certificate path for mTLS.
 	ClientCertPath string
 	// ClientKeyPath is the PEM client private key path for mTLS.
@@ -145,8 +203,14 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	requestCtx := ctx
 	var cancelRequest context.CancelFunc
 	cancelOnReturn := false
+	var responseDeadline time.Time
 	if opts.Timeout > 0 {
-		requestCtx, cancelRequest = context.WithTimeout(ctx, opts.Timeout)
+		if opts.HeaderTimeoutOnly {
+			requestCtx, cancelRequest = context.WithCancel(ctx)
+			responseDeadline = time.Now().Add(opts.Timeout)
+		} else {
+			requestCtx, cancelRequest = context.WithTimeout(ctx, opts.Timeout)
+		}
 		cancelOnReturn = true
 		defer func() {
 			if cancelOnReturn && cancelRequest != nil {
@@ -230,7 +294,7 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		CheckRedirect: credentialStrippingRedirectPolicy,
 	}
 
-	resp, err := doWithResponseTimeout(client, req, cancelRequest)
+	resp, err := doWithResponseTimeout(client, req, opts.Timeout, opts.HeaderTimeoutOnly, cancelRequest)
 	if err != nil {
 		if cancelRequest != nil {
 			cancelRequest()
@@ -256,6 +320,20 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	}
 	if len(closeFns) > 0 {
 		if resp.Body != nil {
+			if opts.Timeout > 0 && opts.HeaderTimeoutOnly && !responseDeadline.IsZero() {
+				remaining := time.Until(responseDeadline)
+				if remaining <= 0 {
+					remaining = time.Nanosecond
+				}
+				deadlineFired := &atomic.Bool{}
+				timer := time.AfterFunc(remaining, func() {
+					deadlineFired.Store(true)
+					if cancelRequest != nil {
+						cancelRequest()
+					}
+				})
+				resp.Body = &deadlineBody{ReadCloser: resp.Body, stopTimer: timer.Stop, fired: deadlineFired}
+			}
 			resp.Body = &closeAfterBody{ReadCloser: resp.Body, closeFn: func() error {
 				var firstErr error
 				for _, closeFn := range closeFns {
@@ -280,7 +358,7 @@ type doResult struct {
 	err  error
 }
 
-func doWithResponseTimeout(client *http.Client, req *http.Request, cancel context.CancelFunc) (*http.Response, error) {
+func doWithResponseTimeout(client *http.Client, req *http.Request, timeout time.Duration, headerOnly bool, cancel context.CancelFunc) (*http.Response, error) {
 	if cancel == nil {
 		return client.Do(req)
 	}
@@ -306,9 +384,23 @@ func doWithResponseTimeout(client *http.Client, req *http.Request, cancel contex
 		}
 	}()
 
+	if !headerOnly {
+		select {
+		case result := <-resultCh:
+			return result.resp, result.err
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case result := <-resultCh:
 		return result.resp, result.err
+	case <-timer.C:
+		cancel()
+		return nil, context.DeadlineExceeded
 	case <-req.Context().Done():
 		return nil, req.Context().Err()
 	}

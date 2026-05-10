@@ -74,7 +74,7 @@ The design requirements are:
 - reject private-range or loopback follow targets by default unless the original
   configured API is itself in that trust class
 - treat DNS lookup errors and lookup timeouts as non-public when validating
-  cross-origin discovery targets
+  cross-origin discovery targets; the current validation timeout is 2 seconds
 - only `http` and `https` are valid remote schemes
 - size limits before full-body parse attempts
 - all requests derive from the command context

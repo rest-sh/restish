@@ -106,6 +106,14 @@ type qualityEntry struct {
 	q    float32
 }
 
+func canonicalMediaType(mt string) string {
+	base, _, err := mime.ParseMediaType(mt)
+	if err != nil || base == "" {
+		base = strings.TrimSpace(mt)
+	}
+	return strings.ToLower(base)
+}
+
 // buildQualityHeader sorts entries by quality descending and formats them as
 // a comma-separated Accept / Accept-Encoding header value.
 func buildQualityHeader(entries []qualityEntry) string {
@@ -132,8 +140,15 @@ func (r *Registry) AcceptHeader() string {
 		return r.acceptHeader
 	}
 	var entries []qualityEntry
+	seen := make(map[string]int)
 	for _, ct := range r.contentTypes {
 		for _, mt := range ct.MIMETypes {
+			key := canonicalMediaType(mt)
+			if idx, ok := seen[key]; ok {
+				entries[idx] = qualityEntry{mt, ct.Quality}
+				continue
+			}
+			seen[key] = len(entries)
 			entries = append(entries, qualityEntry{mt, ct.Quality})
 		}
 	}
@@ -276,7 +291,8 @@ func (r *Registry) MIMETypeForName(name string) string {
 }
 
 // find returns the last-registered ContentType whose MIMETypes list contains
-// a match for mimeType (exact or wildcard). Returns nil if none match.
+// the best-tier match for mimeType. Matching order is exact MIME type,
+// structured suffix, then wildcard. Returns nil if none match.
 func (r *Registry) find(mimeType string) *ContentType {
 	base, _, _ := mime.ParseMediaType(mimeType)
 	if base == "" {
@@ -298,6 +314,18 @@ func (r *Registry) find(mimeType string) *ContentType {
 		return exactMatch
 	}
 
+	var suffixMatch *ContentType
+	for _, ct := range r.contentTypes {
+		for _, suffix := range ct.Suffixes {
+			if strings.HasSuffix(base, suffix) {
+				suffixMatch = ct
+			}
+		}
+	}
+	if suffixMatch != nil {
+		return suffixMatch
+	}
+
 	var wildcardMatch *ContentType
 	for _, ct := range r.contentTypes {
 		for _, mt := range ct.MIMETypes {
@@ -310,19 +338,7 @@ func (r *Registry) find(mimeType string) *ContentType {
 			}
 		}
 	}
-	if wildcardMatch != nil {
-		return wildcardMatch
-	}
-
-	var suffixMatch *ContentType
-	for _, ct := range r.contentTypes {
-		for _, suffix := range ct.Suffixes {
-			if strings.HasSuffix(base, suffix) {
-				suffixMatch = ct
-			}
-		}
-	}
-	return suffixMatch
+	return wildcardMatch
 }
 
 // Printable returns body when it is likely safe and useful to display as text.

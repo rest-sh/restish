@@ -281,6 +281,16 @@ func TestJQ_BodyName(t *testing.T) {
 	}
 }
 
+func TestAutoDetectPrefersJQIntentMarkers(t *testing.T) {
+	result, err := filter.Apply(".body.name", testDoc(), filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "Alice" {
+		t.Fatalf("auto jq result = %#v, want Alice", result)
+	}
+}
+
 func TestJQ_SelectFilter(t *testing.T) {
 	result, err := filter.Apply(`.body.items[] | select(.status == "active") | .name`, testDoc(), filter.LangJQ)
 	if err != nil {

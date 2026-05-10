@@ -130,6 +130,8 @@ your network can reach.
 Use `cert` before changing request TLS flags. It reports issuer, subject,
 validity dates, and expiration warnings using the same custom CA file you would
 use for a request.
+The command is TLS-only: bare hosts default to `https://`, and non-TLS schemes
+such as `http://` are usage errors.
 
 ### `links`
 

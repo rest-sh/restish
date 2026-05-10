@@ -343,6 +343,61 @@ func TestExternalToolAuthPromptsAndStoresApproval(t *testing.T) {
 	}
 }
 
+func TestExternalToolAuthChangedCommandRequiresNewApproval(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command test not supported on Windows")
+	}
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "restish.json")
+	writeConfig := func(commandLine string) {
+		t.Helper()
+		cfg := fmt.Sprintf(`{
+			"apis": {
+				"myapi": {
+					"base_url": "https://api.example.com",
+					"profiles": {
+						"default": {
+							"auth": {
+								"type": "external-tool",
+								"params": {"commandline": %q}
+							}
+						}
+					}
+				}
+			}
+		}`, commandLine)
+		if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeConfig(`echo '{"headers":{"Authorization":["Bearer one"]}}'`)
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{}`), nil
+	})
+	c.Hooks().ConfigPath = configPath
+	c.Hooks().PassReader = strings.NewReader("y\n")
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	writeConfig(`echo '{"headers":{"Authorization":["Bearer two"]}}'`)
+	c2, _, _ := newTestCLI(t)
+	useTransport(c2, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(200, `{}`), nil
+	})
+	c2.Hooks().ConfigPath = configPath
+	c2.Hooks().PassReader = strings.NewReader("n\n")
+	err := c2.Run([]string{"restish", "get", "myapi/items"})
+	if err == nil {
+		t.Fatal("expected changed command to require approval")
+	}
+	if !strings.Contains(err.Error(), "not approved") {
+		t.Fatalf("expected approval error, got %v", err)
+	}
+}
+
 func TestExternalToolAuthRejectsUnapprovedCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell command test not supported on Windows")
