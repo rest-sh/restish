@@ -507,8 +507,9 @@ restish example get-auth-basic -v
 Verbose output redacts sensitive values, so you can confirm that auth was added
 without leaking the credential into logs.
 
-Use `restish api auth inspect example` to see configured credentials and what
-specific header or query parameters they will add to requests.
+Use `restish api auth inspect example --rsh-credential basicAuth` to see what
+specific header or query parameters a configured credential will add to
+requests.
 
 Learn more: [Authentication](../../guides/authentication/),
 [Commands](../../reference/commands/),

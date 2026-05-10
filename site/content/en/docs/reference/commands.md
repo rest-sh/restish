@@ -46,9 +46,9 @@ body input is a generic `POST`.
 Inspect configured API auth without sending the target request:
 
 ```bash
-restish api auth inspect example
-restish api auth inspect example --raw-header Authorization
-restish api auth inspect example --rsh-credential PartnerKey
+restish api auth inspect myapi
+restish api auth inspect myapi --rsh-credential PartnerKey
+restish api auth inspect myapi --rsh-credential UserBearer --raw-header Authorization
 ```
 
 Use this before debugging a `401` or `403`. If the profile has exactly one

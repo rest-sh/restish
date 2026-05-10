@@ -152,9 +152,9 @@ For configured API auth, inspect the computed auth material without making the
 full request:
 
 ```bash
-restish api auth inspect example
-restish api auth inspect example --raw-header Authorization
-restish api auth inspect example --rsh-credential PartnerKey
+restish api auth inspect myapi
+restish api auth inspect myapi --rsh-credential PartnerKey
+restish api auth inspect myapi --rsh-credential UserBearer --raw-header Authorization
 ```
 
 When a profile has exactly one configured credential, `inspect` selects it by

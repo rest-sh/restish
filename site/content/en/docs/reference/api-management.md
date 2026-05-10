@@ -103,9 +103,8 @@ cache entries.
 restish api auth list example
 restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
-restish api auth inspect example
 restish api auth inspect example --rsh-credential PartnerKey
-restish api auth inspect example --raw-header Authorization
+restish api auth inspect example --rsh-credential basicAuth --raw-header Authorization
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI

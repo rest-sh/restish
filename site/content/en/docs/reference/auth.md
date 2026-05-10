@@ -169,14 +169,16 @@ external tool must be approved again.
 Inspect configured auth without sending the target request:
 
 ```bash
-restish api auth inspect example
-restish api auth inspect example --raw-header Authorization
-restish api auth inspect example --rsh-credential PartnerKey
+restish api auth inspect myapi
+restish api auth inspect myapi --rsh-credential PartnerKey
+restish api auth inspect myapi --rsh-credential UserBearer --raw-header Authorization
 ```
 
-Human output redacts sensitive values. Verbose request diagnostics also redact
-common sensitive headers such as `Authorization`, `Cookie`,
-`Proxy-Authorization`, `Set-Cookie`, and common API-key headers.
+The bare form works when the selected profile has profile-level auth or exactly
+one configured credential. If a profile has several credentials, pass
+`--rsh-credential`. Human output redacts sensitive values. Verbose request
+diagnostics also redact common sensitive headers such as `Authorization`,
+`Cookie`, `Proxy-Authorization`, `Set-Cookie`, and common API-key headers.
 
 ## Related Pages
 

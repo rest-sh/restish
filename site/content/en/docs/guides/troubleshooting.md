@@ -135,7 +135,7 @@ public operation where it should have been suppressed.
 
 ```bash
 restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
-restish api auth inspect example --raw-header Authorization
+restish api auth inspect example --rsh-credential basicAuth --raw-header Authorization
 restish api auth list example
 restish -v -p token api.rest.sh/auth/bearer
 ```
