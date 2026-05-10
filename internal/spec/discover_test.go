@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1344,6 +1345,178 @@ paths:
 	}
 	if got := err.Error(); !strings.Contains(got, "https://specs.example.com/slow-item.yaml") || !strings.Contains(got, "context deadline exceeded") {
 		t.Fatalf("error did not name timed-out ref: %v", err)
+	}
+}
+
+func TestDiscoverFetchesRemoteExternalRefsInParallel(t *testing.T) {
+	var current int32
+	var maxConcurrent int32
+	var releaseOnce sync.Once
+	var concurrentOnce sync.Once
+	release := make(chan struct{})
+	reachedConcurrent := make(chan struct{})
+
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			return httpResponse(200, "application/yaml", `openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /a:
+    $ref: "./a.yaml"
+  /b:
+    $ref: "./b.yaml"
+`, nil), nil
+		case "/a.yaml", "/b.yaml":
+			active := atomic.AddInt32(&current, 1)
+			for {
+				prev := atomic.LoadInt32(&maxConcurrent)
+				if active <= prev || atomic.CompareAndSwapInt32(&maxConcurrent, prev, active) {
+					break
+				}
+			}
+			if active >= 2 {
+				concurrentOnce.Do(func() { close(reachedConcurrent) })
+			}
+			<-release
+			atomic.AddInt32(&current, -1)
+			return httpResponse(200, "application/yaml", `get:
+  operationId: listItems
+  responses:
+    "200": {description: OK}
+`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+	cfg := DiscoverConfig{
+		APIName:   "parallel-refs",
+		BaseURL:   "https://specs.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := Discover(context.Background(), cfg, DefaultLoaders())
+		errCh <- err
+	}()
+
+	select {
+	case <-reachedConcurrent:
+	case <-time.After(500 * time.Millisecond):
+		releaseOnce.Do(func() { close(release) })
+		t.Fatalf("remote external refs were fetched serially; max concurrency = %d", atomic.LoadInt32(&maxConcurrent))
+	}
+	releaseOnce.Do(func() { close(release) })
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if got := atomic.LoadInt32(&maxConcurrent); got < 2 {
+		t.Fatalf("max concurrency = %d, want at least 2", got)
+	}
+}
+
+func TestDiscoverFetchesDuplicateRemoteExternalRefOnce(t *testing.T) {
+	var itemHits int32
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			return httpResponse(200, "application/yaml", `openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /a:
+    $ref: "./item.yaml"
+  /b:
+    $ref: "./item.yaml"
+`, nil), nil
+		case "/item.yaml":
+			atomic.AddInt32(&itemHits, 1)
+			return httpResponse(200, "application/yaml", `get:
+  operationId: listItems
+  responses:
+    "200": {description: OK}
+`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+	cfg := DiscoverConfig{
+		APIName:   "duplicate-ref",
+		BaseURL:   "https://specs.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+	}
+
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if got := atomic.LoadInt32(&itemHits); got != 1 {
+		t.Fatalf("duplicate external ref fetched %d times, want 1", got)
+	}
+}
+
+func TestDiscoverResolvesLocalRefsInsideRemoteExternalDocs(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			return httpResponse(200, "application/yaml", `openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /items/{id}:
+    $ref: "./item.yaml"
+`, nil), nil
+		case "/item.yaml":
+			return httpResponse(200, "application/yaml", `parameters:
+  - name: id
+    in: path
+    required: true
+    schema:
+      $ref: "#/components/schemas/ID"
+get:
+  operationId: getItem
+  responses:
+    "200":
+      description: OK
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Node"
+components:
+  schemas:
+    ID:
+      type: string
+    Node:
+      type: object
+      properties:
+        child:
+          $ref: "#/components/schemas/Node"
+`, nil), nil
+		default:
+			return httpResponse(404, "text/plain", "not found", nil), nil
+		}
+	})
+	cfg := DiscoverConfig{
+		APIName:   "external-local-ref",
+		BaseURL:   "https://specs.example.com",
+		SpecURL:   "https://specs.example.com/openapi.yaml",
+		Transport: tr,
+	}
+
+	apiSpec, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	ops, err := apiSpec.Operations(OperationOptions{BaseURL: "https://specs.example.com"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 || len(ops[0].Parameters) != 1 {
+		t.Fatalf("operations = %#v, want getItem with path parameter", ops)
+	}
+	if got := ops[0].Parameters[0]; got.Name != "id" || got.Type != "string" {
+		t.Fatalf("path parameter = %#v, want id string", got)
 	}
 }
 

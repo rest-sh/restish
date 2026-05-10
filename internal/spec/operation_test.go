@@ -304,6 +304,49 @@ paths:
 	}
 }
 
+func TestOperationsInvalidOperationServerDoesNotDisableOperationSet(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com
+paths:
+  /agent:
+    post:
+      operationId: agent
+      servers:
+        - url: https://{your-agent-url}
+      responses:
+        "200":
+          description: OK
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	paths := map[string]string{}
+	for _, op := range ops {
+		paths[op.ID] = op.Path
+	}
+	if got := paths["agent"]; got != "/agent" {
+		t.Fatalf("agent path = %q, want /agent", got)
+	}
+	if got := paths["listItems"]; got != "/items" {
+		t.Fatalf("listItems path = %q, want /items", got)
+	}
+}
+
 func TestOperationsUsesEffectivePathAndOperationServers(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

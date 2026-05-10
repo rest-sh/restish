@@ -474,7 +474,7 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 		endpoint := resolveServerURLVariables(server, serverVariables)
 		parsed, err := url.Parse(endpoint)
 		if err != nil {
-			return "", err
+			continue
 		}
 		resolved := resolutionBase.ResolveReference(parsed)
 		if resolved.Scheme != location.Scheme || resolved.Host != location.Host {

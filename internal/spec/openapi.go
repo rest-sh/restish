@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
@@ -197,11 +198,27 @@ type openAPIRefSource struct {
 	localPath string
 }
 
-type openAPIRefResolver struct {
-	opts  LoadOptions
-	docs  map[string]*yaml.Node
-	depth int
+func (s openAPIRefSource) cacheKey() string {
+	if s.localPath != "" {
+		return "file:" + filepath.Clean(s.localPath)
+	}
+	return s.url
 }
+
+func sameOpenAPIRefSource(a, b openAPIRefSource) bool {
+	return a.cacheKey() == b.cacheKey()
+}
+
+type openAPIRefResolver struct {
+	opts       LoadOptions
+	docs       map[string]*yaml.Node
+	rootSource openAPIRefSource
+	rootDoc    *yaml.Node
+	resolving  map[string]bool
+	depth      int
+}
+
+const openAPIExternalRefConcurrency = 8
 
 func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 	if opts.SourceURL == "" && opts.LocalPath == "" {
@@ -220,8 +237,11 @@ func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
 		root = doc.Content[0]
 	}
-	resolver := &openAPIRefResolver{opts: opts, docs: map[string]*yaml.Node{}}
 	source := openAPIRefSource{url: opts.SourceURL, localPath: opts.LocalPath}
+	resolver := &openAPIRefResolver{opts: opts, docs: map[string]*yaml.Node{}, rootSource: source, rootDoc: root}
+	if err := resolver.prefetchExternalDocs(root, source); err != nil {
+		return nil, err
+	}
 	changed, err := resolver.resolveNode(root, source)
 	if err != nil {
 		return nil, err
@@ -239,7 +259,36 @@ func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource) 
 	if r.depth > 100 {
 		return false, fmt.Errorf("OpenAPI external ref resolution exceeded maximum depth")
 	}
-	if ref := mappingRefValue(n); ref != "" && !strings.HasPrefix(ref, "#") {
+	if ref := mappingRefValue(n); ref != "" {
+		if strings.HasPrefix(ref, "#") {
+			if sameOpenAPIRefSource(source, r.rootSource) {
+				return false, nil
+			}
+			originalSiblings := cloneRefSiblings(n)
+			refKey := source.cacheKey() + ref
+			if r.resolving[refKey] {
+				*n = yaml.Node{Kind: yaml.MappingNode}
+				mergeRefSiblings(n, originalSiblings)
+				return true, nil
+			}
+			target, err := r.resolveLocalRef(ref, source)
+			if err != nil {
+				return false, err
+			}
+			*n = *cloneYAMLNode(target)
+			mergeRefSiblings(n, originalSiblings)
+			if r.resolving == nil {
+				r.resolving = map[string]bool{}
+			}
+			r.resolving[refKey] = true
+			defer delete(r.resolving, refKey)
+			r.depth++
+			defer func() { r.depth-- }()
+			if _, err := r.resolveNode(n, source); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
 		originalSiblings := cloneRefSiblings(n)
 		target, targetSource, err := r.resolveRef(ref, source)
 		if err != nil {
@@ -264,6 +313,123 @@ func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource) 
 		changed = changed || childChanged
 	}
 	return changed, nil
+}
+
+func (r *openAPIRefResolver) resolveLocalRef(ref string, source openAPIRefSource) (*yaml.Node, error) {
+	doc := r.docForSource(source)
+	if doc == nil {
+		return nil, fmt.Errorf("OpenAPI external ref %q has no loaded source document", ref)
+	}
+	target, err := yamlPointer(doc, strings.TrimPrefix(ref, "#"))
+	if err != nil {
+		return nil, fmt.Errorf("OpenAPI external ref %q: %w", ref, err)
+	}
+	return target, nil
+}
+
+func (r *openAPIRefResolver) docForSource(source openAPIRefSource) *yaml.Node {
+	if sameOpenAPIRefSource(source, r.rootSource) {
+		return r.rootDoc
+	}
+	return r.docs[source.cacheKey()]
+}
+
+type openAPIExternalDocRequest struct {
+	key    string
+	source openAPIRefSource
+}
+
+type openAPIExternalDocResult struct {
+	request openAPIExternalDocRequest
+	data    []byte
+	err     error
+}
+
+func (r *openAPIRefResolver) prefetchExternalDocs(root *yaml.Node, source openAPIRefSource) error {
+	seen := map[string]bool{}
+	frontier, err := r.collectExternalDocRequests(root, source, seen)
+	if err != nil {
+		return err
+	}
+	fetched := 0
+	for len(frontier) > 0 {
+		tracef(r.opts.Trace, "Fetching %d OpenAPI external ref document(s)", len(frontier))
+		results := r.fetchExternalDocBatch(frontier)
+		var next []openAPIExternalDocRequest
+		for _, result := range results {
+			if result.err != nil {
+				return result.err
+			}
+			doc, err := parseExternalOpenAPIDoc(result.data)
+			if err != nil {
+				return err
+			}
+			r.docs[result.request.key] = doc
+			fetched++
+			childRefs, err := r.collectExternalDocRequests(doc, result.request.source, seen)
+			if err != nil {
+				return err
+			}
+			next = append(next, childRefs...)
+		}
+		frontier = next
+	}
+	if fetched > 0 {
+		tracef(r.opts.Trace, "Resolved %d unique OpenAPI external ref document(s)", fetched)
+	}
+	return nil
+}
+
+func (r *openAPIRefResolver) collectExternalDocRequests(n *yaml.Node, source openAPIRefSource, seen map[string]bool) ([]openAPIExternalDocRequest, error) {
+	var requests []openAPIExternalDocRequest
+	var walk func(*yaml.Node, openAPIRefSource) error
+	walk = func(n *yaml.Node, source openAPIRefSource) error {
+		if n == nil {
+			return nil
+		}
+		if ref := mappingRefValue(n); ref != "" && !strings.HasPrefix(ref, "#") {
+			root, _, _ := strings.Cut(ref, "#")
+			if root == "" {
+				return fmt.Errorf("OpenAPI external ref %q has no external document", ref)
+			}
+			key, targetSource, err := r.resolveRefRoot(root, source)
+			if err != nil {
+				return err
+			}
+			if !seen[key] && r.docs[key] == nil {
+				seen[key] = true
+				requests = append(requests, openAPIExternalDocRequest{key: key, source: targetSource})
+			}
+		}
+		for _, child := range n.Content {
+			if err := walk(child, source); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(n, source); err != nil {
+		return nil, err
+	}
+	return requests, nil
+}
+
+func (r *openAPIRefResolver) fetchExternalDocBatch(requests []openAPIExternalDocRequest) []openAPIExternalDocResult {
+	results := make([]openAPIExternalDocResult, len(requests))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, openAPIExternalRefConcurrency)
+	for i, request := range requests {
+		wg.Add(1)
+		go func(i int, request openAPIExternalDocRequest) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			data, err := r.loadExternalDocData(request.source)
+			results[i] = openAPIExternalDocResult{request: request, data: data, err: err}
+		}(i, request)
+	}
+	wg.Wait()
+	return results
 }
 
 func mappingRefValue(n *yaml.Node) string {
@@ -382,21 +548,31 @@ func (r *openAPIRefResolver) loadExternalDoc(key string, source openAPIRefSource
 		return doc, nil
 	}
 
-	var data []byte
-	var err error
-	switch {
-	case source.localPath != "":
-		data, err = os.ReadFile(source.localPath)
-	case source.url != "":
-		tracef(r.opts.Trace, "GET OpenAPI external ref %s", source.url)
-		data, err = r.fetchRemoteDoc(source.url)
-	default:
-		err = fmt.Errorf("OpenAPI external ref has no resolved source")
-	}
+	data, err := r.loadExternalDocData(source)
 	if err != nil {
 		return nil, err
 	}
+	doc, err := parseExternalOpenAPIDoc(data)
+	if err != nil {
+		return nil, err
+	}
+	r.docs[key] = doc
+	return doc, nil
+}
 
+func (r *openAPIRefResolver) loadExternalDocData(source openAPIRefSource) ([]byte, error) {
+	switch {
+	case source.localPath != "":
+		return os.ReadFile(source.localPath)
+	case source.url != "":
+		tracef(r.opts.Trace, "GET OpenAPI external ref %s", source.url)
+		return r.fetchRemoteDoc(source.url)
+	default:
+		return nil, fmt.Errorf("OpenAPI external ref has no resolved source")
+	}
+}
+
+func parseExternalOpenAPIDoc(data []byte) (*yaml.Node, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, err
@@ -405,7 +581,6 @@ func (r *openAPIRefResolver) loadExternalDoc(key string, source openAPIRefSource
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
 		root = doc.Content[0]
 	}
-	r.docs[key] = root
 	return root, nil
 }
 
