@@ -36,6 +36,15 @@
       null: /\bnull\b/i
     };
 
+    const quotedSingle = "'(?:\\\\.|[^\\\\'\\r\\n])*'";
+    const quotedDouble = "\"(?:\\\\.|[^\\\\\"\\r\\n])*\"";
+    const shorthandOperator = "(?::|==|\\bcontains\\b|\\bstartsWith\\b)";
+    const shorthandField = "[a-z_][a-z0-9_.-]*(?:\\[[^\\]\\r\\n]*\\])?\\s*" + shorthandOperator;
+    const singleQuotedShorthand = "'(?:(?:" + shorthandField + ")|(?:\\\\.|[^\\\\'\\r\\n])*?[\\s,{\\[.]" + shorthandField + ")(?:\\\\.|[^\\\\'\\r\\n])*'";
+    const doubleQuotedShorthand = "\"(?:(?:" + shorthandField + ")|(?:\\\\.|[^\\\\\"\\r\\n])*?[\\s,{\\[.]" + shorthandField + ")(?:\\\\.|[^\\\\\"\\r\\n])*\"";
+    const quotedFilter = "(?:--rsh-filter|-f)\\s+(?:" + quotedSingle + "|" + quotedDouble + ")";
+    const bareFilter = "(?:--rsh-filter|-f)\\s+\\S+";
+
     Prism.languages.bash = {
       comment: /^\s*#.*/m,
       redirect: /2>\/dev\/null/,
@@ -71,15 +80,48 @@
         }
       },
       header: {
-        pattern: /-H [A-Z][a-zA-Z0-9-]+:\S+/,
+        pattern: /-H\s+(?:[A-Za-z][a-zA-Z0-9-]+:\S+|'[A-Za-z][a-zA-Z0-9-]+:\s*(?:\\.|[^\\'\r\n])*'|"[A-Za-z][a-zA-Z0-9-]+:\s*(?:\\.|[^\\"\r\n])*")/,
         inside: {
-          property: /[A-Z][a-zA-Z0-9-]+(?=:)/
+          property: /[A-Za-z][a-zA-Z0-9-]+(?=:)/
         }
       },
       queryparam: {
         pattern: /(-[qd] [a-z0-9-]+=\S+|[a-z0-9-]+==\S+)/i,
         inside: {
           property: /[a-z0-9-]+(?==)/i
+        }
+      },
+      shorthand: {
+        pattern: new RegExp(quotedFilter + "|" + bareFilter + "|" + singleQuotedShorthand + "|" + doubleQuotedShorthand, "i"),
+        greedy: true,
+        inside: {
+          option: /--rsh-filter|-f/,
+          quote: {
+            alias: "punctuation",
+            pattern: /^['"]|['"]$/
+          },
+          string: {
+            pattern: /"(?:\\.|[^\\"\r\n])*"/,
+            greedy: true
+          },
+          root: {
+            alias: "property",
+            pattern: /\b(?:body|headers|headers_all|links|status)\b/
+          },
+          path: {
+            alias: "property",
+            pattern: /(^|[.{,]\s*)[a-z_][a-z0-9_-]*(?=\s*(?:[.\[{,}]|\]|$))/i,
+            lookbehind: true
+          },
+          property: /[a-z_][a-z0-9_.-]*(?:\[[^\]\r\n]*\])?(?=\s*(?::|==|\bcontains\b|\bstartsWith\b))/i,
+          variable: /\$[A-Z0-9_]+/,
+          uri: /https?:\/\/[^\s,'"]+|@[^\s,'"]+/,
+          number: /\b[0-9]+(\.[0-9]+)?/,
+          boolean: /\b(?:true|false)\b/i,
+          null: /\b(?:null|undefined)\b/i,
+          function: /\b(?:contains|startsWith|select|map|unique|length)\b/,
+          operator: /==|:|\||@/,
+          punctuation: /[,[\]{}().]/
         }
       },
       string: {
@@ -95,7 +137,8 @@
       boolean: /\b(?:true|false)\b/i,
       null: /\bnull\b/i,
       function: /contains|startsWith/,
-      keyword: /restish|rb|<|>|\||\b(for|do|done)(?!\/)\b/
+      operator: /<|>|\|/,
+      keyword: /\b(for|do|done)(?!\/)\b/
     };
 
     if (!Prism.languages.json) {
