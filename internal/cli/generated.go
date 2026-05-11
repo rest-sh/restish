@@ -224,6 +224,9 @@ type paramInfo struct {
 	allowReserved    bool
 	contentMediaType string
 	enum             []string // allowed values from OpenAPI schema enum, if present
+	objectProperties []spec.ParamObjectProperty
+	parent           *paramInfo
+	objectKey        string
 }
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
@@ -286,6 +289,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			allowReserved:    p.AllowReserved,
 			contentMediaType: p.ContentMediaType,
 			enum:             p.Enum,
+			objectProperties: p.ObjectProperties,
 		}
 	}
 
@@ -318,6 +322,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 		optional = append(optional, pi)
 	}
+	optional = expandGeneratedObjectChildParams(optional)
 	for _, warning := range disambiguateGeneratedFlagNames(optional) {
 		c.generatedWarnf("operation %q parameter flag collision: %s", operationDisplayID(op), warning)
 	}
@@ -483,6 +488,54 @@ func validateGeneratedFlagNames(op spec.Operation, optional []*paramInfo) error 
 			return fmt.Errorf("operation %q has duplicate generated flag --%s for %s parameter %q and %s parameter %q", opID, p.flagName, prev.in, prev.name, p.in, p.name)
 		}
 		seen[p.flagName] = p
+	}
+	return nil
+}
+
+func expandGeneratedObjectChildParams(optional []*paramInfo) []*paramInfo {
+	var expanded []*paramInfo
+	for _, p := range optional {
+		expanded = append(expanded, p)
+		if p.in != "query" || len(p.objectProperties) == 0 {
+			continue
+		}
+		for _, prop := range p.objectProperties {
+			flagName := p.flagName + "-" + toKebabCase(prop.Name)
+			if flagName == p.flagName+"-" {
+				continue
+			}
+			expanded = append(expanded, &paramInfo{
+				name:          p.name,
+				flagName:      flagName,
+				in:            p.in,
+				hidden:        p.hidden,
+				desc:          prop.Desc,
+				typ:           prop.Type,
+				style:         p.style,
+				explode:       p.explode,
+				allowReserved: p.allowReserved,
+				enum:          prop.Enum,
+				parent:        p,
+				objectKey:     prop.Name,
+			})
+		}
+	}
+	return expanded
+}
+
+func validateGeneratedObjectChildFlagConflicts(cmd *cobra.Command, optional []*paramInfo) error {
+	childrenChanged := map[*paramInfo][]string{}
+	for _, p := range optional {
+		if p.parent == nil || !cmd.Flags().Changed(p.flagName) {
+			continue
+		}
+		childrenChanged[p.parent] = append(childrenChanged[p.parent], "--"+p.flagName)
+	}
+	for parent, childFlags := range childrenChanged {
+		if cmd.Flags().Changed(parent.flagName) {
+			sort.Strings(childFlags)
+			return fmt.Errorf("--%s cannot be combined with generated child flag(s) %s", parent.flagName, strings.Join(childFlags, ", "))
+		}
 	}
 	return nil
 }
@@ -1060,6 +1113,9 @@ func (c *CLI) runGeneratedOp(
 	}
 
 	// Collect optional param flags.
+	if err := validateGeneratedObjectChildFlagConflicts(cmd, optional); err != nil {
+		return err
+	}
 	for _, p := range optional {
 		if !cmd.Flags().Changed(p.flagName) {
 			continue
@@ -1208,6 +1264,21 @@ func generatedParamDescriptor(p *paramInfo) openapiparam.Param {
 
 func addGeneratedParam(path string, q []generatedQueryParam, extraHeaders []string, p *paramInfo, values []string) (string, []generatedQueryParam, []string, error) {
 	if len(values) == 0 {
+		return path, q, extraHeaders, nil
+	}
+	if p.parent != nil {
+		if p.in != "query" {
+			return path, q, extraHeaders, nil
+		}
+		value, err := generatedParamValue(p, values)
+		if err != nil {
+			return path, q, extraHeaders, err
+		}
+		q = append(q, generatedQueryParam{
+			name:          p.name + "[" + p.objectKey + "]",
+			value:         value.Scalar,
+			allowReserved: p.allowReserved,
+		})
 		return path, q, extraHeaders, nil
 	}
 	switch p.in {

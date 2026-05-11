@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -3634,5 +3635,100 @@ func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
 	}
 	if gotInferencePath != "/v1/models" {
 		t.Fatalf("inference path = %q, want /v1/models", gotInferencePath)
+	}
+}
+
+func TestGeneratedStripeDeepObjectQueryFlags(t *testing.T) {
+	var gotQueries []url.Values
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/v1/customers", func(w http.ResponseWriter, r *http.Request) {
+		gotQueries = append(gotQueries, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+
+	specPath := filepath.Join(t.TempDir(), "stripe.json")
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Stripe-ish", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/v1/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "parameters": [
+          {"name": "expand", "in": "query", "style": "deepObject", "explode": true, "schema": {"type": "array", "items": {"type": "string"}}},
+          {"name": "created", "in": "query", "style": "deepObject", "explode": true, "schema": {
+            "anyOf": [
+              {"type": "integer"},
+              {"type": "object", "properties": {
+                "gt": {"type": "integer"},
+                "gte": {"type": "integer"},
+                "lt": {"type": "integer"},
+                "lte": {"type": "integer"}
+              }}
+            ]
+          }}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, srv.URL)
+	if err := os.WriteFile(specPath, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"stripe": {BaseURL: srv.URL, SpecFiles: []string{specPath}},
+	}})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = t.TempDir()
+		return c
+	}
+
+	if err := newCLI().Run([]string{"restish", "stripe", "list-customers", "--expand", "data.customer", "--expand", "data.invoice", "--created-gt", "0", "--created-lte", "99", "--rsh-query", "limit=1"}); err != nil {
+		t.Fatalf("list-customers child flags: %v", err)
+	}
+	q := gotQueries[len(gotQueries)-1]
+	if got := q["expand[]"]; !reflect.DeepEqual(got, []string{"data.customer", "data.invoice"}) {
+		t.Fatalf("expand[] = %#v", got)
+	}
+	if q.Get("created[gt]") != "0" || q.Get("created[lte]") != "99" || q.Get("limit") != "1" {
+		t.Fatalf("query = %#v, want created child flags and rsh-query", q)
+	}
+
+	if err := newCLI().Run([]string{"restish", "stripe", "list-customers", "--created", "1700000000"}); err != nil {
+		t.Fatalf("list-customers scalar created: %v", err)
+	}
+	if q := gotQueries[len(gotQueries)-1]; q.Get("created") != "1700000000" {
+		t.Fatalf("created scalar query = %#v", q)
+	}
+
+	err := newCLI().Run([]string{"restish", "stripe", "list-customers", "--created", "1", "--created-gt", "0"})
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("expected scalar-plus-child conflict, got %v", err)
+	}
+
+	var help strings.Builder
+	c := newCLI()
+	c.Stdout = &help
+	if err := c.Run([]string{"restish", "stripe", "list-customers", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	for _, want := range []string{"--created-gt", "--created-gte", "--created-lt", "--created-lte"} {
+		if !strings.Contains(help.String(), want) {
+			t.Fatalf("expected %s in help:\n%s", want, help.String())
+		}
 	}
 }

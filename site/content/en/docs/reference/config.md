@@ -90,6 +90,7 @@ restish config show --json
       "operation_base": "/",
       "command_layout": "flat",
       "server_variables": {},
+      "allowed_operation_origins": [],
       "retry_max_wait": "30s",
       "profiles": {
         "default": {},
@@ -108,6 +109,7 @@ restish config show --json
 | `operation_base` | path | Path prefix override for generated operations. |
 | `command_layout` | `flat` or `tags` | Generated command grouping. |
 | `server_variables` | object | OpenAPI server variable values. |
+| `allowed_operation_origins` | array | Cross-origin OpenAPI operation servers that generated commands may call, such as `https://inference.example.com` or `https://*.do-ai.run`. |
 | `retry_max_wait` | duration | API-local cap for `Retry-After` or `X-Retry-In` when no flag/env override is set. |
 | `profiles` | object | API-local profiles. |
 

@@ -30,6 +30,14 @@ func TestSerializeQueryParamStyles(t *testing.T) {
 	if want := []QueryParam{{Name: "filter[limit]", Value: "10"}}; !reflect.DeepEqual(parts, want) {
 		t.Fatalf("deep object = %#v, want %#v", parts, want)
 	}
+
+	parts, err = SerializeQueryParam(Param{Name: "expand", In: "query", Type: "array", Style: "deepObject", Explode: &explode}, ArrayValue([]string{"data.customer", "data.invoice"}))
+	if err != nil {
+		t.Fatalf("deep object exploded array: %v", err)
+	}
+	if want := []QueryParam{{Name: "expand[]", Value: "data.customer"}, {Name: "expand[]", Value: "data.invoice"}}; !reflect.DeepEqual(parts, want) {
+		t.Fatalf("deep object exploded array = %#v, want %#v", parts, want)
+	}
 }
 
 func TestSerializePathHeaderCookieParamStyles(t *testing.T) {

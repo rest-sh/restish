@@ -107,6 +107,15 @@ func SerializeQueryParam(p Param, value Value) ([]QueryParam, error) {
 			return []QueryParam{{Name: p.Name, Value: strings.Join(value.Array, " "), AllowReserved: p.AllowReserved}}, nil
 		case "pipeDelimited":
 			return []QueryParam{{Name: p.Name, Value: strings.Join(value.Array, "|"), AllowReserved: p.AllowReserved}}, nil
+		case "deepObject":
+			if ParamExplode(p) {
+				out := make([]QueryParam, 0, len(value.Array))
+				for _, item := range value.Array {
+					out = append(out, QueryParam{Name: p.Name + "[]", Value: item, AllowReserved: p.AllowReserved})
+				}
+				return out, nil
+			}
+			return []QueryParam{{Name: p.Name, Value: strings.Join(value.Array, ","), AllowReserved: p.AllowReserved}}, nil
 		default:
 			if ParamExplode(p) {
 				out := make([]QueryParam, 0, len(value.Array))

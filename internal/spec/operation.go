@@ -47,7 +47,17 @@ type Param struct {
 	AllowReserved    bool
 	ContentMediaType string
 	Enum             []string
+	ObjectProperties []ParamObjectProperty
 	XCLI             ParamXCLI
+}
+
+// ParamObjectProperty is a simple scalar property from an object-capable
+// parameter schema, used by generated commands to expose child flags.
+type ParamObjectProperty struct {
+	Name string
+	Type string
+	Desc string
+	Enum []string
 }
 
 // OperationBodyHelp is a compact request/response body example extracted from
@@ -283,12 +293,21 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			continue
 		}
 		var enum, defaultValues []string
+		var objectProperties []ParamObjectProperty
 		var paramType, itemType, defaultValue, schemaHelp string
 		var hasDefault bool
 		if p.Schema != nil {
 			if schema := p.Schema.Schema(); schema != nil {
 				schemaHelp = buildParameterSchemaHelp(schema)
 				paramType = schemaType(schema.Type)
+				objectProperties = scalarObjectProperties(schema)
+				if len(objectProperties) > 0 && len(schema.Type) == 0 {
+					if scalarType := composedScalarType(schema); scalarType != "" {
+						paramType = scalarType
+					} else {
+						paramType = "object"
+					}
+				}
 				if paramType == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
 					if itemSchema := schema.Items.A.Schema(); itemSchema != nil {
 						itemType = schemaType(itemSchema.Type)
@@ -327,6 +346,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			AllowReserved:    p.AllowReserved,
 			ContentMediaType: preferredParameterContentMediaType(p),
 			Enum:             enum,
+			ObjectProperties: objectProperties,
 			XCLI: ParamXCLI{
 				Ignore:      ParamExtBool(p, "x-cli-ignore"),
 				Hidden:      ParamExtBool(p, "x-cli-hidden"),
@@ -663,6 +683,94 @@ func schemaType(types []string) string {
 		return types[0]
 	}
 	return "string"
+}
+
+func scalarObjectProperties(schema *base.Schema) []ParamObjectProperty {
+	seen := map[string]bool{}
+	var out []ParamObjectProperty
+	var visit func(*base.Schema)
+	visit = func(s *base.Schema) {
+		if s == nil {
+			return
+		}
+		if schemaType(s.Type) == "object" && s.Properties != nil {
+			for name, proxy := range s.Properties.FromOldest() {
+				if seen[name] {
+					continue
+				}
+				prop := schemaFromProxy(proxy)
+				propType := explicitSimpleScalarType(prop)
+				if propType == "" {
+					continue
+				}
+				seen[name] = true
+				out = append(out, ParamObjectProperty{
+					Name: name,
+					Type: propType,
+					Desc: prop.Description,
+					Enum: schemaEnumStrings(prop),
+				})
+			}
+		}
+		for _, proxy := range s.AnyOf {
+			visit(schemaFromProxy(proxy))
+		}
+		for _, proxy := range s.OneOf {
+			visit(schemaFromProxy(proxy))
+		}
+		for _, proxy := range s.AllOf {
+			visit(schemaFromProxy(proxy))
+		}
+	}
+	visit(schema)
+	return out
+}
+
+func explicitSimpleScalarType(schema *base.Schema) string {
+	if schema == nil {
+		return ""
+	}
+	if len(schema.Type) == 0 {
+		return composedScalarType(schema)
+	}
+	typ := schemaType(schema.Type)
+	switch typ {
+	case "string", "integer", "number", "boolean":
+		return typ
+	default:
+		return ""
+	}
+}
+
+func composedScalarType(schema *base.Schema) string {
+	if schema == nil {
+		return ""
+	}
+	for _, proxies := range [][]*base.SchemaProxy{schema.AnyOf, schema.OneOf, schema.AllOf} {
+		for _, proxy := range proxies {
+			branch := schemaFromProxy(proxy)
+			if branch == nil {
+				continue
+			}
+			if typ := explicitSimpleScalarType(branch); typ != "" {
+				return typ
+			}
+		}
+	}
+	return ""
+}
+
+func schemaEnumStrings(schema *base.Schema) []string {
+	if schema == nil {
+		return nil
+	}
+	var enum []string
+	for _, node := range schema.Enum {
+		if node != nil {
+			enum = append(enum, node.Value)
+		}
+	}
+	return enum
 }
 
 func scalarString(value any) string {

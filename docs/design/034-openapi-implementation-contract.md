@@ -297,12 +297,16 @@ defaults. `enum` values constrain or document accepted values, but Restish does
 not expand variables into a Cartesian product of commands or URLs.
 
 Relative server URLs resolve against the configured API `base_url`. Absolute
-server URLs are used only when they match the configured origin. If a matching
-absolute or relative server resolves outside the configured base path while
-staying on the same origin, Restish represents the generated operation path as a
-relative escape so short-name expansion reaches the intended path while keeping
-the selected API profile. If no OpenAPI server matches the configured origin,
-Restish falls back to `base_url`.
+server URLs are used directly when they match the configured origin. A
+cross-origin path- or operation-level server is represented in operation
+metadata but may only be used when the API config explicitly allows its origin
+with `allowed_operation_origins`; otherwise the generated command fails with a
+configuration hint instead of falling back to `base_url`. If a matching absolute
+or relative server resolves outside the configured base path while staying on
+the same origin, Restish represents the generated operation path as a relative
+escape so short-name expansion reaches the intended path while keeping the
+selected API profile. If no OpenAPI server matches the configured origin and no
+cross-origin server is present, Restish falls back to `base_url`.
 
 An untrusted spec must not be able to redirect authenticated generated commands
 to another origin by declaring a different server URL.

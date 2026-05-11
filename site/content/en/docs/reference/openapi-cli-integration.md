@@ -220,8 +220,14 @@ Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
 `https://api.vendor.test/root/v2`.
 
-Absolute server URLs are used only when they match the configured API origin:
-scheme, hostname, and effective port all match.
+Absolute server URLs on another origin are blocked unless the API config lists
+the origin in `allowed_operation_origins`. `restish api connect --yes` can add
+detected safe entries, and interactive `api connect` asks before saving them.
+Without that opt-in, generated commands fail with an `allowed_operation_origins`
+hint instead of silently routing the request to `base_url`.
+
+Same-origin absolute server URLs are used when scheme, hostname, and effective
+port all match.
 If a same-origin server points outside the configured base path, Restish keeps
 the selected API profile and resolves the generated operation to that path. If
 no OpenAPI server matches the configured origin, Restish falls back to

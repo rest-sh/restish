@@ -74,7 +74,7 @@ func TestBuildOperationCommandDoesNotParseOptionalDefaultsAsFlagValues(t *testin
 	if flag == nil {
 		t.Fatal("expected --enabled flag")
 	}
-	if !strings.Contains(flag.Usage, "default: definitely") {
+	if !strings.Contains(flag.Usage, "Default: definitely") {
 		t.Fatalf("flag usage = %q, want documented server default", flag.Usage)
 	}
 }
