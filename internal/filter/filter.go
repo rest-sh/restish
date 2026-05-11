@@ -3,6 +3,7 @@ package filter
 
 import (
 	"container/list"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"reflect"
@@ -393,7 +394,13 @@ func applyShorthand(expr string, doc map[string]any) (any, error) {
 	return result, nil
 }
 
-func applyJQ(expr string, doc map[string]any) (any, error) {
+func applyJQ(expr string, doc map[string]any) (result any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = nil
+			err = fmt.Errorf("jq: panic: %v", r)
+		}
+	}()
 	code, err := compiledJQ(expr)
 	if err != nil {
 		return nil, err
@@ -445,7 +452,7 @@ func normalizeJQValue(value any) any {
 		return result
 	case reflect.Slice, reflect.Array:
 		if rv.Kind() == reflect.Slice && rv.Type().Elem().Kind() == reflect.Uint8 {
-			return value
+			return base64.StdEncoding.EncodeToString(rv.Bytes())
 		}
 		result := make([]any, rv.Len())
 		for i := range result {

@@ -263,6 +263,66 @@ func TestPaginationNoPaginate(t *testing.T) {
 	}
 }
 
+func TestPaginationLinksFilterDoesNotPaginate(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	requests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests++
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+			"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "links", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	if !strings.Contains(out.String(), "next") {
+		t.Fatalf("links output missing next: %q", out.String())
+	}
+}
+
+func TestPaginationClearsOriginalQueryForAbsoluteNextURL(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	var rawQueries []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rawQueries = append(rawQueries, r.URL.RawQuery)
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		body := `[{"id":2}]`
+		if len(rawQueries) == 1 {
+			body = `[{"id":1}]`
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-q", "page=1", "-o", "ndjson"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(rawQueries) != 2 {
+		t.Fatalf("queries = %#v, want two requests", rawQueries)
+	}
+	if rawQueries[1] != "page=2" {
+		t.Fatalf("second query = %q, want page=2 without duplicated original query", rawQueries[1])
+	}
+}
+
 // TestPaginationMaxPages verifies that --rsh-max-pages 1 stops after one page
 // and emits a warning to stderr.
 func TestPaginationMaxPages(t *testing.T) {

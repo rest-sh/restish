@@ -145,7 +145,9 @@ func (c *CLI) runPagination(
 		page++
 		visited[nextURL] = page
 
-		httpResp, err := request.Do(ctx, "GET", nextURL, nil, opts)
+		pageOpts := opts
+		pageOpts.Query = nil
+		httpResp, err := request.Do(ctx, "GET", nextURL, nil, pageOpts)
 		if err != nil {
 			return fmt.Errorf("paginate page %d: %w", page, err)
 		}

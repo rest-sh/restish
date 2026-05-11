@@ -87,6 +87,9 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) 
 	}
 
 	gfSSE := globalFlagsFromContext(requestContext(cmd))
+	if collectStreamingJSON(gfSSE) {
+		return c.collectSSE(cmd, resp)
+	}
 	maxItems := gfSSE.MaxItems
 	filterExpr := gfSSE.Filter
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), filterExpr != "")
@@ -223,6 +226,159 @@ func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data 
 	return c.renderStreamValue(cmd, renderer, item, parsedJSON)
 }
 
+func (c *CLI) collectNDJSON(cmd *cobra.Command, resp *http.Response) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), maxStreamLineBytes(cmd))
+	items := make([]any, 0, gf.MaxItems)
+	stoppedByMax := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		item, _ := parseJSONOrString(line)
+		value, err := c.filteredStreamValue(cmd, item)
+		if err != nil {
+			return err
+		}
+		items = append(items, value)
+		if len(items) >= gf.MaxItems {
+			stoppedByMax = true
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil && !stoppedByMax {
+		return fmt.Errorf("NDJSON stream error: %w", err)
+	}
+	if stoppedByMax {
+		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", gf.MaxItems)
+	}
+	return c.renderValue(cmd, items, false)
+}
+
+func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	scanner := bufio.NewScanner(resp.Body)
+	lineLimit := maxStreamLineBytes(cmd)
+	eventLimit := maxSSEEventBytes(cmd)
+	scanner.Buffer(make([]byte, 64*1024), lineLimit)
+	items := make([]any, 0, gf.MaxItems)
+	var eventName, eventID string
+	var retryMs int
+	var data strings.Builder
+	stoppedByMax := false
+	flush := func() error {
+		if data.Len() == 0 && eventName == "" && eventID == "" && retryMs == 0 {
+			return nil
+		}
+		parsed, _ := parseJSONOrString(data.String())
+		item := parsed
+		if gf.Filter != "" || eventName != "" || eventID != "" || retryMs != 0 {
+			event := map[string]any{"data": parsed}
+			if eventName != "" {
+				event["event"] = eventName
+			}
+			if eventID != "" {
+				event["id"] = eventID
+			}
+			if retryMs != 0 {
+				event["retry"] = retryMs
+			}
+			item = event
+		}
+		value, err := c.filteredStreamValue(cmd, item)
+		if err != nil {
+			return err
+		}
+		items = append(items, value)
+		eventName = ""
+		eventID = ""
+		retryMs = 0
+		data.Reset()
+		if len(items) >= gf.MaxItems {
+			stoppedByMax = true
+		}
+		return nil
+	}
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			if err := flush(); err != nil {
+				return err
+			}
+			if stoppedByMax {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		field, value, hasColon := strings.Cut(line, ":")
+		if hasColon {
+			value = strings.TrimPrefix(value, " ")
+		} else {
+			value = ""
+		}
+		switch field {
+		case "data":
+			nextLen := data.Len() + len(value)
+			if data.Len() > 0 {
+				nextLen++
+			}
+			if nextLen > eventLimit {
+				return fmt.Errorf("SSE event data exceeds %d bytes", eventLimit)
+			}
+			if data.Len() > 0 {
+				data.WriteByte('\n')
+			}
+			data.WriteString(value)
+		case "event":
+			eventName = value
+		case "id":
+			eventID = value
+		case "retry":
+			if retry, err := strconv.Atoi(value); err == nil {
+				retryMs = retry
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil && !stoppedByMax {
+		if strings.Contains(err.Error(), "token too long") {
+			return fmt.Errorf("SSE stream line exceeds %d bytes", lineLimit)
+		}
+		return fmt.Errorf("SSE stream error: %w", err)
+	}
+	if !stoppedByMax {
+		if err := flush(); err != nil {
+			return err
+		}
+	}
+	if stoppedByMax {
+		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", gf.MaxItems)
+	}
+	return c.renderValue(cmd, items, false)
+}
+
+func (c *CLI) filteredStreamValue(cmd *cobra.Command, item any) (any, error) {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Filter == "" {
+		return item, nil
+	}
+	doc := map[string]any{"body": item}
+	lang := resolveFilterLang(gf.FilterLang)
+	filterResult, err := filter.ApplyWithInfo(gf.Filter, doc, lang)
+	if err != nil {
+		return nil, fmt.Errorf("filter: %w", err)
+	}
+	traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
+	if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
+		c.hintBodyPrefixOnce(gf.Filter)
+	}
+	return filterResult.Value, nil
+}
+
 // handleNDJSON reads a newline-delimited JSON response body, emitting each
 // line to stdout as it arrives. Filter and output flags are applied per line.
 func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr error) {
@@ -233,6 +389,9 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 	}
 
 	gf := globalFlagsFromContext(requestContext(cmd))
+	if collectStreamingJSON(gf) {
+		return c.collectNDJSON(cmd, resp)
+	}
 	maxItems := gf.MaxItems
 	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), gf.Filter != "")
 	if err != nil {
@@ -340,11 +499,15 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 }
 
 func validateStreamingOutputMode(cmd *cobra.Command) error {
-	fmtName := globalFlagsFromContext(requestContext(cmd)).OutputFormat
-	if fmtName == "json" {
-		return fmt.Errorf("-o json cannot be used with an unbounded stream response. Try -o ndjson for record-by-record JSON output.")
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.OutputFormat == "json" && !collectStreamingJSON(gf) {
+		return fmt.Errorf("-o json for stream responses requires --rsh-collect and --rsh-max-items N. Try -o ndjson for record-by-record JSON output.")
 	}
 	return nil
+}
+
+func collectStreamingJSON(gf GlobalFlags) bool {
+	return gf.OutputFormat == "json" && gf.Collect && gf.MaxItems > 0
 }
 
 func streamBaseResponse(resp *http.Response) *output.Response {

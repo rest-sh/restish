@@ -792,9 +792,37 @@ func TestStreamingJSONFormatterReturnsHelpfulError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for -o json on a stream, got nil")
 	}
-	want := "-o json cannot be used with an unbounded stream response. Try -o ndjson for record-by-record JSON output."
+	want := "-o json for stream responses requires --rsh-collect and --rsh-max-items N. Try -o ndjson for record-by-record JSON output."
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestNDJSONCollectJSONWithMaxItems(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"id":1}`)
+		fmt.Fprintln(w, `{"id":2}`)
+		fmt.Fprintln(w, `{"id":3}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-collect", "--rsh-max-items", "2", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	var items []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &items); err != nil {
+		t.Fatalf("output is not JSON array: %q: %v", out.String(), err)
+	}
+	if len(items) != 2 || items[0]["id"] != 1 || items[1]["id"] != 2 {
+		t.Fatalf("items = %#v, want first two records", items)
+	}
+	if !strings.Contains(errOut.String(), "--rsh-max-items=2") {
+		t.Fatalf("expected max-items warning, got %q", errOut.String())
 	}
 }
 

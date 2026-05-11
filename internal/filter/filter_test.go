@@ -331,6 +331,24 @@ func TestJQ_NormalizesTypedMapsAndSlices(t *testing.T) {
 	}
 }
 
+func TestJQ_NormalizesBytesToBase64(t *testing.T) {
+	doc := map[string]any{"body": []byte{1, 2, 3}}
+	result, err := filter.Apply(".body", doc, filter.LangJQ)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "AQID" {
+		t.Fatalf("result = %#v, want base64 string", result)
+	}
+	result, err = filter.Apply(".body | type", doc, filter.LangJQ)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "string" {
+		t.Fatalf("type = %#v, want string", result)
+	}
+}
+
 func TestAutoDetectJQProjectionNormalizesTypedHeaders(t *testing.T) {
 	doc := map[string]any{
 		"headers": map[string]string{

@@ -985,6 +985,7 @@ func filterRequestsResponseMetadata(expr string) bool {
 	expr = strings.TrimSpace(expr)
 	return expr == "@" ||
 		expr == "headers" || strings.HasPrefix(expr, "headers.") || strings.HasPrefix(expr, "headers[") ||
+		expr == "links" || strings.HasPrefix(expr, "links.") || strings.HasPrefix(expr, "links[") ||
 		expr == "status" || strings.HasPrefix(expr, "status.") || strings.HasPrefix(expr, "status[") ||
 		expr == "proto" || strings.HasPrefix(expr, "proto.") || strings.HasPrefix(expr, "proto[")
 }
