@@ -340,6 +340,118 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	}
 }
 
+func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
+	t.Setenv("READY_TOKEN", "ready")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {"type": "http", "scheme": "bearer"},
+      "InferenceBearer": {"type": "http", "scheme": "bearer"},
+      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
+    }
+  },
+  "paths": {
+    "/me": {"get": {"operationId": "me", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "OK"}}}},
+    "/models": {"get": {"operationId": "models", "security": [{"InferenceBearer": []}], "responses": {"200": {"description": "OK"}}}},
+    "/partner": {"get": {"operationId": "partner", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: baseURL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "env:READY_TOKEN"}},
+					Credentials: map[string]*config.CredentialConfig{
+						"BearerAuth": {
+							Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "env:MISSING_TOKEN"}},
+						},
+					},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
+		t.Fatalf("api auth list: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Profile auth: configured",
+		"Callable secured operations: 3/3",
+		"BearerAuth: configured (env missing: MISSING_TOKEN)",
+		"InferenceBearer: missing, satisfied by profile auth fallback",
+		"PartnerKey: missing, satisfied by profile auth fallback (unchecked auth kind)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("list output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestAPIAuthInspectOperationLabelsProfileFallbackSource(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "InferenceBearer": {"type": "http", "scheme": "bearer"}
+    }
+  },
+  "paths": {
+    "/models": {"get": {"operationId": "listModels", "security": [{"InferenceBearer": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: baseURL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "u", "password": "p"}},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "list-models"}); err != nil {
+		t.Fatalf("api auth inspect operation: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Operation: listModels",
+		"Credentials: InferenceBearer",
+		"Source: profile auth fallback",
+		"Auth type: http-basic",
+		"Authorization: <redacted>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("inspect output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestAPIAuthListUsesImplicitDefaultProfile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })

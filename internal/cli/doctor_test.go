@@ -228,6 +228,57 @@ func TestDoctorAPIReportsPersistentCredentialSettings(t *testing.T) {
 	}
 }
 
+func TestDoctorAPIReportsMissingEnvAuth(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{
+  "apis": {
+    "demo": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "bearer",
+            "params": {"token": "env:MISSING_DOCTOR_TOKEN"}
+          }
+        }
+      }
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api --json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Auth struct {
+			Status string   `json:"status"`
+			Issues []string `json:"issues"`
+		} `json:"auth"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.Auth.Status != "configured-but-unresolved" {
+		t.Fatalf("auth.status = %q, want configured-but-unresolved", report.Auth.Status)
+	}
+	if strings.Join(report.Auth.Issues, ",") != "env missing: MISSING_DOCTOR_TOKEN" {
+		t.Fatalf("auth.issues = %#v", report.Auth.Issues)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if err := c.Run([]string{"restish", "doctor", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Auth: configured but unresolved (env missing: MISSING_DOCTOR_TOKEN)") {
+		t.Fatalf("doctor api text did not report missing env:\n%s", out.String())
+	}
+}
+
 func TestDoctorAPIJSONWarnsOnServerErrorReachability(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {

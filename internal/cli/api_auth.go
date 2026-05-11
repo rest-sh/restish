@@ -82,15 +82,17 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 	}
 	set, hasOps := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
 	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
-	if prof.Auth != nil || prof.AuthRef != "" {
-		fmt.Fprintln(c.Stdout, "Profile auth: configured")
+	_, profileReady, profileErr := c.profileAuthReadiness(apiName, profileName, prof)
+	if profileErr != nil {
+		fmt.Fprintf(c.Stdout, "Profile auth: configured (%s)\n", profileErr)
+	} else if profileReady.Configured {
+		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", profileReady.status("none"))
 	} else {
 		fmt.Fprintln(c.Stdout, "Profile auth: none")
 	}
 	if hasOps {
-		configured := configuredCredentialsForProfile(prof)
-		callable, secured := authCoverageCounts(set.Operations, configured)
-		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", callable, secured)
+		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
+		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", coverage.Callable, coverage.Secured)
 	} else {
 		fmt.Fprintf(c.Stdout, "Operation metadata: unavailable (run \"restish api sync %s\" to refresh)\n", apiName)
 	}
@@ -105,10 +107,8 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(c.Stdout, "Credentials:")
 		for _, id := range ids {
 			credential := prof.Credentials[id]
-			status := "empty"
-			if credential.Auth != nil || credential.AuthRef != "" {
-				status = "configured"
-			}
+			_, ready, _ := c.credentialReadiness(apiName, profileName, id, credential)
+			status := ready.status("empty")
 			fmt.Fprintf(c.Stdout, "  %s: %s", id, status)
 			if len(credential.Satisfies) > 0 {
 				fmt.Fprintf(c.Stdout, " (satisfies: %s)", strings.Join(credential.Satisfies, ", "))
@@ -117,7 +117,8 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if hasOps {
-		c.printAPIAuthRequirementSummary(set.Operations, prof)
+		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
+		c.printAPIAuthRequirementSummary(apiName, profileName, set.Operations, prof, coverage)
 	}
 	return nil
 }
@@ -280,7 +281,7 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 		if resolved.Config == nil {
 			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
 		}
-		selected = []selectedOperationAuth{{requirement: spec.CredentialRequirement{ID: selectedCredential}, resolved: resolved}}
+		selected = []selectedOperationAuth{{requirement: spec.CredentialRequirement{ID: selectedCredential}, resolved: resolved, source: "profile auth"}}
 	}
 
 	req, err := c.operationAuthInspectionRequest(cmd, apiName, profileName, selected)
@@ -297,6 +298,7 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 	}
 	fmt.Fprintf(c.Stdout, "Operation: %s\n", op.ID)
 	fmt.Fprintf(c.Stdout, "Credentials: %s\n", strings.Join(selectedOperationCredentialIDs(selected), ", "))
+	fmt.Fprintf(c.Stdout, "Source: %s\n", strings.Join(selectedOperationSources(selected), ", "))
 	c.printAuthInspectionRequest(req, selectedOperationAuthConfigs(selected))
 	return nil
 }
@@ -447,6 +449,18 @@ func selectedOperationCredentialIDs(selected []selectedOperationAuth) []string {
 	return ids
 }
 
+func selectedOperationSources(selected []selectedOperationAuth) []string {
+	sources := make([]string, 0, len(selected))
+	for _, item := range selected {
+		source := item.source
+		if source == "" {
+			source = selectedAuthSourceCredential(item.resolved)
+		}
+		sources = append(sources, source)
+	}
+	return sources
+}
+
 func selectedOperationAuthConfigs(selected []selectedOperationAuth) []*config.AuthConfig {
 	configs := make([]*config.AuthConfig, 0, len(selected))
 	for _, item := range selected {
@@ -572,7 +586,7 @@ type authRequirementSummary struct {
 	deprecated bool
 }
 
-func (c *CLI) printAPIAuthRequirementSummary(ops []spec.Operation, prof *config.ProfileConfig) {
+func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []spec.Operation, prof *config.ProfileConfig, coverage operationAuthCoverage) {
 	summaries := authRequirementSummaries(ops)
 	if len(summaries) == 0 {
 		return
@@ -583,16 +597,16 @@ func (c *CLI) printAPIAuthRequirementSummary(ops []spec.Operation, prof *config.
 		var satisfies []string
 		if prof != nil && prof.Credentials != nil {
 			if credential := prof.Credentials[summary.id]; credential != nil {
-				if credential.Auth != nil || credential.AuthRef != "" {
-					status = "configured"
-				} else {
-					status = "empty"
-				}
+				_, ready, _ := c.credentialReadiness(apiName, profileName, summary.id, credential)
+				status = ready.status("empty")
 				satisfies = credential.Satisfies
 			}
 		}
 		var parts []string
 		parts = append(parts, status)
+		if status == "missing" && coverage.FallbackByID[summary.id] > 0 {
+			parts = append(parts, coverage.FallbackLabels[summary.id])
+		}
 		if len(summary.needs) > 0 {
 			parts = append(parts, "needs "+strings.Join(summary.needs, " "))
 		}

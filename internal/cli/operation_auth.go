@@ -20,6 +20,7 @@ type operationAuthPolicy struct {
 type selectedOperationAuth struct {
 	requirement spec.CredentialRequirement
 	resolved    resolvedAuthConfig
+	source      string
 }
 
 func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
@@ -63,7 +64,7 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 				needErrors = append(needErrors, err.Error())
 				continue
 			}
-			selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved})
+			selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved, source: selectedAuthSourceCredential(resolved)})
 		}
 		if !alternativeMissing && !alternativeNeedErrors {
 			if err := rejectConflictingSelectedAuth(selected); err != nil {
@@ -79,7 +80,7 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 			return nil, false, err
 		}
 		if resolved.Config != nil {
-			return []selectedOperationAuth{{requirement: policy.CredentialAlternatives[0][0], resolved: resolved}}, true, nil
+			return []selectedOperationAuth{{requirement: policy.CredentialAlternatives[0][0], resolved: resolved, source: "profile auth fallback"}}, true, nil
 		}
 	}
 	if policy.OptionalAuth {
@@ -161,9 +162,16 @@ func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *conf
 			needErrors = append(needErrors, err.Error())
 			continue
 		}
-		selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved})
+		selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved, source: selectedAuthSourceCredential(resolved)})
 	}
 	return selected, missing, needErrors, nil
+}
+
+func selectedAuthSourceCredential(resolved resolvedAuthConfig) string {
+	if resolved.Ref != "" {
+		return "auth profile reference"
+	}
+	return "named credential"
 }
 
 func (c *CLI) resolveCredentialAuth(apiName, profileName, credentialID string, credential *config.CredentialConfig) (resolvedAuthConfig, error) {

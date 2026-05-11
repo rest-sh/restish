@@ -104,6 +104,7 @@ type doctorGeneratedOperationsReport struct {
 type doctorAuthReport struct {
 	Status  string   `json:"status"`
 	Sources []string `json:"sources,omitempty"`
+	Issues  []string `json:"issues,omitempty"`
 }
 
 type doctorReachabilityReport struct {
@@ -238,12 +239,18 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(out, "Generated operations: unavailable")
 	}
-	if auth := doctorAuthForProfile(profileForName(api, profileName)); auth.Status == "configured" {
+	if auth := c.doctorAuthForProfile(name, profileName, profileForName(api, profileName)); auth.Status == "configured" {
 		if len(auth.Sources) > 0 {
 			fmt.Fprintf(out, "Auth: configured (%s)\n", strings.Join(auth.Sources, ", "))
 		} else {
 			fmt.Fprintln(out, "Auth: configured")
 		}
+	} else if auth.Status == "configured-but-unresolved" {
+		fmt.Fprintf(out, "Auth: configured but unresolved%s", formatAuthIssues(auth.Issues))
+		if len(auth.Sources) > 0 {
+			fmt.Fprintf(out, " (%s)", strings.Join(auth.Sources, ", "))
+		}
+		fmt.Fprintln(out)
 	} else {
 		fmt.Fprintln(out, "Auth: no profile auth configured")
 	}
@@ -448,7 +455,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	}); ok {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{Status: "available", Count: len(set.Operations)}
 	}
-	report.Auth = doctorAuthForProfile(profileForName(api, profileName))
+	report.Auth = c.doctorAuthForProfile(name, profileName, profileForName(api, profileName))
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
@@ -456,20 +463,31 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	return report
 }
 
-func doctorAuthForProfile(prof *config.ProfileConfig) doctorAuthReport {
+func (c *CLI) doctorAuthForProfile(apiName, profileName string, prof *config.ProfileConfig) doctorAuthReport {
 	if prof == nil {
 		return doctorAuthReport{Status: "none"}
 	}
 	var sources []string
+	var readiness []authReadiness
 	if prof.Auth != nil || prof.AuthRef != "" {
 		sources = append(sources, "profile_auth")
+		_, ready, _ := c.profileAuthReadiness(apiName, profileName, prof)
+		readiness = append(readiness, ready)
 	}
 	if len(prof.Credentials) > 0 {
 		sources = append(sources, "credentials")
+		for id, credential := range prof.Credentials {
+			_, ready, _ := c.credentialReadiness(apiName, profileName, id, credential)
+			readiness = append(readiness, ready)
+		}
 	}
 	sources = append(sources, profileCredentialSettingSources(prof)...)
 	if len(sources) == 0 {
 		return doctorAuthReport{Status: "none"}
+	}
+	issues := authReadinessIssues(readiness...)
+	if len(issues) > 0 {
+		return doctorAuthReport{Status: "configured-but-unresolved", Sources: sources, Issues: issues}
 	}
 	return doctorAuthReport{Status: "configured", Sources: sources}
 }
