@@ -25,7 +25,8 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func response(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
-		Header:     http.Header{},
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Header:     http.Header{"Date": []string{time.Now().UTC().Format(http.TimeFormat)}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }
@@ -138,33 +139,150 @@ func TestBuildTransportOnResponseKeepsCloseChain(t *testing.T) {
 	}
 }
 
-func TestBuildTransportDoesNotCacheMaxAgeZero(t *testing.T) {
+func TestBuildTransportRevalidatesMaxAgeZeroWithETag(t *testing.T) {
 	var hits atomic.Int32
+	var sawValidator atomic.Bool
 	rt := request.BuildTransport(request.Options{
 		CacheDir: t.TempDir(),
 		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 			n := hits.Add(1)
-			resp := response(http.StatusOK, "hit")
+			if n == 2 {
+				if got := req.Header.Get("If-None-Match"); got != `"v1"` {
+					t.Fatalf("If-None-Match = %q, want %q", got, `"v1"`)
+				}
+				sawValidator.Store(true)
+				resp := response(http.StatusNotModified, "")
+				resp.Header.Set("Cache-Control", "public, max-age=0")
+				resp.Header.Set("ETag", `"v1"`)
+				return resp, nil
+			}
+			resp := response(http.StatusOK, "hit-1")
 			resp.Header.Set("Cache-Control", "public, max-age=0")
-			resp.Body = io.NopCloser(strings.NewReader(fmt.Sprintf("hit-%d", n)))
+			resp.Header.Set("ETag", `"v1"`)
 			return resp, nil
 		}),
 	})
+	var bodies []string
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
 		resp, err := rt.RoundTrip(req)
 		if err != nil {
 			t.Fatalf("RoundTrip %d: %v", i+1, err)
 		}
-		_, _ = io.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body %d: %v", i+1, err)
+		}
 		_ = resp.Body.Close()
+		bodies = append(bodies, string(data))
+	}
+	if !sawValidator.Load() {
+		t.Fatal("expected second request to revalidate with ETag")
+	}
+	if strings.Join(bodies, ",") != "hit-1,hit-1" {
+		t.Fatalf("bodies = %v, want cached body reused after 304", bodies)
 	}
 	if got := hits.Load(); got != 2 {
-		t.Fatalf("origin hits = %d, want 2", got)
+		t.Fatalf("origin hits = %d, want 2 including revalidation", got)
 	}
 }
 
-func TestBuildTransportDoesNotCacheVaryResponses(t *testing.T) {
+func TestBuildTransportRevalidatesMaxAgeZeroWithLastModified(t *testing.T) {
+	var hits atomic.Int32
+	lastModified := time.Now().UTC().Add(-time.Hour).Truncate(time.Second).Format(http.TimeFormat)
+	var sawValidator atomic.Bool
+	rt := request.BuildTransport(request.Options{
+		CacheDir: t.TempDir(),
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			n := hits.Add(1)
+			if n == 2 {
+				if got := req.Header.Get("If-Modified-Since"); got != lastModified {
+					t.Fatalf("If-Modified-Since = %q, want %q", got, lastModified)
+				}
+				sawValidator.Store(true)
+				resp := response(http.StatusNotModified, "")
+				resp.Header.Set("Cache-Control", "public, max-age=0")
+				resp.Header.Set("Last-Modified", lastModified)
+				return resp, nil
+			}
+			resp := response(http.StatusOK, "hit-1")
+			resp.Header.Set("Cache-Control", "public, max-age=0")
+			resp.Header.Set("Last-Modified", lastModified)
+			return resp, nil
+		}),
+	})
+	var bodies []string
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+		resp, err := rt.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("RoundTrip %d: %v", i+1, err)
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body %d: %v", i+1, err)
+		}
+		_ = resp.Body.Close()
+		bodies = append(bodies, string(data))
+	}
+	if !sawValidator.Load() {
+		t.Fatal("expected second request to revalidate with Last-Modified")
+	}
+	if strings.Join(bodies, ",") != "hit-1,hit-1" {
+		t.Fatalf("bodies = %v, want cached body reused after 304", bodies)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("origin hits = %d, want 2 including revalidation", got)
+	}
+}
+
+func TestBuildTransportCachesVaryAcceptVariants(t *testing.T) {
+	var hits atomic.Int32
+	rt := request.BuildTransport(request.Options{
+		CacheDir: t.TempDir(),
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			hits.Add(1)
+			body := "json"
+			if req.Header.Get("Accept") == "application/xml" {
+				body = "xml"
+			}
+			resp := response(http.StatusOK, body)
+			resp.Header.Set("Cache-Control", "public, max-age=3600")
+			resp.Header.Set("Vary", "Accept")
+			return resp, nil
+		}),
+	})
+	requests := []struct {
+		accept string
+		want   string
+	}{
+		{"application/json", "json"},
+		{"application/xml", "xml"},
+		{"application/json", "json"},
+		{"application/xml", "xml"},
+	}
+	for i, tc := range requests {
+		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+		req.Header.Set("Accept", tc.accept)
+		resp, err := rt.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("RoundTrip %d: %v", i+1, err)
+		}
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body %d: %v", i+1, err)
+		}
+		_ = resp.Body.Close()
+		if string(data) != tc.want {
+			t.Fatalf("body %d = %q, want %q", i+1, string(data), tc.want)
+		}
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("origin hits = %d, want 2 variants", got)
+	}
+}
+
+func TestBuildTransportDoesNotReuseVaryWildcard(t *testing.T) {
 	var hits atomic.Int32
 	rt := request.BuildTransport(request.Options{
 		CacheDir: t.TempDir(),
@@ -172,13 +290,12 @@ func TestBuildTransportDoesNotCacheVaryResponses(t *testing.T) {
 			n := hits.Add(1)
 			resp := response(http.StatusOK, fmt.Sprintf("hit-%d", n))
 			resp.Header.Set("Cache-Control", "public, max-age=3600")
-			resp.Header.Set("Vary", "Accept")
+			resp.Header.Set("Vary", "*")
 			return resp, nil
 		}),
 	})
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
-		req.Header.Set("Accept", "application/json")
 		resp, err := rt.RoundTrip(req)
 		if err != nil {
 			t.Fatalf("RoundTrip %d: %v", i+1, err)
@@ -187,7 +304,7 @@ func TestBuildTransportDoesNotCacheVaryResponses(t *testing.T) {
 		_ = resp.Body.Close()
 	}
 	if got := hits.Load(); got != 2 {
-		t.Fatalf("origin hits = %d, want 2", got)
+		t.Fatalf("origin hits = %d, want 2 because Vary:* is not reusable", got)
 	}
 }
 

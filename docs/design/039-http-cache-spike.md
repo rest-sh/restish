@@ -2,7 +2,7 @@
 
 ## Status
 
-Spike, May 2026.
+Accepted for implementation, May 2026.
 
 ## Product Frame
 
@@ -100,16 +100,14 @@ change with the matrix below as acceptance tests.
    - `EnableVarySeparation = true`
    - private-cache mode (`IsPublicCache = false`)
    - marker headers enabled unless they interfere with output normalization
-4. Keep or adapt `sensitiveResponseHeaderCache` so Restish still refuses to
+4. Keep or adapt the Restish storage-policy wrapper so Restish still refuses to
    store:
    - credential-bearing response headers
    - `Set-Cookie`
    - any response Restish classifies as sensitive
-5. Remove the temporary `Vary` and `max-age=0` no-store wrapper behavior only
-   after tests prove the new transport handles those cases correctly.
-6. Decide whether to bump the module Go directive from `1.25.0` to `1.25.3`,
-   pin an earlier candidate version, or defer the swap until the project is
-   ready for the patch-level Go requirement.
+5. Remove Restish's temporary `Vary` and `max-age=0` parsing from the wrapper;
+   those are HTTP cache semantics owned by the transport library.
+6. Bump the module Go directive from `1.25.0` to `1.25.3`.
 
 ## Acceptance Tests
 
