@@ -1,0 +1,26 @@
+openapi: "3.1.0"
+info:
+  title: Issue 188 Circular Reference
+  version: "1.0.0"
+paths:
+  /nodes:
+    get:
+      operationId: listNodes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Node"
+components:
+  schemas:
+    Node:
+      type: object
+      required:
+        - child
+      properties:
+        id:
+          type: string
+        child:
+          $ref: "#/components/schemas/Node"

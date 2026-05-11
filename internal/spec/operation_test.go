@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -824,6 +826,45 @@ components:
 	}
 	if len(set.Operations) != 1 || set.Operations[0].ID != "listNodes" {
 		t.Fatalf("operations = %#v", set.Operations)
+	}
+}
+
+func TestHistoricalSchemaCrashFixturesDoNotPanic(t *testing.T) {
+	files, err := filepath.Glob("testdata/historical-schema-crashes/*.yaml")
+	if err != nil {
+		t.Fatalf("find fixtures: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected historical schema crash fixtures")
+	}
+
+	for _, file := range files {
+		file := file
+		name := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+		t.Run(name, func(t *testing.T) {
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			loaded, err := load("application/yaml", raw, DefaultLoaders())
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+			if err != nil {
+				t.Fatalf("operations: %v", err)
+			}
+			if len(ops) == 0 {
+				t.Fatal("expected operations")
+			}
+			set, err := loaded.OperationSet(OperationOptions{BaseURL: "https://api.example.com"})
+			if err != nil {
+				t.Fatalf("operation set: %v", err)
+			}
+			if len(set.Operations) == 0 {
+				t.Fatal("expected operation set entries")
+			}
+		})
 	}
 }
 
