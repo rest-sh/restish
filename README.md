@@ -18,6 +18,13 @@ brew install rest-sh/tap/restish
 restish --version
 ```
 
+Or use mise:
+
+```bash
+mise use -g restish@latest
+restish --version
+```
+
 Build from this repository when working on v2:
 
 ```bash

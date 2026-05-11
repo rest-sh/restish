@@ -18,11 +18,16 @@ as `restish` for:
 Release archives use this shape:
 
 ```text
-restish_X.Y.Z_darwin_arm64.tar.gz
-restish_X.Y.Z_linux_amd64.tar.gz
-restish_X.Y.Z_windows_amd64.zip
+restish-X.Y.Z-darwin-arm64.tar.gz
+restish-X.Y.Z-linux-amd64.tar.gz
+restish-X.Y.Z-windows-amd64.zip
 checksums.txt
 ```
+
+The hyphenated archive names intentionally preserve the v1 GitHub Release
+asset shape used by aqua and mise metadata. Stable v2 releases should become
+the `latest` version for floating installer configs; users who need v1 can pin
+an older version such as `0.21.2`.
 
 GoReleaser injects the tag version into
 `github.com/rest-sh/restish/v2/internal/cli.Version`.

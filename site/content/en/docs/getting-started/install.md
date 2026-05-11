@@ -16,6 +16,22 @@ brew install rest-sh/tap/restish
 restish --version
 ```
 
+## mise
+
+Use mise when you already manage developer tools with it:
+
+```bash
+mise use -g restish@latest
+restish --version
+```
+
+After v2 is released, `latest` installs the latest stable v2 release. Pin a v1
+version when you need to stay on v1:
+
+```bash
+mise use -g restish@0.21.2
+```
+
 ## GitHub Release Archives
 
 Download the archive for your OS and CPU from

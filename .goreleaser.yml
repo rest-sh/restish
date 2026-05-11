@@ -131,7 +131,7 @@ archives:
   - id: restish
     ids:
       - restish
-    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
@@ -140,7 +140,7 @@ archives:
   - id: restish-bulk
     ids:
       - restish-bulk
-    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
@@ -149,7 +149,7 @@ archives:
   - id: restish-csv
     ids:
       - restish-csv
-    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
@@ -158,7 +158,7 @@ archives:
   - id: restish-mcp
     ids:
       - restish-mcp
-    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
@@ -171,7 +171,7 @@ archives:
       - restish-pkcs11-linux-amd64
       - restish-pkcs11-linux-arm64
       - restish-pkcs11-windows-amd64
-    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats:
