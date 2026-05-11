@@ -370,7 +370,7 @@ func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
 			})
 		}
 		out = append(out, pluginwire.APIOperation{
-			ID:               op.ID,
+			ID:               operationCommandName(op),
 			Method:           op.Method,
 			Path:             op.Path,
 			Summary:          op.Summary,

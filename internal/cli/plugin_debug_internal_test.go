@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -64,6 +65,37 @@ func TestDecodePluginDebugStreamReturnsMalformedCBORAfterDrain(t *testing.T) {
 	if !strings.Contains(out.String(), `"text": "starting"`) {
 		t.Fatalf("expected valid message before decode error, got %q", out.String())
 	}
+}
+
+func TestDecodePluginDebugStreamTreatsClosedFileAfterMessageAsEOF(t *testing.T) {
+	var input strings.Builder
+	if err := pluginwire.WriteMessage(&input, pluginwire.ProgressMsg{Type: pluginwire.MsgTypeProgress, Text: "starting"}); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+	out := &lockedStringWriter{}
+	_, err := decodePluginDebugStream(&errAfterStringReader{
+		r:   strings.NewReader(input.String()),
+		err: errors.New("read |0: file already closed"),
+	}, out)
+	if err != nil {
+		t.Fatalf("decodePluginDebugStream: %v", err)
+	}
+	if !strings.Contains(out.String(), `"text": "starting"`) {
+		t.Fatalf("expected valid message before closed-file EOF, got %q", out.String())
+	}
+}
+
+type errAfterStringReader struct {
+	r   *strings.Reader
+	err error
+}
+
+func (r *errAfterStringReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err == io.EOF {
+		return 0, r.err
+	}
+	return n, err
 }
 
 type lockedStringWriter struct {

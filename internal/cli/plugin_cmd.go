@@ -294,15 +294,20 @@ type pluginDebugDecodeResult struct {
 func decodePluginDebugStream(r io.Reader, w io.Writer) (int64, error) {
 	counter := &countingReader{r: r}
 	dec := pluginwire.NewDecoder(counter)
+	decoded := 0
 	for {
 		var v any
 		if err := dec.ReadMessage(&v); err != nil {
 			if !errors.Is(err, io.EOF) {
+				if decoded > 0 && isEOFLike(err) {
+					return counter.n, nil
+				}
 				_, _ = io.Copy(io.Discard, counter)
 				return counter.n, fmt.Errorf("plugin debug: decode stdout: %w", err)
 			}
 			return counter.n, nil
 		}
+		decoded++
 		b, _ := json.MarshalIndent(v, "", "  ")
 		if _, err := fmt.Fprintf(w, "[debug] decoded CBOR message:\n%s\n", b); err != nil {
 			return counter.n, err

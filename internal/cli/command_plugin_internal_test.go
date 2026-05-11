@@ -16,6 +16,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/spf13/cobra"
 )
@@ -230,6 +231,22 @@ func TestLineBufferedCommandPluginStderrDoesNotFlushPartialLines(t *testing.T) {
 	}
 }
 
+func TestStripHostPersistentFlagsPreservesPluginArgs(t *testing.T) {
+	root := &cobra.Command{Use: "restish"}
+	root.PersistentFlags().String("rsh-config", "", "")
+	root.PersistentFlags().StringP("rsh-profile", "p", "", "")
+	root.PersistentFlags().CountP("rsh-verbose", "v", "")
+	cmd := &cobra.Command{Use: "plug"}
+	root.AddCommand(cmd)
+
+	args := []string{"--rsh-config", "cfg.json", "-p", "prod", "-vv", "--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
+	got := stripHostPersistentFlags(cmd, args)
+	want := []string{"--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("stripHostPersistentFlags = %#v, want %#v", got, want)
+	}
+}
+
 func TestValidatePluginCommandNameRejectsCollisions(t *testing.T) {
 	c := &CLI{cfg: &config.Config{APIs: map[string]*config.APIConfig{"svc": {}}}}
 	root := &cobra.Command{Use: "restish"}
@@ -298,6 +315,19 @@ paths: {}`), 0o644); err != nil {
 	}
 	if !strings.Contains(string(reply.Raw), "title: New") {
 		t.Fatalf("APISpec returned stale raw spec:\n%s", string(reply.Raw))
+	}
+}
+
+func TestPluginOperationsFromSpecUsesFallbackOperationName(t *testing.T) {
+	ops := pluginOperationsFromSpec([]spec.Operation{{
+		Method: "GET",
+		Path:   "/pets/{petId}",
+	}})
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got, want := ops[0].ID, "get-pets-petid"; got != want {
+		t.Fatalf("operation ID = %q, want %q", got, want)
 	}
 }
 

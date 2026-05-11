@@ -122,6 +122,7 @@ func (w *commandPluginWaiter) Wait(grace time.Duration) error {
 func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
 	syncErr := &commandPluginWriter{w: cmd.ErrOrStderr()}
 	cmd.SetErr(syncErr)
+	args = stripHostPersistentFlags(cmd, args)
 
 	proc := exec.CommandContext(cmd.Context(), pluginPath, append(terminalContextFlags(c), args...)...)
 	procutil.ConfigureCommandTreeKill(cmd.Context(), proc)
@@ -354,5 +355,46 @@ func isEOFLike(err error) bool {
 	// concrete sentinel. Keep this narrow so ordinary protocol errors are not
 	// mistaken for plugin death.
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "unexpected eof") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe")
+	return strings.Contains(s, "unexpected eof") || strings.Contains(s, "truncated") || strings.Contains(s, "broken pipe") || strings.Contains(s, "file already closed")
+}
+
+func stripHostPersistentFlags(cmd *cobra.Command, args []string) []string {
+	if cmd == nil || cmd.Root() == nil || len(args) == 0 {
+		return args
+	}
+	flags := cmd.Root().PersistentFlags()
+	if flags == nil {
+		return args
+	}
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		if strings.HasPrefix(token, "--") && token != "--" {
+			nameValue := strings.TrimPrefix(token, "--")
+			name, _, hasValue := strings.Cut(nameValue, "=")
+			if flag := flags.Lookup(name); flag != nil {
+				if !hasValue && flag.NoOptDefVal == "" && i+1 < len(args) {
+					i++
+				}
+				continue
+			}
+		}
+		if strings.HasPrefix(token, "-") && token != "-" && !strings.HasPrefix(token, "--") {
+			short := strings.TrimPrefix(token, "-")
+			if len(short) > 0 {
+				if flag := flags.ShorthandLookup(string(short[0])); flag != nil {
+					if flag.NoOptDefVal == "" && len(short) == 1 && i+1 < len(args) {
+						i++
+					}
+					continue
+				}
+			}
+		}
+		out = append(out, token)
+	}
+	return out
 }
