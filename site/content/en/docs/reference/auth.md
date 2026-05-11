@@ -26,6 +26,14 @@ OAuth `auth_method` accepts `client_secret_post` by default or
 loopback development URLs. `issuer_url` uses OIDC discovery when direct
 endpoint URLs are absent.
 
+For `oauth-authorization-code`, the default browser callback URL to allow in
+the OAuth app is `http://localhost:8484/`. `redirect_port` changes `8484`, and
+`redirect_path` changes `/`, for example `http://localhost:8484/callback`.
+Some providers distinguish `localhost` from `127.0.0.1` or require loopback IP
+redirects. Restish currently sends `localhost` in the authorization request, so
+providers that perform exact redirect URI matching must allow the `localhost`
+callback URL.
+
 ## Profile Auth
 
 Use profile-level `auth` for one effective credential:

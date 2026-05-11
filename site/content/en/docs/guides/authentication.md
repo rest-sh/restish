@@ -207,10 +207,28 @@ Authorization code shape:
 ```
 
 Restish opens a localhost callback on `redirect_port` and defaults the callback
-path to `/`. Set `redirect_path` when your OAuth provider requires an exact
-registered redirect URI such as `http://localhost:8484/callback`. Issuers and
-OAuth endpoints must use HTTPS, except for localhost or loopback development
-URLs.
+path to `/`.
+
+Allow this callback URL in your OAuth app by default:
+
+```text
+http://localhost:8484/
+```
+
+If you set `redirect_path`, allow the matching path instead:
+
+```text
+http://localhost:8484/callback
+```
+
+If you set `redirect_port`, allow the same path on that port. Some OAuth
+providers distinguish `localhost` from `127.0.0.1` or require loopback IP
+redirects such as `http://127.0.0.1:8484/`. Restish currently sends
+`localhost` in the authorization request, so the provider must allow the
+`localhost` URL exactly for the browser callback flow to complete.
+
+Issuers and OAuth endpoints must use HTTPS, except for localhost or loopback
+development URLs.
 
 Use `--rsh-no-browser` for headless sessions when the flow supports a manual
 browser step.
