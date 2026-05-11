@@ -2,6 +2,7 @@ package request_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -134,6 +135,59 @@ func TestBuildTransportOnResponseKeepsCloseChain(t *testing.T) {
 	}
 	if got := base.closeCount.Load(); got != 1 {
 		t.Fatalf("base Close count = %d, want 1", got)
+	}
+}
+
+func TestBuildTransportDoesNotCacheMaxAgeZero(t *testing.T) {
+	var hits atomic.Int32
+	rt := request.BuildTransport(request.Options{
+		CacheDir: t.TempDir(),
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			n := hits.Add(1)
+			resp := response(http.StatusOK, "hit")
+			resp.Header.Set("Cache-Control", "public, max-age=0")
+			resp.Body = io.NopCloser(strings.NewReader(fmt.Sprintf("hit-%d", n)))
+			return resp, nil
+		}),
+	})
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+		resp, err := rt.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("RoundTrip %d: %v", i+1, err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("origin hits = %d, want 2", got)
+	}
+}
+
+func TestBuildTransportDoesNotCacheVaryResponses(t *testing.T) {
+	var hits atomic.Int32
+	rt := request.BuildTransport(request.Options{
+		CacheDir: t.TempDir(),
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			n := hits.Add(1)
+			resp := response(http.StatusOK, fmt.Sprintf("hit-%d", n))
+			resp.Header.Set("Cache-Control", "public, max-age=3600")
+			resp.Header.Set("Vary", "Accept")
+			return resp, nil
+		}),
+	})
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "https://api.example.com/items", nil)
+		req.Header.Set("Accept", "application/json")
+		resp, err := rt.RoundTrip(req)
+		if err != nil {
+			t.Fatalf("RoundTrip %d: %v", i+1, err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("origin hits = %d, want 2", got)
 	}
 }
 

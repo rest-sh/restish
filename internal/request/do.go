@@ -601,11 +601,30 @@ type sensitiveResponseHeaderCache struct {
 }
 
 func (c sensitiveResponseHeaderCache) Set(key string, data []byte) {
-	if cachedResponseHasCredentialHeader(data) {
+	if cachedResponseShouldNotStore(data) {
 		c.Delete(key)
 		return
 	}
 	c.Cache.Set(key, data)
+}
+
+func cachedResponseShouldNotStore(data []byte) bool {
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(data)), nil)
+	if err != nil {
+		return false
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	for name := range resp.Header {
+		if IsCredentialHeader(name) {
+			return true
+		}
+	}
+	if resp.Header.Get("Vary") != "" {
+		return true
+	}
+	return cacheControlHasZeroMaxAge(resp.Header.Get("Cache-Control"))
 }
 
 func cachedResponseHasCredentialHeader(data []byte) bool {
@@ -618,6 +637,25 @@ func cachedResponseHasCredentialHeader(data []byte) bool {
 	}
 	for name := range resp.Header {
 		if IsCredentialHeader(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func cacheControlHasZeroMaxAge(value string) bool {
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		name, rawValue, hasValue := strings.Cut(part, "=")
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name != "max-age" && name != "s-maxage" {
+			continue
+		}
+		if !hasValue {
+			continue
+		}
+		rawValue = strings.Trim(strings.TrimSpace(rawValue), `"`)
+		if rawValue == "0" {
 			return true
 		}
 	}
