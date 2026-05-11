@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	generatedOperationAnnotation              = "restish.generated.operation"
 	generatedOperationRequiredTypesAnnotation = "restish.generated.requiredTypes"
 	generatedNegativeNumberArgPrefix          = "__restish_negative_number_arg__"
 )
@@ -270,6 +271,9 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		if p.XCLI.Description != "" {
 			desc = p.XCLI.Description
 		}
+		if strings.TrimSpace(desc) == "" && p.In == "path" {
+			desc = "path parameter"
+		}
 		desc = appendGeneratedParamSupportNote(desc, p)
 		allParams[paramKey(p.In, p.Name)] = &paramInfo{
 			name:             p.Name,
@@ -363,9 +367,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 		argDocs.WriteString("Arguments:\n")
 		for _, p := range required {
-			if p.desc != "" {
-				argDocs.WriteString(fmt.Sprintf("  %-20s %s\n", p.flagName, p.desc))
-			}
+			argDocs.WriteString(fmt.Sprintf("  %-20s %s\n", p.flagName, p.desc))
 		}
 		long += argDocs.String()
 	}
@@ -387,7 +389,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.ResponseMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -395,10 +397,11 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			securityCompletionAnnotation: strings.Join(candidates, "\n"),
 		}
 	}
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[generatedOperationAnnotation] = "true"
 	if len(required) > 0 {
-		if cmd.Annotations == nil {
-			cmd.Annotations = map[string]string{}
-		}
 		types := make([]string, 0, len(required))
 		for _, p := range required {
 			types = append(types, p.typ)
@@ -797,6 +800,51 @@ func shieldGeneratedNegativeNumberArgs(root *cobra.Command, args []string) []str
 	return out
 }
 
+func validateGeneratedFlagValueTokens(root *cobra.Command, args []string) error {
+	cmd, opStart := findGeneratedOperationCommand(root, args)
+	if cmd == nil || opStart < 0 {
+		return nil
+	}
+	for i := opStart; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			return nil
+		}
+		if !isFlagLikeToken(token) || isNegativeNumberToken(token) {
+			continue
+		}
+		if !generatedLocalFlagConsumesNext(cmd, token) {
+			continue
+		}
+		if i+1 >= len(args) {
+			continue
+		}
+		next := args[i+1]
+		if isFlagLikeToken(next) && !isNegativeNumberToken(next) {
+			return fmt.Errorf("%s requires a value; use %s=<value> when the value starts with '-'", token, token)
+		}
+		i++
+	}
+	return nil
+}
+
+func generatedLocalFlagConsumesNext(cmd *cobra.Command, token string) bool {
+	if token == "--" || !isFlagLikeToken(token) || strings.Contains(token, "=") {
+		return false
+	}
+	if strings.HasPrefix(token, "--") {
+		name := strings.TrimPrefix(token, "--")
+		flag := cmd.LocalFlags().Lookup(name)
+		return flag != nil && flag.NoOptDefVal == ""
+	}
+	name := strings.TrimPrefix(token, "-")
+	if name == "" {
+		return false
+	}
+	flag := cmd.LocalFlags().ShorthandLookup(string(name[0]))
+	return flag != nil && flag.NoOptDefVal == "" && len(name) == 1
+}
+
 func findGeneratedOperationCommand(root *cobra.Command, args []string) (*cobra.Command, int) {
 	cmd := root
 	for i := 1; i < len(args); i++ {
@@ -815,7 +863,7 @@ func findGeneratedOperationCommand(root *cobra.Command, args []string) (*cobra.C
 			return nil, -1
 		}
 		cmd = next
-		if cmd.Annotations[generatedOperationRequiredTypesAnnotation] != "" {
+		if cmd.Annotations[generatedOperationAnnotation] == "true" || cmd.Annotations[generatedOperationRequiredTypesAnnotation] != "" {
 			return cmd, i + 1
 		}
 	}
@@ -1087,7 +1135,7 @@ func generatedOperationExamples(commandName, apiName, use string, examples []str
 // runGeneratedOp is the RunE handler for generated operation commands.
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
-	apiName, opPath, operationServer, method, requestMediaType string,
+	apiName, opPath, operationServer, method, requestMediaType, responseMediaType string,
 	requestSchemaTypes map[string]string,
 	requestMultipartContentTypes map[string]string,
 	bodyRequired bool,
@@ -1105,6 +1153,9 @@ func (c *CLI) runGeneratedOp(
 
 	for i, p := range required {
 		val := args[i]
+		if err := validateGeneratedParamValues(p, []string{val}, "argument "+p.flagName); err != nil {
+			return err
+		}
 		var err error
 		path, query, extraHeaders, err = addGeneratedParam(path, query, extraHeaders, p, []string{val})
 		if err != nil {
@@ -1122,6 +1173,9 @@ func (c *CLI) runGeneratedOp(
 		}
 		values, err := generatedFlagValues(cmd, p)
 		if err != nil {
+			return err
+		}
+		if err := validateGeneratedParamValues(p, values, "--"+p.flagName); err != nil {
 			return err
 		}
 		path, query, extraHeaders, err = addGeneratedParam(path, query, extraHeaders, p, values)
@@ -1162,6 +1216,7 @@ func (c *CLI) runGeneratedOp(
 	return c.runHTTPWithOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
+		acceptOverride:            responseMediaType,
 		bodyRequired:              bodyRequired,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
@@ -1203,6 +1258,47 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 			return nil, err
 		}
 		return []string{v}, nil
+	}
+}
+
+func validateGeneratedParamValues(p *paramInfo, values []string, label string) error {
+	if p == nil {
+		return nil
+	}
+	for _, value := range values {
+		if err := validateGeneratedScalarValue(p.typ, value); err != nil {
+			return fmt.Errorf("%s must be %s", label, generatedScalarTypeLabel(p.typ))
+		}
+	}
+	return nil
+}
+
+func validateGeneratedScalarValue(typ, value string) error {
+	switch typ {
+	case "integer":
+		_, err := strconv.ParseInt(value, 10, 64)
+		return err
+	case "number":
+		_, err := strconv.ParseFloat(value, 64)
+		return err
+	case "boolean":
+		_, err := strconv.ParseBool(value)
+		return err
+	default:
+		return nil
+	}
+}
+
+func generatedScalarTypeLabel(typ string) string {
+	switch typ {
+	case "integer":
+		return "integer"
+	case "number":
+		return "number"
+	case "boolean":
+		return "boolean"
+	default:
+		return typ
 	}
 }
 

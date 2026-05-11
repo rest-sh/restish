@@ -46,6 +46,73 @@ paths:
 	}
 }
 
+func TestOperationsExtractsPreferredResponseMediaType(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+          content:
+            application/xml:
+              schema:
+                type: string
+            application/vnd.api+json:
+              schema:
+                type: object`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if got, want := ops[0].ResponseMediaType, "application/vnd.api+json"; got != want {
+		t.Fatalf("ResponseMediaType = %q, want %q", got, want)
+	}
+}
+
+func TestOperationsIncludesContentParameterSchemaHelp(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: filter
+          in: query
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  owner:
+                    type: string
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if got := ops[0].Parameters[0].Schema; !strings.Contains(got, "owner") {
+		t.Fatalf("parameter schema help = %q, want owner property", got)
+	}
+}
+
 func TestOperationsExtractsEffectiveCredentialRequirements(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

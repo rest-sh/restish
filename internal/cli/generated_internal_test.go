@@ -11,6 +11,7 @@ import (
 	v2high "github.com/pb33f/libopenapi/datamodel/high/v2"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/index"
+	"github.com/spf13/cobra"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -138,6 +139,90 @@ func TestBuildOperationCommandDisambiguatesNonOperatorFlagNames(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "parameter flag collision") {
 		t.Fatalf("expected fallback warning, got: %q", errOut.String())
+	}
+}
+
+func TestBuildOperationCommandDocumentsUndescribedPathArgument(t *testing.T) {
+	c := New()
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "getPet",
+		Method: "GET",
+		Path:   "/pets/{petId}",
+		Parameters: []spec.Param{
+			{Name: "petId", In: "path", Type: "integer", Required: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
+	}
+	if !strings.Contains(cmd.Long, "pet-id") || !strings.Contains(cmd.Long, "path parameter") {
+		t.Fatalf("Long help = %q, want path argument row", cmd.Long)
+	}
+}
+
+func TestValidateGeneratedParamValuesRejectsInvalidScalars(t *testing.T) {
+	tests := []struct {
+		name  string
+		param *paramInfo
+		value string
+		want  string
+	}{
+		{name: "integer", param: &paramInfo{typ: "integer"}, value: "abc", want: "argument pet-id must be integer"},
+		{name: "number", param: &paramInfo{typ: "number"}, value: "abc", want: "argument pet-id must be number"},
+		{name: "boolean", param: &paramInfo{typ: "boolean"}, value: "maybe", want: "argument pet-id must be boolean"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateGeneratedParamValues(tc.param, []string{tc.value}, "argument pet-id")
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateGeneratedFlagValueTokensRejectsFlagLikeMissingValue(t *testing.T) {
+	c := New()
+	opCmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "search",
+		Method: "GET",
+		Path:   "/search",
+		Parameters: []spec.Param{
+			{Name: "federal", In: "query", Type: "string", Enum: []string{"true", "false"}},
+			{Name: "optional", In: "query", Type: "boolean"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
+	}
+	root := &cobra.Command{Use: "restish"}
+	apiCmd := &cobra.Command{Use: "myapi"}
+	apiCmd.AddCommand(opCmd)
+	root.AddCommand(apiCmd)
+
+	err = validateGeneratedFlagValueTokens(root, []string{"restish", "myapi", "search", "--federal", "--optional=false"})
+	if err == nil || !strings.Contains(err.Error(), "--federal requires a value") {
+		t.Fatalf("error = %v, want --federal missing value diagnostic", err)
+	}
+	if err := validateGeneratedFlagValueTokens(root, []string{"restish", "myapi", "search", "--federal=true", "--optional=false"}); err != nil {
+		t.Fatalf("unexpected error for equals form: %v", err)
+	}
+}
+
+func TestMatchAPIProfileDeduplicatesOperationBaseMatches(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{APIs: map[string]*config.APIConfig{
+		"petmock": {
+			BaseURL:       "https://api.example.com/",
+			OperationBase: "/",
+		},
+	}}
+	match, ok, err := c.matchAPIProfile("https://api.example.com/pets/1", "default")
+	if err != nil {
+		t.Fatalf("match API profile: %v", err)
+	}
+	if !ok || match.apiName != "petmock" {
+		t.Fatalf("match = %#v, ok=%v; want petmock", match, ok)
 	}
 }
 

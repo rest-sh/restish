@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/shorthand/v2"
 )
@@ -178,6 +179,8 @@ func schemaString(value any) string {
 		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
+	case time.Time:
+		return v.Format(time.RFC3339Nano)
 	default:
 		return fmt.Sprint(v)
 	}

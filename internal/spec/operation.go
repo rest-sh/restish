@@ -135,6 +135,9 @@ type Operation struct {
 	// RequestMediaType is the deterministic preferred content type from
 	// requestBody.content, if the operation accepts a body.
 	RequestMediaType string
+	// ResponseMediaType is the deterministic preferred Accept value from
+	// successful response content, if the operation declares one.
+	ResponseMediaType string
 	// RequestSchemaTypes maps dotted request-body property paths to simple
 	// OpenAPI schema types for generated-command shorthand coercion.
 	RequestSchemaTypes map[string]string
@@ -259,18 +262,19 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		effectiveSecurity = op.Security
 	}
 	o := Operation{
-		ID:               op.OperationId,
-		Method:           method,
-		Path:             path,
-		Summary:          op.Summary,
-		Description:      op.Description,
-		Deprecated:       op.Deprecated != nil && *op.Deprecated,
-		Tags:             op.Tags,
-		HasBody:          op.RequestBody != nil,
-		BodyRequired:     op.RequestBody != nil && op.RequestBody.Required != nil && *op.RequestBody.Required,
-		NoAuth:           effectiveSecurity != nil && len(effectiveSecurity) == 0,
-		MCPIgnore:        OpExtBool(op, "x-mcp-ignore"),
-		RequestMediaType: preferredRequestMediaType(op),
+		ID:                op.OperationId,
+		Method:            method,
+		Path:              path,
+		Summary:           op.Summary,
+		Description:       op.Description,
+		Deprecated:        op.Deprecated != nil && *op.Deprecated,
+		Tags:              op.Tags,
+		HasBody:           op.RequestBody != nil,
+		BodyRequired:      op.RequestBody != nil && op.RequestBody.Required != nil && *op.RequestBody.Required,
+		NoAuth:            effectiveSecurity != nil && len(effectiveSecurity) == 0,
+		MCPIgnore:         OpExtBool(op, "x-mcp-ignore"),
+		RequestMediaType:  preferredRequestMediaType(op),
+		ResponseMediaType: preferredOperationResponseMediaType(op),
 		XCLI: OperationXCLI{
 			Ignore:      OpExtBool(op, "x-cli-ignore"),
 			Hidden:      OpExtBool(op, "x-cli-hidden"),
@@ -329,6 +333,8 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 					}
 				}
 			}
+		} else if schema := preferredParameterContentSchema(p); schema != nil {
+			schemaHelp = buildParameterSchemaHelp(schema)
 		}
 		o.Parameters = append(o.Parameters, Param{
 			Name:             p.Name,
@@ -851,6 +857,30 @@ func preferredParameterContentMediaType(p *v3.Parameter) string {
 	}
 	sort.Strings(names)
 	return names[0]
+}
+
+func preferredParameterContentSchema(p *v3.Parameter) *base.Schema {
+	name := preferredParameterContentMediaType(p)
+	if name == "" || p == nil || p.Content == nil {
+		return nil
+	}
+	return mediaTypeSchema(p.Content.GetOrZero(name))
+}
+
+func preferredOperationResponseMediaType(op *v3.Operation) string {
+	if op == nil || op.Responses == nil {
+		return ""
+	}
+	for _, code := range responseCodes(op) {
+		if !isSuccessResponseCode(code) {
+			continue
+		}
+		name, _ := preferredResponseMediaType(responseForCode(op, code))
+		if name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func joinOperationPath(basePath, opPath string) string {

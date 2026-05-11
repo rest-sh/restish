@@ -99,6 +99,7 @@ func (c *CLI) runInferredHTTP(cmd *cobra.Command, args []string) error {
 type requestBodyOptions struct {
 	schemaTypes               map[string]string
 	multipartPartContentTypes map[string]string
+	acceptOverride            string
 	operationAuth             *operationAuthPolicy
 	bodyRequired              bool
 	bodyOverrideSet           bool
@@ -129,6 +130,9 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	}
 	if opts.ContentType == "" && contentTypeOverride != "" {
 		opts.ContentType = contentTypeOverride
+	}
+	if bodyOpts.acceptOverride != "" {
+		opts.AcceptHeader = bodyOpts.acceptOverride
 	}
 
 	// Resolve API short names and merge persistent profile settings.
@@ -1286,6 +1290,7 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 
 	var best apiProfileMatch
 	var ties []string
+	tieSeen := map[string]bool{}
 	for name, api := range c.cfg.APIs {
 		if api == nil {
 			continue
@@ -1301,11 +1306,15 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 				continue
 			}
 			if score == best.score && best.apiName != "" {
-				ties = append(ties, name)
+				if name != best.apiName && !tieSeen[name] {
+					ties = append(ties, name)
+					tieSeen[name] = true
+				}
 				continue
 			}
 			best = apiProfileMatch{apiName: name, api: api, profile: prof, rawURL: matchURL, score: score}
 			ties = []string{name}
+			tieSeen = map[string]bool{name: true}
 		}
 	}
 	if best.apiName != "" && len(ties) > 1 {
@@ -1368,11 +1377,26 @@ func cleanExpandedAPIURL(rawURL string) string {
 
 func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) ([]string, error) {
 	var bases []string
+	seen := map[string]bool{}
+	addBase := func(raw string) {
+		if raw == "" {
+			return
+		}
+		key := raw
+		if normalized, err := request.Normalize(raw, ""); err == nil {
+			key = normalized
+		}
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		bases = append(bases, raw)
+	}
 	if api.BaseURL != "" {
-		bases = append(bases, api.BaseURL)
+		addBase(api.BaseURL)
 	}
 	if prof != nil && prof.BaseURL != "" {
-		bases = append(bases, prof.BaseURL)
+		addBase(prof.BaseURL)
 	}
 	operationBase := effectiveOperationBase(api, "")
 	if prof != nil && prof.OperationBase != "" {
@@ -1387,7 +1411,7 @@ func apiMatchBases(api *config.APIConfig, prof *config.ProfileConfig) ([]string,
 		if err != nil {
 			return bases, fmt.Errorf("operation_base: %w", err)
 		}
-		bases = append(bases, resolved)
+		addBase(resolved)
 	}
 	return bases, nil
 }

@@ -131,12 +131,13 @@ func TestBody_ShorthandCommaSemantics(t *testing.T) {
 }
 
 func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
-	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456"}
+	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456,", "created_at:", "2026-05-11T12:34:56Z"}
 	body, err := input.Body(strings.NewReader(""), true, args, "", input.BodyOptions{
 		SchemaTypes: map[string]string{
-			"id":        "string",
-			"count":     "integer",
-			"meta.code": "string",
+			"id":         "string",
+			"count":      "integer",
+			"meta.code":  "string",
+			"created_at": "string",
 		},
 	})
 	if err != nil {
@@ -158,6 +159,9 @@ func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
 	}
 	if _, ok := m["count"].(string); ok {
 		t.Fatalf("count = %#v, want numeric because schema is integer", m["count"])
+	}
+	if got := m["created_at"]; got != "2026-05-11T12:34:56Z" {
+		t.Fatalf("created_at = %#v, want RFC3339 string", got)
 	}
 }
 

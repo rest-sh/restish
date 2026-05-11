@@ -588,6 +588,9 @@ func (c *CLI) Run(args []string) error {
 
 func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []string) error {
 	if len(args) > 0 {
+		if err := validateGeneratedFlagValueTokens(root, args); err != nil {
+			return err
+		}
 		args = shieldGeneratedNegativeNumberArgs(root, args)
 		root.SetArgs(args[1:])
 	}
