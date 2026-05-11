@@ -57,9 +57,9 @@ func TestBuildAPICommandWarnsOnModelFailure(t *testing.T) {
 	}
 }
 
-func TestBuildOperationCommandRejectsInvalidTypedDefault(t *testing.T) {
+func TestBuildOperationCommandDoesNotParseOptionalDefaultsAsFlagValues(t *testing.T) {
 	c := New()
-	_, err := c.buildOperationCommand("myapi", "", spec.Operation{
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
 		ID:     "search",
 		Method: "GET",
 		Path:   "/search",
@@ -67,11 +67,15 @@ func TestBuildOperationCommandRejectsInvalidTypedDefault(t *testing.T) {
 			{Name: "enabled", In: "query", Type: "boolean", Default: "definitely", HasDefault: true},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected invalid default error")
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
 	}
-	if !strings.Contains(err.Error(), "invalid boolean default") {
-		t.Fatalf("unexpected error: %v", err)
+	flag := cmd.Flags().Lookup("enabled")
+	if flag == nil {
+		t.Fatal("expected --enabled flag")
+	}
+	if !strings.Contains(flag.Usage, "default: definitely") {
+		t.Fatalf("flag usage = %q, want documented server default", flag.Usage)
 	}
 }
 

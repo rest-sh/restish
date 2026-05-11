@@ -410,42 +410,18 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	}
 
 	for _, p := range optional {
+		desc := generatedParamDescription(p)
 		switch p.typ {
 		case "boolean":
-			var def bool
-			if p.hasDefault {
-				var err error
-				def, err = strconv.ParseBool(p.defaultValue)
-				if err != nil {
-					return nil, fmt.Errorf("operation %q parameter %q has invalid boolean default %q", op.ID, p.name, p.defaultValue)
-				}
-			}
-			cmd.Flags().Bool(p.flagName, def, p.desc)
+			cmd.Flags().Bool(p.flagName, false, desc)
 		case "integer":
-			var def int
-			if p.hasDefault {
-				var err error
-				def, err = strconv.Atoi(p.defaultValue)
-				if err != nil {
-					return nil, fmt.Errorf("operation %q parameter %q has invalid integer default %q", op.ID, p.name, p.defaultValue)
-				}
-			}
-			cmd.Flags().Int(p.flagName, def, p.desc)
+			cmd.Flags().Int(p.flagName, 0, desc)
 		case "number":
-			var def float64
-			if p.hasDefault {
-				var err error
-				def, err = strconv.ParseFloat(p.defaultValue, 64)
-				if err != nil {
-					return nil, fmt.Errorf("operation %q parameter %q has invalid number default %q", op.ID, p.name, p.defaultValue)
-				}
-			}
-			cmd.Flags().Float64(p.flagName, def, p.desc)
+			cmd.Flags().Float64(p.flagName, 0, desc)
 		case "array":
-			def := append([]string(nil), p.defaultValues...)
-			cmd.Flags().StringArray(p.flagName, def, p.desc)
+			cmd.Flags().StringArray(p.flagName, nil, desc)
 		default:
-			cmd.Flags().String(p.flagName, p.defaultValue, p.desc)
+			cmd.Flags().String(p.flagName, "", desc)
 		}
 		if p.hidden {
 			_ = cmd.Flags().MarkHidden(p.flagName)
@@ -471,6 +447,26 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 	}
 	return cmd, nil
+}
+
+func generatedParamDescription(p *paramInfo) string {
+	if p == nil || !p.hasDefault {
+		if p == nil {
+			return ""
+		}
+		return p.desc
+	}
+	defaultValue := p.defaultValue
+	if p.typ == "array" && len(p.defaultValues) > 0 {
+		defaultValue = strings.Join(p.defaultValues, ", ")
+	}
+	if defaultValue == "" {
+		defaultValue = `""`
+	}
+	if p.desc == "" {
+		return "Default: " + defaultValue
+	}
+	return p.desc + " (default: " + defaultValue + ")"
 }
 
 func validateGeneratedFlagNames(op spec.Operation, optional []*paramInfo) error {
@@ -1065,7 +1061,7 @@ func (c *CLI) runGeneratedOp(
 
 	// Collect optional param flags.
 	for _, p := range optional {
-		if !cmd.Flags().Changed(p.flagName) && !p.hasDefault {
+		if !cmd.Flags().Changed(p.flagName) {
 			continue
 		}
 		values, err := generatedFlagValues(cmd, p)
@@ -1134,9 +1130,6 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 		values, err := cmd.Flags().GetStringArray(p.flagName)
 		if err != nil {
 			return nil, err
-		}
-		if len(values) == 0 && p.hasDefault && len(p.defaultValues) > 0 {
-			values = append([]string(nil), p.defaultValues...)
 		}
 		return values, nil
 	default:

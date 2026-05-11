@@ -81,6 +81,55 @@ func TestBody_ShorthandArgs(t *testing.T) {
 	}
 }
 
+func TestBody_ShorthandCommaSemantics(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want map[string]any
+	}{
+		{
+			name: "split comma separated fields",
+			args: []string{"name:", "Alice,", "enabled:", "true"},
+			want: map[string]any{"name": "Alice", "enabled": true},
+		},
+		{
+			name: "quoted comma separated fields",
+			args: []string{"name: Alice, enabled: true"},
+			want: map[string]any{"name": "Alice", "enabled": true},
+		},
+		{
+			name: "single field value with spaces",
+			args: []string{"note:", "Alice", "enabled:", "true"},
+			want: map[string]any{"note": "Alice enabled: true"},
+		},
+		{
+			name: "missing comma remains one string value",
+			args: []string{"name:", "Alice", "enabled:", "true"},
+			want: map[string]any{"name": "Alice enabled: true"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := input.Body(strings.NewReader(""), true, tc.args, "", input.BodyOptions{})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			m, ok := body.(map[string]any)
+			if !ok {
+				t.Fatalf("body = %T(%#v), want map", body, body)
+			}
+			for key, want := range tc.want {
+				if got := m[key]; got != want {
+					t.Fatalf("%s = %#v, want %#v; body=%#v", key, got, want, body)
+				}
+			}
+			if len(m) != len(tc.want) {
+				t.Fatalf("body = %#v, want keys %#v", body, tc.want)
+			}
+		})
+	}
+}
+
 func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
 	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456"}
 	body, err := input.Body(strings.NewReader(""), true, args, "", input.BodyOptions{

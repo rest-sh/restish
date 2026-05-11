@@ -51,6 +51,10 @@ For small structured bodies, use shorthand:
 restish api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
 {{< /restish-example >}}
 
+Separate multiple shorthand fields with commas, even when the shell splits the
+body over several words or lines. Without commas, later `key:` text remains part
+of the previous value.
+
 {{< restish-example >}}
 restish -c form post api.rest.sh/post 'username: alice, password: secret'
 {{< /restish-example >}}

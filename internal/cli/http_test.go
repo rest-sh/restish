@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -574,6 +575,46 @@ func TestShorthandBody(t *testing.T) {
 	}
 	if body["name"] != "Alice" {
 		t.Errorf("name: got %v, want Alice", body["name"])
+	}
+}
+
+func TestShorthandBodyRequiresCommasBetweenFields(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want map[string]any
+	}{
+		{
+			name: "comma separated fields",
+			args: []string{"name:", "Alice,", "enabled:", "true"},
+			want: map[string]any{"name": "Alice", "enabled": true},
+		},
+		{
+			name: "missing comma is one value",
+			args: []string{"name:", "Alice", "enabled:", "true"},
+			want: map[string]any{"name": "Alice enabled: true"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var rr requestRecorder
+			c, _, _ := newTestCLI(t)
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				rr.capture(r)
+				return jsonResponse(200, `{}`), nil
+			})
+			args := append([]string{"restish", "post", "https://api.example.com/items"}, tc.args...)
+			if err := c.Run(args); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rr.body, &body); err != nil {
+				t.Fatalf("body is not valid JSON: %v - body: %s", err, rr.body)
+			}
+			if !reflect.DeepEqual(body, tc.want) {
+				t.Fatalf("body = %#v, want %#v", body, tc.want)
+			}
+		})
 	}
 }
 

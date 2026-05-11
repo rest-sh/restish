@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1766,8 +1765,8 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	if got := values.Get("includeArchived"); got != "true" {
 		t.Fatalf("includeArchived = %q, want true", got)
 	}
-	if got := values.Get("limit"); got != "25" {
-		t.Fatalf("limit default = %q, want 25", got)
+	if got := values.Get("limit"); got != "" {
+		t.Fatalf("limit default = %q, want omitted", got)
 	}
 	if got := values.Get("score"); got != "1.5" {
 		t.Fatalf("score = %q, want 1.5", got)
@@ -1775,11 +1774,75 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	if got := values["tag"]; strings.Join(got, ",") != "red,blue" {
 		t.Fatalf("tag values = %v, want red and blue", got)
 	}
-	if got := values["region"]; !reflect.DeepEqual(got, []string{"us-east-1,blue", "green"}) {
-		t.Fatalf("region values = %v, want comma-bearing default preserved", got)
+	if got := values["region"]; got != nil {
+		t.Fatalf("region values = %v, want omitted default", got)
 	}
 	if got := values.Get("ids"); got != "1,2" {
 		t.Fatalf("ids = %q, want 1,2", got)
+	}
+}
+
+func TestGeneratedCommandOptionalDefaultsSentOnlyWhenChanged(t *testing.T) {
+	var queries []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos", func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "GitHub-ish API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/repos": {
+      "get": {
+        "operationId": "listRepos",
+        "parameters": [
+          {"name": "type", "in": "query", "schema": {"type": "string", "default": "all"}},
+          {"name": "visibility", "in": "query", "schema": {"type": "string", "default": "all"}},
+          {"name": "affiliation", "in": "query", "schema": {"type": "string", "default": "owner"}},
+          {"name": "archived", "in": "query", "schema": {"type": "boolean", "default": true}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-repos"}); err != nil {
+		t.Fatalf("list-repos failed: %v", err)
+	}
+	if queries[0] != "" {
+		t.Fatalf("omitted optional defaults query = %q, want empty", queries[0])
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-repos", "--visibility", "", "--archived=false"}); err != nil {
+		t.Fatalf("list-repos with explicit values failed: %v", err)
+	}
+	values, err := url.ParseQuery(queries[1])
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", queries[1], err)
+	}
+	if got, ok := values["visibility"]; !ok || len(got) != 1 || got[0] != "" {
+		t.Fatalf("visibility = %#v, want explicit empty string", values["visibility"])
+	}
+	if got := values.Get("archived"); got != "false" {
+		t.Fatalf("archived = %q, want false", got)
+	}
+
+	c = env.newCLI()
+	out := &bytes.Buffer{}
+	c.Stdout = out
+	_ = c.Run([]string{"restish", "tapi", "list-repos", "--help"})
+	if got := out.String(); !strings.Contains(got, "Default: all") || !strings.Contains(got, "Default: true") {
+		t.Fatalf("help did not document server defaults:\n%s", got)
 	}
 }
 

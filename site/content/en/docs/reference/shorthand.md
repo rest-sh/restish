@@ -37,9 +37,11 @@ restish post api.rest.sh/post 'user.profile.email: alice@example.com'
 restish post api.rest.sh/post 'items[0].name: first'
 ```
 
-Multiple assignments can be separate CLI arguments or comma-separated inside
-one quoted argument. Restish joins positional body arguments and parses them as
-one shorthand expression.
+Multiple assignments must be comma-separated. They can be split across CLI
+arguments or written inside one quoted argument. Restish joins positional body
+arguments and parses them as one shorthand expression, so a command like
+`name: Alice enabled: true` is one `name` value, not two fields. Write
+`name: Alice, enabled: true` instead.
 
 ## Scalars
 
