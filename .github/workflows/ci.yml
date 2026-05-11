@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - v2
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run integration tests
+        run: go test -tags=integration ./...
+
+      - name: Build binaries
+        run: |
+          go build ./cmd/restish
+          go build ./cmd/restish-bulk
+          go build ./cmd/restish-csv
+          go build ./cmd/restish-mcp
+          go build ./cmd/restish-pkcs11
