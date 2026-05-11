@@ -37,7 +37,9 @@ func (h *HTTPBasic) OnRequest(req *http.Request, params map[string]string) error
 			return fmt.Errorf("http-basic: prompting for password: %w", err)
 		}
 	}
-	req.SetBasicAuth(user, pass)
+	if req.Header.Get("Authorization") == "" {
+		req.SetBasicAuth(user, pass)
+	}
 	return nil
 }
 

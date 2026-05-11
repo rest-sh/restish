@@ -177,6 +177,31 @@ func TestApplyAPIProfileMergesProfileTLSWithFlagPrecedence(t *testing.T) {
 	}
 }
 
+func TestApplyAPIProfileTreatsMissingDefaultProfileAsImplicit(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"staging": {BaseURL: "https://staging.example.com"},
+				},
+			},
+		},
+	}
+	rawURL, apiName, _, err := c.applyAPIProfile("svc/items", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile default: %v", err)
+	}
+	if apiName != "svc" || rawURL != "https://api.example.com/items" {
+		t.Fatalf("match = %q %q, want svc default URL", apiName, rawURL)
+	}
+	_, _, _, err = c.applyAPIProfile("svc/items", "missing", request.Options{}, authHandlerOptions{})
+	if err == nil || !strings.Contains(err.Error(), `profile "missing" not found`) {
+		t.Fatalf("missing named profile error = %v", err)
+	}
+}
+
 func TestClosePreparedTransportStopsContextCloser(t *testing.T) {
 	c := New()
 	ctx, cancel := context.WithCancel(context.Background())

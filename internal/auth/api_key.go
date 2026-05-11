@@ -34,13 +34,19 @@ func (h *APIKey) Authenticate(_ context.Context, req *http.Request, ac AuthConte
 
 	switch location {
 	case "header":
-		req.Header.Set(name, value)
+		if req.Header.Get(name) == "" {
+			req.Header.Set(name, value)
+		}
 	case "query":
 		q := req.URL.Query()
-		q.Set(name, value)
-		req.URL.RawQuery = q.Encode()
+		if !q.Has(name) {
+			q.Set(name, value)
+			req.URL.RawQuery = q.Encode()
+		}
 	case "cookie":
-		req.AddCookie(&http.Cookie{Name: name, Value: value})
+		if _, err := req.Cookie(name); err != nil {
+			req.AddCookie(&http.Cookie{Name: name, Value: value})
+		}
 	default:
 		return fmt.Errorf("api-key: unsupported in %q (supported: header, query, cookie)", location)
 	}

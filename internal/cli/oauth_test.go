@@ -738,3 +738,56 @@ func TestOAuthClientCredentials_401RetryForcesFreshToken(t *testing.T) {
 		t.Fatalf("Authorization = %q", got)
 	}
 }
+
+func TestOAuthClientCredentials_UsesCachedTokenWithMissingEnvSecret(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	cacheKey := "myapi:default"
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	if err := auth.NewTokenCache(c.Hooks().TokenCachePath).Set(cacheKey, auth.CachedToken{
+		AccessToken: "cached-token",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("seed token cache: %v", err)
+	}
+	var tokenHits atomic.Int32
+	var rr requestRecorder
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "oauth.example.com" {
+			tokenHits.Add(1)
+			return oauthTokenResponse(r, "fresh-token"), nil
+		}
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "oauth-client-credentials",
+							"params": {
+								"client_id": "myid",
+								"client_secret": "env:MISSING_CLIENT_SECRET",
+								"token_url": "https://oauth.example.com/token"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tokenHits.Load() != 0 {
+		t.Fatalf("token endpoint hits = %d, want 0", tokenHits.Load())
+	}
+	if got := rr.Last().Header.Get("Authorization"); got != "Bearer cached-token" {
+		t.Fatalf("Authorization = %q, want cached token", got)
+	}
+}

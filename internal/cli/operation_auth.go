@@ -64,6 +64,11 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 				needErrors = append(needErrors, err.Error())
 				continue
 			}
+			if err := c.resolvedAuthParamsReady(resolved, apiName, profileName); err != nil {
+				alternativeNeedErrors = true
+				needErrors = append(needErrors, fmt.Sprintf("%s has unresolved auth params: %v", requirement.ID, err))
+				continue
+			}
 			selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved, source: selectedAuthSourceCredential(resolved)})
 		}
 		if !alternativeMissing && !alternativeNeedErrors {
@@ -109,7 +114,11 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 	}
 	alternative, ok := matchingSecurityAlternative(policy.CredentialAlternatives, requested)
 	if !ok {
-		return nil, false, fmt.Errorf("auth override %q does not match this operation; valid values: %s", override, strings.Join(authOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
+		alternative = configuredAuthOverrideAlternative(requested)
+		if len(alternative) == 0 {
+			return nil, false, fmt.Errorf("auth override %q does not match this operation; valid values: %s", override, strings.Join(authOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
+		}
+		c.warnf("auth override %q is not listed in this operation's OpenAPI security requirements; using configured credential override", override)
 	}
 	if prof == nil {
 		return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings; %s", override, profileName, apiName, operationAuthSetupHint(apiName, profileName))
@@ -162,9 +171,30 @@ func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *conf
 			needErrors = append(needErrors, err.Error())
 			continue
 		}
+		if err := c.resolvedAuthParamsReady(resolved, apiName, profileName); err != nil {
+			needErrors = append(needErrors, fmt.Sprintf("%s has unresolved auth params: %v", requirement.ID, err))
+			continue
+		}
 		selected = append(selected, selectedOperationAuth{requirement: requirement, resolved: resolved, source: selectedAuthSourceCredential(resolved)})
 	}
 	return selected, missing, needErrors, nil
+}
+
+func configuredAuthOverrideAlternative(requested map[string]bool) spec.CredentialAlternative {
+	ids := make([]string, 0, len(requested))
+	for id := range requested {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	alternative := make(spec.CredentialAlternative, 0, len(ids))
+	for _, id := range ids {
+		alternative = append(alternative, spec.CredentialRequirement{
+			ID:     id,
+			Kind:   "configured",
+			Source: "override",
+		})
+	}
+	return alternative
 }
 
 func selectedAuthSourceCredential(resolved resolvedAuthConfig) string {
@@ -287,6 +317,9 @@ func (c *CLI) operationAuthStep(apiName, profileName string, selected selectedOp
 }
 
 func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, force bool) error {
+	if c.applyCachedOAuthClientCredentials(req, s.authType, s.cacheKey, s.apiName, s.profileName, force) {
+		return nil
+	}
 	params, err := c.buildAuthParams(s.rawParams)
 	if err != nil {
 		return err

@@ -46,6 +46,9 @@ func (c *CLI) tipf(format string, args ...any) {
 }
 
 func writeDiagnostic(w io.Writer, role diagnosticRole, label, format string, args ...any) {
+	if w == nil {
+		return
+	}
 	prefix := label + ":"
 	prefix = colorDiagnosticPrefix(w, role, prefix)
 	fmt.Fprintf(w, "%s %s\n", prefix, fmt.Sprintf(format, args...))

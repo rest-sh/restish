@@ -63,6 +63,9 @@ type ForceCapable interface {
 }
 
 func bearerAuth(req *http.Request, token string) {
+	if req.Header.Get("Authorization") != "" {
+		return
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 }
 

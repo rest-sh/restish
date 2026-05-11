@@ -1224,7 +1224,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 	}
 
 	if match.profile == nil {
-		if match.api.Profiles != nil || profileName != "default" {
+		if profileName != "default" {
 			return rawURL, match.apiName, opts, fmt.Errorf("profile %q not found for API %q; configured profiles: %s", profileName, match.apiName, profileNames(match.api.Profiles))
 		}
 		callbacks := c.authOnRequest(match.apiName, profileName, nil, authOpts)

@@ -20,6 +20,20 @@ func TestBearerAuthenticate(t *testing.T) {
 	}
 }
 
+func TestBearerAuthenticateDoesNotOverwriteAuthorization(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	req.Header.Set("Authorization", "Bearer manual")
+	err := (&Bearer{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+		"token": "configured",
+	}})
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer manual" {
+		t.Fatalf("Authorization = %q, want manual value", got)
+	}
+}
+
 func TestBearerAuthenticateRequiresToken(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
 	err := (&Bearer{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{}})

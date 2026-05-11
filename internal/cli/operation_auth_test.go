@@ -140,6 +140,50 @@ func TestPlanOperationAuthPrefersCredentialsBeforeAnonymous(t *testing.T) {
 	}
 }
 
+func TestPlanOperationAuthSkipsAlternativeWithMissingEnvParam(t *testing.T) {
+	t.Setenv("READY_KEY", "ready")
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"MissingKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Missing", "value": "env:MISSING_KEY"}},
+			},
+			"ReadyKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Ready", "value": "env:READY_KEY"}},
+			},
+		},
+	}
+	policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{
+		{{ID: "MissingKey"}},
+		{{ID: "ReadyKey"}},
+	}}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 1 || selected[0].requirement.ID != "ReadyKey" {
+		t.Fatalf("selected = %#v handled=%v, want ReadyKey", selected, handled)
+	}
+}
+
+func TestPlanOperationAuthReportsUnresolvedEnvWhenNoAlternativeReady(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"MissingKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Missing", "value": "env:MISSING_KEY"}},
+			},
+		},
+	}
+	policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{{{ID: "MissingKey"}}}}
+
+	_, _, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err == nil || !strings.Contains(err.Error(), "unresolved auth params") || !strings.Contains(err.Error(), "env:MISSING_KEY") {
+		t.Fatalf("error = %v, want unresolved env diagnostic", err)
+	}
+}
+
 func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialMissing(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{}
@@ -188,8 +232,8 @@ func TestPlanOperationAuthOverrideValidation(t *testing.T) {
 		CredentialAlternatives: basePolicy,
 		Override:               "UserOAuth+PartnerKey",
 	})
-	if err == nil || !strings.Contains(err.Error(), "does not match this operation") {
-		t.Fatalf("expected invalid combination error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "requires missing credential bindings") {
+		t.Fatalf("expected missing binding error, got %v", err)
 	}
 
 	_, _, err = c.planOperationAuth("svc", "default", prof, &operationAuthPolicy{
@@ -210,6 +254,29 @@ func TestPlanOperationAuthOverrideValidation(t *testing.T) {
 	}
 	if !handled || len(selected) != 0 {
 		t.Fatalf("selected = %#v handled=%v, want anonymous", selected, handled)
+	}
+}
+
+func TestPlanOperationAuthOverrideAllowsConfiguredCredentialOutsideSpec(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"BearerAuth": {
+				Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "manual"}},
+			},
+		},
+	}
+	policy := &operationAuthPolicy{
+		CredentialAlternatives: []spec.CredentialAlternative{{{ID: "LegacyKey"}}},
+		Override:               "BearerAuth",
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 1 || selected[0].requirement.ID != "BearerAuth" {
+		t.Fatalf("selected = %#v handled=%v, want BearerAuth", selected, handled)
 	}
 }
 

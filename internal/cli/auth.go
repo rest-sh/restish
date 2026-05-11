@@ -124,6 +124,9 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			}
 		}
 		callbacks.OnRequest = func(req *http.Request) error {
+			if c.applyCachedOAuthClientCredentials(req, resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName, false) {
+				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
+			}
 			params, err := c.buildAuthParams(rawParams)
 			if err != nil {
 				return err
@@ -140,6 +143,9 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		}
 		if _, ok := handler.(auth.ForceCapable); ok {
 			callbacks.OnUnauthorized = func(req *http.Request) error {
+				if c.applyCachedOAuthClientCredentials(req, resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName, true) {
+					return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
+				}
 				params, err := c.buildAuthParams(rawParams)
 				if err != nil {
 					return err
@@ -170,6 +176,37 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
 	return callbacks
+}
+
+func (c *CLI) applyCachedOAuthClientCredentials(req *http.Request, authType string, cacheKey, apiName, profileName string, force bool) bool {
+	if force || authType != "oauth-client-credentials" {
+		return false
+	}
+	token := c.cachedOAuthClientCredentialsToken(authType, cacheKey, apiName, profileName)
+	if token == "" {
+		return false
+	}
+	if req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return true
+}
+
+func (c *CLI) cachedOAuthClientCredentialsToken(authType string, cacheKey, apiName, profileName string) string {
+	if authType != "oauth-client-credentials" {
+		return ""
+	}
+	if cacheKey == "" {
+		cacheKey = apiName + ":" + profileName
+	}
+	if cacheKey == ":" || cacheKey == "" {
+		return ""
+	}
+	cached, err := auth.NewTokenCache(c.tokenCachePath()).Get(cacheKey)
+	if err != nil || cached == nil || cached.IsExpired() {
+		return ""
+	}
+	return cached.AccessToken
 }
 
 func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.ProfileConfig) (resolvedAuthConfig, error) {
@@ -205,6 +242,38 @@ func (c *CLI) buildAuthParams(rawParams map[string]string) (map[string]string, e
 		params[k] = resolved
 	}
 	return params, nil
+}
+
+func (c *CLI) authParamsReady(rawParams map[string]string) error {
+	var missing []string
+	for k, v := range rawParams {
+		if !strings.HasPrefix(v, "env:") {
+			continue
+		}
+		name := strings.TrimPrefix(v, "env:")
+		if name == "" {
+			missing = append(missing, k+" (missing env variable name)")
+			continue
+		}
+		if resolved, ok := os.LookupEnv(name); !ok || resolved == "" {
+			missing = append(missing, k+" (env:"+name+")")
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return fmt.Errorf("%s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (c *CLI) resolvedAuthParamsReady(resolved resolvedAuthConfig, apiName, profileName string) error {
+	if resolved.Config == nil {
+		return nil
+	}
+	if c.cachedOAuthClientCredentialsToken(resolved.Config.Type, resolved.CacheKey, apiName, profileName) != "" {
+		return nil
+	}
+	return c.authParamsReady(resolved.Config.Params)
 }
 
 func (c *CLI) resolveAuthParam(value string) (string, error) {

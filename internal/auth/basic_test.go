@@ -42,6 +42,22 @@ func TestHTTPBasic_OnRequest_WithPassword(t *testing.T) {
 	}
 }
 
+func TestHTTPBasic_OnRequest_DoesNotOverwriteAuthorization(t *testing.T) {
+	h := &HTTPBasic{}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	req.Header.Set("Authorization", "Bearer manual")
+	err := h.OnRequest(req, map[string]string{
+		"username": "alice",
+		"password": "secret",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer manual" {
+		t.Fatalf("Authorization = %q, want manual value", got)
+	}
+}
+
 func TestHTTPBasic_OnRequest_MissingUsername(t *testing.T) {
 	h := &HTTPBasic{}
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)

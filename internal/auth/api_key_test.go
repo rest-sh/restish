@@ -79,6 +79,69 @@ func TestAPIKeyAuthenticateCookie(t *testing.T) {
 	}
 }
 
+func TestAPIKeyAuthenticateDoesNotOverwriteExistingValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		location string
+		setup    func(*http.Request)
+		want     func(*testing.T, *http.Request)
+	}{
+		{
+			name:     "header",
+			location: "header",
+			setup:    func(req *http.Request) { req.Header.Set("X-API-Key", "manual") },
+			want: func(t *testing.T, req *http.Request) {
+				if got := req.Header.Get("X-API-Key"); got != "manual" {
+					t.Fatalf("X-API-Key = %q, want manual", got)
+				}
+			},
+		},
+		{
+			name:     "query",
+			location: "query",
+			setup: func(req *http.Request) {
+				q := req.URL.Query()
+				q.Set("X-API-Key", "manual")
+				req.URL.RawQuery = q.Encode()
+			},
+			want: func(t *testing.T, req *http.Request) {
+				if got := req.URL.Query().Get("X-API-Key"); got != "manual" {
+					t.Fatalf("X-API-Key = %q, want manual", got)
+				}
+			},
+		},
+		{
+			name:     "cookie",
+			location: "cookie",
+			setup:    func(req *http.Request) { req.AddCookie(&http.Cookie{Name: "X-API-Key", Value: "manual"}) },
+			want: func(t *testing.T, req *http.Request) {
+				cookie, err := req.Cookie("X-API-Key")
+				if err != nil {
+					t.Fatalf("Cookie: %v", err)
+				}
+				if cookie.Value != "manual" {
+					t.Fatalf("cookie = %q, want manual", cookie.Value)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+			tt.setup(req)
+			err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+				"in":    tt.location,
+				"name":  "X-API-Key",
+				"value": "configured",
+			}})
+			if err != nil {
+				t.Fatalf("Authenticate: %v", err)
+			}
+			tt.want(t, req)
+		})
+	}
+}
+
 func TestAPIKeyAuthenticateValidation(t *testing.T) {
 	tests := []struct {
 		name   string
