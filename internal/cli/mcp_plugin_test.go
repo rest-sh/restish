@@ -158,7 +158,7 @@ paths:
 		"id":      3,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name":      "getItem",
+			"name":      "get-item",
 			"arguments": map[string]any{"id": "42"},
 		},
 	})
@@ -181,8 +181,8 @@ paths:
 	if len(tools) != 1 {
 		t.Fatalf("expected 1 visible tool, got %d", len(tools))
 	}
-	if got := tools[0].(map[string]any)["name"].(string); got != "getItem" {
-		t.Fatalf("expected getItem tool, got %q", got)
+	if got := tools[0].(map[string]any)["name"].(string); got != "get-item" {
+		t.Fatalf("expected get-item tool, got %q", got)
 	}
 
 	callResult := responses[2]["result"].(map[string]any)
