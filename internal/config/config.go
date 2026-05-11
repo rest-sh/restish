@@ -83,6 +83,9 @@ type APIConfig struct {
 	// Values are used for generated operation path resolution; enum values from
 	// remote specs are never expanded eagerly.
 	ServerVariables map[string]string `json:"server_variables,omitempty"`
+	// AllowedOperationOrigins permits generated commands to use operation- or
+	// path-level OpenAPI servers on origins outside base_url.
+	AllowedOperationOrigins []string `json:"allowed_operation_origins,omitempty"`
 	// Profiles is a map of profile name to profile configuration.
 	Profiles map[string]*ProfileConfig `json:"profiles,omitempty"`
 	// Pagination holds optional per-API pagination configuration.
@@ -338,6 +341,11 @@ func Validate(cfg *Config) error {
 		if err := ValidateRetryMaxWait(api.RetryMaxWait); err != nil {
 			return fmt.Errorf("apis.%s.retry_max_wait: %w", name, err)
 		}
+		for i, origin := range api.AllowedOperationOrigins {
+			if err := ValidateOperationOriginPattern(origin); err != nil {
+				return fmt.Errorf("apis.%s.allowed_operation_origins[%d]: %w", name, i, err)
+			}
+		}
 		if api.OperationBase != "" {
 			if err := ValidateBaseURLForOperationBase(api.BaseURL); err != nil {
 				return fmt.Errorf("apis.%s.base_url: %w", name, err)
@@ -498,6 +506,70 @@ func ResolveOperationBaseURL(baseURL, operationBase string) (string, error) {
 		}
 	}
 	return base.ResolveReference(&url.URL{Path: operationBase}).String(), nil
+}
+
+// ValidateOperationOriginPattern validates an allowed_operation_origins entry.
+// Patterns are origins such as https://api.example.com or conservative
+// single-label wildcards such as https://*.example.com.
+func ValidateOperationOriginPattern(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("must be an absolute http/https origin")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("scheme must be http or https")
+	}
+	if u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("must not include userinfo, path, query, or fragment")
+	}
+	host := u.Hostname()
+	if strings.Count(host, "*") == 0 {
+		return nil
+	}
+	if !strings.HasPrefix(host, "*.") || strings.Count(host, "*") != 1 {
+		return fmt.Errorf("wildcard host must use the form *.example.com")
+	}
+	suffix := strings.TrimPrefix(host, "*.")
+	if suffix == "" || strings.Contains(suffix, "*") || !strings.Contains(suffix, ".") {
+		return fmt.Errorf("wildcard host must include a concrete parent domain")
+	}
+	return nil
+}
+
+// OperationOriginAllowed reports whether serverURL's origin is permitted by
+// allowed_operation_origins.
+func OperationOriginAllowed(serverURL string, patterns []string) bool {
+	u, err := url.Parse(serverURL)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return false
+	}
+	for _, pattern := range patterns {
+		if operationOriginPatternMatches(u, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func operationOriginPatternMatches(origin *url.URL, rawPattern string) bool {
+	pattern, err := url.Parse(rawPattern)
+	if err != nil || !pattern.IsAbs() || pattern.Host == "" {
+		return false
+	}
+	if pattern.Scheme != origin.Scheme {
+		return false
+	}
+	patternPort := pattern.Port()
+	if patternPort != "" && patternPort != origin.Port() {
+		return false
+	}
+	patternHost := pattern.Hostname()
+	originHost := origin.Hostname()
+	if strings.HasPrefix(patternHost, "*.") {
+		suffix := strings.TrimPrefix(patternHost, "*.")
+		return strings.HasSuffix(originHost, "."+suffix) && originHost != suffix
+	}
+	return strings.EqualFold(pattern.Host, origin.Host)
 }
 
 // extractJSONErrorPosition attempts to extract line:column from a JSON decode error.

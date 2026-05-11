@@ -12,6 +12,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
@@ -61,6 +62,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd.Flags().Bool("no-discover", false, "Register the API locally without network spec discovery")
 	connectCmd.Flags().String("spec", "", "OpenAPI spec URL or local file to use instead of discovery")
 	connectCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
+	connectCmd.Flags().Bool("yes", false, "Accept safe api connect prompts without asking")
 	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "inspect <name>",
@@ -198,6 +200,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	noDiscover, _ := cmd.Flags().GetBool("no-discover")
 	explicitSpec, _ := cmd.Flags().GetString("spec")
 	replaceProfiles, _ := cmd.Flags().GetBool("replace")
+	yes, _ := cmd.Flags().GetBool("yes")
 	promptAnswers, setupExprs, err := parseAPIConfigureSetupExpressions(args[2:])
 	if err != nil {
 		return err
@@ -294,6 +297,11 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	if apiSpec != nil && apiCfg.SpecURL == "" && len(apiCfg.SpecFiles) == 0 && apiSpec.SourceURL != "" {
 		apiCfg.SpecURL = apiSpec.SourceURL
 	}
+	if apiSpec != nil {
+		if err := c.configureAllowedOperationOrigins(cmd, apiName, apiCfg, apiSpec, yes); err != nil {
+			return err
+		}
+	}
 	if !replaceProfiles {
 		if err := preserveExistingProfiles(apiCfg, existingAPI); err != nil {
 			return err
@@ -360,6 +368,80 @@ func connectedOperationCount(apiSpec *spec.APISpec, apiCfg *config.APIConfig) in
 		return 0
 	}
 	return len(ops)
+}
+
+func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, apiSpec *spec.APISpec, yes bool) error {
+	origins := discoveredCrossOriginOperationServers(apiSpec, apiCfg)
+	if len(origins) == 0 {
+		return nil
+	}
+	suggestions := suggestedAllowedOperationOrigins(origins, apiCfg.AllowedOperationOrigins)
+	if len(suggestions) == 0 {
+		return nil
+	}
+	if yes {
+		apiCfg.AllowedOperationOrigins = append(apiCfg.AllowedOperationOrigins, suggestions...)
+		return nil
+	}
+	if !output.IsTerminalReader(c.Stdin) {
+		c.warnf("cross-origin operation servers ignored: %s; allow with: restish api set %s 'allowed_operation_origins[]: %s'", strings.Join(origins, ", "), apiName, suggestions[0])
+		return nil
+	}
+	label := fmt.Sprintf("Allow generated operations to call %s? This writes allowed_operation_origins: %s [Y/n] ", strings.Join(origins, ", "), strings.Join(suggestions, ", "))
+	ok, err := c.Confirm(requestContext(cmd), label)
+	if err != nil {
+		return err
+	}
+	if ok {
+		apiCfg.AllowedOperationOrigins = append(apiCfg.AllowedOperationOrigins, suggestions...)
+	}
+	return nil
+}
+
+func discoveredCrossOriginOperationServers(apiSpec *spec.APISpec, apiCfg *config.APIConfig) []string {
+	if apiSpec == nil || apiCfg == nil {
+		return nil
+	}
+	ops, err := apiSpec.Operations(spec.OperationOptions{
+		BaseURL:         apiCfg.BaseURL,
+		OperationBase:   apiCfg.OperationBase,
+		ServerVariables: effectiveServerVariables(apiCfg, "default"),
+	})
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var origins []string
+	for _, op := range ops {
+		if op.OperationServer == "" {
+			continue
+		}
+		origin := operationServerOrigin(op.OperationServer)
+		if !seen[origin] {
+			seen[origin] = true
+			origins = append(origins, origin)
+		}
+	}
+	sort.Strings(origins)
+	return origins
+}
+
+func suggestedAllowedOperationOrigins(origins, existing []string) []string {
+	seen := map[string]bool{}
+	for _, origin := range existing {
+		seen[origin] = true
+	}
+	var suggestions []string
+	for _, origin := range origins {
+		suggestion := suggestedOperationOrigin(origin)
+		if seen[suggestion] || config.OperationOriginAllowed(origin, existing) {
+			continue
+		}
+		seen[suggestion] = true
+		suggestions = append(suggestions, suggestion)
+	}
+	sort.Strings(suggestions)
+	return suggestions
 }
 
 func preservedProfileNames(existingAPI *config.APIConfig, replace bool) []string {

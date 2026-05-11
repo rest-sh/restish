@@ -382,7 +382,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1034,7 +1034,7 @@ func generatedOperationExamples(commandName, apiName, use string, examples []str
 // runGeneratedOp is the RunE handler for generated operation commands.
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
-	apiName, opPath, method, requestMediaType string,
+	apiName, opPath, operationServer, method, requestMediaType string,
 	requestSchemaTypes map[string]string,
 	requestMultipartContentTypes map[string]string,
 	bodyRequired bool,
@@ -1079,7 +1079,16 @@ func (c *CLI) runGeneratedOp(
 	// base URL sub-path.
 	var rawURL string
 	baseURL, operationBase := c.generatedOperationBase(cmd, apiName)
-	if operationBase != "" {
+	if operationServer != "" {
+		apiCfg, err := c.requireAPI(apiName)
+		if err != nil {
+			return err
+		}
+		if !config.OperationOriginAllowed(operationServer, apiCfg.AllowedOperationOrigins) {
+			return fmt.Errorf("operation server %s is outside API base_url and is not allowed; add allowed_operation_origins[]: %s", operationServerOrigin(operationServer), suggestedOperationOrigin(operationServer))
+		}
+		rawURL = strings.TrimRight(operationServer, "/") + path
+	} else if operationBase != "" {
 		resolvedBase, err := config.ResolveOperationBaseURL(baseURL, operationBase)
 		if err != nil {
 			return fmt.Errorf("operation_base: %w", err)
@@ -1158,6 +1167,26 @@ func (c *CLI) generatedOperationBase(cmd *cobra.Command, apiName string) (string
 		}
 	}
 	return baseURL, operationBase
+}
+
+func operationServerOrigin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+func suggestedOperationOrigin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.HasSuffix(host, ".do-ai.run") {
+		return u.Scheme + "://*.do-ai.run"
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 type generatedQueryParam struct {

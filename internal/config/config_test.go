@@ -860,6 +860,54 @@ func TestLoadValidatesOperationBasePath(t *testing.T) {
 	}
 }
 
+func TestAllowedOperationOriginsValidationAndMatching(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "allowed_operation_origins": ["https://inference.do-ai.run", "https://*.trusted.example.com"]
+    }
+  }
+}`)
+	if _, err := config.Load(path); err != nil {
+		t.Fatalf("expected allowed_operation_origins to load: %v", err)
+	}
+
+	patterns := []string{"https://inference.do-ai.run", "https://*.trusted.example.com"}
+	for _, origin := range []string{
+		"https://inference.do-ai.run/v1",
+		"https://one.trusted.example.com",
+		"https://deep.one.trusted.example.com",
+	} {
+		if !config.OperationOriginAllowed(origin, patterns) {
+			t.Fatalf("expected %s to match %v", origin, patterns)
+		}
+	}
+	for _, origin := range []string{
+		"http://inference.do-ai.run",
+		"https://trusted.example.com",
+		"https://evil-trusted.example.com",
+	} {
+		if config.OperationOriginAllowed(origin, patterns) {
+			t.Fatalf("expected %s not to match %v", origin, patterns)
+		}
+	}
+
+	for _, raw := range []string{`"*.example.com"`, `"https://*.com"`, `"https://*bad.example.com"`, `"https://api.example.com/path"`} {
+		path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "allowed_operation_origins": [%s]
+    }
+  }
+}`, raw))
+		if _, err := config.Load(path); err == nil {
+			t.Fatalf("expected invalid allowed_operation_origins entry %s", raw)
+		}
+	}
+}
+
 func TestLoadValidatesCommandLayout(t *testing.T) {
 	for _, layout := range []string{"", "flat", "tags"} {
 		t.Run("valid_"+layout, func(t *testing.T) {

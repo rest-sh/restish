@@ -3560,3 +3560,79 @@ func TestGeneratedCommandPercentEscapesPathAndQueryArgs(t *testing.T) {
 		t.Fatalf("RequestURI = %q, want escaped percent and at in query", gotRequestURI)
 	}
 }
+
+func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
+	var gotInferencePath string
+	inference := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotInferencePath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(inference.Close)
+
+	controlMux := http.NewServeMux()
+	control := httptest.NewServer(controlMux)
+	t.Cleanup(control.Close)
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Control API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "servers": [{"url": %q}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, control.URL, inference.URL)
+	controlMux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	controlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cacheDir := t.TempDir()
+	writeCfg := func(allowed []string) {
+		t.Helper()
+		cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: control.URL, AllowedOperationOrigins: allowed},
+		}})
+		if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+	}
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		return c
+	}
+
+	writeCfg(nil)
+	if err := newCLI().Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	err := newCLI().Run([]string{"restish", "tapi", "list-models"})
+	if err == nil || !strings.Contains(err.Error(), "allowed_operation_origins") {
+		t.Fatalf("expected cross-origin operation server error, got %v", err)
+	}
+	if gotInferencePath != "" {
+		t.Fatalf("unexpected inference request before allow: %q", gotInferencePath)
+	}
+
+	writeCfg([]string{inference.URL})
+	if err := newCLI().Run([]string{"restish", "tapi", "list-models"}); err != nil {
+		t.Fatalf("list-models with allowed origin: %v", err)
+	}
+	if gotInferencePath != "/v1/models" {
+		t.Fatalf("inference path = %q, want /v1/models", gotInferencePath)
+	}
+}

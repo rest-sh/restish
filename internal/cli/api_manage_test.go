@@ -109,6 +109,43 @@ func TestAPIConnect(t *testing.T) {
 	}
 }
 
+func TestAPIConnectYesAllowsDiscoveredOperationOrigins(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specFile := filepath.Join(t.TempDir(), "openapi.json")
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "DigitalOcean", "version": "1.0"},
+  "servers": [{"url": "https://api.digitalocean.com"}],
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "inferenceListModels",
+        "servers": [{"url": "https://inference.do-ai.run"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	if err := os.WriteFile(specFile, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	if err := c.Run([]string{"restish", "api", "connect", "do", "https://api.digitalocean.com", "--spec", specFile, "--yes"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["do"].AllowedOperationOrigins; !reflect.DeepEqual(got, []string{"https://*.do-ai.run"}) {
+		t.Fatalf("allowed_operation_origins = %#v, want DigitalOcean wildcard", got)
+	}
+}
+
 func TestAPIConnectPrimesGeneratedHelp(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	cacheDir := t.TempDir()

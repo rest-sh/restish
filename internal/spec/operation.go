@@ -99,12 +99,15 @@ type Operation struct {
 	ID     string
 	Method string
 	// Path is the full path template after applying any server base prefix.
-	Path        string
-	Summary     string
-	Description string
-	Deprecated  bool
-	Tags        []string
-	Parameters  []Param
+	Path string
+	// OperationServer is an absolute server URL from an operation/path-level
+	// OpenAPI server whose origin differs from the configured API base URL.
+	OperationServer string
+	Summary         string
+	Description     string
+	Deprecated      bool
+	Tags            []string
+	Parameters      []Param
 	// HasBody is true when the operation has a requestBody.
 	HasBody bool
 	// BodyRequired is true when requestBody.required is true.
@@ -220,12 +223,13 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 			if len(mo.Op.Servers) > 0 {
 				servers = mo.Op.Servers
 			}
-			basePath, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
+			basePath, operationServer, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
 			if err != nil {
 				return nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
 			}
 			fullPath := joinOperationPath(basePath, rawPath)
 			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components))
+			op.OperationServer = operationServer
 			if op.XCLI.Ignore {
 				continue
 			}
@@ -449,19 +453,20 @@ func isIgnoredOpenAPIHeaderParameter(p *v3.Parameter) bool {
 // When operationBase is set, no prefix is needed (the URL prefix is resolved
 // from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
 // inspected for a URL that resolves to the same scheme+host as baseURL.
-func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, error) {
+func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, string, error) {
 	if operationBase != "" || len(servers) == 0 {
-		return "", nil
+		return "", "", nil
 	}
 	if err := validateConfiguredServerVariables(servers, serverVariables); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	location, err := url.Parse(baseURL)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	resolutionBase := serverResolutionBase(location)
+	var firstCrossOrigin string
 
 	for _, server := range servers {
 		if server == nil {
@@ -478,13 +483,20 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 		}
 		resolved := resolutionBase.ResolveReference(parsed)
 		if resolved.Scheme != location.Scheme || resolved.Host != location.Host {
+			if firstCrossOrigin == "" && resolved.IsAbs() && resolved.Host != "" && (resolved.Scheme == "http" || resolved.Scheme == "https") {
+				firstCrossOrigin = strings.TrimRight(resolved.String(), "/")
+			}
 			continue
 		}
-		return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), nil
+		return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), "", nil
+	}
+
+	if firstCrossOrigin != "" {
+		return "", firstCrossOrigin, nil
 	}
 
 	// No matching server found — fall back to the configured API base URL.
-	return "", nil
+	return "", "", nil
 }
 
 func serverResolutionBase(location *url.URL) *url.URL {

@@ -577,7 +577,7 @@ func requireCredential(t *testing.T, op Operation, want [][]CredentialRequiremen
 	}
 }
 
-func TestOperationsAbsoluteNonMatchingServerFallsBackToAPIBase(t *testing.T) {
+func TestOperationsAbsoluteNonMatchingServerRecordsOperationServer(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
   title: Test
@@ -605,6 +605,9 @@ paths:
 	}
 	if got := ops[0].Path; got != "/items" {
 		t.Fatalf("operation path = %q, want /items", got)
+	}
+	if got := ops[0].OperationServer; got != "https://other.example.com/v2" {
+		t.Fatalf("operation server = %q, want cross-origin server", got)
 	}
 }
 
