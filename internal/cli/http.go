@@ -118,6 +118,7 @@ type requestBodyOptions struct {
 // redirect to a different host, preventing credentialed SSRF via a compromised
 // response-middleware plugin.
 func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
+	c.requestExecutionStarted = true
 	trace := ensureRequestTrace(cmd)
 	rawURL := args[0]
 	bodyArgs := args[1:] // positional args after the URL are shorthand body input
@@ -446,7 +447,7 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 	}
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
-		c.hintf("filter returned no results; to access response body fields use 'body.%s'", filterExpr)
+		c.hintBodyPrefixOnce(filterExpr)
 	}
 
 	if explicitFilter && filterExpr == "@" {
@@ -939,6 +940,41 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 		}
 	}
 	return true
+}
+
+func (c *CLI) hintBodyPrefixOnce(filterExpr string) {
+	if c.bodyPrefixHinted {
+		return
+	}
+	c.bodyPrefixHinted = true
+	c.hintf("filter returned no results; to access response body fields use 'body.%s'", strings.TrimSpace(filterExpr))
+}
+
+func bodyPrefixTargetExists(item any, filterExpr string) bool {
+	filterExpr = strings.TrimSpace(filterExpr)
+	if !shouldSuggestBodyPrefix(filterExpr) {
+		return false
+	}
+	field := filterExpr
+	for i, r := range field {
+		if r == '.' || r == '[' {
+			field = field[:i]
+			break
+		}
+	}
+	if field == "" {
+		return false
+	}
+	switch obj := item.(type) {
+	case map[string]any:
+		_, ok := obj[field]
+		return ok
+	case map[string]string:
+		_, ok := obj[field]
+		return ok
+	default:
+		return false
+	}
 }
 
 func filterRequestsResponseMetadata(expr string) bool {
@@ -1479,6 +1515,10 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 	if err != nil {
 		return request.Options{}, err
 	}
+	var logger io.Writer = diagnosticPrefixWriter(c.Stderr)
+	if gf.Silent {
+		logger = nil
+	}
 
 	return request.Options{
 		Headers:              gf.Headers,
@@ -1504,7 +1544,7 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		RetryUnsafe:          gf.RetryUnsafe,
 		RetryBaseDelay:       c.hooks.RetryBaseDelay,
 		RetryMaxWait:         retryMaxWait,
-		Logger:               diagnosticPrefixWriter(c.Stderr),
+		Logger:               logger,
 		OnBeforeRequest: func(req *http.Request) {
 			if gf.Verbose > 0 {
 				c.logVerboseRequest(req)

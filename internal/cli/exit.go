@@ -72,6 +72,25 @@ func usageExitError(err error) error {
 	return err
 }
 
+func (c *CLI) shouldSuppressFinalError(err error) bool {
+	if err == nil || !c.silentMode || !c.requestExecutionStarted {
+		return false
+	}
+	return !isUsageError(err)
+}
+
+func silentExitError(err error) error {
+	var exitErr *ExitCodeError
+	if errors.As(err, &exitErr) {
+		code := exitErr.Code
+		if code == 0 {
+			code = 1
+		}
+		return &ExitCodeError{Code: code}
+	}
+	return &ExitCodeError{Code: 1}
+}
+
 func isUsageError(err error) bool {
 	var usageErr *UsageError
 	if errors.As(err, &usageErr) {

@@ -47,9 +47,9 @@ for the generated operation instead of sending the request.
 | `-r`, `--rsh-raw` | boolean | false | Write response body bytes; cannot combine with filters. |
 | `--rsh-columns` | comma list | formatter default | Columns for `-o table`. |
 | `--rsh-sort-by` | column name | none | Sort table rows by a column. |
-| `--rsh-headers` | boolean | false | Shortcut for `-f headers`. |
+| `--rsh-headers` | boolean | false | Shortcut for `-f headers`; selects raw response headers. |
 | `--rsh-status` | boolean | false | Shortcut for `-f status`. |
-| `-S`, `--rsh-silent` | boolean | false | Suppress output; use only exit status. |
+| `-S`, `--rsh-silent` | boolean | false | Suppress request output, diagnostics, and request errors; use only exit status. |
 
 ```bash
 restish api.rest.sh/images -f body.self -o lines

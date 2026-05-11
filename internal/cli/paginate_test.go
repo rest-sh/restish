@@ -802,6 +802,44 @@ func TestPaginationLinesFilteredStreamHasNoTrailingEmptyArray(t *testing.T) {
 	}
 }
 
+func TestPaginationPerItemFilterSuggestsBodyPrefix(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		if r.URL.Query().Get("page") == "" {
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		}
+		body := `[{"self":"one"}]`
+		if r.URL.Query().Get("page") == "2" {
+			body = `[{"self":"two"}]`
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-f", "self", "-o", "json", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	var values []any
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 2 || values[0] != nil || values[1] != nil {
+		t.Fatalf("filtered output = %#v, want two null values", values)
+	}
+	if got := errOut.String(); !strings.Contains(got, "use 'body.self'") {
+		t.Fatalf("expected body prefix hint, got %q", got)
+	}
+	if strings.Count(errOut.String(), "filter returned no results") != 1 {
+		t.Fatalf("expected one hint, got %q", errOut.String())
+	}
+}
+
 func TestPaginationLaterPageErrorFailsCollectedOutput(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"

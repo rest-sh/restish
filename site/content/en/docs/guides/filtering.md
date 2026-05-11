@@ -85,10 +85,12 @@ parser's error.
 
 ## Pagination And Collecting
 
-Default pagination filters each item as it arrives. This stays true when stdout
-is redirected or when you choose a document format such as `-o json`; document
-formats collect the filtered item results into one valid document. Use
-`--rsh-collect` when the filter needs the whole collection:
+Default pagination filters each item as it arrives. The item is still wrapped
+under the normalized `body` root, so item fields are selected as `body.name`,
+`body.self`, and similar filters. This stays true when stdout is redirected or
+when you choose a document format such as `-o json`; document formats collect
+the filtered item results into one valid document. Use `--rsh-collect` when the
+filter needs the whole collection:
 
 {{< restish-example >}}
 restish api.rest.sh/images --rsh-collect -f '.body | length'

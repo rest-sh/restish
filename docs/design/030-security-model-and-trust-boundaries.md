@@ -120,6 +120,8 @@ Restish should only expose sensitive data where it is required:
 
 - stdout carries requested command output, not debug logs
 - stderr diagnostics redact sensitive headers and query parameters
+- explicit response filters, including `--rsh-headers` and `-f @`, are
+  intentional data selection and may expose raw response headers
 - plugin requests receive only the fields needed for their hook type
 - cache files use restrictive permissions
 
@@ -161,6 +163,8 @@ The design rules are:
 - never include them verbatim in synthesized error messages from remote systems
 - cap logged remote error body length
 - preserve them in-memory only as long as required for the current operation
+- bypass HTTP response-cache writes when a response carries credential-bearing
+  headers; cached replay must not strip or alter headers
 
 When a remote IdP returns a JSON error document, Restish should parse and
 redact known token fields before surfacing the error.

@@ -227,7 +227,9 @@ Filters fall into two broad categories:
   `sort_by(...)`, or `group_by(...)`
 
 Per-record filters can compose with record formats and paginated incremental
-execution.
+execution. Each record is evaluated through a mini normalized response where the
+current item or stream event is under `body`; this keeps `body.*` filters
+consistent with full-response filtering.
 
 Whole-collection filters require a full logical collection, even when the
 response arrived in pages. Restish should not try to infer this from the filter
@@ -242,9 +244,9 @@ Restish therefore needs an output planning step that classifies:
 - whether `--rsh-collect` requests whole-collection evaluation
 - whether pagination needs to preserve a wrapper object via `items_path`
 
-Without `--rsh-collect`, paginated filters run per item. Document formats then
-render the filtered item results as one valid document; record formats can emit
-them as records.
+Without `--rsh-collect`, paginated filters run per item against that mini
+response wrapper. Document formats then render the filtered item results as one
+valid document; record formats can emit them as records.
 
 ### Pagination Must Preserve Shape
 

@@ -49,6 +49,35 @@ func TestBasicAuthHeader(t *testing.T) {
 	}
 }
 
+func TestSilentMissingEnvAuthSuppressesError(t *testing.T) {
+	t.Setenv("MISSING_RESTISH_TOKEN", "")
+	c, out, errOut := newTestCLI(t)
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "bearer",
+							"params": {"token": "env:MISSING_RESTISH_TOKEN"}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+
+	err := c.Run([]string{"restish", "get", "myapi/items", "--rsh-silent"})
+	if exitCode(err) != 1 {
+		t.Fatalf("exit code = %v, want 1 (err=%v)", exitCode(err), err)
+	}
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("silent missing env auth wrote stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
 // TestBasicAuthPasswordPrompt verifies that when password is absent from params
 // a prompt is written to stderr and the password is read from stdin.
 func TestBasicAuthPasswordPrompt(t *testing.T) {

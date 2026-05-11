@@ -532,6 +532,28 @@ func TestSSEWithFilter(t *testing.T) {
 	}
 }
 
+func TestSSEPerEventFilterSuggestsBodyPrefix(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseBody(`{"n":1}`, `{"n":2}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-f", "data", "--rsh-max-items", "2"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := errOut.String(); !strings.Contains(got, "use 'body.data'") {
+		t.Fatalf("expected body prefix hint, got %q", got)
+	}
+	if strings.Count(errOut.String(), "filter returned no results") != 1 {
+		t.Fatalf("expected one hint, got %q", errOut.String())
+	}
+}
+
 func TestSSEReadableOutputWithColor(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {

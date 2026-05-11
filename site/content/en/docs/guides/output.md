@@ -77,8 +77,9 @@ Restish rejects `-o json` on stream responses with an error that points to
 `-o ndjson`.
 
 Output format does not change paginated filter scope. Without `--rsh-collect`,
-Restish filters each item; document formats then render the filtered item
-results as one complete document.
+Restish filters each item through a mini response wrapper where the current
+item lives under `body`; document formats then render the filtered item results
+as one complete document.
 
 ## Filters Change What Gets Rendered
 
@@ -132,8 +133,9 @@ restish -v api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 
 Sensitive headers such as `Authorization`, `Cookie`, `Proxy-Authorization`,
 `Set-Cookie`, and common API-key headers are redacted in verbose diagnostics and
-in human/table response preambles. Use explicit body or header filters when you
-need a specific non-sensitive field.
+in human/table response preambles. Explicit filters such as `--rsh-headers`,
+`-f headers.Set-Cookie`, and `-f @` select raw response data and can reveal
+those values, which is useful for pipelines but risky in logs.
 
 ## Images In The Terminal
 

@@ -58,10 +58,12 @@ result returns an error instead of silently truncating the collection.
 
 ## Collect Before Filtering
 
-Without `--rsh-collect`, filters run once for each paginated item. Output
-format does not change that scope: `-o ndjson` can write filtered records as
-they arrive, while `-o json` gathers the filtered item results into one valid
-JSON document. Some filters need the whole collection:
+Without `--rsh-collect`, filters run once for each paginated item. Each item is
+wrapped in the normal response shape with the current item under `body`, so use
+filters such as `body.self`, not `self`. Output format does not change that
+scope: `-o ndjson` can write filtered records as they arrive, while `-o json`
+gathers the filtered item results into one valid JSON document. Some filters
+need the whole collection:
 
 {{< restish-example >}}
 restish api.rest.sh/images --rsh-collect -f '.body | length'

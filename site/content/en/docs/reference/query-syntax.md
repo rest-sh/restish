@@ -113,7 +113,9 @@ restish api.rest.sh/images --rsh-filter-lang jq -f '{next: .links.next}'
 ## Pagination Scope
 
 By default, paginated responses stream items as pages arrive and the filter runs
-per item. Use `--rsh-collect` when the filter needs the whole collection:
+per item. Each item is presented as `{"body": <item>}`, so select item fields
+with `body.self` or jq `.body.self`. Use `--rsh-collect` when the filter needs
+the whole collection:
 
 ```bash
 restish api.rest.sh/images -f body.self -o lines

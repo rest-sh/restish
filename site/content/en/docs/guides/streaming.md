@@ -86,6 +86,10 @@ restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 restish api.rest.sh/events --rsh-max-items 3 -f body.data.message -o lines
 ```
 
+Stream filters use the same mini response wrapper as per-item pagination: the
+current event or NDJSON record is under `body`. For SSE, parsed event payload
+fields live under `body.data`.
+
 ## SSE Parsing Notes
 
 - multiple `data:` lines are joined into one event payload

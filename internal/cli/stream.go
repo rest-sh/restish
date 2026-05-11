@@ -309,6 +309,9 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 			return fmt.Errorf("filter: %w", err)
 		}
 		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
+		if filterResult.Value == nil && bodyPrefixTargetExists(item, filterExpr) {
+			c.hintBodyPrefixOnce(filterExpr)
+		}
 		result = filterResult.Value
 	}
 

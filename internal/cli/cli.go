@@ -92,27 +92,30 @@ type CLI struct {
 	// a custom instance.
 	Paths *config.Paths
 
-	cfg                    *config.Config
-	defaultConfig          *config.Config
-	commandName            string
-	commandShort           string
-	commandLong            string
-	commandVersion         string
-	content                *content.Registry
-	loaders                []spec.Loader
-	linkParsers            []hypermedia.Parser
-	formatters             map[string]output.Formatter
-	plugins                []internalplugin.Plugin
-	pluginsByHook          map[string][]internalplugin.Plugin
-	pluginCommandNames     map[string]string
-	authPluginsByAPI       map[string][]internalplugin.Plugin
-	globalAuthPlugins      []internalplugin.Plugin
-	customAuthHandlers     map[string]auth.Handler
-	explicitConfigFile     bool
-	retryUnsafeWarned      bool
-	signalHandling         bool
-	quietGeneratedWarnings bool
-	runCtx                 context.Context
+	cfg                     *config.Config
+	defaultConfig           *config.Config
+	commandName             string
+	commandShort            string
+	commandLong             string
+	commandVersion          string
+	content                 *content.Registry
+	loaders                 []spec.Loader
+	linkParsers             []hypermedia.Parser
+	formatters              map[string]output.Formatter
+	plugins                 []internalplugin.Plugin
+	pluginsByHook           map[string][]internalplugin.Plugin
+	pluginCommandNames      map[string]string
+	authPluginsByAPI        map[string][]internalplugin.Plugin
+	globalAuthPlugins       []internalplugin.Plugin
+	customAuthHandlers      map[string]auth.Handler
+	explicitConfigFile      bool
+	retryUnsafeWarned       bool
+	signalHandling          bool
+	quietGeneratedWarnings  bool
+	silentMode              bool
+	requestExecutionStarted bool
+	bodyPrefixHinted        bool
+	runCtx                  context.Context
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -423,6 +426,14 @@ func (c *CLI) Run(args []string) error {
 
 	argScan := scanCLIArgs(args)
 	c.retryUnsafeWarned = false
+	c.silentMode = argScan.Silent
+	c.requestExecutionStarted = false
+	c.bodyPrefixHinted = false
+	defer func() {
+		c.silentMode = false
+		c.requestExecutionStarted = false
+		c.bodyPrefixHinted = false
+	}()
 
 	if c.hooks.ConfigPath == "" {
 		if argScan.ExplicitConfigPath {
@@ -569,6 +580,9 @@ func (c *CLI) Run(args []string) error {
 	if isSignalCancellation(err, ctx) {
 		return &ExitCodeError{Code: 130}
 	}
+	if c.shouldSuppressFinalError(err) {
+		return silentExitError(err)
+	}
 	return err
 }
 
@@ -669,6 +683,7 @@ type cliArgScan struct {
 	ProfileName             string
 	ConfigPath              string
 	ExplicitConfigPath      bool
+	Silent                  bool
 	Bootstrap               bool
 	GeneratedAPICommandTree bool
 }
@@ -689,6 +704,8 @@ func scanCLIArgs(args []string) cliArgScan {
 		switch arg {
 		case "--help", "-h", "--version":
 			hasBootstrapFlag = true
+		case "--rsh-silent", "-S":
+			scan.Silent = true
 		case "help", "__complete", "__completeNoDesc":
 			scan.GeneratedAPICommandTree = true
 		}
@@ -708,6 +725,9 @@ func scanCLIArgs(args []string) cliArgScan {
 			value := strings.TrimPrefix(arg, "--rsh-config=")
 			scan.ConfigPath = value
 			scan.ExplicitConfigPath = value != ""
+		} else if strings.HasPrefix(arg, "--rsh-silent=") {
+			value := strings.TrimPrefix(arg, "--rsh-silent=")
+			scan.Silent = isTruthy(value)
 		} else if arg == "--rsh-config" {
 			consumesNext = true
 			if i+1 < len(args) && args[i+1] != "" {

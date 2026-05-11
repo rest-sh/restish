@@ -18,18 +18,30 @@ const (
 )
 
 func (c *CLI) infof(format string, args ...any) {
+	if c.silentMode {
+		return
+	}
 	writeDiagnostic(c.Stderr, diagnosticInfo, "info", format, args...)
 }
 
 func (c *CLI) warnf(format string, args ...any) {
+	if c.silentMode {
+		return
+	}
 	writeDiagnostic(c.Stderr, diagnosticWarn, "warning", format, args...)
 }
 
 func (c *CLI) hintf(format string, args ...any) {
+	if c.silentMode {
+		return
+	}
 	writeDiagnostic(c.Stderr, diagnosticHint, "hint", format, args...)
 }
 
 func (c *CLI) tipf(format string, args ...any) {
+	if c.silentMode {
+		return
+	}
 	writeDiagnostic(c.Stderr, diagnosticHint, "tip", format, args...)
 }
 

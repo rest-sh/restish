@@ -171,7 +171,8 @@ elsewhere.
 
 Cache settings control the HTTP response cache, not OAuth/auth token cache.
 Use `restish cache info` to inspect runtime cache location, size, entry count,
-and oldest entry.
+and oldest entry. Restish does not write cache entries for responses that carry
+credential-bearing headers such as `Set-Cookie` or common API-key headers.
 
 ```bash
 restish config set 'cache.max_size: 250MB'

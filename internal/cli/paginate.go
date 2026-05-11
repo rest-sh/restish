@@ -226,6 +226,9 @@ func (c *CLI) filterPaginatedItems(cmd *cobra.Command, items []any) ([]any, erro
 			return nil, fmt.Errorf("filter: %w", err)
 		}
 		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
+		if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
+			c.hintBodyPrefixOnce(gf.Filter)
+		}
 		filtered = append(filtered, filterResult.Value)
 	}
 	return filtered, nil

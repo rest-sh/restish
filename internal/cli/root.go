@@ -54,6 +54,7 @@ commands for registered APIs via OpenAPI 3.`
 			if err != nil {
 				return err
 			}
+			c.silentMode = gf.Silent
 			cmd.SetContext(withGlobalFlags(cmd.Context(), gf))
 			return nil
 		},
