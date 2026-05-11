@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -322,6 +323,48 @@ func TestCacheNoStoreNotCached(t *testing.T) {
 
 	if n := hits.Load(); n != 2 {
 		t.Errorf("Cache-Control: no-store: expected 2 server hits, got %d", n)
+	}
+}
+
+func TestCacheSensitiveResponseHeaderBypassesCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "max-age=3600")
+		w.Header().Set("Set-Cookie", "session=secret")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cacheDir := t.TempDir()
+	for i := range 2 {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().CachePath = cacheDir
+		if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+			t.Fatalf("request %d failed: %v", i+1, err)
+		}
+	}
+
+	if n := hits.Load(); n != 2 {
+		t.Fatalf("sensitive response headers should bypass cache, got %d server hits", n)
+	}
+	err := filepath.WalkDir(cacheDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "session=secret") {
+			t.Fatalf("cached sensitive response header in %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk cache dir: %v", err)
 	}
 }
 

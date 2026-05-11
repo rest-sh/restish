@@ -1,6 +1,8 @@
 package request
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -589,9 +591,37 @@ func BuildTransport(opts Options) http.RoundTripper {
 		// Cache unavailable; fall back without caching.
 		return finalizeTransport(inner, opts)
 	}
-	ct := httpcache.NewTransport(dc)
+	ct := httpcache.NewTransport(sensitiveResponseHeaderCache{Cache: dc})
 	ct.Transport = inner
 	return finalizeTransport(wrapTransportWithCloseFns(ct, transportCleanup(inner)...), opts)
+}
+
+type sensitiveResponseHeaderCache struct {
+	httpcache.Cache
+}
+
+func (c sensitiveResponseHeaderCache) Set(key string, data []byte) {
+	if cachedResponseHasCredentialHeader(data) {
+		c.Delete(key)
+		return
+	}
+	c.Cache.Set(key, data)
+}
+
+func cachedResponseHasCredentialHeader(data []byte) bool {
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(data)), nil)
+	if err != nil {
+		return false
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	for name := range resp.Header {
+		if IsCredentialHeader(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func finalizeTransport(final http.RoundTripper, opts Options) http.RoundTripper {

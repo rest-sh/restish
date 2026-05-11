@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"unicode"
@@ -399,7 +400,7 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 	}
 
 	results := make([]any, 0, 1)
-	iter := code.Run(doc)
+	iter := code.Run(normalizeJQValue(doc))
 	for {
 		v, ok := iter.Next()
 		if !ok {
@@ -418,6 +419,42 @@ func applyJQ(expr string, doc map[string]any) (any, error) {
 		return results[0], nil
 	}
 	return results, nil
+}
+
+func normalizeJQValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if rv.IsNil() {
+			return nil
+		}
+		return normalizeJQValue(rv.Elem().Interface())
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return value
+		}
+		result := make(map[string]any, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			result[iter.Key().String()] = normalizeJQValue(iter.Value().Interface())
+		}
+		return result
+	case reflect.Slice, reflect.Array:
+		if rv.Kind() == reflect.Slice && rv.Type().Elem().Kind() == reflect.Uint8 {
+			return value
+		}
+		result := make([]any, rv.Len())
+		for i := range result {
+			result[i] = normalizeJQValue(rv.Index(i).Interface())
+		}
+		return result
+	default:
+		return value
+	}
 }
 
 func compiledJQ(expr string) (*gojq.Code, error) {

@@ -301,6 +301,57 @@ func TestJQ_SelectFilter(t *testing.T) {
 	}
 }
 
+func TestJQ_NormalizesTypedMapsAndSlices(t *testing.T) {
+	doc := map[string]any{
+		"headers": map[string]string{
+			"X-Test-Header": "ok",
+		},
+		"headers_all": map[string][]string{
+			"Set-Cookie": {"session=secret", "theme=light"},
+		},
+		"body": map[string][]string{
+			"tags": {"one", "two"},
+		},
+	}
+
+	result, err := filter.Apply(`{header: .headers["X-Test-Header"], cookie: .headers_all["Set-Cookie"][0], tags: .body.tags}`, doc, filter.LangJQ)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	obj, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v (%T), want object", result, result)
+	}
+	if obj["header"] != "ok" || obj["cookie"] != "session=secret" {
+		t.Fatalf("unexpected projected values: %#v", obj)
+	}
+	tags, ok := obj["tags"].([]any)
+	if !ok || len(tags) != 2 || tags[0] != "one" || tags[1] != "two" {
+		t.Fatalf("tags = %#v, want normalized string slice", obj["tags"])
+	}
+}
+
+func TestAutoDetectJQProjectionNormalizesTypedHeaders(t *testing.T) {
+	doc := map[string]any{
+		"headers": map[string]string{
+			"Date": "Mon, 02 Jan 2006 15:04:05 GMT",
+		},
+		"body": map[string]any{"name": "Alice"},
+	}
+
+	result, err := filter.Apply(`{date: .headers.Date, name: .body.name}`, doc, filter.LangAuto)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	obj, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v (%T), want object", result, result)
+	}
+	if obj["date"] != "Mon, 02 Jan 2006 15:04:05 GMT" || obj["name"] != "Alice" {
+		t.Fatalf("unexpected projection: %#v", obj)
+	}
+}
+
 func TestJQForcedParseErrorDoesNotIncludeShorthandFallback(t *testing.T) {
 	_, err := filter.Apply("..[", testDoc(), filter.LangJQ)
 	if err == nil {

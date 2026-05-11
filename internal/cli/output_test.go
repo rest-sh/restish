@@ -334,6 +334,66 @@ func TestFilterHeaderValue(t *testing.T) {
 	}
 }
 
+func TestFilterJQCanProjectHeadersAndBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type":  []string{"application/json"},
+				"Date":          []string{"Mon, 02 Jan 2006 15:04:05 GMT"},
+				"X-Trace-Token": []string{"abc123"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"name":"Alice"}`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-filter-lang", "jq", "-f", `{status: .status, date: .headers.Date, trace: .headers["X-Trace-Token"], name: .body.name}`, "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if decoded["status"] != float64(200) || decoded["date"] != "Mon, 02 Jan 2006 15:04:05 GMT" || decoded["trace"] != "abc123" || decoded["name"] != "Alice" {
+		t.Fatalf("unexpected filter output: %#v", decoded)
+	}
+}
+
+func TestFilterCanExposeSensitiveResponseHeaders(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Set-Cookie":   []string{"session=secret"},
+				"X-Api-Key":    []string{"response-key"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "-f", "@", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	headers, ok := decoded["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("headers = %#v", decoded["headers"])
+	}
+	if headers["Set-Cookie"] != "session=secret" || headers["X-Api-Key"] != "response-key" {
+		t.Fatalf("sensitive filtered headers were not exposed: %#v", headers)
+	}
+}
+
 func TestFilterTopLevelRootsDoNotTriggerBodyHint(t *testing.T) {
 	c, _, errOut := newTestCLI(t)
 	useJSONResponse(c, 200, `{}`)
