@@ -22,6 +22,7 @@ func TestPaths_ConfigFromRSHConfigDir(t *testing.T) {
 func TestPaths_ConfigFromRSHConfigFile(t *testing.T) {
 	t.Setenv("RSH_CONFIG", "/tmp/project/restish.json")
 	t.Setenv("RSH_CONFIG_DIR", "/tmp/rsh-cfg")
+	t.Setenv("RSH_CACHE_DIR", "")
 	p := NewPaths()
 	if got, want := p.Config(), "/tmp/project"; got != want {
 		t.Fatalf("Config() = %q, want %q", got, want)
@@ -29,15 +30,61 @@ func TestPaths_ConfigFromRSHConfigFile(t *testing.T) {
 	if got, want := p.ConfigFile(), "/tmp/project/restish.json"; got != want {
 		t.Fatalf("ConfigFile() = %q, want %q", got, want)
 	}
+	if got, want := p.Cache(), "/tmp/project/cache"; got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
 }
 
 func TestPaths_WithExplicitConfigFile(t *testing.T) {
+	t.Setenv("RSH_CACHE_DIR", "")
 	p := NewPathsWithConfigFile("/tmp/work/restish.json")
 	if got, want := p.Config(), "/tmp/work"; got != want {
 		t.Fatalf("Config() = %q, want %q", got, want)
 	}
 	if got, want := p.ConfigFile(), "/tmp/work/restish.json"; got != want {
 		t.Fatalf("ConfigFile() = %q, want %q", got, want)
+	}
+	if got, want := p.Cache(), "/tmp/work/cache"; got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
+}
+
+func TestPaths_ExplicitConfigFileUsesRSHCacheDirOverride(t *testing.T) {
+	t.Setenv("RSH_CACHE_DIR", "/tmp/restish-cache")
+	p := NewPathsWithConfigFile("/tmp/work/restish.json")
+	if got, want := p.Cache(), "/tmp/restish-cache"; got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
+	}
+}
+
+func TestPaths_ExplicitConfigFileCanonicalizesPath(t *testing.T) {
+	t.Setenv("RSH_CACHE_DIR", "")
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "restish.json")
+	if err := os.WriteFile(cfgPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(wd)
+	})
+
+	wantPath, err := filepath.EvalSymlinks(cfgPath)
+	if err != nil {
+		t.Fatalf("eval symlinks: %v", err)
+	}
+	p := NewPathsWithConfigFile("restish.json")
+	if got, want := p.ConfigFile(), wantPath; got != want {
+		t.Fatalf("ConfigFile() = %q, want %q", got, want)
+	}
+	if got, want := p.Cache(), filepath.Join(filepath.Dir(wantPath), "cache"); got != want {
+		t.Fatalf("Cache() = %q, want %q", got, want)
 	}
 }
 

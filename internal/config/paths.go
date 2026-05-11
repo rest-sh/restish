@@ -55,13 +55,27 @@ func NewPaths() *Paths {
 // state stored in the config directory, such as token caches and external-tool
 // approvals, follows the selected config file.
 func NewPathsWithConfigFile(path string) *Paths {
-	cacheDir, cacheErr := computeCacheDir()
+	path = canonicalExplicitConfigFile(path)
+	cacheDir, cacheErr := computeExplicitConfigCacheDir(path)
 	return &Paths{
 		configDir:  filepath.Dir(path),
 		configFile: path,
 		cacheDir:   cacheDir,
 		cacheErr:   cacheErr,
 	}
+}
+
+func canonicalExplicitConfigFile(path string) string {
+	if path == "" {
+		return path
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 // Config returns the config directory path, typically containing restish.json,
@@ -152,4 +166,14 @@ func computeCacheDir() (string, error) {
 	}
 	fallback := filepath.Join(os.TempDir(), "restish")
 	return fallback, fmt.Errorf("config: cannot determine cache directory; using %s; set RSH_CACHE_DIR, XDG_CACHE_HOME, or HOME for persistent cache state", fallback)
+}
+
+func computeExplicitConfigCacheDir(configFile string) (string, error) {
+	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
+		return dir, nil
+	}
+	if configFile == "" {
+		return computeCacheDir()
+	}
+	return filepath.Join(filepath.Dir(configFile), "cache"), nil
 }
