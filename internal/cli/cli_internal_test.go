@@ -280,6 +280,20 @@ func TestGeneratedAPINames_HelpAndCompletionLoadAll(t *testing.T) {
 	}
 }
 
+func TestGeneratedAPINames_TargetedAPIHelpLoadsOnlyThatAPI(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"aaa": {BaseURL: "https://a.example.com"},
+			"bbb": {BaseURL: "https://b.example.com"},
+		},
+	}
+	c := &CLI{}
+	got := c.generatedAPINames([]string{"restish", "aaa", "list-items", "--help"}, cfg)
+	if !reflect.DeepEqual(got, []string{"aaa"}) {
+		t.Fatalf("targeted API help: got %v, want [aaa]", got)
+	}
+}
+
 func TestQuietGeneratedWarningsForScan(t *testing.T) {
 	cfg := &config.Config{
 		APIs: map[string]*config.APIConfig{
@@ -295,7 +309,7 @@ func TestQuietGeneratedWarningsForScan(t *testing.T) {
 		{name: "root help", args: []string{"restish", "--help"}, want: true},
 		{name: "builtin help", args: []string{"restish", "get", "--help"}, want: true},
 		{name: "unknown help", args: []string{"restish", "github", "--help"}, want: true},
-		{name: "api help", args: []string{"restish", "myapi", "--help"}, want: false},
+		{name: "api help", args: []string{"restish", "myapi", "--help"}, want: true},
 	}
 
 	for _, tc := range tests {

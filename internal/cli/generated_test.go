@@ -2884,8 +2884,8 @@ func TestGeneratedCommandNameCollisionsAreDisambiguated(t *testing.T) {
 	if !strings.Contains(out.String(), "list-items-post") {
 		t.Fatalf("expected disambiguated command name in help, got:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "warning: command name collision") {
-		t.Fatalf("expected collision warning in output, got:\n%s", out.String())
+	if strings.Contains(out.String(), "warning: command name collision") {
+		t.Fatalf("unexpected repeated collision warning in help output, got:\n%s", out.String())
 	}
 
 	c, out = env.newCaptureCLI()

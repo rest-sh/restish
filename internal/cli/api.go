@@ -181,6 +181,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	}
 
 	if apiSpec != nil {
+		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, c.profileFromCmd(cmd))
 		fmt.Fprintf(c.Stdout, "Synced spec for %q.\n", apiName)
 	} else {
 		fmt.Fprintf(c.Stdout, "No spec found for %q.\n", apiName)
@@ -324,6 +325,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if apiSpec != nil {
+		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, "default")
 		opOpts := spec.OperationOptions{
 			BaseURL:         apiCfg.BaseURL,
 			OperationBase:   apiCfg.OperationBase,
@@ -463,6 +465,24 @@ func removeExistingXCLIProfiles(xcli *spec.XCLIConfig, existingAPI *config.APICo
 	for name := range existingAPI.Profiles {
 		delete(xcli.Profiles, name)
 	}
+}
+
+func (c *CLI) emitGeneratedCommandWarnings(apiName string, apiCfg *config.APIConfig, apiSpec *spec.APISpec, profileName string) {
+	if apiCfg == nil || apiSpec == nil {
+		return
+	}
+	opOpts := spec.OperationOptions{
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
+	}
+	set, err := apiSpec.OperationSet(opOpts)
+	quiet := c.quietGeneratedWarnings
+	c.quietGeneratedWarnings = false
+	defer func() {
+		c.quietGeneratedWarnings = quiet
+	}()
+	_ = c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
 }
 
 func preserveExistingProfiles(apiCfg, existingAPI *config.APIConfig) error {

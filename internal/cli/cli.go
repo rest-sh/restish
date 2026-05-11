@@ -848,15 +848,82 @@ func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
 			GroupID: rootGroupAPI,
 			Args:    cobra.ArbitraryArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
+				if shouldSyncGeneratedBeforeGeneric(apiCfg, args) {
+					return c.runSyncedGeneratedAPICommand(cmd, apiName, apiCfg, args)
+				}
 				return c.runInferredHTTP(cmd, append([]string{apiName}, args...))
 			},
 		})
 	}
 }
 
+func shouldSyncGeneratedBeforeGeneric(apiCfg *config.APIConfig, args []string) bool {
+	if apiCfg == nil || !apiHasSpecSource(apiCfg) || len(args) == 0 {
+		return false
+	}
+	return looksLikeGeneratedCommandToken(args[0])
+}
+
+func apiHasSpecSource(apiCfg *config.APIConfig) bool {
+	return apiCfg.SpecURL != "" || len(apiCfg.SpecFiles) > 0
+}
+
+func looksLikeGeneratedCommandToken(token string) bool {
+	if token == "" || strings.HasPrefix(token, "-") || strings.ContainsAny(token, "/?#:") {
+		return false
+	}
+	return true
+}
+
+func (c *CLI) runSyncedGeneratedAPICommand(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, args []string) error {
+	profileName := c.profileFromCmd(cmd)
+	set, ok, err := c.operationSetForAPI(cmd.Context(), apiName, apiCfg, profileName, true)
+	if err != nil {
+		return fmt.Errorf("generated commands for API %q are not available: %w", apiName, err)
+	}
+	if !ok {
+		return fmt.Errorf("generated commands for API %q are not available; run %q after fixing spec discovery", apiName, "api sync "+apiName)
+	}
+	apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set)
+	if apiCmd == nil {
+		return fmt.Errorf("generated commands for API %q are unavailable after sync", apiName)
+	}
+	if !commandPathExists(apiCmd, args) {
+		return fmt.Errorf("unknown generated command %q for %q; run %q to see generated operations", args[0], apiName, cmd.CommandPath()+" --help")
+	}
+	root := c.newRootCmd()
+	root.AddCommand(apiCmd)
+	commandName := c.commandName
+	if commandName == "" {
+		commandName = "restish"
+	}
+	return c.executeRoot(cmd.Context(), root, append([]string{commandName, apiName}, args...))
+}
+
 func rootHasCommand(root *cobra.Command, name string) bool {
 	for _, cmd := range root.Commands() {
 		if cmd.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+func commandPathExists(cmd *cobra.Command, args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	current := cmd
+	for _, arg := range args {
+		if arg == "--" || strings.HasPrefix(arg, "-") {
+			break
+		}
+		next := childCommandForToken(current, arg)
+		if next == nil {
+			break
+		}
+		current = next
+		if current.RunE != nil || current.Run != nil {
 			return true
 		}
 	}
@@ -896,15 +963,16 @@ func (c *CLI) generatedAPINames(args []string, cfg *config.Config) []string {
 }
 
 func quietGeneratedWarningsForScan(scan cliArgScan, cfg *config.Config) bool {
-	if scan.FirstCommand == "" || isBuiltinCommandName(scan.FirstCommand) {
-		return true
-	}
-	_, firstIsAPI := cfg.APIs[scan.FirstCommand]
-	return !firstIsAPI
+	return true
 }
 
 func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
 	if scan.GeneratedAPICommandTree {
+		if scan.FirstCommand != "" && !isBuiltinCommandName(scan.FirstCommand) {
+			if _, ok := cfg.APIs[scan.FirstCommand]; ok {
+				return []string{scan.FirstCommand}
+			}
+		}
 		return sortedAPINames(cfg)
 	}
 	if scan.FirstCommand == "" {

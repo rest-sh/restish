@@ -502,24 +502,36 @@ func (c *CLI) apiProfileForAuth(apiName, profileName string, create bool) (*conf
 }
 
 func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
+	set, ok, _ := c.operationSetForAPI(context.Background(), apiName, apiCfg, profileName, false)
+	return set, ok
+}
+
+func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string, forceRefresh bool) (spec.OperationSet, bool, error) {
 	if apiCfg == nil {
-		return spec.OperationSet{}, false
+		return spec.OperationSet{}, false, nil
 	}
 	opts := spec.OperationOptions{
 		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
-	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts); ok {
-		return set, true
+	if !forceRefresh {
+		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts); ok {
+			return set, true, nil
+		}
 	}
-	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	var s *spec.APISpec
+	var err error
+	if forceRefresh {
+		s, err = c.discoverSpec(ctx, apiName)
+	} else {
+		s, err = spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	}
 	if err != nil || s == nil {
 		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
-			return spec.OperationSet{}, false
+			return spec.OperationSet{}, false, err
 		}
-		var discoverErr error
-		s, discoverErr = spec.Discover(context.Background(), spec.DiscoverConfig{
+		s, err = spec.Discover(ctx, spec.DiscoverConfig{
 			APIName:         apiName,
 			BaseURL:         apiCfg.BaseURL,
 			SpecFiles:       apiCfg.SpecFiles,
@@ -529,16 +541,16 @@ func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig,
 			Version:         Version,
 			ForceRefresh:    true,
 		}, c.loaders)
-		if discoverErr != nil || s == nil {
-			return spec.OperationSet{}, false
+		if err != nil || s == nil {
+			return spec.OperationSet{}, false, err
 		}
 	}
 	set, err := s.OperationSet(opts)
 	if err != nil {
-		return spec.OperationSet{}, false
+		return spec.OperationSet{}, false, err
 	}
 	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opts, set)
-	return set, true
+	return set, true, nil
 }
 
 func (c *CLI) cachedOperationForAPI(apiName string, apiCfg *config.APIConfig, profileName, value string) (spec.Operation, bool, error) {

@@ -14,7 +14,6 @@ import (
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
-	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -231,10 +230,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(out, "Spec cache: missing")
 	}
 	profileName := c.profileFromCmd(cmd)
-	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
-		BaseURL:       api.BaseURL,
-		OperationBase: api.OperationBase,
-	}); ok {
+	if set, ok := c.cachedOperationSetForAPI(name, api, profileName); ok {
 		fmt.Fprintf(out, "Generated operations: %d available\n", len(set.Operations))
 	} else {
 		fmt.Fprintln(out, "Generated operations: unavailable")
@@ -449,10 +445,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 		report.SpecCache = doctorStatusReport{Status: "present"}
 	}
 	profileName := c.profileFromCmd(cmd)
-	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), name, Version, api.SpecFiles, spec.OperationOptions{
-		BaseURL:       api.BaseURL,
-		OperationBase: api.OperationBase,
-	}); ok {
+	if set, ok := c.cachedOperationSetForAPI(name, api, profileName); ok {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{Status: "available", Count: len(set.Operations)}
 	}
 	report.Auth = c.doctorAuthForProfile(name, profileName, profileForName(api, profileName))
