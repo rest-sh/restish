@@ -57,12 +57,15 @@ func TestCertWarnDaysExpiresSoon(t *testing.T) {
 	server, caPath := newTLSServerWithChain(t, time.Now().Add(24*time.Hour), false)
 	defer server.Close()
 
-	c, _, _ := newTestCLI(t)
+	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "cert", "--rsh-ca-cert", caPath, "--warn-days", "2", server.URL})
 	var exitErr *cli.ExitCodeError
 	if err == nil || !errors.As(err, &exitErr) || exitErr.Code != 1 {
 		t.Fatalf("expected ExitCodeError{1}, got %v", err)
+	}
+	if got := errOut.String(); !strings.Contains(got, "warning: certificate for") || !strings.Contains(got, "expires within 2 days") {
+		t.Fatalf("expected expiry warning on stderr, got %q", got)
 	}
 }
 

@@ -66,18 +66,18 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := c.Run([]string{"restish", "config", "show", "--json"}); err != nil {
-		t.Fatalf("config show --json: %v", err)
+	if err := c.Run([]string{"restish", "config", "show", "-o", "json"}); err != nil {
+		t.Fatalf("config show -o json: %v", err)
 	}
 	if got := out.String(); strings.Contains(got, "super-secret") || strings.Contains(got, "docs-key") || !strings.Contains(got, `"client_secret": "***"`) || !strings.Contains(got, `"value": "***"`) {
-		t.Fatalf("config show --json did not redact secret:\n%s", got)
+		t.Fatalf("config show -o json did not redact secret:\n%s", got)
 	}
 	if got := out.String(); strings.Contains(got, "profile-secret") || strings.Contains(got, "query-secret") ||
 		!strings.Contains(got, `"Authorization: ***"`) ||
 		!strings.Contains(got, `"api_key=***"`) ||
 		!strings.Contains(got, `"X-Trace: visible"`) ||
 		!strings.Contains(got, `"page=1"`) {
-		t.Fatalf("config show --json did not redact persistent request credentials correctly:\n%s", got)
+		t.Fatalf("config show -o json did not redact persistent request credentials correctly:\n%s", got)
 	}
 
 	if err := c.Run([]string{"restish", "config", "set", "cache.max_size: 250MB"}); err != nil {

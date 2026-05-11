@@ -53,7 +53,7 @@ Inspect the active config:
 ```bash
 restish config path
 restish config show
-restish config show --json
+restish config show -o json
 ```
 
 ## Top-Level Fields

@@ -894,8 +894,8 @@ func TestPluginListShowsCommandNamesAndJSON(t *testing.T) {
 
 	c, out, _ = newTestCLI(t)
 	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
-	if err := c.Run([]string{"restish", "plugin", "list", "--json"}); err != nil {
-		t.Fatalf("plugin list --json: %v", err)
+	if err := c.Run([]string{"restish", "plugin", "list", "-o", "json"}); err != nil {
+		t.Fatalf("plugin list -o json: %v", err)
 	}
 	if !strings.Contains(out.String(), `"name": "cmdplugin"`) ||
 		!strings.Contains(out.String(), `"commands":`) ||

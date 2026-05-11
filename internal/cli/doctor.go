@@ -25,7 +25,6 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 		Args:    cobra.NoArgs,
 		RunE:    c.runDoctor,
 	}
-	doctorCmd.PersistentFlags().Bool("json", false, "Write machine-readable diagnostics as JSON")
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "api <name>",
 		Short: "Diagnose a registered API",
@@ -329,7 +328,7 @@ func (c *CLI) doctorTextOutput() io.Writer {
 	if c.doctorStdoutIsTerminal() {
 		return c.Stderr
 	}
-	fmt.Fprintln(c.Stderr, "Use --json for machine-readable output.")
+	fmt.Fprintln(c.Stderr, "Use -o json for machine-readable output.")
 	return c.Stdout
 }
 
@@ -341,8 +340,7 @@ func (c *CLI) doctorStdoutIsTerminal() bool {
 }
 
 func doctorJSON(cmd *cobra.Command) bool {
-	value, _ := cmd.Flags().GetBool("json")
-	return value
+	return globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json"
 }
 
 func (c *CLI) writeDoctorJSON(report any) error {

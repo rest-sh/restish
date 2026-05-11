@@ -485,6 +485,36 @@ func TestEditCommandDryRunShowsDiffWithoutSending(t *testing.T) {
 	}
 }
 
+func TestEditCommandJSONOutputKeepsDiffOnStderr(t *testing.T) {
+	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-y", "-o", "json", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := out.String(); strings.Contains(got, "--- original") || !json.Valid(out.Bytes()) {
+		t.Fatalf("stdout should contain only JSON response output, got %q", got)
+	}
+	if got := errOut.String(); !strings.Contains(got, "--- original") || !strings.Contains(got, "+++ modified") {
+		t.Fatalf("expected diff on stderr, got %q", got)
+	}
+}
+
 func TestEditCommandYesSkipsPrompt(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 

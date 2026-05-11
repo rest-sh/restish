@@ -34,7 +34,6 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Args:  cobra.NoArgs,
 		RunE:  c.runConfigShow,
 	}
-	showCmd.Flags().Bool("json", false, "Print the full redacted config as JSON")
 	configCmd.AddCommand(showCmd)
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "edit",
@@ -65,8 +64,7 @@ func (c *CLI) runConfigPath(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
-	asJSON, _ := cmd.Flags().GetBool("json")
-	if asJSON {
+	if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
 		view, err := redactedConfigView(c.cfg)
 		if err != nil {
 			return err

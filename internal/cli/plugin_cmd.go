@@ -37,7 +37,6 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Args:  cobra.NoArgs,
 		RunE:  c.runPluginList,
 	}
-	listCmd.Flags().Bool("json", false, "Write machine-readable plugin metadata as JSON")
 	pluginCmd.AddCommand(listCmd)
 	installCmd := &cobra.Command{
 		Use:   "install <source>",
@@ -69,8 +68,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 
 	if len(plugins) == 0 {
-		asJSON, _ := cmd.Flags().GetBool("json")
-		if asJSON {
+		if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
 			return c.writePrettyJSON([]any{})
 		}
 		fmt.Fprintln(c.Stdout, "No plugins found.")
@@ -112,8 +110,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 		}
 		entries = append(entries, entry)
 	}
-	asJSON, _ := cmd.Flags().GetBool("json")
-	if asJSON {
+	if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
 		return c.writePrettyJSON(entries)
 	}
 

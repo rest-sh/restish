@@ -412,6 +412,7 @@ func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) e
 	if len(via) == 0 {
 		return nil
 	}
+	stripBodyHeadersAfterBodylessRedirect(req, via)
 	prev := via[len(via)-1]
 	if prev == nil || SameOrigin(prev.URL, req.URL) {
 		return nil
@@ -422,6 +423,22 @@ func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) e
 		}
 	}
 	return nil
+}
+
+func stripBodyHeadersAfterBodylessRedirect(req *http.Request, via []*http.Request) {
+	if req == nil || req.Body != nil || len(via) == 0 {
+		return
+	}
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		return
+	}
+	prev := via[len(via)-1]
+	if prev == nil || prev.Method == req.Method {
+		return
+	}
+	req.Header.Del("Content-Type")
+	req.Header.Del("Content-Encoding")
+	req.Header.Del("Content-Length")
 }
 
 func requestHasCredentialHeaders(req *http.Request) bool {

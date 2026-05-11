@@ -385,6 +385,73 @@ func TestDo_SameOriginRedirectKeepsCredentialHeaders(t *testing.T) {
 	}
 }
 
+func TestDo_SeeOtherRedirectStripsBodyHeaders(t *testing.T) {
+	var gotMethod, gotContentType, gotContentEncoding string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/next", http.StatusSeeOther)
+			return
+		}
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		gotContentEncoding = r.Header.Get("Content-Encoding")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	resp, err := request.Do(context.Background(), "POST", srv.URL+"/start", strings.NewReader(`{"ok":true}`), request.Options{
+		Headers: []string{"Content-Type: application/json", "Content-Encoding: gzip"},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotMethod != http.MethodGet {
+		t.Fatalf("redirect method = %q, want GET", gotMethod)
+	}
+	if gotContentType != "" || gotContentEncoding != "" {
+		t.Fatalf("body headers crossed 303 redirect: Content-Type=%q Content-Encoding=%q", gotContentType, gotContentEncoding)
+	}
+}
+
+func TestDo_TemporaryRedirectKeepsBodyHeaders(t *testing.T) {
+	var gotMethod, gotContentType, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/next", http.StatusTemporaryRedirect)
+			return
+		}
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		gotBody = string(data)
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	resp, err := request.Do(context.Background(), "POST", srv.URL+"/start", strings.NewReader(`{"ok":true}`), request.Options{
+		Headers: []string{"Content-Type: application/json"},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotMethod != http.MethodPost {
+		t.Fatalf("redirect method = %q, want POST", gotMethod)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", gotContentType)
+	}
+	if gotBody != `{"ok":true}` {
+		t.Fatalf("body = %q, want original body", gotBody)
+	}
+}
+
 func TestSameOriginUsesSchemeHostAndEffectivePort(t *testing.T) {
 	tests := []struct {
 		name string

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,19 +166,20 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	diff := unifiedDiff("original", "modified", string(originalText), string(editedText))
 	if diff != "" {
-		if output.ColorEnabled(c.Stdout) {
+		diffOut := c.editDiffOutput(cmd, dryRun)
+		if output.ColorEnabled(diffOut) {
 			if lexer := lexers.Get("diff"); lexer != nil {
 				if colored, err := output.HighlightWithLexer(lexer, []byte(diff)); err == nil {
 					diff = string(colored)
 				}
 			}
 		}
-		fmt.Fprint(c.Stdout, diff)
+		fmt.Fprint(diffOut, diff)
 	}
 
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	if dryRun {
 		return nil
 	}
@@ -253,6 +255,17 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func (c *CLI) editDiffOutput(cmd *cobra.Command, dryRun bool) io.Writer {
+	if dryRun {
+		return c.Stdout
+	}
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.OutputFormat != "" || explicitOutputFilter(gf) || gf.Raw {
+		return c.Stderr
+	}
+	return c.Stdout
 }
 
 func editFormatInfo(name string) (mimeType, ext string, err error) {

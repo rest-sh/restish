@@ -3,6 +3,7 @@ package cli
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -1206,6 +1207,11 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 
 	match, ok, err := c.matchAPIProfile(rawURL, profileName)
 	if err != nil {
+		var ambiguous *ambiguousAPIProfileMatchError
+		if errors.As(err, &ambiguous) && profileName == "default" {
+			c.warnf("%v; proceeding without API profile, auth, or cache metadata", ambiguous)
+			return rawURL, "", opts, nil
+		}
 		return rawURL, "", opts, err
 	}
 	if !ok {
@@ -1270,6 +1276,15 @@ type apiProfileMatch struct {
 	score   int
 }
 
+type ambiguousAPIProfileMatchError struct {
+	url   string
+	names []string
+}
+
+func (e *ambiguousAPIProfileMatchError) Error() string {
+	return fmt.Sprintf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", e.url, strings.Join(e.names, ", "))
+}
+
 func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool, error) {
 	apiName, suffix := splitAPIShortNameSuffix(rawURL)
 	if api := c.cfg.APIs[apiName]; api != nil {
@@ -1320,7 +1335,7 @@ func (c *CLI) matchAPIProfile(rawURL, profileName string) (apiProfileMatch, bool
 	}
 	if best.apiName != "" && len(ties) > 1 {
 		sort.Strings(ties)
-		return apiProfileMatch{}, false, fmt.Errorf("ambiguous API match for %s: %s all match with the same base URL score; use the API short-name form instead", matchURL, strings.Join(ties, ", "))
+		return apiProfileMatch{}, false, &ambiguousAPIProfileMatchError{url: matchURL, names: ties}
 	}
 	return best, best.apiName != "", nil
 }

@@ -59,11 +59,11 @@ restish doctor migrate-v1
 `doctor` is a diagnostic command. When stdout is a terminal, it writes the
 human report to stderr to match the rest of Restish's diagnostic channel
 policy. When stdout is redirected, it writes the human report to stdout and
-prints a one-line stderr hint pointing to `--json` for machine-readable output.
+prints a one-line stderr hint pointing to `-o json` for machine-readable output.
 This makes `restish doctor > report.txt` capture the report users intended to
 share while preserving stderr for diagnostics about doctor itself.
 
-`--json` is the explicit machine mode for the entire command family. In JSON
+`-o json` is the explicit machine mode for the entire command family. In JSON
 mode, `doctor`, `doctor api`, `doctor plugin`, and `doctor migrate-v1` write
 one structured JSON document to stdout and keep normal human diagnostics off
 stderr unless a lower-level plugin manifest probe writes its own stderr.

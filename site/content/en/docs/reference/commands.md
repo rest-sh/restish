@@ -152,13 +152,13 @@ formats such as HAL, JSON:API, Siren, JSON-LD/TSJ, and simple `self` fields.
 
 `doctor` writes its human report to stderr on an interactive terminal. When
 stdout is redirected, the human report goes to stdout and stderr prints a hint
-to use `--json` for machine-readable output:
+to use `-o json` for machine-readable output:
 
 ```bash
-restish doctor --json
-restish doctor api example --check-network --json
-restish doctor plugin ./restish-csv --json
-restish doctor migrate-v1 --json
+restish doctor -o json
+restish doctor api example --check-network -o json
+restish doctor plugin ./restish-csv -o json
+restish doctor migrate-v1 -o json
 ```
 
 ## Generated API Commands

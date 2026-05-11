@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -456,8 +457,10 @@ func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
 	}
 }
 
-func TestApplyAPIProfileAmbiguousDuplicateBaseURL(t *testing.T) {
+func TestApplyAPIProfileAmbiguousDuplicateBaseURLRunsUnaffiliated(t *testing.T) {
 	c := New()
+	var errOut bytes.Buffer
+	c.Stderr = &errOut
 	c.cfg = &config.Config{
 		APIs: map[string]*config.APIConfig{
 			"a": {
@@ -475,12 +478,33 @@ func TestApplyAPIProfileAmbiguousDuplicateBaseURL(t *testing.T) {
 		},
 	}
 
-	_, _, _, err := c.applyAPIProfile("https://api.example.com/v1/items", "default", request.Options{}, authHandlerOptions{})
-	if err == nil {
-		t.Fatal("expected duplicate base URL ambiguity error")
+	rawURL, apiName, opts, err := c.applyAPIProfile("https://api.example.com/v1/items", "default", request.Options{}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "ambiguous API match") || !strings.Contains(err.Error(), "a, b") {
-		t.Fatalf("unexpected error: %v", err)
+	if rawURL != "https://api.example.com/v1/items" || apiName != "" {
+		t.Fatalf("match = (%q, %q), want original URL and no API", rawURL, apiName)
+	}
+	if opts.CacheNamespace != "" || len(opts.Headers) != 0 || opts.OnRequest != nil {
+		t.Fatalf("ambiguous full URL should not apply API metadata: %#v", opts)
+	}
+	if got := errOut.String(); !strings.Contains(got, "ambiguous API match") || !strings.Contains(got, "proceeding without API profile") {
+		t.Fatalf("expected ambiguity warning, got %q", got)
+	}
+}
+
+func TestApplyAPIProfileAmbiguousDuplicateBaseURLWithExplicitProfileFails(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"a": {BaseURL: "https://api.example.com/v1"},
+			"b": {BaseURL: "https://api.example.com/v1"},
+		},
+	}
+
+	_, _, _, err := c.applyAPIProfile("https://api.example.com/v1/items", "staging", request.Options{}, authHandlerOptions{})
+	if err == nil || !strings.Contains(err.Error(), "ambiguous API match") {
+		t.Fatalf("expected explicit-profile ambiguity error, got %v", err)
 	}
 }
 

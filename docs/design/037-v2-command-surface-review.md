@@ -139,7 +139,7 @@ restish api
 
 restish config
   path
-  show [--json]
+  show [-o json]
   edit
   set <shorthand-patch> [patch...]
   theme set <source> [name]
@@ -209,7 +209,7 @@ V2 adds `restish config` for configuration work:
 
 ```text
 restish config path
-restish config show [--json]
+restish config show [-o json]
 restish config edit
 restish config set <shorthand-patch> [patch...]
 restish config theme set <source> [name]
@@ -223,7 +223,7 @@ not have to learn that `api edit` opens the entire Restish config.
 `api set` remains for API-scoped settings and accepts the same shorthand patch
 language rooted at `apis.<name>`. `config set` is for arbitrary local
 configuration. The unreleased pre-v2 `set key value` form is not part of the
-stable v2 contract. `config show --json` redacts sensitive values so it is safer
+stable v2 contract. `config show -o json` redacts sensitive values so it is safer
 to use in bug reports and support conversations.
 
 ### API Inspection Uses `inspect`

@@ -272,7 +272,7 @@ func TestDoctorReportsInvalidConfigWithoutFailing(t *testing.T) {
 		!strings.Contains(got, "did you mean \"apis\"") {
 		t.Fatalf("unexpected doctor output:\n%s", got)
 	}
-	if !strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+	if !strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
 		t.Fatalf("expected redirected-output JSON hint on stderr, got:\n%s", errOut.String())
 	}
 }

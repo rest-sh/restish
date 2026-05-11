@@ -31,7 +31,7 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 		!strings.Contains(got, "before the next OAuth request") {
 		t.Fatalf("expected token cache remediation, got:\n%s", got)
 	}
-	if !strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+	if !strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
 		t.Fatalf("expected redirected-output JSON hint on stderr, got:\n%s", errOut.String())
 	}
 }
@@ -49,7 +49,7 @@ func TestDoctorTextWritesToStderrWhenStdoutIsTTY(t *testing.T) {
 	if !strings.Contains(errOut.String(), "Config file:") {
 		t.Fatalf("expected text report on stderr, got:\n%s", errOut.String())
 	}
-	if strings.Contains(errOut.String(), "Use --json for machine-readable output.") {
+	if strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
 		t.Fatalf("tty doctor should not print redirected-output JSON hint, got:\n%s", errOut.String())
 	}
 }
@@ -59,11 +59,11 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := c.Run([]string{"restish", "doctor", "--json"}); err != nil {
-		t.Fatalf("doctor --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json"}); err != nil {
+		t.Fatalf("doctor -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		ConfigFile  string `json:"config_file"`
@@ -74,7 +74,7 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 		PluginDirectory string `json:"plugin_directory"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.ConfigFile != c.Hooks().ConfigPath {
 		t.Fatalf("config_file = %q, want %q", report.ConfigFile, c.Hooks().ConfigPath)
@@ -105,11 +105,11 @@ func TestDoctorJSONReportsUnsupportedReferencedAuthProfile(t *testing.T) {
 }`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := c.Run([]string{"restish", "doctor", "--json"}); err != nil {
-		t.Fatalf("doctor --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json"}); err != nil {
+		t.Fatalf("doctor -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		ConfigParse struct {
@@ -118,7 +118,7 @@ func TestDoctorJSONReportsUnsupportedReferencedAuthProfile(t *testing.T) {
 		} `json:"config_parse"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.ConfigParse.Status != "invalid" {
 		t.Fatalf("config_parse.status = %q, want invalid", report.ConfigParse.Status)
@@ -146,11 +146,11 @@ func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
-		t.Fatalf("doctor api --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		Registered   bool `json:"registered"`
@@ -164,7 +164,7 @@ func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 		} `json:"reachability"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if !report.Registered {
 		t.Fatal("expected registered API")
@@ -196,11 +196,11 @@ func TestDoctorAPIReportsPersistentCredentialSettings(t *testing.T) {
 }`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo"}); err != nil {
-		t.Fatalf("doctor api --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		Auth struct {
@@ -209,7 +209,7 @@ func TestDoctorAPIReportsPersistentCredentialSettings(t *testing.T) {
 		} `json:"auth"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.Auth.Status != "configured" {
 		t.Fatalf("auth.status = %q, want configured", report.Auth.Status)
@@ -247,11 +247,11 @@ func TestDoctorAPIReportsMissingEnvAuth(t *testing.T) {
 }`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo"}); err != nil {
-		t.Fatalf("doctor api --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		Auth struct {
@@ -260,7 +260,7 @@ func TestDoctorAPIReportsMissingEnvAuth(t *testing.T) {
 		} `json:"auth"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.Auth.Status != "configured-but-unresolved" {
 		t.Fatalf("auth.status = %q, want configured-but-unresolved", report.Auth.Status)
@@ -293,11 +293,11 @@ func TestDoctorAPIJSONWarnsOnServerErrorReachability(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
-		t.Fatalf("doctor api --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		Reachability struct {
@@ -308,7 +308,7 @@ func TestDoctorAPIJSONWarnsOnServerErrorReachability(t *testing.T) {
 		} `json:"reachability"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.Reachability.Status != "warn" || report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusInternalServerError || !strings.Contains(report.Reachability.Note, "server error") {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
@@ -343,11 +343,11 @@ func TestDoctorAPIReachabilityUsesProfileCACert(t *testing.T) {
 }`, srv.URL, caPath)), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if err := c.Run([]string{"restish", "doctor", "--json", "api", "demo", "--check-network"}); err != nil {
-		t.Fatalf("doctor api --json returned error: %v", err)
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
 	}
 	if errOut.Len() != 0 {
-		t.Fatalf("doctor api --json should keep stderr quiet, got:\n%s", errOut.String())
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
 		Reachability struct {
@@ -357,7 +357,7 @@ func TestDoctorAPIReachabilityUsesProfileCACert(t *testing.T) {
 		} `json:"reachability"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
-		t.Fatalf("doctor api --json output is not JSON: %v\n%s", err, out.String())
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
 	}
 	if report.Reachability.Status != "ok" || !report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusNoContent {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
