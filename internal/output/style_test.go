@@ -1,6 +1,7 @@
 package output
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/alecthomas/chroma/v2"
@@ -94,6 +95,35 @@ func TestBuildThemeHeaderKeyCanDifferFromKey(t *testing.T) {
 	if got, want := style.Get(httpHeaderKey).Colour.String(), "#abcdef"; got != want {
 		t.Fatalf("header key color = %q, want %q", got, want)
 	}
+}
+
+func TestThemeStateConcurrentAccess(t *testing.T) {
+	defer func() {
+		if err := SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	}()
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			entry := "#00ff00"
+			if i%2 == 0 {
+				entry = "#ff0000"
+			}
+			if err := SetTheme(ThemeEntries{"text": entry, "markdown_heading": entry}); err != nil {
+				t.Errorf("SetTheme: %v", err)
+			}
+		}(i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = StyleText("text", "hello")
+			_ = MarkdownStyle()
+		}()
+	}
+	wg.Wait()
 }
 
 func TestParseThemeJSONRejectsUnknownToken(t *testing.T) {

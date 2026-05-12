@@ -299,6 +299,19 @@ func TestCacheClearAPIDoesNotDeleteOtherAPIOnSameHost(t *testing.T) {
 	}
 }
 
+func TestCacheClearAllIsAPINameNotAlias(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().CachePath = t.TempDir()
+	err := c.Run([]string{"restish", "cache", "clear", "all"})
+	if err == nil {
+		t.Fatal("expected cache clear all to require an API named all")
+	}
+	if !strings.Contains(err.Error(), `unknown API "all"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestCacheNoStoreNotCached verifies that responses with Cache-Control:
 // no-store are not stored in the cache.
 func TestCacheNoStoreNotCached(t *testing.T) {
@@ -391,5 +404,35 @@ func TestCacheInfo(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("cache info output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestCacheInfoJSONOutput(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	cacheDir := t.TempDir()
+
+	c1, _, _ := newTestCLI(t)
+	c1.Hooks().CachePath = cacheDir
+	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("prime request failed: %v", err)
+	}
+
+	c2, out, _ := newTestCLI(t)
+	c2.Hooks().CachePath = cacheDir
+	if err := c2.Run([]string{"restish", "cache", "info", "-o", "json"}); err != nil {
+		t.Fatalf("cache info -o json failed: %v", err)
+	}
+	var got struct {
+		Directory string `json:"directory"`
+		SizeBytes int64  `json:"size_bytes"`
+		Size      string `json:"size"`
+		Entries   int    `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	}
+	if got.Directory != cacheDir || got.Entries == 0 || got.Size == "" || got.SizeBytes <= 0 {
+		t.Fatalf("cache info JSON = %#v", got)
 	}
 }

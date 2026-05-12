@@ -45,8 +45,16 @@ Script generation writes to stdout for package managers and manual setup.
 The install command writes a generated script under Restish's config directory
 or a shell-native user completion directory, then updates shell startup files
 only when the shell requires it.`,
-		Args:              cobra.NoArgs,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown completion command %q", args[0])
+			}
+			return nil
+		},
 		ValidArgsFunction: cobra.NoFileCompletions,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 	if rootCommandHasGroup(root, rootGroupHelp) {
 		completionCmd.GroupID = rootGroupHelp

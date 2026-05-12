@@ -342,6 +342,17 @@ example `PartnerKey` or `UserOAuth+PartnerKey`. Overrides are rejected for
 `security: []`, invalid combinations, and profiles that do not satisfy the
 selected alternative.
 
+As an escape hatch for provider specs that under-declare security, an explicit
+`--rsh-auth <credential-id>` may select a configured credential that is not
+listed in the operation's OpenAPI security requirements. The default remains
+strict: undeclared credentials are not selected implicitly, and the override
+emits a warning so the caller knows it is outside the spec contract.
+
+When no `x-cli-config` extension exists, fallback `api connect` auth setup is
+derived only from security schemes referenced by document-level or operation
+security requirements. Declared but unused `components.securitySchemes` are not
+converted into prompts or credential bindings.
+
 ## Startup Performance And Caching
 
 Routine startup must not fetch the network or parse large OpenAPI documents when

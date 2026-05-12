@@ -81,8 +81,70 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	set, hasOps := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
-	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
 	_, profileReady, profileErr := c.profileAuthReadiness(apiName, profileName, prof)
+	coverage := operationAuthCoverage{}
+	if hasOps {
+		coverage = c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
+	}
+	var ids []string
+	for id := range prof.Credentials {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	} else if jsonOut {
+		type apiAuthCredentialEntry struct {
+			ID        string   `json:"id"`
+			Status    string   `json:"status"`
+			Satisfies []string `json:"satisfies,omitempty"`
+		}
+		type apiAuthListOutput struct {
+			API                          string                   `json:"api"`
+			Profile                      string                   `json:"profile"`
+			ProfileAuth                  string                   `json:"profile_auth"`
+			ProfileAuthError             string                   `json:"profile_auth_error,omitempty"`
+			OperationMetadataAvailable   bool                     `json:"operation_metadata_available"`
+			CallableSecuredOperations    int                      `json:"callable_secured_operations,omitempty"`
+			TotalSecuredOperations       int                      `json:"total_secured_operations,omitempty"`
+			OperationMetadataRefreshHint string                   `json:"operation_metadata_refresh_hint,omitempty"`
+			Credentials                  []apiAuthCredentialEntry `json:"credentials"`
+		}
+		out := apiAuthListOutput{
+			API:                        apiName,
+			Profile:                    profileName,
+			ProfileAuth:                "none",
+			OperationMetadataAvailable: hasOps,
+			Credentials:                make([]apiAuthCredentialEntry, 0, len(ids)),
+		}
+		if profileErr != nil {
+			out.ProfileAuth = "configured"
+			out.ProfileAuthError = profileErr.Error()
+		} else if profileReady.Configured {
+			out.ProfileAuth = profileReady.status("none")
+		}
+		if hasOps {
+			out.CallableSecuredOperations = coverage.Callable
+			out.TotalSecuredOperations = coverage.Secured
+		} else {
+			out.OperationMetadataRefreshHint = fmt.Sprintf("run \"restish api sync %s\" to refresh", apiName)
+		}
+		for _, id := range ids {
+			credential := prof.Credentials[id]
+			_, ready, _ := c.credentialReadiness(apiName, profileName, id, credential)
+			var satisfies []string
+			if credential != nil {
+				satisfies = append([]string(nil), credential.Satisfies...)
+			}
+			out.Credentials = append(out.Credentials, apiAuthCredentialEntry{
+				ID:        id,
+				Status:    ready.status("empty"),
+				Satisfies: satisfies,
+			})
+		}
+		return c.writePrettyJSON(out)
+	}
+	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
 	if profileErr != nil {
 		fmt.Fprintf(c.Stdout, "Profile auth: configured (%s)\n", profileErr)
 	} else if profileReady.Configured {
@@ -91,16 +153,10 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(c.Stdout, "Profile auth: none")
 	}
 	if hasOps {
-		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
 		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", coverage.Callable, coverage.Secured)
 	} else {
 		fmt.Fprintf(c.Stdout, "Operation metadata: unavailable (run \"restish api sync %s\" to refresh)\n", apiName)
 	}
-	var ids []string
-	for id := range prof.Credentials {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
 	if len(ids) == 0 {
 		fmt.Fprintln(c.Stdout, "Credentials: none")
 	} else {

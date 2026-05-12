@@ -253,6 +253,27 @@ func (c *CLI) addContentTypesCommand(root *cobra.Command) {
 }
 
 func (c *CLI) runContentTypes(cmd *cobra.Command, args []string) error {
+	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	} else if jsonOut {
+		type contentTypeOutput struct {
+			Name      string   `json:"name"`
+			MIMETypes []string `json:"mime_types"`
+			Suffixes  []string `json:"suffixes,omitempty"`
+			Quality   float32  `json:"quality"`
+		}
+		contentTypes := c.content.ContentTypes()
+		out := make([]contentTypeOutput, 0, len(contentTypes))
+		for _, ct := range contentTypes {
+			out = append(out, contentTypeOutput{
+				Name:      ct.Name,
+				MIMETypes: append([]string(nil), ct.MIMETypes...),
+				Suffixes:  append([]string(nil), ct.Suffixes...),
+				Quality:   ct.Quality,
+			})
+		}
+		return c.writePrettyJSON(out)
+	}
 	for _, ct := range c.content.ContentTypes() {
 		fmt.Fprintf(c.Stdout, "%-12s %s\n", ct.Name, strings.Join(ct.MIMETypes, ", "))
 	}

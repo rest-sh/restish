@@ -62,12 +62,15 @@ Inspect and clear the HTTP response cache:
 
 ```bash
 restish cache info
+restish cache info -o json
 restish cache clear
 restish cache clear example
 ```
 
 `cache info` prints the cache location, size, entry count, and oldest entry.
-`cache clear` removes HTTP response cache entries only; use
+`cache clear` with no API name clears all HTTP response cache entries; there is
+no special `all` alias. `cache clear example` clears only entries for the
+configured API named `example`. Use
 `restish api auth logout` for cached OAuth/auth tokens.
 
 ### `shell setup`
@@ -113,6 +116,9 @@ differently from JSON/readable object keys. Use `reset` to remove `theme` and
 - `edit`: fetch, edit, and update a resource
 - `links`: print normalized hypermedia links
 - `shell completion`: generate shell completion scripts
+
+Machine-readable JSON output is available for `api list`, `api auth list`,
+`cache info`, `content-types`, and `links` with `-o json`.
 
 ### `cert`
 

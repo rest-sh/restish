@@ -26,6 +26,17 @@ func TestCompletionScripts(t *testing.T) {
 	}
 }
 
+func TestCompletionRejectsUnknownSubcommand(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "completion", "unknown"})
+	if err == nil {
+		t.Fatal("expected unknown completion command error")
+	}
+	if !strings.Contains(err.Error(), `unknown completion command "unknown"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCompletionInstallZshWritesScriptAndRCBlock(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

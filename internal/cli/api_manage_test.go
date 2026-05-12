@@ -109,6 +109,52 @@ func TestAPIConnect(t *testing.T) {
 	}
 }
 
+func TestAPIConnectIgnoresUnusedDeclaredSecuritySchemes(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specFile := filepath.Join(t.TempDir(), "openapi.json")
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Unused Auth API", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "components": {
+    "securitySchemes": {
+      "UnusedBearer": {"type": "http", "scheme": "bearer"}
+    }
+  },
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	if err := os.WriteFile(specFile, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--spec", specFile, "--yes"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	api := written.APIs["myapi"]
+	if api == nil {
+		t.Fatal("expected myapi in config")
+	}
+	if prof := api.Profiles["default"]; prof != nil {
+		if got := prof.Credentials; len(got) != 0 {
+			t.Fatalf("unused declared schemes should not become credentials: %#v", got)
+		}
+	}
+}
+
 func TestAPIConnectYesAllowsDiscoveredOperationOrigins(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	specFile := filepath.Join(t.TempDir(), "openapi.json")
@@ -1851,6 +1897,7 @@ func TestAPIConnectFallbackAPIKeySetup(t *testing.T) {
       "key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
     }
   },
+  "security": [{"key": []}],
   "paths": {}
 }`
 
@@ -2402,5 +2449,69 @@ func TestAPIContentTypes(t *testing.T) {
 	// JSON is always registered.
 	if !strings.Contains(got, "json") {
 		t.Errorf("expected json in content-types output, got: %q", got)
+	}
+}
+
+func TestAPIListJSONOutput(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {},
+        "admin": {}
+      }
+    }
+  }
+}`)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+
+	if err := c.Run([]string{"restish", "api", "list", "-o", "json"}); err != nil {
+		t.Fatalf("api list -o json: %v", err)
+	}
+	var got []struct {
+		Name         string   `json:"name"`
+		BaseURL      string   `json:"base_url"`
+		ProfileCount int      `json:"profile_count"`
+		Profiles     []string `json:"profiles"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	}
+	if len(got) != 1 || got[0].Name != "example" || got[0].BaseURL != "https://api.example.com" || got[0].ProfileCount != 2 {
+		t.Fatalf("api list JSON = %#v", got)
+	}
+	if !reflect.DeepEqual(got[0].Profiles, []string{"admin", "default"}) {
+		t.Fatalf("profiles = %#v", got[0].Profiles)
+	}
+}
+
+func TestContentTypesJSONOutput(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+
+	if err := c.Run([]string{"restish", "content-types", "-o", "json"}); err != nil {
+		t.Fatalf("content-types -o json: %v", err)
+	}
+	var got []struct {
+		Name      string   `json:"name"`
+		MIMETypes []string `json:"mime_types"`
+		Suffixes  []string `json:"suffixes"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	}
+	foundJSON := false
+	for _, ct := range got {
+		if ct.Name == "json" {
+			foundJSON = true
+			if len(ct.MIMETypes) == 0 {
+				t.Fatalf("json content type missing MIME types: %#v", ct)
+			}
+		}
+	}
+	if !foundJSON {
+		t.Fatalf("expected json content type in %#v", got)
 	}
 }

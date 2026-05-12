@@ -39,23 +39,24 @@ func NewMarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 // MarkdownStyle returns the Restish Glamour style, with colors derived from the
 // active user theme so Markdown bodies and help match readable output.
 func MarkdownStyle() ansi.StyleConfig {
-	key := themeCacheKey()
+	style, entries := themeSnapshot()
+	key := themeCacheKey(entries)
 	markdownStyleCache.Lock()
 	if markdownStyleCache.ok && markdownStyleCache.key == key {
-		style := markdownStyleCache.style
+		styleConfig := markdownStyleCache.style
 		markdownStyleCache.Unlock()
-		return style
+		return styleConfig
 	}
 	markdownStyleCache.Unlock()
 
-	style := buildMarkdownStyle()
+	styleConfig := buildMarkdownStyle(style, entries)
 
 	markdownStyleCache.Lock()
 	markdownStyleCache.key = key
-	markdownStyleCache.style = style
+	markdownStyleCache.style = styleConfig
 	markdownStyleCache.ok = true
 	markdownStyleCache.Unlock()
-	return style
+	return styleConfig
 }
 
 func resetMarkdownStyleCache() {
@@ -64,12 +65,12 @@ func resetMarkdownStyleCache() {
 	markdownStyleCache.Unlock()
 }
 
-func themeCacheKey() string {
-	if len(currentThemeEntries) == 0 {
+func themeCacheKey(entries ThemeEntries) string {
+	if len(entries) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(currentThemeEntries))
-	for key := range currentThemeEntries {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
@@ -77,28 +78,28 @@ func themeCacheKey() string {
 	for _, key := range keys {
 		b.WriteString(key)
 		b.WriteByte('=')
-		b.WriteString(currentThemeEntries[key])
+		b.WriteString(entries[key])
 		b.WriteByte('\n')
 	}
 	return b.String()
 }
 
-func buildMarkdownStyle() ansi.StyleConfig {
-	document := markdownPrimitive("markdown_document", chroma.Text)
-	quote := markdownPrimitive("markdown_quote", chroma.GenericEmph)
-	heading := markdownPrimitive("markdown_heading", chroma.GenericHeading)
-	h1 := markdownPrimitive("markdown_h1", chroma.GenericHeading)
-	h1Text := markdownStyleEntry("markdown_h1_text", chroma.StyleEntry{Colour: chroma.MustParseColour("#000000")})
-	h1Background := markdownStyleEntry("markdown_h1_background", restishStyle.Get(chroma.KeywordConstant))
-	link := markdownPrimitive("markdown_link", chroma.LiteralStringSymbol)
-	linkText := markdownPrimitive("markdown_link_text", chroma.LiteralString)
-	code := markdownPrimitive("markdown_code", chroma.LiteralNumber)
-	codeBlock := markdownPrimitive("markdown_code_block", chroma.Text)
-	codeBackground := markdownStyleEntry("markdown_code_background", chroma.StyleEntry{Background: chroma.MustParseColour("#303030")})
-	rule := markdownPrimitive("markdown_rule", chroma.Comment)
-	tableBorder := markdownPrimitive("markdown_table_border", chroma.Punctuation)
-	image := markdownPrimitive("markdown_image", chroma.GenericDeleted)
-	imageText := markdownPrimitive("markdown_image_text", chroma.Comment)
+func buildMarkdownStyle(style *chroma.Style, entries ThemeEntries) ansi.StyleConfig {
+	document := markdownPrimitive(entries, style, "markdown_document", chroma.Text)
+	quote := markdownPrimitive(entries, style, "markdown_quote", chroma.GenericEmph)
+	heading := markdownPrimitive(entries, style, "markdown_heading", chroma.GenericHeading)
+	h1 := markdownPrimitive(entries, style, "markdown_h1", chroma.GenericHeading)
+	h1Text := markdownStyleEntry(entries, "markdown_h1_text", chroma.StyleEntry{Colour: chroma.MustParseColour("#000000")})
+	h1Background := markdownStyleEntry(entries, "markdown_h1_background", style.Get(chroma.KeywordConstant))
+	link := markdownPrimitive(entries, style, "markdown_link", chroma.LiteralStringSymbol)
+	linkText := markdownPrimitive(entries, style, "markdown_link_text", chroma.LiteralString)
+	code := markdownPrimitive(entries, style, "markdown_code", chroma.LiteralNumber)
+	codeBlock := markdownPrimitive(entries, style, "markdown_code_block", chroma.Text)
+	codeBackground := markdownStyleEntry(entries, "markdown_code_background", chroma.StyleEntry{Background: chroma.MustParseColour("#303030")})
+	rule := markdownPrimitive(entries, style, "markdown_rule", chroma.Comment)
+	tableBorder := markdownPrimitive(entries, style, "markdown_table_border", chroma.Punctuation)
+	image := markdownPrimitive(entries, style, "markdown_image", chroma.GenericDeleted)
+	imageText := markdownPrimitive(entries, style, "markdown_image_text", chroma.Comment)
 
 	h1.Color = colorPtr(h1Text)
 	h1.BackgroundColor = backgroundOrColorPtr(h1Background)
@@ -195,7 +196,7 @@ func buildMarkdownStyle() ansi.StyleConfig {
 				StylePrimitive: ansi.StylePrimitive{Color: codeBlock.Color},
 				Margin:         uintPtr(2),
 			},
-			Chroma: markdownChroma(),
+			Chroma: markdownChroma(style, entries),
 		},
 		Table: ansi.StyleTable{
 			StyleBlock:      ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: tableBorder.Color}},
@@ -209,44 +210,44 @@ func buildMarkdownStyle() ansi.StyleConfig {
 	}
 }
 
-func markdownChroma() *ansi.Chroma {
+func markdownChroma(style *chroma.Style, entries ThemeEntries) *ansi.Chroma {
 	return &ansi.Chroma{
-		Text:                markdownPrimitive("", chroma.Text),
+		Text:                markdownPrimitive(entries, style, "", chroma.Text),
 		Error:               ansi.StylePrimitive{Color: stringPtr("#f1f1f1"), BackgroundColor: stringPtr("#f05b5b")},
-		Comment:             markdownPrimitive("", chroma.Comment),
-		CommentPreproc:      markdownPrimitive("", chroma.CommentPreproc),
-		Keyword:             markdownPrimitive("", chroma.Keyword),
-		KeywordReserved:     markdownPrimitive("", chroma.KeywordReserved),
-		KeywordNamespace:    markdownPrimitive("", chroma.KeywordNamespace),
-		KeywordType:         markdownPrimitive("", chroma.KeywordType),
-		Operator:            markdownPrimitive("", chroma.Operator),
-		Punctuation:         markdownPrimitive("", chroma.Punctuation),
-		Name:                markdownPrimitive("", chroma.Name),
-		NameBuiltin:         markdownPrimitive("", chroma.NameBuiltin),
-		NameTag:             markdownPrimitive("", chroma.NameTag),
-		NameAttribute:       markdownPrimitive("", chroma.NameAttribute),
-		NameClass:           markdownPrimitive("", chroma.NameClass),
-		NameDecorator:       markdownPrimitive("", chroma.NameDecorator),
-		NameFunction:        markdownPrimitive("", chroma.NameFunction),
-		LiteralNumber:       markdownPrimitive("", chroma.LiteralNumber),
-		LiteralString:       markdownPrimitive("", chroma.LiteralString),
-		LiteralStringEscape: markdownPrimitive("", chroma.LiteralStringEscape),
-		GenericDeleted:      markdownPrimitive("", chroma.GenericDeleted),
-		GenericEmph:         markdownPrimitive("", chroma.GenericEmph),
-		GenericInserted:     markdownPrimitive("", chroma.GenericInserted),
-		GenericStrong:       markdownPrimitive("", chroma.GenericStrong),
-		GenericSubheading:   markdownPrimitive("", chroma.GenericSubheading),
+		Comment:             markdownPrimitive(entries, style, "", chroma.Comment),
+		CommentPreproc:      markdownPrimitive(entries, style, "", chroma.CommentPreproc),
+		Keyword:             markdownPrimitive(entries, style, "", chroma.Keyword),
+		KeywordReserved:     markdownPrimitive(entries, style, "", chroma.KeywordReserved),
+		KeywordNamespace:    markdownPrimitive(entries, style, "", chroma.KeywordNamespace),
+		KeywordType:         markdownPrimitive(entries, style, "", chroma.KeywordType),
+		Operator:            markdownPrimitive(entries, style, "", chroma.Operator),
+		Punctuation:         markdownPrimitive(entries, style, "", chroma.Punctuation),
+		Name:                markdownPrimitive(entries, style, "", chroma.Name),
+		NameBuiltin:         markdownPrimitive(entries, style, "", chroma.NameBuiltin),
+		NameTag:             markdownPrimitive(entries, style, "", chroma.NameTag),
+		NameAttribute:       markdownPrimitive(entries, style, "", chroma.NameAttribute),
+		NameClass:           markdownPrimitive(entries, style, "", chroma.NameClass),
+		NameDecorator:       markdownPrimitive(entries, style, "", chroma.NameDecorator),
+		NameFunction:        markdownPrimitive(entries, style, "", chroma.NameFunction),
+		LiteralNumber:       markdownPrimitive(entries, style, "", chroma.LiteralNumber),
+		LiteralString:       markdownPrimitive(entries, style, "", chroma.LiteralString),
+		LiteralStringEscape: markdownPrimitive(entries, style, "", chroma.LiteralStringEscape),
+		GenericDeleted:      markdownPrimitive(entries, style, "", chroma.GenericDeleted),
+		GenericEmph:         markdownPrimitive(entries, style, "", chroma.GenericEmph),
+		GenericInserted:     markdownPrimitive(entries, style, "", chroma.GenericInserted),
+		GenericStrong:       markdownPrimitive(entries, style, "", chroma.GenericStrong),
+		GenericSubheading:   markdownPrimitive(entries, style, "", chroma.GenericSubheading),
 		Background:          ansi.StylePrimitive{BackgroundColor: stringPtr("#373737")},
 	}
 }
 
-func markdownPrimitive(alias string, token chroma.TokenType) ansi.StylePrimitive {
-	return primitiveFromStyleEntry(markdownStyleEntry(alias, restishStyle.Get(token)))
+func markdownPrimitive(entries ThemeEntries, style *chroma.Style, alias string, token chroma.TokenType) ansi.StylePrimitive {
+	return primitiveFromStyleEntry(markdownStyleEntry(entries, alias, style.Get(token)))
 }
 
-func markdownStyleEntry(alias string, fallback chroma.StyleEntry) chroma.StyleEntry {
+func markdownStyleEntry(entries ThemeEntries, alias string, fallback chroma.StyleEntry) chroma.StyleEntry {
 	if alias != "" {
-		if entry, ok := currentThemeEntries[alias]; ok {
+		if entry, ok := entries[alias]; ok {
 			if parsed, err := chroma.ParseStyleEntry(entry); err == nil {
 				return parsed
 			}

@@ -34,6 +34,27 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+				return err
+			} else if jsonOut {
+				type cacheInfoOutput struct {
+					Directory   string `json:"directory"`
+					SizeBytes   int64  `json:"size_bytes"`
+					Size        string `json:"size"`
+					Entries     int    `json:"entries"`
+					OldestEntry string `json:"oldest_entry,omitempty"`
+				}
+				out := cacheInfoOutput{
+					Directory: dir,
+					SizeBytes: info.SizeBytes,
+					Size:      formatBytes(info.SizeBytes),
+					Entries:   info.EntryCount,
+				}
+				if !info.OldestEntry.IsZero() {
+					out.OldestEntry = info.OldestEntry.Format(time.RFC3339)
+				}
+				return c.writePrettyJSON(out)
+			}
 			fmt.Fprintf(c.Stdout, "Directory: %s\n", dir)
 			fmt.Fprintf(c.Stdout, "Size:      %s\n", formatBytes(info.SizeBytes))
 			fmt.Fprintf(c.Stdout, "Entries:   %d\n", info.EntryCount)

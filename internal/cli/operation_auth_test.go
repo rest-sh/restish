@@ -97,6 +97,29 @@ func TestPlanOperationAuthRejectsAmbiguousProfileFallback(t *testing.T) {
 	}
 }
 
+func TestPlanOperationAuthMissingCredentialSuggestsExplicitConfiguredOverride(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"BearerAuth": {
+				Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "secret"}},
+			},
+		},
+	}
+	policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{{
+		{ID: "PartnerKey"},
+	}}}
+
+	_, _, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err == nil {
+		t.Fatal("expected missing credential binding error")
+	}
+	if !strings.Contains(err.Error(), `configured credential "BearerAuth" is not declared for this operation`) ||
+		!strings.Contains(err.Error(), "--rsh-auth BearerAuth") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestPlanOperationAuthAllowsSingleRequirementProfileFallback(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{

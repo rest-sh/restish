@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -72,6 +73,7 @@ var defaultStyleEntries = chroma.StyleEntries{
 // restishStyle is the active style for terminal highlighting.
 var restishStyle = styles.Register(chroma.MustNewStyle("restish", defaultStyleEntries))
 var currentThemeEntries ThemeEntries
+var themeStateMu sync.RWMutex
 
 var themeTokenAliases = map[string]chroma.TokenType{
 	"comment":          chroma.Comment,
@@ -140,8 +142,10 @@ func SetTheme(entries ThemeEntries) error {
 	if err != nil {
 		return err
 	}
+	themeStateMu.Lock()
 	restishStyle = style
 	currentThemeEntries = normalizeThemeEntries(entries)
+	themeStateMu.Unlock()
 	resetMarkdownStyleCache()
 	return nil
 }
@@ -212,10 +216,36 @@ func StyleText(tokenName, text string) string {
 	}
 	var out strings.Builder
 	iter := chroma.Literator(chroma.Token{Type: token, Value: text})
-	if err := formatter.Format(&out, restishStyle, iter); err != nil {
+	if err := formatter.Format(&out, activeStyle(), iter); err != nil {
 		return text
 	}
 	return out.String()
+}
+
+func activeStyle() *chroma.Style {
+	themeStateMu.RLock()
+	style := restishStyle
+	themeStateMu.RUnlock()
+	return style
+}
+
+func themeSnapshot() (*chroma.Style, ThemeEntries) {
+	themeStateMu.RLock()
+	style := restishStyle
+	entries := cloneThemeEntries(currentThemeEntries)
+	themeStateMu.RUnlock()
+	return style, entries
+}
+
+func cloneThemeEntries(entries ThemeEntries) ThemeEntries {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make(ThemeEntries, len(entries))
+	for key, value := range entries {
+		out[key] = value
+	}
+	return out
 }
 
 func themeTokenType(name string) (chroma.TokenType, error) {

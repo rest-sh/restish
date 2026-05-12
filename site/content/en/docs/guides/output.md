@@ -137,6 +137,12 @@ in human/table response preambles. Explicit filters such as `--rsh-headers`,
 `-f headers.Set-Cookie`, and `-f @` select raw response data and can reveal
 those values, which is useful for pipelines but risky in logs.
 
+Response bodies are not treated as secrets. Echo and debugging services can
+reflect request headers, form values, or tokens into the response body, and
+verbose output may preview that reflected body. Avoid `-v` with real credentials
+against echo services unless you are comfortable with those values appearing in
+logs.
+
 ## Images In The Terminal
 
 Image responses can render in capable terminals:

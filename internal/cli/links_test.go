@@ -66,6 +66,46 @@ func TestLinksCommandHAL(t *testing.T) {
 	}
 }
 
+func TestLinksCommandJSONOutputFlag(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Link":         []string{`</items?page=2>; rel="next"`},
+				"Content-Type": []string{"application/json"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`[]`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "-o", "json"}); err != nil {
+		t.Fatalf("links -o json: %v", err)
+	}
+
+	var got map[string]string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &got); err != nil {
+		t.Fatalf("parse output: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(got["next"], "page=2") {
+		t.Errorf("next: got %q", got["next"])
+	}
+}
+
+func TestLinksCommandRejectsUnsupportedOutputFormat(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "links", "https://api.example.com/items", "-o", "yaml"})
+	if err == nil {
+		t.Fatal("expected unsupported output format error")
+	}
+	if !strings.Contains(err.Error(), "supports -o json") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestLinksCommandFilterRel verifies that [rel...] args filter the output.
 func TestLinksCommandFilterRel(t *testing.T) {
 	c, out, _ := newTestCLI(t)

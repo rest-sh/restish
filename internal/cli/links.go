@@ -26,6 +26,10 @@ func (c *CLI) runLinksCmd(cmd *cobra.Command, args []string) error {
 	uri := args[0]
 	filterRels := args[1:]
 
+	if _, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	}
+
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
 		return err

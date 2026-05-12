@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	base "github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"go.yaml.in/yaml/v3"
 )
@@ -98,10 +99,10 @@ func ReadXCLIConfig(s *APISpec) (*XCLIConfig, error) {
 	return top.XCLIConfig, nil
 }
 
-// FallbackXCLIConfig derives an XCLIConfig from the document's security
-// schemes when the spec does not define x-cli-config. The first scheme named
-// in the document-level security requirements is preferred; otherwise the first
-// scheme in components/securitySchemes is used.
+// FallbackXCLIConfig derives an XCLIConfig from the document's referenced
+// security schemes when the spec does not define x-cli-config. The first scheme
+// named in the document-level security requirements is preferred, followed by
+// operation-level security requirements.
 //
 // Returns nil when no supported auth scheme can be derived.
 func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
@@ -115,32 +116,17 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 	}
 
 	schemes := model.Model.Components.SecuritySchemes
-
-	// Collect names from document-level security requirements (in order).
-	var preferredNames []string
-	for _, req := range model.Model.Security {
-		if req == nil || req.Requirements == nil {
-			continue
-		}
-		for k := range req.Requirements.FromOldest() {
-			preferredNames = append(preferredNames, k)
-		}
+	preferredNames := referencedFallbackSecuritySchemeNames(model.Model)
+	if len(preferredNames) == 0 {
+		return nil
 	}
 
-	// Try preferred scheme names first, then fall back to first in map.
 	var chosenName string
 	var chosenScheme *v3high.SecurityScheme
 	for _, name := range preferredNames {
 		if s := schemes.GetOrZero(name); s != nil {
 			chosenName = name
 			chosenScheme = s
-			break
-		}
-	}
-	if chosenScheme == nil {
-		for name, v := range schemes.FromOldest() {
-			chosenName = name
-			chosenScheme = v
 			break
 		}
 	}
@@ -171,7 +157,11 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 	} else {
 		return nil
 	}
-	for name, scheme := range schemes.FromOldest() {
+	for _, name := range preferredNames {
+		scheme := schemes.GetOrZero(name)
+		if scheme == nil {
+			continue
+		}
 		if SchemeToXCLIAuth(scheme, nil) == nil {
 			continue
 		}
@@ -200,6 +190,42 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 			"default": profile,
 		},
 	}
+}
+
+func referencedFallbackSecuritySchemeNames(model v3high.Document) []string {
+	seen := map[string]bool{}
+	names := []string{}
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	addRequirements := func(requirements []*base.SecurityRequirement) {
+		for _, req := range requirements {
+			if req == nil || req.Requirements == nil {
+				continue
+			}
+			for name := range req.Requirements.FromOldest() {
+				add(name)
+			}
+		}
+	}
+
+	addRequirements(model.Security)
+	if model.Paths == nil || model.Paths.PathItems == nil {
+		return names
+	}
+	for _, item := range model.Paths.PathItems.FromOldest() {
+		for _, method := range PathItemMethods(item) {
+			if method.Op == nil || method.Op.Security == nil {
+				continue
+			}
+			addRequirements(method.Op.Security)
+		}
+	}
+	return names
 }
 
 // SchemeToXCLIAuth converts an OpenAPI security scheme to an XCLIAuth.

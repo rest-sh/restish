@@ -19,6 +19,11 @@ not change what the server sends.
 
 `restish content-types` lists the registered content aliases and MIME types:
 
+```bash
+restish content-types
+restish content-types -o json
+```
+
 | Alias | MIME types |
 | --- | --- |
 | `json` | `application/json` |

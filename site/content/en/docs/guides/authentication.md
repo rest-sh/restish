@@ -143,6 +143,12 @@ restish myapi partner-report --rsh-auth PartnerKey
 restish myapi signed-report --rsh-auth UserOAuth+PartnerKey
 ```
 
+By default, generated commands only use credentials declared by the operation's
+OpenAPI security requirements. If a provider accepts a configured credential
+that its spec forgot to list, `--rsh-auth <credential-id>` can explicitly select
+that credential; Restish warns that the override is outside the operation's
+declared requirements.
+
 These commands use placeholder operation names because the public example API
 does not expose a multi-scheme partner-auth fixture.
 

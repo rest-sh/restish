@@ -57,6 +57,55 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 	}
 }
 
+func TestAPIAuthListJSONOutput(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "credentials": {
+            "PartnerKey": {
+              "auth": {"type": "api-key", "params": {"in": "header", "name": "X-Partner-Key", "value": "secret"}},
+              "satisfies": ["items:read"]
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "auth", "list", "myapi", "-o", "json"}); err != nil {
+		t.Fatalf("api auth list -o json: %v", err)
+	}
+	var got struct {
+		API                        string `json:"api"`
+		Profile                    string `json:"profile"`
+		ProfileAuth                string `json:"profile_auth"`
+		OperationMetadataAvailable bool   `json:"operation_metadata_available"`
+		Credentials                []struct {
+			ID        string   `json:"id"`
+			Status    string   `json:"status"`
+			Satisfies []string `json:"satisfies"`
+		} `json:"credentials"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	}
+	if got.API != "myapi" || got.Profile != "default" || got.ProfileAuth != "none" || got.OperationMetadataAvailable {
+		t.Fatalf("auth list JSON = %#v", got)
+	}
+	if len(got.Credentials) != 1 || got.Credentials[0].ID != "PartnerKey" || got.Credentials[0].Status != "configured" {
+		t.Fatalf("credentials JSON = %#v", got.Credentials)
+	}
+	if len(got.Credentials[0].Satisfies) != 1 || got.Credentials[0].Satisfies[0] != "items:read" {
+		t.Fatalf("satisfies JSON = %#v", got.Credentials[0].Satisfies)
+	}
+}
+
 func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {

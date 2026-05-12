@@ -1128,6 +1128,11 @@ func cloneConfig(src *config.Config) (*config.Config, error) {
 // runAPIList prints all configured APIs with their base URL and profile count.
 func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 	if c.cfg == nil || len(c.cfg.APIs) == 0 {
+		if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+			return err
+		} else if jsonOut {
+			return c.writePrettyJSON([]any{})
+		}
 		fmt.Fprintln(c.Stdout, "No APIs configured.")
 		return nil
 	}
@@ -1136,6 +1141,32 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	} else if jsonOut {
+		type apiListEntry struct {
+			Name         string   `json:"name"`
+			BaseURL      string   `json:"base_url"`
+			ProfileCount int      `json:"profile_count"`
+			Profiles     []string `json:"profiles,omitempty"`
+		}
+		entries := make([]apiListEntry, 0, len(names))
+		for _, name := range names {
+			api := c.cfg.APIs[name]
+			profiles := make([]string, 0, len(api.Profiles))
+			for profileName := range api.Profiles {
+				profiles = append(profiles, profileName)
+			}
+			sort.Strings(profiles)
+			entries = append(entries, apiListEntry{
+				Name:         name,
+				BaseURL:      api.BaseURL,
+				ProfileCount: len(api.Profiles),
+				Profiles:     profiles,
+			})
+		}
+		return c.writePrettyJSON(entries)
+	}
 	for _, name := range names {
 		api := c.cfg.APIs[name]
 		profileCount := len(api.Profiles)

@@ -16,6 +16,11 @@ restish api connect example api.rest.sh 'prompt.api_key: docs-key'
 Discovers a spec, builds initial config, prompts for setup where needed, and
 saves the API.
 
+When a spec omits `x-cli-config`, Restish can derive initial auth setup from
+OpenAPI security requirements. Declared but unused `components.securitySchemes`
+do not create prompts or credential bindings until an operation actually
+references them.
+
 API names become command groups. Names may contain Unicode letters, Unicode
 numbers, combining marks, `-`, and `_`, and must start with a letter or number.
 They cannot collide with built-in commands such as `api`, `get`, or `post`, and
@@ -52,6 +57,7 @@ Forces a spec refresh after the API publishes changes.
 
 ```bash
 restish api list
+restish api list -o json
 restish api inspect example
 ```
 
@@ -101,6 +107,7 @@ cache entries.
 
 ```bash
 restish api auth list example
+restish api auth list example -o json
 restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
 restish api auth inspect example --rsh-credential PartnerKey

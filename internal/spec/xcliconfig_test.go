@@ -295,6 +295,8 @@ info:
   title: Test
   version: "1.0.0"
 paths: {}
+security:
+  - apikey: []
 components:
   securitySchemes:
     apikey:
@@ -420,6 +422,8 @@ info:
   title: Test
   version: "1.0.0"
 paths: {}
+security:
+  - apikey: []
 components:
   securitySchemes:
     apikey:
@@ -456,6 +460,8 @@ info:
   title: Test
   version: "1.0.0"
 paths: {}
+security:
+  - apikey: []
 components:
   securitySchemes:
     apikey:
@@ -475,6 +481,67 @@ components:
 	auth := resolved.Profiles["default"].Credentials["apikey"].Auth
 	if auth == nil || auth.Type != "api-key" || auth.Params["in"] != "query" || auth.Params["name"] != "apiKey" || auth.Params["value"] != "secret" {
 		t.Fatalf("credential auth = %#v", auth)
+	}
+}
+
+func TestFallbackXCLIConfig_IgnoresUnusedDeclaredSchemes(t *testing.T) {
+	raw := `
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    unused:
+      type: http
+      scheme: bearer`
+	doc := loadDoc(t, raw)
+	cfg := FallbackXCLIConfig(doc)
+	if cfg != nil {
+		t.Fatalf("expected nil fallback config for unused declared scheme, got %#v", cfg)
+	}
+}
+
+func TestFallbackXCLIConfig_UsesOperationReferencedScheme(t *testing.T) {
+	raw := `
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    unused:
+      type: apiKey
+      in: header
+      name: X-Unused
+    bearer:
+      type: http
+      scheme: bearer`
+	doc := loadDoc(t, raw)
+	cfg := FallbackXCLIConfig(doc)
+	if cfg == nil {
+		t.Fatal("expected fallback config")
+	}
+	profile := cfg.Profiles["default"]
+	if profile == nil || profile.Security != "bearer" {
+		t.Fatalf("default profile = %#v, want bearer security", profile)
+	}
+	if profile.Credentials["unused"] != nil {
+		t.Fatalf("unused declared scheme should not be configured: %#v", profile.Credentials)
 	}
 }
 

@@ -21,7 +21,7 @@ import (
 
 // ReadableFormatter writes the full response (status line, headers, body) in
 // a human-friendly format. When color is true, the output is syntax-highlighted
-// using chroma with restishStyle. The body is always valid JSON so it can be
+// using the active Restish style. The body is always valid JSON so it can be
 // copied and pasted directly into other tools.
 type ReadableFormatter struct{}
 
@@ -295,7 +295,7 @@ func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
 }
 
 // highlight tokenizes data with the given lexer and writes chroma-colored
-// output to w using restishStyle and true-color ANSI sequences.
+// output to w using the active Restish style and true-color ANSI sequences.
 // Falls back to plain output on any error.
 func highlight(w io.Writer, lexer chroma.Lexer, data []byte) error {
 	formatter := formatters.Get("terminal16m")
@@ -310,7 +310,7 @@ func highlight(w io.Writer, lexer chroma.Lexer, data []byte) error {
 		return werr
 	}
 
-	return formatter.Format(w, restishStyle, iter)
+	return formatter.Format(w, activeStyle(), iter)
 }
 
 func highlightReadableWithDepth(w io.Writer, data []byte, depth int) error {
@@ -326,7 +326,7 @@ func highlightReadableWithDepth(w io.Writer, data []byte, depth int) error {
 		return werr
 	}
 
-	return formatter.Format(w, restishStyle, indentShiftIterator(iter, depth))
+	return formatter.Format(w, activeStyle(), indentShiftIterator(iter, depth))
 }
 
 func indentShiftIterator(iter chroma.Iterator, depth int) chroma.Iterator {
@@ -354,7 +354,7 @@ func highlightToken(w io.Writer, token chroma.Token) error {
 		_, err := io.WriteString(w, token.Value)
 		return err
 	}
-	return formatter.Format(w, restishStyle, chroma.Literator(token))
+	return formatter.Format(w, activeStyle(), chroma.Literator(token))
 }
 
 // HighlightWithLexer renders data with the provided chroma lexer and the
