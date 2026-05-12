@@ -451,6 +451,29 @@ func TestReadableFormatter_PrintsPlainTextBody(t *testing.T) {
 	}
 }
 
+func TestReadableFormatter_OmitsBinaryBody(t *testing.T) {
+	resp := &output.Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string][]string{"Content-Type": {"application/octet-stream"}},
+		Body:    []byte{0, 1, 2, 3},
+		Raw:     []byte{0, 1, 2, 3},
+	}
+	var buf bytes.Buffer
+	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "AAECAw==") {
+		t.Fatalf("expected binary body to be omitted, got base64 JSON output:\n%s", got)
+	}
+	for _, want := range []string{"Binary body omitted: 4 bytes", "application/octet-stream", "--rsh-raw"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in readable binary notice, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestReadableFormatter_NilBodyNoBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",

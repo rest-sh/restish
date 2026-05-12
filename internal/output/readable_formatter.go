@@ -21,8 +21,8 @@ import (
 
 // ReadableFormatter writes the full response (status line, headers, body) in
 // a human-friendly format. When color is true, the output is syntax-highlighted
-// using the active Restish style. The body is always valid JSON so it can be
-// copied and pasted directly into other tools.
+// using the active Restish style. Structured bodies are rendered as valid JSON,
+// while text bodies are rendered as text.
 type ReadableFormatter struct{}
 
 func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) error {
@@ -57,6 +57,10 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 			}
 		}
 		_, err := w.Write(data)
+		return err
+	}
+	if size, ok := binaryBodySize(resp); ok {
+		_, err := fmt.Fprintf(w, "Binary body omitted: %d bytes (%s). Use --rsh-raw to write bytes.\n", size, binaryBodyContentType(resp))
 		return err
 	}
 	data, err := marshalIndentNoEscape(resp.Body)
@@ -480,14 +484,65 @@ func printableBody(resp *Response) ([]byte, bool) {
 	}
 	switch body := resp.Body.(type) {
 	case string:
+		data := []byte(body)
 		if len(resp.Raw) > 0 {
-			if data, ok := content.Printable(resp.Raw); ok {
-				return data, true
-			}
+			data = resp.Raw
 		}
-		return content.Printable([]byte(body))
+		if textPresentationBody(resp) {
+			return content.DisplayableText(data)
+		}
+		return content.Printable(data)
 	case []byte:
+		if textPresentationBody(resp) {
+			return content.DisplayableText(body)
+		}
 		return content.Printable(body)
 	}
 	return nil, false
+}
+
+func textPresentationBody(resp *Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := Header(resp.Headers, "Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "text/") {
+		return true
+	}
+	return markdownBody(resp) || textBodyLexer(resp) != nil
+}
+
+func binaryBodySize(resp *Response) (int, bool) {
+	if resp == nil {
+		return 0, false
+	}
+	switch body := resp.Body.(type) {
+	case []byte:
+		if len(resp.Raw) > 0 {
+			return len(resp.Raw), true
+		}
+		return len(body), true
+	case string:
+		data := []byte(body)
+		if len(resp.Raw) > 0 {
+			data = resp.Raw
+		}
+		if textPresentationBody(resp) {
+			if _, ok := content.DisplayableText(data); !ok {
+				return len(data), true
+			}
+		}
+	}
+	return 0, false
+}
+
+func binaryBodyContentType(resp *Response) string {
+	contentType := strings.TrimSpace(Header(resp.Headers, "Content-Type"))
+	if contentType == "" {
+		return "unknown content type"
+	}
+	return contentType
 }

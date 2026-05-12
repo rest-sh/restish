@@ -151,6 +151,63 @@ func TestReadableFormatterHighlightsPrintableTextByContentType(t *testing.T) {
 	}
 }
 
+func TestReadableFormatterRendersLargeDeclaredTextAsText(t *testing.T) {
+	css := strings.Repeat(".restish{color:#2dd4bf}", 5000)
+	resp := &Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string][]string{"Content-Type": {"text/css; charset=utf-8"}},
+		Body:    css,
+		Raw:     []byte(css),
+	}
+	if got := textBodyLexer(resp).Config().Name; got != "CSS" {
+		t.Fatalf("textBodyLexer() = %q, want CSS", got)
+	}
+
+	var out bytes.Buffer
+	if err := (&ReadableFormatter{}).Format(&out, resp, false); err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	parts := strings.SplitN(out.String(), "\n\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected readable output separator, got %q", out.String())
+	}
+	body := strings.TrimSpace(parts[1])
+	if strings.HasPrefix(body, `"`) || strings.Contains(body, `\"`) {
+		t.Fatalf("expected raw CSS text, got JSON string body starting %q", body[:80])
+	}
+	if !strings.Contains(body, ".restish{color:#2dd4bf}") {
+		t.Fatalf("expected CSS body, got %q", body[:80])
+	}
+}
+
+func TestReadableFormatterRendersLargeLexerMatchedBytesAsText(t *testing.T) {
+	js := strings.Repeat("const answer = 42;\n", 7000)
+	resp := &Response{
+		Proto:   "HTTP/1.1",
+		Status:  200,
+		Headers: map[string][]string{"Content-Type": {"application/javascript; charset=utf-8"}},
+		Body:    []byte(js),
+		Raw:     []byte(js),
+	}
+	if got := textBodyLexer(resp).Config().Name; got != "JavaScript" {
+		t.Fatalf("textBodyLexer() = %q, want JavaScript", got)
+	}
+
+	var out bytes.Buffer
+	if err := (&ReadableFormatter{}).Format(&out, resp, false); err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+	parts := strings.SplitN(out.String(), "\n\n", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected readable output separator, got %q", out.String())
+	}
+	body := strings.TrimSpace(parts[1])
+	if strings.HasPrefix(body, `"`) || !strings.Contains(body, "const answer = 42;") {
+		t.Fatalf("expected raw JavaScript text, got body starting %q", body[:80])
+	}
+}
+
 func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",

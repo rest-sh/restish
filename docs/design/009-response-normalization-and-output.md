@@ -85,11 +85,26 @@ Text payloads should remain text when that preserves meaning. Human-oriented
 formatters should not unnecessarily re-wrap plain text bodies as JSON strings if
 that would make the output less faithful or less readable.
 
+The implementation may cap text sniffing for otherwise unknown bytes, but that
+cap must not apply once the response is already known to be text. Known text
+includes `text/*` media types, Markdown media types or file-like URLs, and
+other content types or URL extensions that map to a real syntax highlighter
+such as CSS, XML, or JavaScript. Large text assets should still render as text
+in readable output; size alone is not a reason to fall back to JSON string
+encoding.
+
 ### Raw Binary
 
 Unknown or binary content must remain bytes. Coercing unknown binary into a Go
 `string` is a design bug because it corrupts the payload and produces misleading
 later output.
+
+Readable TTY output should not dump arbitrary binary bytes and should not render
+byte slices as base64 JSON strings. If Restish has no content-aware presentation
+for the body, the readable formatter should show the HTTP preamble plus a short
+body notice with the byte count, content type when available, and the raw-output
+escape hatch. Content-aware binary presentations such as terminal images remain
+allowed when stdout supports them.
 
 ## Why `raw` Also Exists
 
@@ -225,7 +240,18 @@ underlying response model:
 - other highlightable text content types or URL extensions may use Chroma
   syntax highlighting
 - `text/plain`, `application/octet-stream`, unknown text, non-TTY output, or
-  renderer failures fall back to the original printable bytes
+  renderer failures fall back to text bytes when they are safe to display
+
+Readable output should choose the text presentation path before the structured
+JSON presentation path for recognized text responses. For example, a large
+`text/css` or `application/javascript` response should be displayed as CSS or
+JavaScript text and highlighted when color is enabled, not marshalled as one
+large JSON string. The small-body safety cap used for unknown byte sniffing is
+only a binary-safety heuristic; it is not a display limit for declared text.
+
+Readable output should choose a binary notice before the structured JSON
+presentation path for byte-backed binary responses. A binary body is not a JSON
+string merely because Go's JSON encoder can serialize `[]byte` as base64.
 
 The Markdown renderer derives its style from the active Restish theme so
 Markdown bodies and generated help feel coherent with readable JSON and HTTP
@@ -321,7 +347,11 @@ an alias for users looking for the inverse of `set`.
 Output behavior must not corrupt data:
 
 - printable text bodies should render as text in human-oriented formats
+- declared or recognized text bodies should render as text regardless of body
+  size, provided the bytes are safe to display
 - unknown binary should remain bytes, not coerced strings
+- readable TTY output should summarize unsupported binary bodies instead of
+  writing raw bytes or base64 JSON strings
 - redirected or piped unfiltered responses should write the payload bytes
   exactly unless the user explicitly selected a different formatter
 - JSON formatters should emit stable JSON without unnecessary HTML escaping

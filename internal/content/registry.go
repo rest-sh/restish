@@ -346,9 +346,11 @@ func (r *Registry) find(mimeType string) *ContentType {
 	return wildcardMatch
 }
 
-// Printable returns body when it is likely safe and useful to display as text.
-func Printable(body []byte) ([]byte, bool) {
-	if len(body) >= 102400 || !utf8.Valid(body) {
+// DisplayableText returns body when it is valid UTF-8 and safe to write as
+// terminal text. Unlike Printable, it does not impose a size cap; callers
+// should use it only after the response is already known to be text.
+func DisplayableText(body []byte) ([]byte, bool) {
+	if !utf8.Valid(body) {
 		return nil, false
 	}
 
@@ -356,14 +358,22 @@ func Printable(body []byte) ([]byte, bool) {
 		if i == 0 && r == '\uFEFF' {
 			continue
 		}
-		if i > 100 {
-			break
-		}
 		if !unicode.In(r, DisplayRanges...) {
 			return nil, false
 		}
 	}
 	return body, true
+}
+
+// Printable returns body when it is likely safe and useful to display as text
+// while sniffing an otherwise unknown response. The cap keeps unknown binary
+// data from being treated as a large text document just because its leading
+// bytes happen to be displayable.
+func Printable(body []byte) ([]byte, bool) {
+	if len(body) >= 102400 {
+		return nil, false
+	}
+	return DisplayableText(body)
 }
 
 // defaultBrotliDecompress wraps r with a brotli reader.
