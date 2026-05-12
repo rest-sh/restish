@@ -546,6 +546,11 @@ Restish is meant to be comfortable for daily terminal use. Themes control
 readable output styling, and shell setup protects Restish's bracket-heavy
 filters and shorthand from shell globbing.
 
+<figure>
+  <img src="/images/restish-theme-grid.png" alt="Six built-in Restish themes rendering the output of restish api.rest.sh/types" loading="lazy">
+  <figcaption>Built-in themes applied to the same readable response.</figcaption>
+</figure>
+
 ```bash
 # See official theme names, then set one
 restish config theme list
