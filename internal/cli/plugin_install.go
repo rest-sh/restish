@@ -42,14 +42,14 @@ var pluginInstallLimits = pluginInstallSizeLimits{
 }
 
 func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
-	resolved, err := c.resolvePluginInstallSource(cmd.Context(), args[0])
+	resolved, err := c.resolvePluginInstallSource(cmd.Context(), args)
 	if err != nil {
 		return err
 	}
 	if resolved.Cleanup != nil {
 		defer resolved.Cleanup()
 	}
-	fmt.Fprintf(c.Stderr, "Plugin source: %s\n", args[0])
+	fmt.Fprintf(c.Stderr, "Plugin source: %s\n", strings.Join(args, " "))
 	fmt.Fprintf(c.Stderr, "Resolved path: %s\n", resolved.Path)
 	yes, _ := cmd.Flags().GetBool("yes")
 	if !yes {
@@ -109,15 +109,23 @@ type githubReleaseAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-func (c *CLI) resolvePluginInstallSource(ctx context.Context, source string) (resolvedPluginInstallSource, error) {
+func (c *CLI) resolvePluginInstallSource(ctx context.Context, args []string) (resolvedPluginInstallSource, error) {
+	source := args[0]
 	if source == "" {
 		return resolvedPluginInstallSource{}, fmt.Errorf("install: source is required")
 	}
+	if len(args) == 2 {
+		gh, ok, err := parseGitHubPluginSource(source, args[1])
+		if err != nil {
+			return resolvedPluginInstallSource{}, err
+		}
+		if !ok {
+			return resolvedPluginInstallSource{}, fmt.Errorf("install: plugin name is only supported with GitHub owner/repo shorthand")
+		}
+		return c.downloadGitHubPlugin(ctx, gh)
+	}
 	if isHTTPURL(source) {
 		return c.downloadPluginURL(ctx, source, "")
-	}
-	if gh, ok := parseGitHubPluginSource(source); ok {
-		return c.downloadGitHubPlugin(ctx, gh)
 	}
 	if path, ok, err := resolveLocalPluginSource(source); ok || err != nil {
 		if err != nil {
@@ -285,23 +293,22 @@ type githubPluginSource struct {
 	PluginName string
 }
 
-func parseGitHubPluginSource(source string) (githubPluginSource, bool) {
-	before, pluginShort, ok := strings.Cut(source, ":")
-	if !ok || pluginShort == "" || strings.Contains(pluginShort, "/") || strings.Contains(pluginShort, "\\") {
-		return githubPluginSource{}, false
-	}
-	parts := strings.Split(before, "/")
+func parseGitHubPluginSource(source, pluginShort string) (githubPluginSource, bool, error) {
+	parts := strings.Split(source, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return githubPluginSource{}, false
+		return githubPluginSource{}, false, nil
 	}
-	if strings.ContainsAny(before, `\:`) || strings.HasPrefix(before, ".") {
-		return githubPluginSource{}, false
+	if strings.ContainsAny(source, `\:`) || strings.HasPrefix(source, ".") {
+		return githubPluginSource{}, false, nil
+	}
+	if err := validatePluginManifestName(pluginShort); err != nil {
+		return githubPluginSource{}, false, fmt.Errorf("install: plugin name: %w", err)
 	}
 	return githubPluginSource{
 		Owner:      parts[0],
 		Repo:       parts[1],
 		PluginName: pluginBinaryName(pluginShort),
-	}, true
+	}, true, nil
 }
 
 func pluginBinaryName(name string) string {

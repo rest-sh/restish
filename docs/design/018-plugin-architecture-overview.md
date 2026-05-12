@@ -51,7 +51,7 @@ Accepted install sources are intentionally explicit:
 - an executable already resolvable on `PATH`
 - an `http` or `https` URL pointing at a plugin binary, `.zip`, `.tar.gz`, or
   `.tgz`
-- a GitHub latest-release shorthand of the form `owner/repo:plugin`, which
+- a GitHub latest-release shorthand of the form `owner/repo plugin`, which
   resolves one release asset for the current `GOOS`/`GOARCH`
 
 The GitHub latest-release shorthand is part of v2 scope because it materially

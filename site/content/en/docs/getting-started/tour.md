@@ -575,7 +575,7 @@ still delegating HTTP and formatting back to Restish.
 Install the CSV formatter locally:
 
 ```bash
-restish plugin install rest-sh/restish:csv
+restish plugin install rest-sh/restish csv
 ```
 
 The browser preview includes a small CSV formatter so you can see the result:

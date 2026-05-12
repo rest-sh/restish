@@ -741,7 +741,7 @@ func TestPluginInstallFromGitHubShorthand(t *testing.T) {
 		}
 	})
 
-	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "acme/tools:testplugin"}); err != nil {
+	if err := c.Run([]string{"restish", "plugin", "install", "--yes", "acme/tools", "testplugin"}); err != nil {
 		t.Fatalf("plugin install from github shorthand: %v", err)
 	}
 	if !sawGitHubAPI || !sawDownload {

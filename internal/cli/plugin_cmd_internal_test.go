@@ -207,6 +207,17 @@ fi
 	assertNoPluginTemps(t, filepath.Dir(installed))
 }
 
+func TestPluginInstallRejectsColonGitHubShorthand(t *testing.T) {
+	c, _, _ := newInternalTestCLI(t, t.TempDir())
+	err := c.Run([]string{"restish", "plugin", "install", "--yes", "acme/tools:testplugin"})
+	if err == nil {
+		t.Fatal("expected colon GitHub shorthand to fail")
+	}
+	if !strings.Contains(err.Error(), "cannot access acme/tools:testplugin") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func restorePluginInstallLimits(t *testing.T, limits pluginInstallSizeLimits) {
 	t.Helper()
 	old := pluginInstallLimits

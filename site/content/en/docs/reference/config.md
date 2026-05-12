@@ -218,7 +218,7 @@ Users normally manage it through:
 
 ```bash
 restish plugin list
-restish plugin install rest-sh/restish:csv
+restish plugin install rest-sh/restish csv
 restish plugin remove restish-csv
 ```
 

@@ -39,9 +39,9 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 	}
 	pluginCmd.AddCommand(listCmd)
 	installCmd := &cobra.Command{
-		Use:   "install <source>",
+		Use:   "install <source> [name]",
 		Short: "Install a plugin from a path, URL, PATH command, or GitHub release",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runPluginInstall,
 	}
 	installCmd.Flags().Bool("yes", false, "Trust and install without an interactive confirmation")

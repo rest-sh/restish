@@ -27,10 +27,10 @@ missing.
 Install from the official Restish GitHub releases:
 
 ```bash
-restish plugin install rest-sh/restish:csv
+restish plugin install rest-sh/restish csv
 ```
 
-The part after `:` is expanded to a plugin binary name, so `:csv` means
+The second argument is expanded to a plugin binary name, so `csv` means
 `restish-csv`. Restish downloads the latest release asset for your OS and CPU,
 extracts it, verifies the plugin manifest, and copies the binary into your
 plugin directory.
@@ -41,7 +41,7 @@ confirm the trust prompt to continue. In automation, pass `--yes` after pinning
 the source you intend to trust:
 
 ```bash
-restish plugin install rest-sh/restish:csv --yes
+restish plugin install rest-sh/restish csv --yes
 ```
 
 Install a system-installed plugin from `PATH`:
