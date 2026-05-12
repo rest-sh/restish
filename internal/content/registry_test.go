@@ -131,6 +131,13 @@ func TestAcceptHeader(t *testing.T) {
 	if iText < iJSON {
 		t.Errorf("text/* should appear after json in Accept header: %q", h)
 	}
+	iWildcard := strings.Index(h, "*/*;q=0.1")
+	if iWildcard == -1 {
+		t.Fatalf("*/* fallback missing from Accept header: %q", h)
+	}
+	if iWildcard < iText {
+		t.Errorf("*/* fallback should appear after text/* in Accept header: %q", h)
+	}
 }
 
 func TestAcceptHeaderDeduplicatesCanonicalMIMETypes(t *testing.T) {
@@ -237,8 +244,8 @@ func TestAcceptHeaderCacheInvalidatesOnNewRegistration(t *testing.T) {
 		MIMETypes: []string{"application/json"},
 		Quality:   0.5,
 	})
-	if got := r.AcceptHeader(); got != "application/json;q=0.5" {
-		t.Fatalf("AcceptHeader() = %q, want %q", got, "application/json;q=0.5")
+	if got := r.AcceptHeader(); got != "application/json;q=0.5, */*;q=0.1" {
+		t.Fatalf("AcceptHeader() = %q, want %q", got, "application/json;q=0.5, */*;q=0.1")
 	}
 
 	r.AddContentType(&content.ContentType{

@@ -219,7 +219,8 @@ The negotiation algorithm is:
 2. include suffix-driven families only through their concrete MIME registrations
 3. sort by descending quality
 4. preserve stable ordering among equal-quality entries
-5. emit the resulting header
+5. append a low-priority `*/*` fallback unless already registered
+6. emit the resulting header
 
 Implementations should also deduplicate equivalent MIME types after
 normalization. If multiple registrations resolve to the same canonical media
@@ -231,7 +232,7 @@ exact list may grow as built-in aliases are added, but the quality order and
 deduplication rules remain stable:
 
 ```text
-application/cbor;q=0.9, application/msgpack;q=0.8, application/x-msgpack;q=0.8, application/vnd.msgpack;q=0.8, application/ion;q=0.8, text/ion;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, application/x-yaml;q=0.5, text/yaml;q=0.5, text/x-yaml;q=0.5, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, text/event-stream;q=0.2, text/*;q=0.2
+application/cbor;q=0.9, application/msgpack;q=0.8, application/x-msgpack;q=0.8, application/vnd.msgpack;q=0.8, application/ion;q=0.8, text/ion;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, application/x-yaml;q=0.5, text/yaml;q=0.5, text/x-yaml;q=0.5, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, text/event-stream;q=0.2, text/plain;q=0.2, text/*;q=0.2, application/octet-stream;q=0.1, */*;q=0.1
 ```
 
 Quality ordering should be stable and deliberate.
@@ -239,6 +240,10 @@ Quality ordering should be stable and deliberate.
 Restish should not advertise suffix forms like `application/*+json` unless the
 runtime has an explicit reason to do so. Accept generation is based on concrete
 formats the client is prepared to decode, not speculative wildcard families.
+The final `*/*` entry is a compatibility and generic-HTTP fallback for servers
+that only emit media types Restish has not registered yet, such as XML-only
+metadata endpoints. Explicit user `Accept` headers still replace the generated
+header exactly.
 
 ## Accept-Encoding Negotiation
 

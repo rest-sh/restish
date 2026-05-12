@@ -106,6 +106,8 @@ type qualityEntry struct {
 	q    float32
 }
 
+const wildcardAcceptQuality float32 = 0.1
+
 func canonicalMediaType(mt string) string {
 	base, _, err := mime.ParseMediaType(mt)
 	if err != nil || base == "" {
@@ -151,6 +153,9 @@ func (r *Registry) AcceptHeader() string {
 			seen[key] = len(entries)
 			entries = append(entries, qualityEntry{mt, ct.Quality})
 		}
+	}
+	if _, ok := seen["*/*"]; !ok {
+		entries = append(entries, qualityEntry{"*/*", wildcardAcceptQuality})
 	}
 	r.acceptHeader = buildQualityHeader(entries)
 	r.acceptHeaderReady = true

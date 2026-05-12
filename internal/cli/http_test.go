@@ -380,6 +380,35 @@ func TestHTTPAcceptHeaderOverride(t *testing.T) {
 	}
 }
 
+func TestHTTPDefaultAcceptIncludesWildcardFallback(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		if !strings.Contains(r.Header.Get("Accept"), "*/*") {
+			return &http.Response{
+				StatusCode: http.StatusNotAcceptable,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"xml only"}`)),
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/xml"}},
+			Body:       io.NopCloser(strings.NewReader(`<ok/>`)),
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/metadata", "-o", "json", "-f", "headers.Content-Type"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Header.Get("Accept"); !strings.Contains(got, "*/*;q=0.1") {
+		t.Fatalf("Accept = %q, want wildcard fallback", got)
+	}
+}
+
 func TestHTTPHeaderEnvSplitsCommaSeparatedValues(t *testing.T) {
 	t.Setenv("RSH_HEADER", "X-One: 1,X-Two: value:with:colons")
 	var rr requestRecorder
