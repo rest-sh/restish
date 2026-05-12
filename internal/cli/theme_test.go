@@ -137,30 +137,28 @@ func TestThemeSetGithubShorthandNamedTheme(t *testing.T) {
 }
 
 func TestThemeSetOfficialThemeName(t *testing.T) {
-	c, _, _ := newTestCLI(t)
+	c, out, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if got, want := r.URL.String(), "https://raw.githubusercontent.com/rest-sh/restish/HEAD/themes/dracula.json"; got != want {
-			t.Fatalf("URL = %q, want %q", got, want)
-		}
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"key":"#282a36"}`)),
-			Request:    r,
-		}, nil
+		t.Fatalf("unexpected theme HTTP fetch: %s", r.URL.String())
+		return nil, nil
 	})
 
 	if err := c.Run([]string{"restish", "config", "theme", "set", "dracula", "--yes"}); err != nil {
 		t.Fatalf("config theme set: %v", err)
+	}
+	if !strings.Contains(out.String(), "Theme name: dracula") {
+		t.Fatalf("expected resolved theme name, got: %q", out.String())
 	}
 
 	cfg, err := config.Load(c.Hooks().ConfigPath)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.Theme["key"] != "#282a36" {
-		t.Fatalf("theme key = %q, want #282a36", cfg.Theme["key"])
+	if cfg.Theme["key"] != "#ff79c6" {
+		t.Fatalf("theme key = %q, want #ff79c6", cfg.Theme["key"])
+	}
+	if cfg.ThemeSource != "official:dracula" {
+		t.Fatalf("theme source = %q, want official:dracula", cfg.ThemeSource)
 	}
 }
 

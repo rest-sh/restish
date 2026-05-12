@@ -12,28 +12,16 @@ import (
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/output"
+	officialthemes "github.com/rest-sh/restish/v2/themes"
 	"github.com/spf13/cobra"
 )
 
 const maxThemeBytes = 256 << 10
-const officialThemeRepo = "rest-sh/restish"
+const officialThemeSourcePrefix = "official:"
+const legacyOfficialThemeRepo = "rest-sh/restish"
 
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
-var officialThemeNames = []string{
-	"catppuccin-mocha",
-	"dracula",
-	"github-dark",
-	"houston",
-	"minimal",
-	"monokai-pro-dark",
-	"monokai-pro-light",
-	"noctis",
-	"one-dark-pro",
-	"restish-light",
-	"synthwave-84",
-	"vscode-dark",
-}
 
 func (c *CLI) newThemeSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -42,7 +30,7 @@ func (c *CLI) newThemeSetCommand() *cobra.Command {
 		Args:  cobra.RangeArgs(1, 2),
 		RunE:  c.runThemeSet,
 	}
-	cmd.Flags().Bool("yes", false, "Fetch and install without confirmation prompt")
+	cmd.Flags().Bool("yes", false, "Install without confirmation prompt")
 	return cmd
 }
 
@@ -70,10 +58,10 @@ func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
 	if c.cfg != nil {
 		current = c.cfg.ThemeSource
 	}
-	for _, name := range officialThemeNames {
+	for _, name := range officialthemes.Names() {
 		source := officialThemeSource(name)
 		marker := " "
-		if current == source {
+		if current == source || current == legacyOfficialThemeSource(name) {
 			marker = "*"
 		}
 		fmt.Fprintf(c.Stdout, "%s %s\n", marker, name)
@@ -86,7 +74,7 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Theme %s: %s\n", themeSourceLabel(source), source)
+	fmt.Fprintf(c.Stdout, "Theme %s: %s\n", themeSourceLabel(source), themeSourceDisplay(source))
 
 	yes, _ := cmd.Flags().GetBool("yes")
 	if c.themeSourceNeedsConfirmation(source) && !yes {
@@ -112,7 +100,7 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(c.Stdout, "Set theme from %s\n", source)
+	fmt.Fprintf(c.Stdout, "Set theme from %s\n", themeSourceDisplay(source))
 	return nil
 }
 
@@ -128,6 +116,9 @@ func (c *CLI) runThemeReset(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) themeSourceNeedsConfirmation(source string) bool {
+	if isOfficialThemeSource(source) {
+		return false
+	}
 	if isLocalThemeSource(source) {
 		return false
 	}
@@ -135,6 +126,9 @@ func (c *CLI) themeSourceNeedsConfirmation(source string) bool {
 }
 
 func (c *CLI) fetchTheme(cmd *cobra.Command, source string) (output.ThemeEntries, error) {
+	if name, ok := officialThemeNameFromSource(source); ok {
+		return readOfficialTheme(name)
+	}
 	if isLocalThemeSource(source) {
 		return readThemeFile(source)
 	}
@@ -246,16 +240,45 @@ func resolveThemeSource(args []string) (string, error) {
 }
 
 func officialThemeSource(name string) string {
-	return "https://raw.githubusercontent.com/" + officialThemeRepo + "/HEAD/themes/" + name + ".json"
+	return officialThemeSourcePrefix + name
+}
+
+func legacyOfficialThemeSource(name string) string {
+	return "https://raw.githubusercontent.com/" + legacyOfficialThemeRepo + "/HEAD/themes/" + name + ".json"
 }
 
 func isOfficialThemeName(name string) bool {
-	for _, official := range officialThemeNames {
+	for _, official := range officialthemes.Names() {
 		if name == official {
 			return true
 		}
 	}
 	return false
+}
+
+func officialThemeNameFromSource(source string) (string, bool) {
+	name, ok := strings.CutPrefix(source, officialThemeSourcePrefix)
+	if !ok || !isOfficialThemeName(name) {
+		return "", false
+	}
+	return name, true
+}
+
+func isOfficialThemeSource(source string) bool {
+	_, ok := officialThemeNameFromSource(source)
+	return ok
+}
+
+func readOfficialTheme(name string) (output.ThemeEntries, error) {
+	data, err := officialthemes.Read(name)
+	if err != nil {
+		return nil, fmt.Errorf("config theme set: %w", err)
+	}
+	entries, err := output.ParseThemeJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 func readThemeFile(path string) (output.ThemeEntries, error) {
@@ -328,6 +351,9 @@ func expandHomePath(path string) string {
 }
 
 func isLocalThemeSource(source string) bool {
+	if isOfficialThemeSource(source) {
+		return false
+	}
 	if hasURLScheme(source) {
 		return false
 	}
@@ -335,10 +361,20 @@ func isLocalThemeSource(source string) bool {
 }
 
 func themeSourceLabel(source string) string {
+	if isOfficialThemeSource(source) {
+		return "name"
+	}
 	if isLocalThemeSource(source) {
 		return "path"
 	}
 	return "URL"
+}
+
+func themeSourceDisplay(source string) string {
+	if name, ok := officialThemeNameFromSource(source); ok {
+		return name
+	}
+	return source
 }
 
 func hasURLScheme(source string) bool {

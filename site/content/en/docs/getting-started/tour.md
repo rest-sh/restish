@@ -558,7 +558,7 @@ restish config theme set one-dark-pro
 
 # Install and set custom themes from a local path, URL, or repo
 restish config theme set ./theme.json
-restish config theme set rest-sh/restish dracula
+restish config theme set user/themes dark
 
 # Shell setup (argument processing & command completion)
 restish shell setup zsh

@@ -197,14 +197,16 @@ restish config theme reset
 ```
 
 `theme_source` records where the theme came from. Local paths are stored as
-absolute paths. `theme` stores the resolved highlighting values. Use
+absolute paths, and bundled official themes are stored as `official:<name>`.
+`theme` stores the resolved highlighting values. Use
 `text` for the base text color and `header_key` to color HTTP response header
 names differently from JSON/readable object keys. `reset` removes the saved
 theme and restores the built-in theme.
 
 For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`
 first, then falls back to `<name>.json` at the repository root. Name-only
-theme installation resolves to the official Restish repository.
+theme installation uses the official themes bundled with the Restish binary and
+does not fetch from the network.
 
 `theme list` shows the official theme names:
 `catppuccin-mocha`, `dracula`, `github-dark`, `houston`, `minimal`,

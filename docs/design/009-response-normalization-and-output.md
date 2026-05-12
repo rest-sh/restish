@@ -321,7 +321,7 @@ restish config theme set user/repo dark
 which first tries `themes/dark.json`, then falls back to the repository's root
 `dark.json` when the `themes/` path is not found.
 
-Official theme names can be discovered with:
+Official bundled theme names can be discovered with:
 
 ```bash
 restish config theme list
@@ -333,9 +333,11 @@ and installed by name:
 restish config theme set one-dark-pro
 ```
 
-Name-only theme installation resolves to the official Restish repository under
-`themes/<name>.json`; it is a convenience for released themes, not an embedded
-theme store inside the binary.
+Name-only theme installation reads the matching `themes/<name>.json` file
+embedded in the Restish binary. This keeps the list and installer deterministic
+for each release. The saved `theme_source` uses `official:<name>` for bundled
+themes. Users who want mutable or third-party themes can still install by local
+path, URL, or GitHub shorthand.
 
 The `restish config theme reset` command removes both `theme` and
 `theme_source` from config, preserving unrelated JSONC comments where possible,
