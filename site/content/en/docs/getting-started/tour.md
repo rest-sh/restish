@@ -46,16 +46,23 @@ restish get https://api.rest.sh/types
 For quick exploration, the verb and scheme can be optional. These commands are
 equivalent in normal use:
 
-```bash
-# Full URL with verb
-restish get https://api.rest.sh/types
-
-# Full URL, verb defaults to GET
-restish https://api.rest.sh/types
-
-# Scheme defaults to https://, verb defaults to GET
-restish api.rest.sh/types
-```
+<figure class="restish-submit-map" aria-labelledby="direct-map-title">
+  <figcaption id="direct-map-title">A full GET request can collapse into a shorter Restish command.</figcaption>
+  <div class="restish-submit-map__flow">
+    <div class="restish-submit-map__command">
+      <span class="restish-submit-map__label">Full form</span>
+      <code><span>restish</span> <span class="restish-submit-map__token restish-submit-map__token--optional">get</span> <span class="restish-submit-map__token restish-submit-map__token--optional">https://</span><span>api.rest.sh/types</span></code>
+    </div>
+    <div class="restish-submit-map__rules" aria-label="What Restish can infer">
+      <span><strong>method</strong> defaults to <code>GET</code> when there is no body</span>
+      <span><strong>scheme</strong> inferred as <code>https://</code> for host-like URLs</span>
+    </div>
+    <div class="restish-submit-map__command">
+      <span class="restish-submit-map__label">Short form</span>
+      <code><span>restish</span> <span>api.rest.sh/types</span></code>
+    </div>
+  </div>
+</figure>
 
 Use the explicit verb when it helps a script or a teammate understand intent.
 Use the shorter form when you are exploring interactively.
@@ -100,12 +107,22 @@ Filters can select from `status`, `headers`, `links`, and `body` across
 different APIs. Restish shorthand is meant to cover the common cases without
 making you write a full query program:
 
-- `body.user.email` selects one field
-- `body.items[0].id` selects one array item's `id` field
-- `body.items[name == "demo"]|[0]` filters an array and picks the first match
-- `body.items.{id, name}` keeps a few fields from each item
-- `body.items[name == "demo"]` filters array items
-- `links.next` or `headers.Content-Type` inspects response metadata
+- Field selection
+  - `body.id` selects one field
+  - `body.{id, name}` selects some fields
+- Array Item
+  - `body.items[0].{id, name}` selects one array item's fields
+- Array Slicing
+  - `body.items[0:2].{id, name}` selects some fields from several items
+- Fields from All Items
+  - `body.items.{id, name}` selects some fields from all items
+- Array Filtering
+  - `body.items[name == "demo"]` keeps array items with a matching field value
+- Pipes to Reset Processing
+  - `body.items[name == "demo"]|[0].id` keeps matching items and picks the first one's ID
+- Metadata Examples
+  - `links.next` or `headers.Content-Type` inspects response metadata
+  - `{id: body.id, ct: headers.Content-Type}` combines metadata + body
 
 Those patterns are enough for a lot of day-to-day API work. Use them to trim
 the response first, then choose an output format that fits what you are doing.
@@ -134,12 +151,39 @@ Learn more: [Filtering](../../guides/filtering/), [Query Syntax](../../reference
 
 ## Choose Output Formats
 
-Interactive terminals default to Restish's `auto` format and `auto` print mode:
-response status, headers, and a syntax-highlighted body go to stdout. When
-stdout is redirected without a filter, Restish writes the original response body
-bytes. Use `-o` to choose the body format and `--rsh-print` to choose which
-HTTP exchange parts are printed. Redirected transformed output is pretty by
-default; pass `--rsh-print=b` when compact rendered JSON matters.
+Restish chooses output from context first: is stdout an interactive terminal, or
+is it redirected to another program or file? Then it looks at whether you asked
+for a filter or output format.
+
+<figure class="restish-output-map" aria-labelledby="output-map-title">
+  <figcaption id="output-map-title">Default output splits between human display and byte-preserving pipelines.</figcaption>
+  <div class="restish-output-map__branches">
+    <section class="restish-output-map__branch" aria-labelledby="output-map-terminal-title">
+      <h3 id="output-map-terminal-title">Interactive Terminal</h3>
+      <p><code>auto</code> print mode shows response status, headers, and a body presentation for humans.</p>
+      <div class="restish-output-map__cases">
+        <span><strong>Structured data</strong><em>syntax-highlighted JSON-like body</em></span>
+        <span><strong>Images</strong><em>terminal image when supported</em></span>
+        <span><strong>Plain text</strong><em>text as text, highlighted when useful</em></span>
+        <span><strong>Binary</strong><em>short notice instead of raw bytes</em></span>
+      </div>
+    </section>
+    <section class="restish-output-map__branch" aria-labelledby="output-map-redirect-title">
+      <h3 id="output-map-redirect-title">Redirected stdout</h3>
+      <p>Restish preserves payload bytes until you ask it to transform the response.</p>
+      <div class="restish-output-map__cases">
+        <span><strong>Raw path</strong><em>no filter, metadata shortcut, collection, or <code>-o</code>: write response body bytes</em></span>
+        <span><strong>Filtered path</strong><em>filters, metadata shortcuts, collection, or <code>-o</code>: render the selected value</em></span>
+      </div>
+    </section>
+  </div>
+</figure>
+
+### Body Output Format
+
+Use `-o` to choose the body format and `--rsh-print` to choose which HTTP
+exchange parts are printed. Redirected transformed output is pretty by default;
+pass `--rsh-print=b` when compact rendered JSON matters.
 
 JSON is the safest handoff to other structured tools:
 
@@ -173,14 +217,10 @@ The command uses Restish's normal output default for an `image/*` response in a 
 Learn more: [Output](../../guides/output/), [Output Formats](../../reference/output-formats/),
 [Output Defaults](../../reference/output-defaults/), [Images in the Terminal](../../guides/output/).
 
-## Saving Files
+## Save Files
 
 For binary responses, the local CLI can write response bytes directly to a
-file. The browser preview still shows the image response headers:
-
-{{< restish-example >}}
-restish api.rest.sh/images/jpeg -f headers
-{{< /restish-example >}}
+file. The browser preview can't.
 
 Run the download locally:
 
@@ -196,10 +236,10 @@ supported response format and render JSON for a script:
 
 ```bash
 # Output a JSON representation even if the server sends CBOR or YAML.
-restish api.rest.sh/types -o json > types.json
+restish api.rest.sh/formats/yaml -o json > example.json
 
-# Save the response body bytes.
-restish api.rest.sh/content/cbor > types.cbor
+# Save the response raw body bytes.
+restish api.rest.sh/formats/yaml > example.yaml
 ```
 
 Learn more: [Content Types](../../reference/content-types/),
@@ -306,7 +346,7 @@ The browser preview shows the one-shot edit shape against the docs fixture:
 restish edit api.rest.sh/types 'boolean: false, number: 67.89'
 {{< /restish-example >}}
 
-In a real terminal you will see a diff before submitting the data. With no
+In a real terminal you will see a diff before submitting the data and if ETags are present then Restish will use them to not overwrite other people's edits. With no
 patch arguments, `restish edit` opens your editor by default:
 
 ```bash
@@ -323,8 +363,7 @@ Learn more: [Edit Workflow](../../guides/edit-workflow/), [Edit Command](../../r
 ## Follow Pagination And Links
 
 When a collection exposes a recognized `next` link, Restish can follow pages for
-you. Output streams as pages arrive, and safety limits prevent a surprise crawl
-from running forever.
+you automatically. Output streams as pages arrive, and safety limits prevent a surprise crawl from running forever (i.e. up to `25` pages by default, see `--rsh-max-pages`).
 
 Inspect the links Restish can see:
 
@@ -366,7 +405,7 @@ The `/logs` endpoint emits records with fields such as `message` and
 restish api.rest.sh/logs --rsh-max-items 4 -f 'body.{message, timestamp}'
 {{< /restish-example >}}
 
-SSE events preserve event metadata and parsed event data:
+SSE events preserve event metadata and parsed event data, so note they use `body.data` instead of just `body` when filtering:
 
 {{< restish-example >}}
 restish api.rest.sh/events --rsh-max-items 4 -f 'body.data.{message, timestamp}'
@@ -560,6 +599,15 @@ formatters, auth, middleware, or spec loaders. Command plugins can provide
 larger workflows, such as bulk resource management or MCP integration, while
 still delegating HTTP and formatting back to Restish.
 
+Official plugins cover a few common extension points:
+
+| Plugin | Adds | Use it when |
+| --- | --- | --- |
+| `restish-csv` | CSV output with `-o csv` for array-shaped responses. | You want to hand API lists to spreadsheets, data tools, or shell scripts that expect comma-separated rows. |
+| `restish-bulk` | A `restish bulk` command for checking out API collections as local files, then pulling, diffing, and pushing changes. | You need to review or edit many resources with local tools while keeping Restish profiles, auth, retries, and validators in the HTTP path. |
+| `restish-mcp` | A `restish mcp serve` command that exposes registered OpenAPI operations as MCP tools. | You want an MCP client or agent to call APIs through Restish instead of building separate auth and HTTP handling. |
+| `restish-pkcs11` | A PKCS#11 TLS signer for mTLS handshakes. | Your client private key lives in a hardware token, smart card, HSM, or PKCS#11 provider and should not be copied into Restish config. |
+
 Install the CSV formatter locally:
 
 ```bash
@@ -572,9 +620,6 @@ The browser preview includes a small CSV formatter so you can see the result:
 restish api.rest.sh/images --rsh-no-paginate -o csv
 {{< /restish-example >}}
 
-Official plugins include CSV output, MCP tool exposure, bulk resource
-management, and PKCS#11-backed TLS signing.
-
 Learn more: [Install and Use Plugins](../../plugins/install-and-use/),
 [Plugin Command](../../reference/plugin-command/), [Plugin Messages](../../reference/plugin-messages/).
 
@@ -585,7 +630,7 @@ fits normal shell pipelines. The most common scripting pattern is to filter down
 to the values that you need. Scalar values are output without quotes, so they are easy to use in shell assignments:
 
 {{< restish-example >}}
-restish api.rest.sh/types -f body.number
+restish api.rest.sh/types -f body.object.url
 {{< /restish-example >}}
 
 For a list, filter the field you want and use the `lines` output format to get one value per line without quotes or JSON array syntax:
@@ -607,11 +652,24 @@ records, and `-o lines` only when the filtered output is an array of scalar valu
 
 ### Exit Codes
 
-Restish exits successfully for successful HTTP responses and uses a non-zero
-exit code for transport failures, command errors, and HTTP error statuses. That
-is what you usually want in scripts because `set -e`, CI jobs, and shell
-conditionals can stop on API failures. When an error response body is the data
-you want to inspect, opt out for that command with `--rsh-ignore-status-code`:
+Restish keeps process exit codes compact so scripts can branch on success,
+runtime failure, usage mistakes, and interrupts:
+
+| Result | Exit code | Notes |
+| --- | --- | --- |
+| Successful command, including final HTTP `2xx` responses | `0` | Redirects are followed before the final status is evaluated. |
+| Final HTTP `3xx` response | `3` | Redirects are followed before the final status is evaluated. |
+| Final HTTP `4xx` response | `4` | Restish still writes the response body before exiting non-zero. |
+| Final HTTP `5xx` response | `5` | Restish still writes the response body before exiting non-zero. |
+| Runtime failure | `1` | Network errors, TLS failures, config problems, auth failures, parse errors, formatter errors, and most plugin failures. |
+| Usage error | `2` | Missing arguments, unknown commands, unknown flags, or invalid flag values before the request runs. |
+| Interrupted with `Ctrl-C` / SIGINT | `130` | Matches the usual shell convention for interrupted processes. |
+| Command plugin exit code | plugin-defined | Command plugins may return their own `0`-`255` exit code. |
+
+That behavior is what you usually want in scripts because `set -e`, CI jobs,
+and shell conditionals can stop on API failures. When an error response body is
+the data you want to inspect, opt out for that command with
+`--rsh-ignore-status-code`:
 
 {{< restish-example >}}
 restish api.rest.sh/problem --rsh-ignore-status-code

@@ -1323,7 +1323,8 @@
         string: "Hello from api.rest.sh",
         array: ["one", "two", "three"],
         object: {
-          nested: "value"
+          nested: "value",
+          url: "https://rest.sh/"
         }
       };
     }
@@ -1917,6 +1918,9 @@
   function readableFilteredOutput(value) {
     if (value === undefined) {
       return "null\n";
+    }
+    if (value === null || typeof value !== "object") {
+      return String(value) + "\n";
     }
     return JSON.stringify(value, null, 2) + "\n";
   }

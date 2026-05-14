@@ -822,8 +822,96 @@ body.td-home .td-navbar__search .td-search-input {
   content: "";
 }
 
+.restish-output-map {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid var(--restish-card-border);
+  border-radius: 8px;
+  background: var(--restish-card-bg-top);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.restish-output-map figcaption {
+  margin: 0 0 0.875rem;
+  color: var(--restish-card-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.restish-output-map__branches {
+  display: grid;
+  gap: 0.875rem;
+  align-items: start;
+}
+
+.restish-output-map__branch {
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.restish-output-map__branch h3 {
+  margin: 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--restish-amber);
+  color: var(--restish-card-title);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.restish-output-map__branch p {
+  margin: 0;
+  color: var(--restish-card-text);
+  font-size: 0.9rem;
+}
+
+.restish-output-map__cases {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.restish-output-map__cases span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--restish-teal);
+}
+
+.restish-output-map__cases strong {
+  color: var(--restish-card-title);
+  font-size: 0.86rem;
+}
+
+.restish-output-map__cases em {
+  color: var(--restish-card-text);
+  font-size: 0.88rem;
+  font-style: normal;
+}
+
+.restish-output-map__cases code {
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .restish-output-map__branches {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 [data-bs-theme="dark"] .restish-playground {
   background: var(--restish-card-bg-bottom);
+}
+
+[data-bs-theme="dark"] .restish-output-map__branch {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 [data-bs-theme="dark"] .restish-playground__bar {
