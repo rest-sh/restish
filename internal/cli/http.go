@@ -207,38 +207,99 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	if kind := streamingContentType(httpResp.Header.Get("Content-Type")); kind != "" {
 		request.DisableResponseBodyDeadline(httpResp)
 		traceContentDecode(trace, httpResp.Header.Get("Content-Type"))
-		if gf := globalFlagsFromContext(requestContext(cmd)); gf.Raw {
-			if err := validateRawOutputOptions(gf); err != nil {
+		gf := globalFlagsFromContext(requestContext(cmd))
+		if gf.Silent {
+			_ = httpResp.Body.Close()
+			return c.statusError(cmd, httpResp.StatusCode)
+		}
+		spec, specErr := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printStreamResponse)
+		if specErr != nil {
+			_ = httpResp.Body.Close()
+			return specErr
+		}
+		if spec.rawBodyOnly() {
+			if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
 				_ = httpResp.Body.Close()
 				return err
 			}
-			defer httpResp.Body.Close()
-			if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
-				return err
+			reader, err := c.decompressedResponseBody(httpResp)
+			if err != nil {
+				_ = httpResp.Body.Close()
+				return fmt.Errorf("decompressing response: %w", err)
 			}
+			defer reader.Close()
 			trace.Info("Output", "raw")
 			trace.Step("raw")
 			trace.RenderAfter(c.Stderr, gf.Verbose)
-			_, err := io.Copy(c.Stdout, httpResp.Body)
+			_, err = io.Copy(c.Stdout, reader)
 			return err
 		}
 		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
 			_ = httpResp.Body.Close()
 			return err
 		}
+		if spec.includesResponseBody() {
+			body, err := c.decompressedResponseBody(httpResp)
+			if err != nil {
+				_ = httpResp.Body.Close()
+				return fmt.Errorf("decompressing response: %w", err)
+			}
+			httpResp.Body = body
+		}
 		var streamErr error
 		switch kind {
 		case "sse":
-			streamErr = c.handleSSE(cmd, httpResp)
+			streamErr = c.handleSSE(cmd, httpResp, prepared, spec)
 		case "ndjson":
-			streamErr = c.handleNDJSON(cmd, httpResp)
+			streamErr = c.handleNDJSON(cmd, httpResp, prepared, spec)
 		}
 		if streamErr != nil {
 			return streamErr
 		}
 		return nil
 	}
-	if handled, streamErr := c.handleMislabeledJSONLines(cmd, httpResp); handled || streamErr != nil {
+
+	// Decide whether this response needs decoded/interpreted body handling
+	// before normalizing. Raw downloads must not unmarshal JSON/CBOR/YAML, and
+	// explicit body-free print specs should not block on or validate the body.
+	gf := globalFlagsFromContext(requestContext(cmd))
+	tty := c.stdoutIsTerminal()
+	printSpec, err := c.resolvePrintSpec(gf, tty, printBoundedResponse)
+	if err != nil {
+		_ = httpResp.Body.Close()
+		return err
+	}
+	if gf.Silent {
+		_ = httpResp.Body.Close()
+		return c.statusError(cmd, httpResp.StatusCode)
+	}
+	if printSpec.rawBodyOnly() {
+		defer httpResp.Body.Close()
+		raw, err := c.rawResponseBodyBytes(httpResp, maxBodyBytes(cmd))
+		if err != nil {
+			return err
+		}
+		if gf.Verbose >= 1 {
+			c.logVerboseBody("< body", raw, httpResp.Header.Get("Content-Type"))
+		}
+		trace.Info("Output", "raw")
+		trace.Step("raw")
+		trace.RenderAfter(c.Stderr, gf.Verbose)
+		if err := c.writeRawBytes(raw); err != nil {
+			return err
+		}
+		return c.statusError(cmd, httpResp.StatusCode)
+	}
+	if c.canPrintWithoutResponseBody(gf, printSpec) {
+		resp := responseMetadataOnly(httpResp)
+		if err := c.formatResponse(cmd, resp, prepared); err != nil {
+			_ = httpResp.Body.Close()
+			return err
+		}
+		_ = httpResp.Body.Close()
+		return c.statusError(cmd, resp.Status)
+	}
+	if handled, streamErr := c.handleMislabeledJSONLines(cmd, httpResp, prepared, printSpec); handled || streamErr != nil {
 		if handled {
 			traceContentDecode(trace, httpResp.Header.Get("Content-Type"))
 		}
@@ -256,7 +317,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	// Response-middleware plugins: can modify, drop, or follow.
 	// Skipped in follow mode to prevent infinite loops.
-	if !followMode && httpResp.Request != nil {
+	if !followMode && httpResp.Request != nil && !printSpec.rawBodyOnly() {
 		drop, followReq, mwErr := c.runResponseMiddlewarePlugins(httpResp.Request, resp)
 		if mwErr != nil {
 			return mwErr
@@ -281,14 +342,12 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	}
 
 	// Pagination: if this is a GET and there's a next link, paginate.
-	gf := globalFlagsFromContext(requestContext(cmd))
-	tty := output.IsTerminal(c.Stdout)
-	if method == "GET" && !gf.Raw && !c.defaultRawBodyOutput(gf, tty) && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
+	if method == "GET" && printSpec.includesResponseBody() && !printSpec.rawBodyOnly() && !gf.HeadersShorthand && !filterRequestsResponseMetadata(gf.Filter) {
 		var pagCfg *config.PaginationConfig
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
 		}
-		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg)
+		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg, prepared)
 		if err != nil {
 			return err
 		}
@@ -297,7 +356,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		}
 	}
 
-	if err := c.formatResponse(cmd, resp); err != nil {
+	if err := c.formatResponse(cmd, resp, prepared); err != nil {
 		return err
 	}
 
@@ -346,43 +405,32 @@ func followRequestHeaders(followReq *HookFollowRequest) ([]string, string) {
 }
 
 // formatResponse applies any filter then selects and runs the formatter.
-func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
+func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response, prepared *preparedRequest) error {
 	// Silent mode: suppress all output.
 	gf := globalFlagsFromContext(requestContext(cmd))
 	if gf.Silent {
 		return nil
 	}
-	if err := validateRawOutputOptions(gf); err != nil {
+	printPlan, err := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printBoundedResponse)
+	if err != nil {
 		return err
 	}
 
-	fmtName := gf.OutputFormat
 	filterExpr := gf.Filter
 	explicitFilter := explicitOutputFilter(gf)
 	filterLang := gf.FilterLang
 	headersOnly := gf.HeadersShorthand
 	statusOnly := gf.StatusShorthand
-	tty := output.IsTerminal(c.Stdout)
 
-	if gf.Raw {
-		trace := requestTraceFromContext(requestContext(cmd))
-		trace.Info("Output", "raw")
-		trace.Step("raw")
-		trace.RenderAfter(c.Stderr, gf.Verbose)
-		return c.writeRawBytes(resp.Raw)
-	}
-	if c.defaultRawBodyOutput(gf, tty) {
-		if resp.Raw == nil {
-			if resp.Body == nil {
-				return nil
-			}
+	if printPlan.rawBodyOnly() {
+		if resp.Raw == nil && resp.Body != nil && !gf.PrintSet {
+			printPlan = printSpec{order: []rune{printRenderedBody}}
 		} else {
 			trace := requestTraceFromContext(requestContext(cmd))
-			trace.Info("Output", "raw bytes (auto)")
+			trace.Info("Output", "raw")
 			trace.Step("raw")
 			trace.RenderAfter(c.Stderr, gf.Verbose)
-			_, err := c.Stdout.Write(resp.Raw)
-			return err
+			return c.writeRawBytes(resp.Raw)
 		}
 	}
 
@@ -403,43 +451,28 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		filterExpr = "status"
 	}
 
-	// Default filter: full response on TTY or when using the readable format;
-	// body only on non-TTY with other formats (json/raw/scripting).
 	if filterExpr == "" {
-		if tty || fmtName == "readable" {
-			filterExpr = "@"
-		} else {
-			filterExpr = "body"
+		if err := c.printResponseParts(cmd, resp, prepared, printPlan, nil, false); err != nil {
+			return err
 		}
+		if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+			trace.RenderAfter(c.Stderr, gf.Verbose)
+		}
+		return nil
 	}
 
 	if explicitFilter && filterNeedsLinks(filterExpr) {
 		c.ensureBodyLinks(resp)
 	}
 
-	if filterExpr == "@" && !explicitFilter {
-		formatter, err := c.selectFormatter(cmd, fmtName, tty)
-		if err != nil {
-			return err
-		}
-		traceOutputFormatter(cmd, fmtName, tty, formatter)
-		if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
-			trace.RenderAfter(c.Stderr, gf.Verbose)
-		}
-		return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
+	if filterExpr == "@" {
+		doc := normalizedResponseDoc(resp)
+		return c.printResponseParts(cmd, resp, prepared, printPlan, doc, true)
 	}
 
 	lang := resolveFilterLang(filterLang)
 
-	// Build the full response map for filtering.
-	doc := map[string]any{
-		"proto":       resp.Proto,
-		"status":      resp.Status,
-		"headers":     firstHeaderValues(resp.Headers),
-		"headers_all": resp.Headers,
-		"links":       resp.Links,
-		"body":        resp.Body,
-	}
+	doc := normalizedResponseDoc(resp)
 
 	filterResult, err := filter.ApplyWithInfo(filterExpr, doc, lang)
 	if err != nil {
@@ -455,24 +488,18 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response) error {
 		c.hintBodyPrefixOnce(filterExpr)
 	}
 
-	if explicitFilter && filterExpr == "@" {
-		return c.renderValue(cmd, doc, true)
-	}
+	return c.printResponseParts(cmd, resp, prepared, printPlan, filtered, explicitFilter)
+}
 
-	if filterExpr != "@" {
-		return c.renderValue(cmd, filtered, explicitFilter)
+func normalizedResponseDoc(resp *output.Response) map[string]any {
+	return map[string]any{
+		"proto":       resp.Proto,
+		"status":      resp.Status,
+		"headers":     firstHeaderValues(resp.Headers),
+		"headers_all": resp.Headers,
+		"links":       resp.Links,
+		"body":        resp.Body,
 	}
-
-	formatter, err := c.selectFormatter(cmd, fmtName, tty)
-	if err != nil {
-		return err
-	}
-
-	traceOutputFormatter(cmd, fmtName, tty, formatter)
-	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
-		trace.RenderAfter(c.Stderr, gf.Verbose)
-	}
-	return formatter.Format(c.Stdout, resp, output.ColorEnabled(c.Stdout))
 }
 
 func firstHeaderValues(headers map[string][]string) map[string]string {
@@ -525,14 +552,346 @@ func (c *CLI) populateRequestTrace(trace *requestTrace, apiName, profileName, in
 	}
 }
 
-func (c *CLI) defaultRawBodyOutput(gf GlobalFlags, tty bool) bool {
-	return !tty &&
-		!gf.Raw &&
-		gf.OutputFormat == "" &&
-		!explicitOutputFilter(gf) &&
-		!gf.Collect &&
-		gf.MaxItems == 0 &&
-		len(c.pluginsByHook["response-middleware"]) == 0
+func (c *CLI) runPrintSpec(cmd *cobra.Command, resp *output.Response, prepared *preparedRequest, spec printSpec, renderBody func() error) error {
+	for _, part := range spec.order {
+		switch part {
+		case printRequestHeaders:
+			if err := c.writeRequestPreamble(prepared, spec.color); err != nil {
+				return err
+			}
+		case printRequestBody:
+			if err := c.writeRequestBody(prepared, spec); err != nil {
+				return err
+			}
+		case printResponseHeaders:
+			if err := c.writeResponsePreamble(resp, spec.color); err != nil {
+				return err
+			}
+		case printRenderedBody:
+			if renderBody != nil {
+				if err := renderBody(); err != nil {
+					return err
+				}
+			}
+		case printRawBody:
+			if resp != nil {
+				if err := c.writeRawBytes(resp.Raw); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CLI) rawResponseBodyBytes(resp *http.Response, maxBytes int64) ([]byte, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, nil
+	}
+	if maxBytes <= 0 {
+		maxBytes = output.DefaultMaxBodyBytes
+	}
+	reader, err := c.content.Decompress(resp.Header.Get("Content-Encoding"), resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("decompressing response: %w", err)
+	}
+	defer reader.Close()
+
+	limited := io.LimitReader(reader, maxBytes+1)
+	raw, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, fmt.Errorf("response body exceeds limit of %d bytes; use --rsh-max-body-size to increase", maxBytes)
+	}
+	return raw, nil
+}
+
+func (c *CLI) decompressedResponseBody(resp *http.Response) (io.ReadCloser, error) {
+	if resp == nil || resp.Body == nil {
+		return io.NopCloser(strings.NewReader("")), nil
+	}
+	original := resp.Body
+	reader, err := c.content.Decompress(resp.Header.Get("Content-Encoding"), original)
+	if err != nil {
+		return nil, err
+	}
+	return &readCloser{
+		Reader: reader,
+		Closer: closeBoth{
+			first:  reader,
+			second: original,
+		},
+	}, nil
+}
+
+type closeBoth struct {
+	first  io.Closer
+	second io.Closer
+}
+
+func (c closeBoth) Close() error {
+	return errors.Join(c.first.Close(), c.second.Close())
+}
+
+func (c *CLI) canPrintWithoutResponseBody(gf GlobalFlags, spec printSpec) bool {
+	if spec.has(printRawBody) {
+		return false
+	}
+	if spec.includesResponseBody() && !filterCanRenderWithoutResponseBody(gf) {
+		return false
+	}
+	if len(c.pluginsByHook["response-middleware"]) > 0 {
+		return false
+	}
+	return true
+}
+
+func filterCanRenderWithoutResponseBody(gf GlobalFlags) bool {
+	if gf.HeadersShorthand || gf.StatusShorthand {
+		return true
+	}
+	if strings.TrimSpace(gf.Filter) == "" {
+		return false
+	}
+	return bodyFreeMetadataFilter(gf.Filter)
+}
+
+func bodyFreeMetadataFilter(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	expr = strings.TrimPrefix(expr, ".")
+	return expr == "headers" || strings.HasPrefix(expr, "headers.") || strings.HasPrefix(expr, "headers[") ||
+		expr == "headers_all" || strings.HasPrefix(expr, "headers_all.") || strings.HasPrefix(expr, "headers_all[") ||
+		expr == "status" || strings.HasPrefix(expr, "status.") || strings.HasPrefix(expr, "status[") ||
+		expr == "proto" || strings.HasPrefix(expr, "proto.") || strings.HasPrefix(expr, "proto[")
+}
+
+func responseMetadataOnly(resp *http.Response) *output.Response {
+	if resp == nil {
+		return &output.Response{}
+	}
+	headers := make(map[string][]string, len(resp.Header))
+	for k, vals := range resp.Header {
+		if len(vals) > 0 {
+			headers[k] = append([]string(nil), vals...)
+		}
+	}
+	out := &output.Response{
+		Proto:   resp.Proto,
+		Status:  resp.StatusCode,
+		Headers: headers,
+	}
+	if resp.Request != nil && resp.Request.URL != nil {
+		out.URL = resp.Request.URL.String()
+	}
+	return out
+}
+
+func (c *CLI) printResponseParts(cmd *cobra.Command, resp *output.Response, prepared *preparedRequest, spec printSpec, value any, valueSet bool) error {
+	renderBody := func() error {
+		if valueSet {
+			return c.renderValueWithPrint(cmd, value, spec, valueSet)
+		}
+		return c.formatResponseBodyWithPrint(cmd, resp, spec)
+	}
+	return c.runPrintSpec(cmd, resp, prepared, spec, renderBody)
+}
+
+func (c *CLI) writeResponsePreamble(resp *output.Response, color bool) error {
+	if resp == nil {
+		return nil
+	}
+	proto := resp.Proto
+	if proto == "" {
+		proto = "HTTP/1.1"
+	}
+	var preamble strings.Builder
+	fmt.Fprintf(&preamble, "%s %d %s\n", proto, resp.Status, http.StatusText(resp.Status))
+
+	for _, key := range sortedHeaderKeys(http.Header(resp.Headers)) {
+		for _, value := range resp.Headers[key] {
+			if secrets.IsHeaderName(key) {
+				value = "<redacted>"
+			}
+			fmt.Fprintf(&preamble, "%s: %s\n", key, value)
+		}
+	}
+	fmt.Fprintln(&preamble)
+
+	if color {
+		highlighted, err := output.HighlightWithLexer(output.HTTPPreambleLexer, []byte(preamble.String()))
+		if err == nil {
+			_, err = c.Stdout.Write(highlighted)
+			return err
+		}
+	}
+	_, err := io.WriteString(c.Stdout, preamble.String())
+	return err
+}
+
+func (c *CLI) writeRequestPreamble(prepared *preparedRequest, color bool) error {
+	if prepared == nil || prepared.actualRequest == nil {
+		return nil
+	}
+	req := prepared.actualRequest
+	uri := "/"
+	if req.URL != nil {
+		uri = redactedRequestURI(req.URL)
+		if uri == "" {
+			uri = "/"
+		}
+	}
+	proto := req.Proto
+	if proto == "" {
+		proto = "HTTP/1.1"
+	}
+	var preamble strings.Builder
+	fmt.Fprintf(&preamble, "%s %s %s\n", req.Method, uri, proto)
+	host := req.Host
+	if host == "" && req.URL != nil {
+		host = req.URL.Host
+	}
+	if host != "" {
+		fmt.Fprintf(&preamble, "Host: %s\n", host)
+	}
+	keys := sortedHeaderKeys(req.Header)
+	for _, key := range keys {
+		for _, value := range req.Header[key] {
+			if secrets.IsHeaderName(key) {
+				value = "<redacted>"
+			}
+			fmt.Fprintf(&preamble, "%s: %s\n", key, value)
+		}
+	}
+	fmt.Fprintln(&preamble)
+
+	if color {
+		highlighted, err := output.HighlightWithLexer(output.HTTPPreambleLexer, []byte(preamble.String()))
+		if err == nil {
+			_, err = c.Stdout.Write(highlighted)
+			return err
+		}
+	}
+	_, err := io.WriteString(c.Stdout, preamble.String())
+	return err
+}
+
+func (c *CLI) writeRequestBody(prepared *preparedRequest, spec printSpec) error {
+	if prepared == nil || len(prepared.bodyRaw) == 0 {
+		return nil
+	}
+	data := prepared.bodyRaw
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(prepared.bodyContentType, ";")[0]))
+	if mediaType == "application/json" || strings.HasSuffix(mediaType, "+json") {
+		var value any
+		if err := json.Unmarshal(prepared.bodyRaw, &value); err == nil {
+			redactSensitiveJSON(value)
+			var encoded []byte
+			var marshalErr error
+			if spec.pretty {
+				encoded, marshalErr = json.MarshalIndent(value, "", "  ")
+			} else {
+				encoded, marshalErr = json.Marshal(value)
+			}
+			if marshalErr == nil {
+				data = encoded
+			}
+		}
+	} else if mediaType == "application/x-www-form-urlencoded" {
+		if rendered := redactVerboseBody(prepared.bodyRaw, prepared.bodyContentType); rendered != "" {
+			data = []byte(rendered)
+		}
+	}
+	if len(data) == 0 || data[len(data)-1] != '\n' {
+		data = append(append([]byte(nil), data...), '\n')
+	}
+	if spec.color {
+		highlighted, err := output.HighlightWithLexer(output.ReadableLexer, data)
+		if err == nil {
+			_, err = c.Stdout.Write(highlighted)
+			return err
+		}
+	}
+	_, err := c.Stdout.Write(data)
+	return err
+}
+
+func (c *CLI) formatResponseBodyWithPrint(cmd *cobra.Command, resp *output.Response, spec printSpec) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	fmtName := gf.OutputFormat
+	tty := c.stdoutIsTerminal()
+	if responseBodyAbsent(resp) {
+		return nil
+	}
+	if !spec.pretty && fmtName == "" && autoBodyShouldHandleCompact(resp) {
+		traceOutputFormatter(cmd, fmtName, tty, &output.AutoFormatter{})
+		return (&output.AutoFormatter{}).Format(c.Stdout, resp, renderedBodyColor(resp, fmtName, tty, spec.color))
+	}
+	if !spec.pretty && (fmtName == "" || fmtName == "json") && compactAutoBody(resp) {
+		return c.writeJSONValue(resp.Body, false, spec.color)
+	}
+	formatter, err := c.selectFormatter(cmd, fmtName, tty)
+	if err != nil {
+		return err
+	}
+	traceOutputFormatter(cmd, fmtName, tty, formatter)
+	return formatter.Format(c.Stdout, resp, renderedBodyColor(resp, fmtName, tty, spec.color))
+}
+
+func responseBodyAbsent(resp *output.Response) bool {
+	return resp == nil || (resp.Body == nil && len(resp.Raw) == 0)
+}
+
+func autoBodyShouldHandleCompact(resp *output.Response) bool {
+	if resp == nil {
+		return false
+	}
+	if strings.HasPrefix(output.Header(resp.Headers, "Content-Type"), "image/") && len(resp.Raw) > 0 {
+		return true
+	}
+	switch resp.Body.(type) {
+	case string, []byte:
+		return true
+	default:
+		return false
+	}
+}
+
+func compactAutoBody(resp *output.Response) bool {
+	if resp == nil {
+		return false
+	}
+	switch resp.Body.(type) {
+	case map[string]any, []any, bool, float64, int, int64, uint64, nil:
+		return true
+	default:
+		return false
+	}
+}
+
+func renderedBodyColor(resp *output.Response, fmtName string, tty, color bool) bool {
+	if color {
+		return true
+	}
+	if !tty {
+		return false
+	}
+	contentType := output.Header(resp.Headers, "Content-Type")
+	return strings.HasPrefix(contentType, "image/") && (fmtName == "" || fmtName == "auto" || fmtName == "image")
+}
+
+func (c *CLI) renderValueWithPrint(cmd *cobra.Command, value any, spec printSpec, plainScalars bool) error {
+	renderer, err := c.newValueRendererWithPrint(cmd, nil, plainScalars, spec)
+	if err != nil {
+		return err
+	}
+	defer renderer.Close()
+	c.traceValueOutput(cmd, value, plainScalars)
+	if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {
+		trace.RenderAfter(c.Stderr, globalFlagsFromContext(requestContext(cmd)).Verbose)
+	}
+	return renderer.Render(value)
 }
 
 func traceInputSource(info input.BodyInfo, hasBody bool) string {
@@ -580,6 +939,24 @@ func filterPipelineStep(lang filter.Lang, auto bool) string {
 	return lang.String()
 }
 
+func (c *CLI) filterBodyValue(cmd *cobra.Command, item any) (any, error) {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if gf.Filter == "" {
+		return item, nil
+	}
+	doc := map[string]any{"body": item}
+	lang := resolveFilterLang(gf.FilterLang)
+	filterResult, err := filter.ApplyWithInfo(gf.Filter, doc, lang)
+	if err != nil {
+		return nil, fmt.Errorf("filter: %w", err)
+	}
+	traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
+	if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
+		c.hintBodyPrefixOnce(gf.Filter)
+	}
+	return filterResult.Value, nil
+}
+
 func traceMediaType(contentType string) string {
 	contentType = strings.TrimSpace(contentType)
 	if contentType == "" {
@@ -611,7 +988,7 @@ func traceOutputFormatter(cmd *cobra.Command, fmtName string, tty bool, formatte
 	}
 	name := resolvedOutputFormatName(fmtName, tty)
 	value := outputTraceLabel(name, formatter)
-	if fmtName == "" {
+	if fmtName == "" && name != "auto" {
 		value += " (auto)"
 	}
 	trace.Info("Output", value)
@@ -632,12 +1009,6 @@ func (c *CLI) traceValueOutput(cmd *cobra.Command, value any, plainScalars bool)
 		trace.Step("silent")
 		return
 	}
-	if gf.Raw {
-		trace.Info("Output", "raw")
-		trace.Step("raw")
-		return
-	}
-
 	fmtName := gf.OutputFormat
 	if fmtName == "" && plainScalars && output.IsLineScalar(value) {
 		trace.Info("Output", "lines (auto)")
@@ -645,9 +1016,9 @@ func (c *CLI) traceValueOutput(cmd *cobra.Command, value any, plainScalars bool)
 		return
 	}
 	if fmtName == "" {
-		if output.IsTerminal(c.Stdout) {
-			trace.Info("Output", "readable (auto)")
-			trace.Step("readable")
+		if c.stdoutIsTerminal() {
+			trace.Info("Output", "auto")
+			trace.Step("auto")
 			return
 		}
 		trace.Info("Output", "json (auto)")
@@ -671,7 +1042,7 @@ func resolvedOutputFormatName(fmtName string, tty bool) string {
 		return fmtName
 	}
 	if tty {
-		return "readable"
+		return "auto"
 	}
 	return "json"
 }
@@ -694,19 +1065,6 @@ func explicitOutputFilter(gf GlobalFlags) bool {
 	return gf.Filter != "" || gf.HeadersShorthand || gf.StatusShorthand
 }
 
-func validateRawOutputOptions(gf GlobalFlags) error {
-	if !gf.Raw {
-		return nil
-	}
-	if explicitOutputFilter(gf) {
-		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-filter, --rsh-headers, or --rsh-status\nFor shell-friendly scalar output use: -o lines\nFor JSON use: -o json")
-	}
-	if gf.OutputFormat != "" {
-		return fmt.Errorf("--rsh-raw cannot be combined with --rsh-output-format; raw output writes the response body bytes")
-	}
-	return nil
-}
-
 func filterNeedsLinks(filterExpr string) bool {
 	filterExpr = strings.TrimSpace(filterExpr)
 	return filterExpr == "@" || filterExpr == "links" ||
@@ -715,10 +1073,15 @@ func filterNeedsLinks(filterExpr string) bool {
 		strings.HasPrefix(filterExpr, ".links")
 }
 
-// renderValue writes a filtered/subselected value using the same formatter
-// selection rules as normal responses, but without HTTP status/header preamble.
+// renderValue writes a filtered/subselected value using the active print and
+// formatter selection rules.
 func (c *CLI) renderValue(cmd *cobra.Command, value any, plainScalars bool) error {
-	renderer, err := c.newValueRenderer(cmd, nil, plainScalars)
+	gf := globalFlagsFromContext(requestContext(cmd))
+	spec, err := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printValueResponse)
+	if err != nil {
+		return err
+	}
+	renderer, err := c.newValueRendererWithPrint(cmd, nil, plainScalars, spec)
 	if err != nil {
 		return err
 	}
@@ -760,6 +1123,15 @@ func (r valueStreamRenderer) Close() error {
 }
 
 func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainScalars bool) (valueRenderer, error) {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	spec, err := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printValueResponse)
+	if err != nil {
+		return nil, err
+	}
+	return c.newValueRendererWithPrint(cmd, base, plainScalars, spec)
+}
+
+func (c *CLI) newValueRendererWithPrint(cmd *cobra.Command, base *output.Response, plainScalars bool, spec printSpec) (valueRenderer, error) {
 	streaming := base != nil
 	if base == nil {
 		base = &output.Response{}
@@ -770,47 +1142,41 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainS
 		return valueRendererFunc{render: func(any) error { return nil }}, nil
 	}
 
-	if gf.Raw {
-		return nil, validateRawOutputOptions(gf)
+	if spec.rawBodyOnly() {
+		return nil, fmt.Errorf("raw body output cannot render a filtered value")
 	}
 
 	fmtName := gf.OutputFormat
-	tty := output.IsTerminal(c.Stdout)
-	color := output.ColorEnabled(c.Stdout)
+	explicitAuto := explicitAutoOutputFormat(gf)
+	tty := c.stdoutIsTerminal()
+	color := spec.color
 
-	if fmtName == "" && plainScalars {
+	if fmtName == "" && plainScalars && (!explicitAuto || !spec.pretty) {
 		return valueRendererFunc{render: func(value any) error {
 			if output.IsLineScalar(value) {
 				return output.WriteLinesValue(c.Stdout, value)
 			}
-			return c.renderValueWithDefaults(value, tty, color)
+			return c.writeJSONValue(value, spec.pretty, color)
 		}}, nil
 	}
 
-	// Body/sub-value rendering should stay machine-friendly by default on
-	// non-TTY.
-	if !tty && fmtName == "" {
-		return valueRendererFunc{render: func(value any) error { return c.writeJSONValue(value) }}, nil
+	if !spec.pretty && fmtName == "json" {
+		return valueRendererFunc{render: func(value any) error {
+			return c.writeJSONValue(value, false, color)
+		}}, nil
 	}
 
-	// Readable output for sub-values omits the synthetic HTTP preamble and just
-	// pretty-prints the value.
-	if fmtName == "readable" || (fmtName == "" && tty) {
+	// Explicit --rsh-print=b keeps default body/sub-value rendering compact for
+	// scripts. Auto mode sets spec.pretty for transformed redirected output.
+	if !spec.pretty && fmtName == "" {
 		return valueRendererFunc{render: func(value any) error {
-			encoded, err := json.MarshalIndent(value, "", "  ")
-			if err != nil {
-				return err
-			}
-			encoded = append(encoded, '\n')
-			if color {
-				highlighted, err := output.HighlightWithLexer(output.ReadableLexer, encoded)
-				if err == nil {
-					_, err = c.Stdout.Write(highlighted)
-					return err
-				}
-			}
-			_, err = c.Stdout.Write(encoded)
-			return err
+			return c.writeJSONValue(value, false, color)
+		}}, nil
+	}
+
+	if fmtName == "" && spec.pretty && !explicitAuto {
+		return valueRendererFunc{render: func(value any) error {
+			return c.writeJSONValue(value, true, color)
 		}}, nil
 	}
 
@@ -847,11 +1213,16 @@ func (c *CLI) newValueRenderer(cmd *cobra.Command, base *output.Response, plainS
 	}}, nil
 }
 
-func (c *CLI) renderValueWithDefaults(value any, tty, color bool) error {
-	if !tty {
-		return c.writeJSONValue(value)
+func (c *CLI) writeJSONValue(value any, pretty, color bool) error {
+	var (
+		encoded []byte
+		err     error
+	)
+	if pretty {
+		encoded, err = json.MarshalIndent(value, "", "  ")
+	} else {
+		encoded, err = json.Marshal(value)
 	}
-	encoded, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -867,19 +1238,9 @@ func (c *CLI) renderValueWithDefaults(value any, tty, color bool) error {
 	return err
 }
 
-func (c *CLI) writeJSONValue(value any) error {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	encoded = append(encoded, '\n')
-	_, err = c.Stdout.Write(encoded)
-	return err
-}
-
 func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (output.Formatter, error) {
-	if fmtName == "raw" {
-		return nil, fmt.Errorf(`output format "raw" has been removed; use -r/--rsh-raw for raw response body bytes or -o lines for shell-friendly text`)
+	if fmtName == "auto" {
+		fmtName = ""
 	}
 
 	fmts := c.formatters
@@ -906,8 +1267,11 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 	}
 
 	if fmtName == "" {
+		if explicitAutoOutputFormat(globalFlagsFromContext(requestContext(cmd))) {
+			return fmts["auto"], nil
+		}
 		if tty {
-			return fmts["readable"], nil
+			return fmts["auto"], nil
 		}
 		return fmts["json"], nil
 	}
@@ -916,6 +1280,10 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
 	return formatter, nil
+}
+
+func explicitAutoOutputFormat(gf GlobalFlags) bool {
+	return gf.OutputFormat == "" && gf.OutputFormatSet
 }
 
 func (c *CLI) writeRawBytes(data []byte) error {
@@ -1172,6 +1540,21 @@ func networkErrorHint(err error) string {
 
 func redactedRequestURL(u *url.URL) string {
 	return request.RedactedURL(u)
+}
+
+func redactedRequestURI(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	copyURL := *u
+	q := copyURL.Query()
+	for name := range q {
+		if isSensitiveQueryParam(name) {
+			q.Set(name, "<redacted>")
+		}
+	}
+	copyURL.RawQuery = q.Encode()
+	return copyURL.RequestURI()
 }
 
 func isSensitiveQueryParam(name string) bool {

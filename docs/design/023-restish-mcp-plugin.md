@@ -229,8 +229,8 @@ the normalized HTTP body as pretty JSON, with a few deliberate choices:
 This keeps the MCP response concise for model-oriented tool use while still
 surfacing a small amount of HTTP context when it matters.
 
-The plugin is intentionally not trying to replicate the full Restish readable
-formatter or raw HTTP envelope in tool results.
+The plugin is intentionally not trying to replicate the full Restish terminal
+presentation or raw HTTP envelope in tool results.
 
 ## Error Model
 

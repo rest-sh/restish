@@ -412,6 +412,106 @@ func TestPaginationNDJSONOutputStreamsRecords(t *testing.T) {
 	}
 }
 
+func TestPaginationStreamingPrintHeadersOnlyDoesNotRenderOrFetchItems(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	requests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests++
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1},{"id":2}]`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-print", "h"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200 OK") {
+		t.Fatalf("response headers not found:\n%s", got)
+	}
+	if strings.Contains(got, `"id"`) {
+		t.Fatalf("headers-only pagination output included body data:\n%s", got)
+	}
+	if requests != 1 {
+		t.Fatalf("pagination fetched %d pages for headers-only output, want 1", requests)
+	}
+}
+
+func TestPaginationDocumentPrintHeadersOnlyDoesNotFetchNextPage(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	requests := 0
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests++
+		headers := http.Header{
+			"Content-Type": []string{"application/json"},
+			"X-Page":       []string{r.URL.Query().Get("page")},
+		}
+		if r.URL.Query().Get("page") == "" {
+			headers.Set("X-Page", "1")
+			headers.Set("Link", `<https://api.example.com/items?page=2>; rel="next"`)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1},{"id":2}]`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "2", "--rsh-print", "h"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200 OK") || !strings.Contains(got, "X-Page: 1") {
+		t.Fatalf("response headers not found:\n%s", got)
+	}
+	if strings.Contains(got, `"id"`) {
+		t.Fatalf("headers-only pagination output included body data:\n%s", got)
+	}
+	if requests != 1 {
+		t.Fatalf("pagination fetched %d pages for headers-only output, want 1", requests)
+	}
+	if strings.Contains(errOut.String(), "pagination stopped") {
+		t.Fatalf("headers-only output should not emit pagination warnings, got: %q", errOut.String())
+	}
+}
+
+func TestPaginationStreamingPrintBodyOnlyOmitsPrettyFraming(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useThreePageObjectTransport(c)
+
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-print", "b"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
+		t.Fatalf("body-only pagination output included response transcript:\n%s", got)
+	}
+	for _, want := range []string{`{"id":1}`, `{"id":2}`, `{"id":3}`, `{"id":4}`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected compact item %q in output:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, `"id": 1`) || strings.Contains(got, "[\n") {
+		t.Fatalf("body-only pagination output was pretty-framed:\n%s", got)
+	}
+}
+
 func TestPaginationStreamingMaxItemsLimitsRecords(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
@@ -468,25 +568,25 @@ func TestPaginationStreamingMaxItemsLimitsRecords(t *testing.T) {
 	}
 }
 
-func TestPaginationReadableOutputNonTTYUsesDocumentRendering(t *testing.T) {
+func TestPaginationExplicitRenderedBodyNonTTYUsesDocumentRendering(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "readable"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-print", "b"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
 	got := out.String()
-	if strings.Count(got, "HTTP/1.1 200 OK") != 1 {
-		t.Fatalf("expected readable preamble once, got:\n%s", got)
+	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
+		t.Fatalf("body-only output included response transcript:\n%s", got)
 	}
-	for _, want := range []string{`"id": 1`, `"id": 2`, `"id": 3`, `"id": 4`} {
+	for _, want := range []string{`"id":1`, `"id":2`, `"id":3`, `"id":4`} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in readable output, got:\n%s", want, got)
+			t.Fatalf("expected %q in auto output, got:\n%s", want, got)
 		}
 	}
-	if !strings.Contains(got, "[\n") {
-		t.Fatalf("expected non-TTY readable output to render the collected array, got:\n%s", got)
+	if strings.Contains(got, "[\n") {
+		t.Fatalf("expected non-TTY auto output to render compactly, got:\n%s", got)
 	}
 }
 
@@ -568,11 +668,11 @@ func TestPaginationStreamingFilterUsesFormatter(t *testing.T) {
 	}
 }
 
-func TestPaginationExplicitReadableFilterOmitsResponsePreamble(t *testing.T) {
+func TestPaginationExplicitJSONFilterOmitsResponseContext(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "readable"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "json"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -582,7 +682,7 @@ func TestPaginationExplicitReadableFilterOmitsResponsePreamble(t *testing.T) {
 	}
 	for _, want := range []string{`"id": 1`, `"id": 2`, `"id": 3`, `"id": 4`} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in filtered readable output, got:\n%s", want, got)
+			t.Fatalf("expected %q in filtered JSON output, got:\n%s", want, got)
 		}
 	}
 }

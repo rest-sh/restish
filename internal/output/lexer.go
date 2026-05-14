@@ -23,7 +23,7 @@ const (
 // bracket nesting depth inside the chroma LexerState.
 type indentDepthKey struct{}
 
-// ReadableLexer is a custom chroma lexer for Restish readable output.
+// ReadableLexer is a custom chroma lexer for Restish terminal output.
 // It extends JSON tokenization with special-case patterns for:
 //   - ISO 8601 / HTTP dates  → LiteralDate
 //   - URLs                   → LiteralStringSymbol

@@ -133,7 +133,7 @@ func TestHookPluginsRedactSecretRequestHeadersByDefault(t *testing.T) {
 	c.Hooks().PluginManifestCachePath = filepath.Join(t.TempDir(), "plugin-manifest.cbor")
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
-	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", "testapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -150,7 +150,7 @@ func TestHookPluginsPreserveSecretRequestHeadersWhenOptedIn(t *testing.T) {
 	c.Hooks().PluginManifestCachePath = filepath.Join(t.TempDir(), "plugin-manifest.cbor")
 	c.Hooks().ConfigPath = writeAPIConfig(t, hookSecretHeaderConfig(srv.URL))
 
-	if err := c.Run([]string{"restish", "get", "testapi/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", "testapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -221,12 +221,32 @@ func TestResponseMiddlewarePluginModify(t *testing.T) {
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if !strings.Contains(out.String(), "plugin_added") {
 		t.Errorf("expected plugin_added in output, got:\n%s", out.String())
+	}
+}
+
+func TestResponseMiddlewarePluginBypassedForRawRedirect(t *testing.T) {
+	installHookPlugin(t)
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
+
+	raw := `{"hello":"world"}`
+	srv := hookJSONServer(t, 200, raw)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := out.String(); got != raw {
+		t.Fatalf("raw redirect path changed body bytes:\ngot  %q\nwant %q", got, raw)
+	}
+	if strings.Contains(out.String(), "plugin_added") {
+		t.Fatalf("response middleware ran on raw redirect path:\n%s", out.String())
 	}
 }
 
@@ -239,7 +259,7 @@ func TestResponseMiddlewarePluginDrop(t *testing.T) {
 	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", srv.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -262,7 +282,7 @@ func TestResponseMiddlewarePluginFollow(t *testing.T) {
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
-	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -298,7 +318,7 @@ func TestResponseMiddlewarePluginFollowWithHeadersAndBody(t *testing.T) {
 	first := hookJSONServer(t, 200, `{"from":"first"}`)
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
-	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -364,7 +384,7 @@ func TestResponseMiddlewarePluginFollowCrossHostStripsProfileQueryCredentials(t 
 		t.Fatalf("write config: %v", err)
 	}
 
-	if err := c.Run([]string{"restish", "get", first.URL}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", first.URL}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(errOut.String(), "stripping credentials") {

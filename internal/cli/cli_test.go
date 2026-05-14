@@ -364,6 +364,12 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 			t.Errorf("expected root --help-all to contain %q:\n%s", want, got)
 		}
 	}
+	outputGroupIdx := strings.Index(got, "Output Options")
+	printFlagIdx := strings.Index(got, "--rsh-print")
+	authGroupIdx := strings.Index(got, "Auth and Profile Options")
+	if outputGroupIdx < 0 || printFlagIdx < outputGroupIdx || authGroupIdx < 0 || printFlagIdx > authGroupIdx {
+		t.Fatalf("--rsh-print should be grouped under Output Options in --help-all:\n%s", got)
+	}
 }
 
 func TestUnknownCommand(t *testing.T) {

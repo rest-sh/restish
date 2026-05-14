@@ -81,30 +81,30 @@ replaces, or intentionally retires each major v1 capability.
 The mapping below helps contributors jump from a v1 feature area into the
 record that now defines the v2 design:
 
-| v1 Area | Primary v2 design record |
-| ------- | ------------------------ |
-| CLI runtime and lifecycle | `001-cli-architecture.md` |
-| Config, profiles, and persistence | `002-config-and-profiles.md` |
-| Content types and encodings | `003-content-types-and-encodings.md` |
-| Authentication | `004-authentication.md` |
-| TLS, mTLS, and cert inspection | `005-tls-and-cert-handling.md` |
-| Spec discovery and loading | `006-spec-discovery-and-loading.md` |
-| Generated API commands | `007-api-command-generation.md` |
-| Shorthand request input | `008-shorthand-input.md` |
-| Response model and output | `009-response-normalization-and-output.md` |
-| Filtering and projection | `010-filtering-and-projection.md` |
-| Hypermedia and pagination | `011-pagination-and-hypermedia.md` |
-| Streaming | `012-streaming.md` |
-| Caching and retries | `013-caching-and-retries.md` |
-| Edit workflow | `014-edit-workflow.md` |
-| `links` command | `015-links-command.md` |
-| Shell setup and completions | `016-setup-and-completions.md` |
-| CLI behavior, diagnostics, exit rules | `017-cli-behavior-and-diagnostics.md` |
-| Plugin architecture and concrete plugins | `018` through `027` |
-| Output framing | `028-document-and-record-output.md` |
-| End-to-end request pipeline | `029-request-execution-pipeline.md` |
-| Security model | `030-security-model-and-trust-boundaries.md` |
-| Compatibility and migration | `031-compatibility-and-migration.md` |
+| v1 Area                                  | Primary v2 design record                     |
+| ---------------------------------------- | -------------------------------------------- |
+| CLI runtime and lifecycle                | `001-cli-architecture.md`                    |
+| Config, profiles, and persistence        | `002-config-and-profiles.md`                 |
+| Content types and encodings              | `003-content-types-and-encodings.md`         |
+| Authentication                           | `004-authentication.md`                      |
+| TLS, mTLS, and cert inspection           | `005-tls-and-cert-handling.md`               |
+| Spec discovery and loading               | `006-spec-discovery-and-loading.md`          |
+| Generated API commands                   | `007-api-command-generation.md`              |
+| Shorthand request input                  | `008-shorthand-input.md`                     |
+| Response model and output                | `009-response-normalization-and-output.md`   |
+| Filtering and projection                 | `010-filtering-and-projection.md`            |
+| Hypermedia and pagination                | `011-pagination-and-hypermedia.md`           |
+| Streaming                                | `012-streaming.md`                           |
+| Caching and retries                      | `013-caching-and-retries.md`                 |
+| Edit workflow                            | `014-edit-workflow.md`                       |
+| `links` command                          | `015-links-command.md`                       |
+| Shell setup and completions              | `016-setup-and-completions.md`               |
+| CLI behavior, diagnostics, exit rules    | `017-cli-behavior-and-diagnostics.md`        |
+| Plugin architecture and concrete plugins | `018` through `027`                          |
+| Output framing                           | `028-document-and-record-output.md`          |
+| End-to-end request pipeline              | `029-request-execution-pipeline.md`          |
+| Security model                           | `030-security-model-and-trust-boundaries.md` |
+| Compatibility and migration              | `031-compatibility-and-migration.md`         |
 
 Where the v2 design intentionally changes behavior, the crosswalk should be
 read together with design 031 rather than assuming direct one-to-one parity.
@@ -212,7 +212,7 @@ names.
 
 | Subcommand                    | Description                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------ |
-| old interactive API setup  | Interactive TUI to create or update an API registration (profiles, headers, query params, auth). |
+| old interactive API setup     | Interactive TUI to create or update an API registration (profiles, headers, query params, auth). |
 | `api show <name>`             | Print the API config as JSON or YAML.                                                            |
 | `api edit`                    | Open `apis.json` in `$VISUAL` / `$EDITOR`.                                                       |
 | `api sync <name>`             | Force-refresh the cached API spec.                                                               |
@@ -499,7 +499,6 @@ Also checks `/etc/restish/config.json` and `~/.restish/config.json` (legacy).
 | `-v`, `--rsh-verbose`       | `RSH_VERBOSE`            | false     | Verbose debug output                    |
 | `-o`, `--rsh-output-format` | `RSH_OUTPUT_FORMAT`      | `auto`    | Output format                           |
 | `-f`, `--rsh-filter`        | `RSH_FILTER`             | —         | Shorthand query filter/projection       |
-| `-r`, `--rsh-raw`           | `RSH_RAW`                | false     | Raw string output (strip JSON quotes)   |
 | `-s`, `--rsh-server`        | `RSH_SERVER`             | —         | Override scheme://host for requests     |
 | `-H`, `--rsh-header`        | `RSH_HEADER`             | —         | Set a request header (repeatable)       |
 | `-q`, `--rsh-query`         | `RSH_QUERY`              | —         | Set a query parameter (repeatable)      |
@@ -708,18 +707,6 @@ Uses `danielgtaylor/shorthand` v2 query syntax (similar to JMESPath / jq):
 Filter expressions (inside `[...]`) use `danielgtaylor/mexpr` — a small
 expression language supporting comparisons, `contains`, `startsWith`,
 `where`, `after`, etc.
-
-### Raw mode
-
-`-r` / `--rsh-raw` strips JSON string quotes from the filter result when the
-result is:
-
-- A string → printed without quotes.
-- An array of scalars → one value per line, no quotes.
-
-Useful for shell scripting where you want to loop over IDs without parsing.
-
----
 
 ## 14. CLI Shorthand (Input Language)
 

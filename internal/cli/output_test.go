@@ -28,6 +28,18 @@ func useJSONResponse(c *cli.CLI, status int, body string) {
 	})
 }
 
+func useTextResponse(c *cli.CLI, status int, contentType, body string) {
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{contentType}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+}
+
 func useCBORResponse(t *testing.T, c *cli.CLI, status int, value any) []byte {
 	t.Helper()
 	raw, err := cbor.Marshal(value)
@@ -84,42 +96,283 @@ func TestJSONOutput(t *testing.T) {
 	}
 }
 
-// TestReadableOutput verifies that -o readable includes the status line and headers.
-func TestReadableOutput(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{"hello":"world"}`)
-	if err := c.Run([]string{"restish", "get", "-o", "readable", "https://api.example.com/items"}); err != nil {
+func TestDefaultTTYOutputPrintsResponseTranscript(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type":  []string{"application/json"},
+				"Set-Cookie":    []string{"session=secret"},
+				"X-Trace-Token": []string{"abc123"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"hello":"world"}`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	got := out.String()
 
-	if !strings.Contains(got, "200") {
-		t.Errorf("readable output missing status code:\n%s", got)
+	context := stripANSI(out.String())
+	for _, want := range []string{"HTTP/1.1 200 OK", "Content-Type: application/json", "X-Trace-Token: abc123"} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, context)
+		}
 	}
-	if !strings.Contains(got, "Content-Type") {
-		t.Errorf("readable output missing Content-Type header:\n%s", got)
+	if strings.Contains(context, "session=secret") || !strings.Contains(context, "Set-Cookie: <redacted>") {
+		t.Fatalf("stdout did not redact sensitive header:\n%s", context)
+	}
+	if !strings.Contains(context, `"hello": "world"`) {
+		t.Fatalf("stdout missing formatted body:\n%s", context)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("expected no stderr diagnostics, got:\n%s", errOut.String())
 	}
 }
 
-// TestReadableBodyIsValidJSON verifies that the body section of -o readable output
-// is parseable JSON (no ANSI codes since we're not a TTY).
-func TestReadableBodyIsValidJSON(t *testing.T) {
-	c, out, _ := newTestCLI(t)
+func TestExplicitJSONTTYOutputStillShowsContextOnStdout(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
 	useJSONResponse(c, 200, `{"key":"value"}`)
-	if err := c.Run([]string{"restish", "get", "-o", "readable", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "-o", "json", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Split on the blank line between headers and body.
-	parts := strings.SplitN(out.String(), "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected blank-line separator in readable output:\n%s", out.String())
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200 OK") || !strings.Contains(got, "Content-Type: application/json") || !strings.Contains(got, `"key": "value"`) {
+		t.Fatalf("stdout missing response transcript:\n%s", got)
 	}
-	bodyPart := strings.TrimSpace(parts[1])
+	if errOut.Len() != 0 {
+		t.Fatalf("expected no stderr diagnostics, got:\n%s", errOut.String())
+	}
+}
 
-	var v any
-	if err := json.Unmarshal([]byte(bodyPart), &v); err != nil {
-		t.Errorf("body section is not valid JSON: %v\nbody: %s", err, bodyPart)
+func TestExplicitPrintBodyOnlySuppressesTTYHeaders(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useJSONResponse(c, 200, `{"key":"value"}`)
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "-o", "json", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "HTTP/1.1") || strings.Contains(got, "Content-Type:") {
+		t.Fatalf("body-only print included headers:\n%s", got)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(out.Bytes(), &body); err != nil {
+		t.Fatalf("stdout should be body JSON only, got %q: %v", out.String(), err)
+	}
+	if body["key"] != "value" {
+		t.Fatalf("unexpected body: %#v", body)
+	}
+}
+
+func TestExplicitPrintBodyColorColorsCompactJSON(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"key":"value"}`)
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "bc", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected colored compact JSON, got:\n%s", got)
+	}
+	stripped := stripANSI(got)
+	var body map[string]string
+	if err := json.Unmarshal([]byte(stripped), &body); err != nil {
+		t.Fatalf("colored output should strip to JSON, got %q: %v", stripped, err)
+	}
+	if body["key"] != "value" {
+		t.Fatalf("unexpected body: %#v", body)
+	}
+}
+
+func TestExplicitPrintBodyPrettyNoColorOnTTY(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useJSONResponse(c, 200, `{"key":"value"}`)
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "bp", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected no ANSI color codes for --rsh-print=bp, got:\n%s", got)
+	}
+	if !strings.Contains(got, "key") || !strings.Contains(got, "value") {
+		t.Fatalf("expected body content, got:\n%s", got)
+	}
+}
+
+func TestExplicitPrintBodyRendersImageOnTTY(t *testing.T) {
+	data := pngBytes(t)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	t.Setenv("RSH_IMAGE_PROTOCOL", "iterm2")
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(data)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/logo.png"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\x1b]1337;File=") {
+		t.Fatalf("expected terminal image output, got %q", got)
+	}
+	if bytes.Equal(out.Bytes(), data) {
+		t.Fatalf("expected rendered image, got raw image bytes")
+	}
+}
+
+func TestExplicitPrintRequestBodyModifiers(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"ok":true}`)
+	if err := c.Run([]string{"restish", "post", "--rsh-print", "B", "https://api.example.com/items", "name: Alice"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != `{"name":"Alice"}` {
+		t.Fatalf("request body = %q, want compact JSON", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "post", "--rsh-print", "Bpc", "https://api.example.com/items", "name: Alice"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected colored request body, got:\n%s", got)
+	}
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, `"name": "Alice"`) {
+		t.Fatalf("expected pretty request body, got:\n%s", stripped)
+	}
+}
+
+func TestPrintRequestAndResponseTranscript(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useJSONResponse(c, 200, `{"ok":true}`)
+	if err := c.Run([]string{
+		"restish", "post",
+		"--rsh-header", "Authorization: Bearer secret",
+		"--rsh-print", "HBhbp",
+		"https://api.example.com/items",
+		"name: Alice",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := stripANSI(out.String())
+	for _, want := range []string{
+		"POST /items HTTP/1.1",
+		"Host: api.example.com",
+		"Authorization: <redacted>",
+		`"name": "Alice"`,
+		"HTTP/1.1 200 OK",
+		`"ok": true`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestPrintRequestHeadersRedactsSensitiveQueryParams(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"ok":true}`)
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "H", "https://api.example.com/items?api_key=secret&token=abc&page=1"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := stripANSI(out.String())
+	if strings.Contains(got, "api_key=secret") || strings.Contains(got, "token=abc") {
+		t.Fatalf("printed request leaked sensitive query params:\n%s", got)
+	}
+	for _, want := range []string{"GET /items?", "api_key=%3Credacted%3E", "token=%3Credacted%3E", "page=1"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("printed request missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestExplicitAutoOutputFormatRedirectRendersBody(t *testing.T) {
+	raw := `{"z":1}`
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, raw)
+	if err := c.Run([]string{"restish", "get", "-o", "auto", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); got == raw {
+		t.Fatalf("explicit -o auto used raw redirected body path:\n%s", got)
+	}
+	if got, want := out.String(), "{\n  \"z\": 1\n}\n"; got != want {
+		t.Fatalf("explicit -o auto = %q, want pretty rendered JSON body %q", got, want)
+	}
+}
+
+func TestExplicitAutoOutputFormatRedirectRendersPlainTextBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useTextResponse(c, 200, "text/plain; charset=utf-8", "hello")
+	if err := c.Run([]string{"restish", "get", "-o", "auto", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "hello\n"; got != want {
+		t.Fatalf("explicit -o auto plain text = %q, want %q", got, want)
+	}
+}
+
+func TestFilteredStructuredOutputPrettyByDefault(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"object":{"z":1,"items":[true,false]}}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.object", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "{\n  \"items\": [\n    true,\n    false\n  ],\n  \"z\": 1\n}\n"; got != want {
+		t.Fatalf("filtered structured output = %q, want pretty JSON %q", got, want)
+	}
+}
+
+func TestExplicitPrintBodyKeepsAutoOutputCompact(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"object":{"z":1}}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.object", "--rsh-print", "b", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "{\"z\":1}\n"; got != want {
+		t.Fatalf("explicit --rsh-print=b output = %q, want compact JSON %q", got, want)
+	}
+}
+
+func TestExplicitPrintBodyKeepsJSONFilterCompact(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"object":{"z":1}}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.object", "-o", "json", "--rsh-print", "b", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "{\"z\":1}\n"; got != want {
+		t.Fatalf("explicit --rsh-print=b -o json output = %q, want compact JSON %q", got, want)
+	}
+}
+
+func TestTTYTableOutputPrintsSingleHTTPPreamble(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useJSONResponse(c, 200, `[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]`)
+	if err := c.Run([]string{"restish", "get", "-o", "table", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := stripANSI(out.String())
+	if count := strings.Count(got, "HTTP/1.1 200 OK"); count != 1 {
+		t.Fatalf("HTTP preamble count = %d, want 1:\n%s", count, got)
+	}
+	if !strings.Contains(got, "Alice") || !strings.Contains(got, "Bob") {
+		t.Fatalf("table body missing rows:\n%s", got)
 	}
 }
 
@@ -183,33 +436,63 @@ func TestUnknownOutputFormat(t *testing.T) {
 	}
 }
 
-func TestRawOutputFormatRemoved(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{}`)
-	err := c.Run([]string{"restish", "get", "-o", "raw", "https://api.example.com/items"})
-	if err == nil {
-		t.Fatal("expected error for -o raw, got nil")
+// TestPrintResponseHeadersOnly verifies that --rsh-print h writes only
+// response headers and no body.
+func TestPrintResponseHeadersOnly(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Custom": []string{"hello"}},
+			Body:       io.NopCloser(strings.NewReader(`{"key":"value"}`)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "h", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), `raw response body bytes`) ||
-		!strings.Contains(err.Error(), `-o lines`) {
-		t.Fatalf("expected -r and -o lines hints, got: %v", err)
+	got := stripANSI(out.String())
+	for _, want := range []string{"HTTP/1.1 200 OK", "Content-Type: application/json", "X-Custom: hello"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "key") || strings.Contains(got, "value") {
+		t.Fatalf("body should not appear with --rsh-print h:\n%s", got)
 	}
 }
 
-func TestRawWithFilterSuggestsOutputModes(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{"id":1}`)
-	err := c.Run([]string{"restish", "get", "-r", "-f", "body.id", "https://api.example.com/items"})
-	if err == nil {
-		t.Fatal("expected -r with filter error")
+// TestPrintResponseHeadersAndBody verifies that --rsh-print hb writes headers
+// then body, without request parts.
+func TestPrintResponseHeadersAndBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 201, `{"created":true}`)
+	if err := c.Run([]string{"restish", "post", "--rsh-print", "hb", "--rsh-ignore-status-code", "https://api.example.com/items", "name: test"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, want := range []string{
-		"For shell-friendly scalar output use: -o lines",
-		"For JSON use: -o json",
-	} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("expected %q hint, got: %v", want, err)
-		}
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 201") {
+		t.Fatalf("stdout missing response status:\n%s", got)
+	}
+	if !strings.Contains(got, "created") {
+		t.Fatalf("stdout missing body:\n%s", got)
+	}
+	if strings.Contains(got, "POST") {
+		t.Fatalf("request line should not appear with --rsh-print hb:\n%s", got)
+	}
+}
+
+func TestPrintRejectsRawPart(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{}`)
+	err := c.Run([]string{"restish", "get", "--rsh-print", "rb", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected --rsh-print raw part to be rejected")
+	}
+	if !strings.Contains(err.Error(), `unknown part "r"`) ||
+		!strings.Contains(err.Error(), "H, B, h, b, p, c") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -277,18 +560,6 @@ func TestFilterLinesOutputRejectsObjects(t *testing.T) {
 	}
 }
 
-func TestFilterRawErrors(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{"name":"Alice"}`)
-	err := c.Run([]string{"restish", "get", "-f", "body.name", "-r", "https://api.example.com/items"})
-	if err == nil {
-		t.Fatal("expected -f with -r to fail")
-	}
-	if !strings.Contains(err.Error(), "cannot be combined") || !strings.Contains(err.Error(), "-o lines") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 // TestFilterHeaders verifies that --rsh-headers is shorthand for -f headers.
 func TestFilterHeaders(t *testing.T) {
 	c, out, _ := newTestCLI(t)
@@ -309,6 +580,52 @@ func TestFilterStatus(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "204" {
 		t.Fatalf("status output = %q, want 204", got)
+	}
+}
+
+func TestFilterHeadersDoesNotReadBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	body := &failOnReadBody{t: t}
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Test": []string{"ok"}},
+			Body:       body,
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-headers", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "X-Test") {
+		t.Fatalf("headers output missing X-Test header:\n%s", got)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
+	}
+}
+
+func TestFilterStatusDoesNotReadBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	body := &failOnReadBody{t: t}
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 204,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       body,
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-status", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "204" {
+		t.Fatalf("status output = %q, want 204", got)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
 	}
 }
 
@@ -460,30 +777,6 @@ func TestFilterAtNonTTYUsesJSONFormatter(t *testing.T) {
 	}
 }
 
-func TestRawFlagWithoutFilterWritesOriginalBytes(t *testing.T) {
-	raw := "{\n  \"z\": 1,\n  \"a\": 2\n}\n"
-	c, out, _ := newTestCLI(t)
-	useJSONResponse(c, 200, raw)
-	if err := c.Run([]string{"restish", "get", "-r", "https://api.example.com/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if out.String() != raw {
-		t.Fatalf("raw output changed:\ngot  %q\nwant %q", out.String(), raw)
-	}
-}
-
-func TestRawFlagWithOutputFormatErrors(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{}`)
-	err := c.Run([]string{"restish", "get", "-r", "-o", "json", "https://api.example.com/items"})
-	if err == nil {
-		t.Fatal("expected -r with -o to fail")
-	}
-	if !strings.Contains(err.Error(), "cannot be combined") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestImageResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	data := pngBytes(t)
 	c, out, _ := newTestCLI(t)
@@ -504,6 +797,29 @@ func TestImageResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	}
 	if _, err := png.Decode(bytes.NewReader(out.Bytes())); err != nil {
 		t.Fatalf("output is not a valid png: %v", err)
+	}
+}
+
+func TestExplicitPrintBodyImageNonTTYWritesOriginalBytes(t *testing.T) {
+	data := pngBytes(t)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(bytes.NewReader(data)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/logo.png"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), data) {
+		t.Fatalf("image bytes changed: got %d bytes, want %d", out.Len(), len(data))
+	}
+	if strings.HasPrefix(out.String(), `"`) {
+		t.Fatalf("image body was JSON-encoded instead of written as bytes")
 	}
 }
 
@@ -531,6 +847,63 @@ func TestBinaryResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	}
 }
 
+func TestExplicitPrintBodyBinaryNonTTYOmitNotice(t *testing.T) {
+	data := []byte{0x00, 0x01, 0xff, 0x7f}
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+			Body:       io.NopCloser(bytes.NewReader(data)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/file"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Binary body omitted: 4 bytes (application/octet-stream)") {
+		t.Fatalf("expected binary omit notice, got %q", got)
+	}
+	if strings.Contains(got, "AAH/fw==") {
+		t.Fatalf("binary body was JSON base64-encoded:\n%s", got)
+	}
+}
+
+func TestExplicitPrintBodyPlainTextNonTTYStaysText(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useTextResponse(c, 200, "text/plain; charset=utf-8", "hello")
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/message"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "hello\n"; got != want {
+		t.Fatalf("plain text body-only output = %q, want %q", got, want)
+	}
+}
+
+func TestExplicitPrintBodyNoContentNonTTYWritesNothing(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 204, "")
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/empty"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("no-content body-only output = %q, want empty", got)
+	}
+}
+
+func TestExplicitPrintBodyJSONNullNonTTYWritesNull(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, "null")
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/null"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "null\n"; got != want {
+		t.Fatalf("JSON null body-only output = %q, want %q", got, want)
+	}
+}
+
 func TestStructuredJSONResponseDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
 	raw := "{\n  \"ok\": true\n}\n"
 	c, out, _ := newTestCLI(t)
@@ -540,6 +913,51 @@ func TestStructuredJSONResponseDefaultNonTTYPreservesOriginalBytes(t *testing.T)
 	}
 	if got := out.String(); got != raw {
 		t.Fatalf("default redirected output changed body bytes:\ngot  %q\nwant %q", got, raw)
+	}
+}
+
+func TestMalformedJSONDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
+	raw := "{not json"
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, raw)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); got != raw {
+		t.Fatalf("default redirected output changed malformed JSON bytes:\ngot  %q\nwant %q", got, raw)
+	}
+}
+
+func TestOutputFormatAutoEnvPreservesDefaultRawRedirect(t *testing.T) {
+	t.Setenv("RSH_OUTPUT_FORMAT", "auto")
+	raw := `{"z":1}`
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, raw)
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); got != raw {
+		t.Fatalf("RSH_OUTPUT_FORMAT=auto changed redirected body bytes:\ngot  %q\nwant %q", got, raw)
+	}
+}
+
+func TestMalformedCBORDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
+	raw := []byte{0xff}
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/cbor"}},
+			Body:       io.NopCloser(bytes.NewReader(raw)),
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), raw) {
+		t.Fatalf("default redirected output changed malformed CBOR bytes:\ngot  %x\nwant %x", out.Bytes(), raw)
 	}
 }
 
@@ -566,5 +984,47 @@ func TestExplicitJSONOutputTranscodesStructuredCBOR(t *testing.T) {
 	}
 	if !got["ok"] {
 		t.Fatalf("explicit JSON output = %#v, want ok=true", got)
+	}
+}
+
+type failOnReadBody struct {
+	t      *testing.T
+	closed bool
+}
+
+func (b *failOnReadBody) Read([]byte) (int, error) {
+	b.t.Fatal("response body was read for body-free --rsh-print output")
+	return 0, io.EOF
+}
+
+func (b *failOnReadBody) Close() error {
+	b.closed = true
+	return nil
+}
+
+func TestPrintResponseHeadersOnlyDoesNotReadBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	body := &failOnReadBody{t: t}
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Test": []string{"ok"}},
+			Body:       body,
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "h", "https://api.example.com/status"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200 OK") || !strings.Contains(got, "X-Test: ok") {
+		t.Fatalf("headers-only output missing response metadata:\n%s", got)
+	}
+	if strings.Contains(got, "body") {
+		t.Fatalf("headers-only output included body data:\n%s", got)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
 	}
 }

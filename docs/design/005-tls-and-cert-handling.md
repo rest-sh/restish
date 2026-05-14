@@ -67,7 +67,7 @@ containing at least:
 - optional server-name override if the CLI supports one in the future
 
 The resulting `tls.Config` should be built from that resolved plan rather than
-from raw flags scattered across multiple layers.
+from unprocessed flag values scattered across multiple layers.
 
 ## Precedence And Conflict Rules
 

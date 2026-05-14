@@ -155,7 +155,7 @@ formatter as long as the failure is explicit.
 
 - Restish still owns HTTP, decoding, filtering, pagination, and normalization
 - the plugin receives a normalized response model rather than `*http.Response`
-- the plugin owns final bytes on stdout
+- the plugin owns final bytes for the rendered body/value it is asked to format
 - the plugin can hold just enough state to stay consistent across paginated and
   event-stream output without forcing the host to buffer everything
 
@@ -164,7 +164,7 @@ out of process without changing the core CLI pipeline.
 
 One notable non-goal is sharing built-in syntax highlighting. Formatter plugins
 receive a `color` hint, but they are responsible for any ANSI or styling they
-want to emit. The core readable formatter's highlighting helpers remain an
+want to emit. The core auto formatter's highlighting helpers remain an
 in-process implementation detail.
 
 ## Alternatives Considered

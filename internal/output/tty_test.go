@@ -50,10 +50,10 @@ func TestIsTerminal_Buffer(t *testing.T) {
 	}
 }
 
-// TestReadableFormatter_WithColor exercises the chroma highlight path.
+// TestAutoFormatter_WithColor exercises the chroma highlight path.
 // We can't easily verify the exact ANSI codes, so we check that the body
 // content is still present and the call doesn't error.
-func TestReadableFormatter_WithColor(t *testing.T) {
+func TestAutoFormatter_WithColor(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -62,7 +62,7 @@ func TestReadableFormatter_WithColor(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	f := output.DefaultFormatters()["readable"]
+	f := &output.AutoFormatter{}
 	if err := f.Format(&buf, resp, true); err != nil {
 		t.Fatalf("unexpected error with color enabled: %v", err)
 	}
@@ -70,16 +70,11 @@ func TestReadableFormatter_WithColor(t *testing.T) {
 	// Strip ANSI escape sequences (ESC [ ... m) for the content check.
 	stripped := stripANSI(buf.String())
 
-	if !strings.Contains(stripped, "200") {
-		t.Errorf("status missing from colored output: %q", stripped)
+	if strings.Contains(stripped, "HTTP/1.1") {
+		t.Errorf("auto formatter included status in colored output: %q", stripped)
 	}
-
-	// Extract body (after blank line) and verify it parses as JSON.
-	parts := strings.SplitN(stripped, "\n\n", 2)
-	if len(parts) == 2 {
-		if err := json.Unmarshal([]byte(strings.TrimSpace(parts[1])), new(any)); err != nil {
-			t.Errorf("body section not valid JSON after stripping ANSI: %v\nbody: %s", err, parts[1])
-		}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stripped)), new(any)); err != nil {
+		t.Errorf("body output not valid JSON after stripping ANSI: %v\nbody: %s", err, stripped)
 	}
 }
 

@@ -146,7 +146,8 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.StringArrayP("rsh-header", "H", nil, `Request header in "Name: Value" format (repeatable)`)
 	pf.StringArrayP("rsh-query", "q", nil, `Query parameter in "key=value" format (repeatable)`)
 	pf.StringP("rsh-server", "s", "", "Override scheme://host for all requests (e.g. https://staging.example.com)")
-	pf.StringP("rsh-output-format", "o", "", "Output format: "+output.FormatterNames(c.formatters)+" (default: readable on TTY, body bytes when redirected, JSON for filtered values; use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)")
+	pf.StringP("rsh-output-format", "o", "auto", "Output format for rendered response bodies: "+output.FormatterNames(c.formatters)+" (default: auto; use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)")
+	pf.String("rsh-print", "auto", "Output parts to print: auto or any of H=request headers, B=request body, h=response headers, b=rendered body, p=pretty, c=color")
 	pf.BoolP("rsh-silent", "S", false, "Suppress all output; only the exit code conveys success or failure")
 	pf.String("rsh-columns", "", "Comma-separated column names for -o table (e.g. id,name,status)")
 	pf.String("rsh-sort-by", "", "Sort -o table rows by this column name")
@@ -155,7 +156,6 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-filter-lang", "", "Force filter language: shorthand or jq")
 	pf.Bool("rsh-headers", false, "Shorthand for -f headers")
 	pf.Bool("rsh-status", false, "Shorthand for -f status")
-	pf.BoolP("rsh-raw", "r", false, "Raw output: original response body bytes only")
 	pf.CountP("rsh-verbose", "v", "Verbose output: -v shows request/response headers, -vv adds TLS details")
 	pf.Bool("rsh-insecure", false, "Disable TLS certificate verification")
 	pf.String("rsh-client-cert", "", "Path to a PEM encoded client certificate for mTLS")
@@ -202,6 +202,9 @@ func (c *CLI) registerFlagCompletions(root *cobra.Command) {
 		}
 		sort.Strings(names)
 		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = root.RegisterFlagCompletionFunc("rsh-print", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"auto", "hbpc", "b", "bp", "HBhbp"}, cobra.ShellCompDirectiveNoFileComp
 	})
 
 	// -p / --rsh-profile: dynamic list from all API profiles in config.

@@ -47,6 +47,9 @@ Response middleware can also return a `follow` object with `method`, `uri`,
 optional `headers`, optional `body`, and optional `content_type`. Restish sends
 that follow-up request through the normal host pipeline, including TLS, retries,
 auth for same-origin follows, and credential stripping for cross-host follows.
+Response middleware runs when Restish renders, filters, collects, or explicitly
+prints an interpreted response. It is skipped for plain raw downloads such as
+`restish URL > file`, where Restish preserves the original response body bytes.
 
 Auth hooks run after built-in auth has prepared the request. For generated
 operations that require more than one credential, Restish applies all selected

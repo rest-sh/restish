@@ -246,7 +246,7 @@ func TestAPIShortNameWithShorthandInfersPOST(t *testing.T) {
 	}
 }
 
-func TestHTTPResponseContentTypeIdentity(t *testing.T) {
+func TestHTTPResponseContentTypeIdentityDefaultsToRawRedirect(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -257,7 +257,7 @@ func TestHTTPResponseContentTypeIdentity(t *testing.T) {
 			Request:    r,
 		}, nil
 	})
-	if err := c.Run([]string{"restish", "-r", "https://api.example.com/items"}); err != nil {
+	if err := c.Run([]string{"restish", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := strings.TrimSpace(out.String()); got != "plain response" {

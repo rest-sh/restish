@@ -165,7 +165,7 @@ In particular:
 
 - `-o json` always produces one valid JSON document
 - `-o yaml` always produces one valid YAML document
-- `-o readable` keeps a coherent human-oriented framing contract
+- `-o auto` keeps a coherent human-oriented framing contract
 - `-o ndjson` is the explicit record format for one item per line
 
 Design 028 defines the planner that combines pagination with filtering and

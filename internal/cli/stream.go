@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +36,7 @@ func streamingContentType(ct string) string {
 	return ""
 }
 
-func (c *CLI) handleMislabeledJSONLines(cmd *cobra.Command, resp *http.Response) (bool, error) {
+func (c *CLI) handleMislabeledJSONLines(cmd *cobra.Command, resp *http.Response, prepared *preparedRequest, spec printSpec) (bool, error) {
 	gf := globalFlagsFromContext(requestContext(cmd))
 	if gf.MaxItems <= 0 {
 		return false, nil
@@ -45,6 +44,15 @@ func (c *CLI) handleMislabeledJSONLines(cmd *cobra.Command, resp *http.Response)
 	base, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if base != "application/json" || resp.Body == nil {
 		return false, nil
+	}
+	if contentEncodingApplied(resp.Header.Get("Content-Encoding")) {
+		body, err := c.decompressedResponseBody(resp)
+		if err != nil {
+			_ = resp.Body.Close()
+			return true, fmt.Errorf("decompressing response: %w", err)
+		}
+		resp.Body = body
+		resp.Header.Del("Content-Encoding")
 	}
 
 	original := resp.Body
@@ -69,7 +77,12 @@ func (c *CLI) handleMislabeledJSONLines(cmd *cobra.Command, resp *http.Response)
 		_ = resp.Body.Close()
 		return true, err
 	}
-	return true, c.handleNDJSON(cmd, resp)
+	return true, c.handleNDJSON(cmd, resp, prepared, spec)
+}
+
+func contentEncodingApplied(encoding string) bool {
+	encoding = strings.TrimSpace(encoding)
+	return encoding != "" && !strings.EqualFold(encoding, "identity")
 }
 
 type readCloser struct {
@@ -79,138 +92,37 @@ type readCloser struct {
 
 // handleSSE reads a text/event-stream response body, emitting each event's
 // data to stdout as it arrives. Filter and output flags are applied per event.
-func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response) (retErr error) {
+func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response, prepared *preparedRequest, spec printSpec) (retErr error) {
 	defer resp.Body.Close()
+
+	if !spec.includesResponseBody() {
+		return c.runPrintSpec(cmd, streamBaseResponse(resp), prepared, spec, nil)
+	}
 
 	if err := validateStreamingOutputMode(cmd); err != nil {
 		return err
 	}
 
-	gfSSE := globalFlagsFromContext(requestContext(cmd))
-	if collectStreamingJSON(gfSSE) {
-		return c.collectSSE(cmd, resp)
-	}
-	maxItems := gfSSE.MaxItems
-	filterExpr := gfSSE.Filter
-	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), filterExpr != "")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := renderer.Close(); retErr == nil && err != nil {
-			retErr = err
+	gf := globalFlagsFromContext(requestContext(cmd))
+	base := streamBaseResponse(resp)
+	return c.runPrintSpec(cmd, base, prepared, spec, func() (err error) {
+		if collectStreamingJSON(gf) {
+			return c.collectSSE(cmd, resp)
 		}
-	}()
-
-	scanner := bufio.NewScanner(resp.Body)
-	lineLimit := maxStreamLineBytes(cmd)
-	eventLimit := maxSSEEventBytes(cmd)
-	scanner.Buffer(make([]byte, 64*1024), lineLimit)
-	var eventName string
-	var eventID string
-	var retryMs int
-	var data strings.Builder
-	count := 0
-
-	flush := func() error {
-		if data.Len() == 0 && eventName == "" && eventID == "" && retryMs == 0 {
-			return nil
-		}
-		parsed, parsedJSON := parseJSONOrString(data.String())
-		item := parsed
-		itemParsedJSON := parsedJSON
-		if filterExpr != "" || eventName != "" || eventID != "" || retryMs != 0 {
-			event := map[string]any{"data": parsed}
-			if eventName != "" {
-				event["event"] = eventName
-			}
-			if eventID != "" {
-				event["id"] = eventID
-			}
-			if retryMs != 0 {
-				event["retry"] = retryMs
-			}
-			item = event
-			itemParsedJSON = true
-		}
-		if err := c.renderStreamValue(cmd, renderer, item, itemParsedJSON); err != nil {
+		renderer, err := c.newValueRendererWithPrint(cmd, base, gf.Filter != "", spec)
+		if err != nil {
 			return err
 		}
-		count++
-		eventName = ""
-		eventID = ""
-		retryMs = 0
-		data.Reset()
-		return nil
-	}
+		defer func() {
+			if closeErr := renderer.Close(); err == nil && closeErr != nil {
+				err = closeErr
+			}
+		}()
 
-	stoppedByMax := false
-	for scanner.Scan() {
-		line := strings.TrimRight(scanner.Text(), "\r")
-		if line == "" {
-			// Blank line terminates an event.
-			if err := flush(); err != nil {
-				return err
-			}
-			if maxItems > 0 && count >= maxItems {
-				stoppedByMax = true
-				break
-			}
-			continue
-		}
-
-		if strings.HasPrefix(line, ":") {
-			continue
-		}
-		field, value, hasColon := strings.Cut(line, ":")
-		if hasColon {
-			value = strings.TrimPrefix(value, " ")
-		} else {
-			value = ""
-		}
-		switch field {
-		case "data":
-			nextLen := data.Len() + len(value)
-			if data.Len() > 0 {
-				nextLen++
-			}
-			if nextLen > eventLimit {
-				return fmt.Errorf("SSE event data exceeds %d bytes", eventLimit)
-			}
-			if data.Len() > 0 {
-				data.WriteByte('\n')
-			}
-			data.WriteString(value)
-		case "event":
-			eventName = value
-		case "id":
-			eventID = value
-		case "retry":
-			if retry, err := strconv.Atoi(value); err == nil {
-				retryMs = retry
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		if stoppedByMax {
-			c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
-			return nil
-		}
-		if strings.Contains(err.Error(), "token too long") {
-			return fmt.Errorf("SSE stream line exceeds %d bytes", lineLimit)
-		}
-		return fmt.Errorf("SSE stream error: %w", err)
-	}
-	if !stoppedByMax {
-		if err := flush(); err != nil {
-			return err
-		}
-	} else {
-		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
-	}
-
-	return nil
+		return c.readSSEItems(cmd, resp.Body, gf.Filter != "", gf.MaxItems, func(item streamItem) error {
+			return c.renderStreamValue(cmd, renderer, item.value, item.parsedJSON)
+		})
+	})
 }
 
 func parseJSONOrString(data string) (any, bool) {
@@ -221,86 +133,64 @@ func parseJSONOrString(data string) (any, bool) {
 	return data, false
 }
 
-func (c *CLI) formatStreamItem(cmd *cobra.Command, renderer valueRenderer, data string) error {
-	item, parsedJSON := parseJSONOrString(data)
-	return c.renderStreamValue(cmd, renderer, item, parsedJSON)
+type streamItem struct {
+	value      any
+	parsedJSON bool
 }
 
-func (c *CLI) collectNDJSON(cmd *cobra.Command, resp *http.Response) error {
-	gf := globalFlagsFromContext(requestContext(cmd))
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 64*1024), maxStreamLineBytes(cmd))
-	items := make([]any, 0, gf.MaxItems)
-	stoppedByMax := false
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
+func sseStreamItem(data, eventName, eventID string, retryMs int, wrapData bool) streamItem {
+	parsed, parsedJSON := parseJSONOrString(data)
+	item := parsed
+	itemParsedJSON := parsedJSON
+	if wrapData || eventName != "" || eventID != "" || retryMs != 0 {
+		event := map[string]any{"data": parsed}
+		if eventName != "" {
+			event["event"] = eventName
 		}
-		item, _ := parseJSONOrString(line)
-		value, err := c.filteredStreamValue(cmd, item)
-		if err != nil {
-			return err
+		if eventID != "" {
+			event["id"] = eventID
 		}
-		items = append(items, value)
-		if len(items) >= gf.MaxItems {
-			stoppedByMax = true
-			break
+		if retryMs != 0 {
+			event["retry"] = retryMs
 		}
+		item = event
+		itemParsedJSON = true
 	}
-	if err := scanner.Err(); err != nil && !stoppedByMax {
-		return fmt.Errorf("NDJSON stream error: %w", err)
-	}
-	if stoppedByMax {
-		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", gf.MaxItems)
-	}
-	return c.renderValue(cmd, items, false)
+	return streamItem{value: item, parsedJSON: itemParsedJSON}
 }
 
-func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
-	gf := globalFlagsFromContext(requestContext(cmd))
-	scanner := bufio.NewScanner(resp.Body)
+func (c *CLI) readSSEItems(cmd *cobra.Command, r io.Reader, wrapData bool, maxItems int, emit func(streamItem) error) error {
+	scanner := bufio.NewScanner(r)
 	lineLimit := maxStreamLineBytes(cmd)
 	eventLimit := maxSSEEventBytes(cmd)
 	scanner.Buffer(make([]byte, 64*1024), lineLimit)
-	items := make([]any, 0, gf.MaxItems)
-	var eventName, eventID string
+
+	var eventName string
+	var eventID string
 	var retryMs int
 	var data strings.Builder
+	count := 0
 	stoppedByMax := false
+
 	flush := func() error {
 		if data.Len() == 0 && eventName == "" && eventID == "" && retryMs == 0 {
 			return nil
 		}
-		parsed, _ := parseJSONOrString(data.String())
-		item := parsed
-		if gf.Filter != "" || eventName != "" || eventID != "" || retryMs != 0 {
-			event := map[string]any{"data": parsed}
-			if eventName != "" {
-				event["event"] = eventName
-			}
-			if eventID != "" {
-				event["id"] = eventID
-			}
-			if retryMs != 0 {
-				event["retry"] = retryMs
-			}
-			item = event
-		}
-		value, err := c.filteredStreamValue(cmd, item)
-		if err != nil {
+		item := sseStreamItem(data.String(), eventName, eventID, retryMs, wrapData)
+		if err := emit(item); err != nil {
 			return err
 		}
-		items = append(items, value)
+		count++
 		eventName = ""
 		eventID = ""
 		retryMs = 0
 		data.Reset()
-		if len(items) >= gf.MaxItems {
+		if maxItems > 0 && count >= maxItems {
 			stoppedByMax = true
 		}
 		return nil
 	}
+
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r")
 		if line == "" {
@@ -312,6 +202,7 @@ func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
 			}
 			continue
 		}
+
 		if strings.HasPrefix(line, ":") {
 			continue
 		}
@@ -344,6 +235,7 @@ func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
 			}
 		}
 	}
+
 	if err := scanner.Err(); err != nil && !stoppedByMax {
 		if strings.Contains(err.Error(), "token too long") {
 			return fmt.Errorf("SSE stream line exceeds %d bytes", lineLimit)
@@ -356,54 +248,13 @@ func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
 		}
 	}
 	if stoppedByMax {
-		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", gf.MaxItems)
+		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 	}
-	return c.renderValue(cmd, items, false)
+	return nil
 }
 
-func (c *CLI) filteredStreamValue(cmd *cobra.Command, item any) (any, error) {
-	gf := globalFlagsFromContext(requestContext(cmd))
-	if gf.Filter == "" {
-		return item, nil
-	}
-	doc := map[string]any{"body": item}
-	lang := resolveFilterLang(gf.FilterLang)
-	filterResult, err := filter.ApplyWithInfo(gf.Filter, doc, lang)
-	if err != nil {
-		return nil, fmt.Errorf("filter: %w", err)
-	}
-	traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
-	if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
-		c.hintBodyPrefixOnce(gf.Filter)
-	}
-	return filterResult.Value, nil
-}
-
-// handleNDJSON reads a newline-delimited JSON response body, emitting each
-// line to stdout as it arrives. Filter and output flags are applied per line.
-func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr error) {
-	defer resp.Body.Close()
-
-	if err := validateStreamingOutputMode(cmd); err != nil {
-		return err
-	}
-
-	gf := globalFlagsFromContext(requestContext(cmd))
-	if collectStreamingJSON(gf) {
-		return c.collectNDJSON(cmd, resp)
-	}
-	maxItems := gf.MaxItems
-	renderer, err := c.newValueRenderer(cmd, streamBaseResponse(resp), gf.Filter != "")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := renderer.Close(); retErr == nil && err != nil {
-			retErr = err
-		}
-	}()
-
-	scanner := bufio.NewScanner(resp.Body)
+func (c *CLI) readNDJSONItems(cmd *cobra.Command, r io.Reader, maxItems int, emit func(streamItem) error) error {
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), maxStreamLineBytes(cmd))
 	count := 0
 	stoppedByMax := false
@@ -413,7 +264,8 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		if line == "" {
 			continue
 		}
-		if err := c.formatStreamItem(cmd, renderer, line); err != nil {
+		item, parsedJSON := parseJSONOrString(line)
+		if err := emit(streamItem{value: item, parsedJSON: parsedJSON}); err != nil {
 			return err
 		}
 		count++
@@ -423,17 +275,80 @@ func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response) (retErr erro
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if stoppedByMax {
-			c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
-			return nil
-		}
+	if err := scanner.Err(); err != nil && !stoppedByMax {
 		return fmt.Errorf("NDJSON stream error: %w", err)
 	}
 	if stoppedByMax {
 		c.warnf("streaming stopped at --rsh-max-items=%d; pass 0 for unlimited", maxItems)
 	}
 	return nil
+}
+
+func (c *CLI) collectNDJSON(cmd *cobra.Command, resp *http.Response) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	items := make([]any, 0, gf.MaxItems)
+	if err := c.readNDJSONItems(cmd, resp.Body, gf.MaxItems, func(item streamItem) error {
+		value, err := c.filterBodyValue(cmd, item.value)
+		if err != nil {
+			return err
+		}
+		items = append(items, value)
+		return nil
+	}); err != nil {
+		return err
+	}
+	return c.renderValue(cmd, items, false)
+}
+
+func (c *CLI) collectSSE(cmd *cobra.Command, resp *http.Response) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	items := make([]any, 0, gf.MaxItems)
+	if err := c.readSSEItems(cmd, resp.Body, gf.Filter != "", gf.MaxItems, func(item streamItem) error {
+		value, err := c.filterBodyValue(cmd, item.value)
+		if err != nil {
+			return err
+		}
+		items = append(items, value)
+		return nil
+	}); err != nil {
+		return err
+	}
+	return c.renderValue(cmd, items, false)
+}
+
+// handleNDJSON reads a newline-delimited JSON response body, emitting each
+// line to stdout as it arrives. Filter and output flags are applied per line.
+func (c *CLI) handleNDJSON(cmd *cobra.Command, resp *http.Response, prepared *preparedRequest, spec printSpec) (retErr error) {
+	defer resp.Body.Close()
+
+	if !spec.includesResponseBody() {
+		return c.runPrintSpec(cmd, streamBaseResponse(resp), prepared, spec, nil)
+	}
+
+	if err := validateStreamingOutputMode(cmd); err != nil {
+		return err
+	}
+
+	gf := globalFlagsFromContext(requestContext(cmd))
+	base := streamBaseResponse(resp)
+	return c.runPrintSpec(cmd, base, prepared, spec, func() (err error) {
+		if collectStreamingJSON(gf) {
+			return c.collectNDJSON(cmd, resp)
+		}
+		renderer, err := c.newValueRendererWithPrint(cmd, base, gf.Filter != "", spec)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if closeErr := renderer.Close(); err == nil && closeErr != nil {
+				err = closeErr
+			}
+		}()
+
+		return c.readNDJSONItems(cmd, resp.Body, gf.MaxItems, func(item streamItem) error {
+			return c.renderStreamValue(cmd, renderer, item.value, item.parsedJSON)
+		})
+	})
 }
 
 func maxStreamLineBytes(cmd *cobra.Command) int {
@@ -459,23 +374,13 @@ func (c *CLI) renderStreamValue(cmd *cobra.Command, renderer valueRenderer, item
 	filterExpr := gf.Filter
 	fmtName := gf.OutputFormat
 
-	result := item
-	if filterExpr != "" {
-		doc := map[string]any{"body": item}
-		lang := resolveFilterLang(gf.FilterLang)
-		filterResult, err := filter.ApplyWithInfo(filterExpr, doc, lang)
-		if err != nil {
-			return fmt.Errorf("filter: %w", err)
-		}
-		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
-		if filterResult.Value == nil && bodyPrefixTargetExists(item, filterExpr) {
-			c.hintBodyPrefixOnce(filterExpr)
-		}
-		result = filterResult.Value
+	result, err := c.filterBodyValue(cmd, item)
+	if err != nil {
+		return err
 	}
 
-	tty := output.IsTerminal(c.Stdout)
-	if fmtName == "readable" || (fmtName == "" && tty) {
+	tty := c.stdoutIsTerminal()
+	if fmtName == "" && tty {
 		if !parsedJSON {
 			c.traceValueOutput(cmd, result, false)
 			if trace := requestTraceFromContext(requestContext(cmd)); trace != nil {

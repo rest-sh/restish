@@ -257,7 +257,7 @@ func (c *CLI) handlePluginResponse(cmd *cobra.Command, msg pluginwire.ResponseMs
 		Headers: msg.Headers,
 		Body:    msg.Body,
 	}
-	return c.formatResponse(cmd, resp)
+	return c.formatResponse(cmd, resp, nil)
 }
 
 func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, writer *commandPluginWriter, msg pluginwire.APISpecMsg) error {

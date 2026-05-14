@@ -45,11 +45,11 @@ var defaultFlagGroups = map[string]string{
 	"rsh-ignore-status-code": flagGroupRequest,
 
 	"rsh-output-format": flagGroupOutput,
+	"rsh-print":         flagGroupOutput,
 	"rsh-filter":        flagGroupOutput,
 	"rsh-filter-lang":   flagGroupOutput,
 	"rsh-headers":       flagGroupOutput,
 	"rsh-status":        flagGroupOutput,
-	"rsh-raw":           flagGroupOutput,
 	"rsh-columns":       flagGroupOutput,
 	"rsh-sort-by":       flagGroupOutput,
 	"rsh-silent":        flagGroupOutput,

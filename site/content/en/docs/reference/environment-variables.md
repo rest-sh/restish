@@ -35,6 +35,8 @@ Flags override environment defaults for one command.
 
 | Variable | Purpose |
 | --- | --- |
+| `RSH_OUTPUT_FORMAT` | Default `-o` rendered body format. |
+| `RSH_PRINT` | Default `--rsh-print` output parts, such as `b` for compact rendered output in scripts. |
 | `VISUAL` | Preferred editor for `config edit` and `edit`. |
 | `EDITOR` | Fallback editor. |
 | `NO_COLOR` | Disable color where respected. |

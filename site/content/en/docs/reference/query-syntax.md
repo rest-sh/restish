@@ -127,7 +127,7 @@ Use item-by-item filters when you want early output or large-result safety.
 
 ## Scalar Output
 
-Explicit scalar filters print without JSON string quotes in readable output.
+Explicit scalar filters print without JSON string quotes in auto output.
 Use `-o lines` when a selected array or stream should become one scalar value
 per line:
 

@@ -74,8 +74,15 @@ type testHooks struct {
 	SignalAwareContext func() (context.Context, context.CancelFunc)
 	// AuthHookFunc overrides auth hook plugin execution in tests.
 	AuthHookFunc func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error
-	// StdoutIsTerminal overrides doctor text-output channel selection in tests.
+	// StdoutIsTerminal overrides terminal detection in tests.
 	StdoutIsTerminal func(io.Writer) bool
+}
+
+func (c *CLI) stdoutIsTerminal() bool {
+	if c.hooks.StdoutIsTerminal != nil {
+		return c.hooks.StdoutIsTerminal(c.Stdout)
+	}
+	return output.IsTerminal(c.Stdout)
 }
 
 // CLI holds all state for a Restish instance. Using a struct instead of
@@ -1012,12 +1019,12 @@ func flagConsumesNextArg(token string) bool {
 
 var boolLikeLongFlags = map[string]bool{
 	"help": true, "version": true,
-	"rsh-silent": true, "rsh-headers": true, "rsh-raw": true,
+	"rsh-silent": true, "rsh-headers": true,
 	"rsh-verbose": true, "rsh-insecure": true, "rsh-ignore-status-code": true,
 	"rsh-no-cache": true, "rsh-no-browser": true, "rsh-no-paginate": true,
 	"rsh-collect": true,
 }
 
 var boolLikeShortFlags = map[rune]bool{
-	'S': true, 'r': true, 'v': true,
+	'S': true, 'v': true,
 }

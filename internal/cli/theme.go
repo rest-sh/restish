@@ -47,7 +47,7 @@ func (c *CLI) newThemeResetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "reset",
 		Aliases: []string{"unset"},
-		Short:   "Reset readable output highlighting to the built-in theme",
+		Short:   "Reset auto output highlighting to the built-in theme",
 		Args:    cobra.NoArgs,
 		RunE:    c.runThemeReset,
 	}

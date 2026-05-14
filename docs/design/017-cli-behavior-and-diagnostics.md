@@ -114,6 +114,12 @@ The channel split is strict:
 
 This is one of the most important scriptability guarantees in the product.
 
+For normal HTTP requests, `--rsh-print` chooses which HTTP exchange parts are
+written to stdout. Its `auto` mode prints response status, headers, and a
+formatted body on an interactive terminal; redirected unfiltered output
+preserves response body bytes. Explicit filters, including `-f @`,
+`--rsh-headers`, and `--rsh-status`, select metadata as rendered stdout data.
+
 The same contract applies to helper commands and diagnostics-oriented commands.
 Even a command like `cert` or `cache` should keep human-oriented warnings on
 stderr and reserve stdout for the primary command result.
@@ -257,8 +263,8 @@ label, such as `info:`, `warning:`, `error:`, `hint:`, or `tip:`. The message
 body remains plain so it can be copied, searched, and read in low-contrast
 themes.
 
-Diagnostic label colors are part of the same theme system as readable response
-output. Themes may override `diagnostic_info`, `diagnostic_warn`,
+Diagnostic label colors are part of the same theme system as auto response
+output and printed HTTP transcripts. Themes may override `diagnostic_info`, `diagnostic_warn`,
 `diagnostic_error`, and `diagnostic_hint`; otherwise Restish uses the built-in
 theme colors. Non-TTY stderr, disabled color, and raw plugin stderr pass-through
 must remain free of injected ANSI escapes. Structured plugin messages that the

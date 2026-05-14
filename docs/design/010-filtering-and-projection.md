@@ -160,7 +160,6 @@ Examples:
 
 - `--rsh-headers` asks for header-oriented output
 - `--rsh-filter` asks for a selected sub-value
-- `--rsh-raw` asks for original response body bytes
 - `-o lines` asks for shell-friendly scalar line output
 
 When options conflict, Restish should either:
@@ -170,13 +169,13 @@ When options conflict, Restish should either:
 
 Silent discarding of user intent is not acceptable.
 
-## Raw And Line Output
+## Redirected Bytes And Line Output
 
-`--rsh-raw` writes the original response body bytes after transfer decoding.
-Redirected stdout uses the same byte-preserving body path when no filter,
-metadata shortcut, collection, or output format is set. Raw output is
-incompatible with `--rsh-filter` and `--rsh-headers` because filtered values are
-normalized logical values, not byte-preserving response payloads.
+Redirected stdout writes the original response body bytes after transfer
+decoding when no filter, metadata shortcut, collection, or rendered output
+format is requested. This raw-download path bypasses response middleware.
+Filters always select decoded normalized values; they do not have a raw-byte
+rendering mode.
 
 Filtered scalar values print plainly by default:
 
@@ -202,7 +201,8 @@ Once filtering selects a sub-value, Restish is no longer working with the
 original raw response payload. That changes default output behavior for
 non-TTY/stdout-redirected cases:
 
-- if the result is a transformed value, default to JSON
+- if the result is a transformed structured value, default to pretty JSON
+  unless `--rsh-print=b` explicitly requests compact rendering
 - do not try to preserve raw bytes that no longer correspond to the selected
   result
 - if the result is a scalar selected by an explicit filter, print the scalar
@@ -212,9 +212,11 @@ non-TTY/stdout-redirected cases:
 
 This is a key interaction between filtering and design 009/028.
 
-An explicit `-f @` is not the same as omitting a filter. No filter may use a
-body-oriented display default, but `@` selects the full normalized response
-document with `status`, `headers`, `links`, and `body`.
+An explicit `-f @` is not the same as omitting a filter. Omitting a filter lets
+`--rsh-print=auto` choose between an interactive transcript and redirected raw
+body bytes. `@` selects the full normalized response document with `status`,
+`headers`, `links`, and `body` as rendered stdout data, pretty by default in
+redirected output.
 
 ## Performance And Caching
 

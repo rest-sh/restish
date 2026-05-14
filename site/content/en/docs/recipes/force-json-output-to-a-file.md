@@ -14,6 +14,13 @@ one logical document before writing the file.
 restish api.rest.sh/images --rsh-collect -o json > images.json
 ```
 
+The file is pretty-printed by default. Add `--rsh-print=b` when compact JSON is
+more useful:
+
+```bash
+restish api.rest.sh/images --rsh-collect -o json --rsh-print=b > images.json
+```
+
 Open the file with `jq`, an editor, or another tool that expects one complete
 JSON value. For line-oriented pipelines, prefer `-o ndjson` instead; the
 [Output guide](/docs/guides/output/) explains document versus record formats.

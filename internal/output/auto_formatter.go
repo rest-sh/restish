@@ -5,34 +5,27 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"net/http"
 	"net/url"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/rest-sh/restish/v2/internal/content"
-	"github.com/rest-sh/restish/v2/internal/secrets"
 	"golang.org/x/term"
 )
 
-// ReadableFormatter writes the full response (status line, headers, body) in
-// a human-friendly format. When color is true, the output is syntax-highlighted
-// using the active Restish style. Structured bodies are rendered as valid JSON,
-// while text bodies are rendered as text.
-type ReadableFormatter struct{}
+// AutoFormatter writes the response body in the default human-friendly format.
+// It does not write status or headers; callers that want interactive HTTP
+// context should print those parts explicitly before rendering the body.
+type AutoFormatter struct{}
 
-func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	if err := writeHTTPPreamble(w, resp, color); err != nil {
-		return err
-	}
+func (f *AutoFormatter) Format(w io.Writer, resp *Response, color bool) error {
+	return writeAutoBody(w, resp, color)
+}
 
-	fmt.Fprintln(w) // blank line between headers and body
-
-	// Body.
+func writeAutoBody(w io.Writer, resp *Response, color bool) error {
 	if resp.Body == nil {
 		return nil
 	}
@@ -60,7 +53,7 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 		return err
 	}
 	if size, ok := binaryBodySize(resp); ok {
-		_, err := fmt.Fprintf(w, "Binary body omitted: %d bytes (%s). Use --rsh-raw to write bytes.\n", size, binaryBodyContentType(resp))
+		_, err := fmt.Fprintf(w, "Binary body omitted: %d bytes (%s). Redirect stdout without a filter or output format to write bytes.\n", size, binaryBodyContentType(resp))
 		return err
 	}
 	data, err := marshalIndentNoEscape(resp.Body)
@@ -77,45 +70,28 @@ func (f *ReadableFormatter) Format(w io.Writer, resp *Response, color bool) erro
 	return highlight(w, ReadableLexer, data)
 }
 
-// StartValueStream writes the HTTP preamble once, then renders each streamed
-// item as a pretty-printed JSON block for fast human feedback on TTYs.
-func (f *ReadableFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
-	if base != nil && (base.Proto != "" || base.Status != 0 || len(base.Headers) > 0) {
-		if err := writeHTTPPreamble(w, base, color); err != nil {
-			return nil, err
-		}
-		if _, err := io.WriteString(w, "\n"); err != nil {
-			return nil, err
-		}
-	}
-	return &readableValueStream{w: w, color: color}, nil
+// StartValueStream renders each streamed value as a pretty-printed JSON block
+// for fast human feedback on TTYs.
+func (f *AutoFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
+	return &autoValueStream{w: w, color: color}, nil
 }
 
-// StartFramedValueStream writes the HTTP preamble once, then renders streamed
-// items into a larger JSON document shape described by frame.
-func (f *ReadableFormatter) StartFramedValueStream(w io.Writer, base *Response, color bool, frame FramedValueTemplate) (ValueStream, error) {
-	if base != nil && (base.Proto != "" || base.Status != 0 || len(base.Headers) > 0) {
-		if err := writeHTTPPreamble(w, base, color); err != nil {
-			return nil, err
-		}
-		if _, err := io.WriteString(w, "\n"); err != nil {
-			return nil, err
-		}
-	}
-	return &readableFramedValueStream{
+// StartFramedValueStream renders streamed values into a JSON-shaped frame
+func (f *AutoFormatter) StartFramedValueStream(w io.Writer, base *Response, color bool, frame FramedValueTemplate) (ValueStream, error) {
+	return &autoFramedValueStream{
 		w:     w,
 		color: color,
 		frame: frame,
 	}, nil
 }
 
-type readableValueStream struct {
+type autoValueStream struct {
 	w     io.Writer
 	color bool
 	first bool
 }
 
-func (s *readableValueStream) WriteValue(value any) error {
+func (s *autoValueStream) WriteValue(value any) error {
 	if s.first {
 		if _, err := io.WriteString(s.w, "\n"); err != nil {
 			return err
@@ -135,11 +111,11 @@ func (s *readableValueStream) WriteValue(value any) error {
 	return err
 }
 
-func (s *readableValueStream) Close() error {
+func (s *autoValueStream) Close() error {
 	return nil
 }
 
-type readableFramedValueStream struct {
+type autoFramedValueStream struct {
 	w         io.Writer
 	color     bool
 	frame     FramedValueTemplate
@@ -147,7 +123,7 @@ type readableFramedValueStream struct {
 	wroteItem bool
 }
 
-func (s *readableFramedValueStream) WriteValue(value any) error {
+func (s *autoFramedValueStream) WriteValue(value any) error {
 	if !s.started {
 		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
 			return err
@@ -182,7 +158,7 @@ func (s *readableFramedValueStream) WriteValue(value any) error {
 	return err
 }
 
-func (s *readableFramedValueStream) Close() error {
+func (s *autoFramedValueStream) Close() error {
 	if !s.started {
 		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
 			return err
@@ -219,7 +195,7 @@ func (s *readableFramedValueStream) Close() error {
 	return err
 }
 
-func (s *readableFramedValueStream) writeFrameBracket(bracket string) error {
+func (s *autoFramedValueStream) writeFrameBracket(bracket string) error {
 	if !s.color {
 		_, err := io.WriteString(s.w, bracket)
 		return err
@@ -230,11 +206,11 @@ func (s *readableFramedValueStream) writeFrameBracket(bracket string) error {
 	})
 }
 
-func (s *readableFramedValueStream) arrayDepth() int {
+func (s *autoFramedValueStream) arrayDepth() int {
 	return indentDepth(s.frame.CloseIndent)
 }
 
-func (s *readableFramedValueStream) itemDepth() int {
+func (s *autoFramedValueStream) itemDepth() int {
 	return s.arrayDepth() + 1
 }
 
@@ -270,32 +246,6 @@ func indentBlock(data []byte, indent string) []byte {
 		lineStart = i + 1
 	}
 	return out.Bytes()
-}
-
-func writeHTTPPreamble(w io.Writer, resp *Response, color bool) error {
-	var preamble strings.Builder
-	fmt.Fprintf(&preamble, "%s %d %s\n", resp.Proto, resp.Status, http.StatusText(resp.Status))
-
-	keys := make([]string, 0, len(resp.Headers))
-	for k := range resp.Headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		for _, value := range resp.Headers[k] {
-			if secrets.IsHeaderName(k) {
-				value = "<redacted>"
-			}
-			fmt.Fprintf(&preamble, "%s: %s\n", k, value)
-		}
-	}
-
-	if color {
-		return highlight(w, HTTPPreambleLexer, []byte(preamble.String()))
-	}
-
-	_, err := io.WriteString(w, preamble.String())
-	return err
 }
 
 // highlight tokenizes data with the given lexer and writes chroma-colored

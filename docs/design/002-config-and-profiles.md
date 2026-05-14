@@ -121,7 +121,7 @@ The primary top-level keys are:
 
 `auth_profiles` stores shared auth configurations that profile-level `auth_ref`
 or credential-level `auth_ref` can point to. `cache` stores global cache
-settings. `theme` stores readable-output style overrides. `theme_source`
+settings. `theme` stores human terminal output style overrides. `theme_source`
 records the source last installed by `config theme set`; remote sources use this
 for first-install confirmation, and official bundled themes use the
 `official:<name>` source form. `plugins` stores raw per-plugin JSON config keyed

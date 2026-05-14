@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,21 @@ func sseBody(events ...string) string {
 	return b.String()
 }
 
-// TestSSEThreeEvents verifies that three SSE events are each printed to stdout.
+func gzipBytes(t *testing.T, data string) []byte {
+	t.Helper()
+	var encoded bytes.Buffer
+	gz := gzip.NewWriter(&encoded)
+	if _, err := gz.Write([]byte(data)); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	return encoded.Bytes()
+}
+
+// TestSSEThreeEvents verifies that redirected, untransformed SSE output
+// preserves raw event-stream framing.
 func TestSSEThreeEvents(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
@@ -43,15 +58,277 @@ func TestSSEThreeEvents(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{`"n":1`, `"n":2`, `"n":3`} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %q in output, got:\n%s", want, got)
-		}
+	want := sseBody(`{"n":1}`, `{"n":2}`, `{"n":3}`)
+	if got != want {
+		t.Fatalf("raw SSE output = %q, want %q", got, want)
 	}
-	// Each event should be on its own line.
-	lines := strings.Split(strings.TrimSpace(got), "\n")
-	if len(lines) != 3 {
-		t.Errorf("expected 3 output lines, got %d:\n%s", len(lines), got)
+}
+
+func TestSSEPrintAutoPreservesRawRedirectedStream(t *testing.T) {
+	tests := []struct {
+		name string
+		env  bool
+		args []string
+	}{
+		{name: "env", env: true},
+		{name: "flag", args: []string{"--rsh-print", "auto"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.env {
+				t.Setenv("RSH_PRINT", "auto")
+			}
+			mux := http.NewServeMux()
+			mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, sseBody(`{"n":1}`, `{"n":2}`))
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+
+			c, out, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			args := append([]string{"restish", "get"}, tt.args...)
+			args = append(args, srv.URL+"/events")
+			if err := c.Run(args); err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			got := out.String()
+			want := sseBody(`{"n":1}`, `{"n":2}`)
+			if got != want {
+				t.Fatalf("auto print output = %q, want raw stream %q", got, want)
+			}
+		})
+	}
+}
+
+func TestStreamingRawRedirectDecompressesContentEncoding(t *testing.T) {
+	raw := "{\"n\":1}\n{\"n\":2}\n"
+	encoded := gzipBytes(t, raw)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(encoded)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got := out.String(); got != raw {
+		t.Fatalf("raw streaming output = %q, want decompressed %q", got, raw)
+	}
+}
+
+func TestStreamingRenderedOutputDecompressesContentEncoding(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		path        string
+	}{
+		{name: "sse", contentType: "text/event-stream", body: sseBody(`{"n":1}`, `{"n":2}`), path: "/events"},
+		{name: "ndjson", contentType: "application/x-ndjson", body: "{\"n\":1}\n{\"n\":2}\n", path: "/stream"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := gzipBytes(t, tt.body)
+			mux := http.NewServeMux()
+			mux.HandleFunc(tt.path, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tt.contentType)
+				w.Header().Set("Content-Encoding", "gzip")
+				_, _ = w.Write(encoded)
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+
+			c, out, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			if err := c.Run([]string{"restish", "get", "-o", "ndjson", srv.URL + tt.path}); err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if got, want := out.String(), "{\"n\":1}\n{\"n\":2}\n"; got != want {
+				t.Fatalf("rendered compressed stream output = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestStreamingHeadersOnlyAllowsJSONOutputFormat(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		path        string
+	}{
+		{name: "sse", contentType: "text/event-stream", body: sseBody(`{"n":1}`), path: "/events"},
+		{name: "ndjson", contentType: "application/x-ndjson", body: "{\"n\":1}\n", path: "/stream"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc(tt.path, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tt.contentType)
+				w.Header().Set("X-Test", "ok")
+				fmt.Fprint(w, tt.body)
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+
+			c, out, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			if err := c.Run([]string{"restish", "get", "--rsh-print", "h", "-o", "json", srv.URL + tt.path}); err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			got := stripANSI(out.String())
+			if !strings.Contains(got, "HTTP/1.1 200 OK") || !strings.Contains(got, "X-Test: ok") {
+				t.Fatalf("headers-only output missing response metadata:\n%s", got)
+			}
+			if strings.Contains(got, `"n"`) || strings.Contains(got, "data:") {
+				t.Fatalf("headers-only output included stream body:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestMislabeledJSONLinesHeadersOnlyDoesNotReadBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	body := &failOnReadBody{t: t}
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Test": []string{"ok"}},
+			Body:       body,
+			Request:    r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-max-items", "1", "--rsh-print", "h", "https://api.example.com/stream"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200 OK") || !strings.Contains(got, "X-Test: ok") {
+		t.Fatalf("headers-only output missing response metadata:\n%s", got)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
+	}
+}
+
+func TestSSEPrintRequestHeadersAppearsBeforeStreamOutput(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseBody(`{"n":1}`, `{"n":2}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "Hhb", srv.URL + "/events"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	reqIdx := strings.Index(got, "GET /events")
+	respIdx := strings.Index(got, "HTTP/1.1 200")
+	bodyIdx := strings.Index(got, `"n":1`)
+	if reqIdx < 0 {
+		t.Fatalf("request line not found:\n%s", got)
+	}
+	if respIdx < 0 {
+		t.Fatalf("response status line not found:\n%s", got)
+	}
+	if bodyIdx < 0 {
+		t.Fatalf("stream body not found:\n%s", got)
+	}
+	if reqIdx > respIdx || respIdx > bodyIdx {
+		t.Fatalf("expected request headers before response headers before body:\n%s", got)
+	}
+}
+
+func TestNDJSONPrintRequestHeadersAppearsBeforeStreamOutput(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"n":1}`)
+		fmt.Fprintln(w, `{"n":2}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "hb", srv.URL + "/stream"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200") {
+		t.Fatalf("response status not found:\n%s", got)
+	}
+	if !strings.Contains(got, `"n":1`) {
+		t.Fatalf("stream body not found:\n%s", got)
+	}
+	headerIdx := strings.Index(got, "HTTP/1.1 200")
+	bodyIdx := strings.Index(got, `"n":1`)
+	if headerIdx > bodyIdx {
+		t.Fatalf("response headers should appear before stream body:\n%s", got)
+	}
+}
+
+func TestSSEPrintHeadersOnlyOmitsStreamBody(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseBody(`{"n":1}`, `{"n":2}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "h", srv.URL + "/events"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "HTTP/1.1 200") {
+		t.Fatalf("response status not found:\n%s", got)
+	}
+	if strings.Contains(got, `"n"`) || strings.Contains(got, "data:") {
+		t.Fatalf("headers-only stream output included body data:\n%s", got)
+	}
+}
+
+func TestNDJSONPrintRequestHeadersOnlyOmitsStreamBody(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprintln(w, `{"n":1}`)
+		fmt.Fprintln(w, `{"n":2}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "H", srv.URL + "/stream"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := stripANSI(out.String())
+	if !strings.Contains(got, "GET /stream HTTP/1.1") {
+		t.Fatalf("request line not found:\n%s", got)
+	}
+	if strings.Contains(got, "HTTP/1.1 200") || strings.Contains(got, `"n"`) {
+		t.Fatalf("request-headers-only stream output included response data:\n%s", got)
 	}
 }
 
@@ -75,7 +352,8 @@ func TestSSEDataFieldWithoutColonPreservesBlankLine(t *testing.T) {
 	}
 }
 
-// TestNDJSONThreeLines verifies that three NDJSON lines are each printed to stdout.
+// TestNDJSONThreeLines verifies that redirected, untransformed NDJSON output
+// preserves raw records.
 func TestNDJSONThreeLines(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -94,14 +372,9 @@ func TestNDJSONThreeLines(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{`"n":1`, `"n":2`, `"n":3`} {
-		if !strings.Contains(got, want) {
-			t.Errorf("expected %q in output, got:\n%s", want, got)
-		}
-	}
-	lines := strings.Split(strings.TrimSpace(got), "\n")
-	if len(lines) != 3 {
-		t.Errorf("expected 3 output lines, got %d:\n%s", len(lines), got)
+	want := "{\"n\":1}\n{\"n\":2}\n{\"n\":3}\n"
+	if got != want {
+		t.Fatalf("raw NDJSON output = %q, want %q", got, want)
 	}
 }
 
@@ -152,14 +425,14 @@ func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	out := &signalWriter{needle: []byte(`"n":1`), seen: make(chan struct{})}
+	out := &signalWriter{needle: []byte(`"n": 1`), seen: make(chan struct{})}
 	c, _, _ := newTestCLI(t)
 	c.Stdout = out
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- c.Run([]string{"restish", "get", srv.URL + "/stream"})
+		errCh <- c.Run([]string{"restish", "get", "--rsh-print", "bp", srv.URL + "/stream"})
 	}()
 
 	select {
@@ -180,7 +453,7 @@ func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
 	if err := <-errCh; err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got := out.String(); !strings.Contains(got, `"n":2`) {
+	if got := out.String(); !strings.Contains(got, `"n": 2`) {
 		t.Fatalf("expected second line after response completed, got:\n%s", got)
 	}
 }
@@ -216,7 +489,7 @@ func TestNDJSONTimeoutOnlyBoundsHeaders(t *testing.T) {
 		t.Fatal("server did not write second stream line")
 	}
 	got := out.String()
-	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+	if !strings.Contains(got, `"n": 1`) || !strings.Contains(got, `"n": 2`) {
 		t.Fatalf("expected both stream lines after timeout elapsed, got:\n%s", got)
 	}
 }
@@ -247,14 +520,14 @@ func TestSSEFlushesBeforeResponseCompletes(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	out := &signalWriter{needle: []byte(`"n":1`), seen: make(chan struct{})}
+	out := &signalWriter{needle: []byte(`"n": 1`), seen: make(chan struct{})}
 	c, _, _ := newTestCLI(t)
 	c.Stdout = out
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- c.Run([]string{"restish", "get", srv.URL + "/events"})
+		errCh <- c.Run([]string{"restish", "get", "--rsh-print", "bp", srv.URL + "/events"})
 	}()
 
 	select {
@@ -275,7 +548,7 @@ func TestSSEFlushesBeforeResponseCompletes(t *testing.T) {
 	if err := <-errCh; err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got := out.String(); !strings.Contains(got, `"n":2`) {
+	if got := out.String(); !strings.Contains(got, `"n": 2`) {
 		t.Fatalf("expected second event after response completed, got:\n%s", got)
 	}
 }
@@ -314,7 +587,7 @@ func TestSSEPlainReadableOutputFlushesBeforeResponseCompletes(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"})
+		errCh <- c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "lines"})
 	}()
 
 	select {
@@ -395,13 +668,13 @@ func TestSSEMaxItems(t *testing.T) {
 
 	got := out.String()
 	// Events 1 and 2 should be present; event 3 should not.
-	if !strings.Contains(got, `"n":1`) {
+	if !strings.Contains(got, `"n": 1`) {
 		t.Errorf("expected event 1 in output, got:\n%s", got)
 	}
-	if !strings.Contains(got, `"n":2`) {
+	if !strings.Contains(got, `"n": 2`) {
 		t.Errorf("expected event 2 in output, got:\n%s", got)
 	}
-	if strings.Contains(got, `"n":3`) {
+	if strings.Contains(got, `"n": 3`) {
 		t.Errorf("unexpected event 3 in output (should be stopped by --rsh-max-items 2), got:\n%s", got)
 	}
 	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
@@ -428,10 +701,10 @@ func TestNDJSONMaxItemsWarns(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+	if !strings.Contains(got, `"n": 1`) || !strings.Contains(got, `"n": 2`) {
 		t.Fatalf("expected first two lines, got:\n%s", got)
 	}
-	if strings.Contains(got, `"n":3`) {
+	if strings.Contains(got, `"n": 3`) {
 		t.Fatalf("unexpected third line, got:\n%s", got)
 	}
 	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
@@ -458,10 +731,41 @@ func TestMislabeledJSONLinesMaxItemsStreams(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, `"n":1`) || !strings.Contains(got, `"n":2`) {
+	if !strings.Contains(got, `"n": 1`) || !strings.Contains(got, `"n": 2`) {
 		t.Fatalf("expected first two lines, got:\n%s", got)
 	}
-	if strings.Contains(got, `"n":3`) {
+	if strings.Contains(got, `"n": 3`) {
+		t.Fatalf("unexpected third line, got:\n%s", got)
+	}
+	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
+	if !strings.Contains(errOut.String(), wantWarning) {
+		t.Fatalf("expected max-items warning %q, got %q", wantWarning, errOut.String())
+	}
+}
+
+func TestMislabeledJSONLinesMaxItemsDecompressesContentEncoding(t *testing.T) {
+	raw := "{\"n\":1}\n{\"n\":2}\n{\"n\":3}\n"
+	encoded := gzipBytes(t, raw)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(encoded)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "get", srv.URL + "/stream", "--rsh-max-items", "2"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, `"n": 1`) || !strings.Contains(got, `"n": 2`) {
+		t.Fatalf("expected first two decompressed lines, got:\n%s", got)
+	}
+	if strings.Contains(got, `"n": 3`) {
 		t.Fatalf("unexpected third line, got:\n%s", got)
 	}
 	wantWarning := "streaming stopped at --rsh-max-items=2; pass 0 for unlimited"
@@ -566,23 +870,25 @@ func TestSSEReadableOutputWithColor(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	var out bytes.Buffer
 	c.Stdout = &out
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	t.Setenv("COLOR", "1")
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
 	got := out.String()
 	stripped := stripANSI(got)
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stripped)), new(any)); err != nil {
+	_, body, _ := strings.Cut(stripped, "\n\n")
+	if err := json.Unmarshal([]byte(strings.TrimSpace(body)), new(any)); err != nil {
 		t.Fatalf("expected highlighted stream output to remain valid JSON, got %q: %v", stripped, err)
 	}
-	if !strings.Contains(stripped, "\n  ") {
-		t.Errorf("expected readable output to be pretty-printed, got %q", stripped)
+	if !strings.Contains(body, "\n  ") {
+		t.Errorf("expected auto output to be pretty-printed, got %q", stripped)
 	}
 }
 
-func TestSSEReadableOutputPlainTextStaysPlain(t *testing.T) {
+func TestSSELinesOutputPlainTextStaysPlain(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -593,7 +899,7 @@ func TestSSEReadableOutputPlainTextStaysPlain(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "readable"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "-o", "lines"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -709,7 +1015,7 @@ func TestSSENDJSONOutputWithColor(t *testing.T) {
 	t.Setenv("NOCOLOR", "")
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("COLOR", "1")
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-items", "2", "-o", "ndjson"}); err != nil {
+	if err := c.Run([]string{"restish", "get", srv.URL + "/events", "--rsh-max-items", "2", "-o", "ndjson", "--rsh-print", "bc"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 
@@ -746,7 +1052,7 @@ func TestNDJSONScannerErrorFailsCommand(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "https://api.example.com/stream"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "--rsh-print", "b", "https://api.example.com/stream"})
 	if err == nil {
 		t.Fatal("expected NDJSON scanner error")
 	}
@@ -768,7 +1074,7 @@ func TestSSEReadErrorFailsCommand(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "get", "https://api.example.com/events"})
+	err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/events"})
 	if err == nil {
 		t.Fatal("expected SSE read error")
 	}
@@ -838,7 +1144,7 @@ func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "--rsh-print", "b", srv.URL + "/events"})
 	if exitCode(err) != 1 {
 		t.Fatalf("exit code = %v, want 1 (err=%v)", exitCode(err), err)
 	}
@@ -906,7 +1212,7 @@ func TestSSELargeEventExceedsScannerLimit(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "--rsh-print", "b", srv.URL + "/events"})
 	if err == nil {
 		t.Fatal("expected oversized SSE line error")
 	}
@@ -930,7 +1236,7 @@ func TestSSEEventDataLimit(t *testing.T) {
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", srv.URL + "/events"})
+	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "--rsh-print", "b", srv.URL + "/events"})
 	if err == nil {
 		t.Fatal("expected oversized SSE event error")
 	}
@@ -951,7 +1257,7 @@ func TestSSEMalformedLinesDoNotAbortStream(t *testing.T) {
 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/events"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "b", srv.URL + "/events"}); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if !strings.Contains(out.String(), `"n":1`) {

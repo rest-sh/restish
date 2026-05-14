@@ -141,6 +141,13 @@ The plugin may:
 - return `{"follow": {...}}` to tell Restish to make a follow-up request
 - return `{"response": {...}}` to replace body fields or merge headers
 
+Response middleware runs on the interpreted response path: interactive output,
+explicit filters, metadata shortcuts, collection, explicit output formats, and
+explicit `--rsh-print` values. It does not run for the automatic raw-download
+path (`restish URL > file` with no filter, collection, metadata shortcut, or
+output format), because that path preserves the original response body bytes for
+files and shell pipelines.
+
 The response update's `headers` object is a partial update: keys returned by the
 plugin replace those individual response header values, while omitted inbound
 headers remain unchanged.

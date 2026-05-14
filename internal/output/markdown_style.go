@@ -37,7 +37,7 @@ func NewMarkdownRenderer(width int) (*glamour.TermRenderer, error) {
 }
 
 // MarkdownStyle returns the Restish Glamour style, with colors derived from the
-// active user theme so Markdown bodies and help match readable output.
+// active user theme so Markdown bodies and help match auto terminal output.
 func MarkdownStyle() ansi.StyleConfig {
 	style, entries := themeSnapshot()
 	key := themeCacheKey(entries)

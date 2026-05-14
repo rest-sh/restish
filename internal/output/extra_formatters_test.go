@@ -95,7 +95,7 @@ func TestTableFormatter(t *testing.T) {
 	}
 }
 
-func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
+func TestTableFormatterOmitsHTTPPreamble(t *testing.T) {
 	resp := tableResp()
 	resp.Headers = map[string][]string{
 		"Content-Type": {"application/json"},
@@ -108,20 +108,15 @@ func TestTableFormatterIncludesHTTPPreambleForFullResponse(t *testing.T) {
 		t.Fatalf("Format: %v", err)
 	}
 	got := buf.String()
-	for _, want := range []string{
-		"HTTP/1.1 200 OK",
-		"Content-Type: application/json",
-		"Date: Mon, 02 Jan 2006 15:04:05 GMT",
-		"Set-Cookie: <redacted>",
-		"Alice",
-		"Bob",
-	} {
+	for _, want := range []string{"Alice", "Bob"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in table output:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "session=secret") {
-		t.Fatalf("sensitive header leaked in table output:\n%s", got)
+	for _, notWant := range []string{"HTTP/1.1 200 OK", "Content-Type:", "Date:", "Set-Cookie:"} {
+		if strings.Contains(got, notWant) {
+			t.Fatalf("table output should not include HTTP preamble %q:\n%s", notWant, got)
+		}
 	}
 }
 
@@ -305,10 +300,10 @@ func TestTableFormatterCJKWidth(t *testing.T) {
 	}
 }
 
-// TestReadableValueStreamEmptyBase verifies that a nil base does not crash.
-func TestReadableValueStreamEmptyBase(t *testing.T) {
+// TestAutoValueStreamEmptyBase verifies that a nil base does not crash.
+func TestAutoValueStreamEmptyBase(t *testing.T) {
 	var buf bytes.Buffer
-	f := &output.ReadableFormatter{}
+	f := &output.AutoFormatter{}
 	stream, err := f.StartValueStream(&buf, nil, false)
 	if err != nil {
 		t.Fatalf("StartValueStream(nil base): %v", err)
@@ -324,11 +319,11 @@ func TestReadableValueStreamEmptyBase(t *testing.T) {
 	}
 }
 
-// TestReadableValueStreamCloseWithoutWrites verifies that Close on an
+// TestAutoValueStreamCloseWithoutWrites verifies that Close on an
 // untouched stream does not crash.
-func TestReadableValueStreamCloseWithoutWrites(t *testing.T) {
+func TestAutoValueStreamCloseWithoutWrites(t *testing.T) {
 	var buf bytes.Buffer
-	f := &output.ReadableFormatter{}
+	f := &output.AutoFormatter{}
 	stream, err := f.StartValueStream(&buf, nil, false)
 	if err != nil {
 		t.Fatalf("StartValueStream: %v", err)

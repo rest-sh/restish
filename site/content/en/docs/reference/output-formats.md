@@ -5,9 +5,12 @@ weight: 30
 description: Reference for Restish output formats and document-versus-record behavior.
 ---
 
-Output formats decide how a normalized response is rendered after decoding,
-pagination or streaming, and filtering. They do not change request `Accept`
-headers or server-side content negotiation.
+Output formats decide how the selected body/value is rendered after decoding,
+pagination or streaming, and filtering. They do not print HTTP status or
+headers; use `--rsh-print` for those exchange parts. They also do not change
+request `Accept` headers or server-side content negotiation. Redirected
+rendered document output is pretty by default; pass `--rsh-print=b` for compact
+rendered JSON.
 
 ## Document Formats
 
@@ -15,7 +18,7 @@ Document formats produce one coherent result:
 
 | Format | Use |
 | --- | --- |
-| `readable` | Human-oriented terminal output. |
+| `auto` | Default body/value presentation. |
 | `json` | One JSON document. |
 | `yaml` | One YAML document. |
 | `cbor` | One CBOR document. |
@@ -24,7 +27,7 @@ Document formats produce one coherent result:
 | `image` | Terminal image rendering for image responses. |
 
 ```bash
-restish api.rest.sh/images -o readable
+restish api.rest.sh/images -o auto
 restish api.rest.sh/images --rsh-collect -o json
 restish api.rest.sh/images -o yaml
 restish api.rest.sh/example -o gron
@@ -69,7 +72,7 @@ restish api.rest.sh/images -o table --rsh-sort-by name
 
 ## Images
 
-The readable default renders `image/*` responses in capable interactive
+The `auto` default renders `image/*` responses in capable interactive
 terminals. Use `-o image` to force image rendering when the default would be
 something else. Redirect the same request when you want a file instead.
 
@@ -86,15 +89,18 @@ restish api.rest.sh/images -f body.name -o lines
 Explicit scalar filters print without JSON string quotes. `-o lines` accepts
 arrays and streams of scalar values and rejects structured objects.
 
-## Raw Output
+## Raw Bytes
 
-Raw output is a mode, not an `-o` format:
+Raw byte output is automatic for redirected unfiltered responses. It is not an
+`-o` format and not a `--rsh-print` part:
 
 ```bash
-restish api.rest.sh/bytes/64 --rsh-raw > sample.bin
+restish api.rest.sh/bytes/64 > sample.bin
+restish api.rest.sh/images/jpeg > dragonfly.jpg
 ```
 
-Raw mode writes response body bytes and cannot combine with filters.
+Choose a format such as `-o json`, `-o lines`, or `-o table` when you want
+Restish to render a decoded value instead.
 
 ## Related Pages
 

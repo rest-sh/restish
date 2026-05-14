@@ -21,6 +21,7 @@ type preparedRequest struct {
 	body            io.Reader
 	bodyRaw         []byte
 	bodyContentType string
+	actualRequest   *http.Request
 	authEnabled     bool
 	closer          io.Closer
 	stopClose       func() bool
@@ -144,6 +145,18 @@ func (c *CLI) prepareRequest(
 			return c.runRequestMiddlewarePlugins(req)
 		}
 	}
+	var prepared *preparedRequest
+	origBeforeRequest := opts.OnBeforeRequest
+	opts.OnBeforeRequest = func(req *http.Request) {
+		if origBeforeRequest != nil {
+			origBeforeRequest(req)
+		}
+		preparedReq := req.Clone(req.Context())
+		preparedReq.Header = req.Header.Clone()
+		preparedReq.Body = nil
+		preparedReq.GetBody = req.GetBody
+		prepared.actualRequest = preparedReq
+	}
 
 	bodyRaw, bodyContentType, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)
 	if err != nil {
@@ -154,7 +167,7 @@ func (c *CLI) prepareRequest(
 		body = bytes.NewReader(bodyRaw)
 	}
 
-	return &preparedRequest{
+	prepared = &preparedRequest{
 		rawURL:          rawURL,
 		apiName:         apiName,
 		opts:            opts,
@@ -164,7 +177,8 @@ func (c *CLI) prepareRequest(
 		authEnabled:     authEnabled,
 		closer:          transportCloser,
 		stopClose:       stopTransportClose,
-	}, nil
+	}
+	return prepared, nil
 }
 
 func filterCredentialQueryParams(query []string) []string {

@@ -16,9 +16,9 @@ func TestIndentBlockPreservesLines(t *testing.T) {
 	}
 }
 
-func TestReadableFramedValueStreamHighlightsFrameAndNestedItemDepth(t *testing.T) {
+func TestAutoFramedValueStreamHighlightsFrameAndNestedItemDepth(t *testing.T) {
 	var out bytes.Buffer
-	stream, err := (&ReadableFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
+	stream, err := (&AutoFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
 		ItemIndent:  "  ",
 		CloseIndent: "",
 	})
@@ -56,9 +56,9 @@ func TestReadableFramedValueStreamHighlightsFrameAndNestedItemDepth(t *testing.T
 	}
 }
 
-func TestReadableFramedValueStreamHighlightsWrappedArrayDepth(t *testing.T) {
+func TestAutoFramedValueStreamHighlightsWrappedArrayDepth(t *testing.T) {
 	var out bytes.Buffer
-	stream, err := (&ReadableFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
+	stream, err := (&AutoFormatter{}).StartFramedValueStream(&out, nil, true, FramedValueTemplate{
 		Prefix:      "{\n  \"data\": ",
 		Suffix:      "\n}",
 		ItemIndent:  "    ",
@@ -103,7 +103,7 @@ func TestShiftedIndentTokenCyclesBracketDepth(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
+func TestAutoFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -117,7 +117,7 @@ func TestReadableFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, true); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
 	got := out.String()
@@ -130,7 +130,7 @@ func TestReadableFormatterHighlightsPrintableTextByURLPath(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterHighlightsPrintableTextByContentType(t *testing.T) {
+func TestAutoFormatterHighlightsPrintableTextByContentType(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -143,7 +143,7 @@ func TestReadableFormatterHighlightsPrintableTextByContentType(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, true); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
 	if got := out.String(); !strings.Contains(got, "\x1b[") {
@@ -151,7 +151,7 @@ func TestReadableFormatterHighlightsPrintableTextByContentType(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterRendersLargeDeclaredTextAsText(t *testing.T) {
+func TestAutoFormatterRendersLargeDeclaredTextAsText(t *testing.T) {
 	css := strings.Repeat(".restish{color:#2dd4bf}", 5000)
 	resp := &Response{
 		Proto:   "HTTP/1.1",
@@ -165,14 +165,10 @@ func TestReadableFormatterRendersLargeDeclaredTextAsText(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, false); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, false); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
-	parts := strings.SplitN(out.String(), "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected readable output separator, got %q", out.String())
-	}
-	body := strings.TrimSpace(parts[1])
+	body := strings.TrimSpace(out.String())
 	if strings.HasPrefix(body, `"`) || strings.Contains(body, `\"`) {
 		t.Fatalf("expected raw CSS text, got JSON string body starting %q", body[:80])
 	}
@@ -181,7 +177,7 @@ func TestReadableFormatterRendersLargeDeclaredTextAsText(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterRendersLargeLexerMatchedBytesAsText(t *testing.T) {
+func TestAutoFormatterRendersLargeLexerMatchedBytesAsText(t *testing.T) {
 	js := strings.Repeat("const answer = 42;\n", 7000)
 	resp := &Response{
 		Proto:   "HTTP/1.1",
@@ -195,20 +191,16 @@ func TestReadableFormatterRendersLargeLexerMatchedBytesAsText(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, false); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, false); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
-	parts := strings.SplitN(out.String(), "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected readable output separator, got %q", out.String())
-	}
-	body := strings.TrimSpace(parts[1])
+	body := strings.TrimSpace(out.String())
 	if strings.HasPrefix(body, `"`) || !strings.Contains(body, "const answer = 42;") {
 		t.Fatalf("expected raw JavaScript text, got body starting %q", body[:80])
 	}
 }
 
-func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
+func TestAutoFormatterRendersMarkdownByURLPath(t *testing.T) {
 	resp := &Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -222,7 +214,7 @@ func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, true); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
 	plain := stripANSITest(out.String())
@@ -234,7 +226,7 @@ func TestReadableFormatterRendersMarkdownByURLPath(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
+func TestAutoFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
 	t.Setenv("GLAMOUR_STYLE", "")
 	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
 		t.Fatalf("SetTheme: %v", err)
@@ -253,7 +245,7 @@ func TestReadableFormatterRendersMarkdownWithRestishTheme(t *testing.T) {
 		Raw:     []byte("## Restish\n"),
 	}
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, true); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
 	if got := out.String(); !strings.Contains(got, "\x1b[38;2;18;52;86") {
@@ -353,7 +345,7 @@ func TestHTTPPreambleLexerUsesHeaderKeyToken(t *testing.T) {
 	}
 }
 
-func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
+func TestAutoFormatterHonorsGlamourStyleEnv(t *testing.T) {
 	t.Setenv("GLAMOUR_STYLE", "notty")
 	if err := SetTheme(ThemeEntries{"markdown_heading": "#123456"}); err != nil {
 		t.Fatalf("SetTheme: %v", err)
@@ -372,7 +364,7 @@ func TestReadableFormatterHonorsGlamourStyleEnv(t *testing.T) {
 		Raw:     []byte("## Restish\n"),
 	}
 	var out bytes.Buffer
-	if err := (&ReadableFormatter{}).Format(&out, resp, true); err != nil {
+	if err := (&AutoFormatter{}).Format(&out, resp, true); err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
 	if got := out.String(); strings.Contains(got, "\x1b[38;2;18;52;86") {

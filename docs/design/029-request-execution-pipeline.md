@@ -309,7 +309,7 @@ The renderer receives:
 - TTY metadata
 - normalized or streamed values
 - filter results
-- response metadata needed by readable or plugin formatters
+- response metadata needed by auto output or plugin formatters
 
 The rendering contract is:
 
@@ -318,7 +318,8 @@ The rendering contract is:
 - explicit `-o` always wins
 - TTY defaults are human-oriented
 - redirected unfiltered non-TTY output preserves body bytes
-- non-TTY filtered, collected, or formatted output is machine-oriented
+- non-TTY filtered, collected, or formatted output defaults to pretty rendered
+  values; explicit `--rsh-print=b` selects compact rendered output
 
 The document/record distinction from design 028 is the central rule here.
 

@@ -16,6 +16,13 @@
 /testing.md
 /test-findings.md
 
+# Local Codex skill installs.
+/skills-lock.json
+/.agents/skills/grill-me/
+/.agents/skills/grill-with-docs/
+/.agents/skills/improve-codebase-architecture/
+/.agents/skills/zoom-out/
+
 .claude/worktrees/
 
 site/node_modules/
@@ -27,3 +34,4 @@ site/resources/
 site/.hugo_build.lock
 dist/
 /tmp/
+.tmp

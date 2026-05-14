@@ -21,12 +21,12 @@ They are useful for learning and testing.
 ### Bearer Token
 
 {{< restish-example >}}
-restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
+restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer --rsh-print b
 {{< /restish-example >}}
 
 Representative output:
 
-```readable
+```text
 authenticated: true
 scheme: "bearer"
 subject: "docs-token"
@@ -35,19 +35,19 @@ subject: "docs-token"
 ### API Key Header
 
 {{< restish-example >}}
-restish -H 'X-API-Key: docs-key' api.rest.sh/auth/api-key-header
+restish -H 'X-API-Key: docs-key' api.rest.sh/auth/api-key-header --rsh-print b
 {{< /restish-example >}}
 
 ### API Key Query Param
 
 {{< restish-example >}}
-restish 'api.rest.sh/auth/api-key-query?api_key=docs-key'
+restish 'api.rest.sh/auth/api-key-query?api_key=docs-key' --rsh-print b
 {{< /restish-example >}}
 
 ### Basic Auth
 
 {{< restish-example >}}
-restish -H 'Authorization: Basic YWxpY2U6c2VjcmV0' api.rest.sh/auth/basic
+restish -H 'Authorization: Basic YWxpY2U6c2VjcmV0' api.rest.sh/auth/basic --rsh-print b
 {{< /restish-example >}}
 
 For real APIs, put these values in a profile or use an auth method instead of

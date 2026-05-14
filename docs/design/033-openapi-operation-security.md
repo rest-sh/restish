@@ -552,14 +552,14 @@ X-Partner-Key: ****
 ```
 
 For script compatibility with the old narrow behavior, `api auth inspect` should
-offer an explicit raw mode, for example:
+offer an explicit header-value selector, for example:
 
 ```bash
 restish api auth inspect example --rsh-credential UserOAuth --raw-header Authorization
 ```
 
-That command prints only the selected header value. Raw modes must be explicit
-because they can print secrets to stdout.
+That command prints only the selected header value. Secret-revealing output must
+be explicit because it can print credentials to stdout.
 
 The old API-or-URI, Authorization-header-only inspect behavior should be
 removed for v2 rather than kept as an alias. This is a release-window break

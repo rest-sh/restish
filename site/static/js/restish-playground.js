@@ -9,6 +9,7 @@
     ["--rsh-content-type", "contentType"],
     ["-o", "outputFormat"],
     ["--rsh-output-format", "outputFormat"],
+    ["--rsh-print", "print"],
     ["-f", "filter"],
     ["--rsh-filter", "filter"],
     ["--rsh-filter-lang", "filterLang"],
@@ -21,12 +22,11 @@
     ["--rsh-retry", "retry"],
     ["--rsh-retry-max-wait", "retryMaxWait"]
   ]);
+  const supportedOutputFormats = new Set(["auto", "json", "yaml", "ndjson", "lines", "table", "image", "gron", "csv"]);
   const boolFlags = new Map([
     ["-v", "verbose"],
     ["-vv", "verbose"],
     ["--verbose", "verbose"],
-    ["-r", "raw"],
-    ["--rsh-raw", "raw"],
     ["--rsh-headers", "headersOnly"],
     ["--rsh-no-cache", "noCache"],
     ["--rsh-no-paginate", "noPaginate"],
@@ -214,7 +214,7 @@
       retryMaxWait: "",
       generatedParams: [],
       verbose: false,
-      raw: false,
+      print: "",
       headersOnly: false,
       noCache: false,
       noPaginate: false,
@@ -279,10 +279,9 @@
     if (!args.length) {
       throw new Error("Add a URL or supported docs API command.");
     }
-    if (flags.outputFormat === "raw") {
-      throw new Error("Output format `raw` has been removed. Use `-r` or `--rsh-raw` for raw output.");
+    if (flags.outputFormat && !supportedOutputFormats.has(flags.outputFormat)) {
+      throw new Error(`Output format \`${flags.outputFormat}\` is not supported in the browser preview.`);
     }
-
     let method = "GET";
     let url = "";
     let bodyArgs = [];
@@ -1477,7 +1476,7 @@
   }
 
   function renderWithVerbose(doc, plan, request) {
-    const output = render(doc, plan);
+    const output = render(doc, plan, request);
     if (!plan.flags.verbose) {
       return output;
     }
@@ -1550,22 +1549,31 @@
 
   function verboseOutputFormat(doc, plan) {
     const flags = plan.flags;
-    if (flags.raw) return "raw";
     if (flags.headersOnly) return "headers";
+    if (flags.print && flags.print !== "auto") {
+      const parts = printParts(flags.print);
+      if ((parts.requestHeaders || parts.responseHeaders) && !parts.body) return "headers";
+      if (parts.body && !parts.requestHeaders && !parts.requestBody && !parts.responseHeaders) return "body";
+    }
     if (flags.outputFormat) return flags.outputFormat;
     if (!flags.filter && isImageResponse(doc)) return "image";
     if (flags.filter) return "filtered";
-    return "readable";
+    return "auto";
   }
 
-  function render(doc, plan) {
+  function render(doc, plan, request) {
     const flags = plan.flags;
     if (plan.mode === "links") {
       return renderValue(selectLinks(doc.links || {}, plan.linkRels), flags);
     }
 
+    // Parse --rsh-print spec. No flag or "auto" defaults to headers+body+pretty (playground default).
+    const printStr = flags.print && flags.print !== "auto" ? flags.print : "";
+    const parts = printParts(printStr || "hbp");
+
     let value = doc.body;
-    let filter = flags.headersOnly ? "headers" : flags.filter;
+    // --rsh-headers or --rsh-print=h-without-b: filter to headers.
+    let filter = flags.headersOnly || (printStr && parts.responseHeaders && !parts.body && !parts.requestHeaders && !parts.requestBody) ? "headers" : flags.filter;
     const explicitFilter = Boolean(filter || flags.headersOnly);
 
     if (filter === "headers") {
@@ -1574,15 +1582,10 @@
       value = applyFilter(doc, filter);
     }
 
-    if (flags.raw) {
-      if (explicitFilter) {
-        throw new Error("--rsh-raw cannot be combined with --rsh-filter or --rsh-headers; use -o lines for shell-friendly filtered values.");
-      }
-      if (flags.outputFormat) {
-        throw new Error("--rsh-raw cannot be combined with --rsh-output-format.");
-      }
-      return doc.raw !== undefined ? doc.raw : JSON.stringify(doc.body);
+    if (printStr) {
+      return renderPrintParts(doc, plan, request, value, explicitFilter, parts);
     }
+
     if (flags.outputFormat === "json") {
       return JSON.stringify(value, null, 2) + "\n";
     }
@@ -1611,6 +1614,119 @@
       return renderValue(value, flags);
     }
     return readableResponse(doc);
+  }
+
+  function shouldHighlight(plan) {
+    const printStr = plan.flags.print && plan.flags.print !== "auto" ? plan.flags.print : "";
+    return !printStr || printStr.includes("c");
+  }
+
+  function highlightLanguage(plan) {
+    const printStr = plan.flags.print && plan.flags.print !== "auto" ? plan.flags.print : "";
+    const parts = printStr ? printParts(printStr) : null;
+    if (parts && parts.color && !parts.pretty) {
+      return "language-json";
+    }
+    return "language-readable";
+  }
+
+  function printParts(spec) {
+    const parts = {
+      requestHeaders: false,
+      requestBody: false,
+      responseHeaders: false,
+      body: false,
+      pretty: false,
+      color: false
+    };
+    for (const ch of spec || "") {
+      if (ch === "H") parts.requestHeaders = true;
+      else if (ch === "B") parts.requestBody = true;
+      else if (ch === "h") parts.responseHeaders = true;
+      else if (ch === "b") parts.body = true;
+      else if (ch === "p") parts.pretty = true;
+      else if (ch === "c") parts.color = true;
+      else throw new Error(`Invalid --rsh-print value \`${spec}\`: unknown part \`${ch}\`.`);
+    }
+    return parts;
+  }
+
+  function renderPrintParts(doc, plan, request, value, explicitFilter, parts) {
+    const chunks = [];
+    const spec = plan.flags.print || "";
+    for (const ch of spec) {
+      if (ch === "H") {
+        chunks.push(requestPreamble(request, plan));
+      } else if (ch === "B") {
+        const body = requestBodyOutput(request, parts.pretty);
+        if (body) chunks.push(body);
+      } else if (ch === "h") {
+        chunks.push(responsePreamble(doc));
+      } else if (ch === "b") {
+        const body = renderBodyPart(doc, value, plan.flags, explicitFilter, parts.pretty);
+        if (typeof body === "object") {
+          if (chunks.length === 0) return body;
+          chunks.push(body.text || "");
+        } else {
+          chunks.push(body);
+        }
+      }
+    }
+    return chunks.join("").replace(/\n?$/, "\n");
+  }
+
+  function requestPreamble(request, plan) {
+    if (!request) return "";
+    const lines = [`${plan.method} ${request.url.pathname}${request.url.search || ""} HTTP/1.1`];
+    lines.push(`Host: ${request.url.host}`);
+    const headers = demoRequestHeaders(requestHeadersObject(request.init.headers));
+    for (const key of Object.keys(headers).sort()) {
+      lines.push(`${key}: ${headers[key]}`);
+    }
+    lines.push("");
+    return lines.join("\n") + "\n";
+  }
+
+  function requestBodyOutput(request, pretty) {
+    if (!request || !request.init.body) return "";
+    const body = String(request.init.body);
+    const contentType = request.init.headers.get("Content-Type") || "";
+    if (pretty && contentType.includes("application/json")) {
+      try {
+        return JSON.stringify(JSON.parse(body), null, 2) + "\n";
+      } catch (_) {
+        return body.replace(/\n?$/, "\n");
+      }
+    }
+    return body.replace(/\n?$/, "\n");
+  }
+
+  function responsePreamble(doc) {
+    const lines = [`${doc.proto || "HTTP/2.0"} ${doc.status} ${statusText(doc.status)}`];
+    const headers = demoHeaders(doc.headers);
+    for (const key of Object.keys(headers).sort()) {
+      lines.push(`${key}: ${headers[key]}`);
+    }
+    lines.push("");
+    return lines.join("\n") + "\n";
+  }
+
+  function renderBodyPart(doc, value, flags, explicitFilter, pretty) {
+    if (flags.outputFormat === "json") {
+      return JSON.stringify(value, null, pretty ? 2 : 0) + "\n";
+    }
+    if (flags.outputFormat) {
+      return renderValue(value, flags);
+    }
+    if (!explicitFilter && isImageResponse(doc)) {
+      return imageOutput(doc);
+    }
+    if (!pretty) {
+      if (value === null || value === undefined) return "null\n";
+      if (typeof value !== "object") return String(value) + "\n";
+      return JSON.stringify(value) + "\n";
+    }
+    return readableFilteredOutput(value);
   }
 
   function isImageResponse(doc) {
@@ -2088,11 +2204,12 @@
     return first ? Object.keys(first).slice(0, 4) : [];
   }
 
-  function setOutput(node, output, isError) {
+  function setOutput(node, output, isError, highlight = true, language = "language-readable") {
     node.replaceChildren();
     if (output && typeof output === "object" && output.kind === "image") {
       node.textContent = output.text || "";
-      if (window.Prism) {
+      if (highlight && window.Prism) {
+        node.className = language;
         Prism.highlightElement(node);
       }
       if (output.url) {
@@ -2110,7 +2227,8 @@
     pane.hidden = false;
     pane.classList.toggle("restish-playground__output--error", Boolean(isError));
     pane.scrollTop = pane.scrollHeight;
-    if (window.Prism && typeof output === "string") {
+    if (highlight && window.Prism && typeof output === "string") {
+      node.className = language;
       Prism.highlightElement(node);
     }
   }
@@ -2266,6 +2384,15 @@
       if (runButton.disabled) {
         return;
       }
+      let highlight = true;
+      let language = "language-readable";
+      try {
+        const plan = parseCommand(command.value);
+        highlight = shouldHighlight(plan);
+        language = highlightLanguage(plan);
+      } catch (_) {
+        // parseCommand errors will surface again inside run()
+      }
       setOutput(output, "Running...\n", false);
       setState(state, "Running", "running");
       runButton.disabled = true;
@@ -2274,14 +2401,14 @@
         const text = await run(command.value, {
           onStream: function (text) {
             streamed = true;
-            setOutput(output, text, false);
+            setOutput(output, text, false, highlight, language);
             setState(state, "Streaming", "running");
           }
         });
         if (!streamed) {
-          setOutput(output, text, false);
+          setOutput(output, text, false, highlight, language);
         } else if (output.textContent !== text) {
-          setOutput(output, text, false);
+          setOutput(output, text, false, highlight, language);
         }
         setState(state, "Live", "ok");
       } catch (error) {

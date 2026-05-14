@@ -267,7 +267,7 @@ func TestRunPaginationHonorsContextCancellation(t *testing.T) {
 
 	err = c.runPagination(cmd, firstResp, firstReq.URL.String(), "https://api.example.com/items?page=2", request.Options{
 		Transport: request.BuildTransport(request.Options{Transport: c.baseHTTPTransport()}),
-	}, nil, false, 25, 0)
+	}, nil, false, 25, 0, nil)
 	if err == nil {
 		t.Fatal("expected pagination to stop on context cancellation")
 	}

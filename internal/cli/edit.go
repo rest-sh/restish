@@ -67,7 +67,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		c.logVerboseResponseBody(resp)
 	}
 	if code := output.StatusToExitCode(resp.Status); code != 0 {
-		if formatErr := c.formatResponse(cmd, resp); formatErr != nil {
+		if formatErr := c.formatResponse(cmd, resp, nil); formatErr != nil {
 			return formatErr
 		}
 		return &ExitCodeError{Code: code}
@@ -244,7 +244,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
 		c.logVerboseResponseBody(normalized)
 	}
-	if err := c.formatResponse(cmd, normalized); err != nil {
+	if err := c.formatResponse(cmd, normalized, nil); err != nil {
 		return err
 	}
 
@@ -262,7 +262,7 @@ func (c *CLI) editDiffOutput(cmd *cobra.Command, dryRun bool) io.Writer {
 		return c.Stdout
 	}
 	gf := globalFlagsFromContext(requestContext(cmd))
-	if gf.OutputFormat != "" || explicitOutputFilter(gf) || gf.Raw {
+	if gf.OutputFormatSet || gf.PrintSet || explicitOutputFilter(gf) {
 		return c.Stderr
 	}
 	return c.Stdout

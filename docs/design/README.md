@@ -147,7 +147,7 @@ were a recurring source of remediation work.
 **Response And Data Flow**
 
 - [009-response-normalization-and-output.md](./009-response-normalization-and-output.md) - The normalized response model and output behavior across TTY and non-TTY use.
-- [010-filtering-and-projection.md](./010-filtering-and-projection.md) - Response querying with shorthand and jq, including auto-detection and raw output.
+- [010-filtering-and-projection.md](./010-filtering-and-projection.md) - Response querying with shorthand and jq, including auto-detection and redirected byte output.
 - [011-pagination-and-hypermedia.md](./011-pagination-and-hypermedia.md) - Link extraction, automatic pagination, and collection handling across pages.
 - [012-streaming.md](./012-streaming.md) - SSE and NDJSON streaming behavior, per-event filtering, and output rules.
 - [013-caching-and-retries.md](./013-caching-and-retries.md) - HTTP response caching, transport layering, and retry behavior.

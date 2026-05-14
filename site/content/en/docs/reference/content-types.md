@@ -72,6 +72,8 @@ restish api.rest.sh/problem --rsh-ignore-status-code
 
 If stdout is redirected and no filter or output format is selected, Restish
 writes the response body bytes instead of reformatting them.
+Choose `-o json`, `-o yaml`, or another format when you want Restish to decode
+and re-render the body; redirected rendered output is pretty by default.
 
 ## Accept Header
 

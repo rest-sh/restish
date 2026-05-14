@@ -43,8 +43,8 @@ for the generated operation instead of sending the request.
 | --- | --- | --- | --- |
 | `-f`, `--rsh-filter` | expression | none | Filter with shorthand or jq. |
 | `--rsh-filter-lang` | `shorthand` or `jq` | auto | Force one parser. |
-| `-o`, `--rsh-output-format` | format | context-sensitive | `readable`, `json`, `yaml`, `cbor`, `table`, `ndjson`, `lines`, `gron`, `image`, or plugin formats. |
-| `-r`, `--rsh-raw` | boolean | false | Write response body bytes; cannot combine with filters. |
+| `-o`, `--rsh-output-format` | format | `auto` | `auto`, `json`, `yaml`, `cbor`, `table`, `ndjson`, `lines`, `gron`, `image`, or plugin formats. |
+| `--rsh-print` | `auto` or letters | `auto` | Print parts: `H` request headers, `B` request body, `h` response status and headers, `b` rendered body, `p` pretty, `c` color. |
 | `--rsh-columns` | comma list | formatter default | Columns for `-o table`. |
 | `--rsh-sort-by` | column name | none | Sort table rows by a column. |
 | `--rsh-headers` | boolean | false | Shortcut for `-f headers`; selects raw response headers. |
@@ -54,6 +54,7 @@ for the generated operation instead of sending the request.
 ```bash
 restish api.rest.sh/images -f body.self -o lines
 restish api.rest.sh/images -o table --rsh-columns name,format,self
+restish api.rest.sh/types --rsh-print=b > types.json
 restish api.rest.sh/ --rsh-headers
 restish -S api.rest.sh/status/204
 ```

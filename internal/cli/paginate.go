@@ -25,6 +25,7 @@ func (c *CLI) tryPaginate(
 	firstURL string,
 	opts request.Options,
 	pagCfg *config.PaginationConfig,
+	prepared *preparedRequest,
 ) (bool, error) {
 	noPaginate := globalFlagsFromContext(requestContext(cmd)).NoPaginate
 	if noPaginate {
@@ -45,7 +46,7 @@ func (c *CLI) tryPaginate(
 	maxPages := gfPag.MaxPages
 	maxItems := gfPag.MaxItems
 
-	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems)
+	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems, prepared)
 }
 
 // runPagination drives the pagination loop starting from firstResp.
@@ -58,12 +59,13 @@ func (c *CLI) runPagination(
 	pagCfg *config.PaginationConfig,
 	collect bool,
 	maxPages, maxItems int,
+	prepared *preparedRequest,
 ) (retErr error) {
 	ctx := requestContext(cmd)
 	if err := c.paginationStatusError(cmd, 1, firstResp.Status); err != nil {
 		return err
 	}
-	if !output.IsTerminal(c.Stdout) {
+	if !c.stdoutIsTerminal() {
 		origStdout := c.Stdout
 		c.Stdout = contextWriter{ctx: ctx, writer: origStdout}
 		defer func() { c.Stdout = origStdout }()
@@ -79,9 +81,19 @@ func (c *CLI) runPagination(
 	}
 
 	if !collect && streamItems {
-		renderer, err = c.newPaginatedValueRenderer(cmd, firstResp, pagCfg)
+		spec, err := c.resolvePrintSpec(globalFlagsFromContext(ctx), c.stdoutIsTerminal(), printStreamResponse)
 		if err != nil {
 			return err
+		}
+		if err := c.runPrintSpec(cmd, firstResp, prepared, spec, func() error {
+			var err error
+			renderer, err = c.newPaginatedValueRenderer(cmd, firstResp, pagCfg, spec)
+			return err
+		}); err != nil {
+			return err
+		}
+		if renderer == nil {
+			return nil
 		}
 		defer func() {
 			if err := renderer.Close(); retErr == nil && err != nil {
@@ -208,7 +220,7 @@ func (c *CLI) runPagination(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return c.formatResponse(cmd, synthetic)
+		return c.formatResponse(cmd, synthetic, prepared)
 	}
 	return nil
 }
@@ -218,20 +230,13 @@ func (c *CLI) filterPaginatedItems(cmd *cobra.Command, items []any) ([]any, erro
 		return items, nil
 	}
 
-	gf := globalFlagsFromContext(requestContext(cmd))
-	lang := resolveFilterLang(gf.FilterLang)
 	filtered := make([]any, 0, len(items))
 	for _, item := range items {
-		doc := map[string]any{"body": item}
-		filterResult, err := filter.ApplyWithInfo(gf.Filter, doc, lang)
+		value, err := c.filterBodyValue(cmd, item)
 		if err != nil {
-			return nil, fmt.Errorf("filter: %w", err)
+			return nil, err
 		}
-		traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
-		if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
-			c.hintBodyPrefixOnce(gf.Filter)
-		}
-		filtered = append(filtered, filterResult.Value)
+		filtered = append(filtered, value)
 	}
 	return filtered, nil
 }
@@ -351,12 +356,15 @@ func isFatalPaginationItemsPathError(err error) bool {
 	return err != nil && errors.As(err, &pathErr) && pathErr.fatal
 }
 
-func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig) (valueRenderer, error) {
+func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Response, pagCfg *config.PaginationConfig, spec printSpec) (valueRenderer, error) {
 	gf := globalFlagsFromContext(requestContext(cmd))
 	fmtName := gf.OutputFormat
-	tty := output.IsTerminal(c.Stdout)
-	if !tty || (fmtName != "" && fmtName != "readable") {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
+	tty := c.stdoutIsTerminal()
+	if !tty || fmtName != "" {
+		return c.newValueRendererWithPrint(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf), spec)
+	}
+	if !spec.pretty {
+		return c.newValueRendererWithPrint(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf), spec)
 	}
 
 	formatter, err := c.selectFormatter(cmd, fmtName, tty)
@@ -365,15 +373,15 @@ func (c *CLI) newPaginatedValueRenderer(cmd *cobra.Command, base *output.Respons
 	}
 	framed, ok := formatter.(output.FramedValueStreamFormatter)
 	if !ok {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
+		return c.newValueRendererWithPrint(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf), spec)
 	}
 
 	frame, ok := paginatedReadableFrame(base.Body, pagCfg)
 	if !ok {
-		return c.newValueRenderer(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf))
+		return c.newValueRendererWithPrint(cmd, valueStreamBaseForFilter(base, gf), explicitOutputFilter(gf), spec)
 	}
 
-	stream, err := framed.StartFramedValueStream(c.Stdout, valueStreamBaseForFilter(base, gf), output.ColorEnabled(c.Stdout), frame)
+	stream, err := framed.StartFramedValueStream(c.Stdout, valueStreamBaseForFilter(base, gf), spec.color, frame)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +406,7 @@ func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) 
 	}
 
 	fmtName := gf.OutputFormat
-	tty := output.IsTerminal(c.Stdout)
+	tty := c.stdoutIsTerminal()
 
 	// Default non-TTY pagination should preserve a single valid JSON document.
 	if !tty && fmtName == "" {
@@ -408,11 +416,6 @@ func (c *CLI) paginationStreamsItems(cmd *cobra.Command, base *output.Response) 
 	if fmtName == "json" {
 		return false, nil
 	}
-	// Explicit readable only streams incrementally on an actual TTY.
-	if fmtName == "readable" && !tty {
-		return false, nil
-	}
-
 	formatter, err := c.selectFormatter(cmd, fmtName, tty)
 	if err != nil {
 		return false, err

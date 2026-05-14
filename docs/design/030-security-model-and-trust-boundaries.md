@@ -179,13 +179,16 @@ distinguish:
 - binary payloads
 - image payloads with explicit TTY renderers
 
-If Restish cannot safely render binary to a TTY, it should use a placeholder or
-require `-r`.
+If Restish cannot safely render binary to a TTY, it should use a placeholder and
+point users toward redirecting stdout.
 
 Redirected stdout is different: when no filter, metadata shortcut, pagination
-collection, or output format is set, Restish may write body bytes directly
-because the user is saving or piping the response rather than asking for a TTY
-presentation.
+collection, or output format is set, `--rsh-print=auto` writes body bytes
+directly because the user is saving or piping the response rather than asking
+for a TTY presentation. This raw-download path bypasses response middleware so
+installed plugins cannot silently rewrite saved files. Explicit filters,
+formats, and print strings use the interpreted response path where response
+middleware may modify, drop, or follow.
 
 ## Plugin Safety
 

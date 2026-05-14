@@ -53,7 +53,7 @@ When:
   original image payload
 
 then `image/*` responses should route to the registered `image` formatter
-instead of the usual `readable` default.
+instead of the usual `auto` structured-value path.
 
 Non-TTY output is unaffected: raw bytes flow through unchanged.
 

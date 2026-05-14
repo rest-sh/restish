@@ -17,7 +17,8 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-header` | `-H` | repeat `Name: Value` | `RSH_HEADER` | empty | Env is comma-separated and prepended. |
 | `--rsh-query` | `-q` | repeat `key=value` | `RSH_QUERY` | empty | Env is comma-separated and prepended. |
 | `--rsh-server` | `-s` | string | | empty | Overrides scheme/host; path prefixes request path. |
-| `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | TTY readable; redirected unfiltered output writes body bytes; filtered structured non-TTY values default to JSON; `lines` for scalar line output; no `raw` format. |
+| `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | Formats the rendered body/value selected by `--rsh-print=b`; `lines` for scalar line output; no `raw` format. |
+| `--rsh-print` | | string | `RSH_PRINT` | auto | Chooses stdout parts: `H` request headers, `B` request body, `h` response status/headers, `b` rendered body, `p` pretty, `c` color. `auto` is `hbpc` on a terminal, body bytes for redirected unfiltered responses with no explicit output transform, and `bp` for filters, metadata shortcuts, and formatted/collected output. |
 | `--rsh-silent` | `-S` | bool | | false | Suppress output. |
 | `--rsh-columns` | | string | | empty | Table columns. |
 | `--rsh-sort-by` | | string | | empty | Table sort column. |
@@ -26,7 +27,6 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-filter-lang` | | string | | auto | `shorthand` or `jq`. |
 | `--rsh-headers` | | bool | | false | Shorthand for `-f headers`. |
 | `--rsh-status` | | bool | | false | Shorthand for `-f status`. |
-| `--rsh-raw` | `-r` | bool | | false | Raw original response body bytes only; incompatible with filters and output formats. |
 | `--rsh-verbose` | `-v` | count | | 0 | `-v` headers, `-vv` TLS details. |
 | `--rsh-insecure` | | bool | `RSH_INSECURE` | false | Warns, then disables TLS verification. |
 | `--rsh-client-cert` | | string | | empty | mTLS cert. |
@@ -74,7 +74,7 @@ Top-level config is JSONC with strict decoded fields:
 | `apis` | map | API registrations keyed by short name. |
 | `auth_profiles` | map | Shared auth configs referenced by profile or credential `auth_ref`. |
 | `cache.max_size` | string | Disk cache size such as `100MB`. |
-| `theme` | map | Readable-output style entries. |
+| `theme` | map | Auto-output and terminal transcript style entries. |
 | `plugins` | map | Raw per-plugin JSON config. |
 
 HTTP response-cache entries are written with temp-file plus rename semantics,

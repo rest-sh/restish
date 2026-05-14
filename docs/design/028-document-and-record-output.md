@@ -13,8 +13,9 @@ as `json` and `yaml` must always produce valid documents, while line-oriented
 record processing should be explicit.
 
 This design introduces a user-facing distinction between **document output**
-and **record output**. Pagination, streaming, filtering, readable rendering,
-and formatter plugins should all compose through that distinction.
+and **record output**. Pagination, streaming, filtering, auto rendering,
+`--rsh-print`, and formatter plugins should all compose through that
+distinction.
 
 ## Problem
 
@@ -66,16 +67,16 @@ Restish should treat output formats as belonging to one of two families.
 
 Document formats represent one logical result:
 
+- `auto`
 - `json`
 - `yaml`
-- `readable`
 - future document-oriented plugins
 
 These formats must preserve their framing guarantees:
 
 - `-o json` always emits one valid JSON document
 - `-o yaml` always emits one valid YAML document
-- `-o readable` emits one coherent human-readable response view
+- `-o auto` emits the default body/value presentation
 
 Document formats may need to buffer paginated data or otherwise switch into a
 collect-like execution path to uphold that contract.
@@ -100,7 +101,8 @@ That means:
 
 - `-o json` implies document semantics
 - `-o yaml` implies document semantics
-- `-o readable` implies document semantics
+- `-o auto` implies document semantics for bounded values and human
+  presentation for TTY streams
 - `-o ndjson` implies record semantics
 - `-o lines` implies scalar value-per-line semantics
 - plugin formats should declare whether they are document-oriented,
@@ -127,11 +129,12 @@ This keeps a clean product distinction:
 The rule is:
 
 - when Restish is still writing the original unmodified payload, raw body-byte
-  output is meaningful and is also available explicitly through `-r`
+  output is meaningful for redirected stdout
 - when an explicit filter selects a scalar, Restish may print the scalar plainly
   because the selected value is already shell-native
 - when Restish is writing a normalized, collected, or transformed structured
-  value without an explicit format, redirected output should default to JSON
+  value without an explicit format, redirected output should default to pretty
+  JSON; explicit `--rsh-print=b` selects compact rendered output for scripts
 
 Practically, saving a negotiated CBOR response keeps CBOR bytes:
 
@@ -190,28 +193,30 @@ and arrays containing objects so line output does not silently erase structured
 shape. Users who need structured data should choose `-o json`, `-o ndjson`, or
 another structured format.
 
-### Readable Output Has Two Internal Modes
+### Auto Output Has Two Internal Modes
 
-Readable output is always a document-oriented human format, but it should still
-provide low-latency feedback.
+Auto output is a human/default body/value format, but it should still provide
+low-latency feedback. HTTP status and header context is not formatter output;
+the CLI print layer writes it when `--rsh-print` includes `h` or `H`.
 
-For bounded non-paginated responses, readable output stays as it is today:
+For bounded non-paginated responses, auto output writes only the selected value
+to stdout:
 
-- HTTP preamble
-- blank line
-- pretty JSON body
+- text as text
+- images through terminal image presentation when supported
+- structured values as pretty JSON on a terminal
+- binary bodies as a short notice on a terminal
 
 When the selected value is response metadata or the full response envelope,
-readable and table-like renderers should display that metadata instead of
+auto and table-like renderers should display that metadata instead of
 assuming every useful field lives under `body`. Status, headers, links, and
 body are all legitimate output roots.
 
-For pagination and true streams, readable output should switch to a
-record-oriented presentation mode internally while preserving a coherent human
-interface:
+For pagination and true streams, auto output may switch to a record-oriented
+presentation mode internally while preserving a coherent human interface:
 
-- write the HTTP preamble once
-- then render each item or event as its own pretty-printed JSON block
+- write the response status and headers once when `--rsh-print` includes `h`
+- render each item or event as its own pretty-printed JSON block
 - separate records clearly
 - keep ANSI highlighting when color is enabled
 
@@ -271,7 +276,7 @@ important way: there may never be a natural end-of-document.
 For those responses:
 
 - record formats are the natural fit
-- readable output should render records incrementally
+- auto output should render records incrementally in interactive terminals
 - document formats like `json` should be treated as bounded-document requests
 
 In practice, that means `-o json` on an unbounded stream should either:
@@ -326,7 +331,7 @@ The output planner should make these decisions in order:
    - direct bounded document render
    - collected paginated document render
    - incremental record render
-   - readable incremental human mode
+   - auto incremental human mode
    - fail because the requested format cannot be satisfied safely
 
 This planning step should happen before bytes are written to stdout. Once output
@@ -359,11 +364,11 @@ Use when:
 - the filter can run per record
 - the response is either paginated or streamed
 
-### Readable Incremental Human Mode
+### Auto Incremental Human Mode
 
 Use when:
 
-- the selected format is `readable`
+- the selected format is `auto`
 - low latency is valuable
 - the result is paginated or streamed
 
@@ -388,24 +393,25 @@ Clear failure is better than silently emitting invalid or misleading output.
 
 ### Paginated Bounded Response
 
-- default TTY: readable, low-latency human output
+- default TTY: auto, low-latency human output with response status and headers
+  on stdout
 - default redirected non-TTY without filters or formats: first response body
   bytes, with automatic pagination skipped
-- `-o json`: valid JSON document; unfiltered pagination merges items, filtered
-  pagination renders filtered item results
+- `-o json`: valid pretty JSON document by default; unfiltered pagination
+  merges items, filtered pagination renders filtered item results
 - `-o yaml`: valid YAML document; unfiltered pagination merges items, filtered
   pagination renders filtered item results
-- `-o readable`: render progressively for humans
+- `-o auto`: render progressively for humans
 - `-o ndjson`: stream one item per line
 - `-o lines`: stream scalar values one per line, error on structured values
 - `-o csv`: stream one record per row if the formatter supports it
 
 ### True SSE / NDJSON Stream
 
-- default TTY: readable incremental event output
+- default TTY: auto incremental event output
 - default non-TTY: NDJSON-style item output when the payload is structured
 - `-o ndjson`: one JSON value per line
-- `-o readable`: incremental human-readable event view
+- `-o auto`: incremental human-readable event view
 - `-o json`: not a streaming mode; should require a bounded stream or error
 
 ### Filtering
@@ -424,7 +430,7 @@ Human-in-the-loop TTY scan of a paginated endpoint:
 restish api.rest.sh/images -f 'body.{format,self}'
 ```
 
-This should render incrementally in readable mode, one record at a time, so
+This should render incrementally in auto mode, one record at a time, so
 the user sees feedback immediately.
 
 Shell pipeline processing paginated items:
@@ -456,7 +462,7 @@ Follow a live event stream with less noise:
 restish api.example.com/events -f 'body.{type,id,message}'
 ```
 
-This should print events as they arrive in readable mode.
+This should print events as they arrive in auto mode.
 
 ## Alternatives Considered
 
@@ -495,5 +501,5 @@ strategy** and filter scope:
 - execution strategy is chosen by Restish to satisfy that contract without
   changing filter meaning
 
-That distinction keeps pagination, filtering, readable rendering, and plugins
+That distinction keeps pagination, filtering, auto rendering, and plugins
 composable without requiring the user to reason about internal control flow.

@@ -123,11 +123,11 @@ meaningful.
 Restish therefore treats:
 
 - `-o ndjson` as the explicit record-oriented JSON stream format
-- `-o readable` as an incremental human view
+- `-o auto` as an incremental human view
 - `-o json` as a bounded-document request that should reject clearly live
   streams
 
-Readable output remains valid for streams, but it is an incremental human view,
+Auto output remains valid for streams, but it is an incremental human view,
 not one coherent machine document.
 
 ## Stream Planner Rules

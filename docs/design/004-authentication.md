@@ -378,9 +378,10 @@ requests but stops after producing the auth mutations that would be applied.
 The command lives under API management because v2 auth can be credential-specific
 and operation-specific.
 
-Default output is redacted and human-oriented. Explicit raw-output flags may
-print selected values for scripts, such as the `Authorization` header value.
-Raw modes must be opt-in because they can print secrets to stdout.
+Default output is redacted and human-oriented. Explicit secret-revealing flags
+may print selected values for scripts, such as the `Authorization` header
+value. Secret-revealing output must be opt-in because it can print credentials
+to stdout.
 
 The v1/v2-draft header-only auth-inspection behavior is removed for v2. The
 stable command keeps the `restish api auth inspect <api>` family, but it must

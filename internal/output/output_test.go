@@ -377,9 +377,9 @@ func TestLinesFormatter_RejectsStructuredValue(t *testing.T) {
 	}
 }
 
-// --- ReadableFormatter ---
+// --- AutoFormatter ---
 
-func TestReadableFormatter_ContainsStatus(t *testing.T) {
+func TestAutoFormatter_DoesNotPrintHTTPPreamble(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -388,21 +388,21 @@ func TestReadableFormatter_ContainsStatus(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	f := output.DefaultFormatters()["readable"]
+	f := &output.AutoFormatter{}
 	if err := f.Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := buf.String()
 
-	if !strings.Contains(got, "200") {
-		t.Errorf("readable output missing status code:\n%s", got)
+	if strings.Contains(got, "HTTP/1.1") || strings.Contains(got, "Content-Type") {
+		t.Errorf("auto output included HTTP preamble:\n%s", got)
 	}
-	if !strings.Contains(got, "Content-Type") {
-		t.Errorf("readable output missing Content-Type header:\n%s", got)
+	if !strings.Contains(got, `"hello": "world"`) {
+		t.Errorf("auto output missing body:\n%s", got)
 	}
 }
 
-func TestReadableFormatter_BodyIsValidJSON(t *testing.T) {
+func TestAutoFormatter_BodyIsValidJSON(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -411,26 +411,18 @@ func TestReadableFormatter_BodyIsValidJSON(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	f := output.DefaultFormatters()["readable"]
+	f := &output.AutoFormatter{}
 	if err := f.Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// The readable output is: status line + headers + blank line + JSON body.
-	// Find the blank line that separates headers from body.
-	parts := strings.SplitN(buf.String(), "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected blank line separator in readable output:\n%s", buf.String())
-	}
-	bodyPart := strings.TrimSpace(parts[1])
-
 	var v any
-	if err := json.Unmarshal([]byte(bodyPart), &v); err != nil {
-		t.Errorf("body part of readable output is not valid JSON: %v\nbody: %s", err, bodyPart)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &v); err != nil {
+		t.Errorf("auto output is not valid JSON: %v\nbody: %s", err, buf.String())
 	}
 }
 
-func TestReadableFormatter_PrintsPlainTextBody(t *testing.T) {
+func TestAutoFormatter_PrintsPlainTextBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -439,19 +431,15 @@ func TestReadableFormatter_PrintsPlainTextBody(t *testing.T) {
 		Raw:     []byte("hello & goodbye"),
 	}
 	var buf bytes.Buffer
-	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
+	if err := (&output.AutoFormatter{}).Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	parts := strings.SplitN(buf.String(), "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected readable output separator, got %q", buf.String())
-	}
-	if strings.TrimSpace(parts[1]) != "hello & goodbye" {
-		t.Fatalf("expected plain text body, got %q", parts[1])
+	if strings.TrimSpace(buf.String()) != "hello & goodbye" {
+		t.Fatalf("expected plain text body, got %q", buf.String())
 	}
 }
 
-func TestReadableFormatter_OmitsBinaryBody(t *testing.T) {
+func TestAutoFormatter_OmitsBinaryBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
@@ -460,39 +448,38 @@ func TestReadableFormatter_OmitsBinaryBody(t *testing.T) {
 		Raw:     []byte{0, 1, 2, 3},
 	}
 	var buf bytes.Buffer
-	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
+	if err := (&output.AutoFormatter{}).Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := buf.String()
 	if strings.Contains(got, "AAECAw==") {
 		t.Fatalf("expected binary body to be omitted, got base64 JSON output:\n%s", got)
 	}
-	for _, want := range []string{"Binary body omitted: 4 bytes", "application/octet-stream", "--rsh-raw"} {
+	for _, want := range []string{"Binary body omitted: 4 bytes", "application/octet-stream", "Redirect stdout"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("expected %q in readable binary notice, got:\n%s", want, got)
+			t.Fatalf("expected %q in auto binary notice, got:\n%s", want, got)
 		}
 	}
 }
 
-func TestReadableFormatter_NilBodyNoBody(t *testing.T) {
+func TestAutoFormatter_NilBodyNoBody(t *testing.T) {
 	resp := &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  204,
 		Headers: map[string][]string{},
 	}
 	var buf bytes.Buffer
-	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, false); err != nil {
+	if err := (&output.AutoFormatter{}).Format(&buf, resp, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should have status line but no body content after the blank line.
-	if !strings.Contains(buf.String(), "204") {
-		t.Errorf("expected 204 in readable output: %q", buf.String())
+	if buf.String() != "" {
+		t.Errorf("expected no body output, got: %q", buf.String())
 	}
 }
 
-func TestReadableFormatter_FramedValueStreamRootArray(t *testing.T) {
+func TestAutoFormatter_FramedValueStreamRootArray(t *testing.T) {
 	var buf bytes.Buffer
-	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
+	stream, err := (&output.AutoFormatter{}).StartFramedValueStream(&buf, &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
 		Headers: map[string][]string{"Content-Type": {"application/json"}},
@@ -514,23 +501,19 @@ func TestReadableFormatter_FramedValueStreamRootArray(t *testing.T) {
 	}
 
 	got := buf.String()
-	parts := strings.SplitN(got, "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected preamble separator in output:\n%s", got)
-	}
-	body := strings.TrimSpace(parts[1])
+	body := strings.TrimSpace(got)
 	var parsed []map[string]int
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
-		t.Fatalf("expected framed readable stream to be valid JSON, got %q: %v", body, err)
+		t.Fatalf("expected framed auto stream to be valid JSON, got %q: %v", body, err)
 	}
 	if len(parsed) != 2 || parsed[0]["id"] != 1 || parsed[1]["id"] != 2 {
 		t.Fatalf("unexpected parsed body: %#v", parsed)
 	}
 }
 
-func TestReadableFormatter_FramedValueStreamWrappedObject(t *testing.T) {
+func TestAutoFormatter_FramedValueStreamWrappedObject(t *testing.T) {
 	var buf bytes.Buffer
-	stream, err := (&output.ReadableFormatter{}).StartFramedValueStream(&buf, &output.Response{
+	stream, err := (&output.AutoFormatter{}).StartFramedValueStream(&buf, &output.Response{
 		Proto:   "HTTP/1.1",
 		Status:  200,
 		Headers: map[string][]string{"Content-Type": {"application/json"}},
@@ -554,17 +537,13 @@ func TestReadableFormatter_FramedValueStreamWrappedObject(t *testing.T) {
 	}
 
 	got := buf.String()
-	parts := strings.SplitN(got, "\n\n", 2)
-	if len(parts) != 2 {
-		t.Fatalf("expected preamble separator in output:\n%s", got)
-	}
-	body := strings.TrimSpace(parts[1])
+	body := strings.TrimSpace(got)
 	var parsed struct {
 		Data []map[string]int  `json:"data"`
 		Meta map[string]string `json:"meta"`
 	}
 	if err := json.Unmarshal([]byte(body), &parsed); err != nil {
-		t.Fatalf("expected wrapped framed readable stream to be valid JSON, got %q: %v", body, err)
+		t.Fatalf("expected wrapped framed auto stream to be valid JSON, got %q: %v", body, err)
 	}
 	if len(parsed.Data) != 2 || parsed.Data[0]["id"] != 1 || parsed.Data[1]["id"] != 2 {
 		t.Fatalf("unexpected parsed data: %#v", parsed.Data)
@@ -574,7 +553,7 @@ func TestReadableFormatter_FramedValueStreamWrappedObject(t *testing.T) {
 	}
 }
 
-func TestReadableFormatter_ImageBodyIncludesHeadersAndRenderedImage(t *testing.T) {
+func TestAutoFormatter_ImageBodyRendersImageWithoutHeaders(t *testing.T) {
 	clearGraphicsEnv(t)
 
 	data := makePNG(t, 4, 4, color.RGBA{255, 0, 0, 255})
@@ -590,18 +569,15 @@ func TestReadableFormatter_ImageBodyIncludesHeadersAndRenderedImage(t *testing.T
 	}
 
 	var buf bytes.Buffer
-	if err := output.DefaultFormatters()["readable"].Format(&buf, resp, true); err != nil {
+	if err := (&output.AutoFormatter{}).Format(&buf, resp, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	got := buf.String()
-	if !strings.Contains(got, "Content-Type") {
-		t.Errorf("expected readable image output to include headers")
-	}
-	if !strings.Contains(got, "X-Test") {
-		t.Errorf("expected readable image output to include custom headers")
+	if strings.Contains(got, "Content-Type") || strings.Contains(got, "X-Test") {
+		t.Errorf("expected auto image output to omit headers")
 	}
 	if !strings.Contains(got, "▀") {
-		t.Errorf("expected readable image output to render the image inline")
+		t.Errorf("expected auto image output to render the image inline")
 	}
 }

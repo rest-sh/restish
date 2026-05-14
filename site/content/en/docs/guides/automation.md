@@ -13,14 +13,20 @@ shell loops, and small automation around APIs.
 
 ## Output Streams
 
-Response data is written to stdout. Progress, verbose request/response details,
-plugin diagnostics, migration notices, and warnings are written to stderr.
+Selected output is written to stdout. Progress, verbose request/response
+details, plugin diagnostics, migration notices, and warnings are written to
+stderr. Redirecting or piping stdout changes `--rsh-print=auto` from an
+interactive response transcript to raw body bytes for unfiltered responses, or
+to pretty rendered output when a filter, metadata shortcut, collection, or
+explicit output format is selected.
 
-Use a machine-oriented format in scripts. `json` is best for one complete
-document, `ndjson` for record streams, and `lines` for scalar values:
+Use explicit output controls in scripts. `json` is best for one complete
+document, `ndjson` for record streams, and `lines` for scalar values. Add
+`--rsh-print=b` when compact JSON is useful:
 
 ```bash
 restish api.rest.sh/images -o json
+restish api.rest.sh/images --rsh-print=b -o json
 restish api.rest.sh/images -o ndjson
 restish api.rest.sh/images -f body.self -o lines
 ```
@@ -89,7 +95,8 @@ These flags are the usual script building blocks:
 - `--rsh-ignore-status-code` keeps HTTP error bodies usable.
 - `-S` suppresses output when the exit code is enough.
 - `-o json`, `-o ndjson`, and `-o lines` avoid terminal-oriented formatting.
-- `-r` writes raw response body bytes.
+- `--rsh-print=b` requests compact rendered output.
+- plain redirection writes unfiltered response body bytes unchanged.
 - `--rsh-no-paginate`, `--rsh-max-pages`, and `--rsh-max-items` bound
   collection and stream work.
 - `--rsh-timeout`, `--rsh-retry`, and `--rsh-retry-max-wait` keep network work

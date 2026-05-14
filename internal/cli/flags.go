@@ -19,6 +19,9 @@ type GlobalFlags struct {
 	Query            []string
 	Server           string
 	OutputFormat     string
+	OutputFormatSet  bool
+	Print            string
+	PrintSet         bool
 	Silent           bool
 	Columns          string
 	SortBy           string
@@ -27,7 +30,6 @@ type GlobalFlags struct {
 	FilterLang       string
 	HeadersShorthand bool // --rsh-headers
 	StatusShorthand  bool // --rsh-status
-	Raw              bool
 	Verbose          int
 	Insecure         bool
 	ClientCert       string
@@ -69,6 +71,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	// String flags
 	gf.Server, _ = cmd.Flags().GetString("rsh-server")
 	gf.OutputFormat, _ = cmd.Flags().GetString("rsh-output-format")
+	gf.OutputFormatSet = cmd.Flags().Changed("rsh-output-format")
+	gf.Print, _ = cmd.Flags().GetString("rsh-print")
+	gf.PrintSet = cmd.Flags().Changed("rsh-print")
 	gf.Columns, _ = cmd.Flags().GetString("rsh-columns")
 	gf.SortBy, _ = cmd.Flags().GetString("rsh-sort-by")
 	gf.ContentType, _ = cmd.Flags().GetString("rsh-content-type")
@@ -87,7 +92,6 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	gf.Silent, _ = cmd.Flags().GetBool("rsh-silent")
 	gf.HeadersShorthand, _ = cmd.Flags().GetBool("rsh-headers")
 	gf.StatusShorthand, _ = cmd.Flags().GetBool("rsh-status")
-	gf.Raw, _ = cmd.Flags().GetBool("rsh-raw")
 	gf.Insecure, _ = cmd.Flags().GetBool("rsh-insecure")
 	gf.IgnoreStatus, _ = cmd.Flags().GetBool("rsh-ignore-status-code")
 	gf.NoCache, _ = cmd.Flags().GetBool("rsh-no-cache")
@@ -117,6 +121,22 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	}
 	if v := os.Getenv("RSH_OUTPUT_FORMAT"); v != "" && !cmd.Flags().Changed("rsh-output-format") {
 		gf.OutputFormat = v
+		gf.OutputFormatSet = true
+	}
+	if v := os.Getenv("RSH_PRINT"); v != "" && !cmd.Flags().Changed("rsh-print") {
+		gf.Print = v
+		gf.PrintSet = true
+	}
+
+	if strings.EqualFold(strings.TrimSpace(gf.OutputFormat), "auto") {
+		gf.OutputFormat = ""
+		if !cmd.Flags().Changed("rsh-output-format") {
+			gf.OutputFormatSet = false
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(gf.Print), "auto") {
+		gf.Print = ""
+		gf.PrintSet = false
 	}
 	if v := os.Getenv("RSH_FILTER"); v != "" && !cmd.Flags().Changed("rsh-filter") {
 		gf.Filter = v

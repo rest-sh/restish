@@ -18,13 +18,6 @@ have only a URL, and it can also learn an API from OpenAPI so repeated work gets
 generated commands, auth, profiles, completions, filtering, pagination, and
 output formats.
 
-In this tour:
-
-- make direct requests, inspect errors, filter responses, and choose output
-- send data, edit resources, paginate collections, and read streams
-- register an API, use generated commands, configure auth and profiles
-- customize local output, install plugins, and script with Restish
-
 ## Try It Here Or Locally
 
 The browser examples are previews of the real CLI. They make live requests to
@@ -34,60 +27,48 @@ exactly. Browser previews cannot read stdin or write local files; otherwise the
 commands are the same. The Go CLI remains the source of truth for command
 behavior.
 
-To follow along locally, install Restish and verify the binary:
-
-```bash
-brew install rest-sh/tap/restish
-restish --help
-```
-
-See [Install](../install/) for Homebrew, GitHub release archives, the OCI
-image, and source-build options. If you are already installed, run
-[Shell Setup](../shell-setup/) after the tour so your shell does not rewrite
-query strings, brackets, or filters before Restish sees them.
+To follow along locally, [install Restish](../install/).
 
 ## Make A Direct Request
 
 Start with a URL. No config, generated client, or API registration is required.
-Restish sends a `GET`, decodes the response, and renders it in a readable
-terminal format.
+Restish sends a `GET`, decodes the response, and renders it in the default
+auto terminal format.
+
+The `https://api.rest.sh/types` endpoint returns a few different types of data,
+so it's a good way to see how Restish will render it. Give it a try by
+pressing "Run" below:
 
 {{< restish-example >}}
-restish get api.rest.sh/types
+restish get https://api.rest.sh/types
 {{< /restish-example >}}
 
 For quick exploration, the verb and scheme can be optional. These commands are
 equivalent in normal use:
 
 ```bash
-restish get api.rest.sh/types
+# Full URL with verb
+restish get https://api.rest.sh/types
+
+# Full URL, verb defaults to GET
 restish https://api.rest.sh/types
+
+# Scheme defaults to https://, verb defaults to GET
 restish api.rest.sh/types
 ```
 
 Use the explicit verb when it helps a script or a teammate understand intent.
 Use the shorter form when you are exploring interactively.
 
-Learn more: [Requests](../../guides/requests/), [HTTP Commands](../../reference/http-commands/).
-
-## Inspect Requests And Errors
-
-Restish is useful when you need to understand what happened, not only when the
-request succeeds. Echo endpoints can show the request the server received, and
-error bodies stay decodable when the API returns structured JSON.
-
-Send a header and inspect the echoed request:
+You can use `-v` or `--rsh-verbose` to see the request/response details, which
+can help you to debug what is being sent and received. Note: some sensitive
+values are redacted in verbose mode, such as the `Authorization` header.
 
 {{< restish-example >}}
-restish -H 'X-Demo: tour' api.rest.sh/headers
+restish api.rest.sh/types -v
 {{< /restish-example >}}
 
-For local debugging, add `-v` to see request and response details on stderr
-while keeping stdout available for the response body.
-
-Learn more: [Troubleshooting](../../guides/troubleshooting/),
-[Command Behavior](../../guides/command-behavior/),
-[Output](../../guides/output/).
+Learn more: [Requests](../../guides/requests/), [HTTP Commands](../../reference/http-commands/), [Troubleshooting](../../guides/troubleshooting/).
 
 ## Filter Responses
 
@@ -153,10 +134,12 @@ Learn more: [Filtering](../../guides/filtering/), [Query Syntax](../../reference
 
 ## Choose Output Formats
 
-Interactive terminals default to Restish's readable format: syntax-highlighted,
-JSON-like output optimized for humans. When stdout is not a terminal, the CLI
-defaults toward machine-readable JSON. You can choose the format directly with
-`-o`.
+Interactive terminals default to Restish's `auto` format and `auto` print mode:
+response status, headers, and a syntax-highlighted body go to stdout. When
+stdout is redirected without a filter, Restish writes the original response body
+bytes. Use `-o` to choose the body format and `--rsh-print` to choose which
+HTTP exchange parts are printed. Redirected transformed output is pretty by
+default; pass `--rsh-print=b` when compact rendered JSON matters.
 
 JSON is the safest handoff to other structured tools:
 
@@ -543,12 +526,12 @@ Learn more: [Set Up Profiles](../set-up-profiles/),
 ## Customize Local Output
 
 Restish is meant to be comfortable for daily terminal use. Themes control
-readable output styling, and shell setup protects Restish's bracket-heavy
+auto output styling, and shell setup protects Restish's bracket-heavy
 filters and shorthand from shell globbing.
 
 <figure>
   <img src="/images/restish-theme-grid.png" alt="Six built-in Restish themes rendering the output of restish api.rest.sh/types" loading="lazy">
-  <figcaption>Built-in themes applied to the same readable response.</figcaption>
+  <figcaption>Built-in themes applied to the same terminal response.</figcaption>
 </figure>
 
 ```bash

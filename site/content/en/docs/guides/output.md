@@ -8,8 +8,9 @@ aliases:
   - /docs/recipes/show-only-response-headers/
 ---
 
-Restish output is built around one rule: document formats produce one coherent
-result, while record formats can emit one item or event at a time.
+Restish output is built around one rule: stdout carries the selected HTTP
+exchange parts, while stderr carries diagnostics, warnings, progress, and
+verbose traces.
 
 ## Processing Model
 
@@ -52,9 +53,18 @@ restish api.rest.sh/status/204 --rsh-status
 restish api.rest.sh/ --rsh-headers
 ```
 
-`readable` is the normal interactive default and is optimized for humans on a
-terminal. `json`, `yaml`, and `cbor` are document formats. `ndjson` is a record
-format for structured streams, and `lines` is for shell-friendly scalar values.
+`auto` is the default output format. Output formats render the selected
+body/value; `--rsh-print` controls whether request or response headers appear
+around that rendered value. In an interactive terminal with no explicit filter,
+Restish prints the response status line, headers, and formatted body to stdout.
+Redirected output preserves raw response body bytes when there is no filter,
+metadata shortcut, collection, or explicit `-o` format. That raw-download path
+bypasses response middleware plugins so installed plugins cannot rewrite saved
+files. When you do ask Restish to select or transform a value, redirected output
+is pretty by default. Use `--rsh-print=b` for compact rendered output.
+`json`, `yaml`, and `cbor` are document formats.
+`ndjson` is a record format for structured streams, and `lines` is for
+shell-friendly scalar values.
 
 ## Document vs Record Output
 
@@ -114,16 +124,27 @@ Choose an output format when you want Restish to transform the decoded body:
 restish api.rest.sh/content/cbor -o json > response.json
 ```
 
-Use raw output explicitly when you want body bytes even on a terminal:
+Raw redirected output bypasses Restish's structured body decoding and
+formatting for presentation, but it is still based on the body after HTTP
+content-encoding decompression. `raw` is not an `-o` format. To save bytes
+unchanged, redirect stdout without choosing a filter, metadata shortcut,
+collection, or explicit output format. Response middleware plugins are skipped
+on this raw-download path; they run when Restish renders, filters, collects, or
+prints an interpreted response.
+
+Control exactly what stdout contains with `--rsh-print`:
 
 ```bash
-restish api.rest.sh/bytes/64 --rsh-raw > sample.bin
+restish api.rest.sh/images --rsh-print hbpc
+restish api.rest.sh/images -o json > images.json
+restish api.rest.sh/images --rsh-print b > images.compact.json
+restish post api.rest.sh/post 'name: Alice' --rsh-print HBhbp
 ```
 
-Raw output bypasses Restish's structured body decoding and formatting for
-presentation, but it is still based on the body after HTTP content-encoding
-decompression. `raw` is not an `-o` format and raw mode cannot be combined with
-filters.
+The letters are `H` request headers, `B` request body, `h` response status and
+headers, `b` rendered body, `p` pretty formatting, and `c` color. `-o` still
+controls how the rendered body (`b`) is formatted. In `auto` mode, transformed
+or filtered output includes `p`; pass `--rsh-print=b` to omit pretty formatting.
 
 Verbose diagnostics go to stderr, so body redirects stay clean:
 
@@ -133,7 +154,7 @@ restish -v api.rest.sh/images/jpeg > dragonfly.jpg 2> dragonfly.headers.txt
 
 Sensitive headers such as `Authorization`, `Cookie`, `Proxy-Authorization`,
 `Set-Cookie`, and common API-key headers are redacted in verbose diagnostics and
-in human/table response preambles. Explicit filters such as `--rsh-headers`,
+printed request/response headers. Explicit filters such as `--rsh-headers`,
 `-f headers.Set-Cookie`, and `-f @` select raw response data and can reveal
 those values, which is useful for pipelines but risky in logs.
 
@@ -152,7 +173,7 @@ restish api.rest.sh/images/png
 restish -H 'Accept: image/png' api.rest.sh/images/png
 ```
 
-The readable default renders `image/*` responses on an interactive terminal.
+The `auto` default renders `image/*` responses on an interactive terminal.
 Use `-o image` only when you need to force image rendering for an ambiguous
 response. Redirect the response to save the image instead.
 

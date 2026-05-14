@@ -39,7 +39,7 @@ body input is a generic `POST`.
 - `cache`: inspect and clear HTTP response cache.
 - `config`: inspect and edit the active Restish config.
 - `shell setup`: write shell wrappers for safer interactive use.
-- `config theme`: manage readable-output highlighting theme.
+- `config theme`: manage auto-output highlighting theme.
 
 ### `api auth inspect`
 
@@ -91,7 +91,7 @@ argument wrapper.
 
 ### `config theme`
 
-Install readable-output highlighting themes:
+Install auto-output highlighting themes:
 
 ```bash
 restish config theme list
@@ -108,7 +108,7 @@ raw `theme.json`, or to `<name>.json` when you pass the optional name. Theme
 files and downloads are capped at 256 KiB. Themes affect human-readable terminal
 output, not `json`, `ndjson`, raw bytes, or other machine-oriented formats.
 Theme authors can use `header_key` to color HTTP response header names
-differently from JSON/readable object keys. Use `reset` to remove `theme` and
+differently from JSON object keys. Use `reset` to remove `theme` and
 `theme_source` from config and return to the built-in theme.
 
 ## Utilities

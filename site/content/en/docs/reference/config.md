@@ -8,7 +8,7 @@ aliases:
 ---
 
 Restish config is the trust boundary for API base URLs, generated command
-sources, profiles, auth, TLS, plugins, cache settings, and readable-output
+sources, profiles, auth, TLS, plugins, cache settings, and terminal-output
 themes.
 
 ## Location And Selection
@@ -75,7 +75,7 @@ restish config show -o json
 | `auth_profiles` | object | Shared auth profiles referenced by `auth_ref`. |
 | `cache` | object | HTTP response cache settings. |
 | `theme_source` | URL or GitHub shorthand | Source used by `config theme set`. |
-| `theme` | object | Readable-output highlighting theme. |
+| `theme` | object | Auto-output and terminal transcript highlighting theme. |
 | `plugins` | object | Installed plugin metadata and trust decisions. |
 
 ## API Entries
@@ -186,7 +186,8 @@ Use `restish api auth logout` for cached auth tokens.
 
 ## Theme
 
-Themes affect `readable` output only. Theme files may be JSON or JSONC:
+Themes affect `auto` terminal output and printed HTTP transcript highlighting.
+Theme files may be JSON or JSONC:
 
 ```bash
 restish config theme list
@@ -200,7 +201,7 @@ restish config theme reset
 absolute paths, and bundled official themes are stored as `official:<name>`.
 `theme` stores the resolved highlighting values. Use
 `text` for the base text color and `header_key` to color HTTP response header
-names differently from JSON/readable object keys. `reset` removes the saved
+names differently from JSON object keys. `reset` removes the saved
 theme and restores the built-in theme.
 
 For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`

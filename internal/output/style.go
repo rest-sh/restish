@@ -17,7 +17,7 @@ import (
 // "key", "header_key", "keyword", "url", and "status_2xx".
 type ThemeEntries map[string]string
 
-// defaultStyleEntries is a 256-color terminal theme for Restish readable
+// defaultStyleEntries is a 256-color terminal theme for Restish terminal
 // output. It assigns colors to all token types produced by ReadableLexer as
 // well as standard JSON token types.
 var defaultStyleEntries = chroma.StyleEntries{

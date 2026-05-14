@@ -30,11 +30,11 @@ restish api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
 
 **Related docs:** [Shell Setup](/docs/getting-started/shell-setup/), [Query Syntax](/docs/reference/query-syntax/).
 
-## I Expected JSON But Got Readable Output
+## I Expected JSON But Got Auto Output
 
-**Symptom:** Output is human-readable instead of JSON.
+**Symptom:** stdout is human-friendly instead of the exact JSON shape you want.
 
-**Likely cause:** TTY output defaults to `readable`.
+**Likely cause:** The default output format is `auto`.
 
 **How to confirm:** Run with an explicit format.
 
@@ -45,6 +45,7 @@ restish api.rest.sh/images -o json
 ```
 
 **Prevention:** Use `-o json` in scripts and redirects when the format matters.
+Add `--rsh-print=b` when the script needs compact rendered JSON.
 
 **Related docs:** [Output](/docs/guides/output/), [Output Defaults](/docs/reference/output-defaults/).
 
@@ -64,7 +65,8 @@ restish api.rest.sh/content/cbor -o json > response.json
 ```
 
 **Prevention:** Use `-o json` when a file or script needs JSON. Omit `-o` when
-you want to save the response body unchanged.
+you want to save the response body unchanged. Add `--rsh-print=b` when compact
+rendered JSON is preferable to the pretty default.
 
 **Related docs:** [Output Defaults](/docs/reference/output-defaults/), [Save a Response Unchanged](/docs/recipes/save-a-response-unchanged/).
 

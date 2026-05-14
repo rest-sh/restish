@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/config"
-	"github.com/rest-sh/restish/v2/internal/output"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/spf13/cobra"
 )
@@ -333,10 +332,7 @@ func (c *CLI) doctorTextOutput() io.Writer {
 }
 
 func (c *CLI) doctorStdoutIsTerminal() bool {
-	if c.hooks.StdoutIsTerminal != nil {
-		return c.hooks.StdoutIsTerminal(c.Stdout)
-	}
-	return output.IsTerminal(c.Stdout)
+	return c.stdoutIsTerminal()
 }
 
 func doctorJSON(cmd *cobra.Command) bool {

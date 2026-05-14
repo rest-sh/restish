@@ -24,14 +24,6 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	if resp == nil {
 		resp = &Response{}
 	}
-	if resp != nil && (resp.Proto != "" || resp.Status != 0 || len(resp.Headers) > 0) {
-		if err := writeHTTPPreamble(w, resp, color); err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintln(w); err != nil {
-			return err
-		}
-	}
 	rows, ok := toRows(resp.Body)
 	if !ok {
 		// Fall back to JSON output for non-array bodies.

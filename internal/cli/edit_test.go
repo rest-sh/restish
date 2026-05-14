@@ -87,6 +87,43 @@ func TestEditCommandFetchesEditsAndPuts(t *testing.T) {
 	}
 }
 
+func TestEditPrintFlagKeepsDiffOffStdout(t *testing.T) {
+	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"name":"before"}`)
+		case http.MethodPut:
+			fmt.Fprint(w, `{"name":"after"}`)
+		default:
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	if err := c.Run([]string{"restish", "edit", "-y", "--rsh-print", "b", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out.String(), "--- original") || strings.Contains(out.String(), "+++ modified") {
+		t.Fatalf("stdout included edit diff:\n%s", out.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(out.Bytes(), &body); err != nil {
+		t.Fatalf("stdout should be compact response JSON only, got %q: %v", out.String(), err)
+	}
+	if body["name"] != "after" {
+		t.Fatalf("unexpected response body: %#v", body)
+	}
+	if !strings.Contains(errOut.String(), "--- original") || !strings.Contains(errOut.String(), "+++ modified") {
+		t.Fatalf("stderr missing edit diff:\n%s", errOut.String())
+	}
+}
+
 func TestEditCommandIgnoresEditorFormattingOnlyChanges(t *testing.T) {
 	installFakeEditor(t, "{\"name\":\"before\"}\n")
 

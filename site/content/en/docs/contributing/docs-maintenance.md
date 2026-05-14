@@ -50,7 +50,7 @@ For each user-facing page, verify:
 - the opening paragraph says what the page helps the reader do
 - operational pages include at least one copyable command
 - commands are paired with representative output when practical
-- interactive examples use the default readable output unless the page is
+- interactive examples use the default auto output unless the page is
   specifically teaching JSON, scripting, redirects, or exact machine-readable
   response shape
 - the Tour of Restish keeps browser examples runnable where practical and
@@ -157,7 +157,7 @@ High-value old topics to keep auditing:
 - shorthand input and query syntax
 - retries, timeouts, caching, and exit statuses
 - pagination and hypermedia links
-- output defaults, raw mode, gron, images, and file downloads
+- output defaults, redirected body bytes, gron, images, and file downloads
 - configuration and v1-to-v2 migration behavior
 
 ## Related Pages

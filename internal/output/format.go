@@ -52,15 +52,15 @@ type FramedValueStreamFormatter interface {
 // callers that need --rsh-columns / --rsh-sort-by should replace it.
 func DefaultFormatters() map[string]Formatter {
 	return map[string]Formatter{
-		"json":     &JSONFormatter{},
-		"lines":    &LinesFormatter{},
-		"ndjson":   &NDJSONFormatter{},
-		"readable": &ReadableFormatter{},
-		"table":    &TableFormatter{},
-		"gron":     &GronFormatter{},
-		"cbor":     &CBORFormatter{},
-		"image":    &ImageFormatter{},
-		"yaml":     &YAMLFormatter{},
+		"auto":   &AutoFormatter{},
+		"json":   &JSONFormatter{},
+		"lines":  &LinesFormatter{},
+		"ndjson": &NDJSONFormatter{},
+		"table":  &TableFormatter{},
+		"gron":   &GronFormatter{},
+		"cbor":   &CBORFormatter{},
+		"image":  &ImageFormatter{},
+		"yaml":   &YAMLFormatter{},
 	}
 }
 
