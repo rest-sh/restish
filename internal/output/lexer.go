@@ -193,11 +193,16 @@ var HTTPPreambleLexer = lexers.Register(chroma.MustNewLexer(
 				{Pattern: `\n`, Type: chroma.Text, Mutator: chroma.Push("headers")},
 			},
 			// headers matches header name: value lines; status code patterns are absent.
+			// After the first colon, switch to a value-only state so colons inside
+			// ISO timestamps, URLs, and other header values are left plain.
 			"headers": {
-				{Pattern: `([\w][\w-]*)(:)`, Type: chroma.ByGroups(httpHeaderKey, chroma.Punctuation)},
+				{Pattern: `([\w][\w-]*)(:)`, Type: chroma.ByGroups(httpHeaderKey, chroma.Punctuation), Mutator: chroma.Push("headervalue")},
+				{Pattern: `\n`, Type: chroma.Text},
+			},
+			"headervalue": {
 				{Pattern: `[ \t]+`, Type: chroma.Text},
 				{Pattern: `[^\n]+`, Type: chroma.Text},
-				{Pattern: `\n`, Type: chroma.Text},
+				{Pattern: `\n`, Type: chroma.Text, Mutator: chroma.Pop(1)},
 			},
 			"root": {chroma.Include("statusline")},
 		}

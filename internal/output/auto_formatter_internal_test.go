@@ -332,6 +332,31 @@ func TestHTTPPreambleLexerLeavesHeaderValuesPlain(t *testing.T) {
 	}
 }
 
+func TestHTTPPreambleLexerDoesNotRetokenizeHeaderValueColons(t *testing.T) {
+	iter, err := HTTPPreambleLexer.Tokenise(nil, "HTTP/1.1 200 OK\nX-Request-Time: 2026-05-14T21:51:04Z\nLocation: https://api.example.test/items/42\n")
+	if err != nil {
+		t.Fatalf("Tokenise: %v", err)
+	}
+
+	tokens := iter.Tokens()
+	for _, unwanted := range []chroma.Token{
+		{Type: httpHeaderKey, Value: "2026-05-14T21"},
+		{Type: httpHeaderKey, Value: "https"},
+	} {
+		if tokenSliceContains(tokens, unwanted) {
+			t.Fatalf("did not expect header value token %s %q in %#v", unwanted.Type, unwanted.Value, tokens)
+		}
+	}
+	for _, want := range []chroma.Token{
+		{Type: chroma.Text, Value: "2026-05-14T21:51:04Z"},
+		{Type: chroma.Text, Value: "https://api.example.test/items/42"},
+	} {
+		if !tokenSliceContains(tokens, want) {
+			t.Fatalf("expected plain HTTP header value token %s %q in %#v", want.Type, want.Value, tokens)
+		}
+	}
+}
+
 func TestHTTPPreambleLexerUsesHeaderKeyToken(t *testing.T) {
 	iter, err := HTTPPreambleLexer.Tokenise(nil, "HTTP/1.1 200 OK\nContent-Type: application/json\n")
 	if err != nil {
