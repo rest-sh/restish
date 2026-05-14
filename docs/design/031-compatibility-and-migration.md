@@ -81,9 +81,9 @@ The current design set intentionally changes v1 in at least these areas:
 - retirement of the v1 interactive `api connect <name>` prompt flow in favor
   of `restish.json`, `api connect`, `api set`, and `config edit`
 - removal of the v1/v2-draft API-or-URI, Authorization-header-only auth inspect
-  behavior in favor of `restish api auth inspect <api> --raw-header
-  Authorization`, because v2 auth can be credential-specific and may not use
-  the `Authorization` header
+  behavior in favor of `restish api auth inspect <api>` for full auth material
+  and `restish api auth header <api> Authorization` for scripts, because v2
+  auth can be credential-specific and may not use the `Authorization` header
 
 Those are acceptable breaks, but they require migration documentation and
 operator guidance.

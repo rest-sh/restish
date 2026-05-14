@@ -215,8 +215,58 @@ func TestAPIAuthInspectCredentialAPIKey(t *testing.T) {
 		t.Fatalf("api auth inspect: %v", err)
 	}
 	got := out.String()
+	if !strings.Contains(got, "X-Partner-Key: secret") {
+		t.Fatalf("expected API key inspection to show value, got %q", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact"}); err != nil {
+		t.Fatalf("api auth inspect --redact: %v", err)
+	}
+	got = out.String()
 	if strings.Contains(got, "secret") || !strings.Contains(got, "X-Partner-Key: <redacted>") {
-		t.Fatalf("expected redacted API key inspection, got %q", got)
+		t.Fatalf("expected redacted API key inspection with --redact, got %q", got)
+	}
+}
+
+func TestAPIAuthInspectCredentialAPIKeyQuery(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "credentials": {
+            "PartnerKey": {
+              "auth": {
+                "type": "api-key",
+                "params": {"in": "query", "name": "partner", "value": "secret"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Query: http://example.com?partner=secret") {
+		t.Fatalf("expected API key query inspection to show value, got %q", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact"}); err != nil {
+		t.Fatalf("api auth inspect --redact: %v", err)
+	}
+	got = out.String()
+	if strings.Contains(got, "secret") || !strings.Contains(got, "Query: http://example.com?partner=%3Credacted%3E") {
+		t.Fatalf("expected redacted API key query inspection with --redact, got %q", got)
 	}
 }
 
@@ -226,7 +276,7 @@ func TestAPIAuthInspectURLSuggestsV2Form(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected URL argument error")
 	}
-	if !strings.Contains(err.Error(), "v2 form: restish api auth inspect <api-name> --raw-header Authorization") {
+	if !strings.Contains(err.Error(), "v2 form: restish api auth header <api-name> Authorization") {
 		t.Fatalf("expected v2 form hint, got: %v", err)
 	}
 }
@@ -261,8 +311,24 @@ func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 	if !strings.Contains(got, "Credential: PartnerKey") {
 		t.Fatalf("expected selected credential in output, got %q", got)
 	}
-	if strings.Contains(got, "secret") || !strings.Contains(got, "X-Partner-Key: <redacted>") {
-		t.Fatalf("expected redacted API key inspection, got %q", got)
+	if !strings.Contains(got, "X-Partner-Key: secret") {
+		t.Fatalf("expected API key inspection to show value, got %q", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "header", "myapi", "X-Partner-Key"}); err != nil {
+		t.Fatalf("api auth header: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "secret" {
+		t.Fatalf("header = %q, want secret", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "header", "myapi", "X-Partner-Key", "PartnerKey"}); err != nil {
+		t.Fatalf("api auth header with positional credential: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "secret" {
+		t.Fatalf("header with positional credential = %q, want secret", got)
 	}
 
 	out.Reset()
@@ -270,7 +336,7 @@ func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 		t.Fatalf("api auth inspect raw header: %v", err)
 	}
 	if got := strings.TrimSpace(out.String()); got != "secret" {
-		t.Fatalf("raw header = %q, want secret", got)
+		t.Fatalf("raw header compatibility = %q, want secret", got)
 	}
 }
 
@@ -493,7 +559,7 @@ func TestAPIAuthInspectOperationLabelsProfileFallbackSource(t *testing.T) {
 		"Credentials: InferenceBearer",
 		"Source: profile auth fallback",
 		"Auth type: http-basic",
-		"Authorization: <redacted>",
+		"Authorization: Basic dTpw",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("inspect output missing %q:\n%s", want, got)
@@ -713,22 +779,36 @@ func TestAPIAuthInspectOperationCombinedCredentials(t *testing.T) {
 	for _, want := range []string{
 		"Operation: signedReport",
 		"Credentials: UserKey, PartnerKey",
-		"X-User-Key: <redacted>",
-		"X-Partner-Key: <redacted>",
+		"X-User-Key: user-secret",
+		"X-Partner-Key: partner-secret",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("inspect output missing %q:\n%s", want, got)
 		}
 	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "signedReport", "--redact"}); err != nil {
+		t.Fatalf("api auth inspect redacted operation: %v", err)
+	}
+	got = out.String()
+	for _, want := range []string{
+		"X-User-Key: <redacted>",
+		"X-Partner-Key: <redacted>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("redacted inspect output missing %q:\n%s", want, got)
+		}
+	}
 	if strings.Contains(got, "user-secret") || strings.Contains(got, "partner-secret") {
-		t.Fatalf("inspect output leaked secret:\n%s", got)
+		t.Fatalf("redacted inspect output leaked secret:\n%s", got)
 	}
 
 	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "signedReport", "--raw-header", "X-Partner-Key"}); err != nil {
-		t.Fatalf("api auth inspect raw operation header: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "header", "tapi", "X-Partner-Key", "--rsh-operation", "signedReport"}); err != nil {
+		t.Fatalf("api auth operation header: %v", err)
 	}
 	if got := strings.TrimSpace(out.String()); got != "partner-secret" {
-		t.Fatalf("raw header = %q, want partner-secret", got)
+		t.Fatalf("operation header = %q, want partner-secret", got)
 	}
 }

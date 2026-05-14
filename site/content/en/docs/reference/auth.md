@@ -179,13 +179,16 @@ Inspect configured auth without sending the target request:
 ```bash
 restish api auth inspect myapi
 restish api auth inspect myapi --rsh-credential PartnerKey
-restish api auth inspect myapi --rsh-credential UserBearer --raw-header Authorization
+restish api auth inspect myapi --rsh-credential UserBearer --redact
+restish api auth header myapi Authorization UserBearer
 ```
 
 The bare form works when the selected profile has profile-level auth or exactly
 one configured credential. If a profile has several credentials, pass
-`--rsh-credential`. Human output redacts sensitive values. Verbose request
-diagnostics also redact common sensitive headers such as `Authorization`,
+`--rsh-credential`. Inspection output shows computed auth values because the
+command is explicitly for checking auth. Add `--redact` when you need shareable
+output. Verbose request diagnostics still redact common sensitive headers such
+as `Authorization`,
 `Cookie`, `Proxy-Authorization`, `Set-Cookie`, and common API-key headers.
 
 ## Related Pages

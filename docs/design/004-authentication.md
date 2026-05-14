@@ -378,10 +378,12 @@ requests but stops after producing the auth mutations that would be applied.
 The command lives under API management because v2 auth can be credential-specific
 and operation-specific.
 
-Default output is redacted and human-oriented. Explicit secret-revealing flags
-may print selected values for scripts, such as the `Authorization` header
-value. Secret-revealing output must be opt-in because it can print credentials
-to stdout.
+Default output is human-oriented and shows the computed auth values because the
+user explicitly asked to inspect auth material. Ambient request diagnostics,
+logs, plugin payloads, and config display remain redacted by default.
+`--redact` produces shareable inspection output, and
+`restish api auth header <api> <header> [credential-id]` prints one computed
+header value for scripts.
 
 The v1/v2-draft header-only auth-inspection behavior is removed for v2. The
 stable command keeps the `restish api auth inspect <api>` family, but it must
@@ -394,7 +396,8 @@ Auth behavior must follow design 030:
 
 - redact secrets in logs
 - do not print raw remote token bodies in errors
-- keep secrets out of stdout unless the command explicitly asks for them
+- keep secrets out of stdout unless the command explicitly asks for auth
+  inspection or a selected header value
 - prefer restrictive file permissions for caches
 
 ## Plugin Integration

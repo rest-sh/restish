@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -55,6 +56,15 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	}
 	addAPIAuthLogoutFlags(clearCacheCmd)
 	cmd.AddCommand(clearCacheCmd)
+	headerCmd := &cobra.Command{
+		Use:   "header <api> <header> [credential-id]",
+		Short: "Print one auth header value for an API profile",
+		Args:  cobra.RangeArgs(2, 3),
+		RunE:  c.runAPIAuthHeader,
+	}
+	headerCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
+	headerCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")
+	cmd.AddCommand(headerCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",
@@ -63,7 +73,9 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	}
 	inspectCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
 	inspectCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")
-	inspectCmd.Flags().String("raw-header", "", "Print one raw header value for scripts, e.g. Authorization")
+	inspectCmd.Flags().Bool("redact", false, "Redact sensitive auth values for shareable output")
+	inspectCmd.Flags().String("raw-header", "", "Deprecated: use \"restish api auth header <api> <header>\"")
+	_ = inspectCmd.Flags().MarkHidden("raw-header")
 	cmd.AddCommand(inspectCmd)
 	return cmd
 }
@@ -241,7 +253,7 @@ func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
-		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth inspect <api-name> --raw-header Authorization")
+		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth header <api-name> Authorization")
 	}
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
@@ -250,11 +262,12 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	}
 	credentialID, _ := cmd.Flags().GetString("rsh-credential")
 	rawHeader, _ := cmd.Flags().GetString("raw-header")
+	redact, _ := cmd.Flags().GetBool("redact")
 	if operation, _ := cmd.Flags().GetString("rsh-operation"); operation != "" {
 		if credentialID != "" {
 			return fmt.Errorf("--rsh-operation and --rsh-credential are mutually exclusive")
 		}
-		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, rawHeader)
+		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, rawHeader, redact)
 	}
 
 	resolved, selectedCredential, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
@@ -280,23 +293,11 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	if selectedCredential != "" {
 		fmt.Fprintf(c.Stdout, "Credential: %s\n", selectedCredential)
 	}
-	fmt.Fprintf(c.Stdout, "Auth type: %s\n", resolved.Config.Type)
-	for _, name := range sortedHeaderKeys(req.Header) {
-		values := req.Header[name]
-		for _, value := range values {
-			if isSensitiveHeader(name) || isAuthInspectionSensitiveHeader(resolved.Config, name) {
-				value = "<redacted>"
-			}
-			fmt.Fprintf(c.Stdout, "%s: %s\n", name, value)
-		}
-	}
-	if req.URL.RawQuery != "" {
-		fmt.Fprintf(c.Stdout, "Query: %s\n", redactedRequestURL(req.URL))
-	}
+	c.printAuthInspectionRequest(req, []*config.AuthConfig{resolved.Config}, redact)
 	return nil
 }
 
-func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName, rawHeader string) error {
+func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName, rawHeader string, redact bool) error {
 	op, ok, err := c.cachedOperationForAPI(apiName, apiCfg, profileName, operationName)
 	if err != nil {
 		return err
@@ -355,7 +356,50 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 	fmt.Fprintf(c.Stdout, "Operation: %s\n", op.ID)
 	fmt.Fprintf(c.Stdout, "Credentials: %s\n", strings.Join(selectedOperationCredentialIDs(selected), ", "))
 	fmt.Fprintf(c.Stdout, "Source: %s\n", strings.Join(selectedOperationSources(selected), ", "))
-	c.printAuthInspectionRequest(req, selectedOperationAuthConfigs(selected))
+	c.printAuthInspectionRequest(req, selectedOperationAuthConfigs(selected), redact)
+	return nil
+}
+
+func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
+	apiName, headerName := args[0], args[1]
+	if looksLikeURLArgument(apiName) {
+		return fmt.Errorf("api auth header expects an API name, not a URL")
+	}
+	credentialID, _ := cmd.Flags().GetString("rsh-credential")
+	if len(args) == 3 {
+		if credentialID != "" {
+			return fmt.Errorf("pass credential ID either as an argument or --rsh-credential, not both")
+		}
+		credentialID = args[2]
+	}
+	profileName := c.profileFromCmd(cmd)
+	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
+	if err != nil {
+		return err
+	}
+	if operation, _ := cmd.Flags().GetString("rsh-operation"); operation != "" {
+		if credentialID != "" {
+			return fmt.Errorf("--rsh-operation and credential ID are mutually exclusive")
+		}
+		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, headerName, false)
+	}
+
+	resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
+	if err != nil {
+		return err
+	}
+	if resolved.Config == nil {
+		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+	}
+	req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
+	if err != nil {
+		return err
+	}
+	value := req.Header.Get(headerName)
+	if value == "" {
+		return fmt.Errorf("auth did not set header %q", headerName)
+	}
+	fmt.Fprintln(c.Stdout, value)
 	return nil
 }
 
@@ -415,6 +459,13 @@ func isAuthInspectionSensitiveHeader(ac *config.AuthConfig, name string) bool {
 		strings.EqualFold(ac.Params["name"], name)
 }
 
+func isAuthInspectionSensitiveQueryParam(ac *config.AuthConfig, name string) bool {
+	return ac != nil &&
+		ac.Type == "api-key" &&
+		strings.EqualFold(ac.Params["in"], "query") &&
+		strings.EqualFold(ac.Params["name"], name)
+}
+
 func (c *CLI) operationAuthInspectionRequest(cmd *cobra.Command, apiName, profileName string, selected []selectedOperationAuth) (*http.Request, error) {
 	authOpts, err := c.authHandlerOptionsFromCmd(cmd)
 	if err != nil {
@@ -466,7 +517,7 @@ func (c *CLI) authInspectionRequest(cmd *cobra.Command, apiName, profileName str
 	return req, nil
 }
 
-func (c *CLI) printAuthInspectionRequest(req *http.Request, configs []*config.AuthConfig) {
+func (c *CLI) printAuthInspectionRequest(req *http.Request, configs []*config.AuthConfig, redact bool) {
 	for _, ac := range configs {
 		if ac != nil {
 			fmt.Fprintf(c.Stdout, "Auth type: %s\n", ac.Type)
@@ -475,14 +526,18 @@ func (c *CLI) printAuthInspectionRequest(req *http.Request, configs []*config.Au
 	for _, name := range sortedHeaderKeys(req.Header) {
 		values := req.Header[name]
 		for _, value := range values {
-			if isSensitiveHeader(name) || authInspectionSensitiveHeader(configs, name) {
+			if redact && (isSensitiveHeader(name) || authInspectionSensitiveHeader(configs, name)) {
 				value = "<redacted>"
 			}
 			fmt.Fprintf(c.Stdout, "%s: %s\n", name, value)
 		}
 	}
 	if req.URL.RawQuery != "" {
-		fmt.Fprintf(c.Stdout, "Query: %s\n", redactedRequestURL(req.URL))
+		query := req.URL.String()
+		if redact {
+			query = redactedAuthInspectionURL(req.URL, configs)
+		}
+		fmt.Fprintf(c.Stdout, "Query: %s\n", query)
 	}
 }
 
@@ -493,6 +548,30 @@ func authInspectionSensitiveHeader(configs []*config.AuthConfig, name string) bo
 		}
 	}
 	return false
+}
+
+func authInspectionSensitiveQueryParam(configs []*config.AuthConfig, name string) bool {
+	for _, ac := range configs {
+		if isAuthInspectionSensitiveQueryParam(ac, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactedAuthInspectionURL(u *url.URL, configs []*config.AuthConfig) string {
+	if u == nil {
+		return ""
+	}
+	copyURL := *u
+	q := copyURL.Query()
+	for name := range q {
+		if isSensitiveQueryParam(name) || authInspectionSensitiveQueryParam(configs, name) {
+			q.Set(name, "<redacted>")
+		}
+	}
+	copyURL.RawQuery = q.Encode()
+	return copyURL.String()
 }
 
 func selectedOperationCredentialIDs(selected []selectedOperationAuth) []string {

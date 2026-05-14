@@ -535,11 +535,12 @@ behavior, it must handle credentials that do not produce an `Authorization`
 header, such as API keys in headers or query parameters, and combined
 requirements that attach several credentials.
 
-Default inspect output is human-oriented and redacted:
+Default inspect output is human-oriented and shows computed auth values because
+the user explicitly asked to inspect auth material:
 
 ```text
 Credential: UserOAuth
-Authorization: Bearer ****
+Authorization: Bearer user-token
 ```
 
 For combined operation auth:
@@ -547,19 +548,26 @@ For combined operation auth:
 ```text
 Operation: signedReport
 Credentials: UserOAuth, PartnerKey
-Authorization: Bearer ****
-X-Partner-Key: ****
+Authorization: Bearer user-token
+X-Partner-Key: partner-key
 ```
 
-For script compatibility with the old narrow behavior, `api auth inspect` should
-offer an explicit header-value selector, for example:
+For shareable diagnostics, `api auth inspect` offers explicit redaction:
 
 ```bash
-restish api auth inspect example --rsh-credential UserOAuth --raw-header Authorization
+restish api auth inspect example --rsh-credential UserOAuth --redact
 ```
 
-That command prints only the selected header value. Secret-revealing output must
-be explicit because it can print credentials to stdout.
+For script compatibility with the old narrow behavior and for discoverability,
+`api auth header` prints only the selected computed header value:
+
+```bash
+restish api auth header example Authorization UserOAuth
+restish api auth header example X-Partner-Key --rsh-operation signedReport
+```
+
+Ambient request and response output remains redacted by default; auth inspection
+is different because it is an explicit request to show the final auth material.
 
 The old API-or-URI, Authorization-header-only inspect behavior should be
 removed for v2 rather than kept as an alias. This is a release-window break
@@ -878,7 +886,7 @@ Update user docs before release:
 - API management reference: document `api auth list/add/remove/inspect` and
   configure behavior;
 - migration notes: document removal of the old header-only inspect behavior and
-  the equivalent `api auth inspect --raw-header Authorization` flow;
+  the equivalent `api auth header <api> Authorization` flow;
 - troubleshooting guide: add missing credential/requirement diagnostics.
 
 ## Decision

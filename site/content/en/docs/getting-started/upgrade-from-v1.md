@@ -120,7 +120,7 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | n/a                                   | `restish api connect <name> <url> 'path:value'`             | fast one-shot registration with shorthand expressions |
 | n/a                                   | `restish api set <name> 'path:value'`                       | shorthand updates support set/append/delete           |
 | `restish api clear-auth-cache <name>` | `restish api auth logout <name>`                            | Token cache state lives under `api auth`              |
-| `restish api auth inspect <uri>`      | `restish api auth inspect <api> --raw-header Authorization` | URL form was replaced by API/profile-aware inspection |
+| `restish api auth inspect <uri>`      | `restish api auth header <api> Authorization`               | URL form was replaced by API/profile-aware inspection |
 | `auth.name`                           | `auth.type`                                                 | Profile auth config field renamed                     |
 | profile `base`                        | profile `base_url`                                          | API/profile base field renamed                        |
 | API `base`                            | API `base_url`                                              | API base field renamed                                |

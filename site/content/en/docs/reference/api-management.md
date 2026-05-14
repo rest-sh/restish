@@ -111,7 +111,8 @@ restish api auth list example -o json
 restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
 restish api auth inspect example --rsh-credential PartnerKey
-restish api auth inspect example --rsh-credential basicAuth --raw-header Authorization
+restish api auth inspect example --rsh-credential basicAuth --redact
+restish api auth header example Authorization basicAuth
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI
