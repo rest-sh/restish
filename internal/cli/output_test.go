@@ -666,6 +666,33 @@ func TestFilterHeaderValue(t *testing.T) {
 	}
 }
 
+func TestFilterShorthandCanProjectHeadersAndBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Server":       []string{"test-server"},
+			},
+			Body:    io.NopCloser(strings.NewReader(`{"integer":42}`)),
+			Request: r,
+		}, nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-filter-lang", "shorthand", "-f", `{int: body.integer, ct: headers.Server}`, "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if decoded["int"] != float64(42) || decoded["ct"] != "test-server" {
+		t.Fatalf("unexpected filter output: %#v", decoded)
+	}
+}
+
 func TestFilterJQCanProjectHeadersAndBody(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {

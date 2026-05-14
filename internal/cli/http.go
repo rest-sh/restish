@@ -502,8 +502,8 @@ func normalizedResponseDoc(resp *output.Response) map[string]any {
 	}
 }
 
-func firstHeaderValues(headers map[string][]string) map[string]string {
-	out := make(map[string]string, len(headers))
+func firstHeaderValues(headers map[string][]string) map[string]any {
+	out := make(map[string]any, len(headers))
 	for k, values := range headers {
 		if len(values) > 0 {
 			out[k] = values[0]
