@@ -84,7 +84,7 @@ func validCacheAPIName(apiName string) bool {
 }
 
 // readCache loads and validates a cached spec entry.
-// Returns the entry and true if the cache is valid (not expired, version matches).
+// Returns the entry and true if the cache is valid (not expired, schema compatible).
 func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
 	return readCacheEntry(cacheDir, apiName, version, false)
 }
@@ -102,8 +102,8 @@ func readCacheEntry(cacheDir, apiName, version string, allowExpired bool) (*cach
 	if err := cbor.Unmarshal(data, &e); err != nil {
 		return nil, false
 	}
-	if e.Version != version {
-		return nil, false // restish version changed
+	if e.Schema > currentCacheSchema {
+		return nil, false // cache was written by a newer incompatible schema
 	}
 	if !allowExpired && !e.ExpiresAt.IsZero() && time.Now().After(e.ExpiresAt) {
 		return nil, false // TTL expired

@@ -250,6 +250,44 @@ func TestCacheClearEmptiesCache(t *testing.T) {
 	}
 }
 
+func TestCacheClearPreservesSpecCache(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	cacheDir := t.TempDir()
+	specDir := filepath.Join(cacheDir, "specs")
+	if err := os.MkdirAll(specDir, 0o700); err != nil {
+		t.Fatalf("create spec cache dir: %v", err)
+	}
+	specPath := filepath.Join(specDir, "example.cbor")
+	if err := os.WriteFile(specPath, []byte("spec metadata"), 0o600); err != nil {
+		t.Fatalf("write spec cache: %v", err)
+	}
+
+	c1, _, _ := newTestCLI(t)
+	c1.Hooks().CachePath = cacheDir
+	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("prime request failed: %v", err)
+	}
+
+	c2, _, _ := newTestCLI(t)
+	c2.Hooks().CachePath = cacheDir
+	if err := c2.Run([]string{"restish", "cache", "clear"}); err != nil {
+		t.Fatalf("cache clear failed: %v", err)
+	}
+	if _, err := os.Stat(specPath); err != nil {
+		t.Fatalf("cache clear should preserve spec metadata: %v", err)
+	}
+
+	c3, _, _ := newTestCLI(t)
+	c3.Hooks().CachePath = cacheDir
+	if err := c3.Run([]string{"restish", "get", srv.URL}); err != nil {
+		t.Fatalf("post-clear request failed: %v", err)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("expected response cache to be cleared, got %d server hits", got)
+	}
+}
+
 func TestCacheClearAPIDoesNotDeleteOtherAPIOnSameHost(t *testing.T) {
 	hits := map[string]*atomic.Int32{
 		"/one": {},

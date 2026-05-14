@@ -256,19 +256,19 @@ func (c *DiskCache) Info() (*Info, error) {
 	return info, nil
 }
 
-// Clear deletes all cache entries.  If host is non-empty, only entries stored
-// under the <host> subdirectory are removed (i.e. responses for one API).
+// Clear deletes HTTP response cache entries. If host is non-empty, only entries
+// stored under the <host> subdirectory are removed (i.e. responses for one API).
 func (c *DiskCache) Clear(host string) error {
 	if host == "" {
-		entries, err := os.ReadDir(c.dir)
+		entries, _, err := c.allFiles()
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
 			return err
 		}
 		for _, e := range entries {
-			_ = os.RemoveAll(filepath.Join(c.dir, e.Name()))
+			_ = os.Remove(e.path)
 		}
 		atomic.StoreInt64(&c.sizeEstimate, 0)
 		return nil

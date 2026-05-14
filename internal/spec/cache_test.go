@@ -87,10 +87,28 @@ func TestReadCache_Miss_Missing(t *testing.T) {
 	}
 }
 
-func TestReadCache_Miss_VersionMismatch(t *testing.T) {
+func TestReadCache_AllowsVersionMismatchWhenSchemaCompatible(t *testing.T) {
 	dir := t.TempDir()
 	entry := &cacheEntry{
 		Version:     "v1",
+		Schema:      currentCacheSchema,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	writeCache(dir, "testapi", entry)
+
+	_, ok := readCache(dir, "testapi", "v2")
+	if !ok {
+		t.Error("expected cache hit for compatible schema despite version mismatch")
+	}
+}
+
+func TestReadCache_Miss_FutureSchema(t *testing.T) {
+	dir := t.TempDir()
+	entry := &cacheEntry{
+		Version:     "v2",
+		Schema:      currentCacheSchema + 1,
 		ExpiresAt:   time.Now().Add(time.Hour),
 		ContentType: "application/json",
 		Raw:         []byte(testSpecRaw),
@@ -99,7 +117,7 @@ func TestReadCache_Miss_VersionMismatch(t *testing.T) {
 
 	_, ok := readCache(dir, "testapi", "v2")
 	if ok {
-		t.Error("expected cache miss for version mismatch")
+		t.Error("expected cache miss for future schema")
 	}
 }
 
