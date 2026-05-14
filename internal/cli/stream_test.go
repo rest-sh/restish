@@ -1145,8 +1145,8 @@ func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 	err := c.Run([]string{"restish", "--rsh-max-body-size", "1", "get", "--rsh-print", "b", srv.URL + "/events"})
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %v, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 4 {
+		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("expected no stream output before status error, got %q", out.String())

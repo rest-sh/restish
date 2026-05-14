@@ -16,13 +16,16 @@ verbose diagnostics are part of the interface.
 
 Restish uses a compact exit-code policy:
 
-| Case | Exit code |
-| --- | --- |
-| Success and `2xx` HTTP status | `0` |
-| Non-2xx HTTP status | `1` |
-| Network, parse, config, or command errors | `1` |
-| Usage errors, such as missing args or unknown flags | `2` |
-| Interrupted with SIGINT | `130` |
+| Result | Exit code | Notes |
+| --- | --- | --- |
+| Successful command, including final HTTP `2xx` responses | `0` | Redirects are followed before the final status is evaluated. |
+| Final HTTP `3xx` response | `3` | Redirects are followed before the final status is evaluated. |
+| Final HTTP `4xx` response | `4` | Restish still writes the response body before exiting non-zero. |
+| Final HTTP `5xx` response | `5` | Restish still writes the response body before exiting non-zero. |
+| Runtime failure | `1` | Network errors, TLS failures, config problems, auth failures, parse errors, formatter errors, and most plugin failures. |
+| Usage error | `2` | Missing arguments, unknown commands, unknown flags, or invalid flag values before the request runs. |
+| Interrupted with `Ctrl-C` / SIGINT | `130` | Matches the usual shell convention for interrupted processes. |
+| Command plugin exit code | plugin-defined | Command plugins may return their own `0`-`255` exit code. |
 
 Inspect an error body without failing the shell command:
 

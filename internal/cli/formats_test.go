@@ -68,8 +68,8 @@ func TestSilentModeSuppressesHTTPStatusFailure(t *testing.T) {
 		}, nil
 	})
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-silent"})
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %v, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %v, want 5 (err=%v)", exitCode(err), err)
 	}
 	if out.Len() != 0 || errOut.Len() != 0 {
 		t.Fatalf("silent HTTP status failure wrote stdout=%q stderr=%q", out.String(), errOut.String())

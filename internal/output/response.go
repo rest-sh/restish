@@ -144,15 +144,26 @@ func printableBodyExcerpt(raw []byte, max int) (string, bool) {
 	return s, true
 }
 
-// StatusToExitCode maps an HTTP status code to the Restish runtime-failure
-// exit code. Detailed status is available in output; the process code stays
-// intentionally small and script-friendly.
+// StatusToExitCode maps an HTTP status code to Restish's script-friendly
+// status-family exit code.
 //
 //	2xx → 0  (success)
-//	other → 1  (runtime failure)
+//	3xx → 3  (redirect status)
+//	4xx → 4  (client error)
+//	5xx → 5  (server error)
+//	other → 1  (runtime or unexpected status failure)
 func StatusToExitCode(status int) int {
 	if status >= 200 && status < 300 {
 		return 0
+	}
+	if status >= 300 && status < 400 {
+		return 3
+	}
+	if status >= 400 && status < 500 {
+		return 4
+	}
+	if status >= 500 && status < 600 {
+		return 5
 	}
 	return 1
 }

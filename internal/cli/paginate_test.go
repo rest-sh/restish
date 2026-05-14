@@ -1026,8 +1026,8 @@ func TestPaginationLaterPageErrorFailsCollectedOutput(t *testing.T) {
 	})
 
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"})
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
 	}
 	if out.String() != "" {
 		t.Fatalf("collected pagination should not emit partial JSON document, got %q", out.String())
@@ -1063,8 +1063,8 @@ func TestPaginationLaterPageErrorKeepsStreamedPartialOutput(t *testing.T) {
 	})
 
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson"})
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
 	}
 	if !strings.Contains(out.String(), `"id":1`) {
 		t.Fatalf("expected first page item to remain streamed, got %q", out.String())
@@ -1100,8 +1100,8 @@ func TestPaginationFilteredNDJSONKeepsStreamedPartialOutput(t *testing.T) {
 	})
 
 	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body.{id}", "-o", "ndjson"})
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
 	}
 	if got, want := out.String(), "{\"id\":1}\n"; got != want {
 		t.Fatalf("expected filtered first-page NDJSON output to remain streamed, got %q", got)
@@ -1167,8 +1167,8 @@ func TestPaginationFilteredNDJSONStreamsBeforeNextPageCompletes(t *testing.T) {
 	}
 	close(allowPage2)
 	err := <-errCh
-	if exitCode(err) != 1 {
-		t.Fatalf("exit code = %d, want 1 (err=%v)", exitCode(err), err)
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
 	}
 	if got, want := out.String(), "{\"id\":1}\n"; got != want {
 		t.Fatalf("expected only streamed first-page output, got %q", got)

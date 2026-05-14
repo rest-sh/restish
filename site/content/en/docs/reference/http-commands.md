@@ -54,8 +54,9 @@ restish delete api.rest.sh/items/docs-demo --rsh-ignore-status-code
 
 ## Output And Errors
 
-Non-2xx HTTP statuses produce non-zero exit codes unless
-`--rsh-ignore-status-code` is set. Response output goes to stdout; verbose
+Non-2xx HTTP statuses produce status-family exit codes unless
+`--rsh-ignore-status-code` is set: `3` for final `3xx`, `4` for final `4xx`,
+and `5` for final `5xx`. Response output goes to stdout; verbose
 request/response diagnostics go to stderr.
 
 ## Related Pages

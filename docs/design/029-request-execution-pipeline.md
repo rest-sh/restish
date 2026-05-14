@@ -342,6 +342,11 @@ Teardown must close anything that was opened for the request:
 - command plugin subprocesses
 - TLS signer subprocesses tied to the request or transport lifetime
 
+HTTP-family exit codes follow the v1 compatibility contract: final 2xx
+responses exit 0, final 3xx responses exit 3, final 4xx responses exit 4, and
+final 5xx responses exit 5. Local runtime failures use 1, usage failures use 2,
+and SIGINT uses 130.
+
 ## Invariants
 
 The implementation may be refactored, but these invariants should remain true:

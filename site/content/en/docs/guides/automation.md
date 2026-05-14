@@ -33,9 +33,11 @@ restish api.rest.sh/images -f body.self -o lines
 
 ## Exit Codes
 
-Restish exits `0` for success, `1` for runtime failures or non-2xx HTTP
-statuses, `2` for usage errors such as missing arguments, and `130` for SIGINT.
-HTTP error statuses still write the response body before returning non-zero.
+Restish exits `0` for success, `1` for runtime failures, `2` for usage errors
+such as missing arguments, `3` for final HTTP `3xx` responses, `4` for final
+HTTP `4xx` responses, `5` for final HTTP `5xx` responses, and `130` for
+SIGINT. HTTP error statuses still write the response body before returning
+non-zero.
 
 When a script intentionally handles HTTP status itself, keep the body and force
 a zero exit code:

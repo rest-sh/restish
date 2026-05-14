@@ -173,8 +173,10 @@ Restish uses a small stable exit-code policy:
 
 - `0` for success
 - `1` for generic local runtime failure
-- `1` for non-2xx HTTP final status when `--rsh-ignore-status-code` is not set
 - `2` for usage or validation failure before execution
+- `3` for final HTTP 3xx status when `--rsh-ignore-status-code` is not set
+- `4` for final HTTP 4xx status when `--rsh-ignore-status-code` is not set
+- `5` for final HTTP 5xx status when `--rsh-ignore-status-code` is not set
 - `130` for SIGINT / canceled interactive execution
 
 Recommended local categories are:
@@ -183,8 +185,9 @@ Recommended local categories are:
 - local runtime/setup failure during execution
 - cancellation/interruption
 
-The response body and verbose diagnostics carry details such as exact HTTP
-status. The process exit code stays intentionally compact for script branches.
+HTTP responses use the v1-compatible status-family exit codes: `3` for final
+3xx responses, `4` for final 4xx responses, and `5` for final 5xx responses.
+The response body and verbose diagnostics carry the exact HTTP status.
 
 ## Output Versus Exit Status
 
