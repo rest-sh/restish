@@ -30,21 +30,24 @@ Review code changes with a bug-finding mindset. Prioritize correctness, regressi
 
 ## How To Review
 
-1. Read the changed files and identify the user-visible or protocol-visible behavior change.
-2. Challenge assumptions around error paths, cancellation, timeouts, cleanup, and backward compatibility.
-3. Check whether tests cover both the intended path and the failure modes.
-4. Check whether user-facing docs in `site/` or design docs in `docs/design/` should change.
-5. Report findings first, ordered by severity. Keep summaries brief.
+1. Start with `git status --short`, `git diff --stat`, and `git diff --name-only` to map the review surface.
+2. Read the diff before surrounding code. Identify the user-visible, protocol-visible, or compatibility impact.
+3. Read nearby implementation and tests for changed paths. Compare new behavior with existing conventions.
+4. Challenge assumptions around error paths, cancellation, timeouts, cleanup, concurrency, config precedence, and backward compatibility.
+5. Check whether tests cover intended behavior and important failure modes.
+6. Check whether `site/` docs or `docs/design/` should change.
+7. Report findings first, ordered by severity. Keep summaries brief.
 
 ## Output Expectations
 
 - Lead with concrete findings, not a general summary.
 - Prefer sections in this order: `Findings`, `Open questions / assumptions`, `Residual risk`.
-- Reference the affected file and line when possible.
+- For each finding, include severity, file/line, problem, impact, and the smallest credible fix.
 - Explain the impact: what breaks, leaks, regresses, or becomes confusing.
-- Suggest the smallest credible fix or follow-up.
 - If no findings are present, say so explicitly and call out any residual risk or untested areas.
 - Do not pad the review with praise or low-value nits unless the user asks for them.
+- Do not report speculative issues unless there is a plausible failure mode in the changed code.
+- Treat missing coverage as a test gap unless the diff shows a confirmed bug.
 
 ## Severity Guide
 
@@ -56,6 +59,15 @@ Review code changes with a bug-finding mindset. Prioritize correctness, regressi
 ## Restish-Specific Watchlist
 
 These are high-value repo-specific checks, not an exhaustive checklist. Use them when relevant; do not force them into unrelated reviews.
+
+### Path-specific cues
+
+- `internal/cli/`: flags, exit codes, stdin/stdout/stderr, config precedence, generated commands
+- `internal/request/`: content negotiation, auth headers, redirects, pagination, retries, streaming, cancellation
+- `internal/output/`: formatter drift, golden tests, terminal width behavior, stable ordering
+- `internal/config/`: defaults, file permissions, migrations, backward compatibility
+- `internal/plugin/` and `cmd/restish-*`: plugin protocol, subprocess lifecycle, wire compatibility
+- `cmd/restish` and `site/`: user-facing CLI behavior, examples, docs impact
 
 ### Subprocess lifecycle
 
@@ -99,7 +111,9 @@ Tests that share a `bytes.Buffer` across concurrent writers can hide data races,
 
 ## Verification Hints
 
-- Run targeted package tests when the changed area is clear.
+- Prefer the narrowest meaningful test first: `go test ./internal/cli/...`, `go test ./internal/request/...`, `go test ./internal/output/...`, or another touched package.
+- Run `go test ./...` for broad or shared changes.
+- Run `go test -tags=integration ./...` before approving CLI or plugin behavior changes with integration risk.
 - Update golden files only when behavior intentionally changed.
 - Consider `go test -race ./...` when concurrency, subprocess handling, or shared buffers are touched.
 
