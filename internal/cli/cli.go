@@ -29,6 +29,8 @@ import (
 
 var errSignalCanceled = errors.New("signal canceled")
 
+const staleGeneratedOperationRefreshTimeout = 3 * time.Second
+
 type signalCancelError struct {
 	signal os.Signal
 }
@@ -388,11 +390,15 @@ func mergeDefaultConfigForEmbedding(defaults, loaded *config.Config) *config.Con
 
 // discoverSpec runs spec discovery for the named API using the registered loaders.
 func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, error) {
+	return c.discoverSpecForProfile(ctx, apiName, "default", false, 0)
+}
+
+func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName string, forceRefresh bool, timeout time.Duration) (*spec.APISpec, error) {
 	api, err := c.requireAPI(apiName)
 	if err != nil {
 		return nil, nil
 	}
-	transport, closer, err := c.discoveryTransport(ctx, api, "default")
+	transport, closer, err := c.discoveryTransport(ctx, api, profileName)
 	if err != nil {
 		return nil, err
 	}
@@ -406,10 +412,12 @@ func (c *CLI) discoverSpec(ctx context.Context, apiName string) (*spec.APISpec, 
 		SpecFiles:        api.SpecFiles,
 		CacheDir:         c.specCacheDir(),
 		OperationBase:    api.OperationBase,
-		ServerVariables:  effectiveServerVariables(api, "default"),
+		ServerVariables:  effectiveServerVariables(api, profileName),
 		Version:          Version,
 		Transport:        transport,
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
+		ForceRefresh:     forceRefresh,
+		Timeout:          timeout,
 		Trace:            c.contextDiscoveryTrace(ctx),
 	}
 	return spec.Discover(ctx, cfg, c.loaders)
@@ -541,6 +549,7 @@ func (c *CLI) Run(args []string) error {
 
 	root := c.newRootCmd()
 	c.quietGeneratedWarnings = quietGeneratedWarningsForScan(argScan, cfg)
+	c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
@@ -555,7 +564,7 @@ func (c *CLI) Run(args []string) error {
 			OperationBase:   apiCfg.OperationBase,
 			ServerVariables: effectiveServerVariables(apiCfg, startupProfile),
 		}
-		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
+		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
@@ -690,6 +699,7 @@ func (c *CLI) rootContext() (context.Context, context.CancelFunc) {
 
 type cliArgScan struct {
 	FirstCommand            string
+	SecondCommand           string
 	ProfileName             string
 	ConfigPath              string
 	ExplicitConfigPath      bool
@@ -723,6 +733,9 @@ func scanCLIArgs(args []string) cliArgScan {
 		if arg == "--" {
 			if scan.FirstCommand == "" && i+1 < len(args) {
 				scan.FirstCommand = args[i+1]
+				if i+2 < len(args) {
+					scan.SecondCommand = args[i+2]
+				}
 			}
 			break
 		}
@@ -759,8 +772,12 @@ func scanCLIArgs(args []string) cliArgScan {
 			consumesNext = flagConsumesNextArg(arg)
 		}
 
-		if scan.FirstCommand == "" && !strings.HasPrefix(arg, "-") {
-			scan.FirstCommand = arg
+		if !strings.HasPrefix(arg, "-") {
+			if scan.FirstCommand == "" {
+				scan.FirstCommand = arg
+			} else if scan.SecondCommand == "" {
+				scan.SecondCommand = arg
+			}
 		}
 		if consumesNext && i+1 < len(args) {
 			i++
@@ -776,6 +793,37 @@ func scanCLIArgs(args []string) cliArgScan {
 		scan.GeneratedAPICommandTree = true
 	}
 	return scan
+}
+
+func (c *CLI) refreshStaleGeneratedMetadataForCommand(ctx context.Context, scan cliArgScan, cfg *config.Config) {
+	if scan.Bootstrap || scan.GeneratedAPICommandTree || scan.FirstCommand == "" || scan.SecondCommand == "" {
+		return
+	}
+	apiCfg := cfg.APIs[scan.FirstCommand]
+	if apiCfg == nil {
+		return
+	}
+	opts := spec.OperationOptions{
+		BaseURL:         apiCfg.BaseURL,
+		OperationBase:   apiCfg.OperationBase,
+		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
+	}
+	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), scan.FirstCommand, Version, apiCfg.SpecFiles, opts, true)
+	if !ok || !status.Stale {
+		return
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, staleGeneratedOperationRefreshTimeout)
+	defer cancel()
+	if _, err := c.discoverSpecForProfile(refreshCtx, scan.FirstCommand, scan.ProfileName, true, staleGeneratedOperationRefreshTimeout); err != nil {
+		c.warnf("could not refresh stale API metadata for %q; using last synced metadata from %s: %v", scan.FirstCommand, formatCacheTime(status.FetchedAt), err)
+	}
+}
+
+func formatCacheTime(t time.Time) string {
+	if t.IsZero() {
+		return "unknown time"
+	}
+	return t.Format("2006-01-02 15:04:05 MST")
 }
 
 func signalAwareContext() (context.Context, context.CancelFunc) {

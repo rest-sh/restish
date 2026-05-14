@@ -61,6 +61,13 @@ type opsBlob struct {
 const currentCacheSchema = 2
 const currentOperationCacheSchema = 10
 
+// OperationCacheStatus describes the freshness of cached operation metadata.
+type OperationCacheStatus struct {
+	FetchedAt time.Time
+	ExpiresAt time.Time
+	Stale     bool
+}
+
 // cacheFile returns the path of the CBOR cache file for the given API.
 func cacheFile(cacheDir, apiName string) string {
 	return filepath.Join(cacheDir, apiName+".cbor")
@@ -79,6 +86,10 @@ func validCacheAPIName(apiName string) bool {
 // readCache loads and validates a cached spec entry.
 // Returns the entry and true if the cache is valid (not expired, version matches).
 func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
+	return readCacheEntry(cacheDir, apiName, version, false)
+}
+
+func readCacheEntry(cacheDir, apiName, version string, allowExpired bool) (*cacheEntry, bool) {
 	if !validCacheAPIName(apiName) {
 		return nil, false
 	}
@@ -94,7 +105,7 @@ func readCache(cacheDir, apiName, version string) (*cacheEntry, bool) {
 	if e.Version != version {
 		return nil, false // restish version changed
 	}
-	if !e.ExpiresAt.IsZero() && time.Now().After(e.ExpiresAt) {
+	if !allowExpired && !e.ExpiresAt.IsZero() && time.Now().After(e.ExpiresAt) {
 		return nil, false // TTL expired
 	}
 	e.normalize()
@@ -190,15 +201,36 @@ func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loader
 // or lacks operations for the requested base URL, operation base, and server
 // variable set.
 func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []string, opts OperationOptions) (OperationSet, bool) {
-	entry, ok := readCache(cacheDir, apiName, version)
-	if !ok {
+	set, status, ok := LoadOperationSetFromCacheStatus(cacheDir, apiName, version, specFiles, opts, false)
+	if !ok || status.Stale {
 		return OperationSet{}, false
+	}
+	return set, true
+}
+
+// LoadOperationSetFromCacheStatus reads extracted operations and reports
+// whether the matching metadata is stale. When allowStale is true, expired
+// remote spec metadata remains usable as "last known good" operations. Local
+// spec file changes still invalidate the metadata, because the local source is
+// immediately available and should be treated as authoritative.
+func LoadOperationSetFromCacheStatus(cacheDir, apiName, version string, specFiles []string, opts OperationOptions, allowStale bool) (OperationSet, OperationCacheStatus, bool) {
+	entry, ok := readCacheEntry(cacheDir, apiName, version, allowStale)
+	if !ok {
+		return OperationSet{}, OperationCacheStatus{}, false
 	}
 	if !cacheSpecFilesMatch(specFiles, entry) {
-		return OperationSet{}, false
+		return OperationSet{}, OperationCacheStatus{}, false
 	}
 	if specFilesChangedSince(specFiles, entry.FetchedAt) {
-		return OperationSet{}, false
+		return OperationSet{}, OperationCacheStatus{}, false
+	}
+	status := OperationCacheStatus{
+		FetchedAt: entry.FetchedAt,
+		ExpiresAt: entry.ExpiresAt,
+		Stale:     !entry.ExpiresAt.IsZero() && time.Now().After(entry.ExpiresAt),
+	}
+	if status.Stale && !allowStale {
+		return OperationSet{}, status, false
 	}
 	rawHash := cacheRawHash(entry.raw())
 	for _, blob := range entry.Operations {
@@ -216,10 +248,10 @@ func LoadOperationSetFromCache(cacheDir, apiName, version string, specFiles []st
 			if blob.Operations == nil {
 				set.Operations = []Operation{}
 			}
-			return set, true
+			return set, status, true
 		}
 	}
-	return OperationSet{}, false
+	return OperationSet{}, status, false
 }
 
 // StoreOperationSetInCache updates an existing raw cache entry with extracted

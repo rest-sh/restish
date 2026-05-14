@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -196,6 +197,28 @@ func (e *generatedEnv) newCaptureCLI() (*cli.CLI, *strings.Builder) {
 	return c, &out
 }
 
+func expireGeneratedSpecCache(t *testing.T, cacheDir, apiName string) {
+	t.Helper()
+	path := filepath.Join(cacheDir, apiName+".cbor")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read spec cache: %v", err)
+	}
+	var entry map[string]any
+	if err := cbor.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("decode spec cache: %v", err)
+	}
+	entry["fetched_at"] = time.Now().Add(-48 * time.Hour)
+	entry["expires_at"] = time.Now().Add(-24 * time.Hour)
+	data, err = cbor.Marshal(entry)
+	if err != nil {
+		t.Fatalf("encode spec cache: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write spec cache: %v", err)
+	}
+}
+
 type countingLoader struct {
 	detects atomic.Int32
 }
@@ -238,6 +261,78 @@ func TestGeneratedAPIHelpUsesSpecDescriptionFromOperationCache(t *testing.T) {
 	}
 	if got := loader.detects.Load(); got != 0 {
 		t.Fatalf("loader Detect called %d times, want 0 when API help loads from cached operations", got)
+	}
+}
+
+func TestGeneratedAPIHelpUsesStaleOperationCache(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	c, out := env.newCaptureCLI()
+	loader := &countingLoader{}
+	c.AddLoader(loader)
+
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "list-items") {
+		t.Fatalf("expected stale generated operations in help, got:\n%s", got)
+	}
+	if got := loader.detects.Load(); got != 0 {
+		t.Fatalf("loader Detect called %d times, want 0 when API help loads from stale cached operations", got)
+	}
+}
+
+func TestGeneratedCommandRefreshesStaleOperationCacheOnUse(t *testing.T) {
+	var specHits atomic.Int32
+	mux := http.NewServeMux()
+	var serverURL string
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		specHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specWithOperations(serverURL))
+	})
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	serverURL = srv.URL
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	env := &generatedEnv{cfgFile: cfgFile, cacheDir: t.TempDir()}
+	syncCLI := env.newCLI()
+	if err := syncCLI.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	hitsAfterSync := specHits.Load()
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+
+	c := env.newCLI()
+	var out strings.Builder
+	c.Stdout = &out
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("generated command from stale cache: %v", err)
+	}
+	if got := specHits.Load(); got <= hitsAfterSync {
+		t.Fatalf("expected stale generated command to refresh spec metadata; spec hits before=%d after=%d", hitsAfterSync, got)
 	}
 }
 

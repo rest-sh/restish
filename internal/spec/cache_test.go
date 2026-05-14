@@ -214,6 +214,47 @@ func TestLoadOperationsFromCache(t *testing.T) {
 	}
 }
 
+func TestLoadOperationSetFromCacheStatusAllowsStaleRemoteMetadata(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	set, err := loaded.OperationSet(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operation set: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-24 * time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+		},
+	}
+	entry.upsertOperationSet(OperationOptions{BaseURL: "https://api.example.com"}, set)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	if _, ok := LoadOperationSetFromCache(dir, "testapi", "v2", nil, OperationOptions{BaseURL: "https://api.example.com"}); ok {
+		t.Fatal("fresh-only operation cache should miss expired metadata")
+	}
+	got, status, ok := LoadOperationSetFromCacheStatus(dir, "testapi", "v2", nil, OperationOptions{BaseURL: "https://api.example.com"}, true)
+	if !ok {
+		t.Fatal("expected stale operation cache hit")
+	}
+	if !status.Stale {
+		t.Fatal("expected stale status")
+	}
+	if len(got.Operations) != 1 || got.Operations[0].ID != "listItems" {
+		t.Fatalf("unexpected operations: %#v", got.Operations)
+	}
+}
+
 func TestLoadOperationsFromCachePreservesCredentialMetadata(t *testing.T) {
 	dir := t.TempDir()
 	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"security":[{"ApiKey":[]}],"components":{"securitySchemes":{"ApiKey":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)

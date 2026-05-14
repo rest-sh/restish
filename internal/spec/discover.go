@@ -143,7 +143,9 @@ loadFresh:
 			if set.Operations != nil {
 				entry.upsertOperationSet(opts, set)
 			}
-			_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
+			if err := writeCache(cfg.CacheDir, cfg.APIName, entry); err != nil {
+				return nil, err
+			}
 		}
 		return spec, nil
 	}
@@ -180,7 +182,9 @@ loadFresh:
 		if set.Operations != nil {
 			entry.upsertOperationSet(opts, set)
 		}
-		_ = writeCache(cfg.CacheDir, cfg.APIName, entry)
+		if err := writeCache(cfg.CacheDir, cfg.APIName, entry); err != nil {
+			return nil, err
+		}
 	}
 
 	return spec, nil

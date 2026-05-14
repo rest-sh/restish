@@ -228,6 +228,27 @@ func TestDoctorAPIReportsPersistentCredentialSettings(t *testing.T) {
 	}
 }
 
+func TestDoctorAPIReportsStaleGeneratedOperations(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	c, out := env.newCaptureCLI()
+
+	if err := c.Run([]string{"restish", "doctor", "api", "tapi"}); err != nil {
+		t.Fatalf("doctor api returned error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Spec cache: stale") || !strings.Contains(got, "Generated operations: 7 available (stale") {
+		t.Fatalf("doctor api did not report stale generated operations:\n%s", got)
+	}
+}
+
 func TestDoctorAPIReportsMissingEnvAuth(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{

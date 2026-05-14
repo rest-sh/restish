@@ -558,8 +558,28 @@ func (c *CLI) apiProfileForAuth(apiName, profileName string, create bool) (*conf
 }
 
 func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
+	if set, _, ok := c.cachedOperationSetStatusForAPI(apiName, apiCfg, profileName); ok {
+		return set, true
+	}
 	set, ok, _ := c.operationSetForAPI(context.Background(), apiName, apiCfg, profileName, false)
 	return set, ok
+}
+
+func (c *CLI) cachedOperationSetStatusForAPI(apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, spec.OperationCacheStatus, bool) {
+	if apiCfg == nil {
+		return spec.OperationSet{}, spec.OperationCacheStatus{}, false
+	}
+	opts := spec.OperationOptions{
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
+	}
+	if set, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
+		return set, status, true
+	}
+	opts.BaseURL = apiCfg.BaseURL
+	opts.OperationBase = apiCfg.OperationBase
+	return spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true)
 }
 
 func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string, forceRefresh bool) (spec.OperationSet, bool, error) {
@@ -572,7 +592,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
 	if !forceRefresh {
-		if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts); ok {
+		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
 			return set, true, nil
 		}
 	}

@@ -219,7 +219,7 @@ func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg 
 		OperationBase:   apiCfg.OperationBase,
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
-	if set, ok := spec.LoadOperationSetFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts); ok {
+	if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 		return set, true
 	}
 	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
