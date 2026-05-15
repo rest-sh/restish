@@ -177,24 +177,37 @@ func getInput(input chan string) {
 }
 
 // authHandler is an HTTP handler that takes a channel and sends the `code`
-// query param when it gets a request.
+// query param when it gets a request. The successHTML and errorHTML fields
+// allow callers to override the built-in HTML pages; an empty string falls
+// back to the package-level htmlSuccess / htmlError defaults.
 type authHandler struct {
-	c chan string
+	c           chan string
+	successHTML string
+	errorHTML   string
 }
 
 func (h authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 
+	successBody := h.successHTML
+	if successBody == "" {
+		successBody = htmlSuccess
+	}
+	errorBody := h.errorHTML
+	if errorBody == "" {
+		errorBody = htmlError
+	}
+
 	if err := r.URL.Query().Get("error"); err != "" {
 		details := r.URL.Query().Get("error_description")
-		rendered := strings.Replace(strings.Replace(htmlError, "$ERROR", err, 1), "$DETAILS", details, 1)
+		rendered := strings.Replace(strings.Replace(errorBody, "$ERROR", err, 1), "$DETAILS", details, 1)
 		w.Write([]byte(rendered))
 		h.c <- ""
 		return
 	}
 
 	h.c <- r.URL.Query().Get("code")
-	w.Write([]byte(htmlSuccess))
+	w.Write([]byte(successBody))
 }
 
 // AuthorizationCodeTokenSource with PKCE as described in:
@@ -212,6 +225,8 @@ type AuthorizationCodeTokenSource struct {
 	RedirectURL    string
 	EndpointParams *url.Values
 	Scopes         []string
+	HTMLSuccess    string
+	HTMLError      string
 }
 
 func (ac *AuthorizationCodeTokenSource) getRedirectUrl() string {
@@ -260,7 +275,9 @@ func (ac *AuthorizationCodeTokenSource) Token() (*oauth2.Token, error) {
 	// Run server before opening the user's browser so we are ready for any redirect.
 	codeChan := make(chan string)
 	handler := authHandler{
-		c: codeChan,
+		c:           codeChan,
+		successHTML: ac.HTMLSuccess,
+		errorHTML:   ac.HTMLError,
 	}
 
 	// strip protocol prefix from configured redirect url for local webserver
