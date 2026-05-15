@@ -92,7 +92,7 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	set, hasOps := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
+	set, hasOps := c.cachedOperationSetForAPI(requestContext(cmd), apiName, apiCfg, profileName)
 	_, profileReady, profileErr := c.profileAuthReadiness(apiName, profileName, prof)
 	coverage := operationAuthCoverage{}
 	if hasOps {
@@ -204,7 +204,7 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 	if prof.Credentials[credentialID] == nil {
 		prof.Credentials[credentialID] = &config.CredentialConfig{}
 	}
-	defaultNeeds := c.cachedCredentialDefaultNeeds(apiName, apiCfg, profileName, credentialID)
+	defaultNeeds := c.cachedCredentialDefaultNeeds(requestContext(cmd), apiName, apiCfg, profileName, credentialID)
 	if prof.Credentials[credentialID].Auth == nil {
 		if authCfg, ok, err := c.cachedAuthConfigForCredential(apiName, apiCfg, credentialID); err != nil {
 			return err
@@ -298,7 +298,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName, rawHeader string, redact bool) error {
-	op, ok, err := c.cachedOperationForAPI(apiName, apiCfg, profileName, operationName)
+	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
 	if err != nil {
 		return err
 	}
@@ -471,7 +471,7 @@ func (c *CLI) operationAuthInspectionRequest(cmd *cobra.Command, apiName, profil
 	if err != nil {
 		return nil, err
 	}
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
+	req, _ := http.NewRequestWithContext(requestContext(cmd), "GET", "http://example.com", nil)
 	for _, item := range selected {
 		step, err := c.operationAuthStep(apiName, profileName, item, authOpts)
 		if err != nil {
@@ -510,7 +510,7 @@ func (c *CLI) authInspectionRequest(cmd *cobra.Command, apiName, profileName str
 	if err != nil {
 		return nil, err
 	}
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
+	req, _ := http.NewRequestWithContext(requestContext(cmd), "GET", "http://example.com", nil)
 	if err := handler.Authenticate(requestContext(cmd), req, c.authContext(requestContext(cmd), apiName, profileName, params, resolved.CacheKey, false)); err != nil {
 		return nil, fmt.Errorf("building auth inspection: %w", err)
 	}
@@ -636,11 +636,11 @@ func (c *CLI) apiProfileForAuth(apiName, profileName string, create bool) (*conf
 	return apiCfg, apiCfg.Profiles[profileName], nil
 }
 
-func (c *CLI) cachedOperationSetForAPI(apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
+func (c *CLI) cachedOperationSetForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
 	if set, _, ok := c.cachedOperationSetStatusForAPI(apiName, apiCfg, profileName); ok {
 		return set, true
 	}
-	set, ok, _ := c.operationSetForAPI(context.Background(), apiName, apiCfg, profileName, false)
+	set, ok, _ := c.operationSetForAPI(ctx, apiName, apiCfg, profileName, false)
 	return set, ok
 }
 
@@ -708,8 +708,8 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	return set, true, nil
 }
 
-func (c *CLI) cachedOperationForAPI(apiName string, apiCfg *config.APIConfig, profileName, value string) (spec.Operation, bool, error) {
-	set, ok := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
+func (c *CLI) cachedOperationForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName, value string) (spec.Operation, bool, error) {
+	set, ok := c.cachedOperationSetForAPI(ctx, apiName, apiCfg, profileName)
 	if !ok {
 		return spec.Operation{}, false, nil
 	}
@@ -858,8 +858,8 @@ func authRequirementKindSupported(kind string) bool {
 	}
 }
 
-func (c *CLI) cachedCredentialDefaultNeeds(apiName string, apiCfg *config.APIConfig, profileName, credentialID string) []string {
-	set, ok := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
+func (c *CLI) cachedCredentialDefaultNeeds(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName, credentialID string) []string {
+	set, ok := c.cachedOperationSetForAPI(ctx, apiName, apiCfg, profileName)
 	if !ok {
 		return nil
 	}

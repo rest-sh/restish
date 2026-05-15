@@ -29,13 +29,16 @@ func HookTimeout(m Manifest, hookName string) time.Duration {
 // callHookRaw spawns the plugin at path, writes in as a CBOR message to
 // stdin, and returns all bytes written to stdout on success. Non-zero plugin
 // exit is returned as an error together with any text on stderr.
-func callHookRaw(path string, timeout time.Duration, in any) ([]byte, error) {
+func callHookRaw(ctx context.Context, path string, timeout time.Duration, in any) ([]byte, error) {
 	var stdin bytes.Buffer
 	if err := pluginwire.WriteMessage(&stdin, in); err != nil {
 		return nil, fmt.Errorf("hook %s: encode: %w", filepath.Base(path), err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
@@ -46,6 +49,12 @@ func callHookRaw(path string, timeout time.Duration, in any) ([]byte, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if msg := strings.TrimSpace(stderr.String()); msg != "" {
+				return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), ctxErr, msg)
+			}
+			return nil, fmt.Errorf("hook %s: exec: %w", filepath.Base(path), ctxErr)
+		}
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), err, msg)
 		}
@@ -150,12 +159,23 @@ func (s *FormatterStream) Close() error {
 // 30 seconds to respond before it is killed. Use CallHookWithTimeout to
 // override the deadline.
 func CallHook(path string, in, out any) error {
-	return CallHookWithTimeout(path, 30*time.Second, in, out)
+	return CallHookContext(context.Background(), path, in, out)
+}
+
+// CallHookContext is like CallHook but derives the plugin deadline from ctx.
+func CallHookContext(ctx context.Context, path string, in, out any) error {
+	return CallHookWithTimeoutContext(ctx, path, 30*time.Second, in, out)
 }
 
 // CallHookWithTimeout is like CallHook but uses the supplied deadline.
 func CallHookWithTimeout(path string, timeout time.Duration, in, out any) error {
-	data, err := callHookRaw(path, timeout, in)
+	return CallHookWithTimeoutContext(context.Background(), path, timeout, in, out)
+}
+
+// CallHookWithTimeoutContext is like CallHookWithTimeout but derives the plugin
+// deadline from ctx.
+func CallHookWithTimeoutContext(ctx context.Context, path string, timeout time.Duration, in, out any) error {
+	data, err := callHookRaw(ctx, path, timeout, in)
 	if err != nil {
 		return err
 	}

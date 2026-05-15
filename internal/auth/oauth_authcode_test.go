@@ -296,6 +296,42 @@ func TestAuthCode_BrowserFlow_ImmediateCallbackDuringOpenBrowser(t *testing.T) {
 	}
 }
 
+func TestAuthCodeAuthenticateUsesExplicitContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.Context().Err(); err != nil {
+				return nil, err
+			}
+			return testResponse(200, "application/json", `{"access_token":"unexpected-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			callbackURL, state := mustCallbackURL(t, raw)
+			resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=late-code", callbackURL, url.QueryEscape(state)))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			return nil
+		},
+	}
+
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.Authenticate(ctx, req, AuthContext{Params: map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_port": availablePort(t),
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Fatalf("Authorization = %q, want empty", got)
+	}
+}
+
 func TestAuthCode_BrowserFlow_TwoStrayPreflightsDoNotDeadlock(t *testing.T) {
 	h := &AuthorizationCode{
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {

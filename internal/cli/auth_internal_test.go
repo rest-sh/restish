@@ -67,7 +67,7 @@ func TestCachedOperationSetForAPIUsesEffectiveProfileBase(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
-	got, ok := c.cachedOperationSetForAPI("svc", apiCfg, "default")
+	got, ok := c.cachedOperationSetForAPI(context.Background(), "svc", apiCfg, "default")
 	if !ok {
 		t.Fatal("expected cached profile operation set")
 	}

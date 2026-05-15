@@ -221,6 +221,9 @@ func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, devi
 		select {
 		case <-pollCtx.Done():
 			timer.Stop()
+			if errors.Is(pollCtx.Err(), context.Canceled) {
+				return CachedToken{}, pollCtx.Err()
+			}
 			return CachedToken{}, fmt.Errorf("timed out waiting for device authorization")
 		case <-timer.C:
 		}
@@ -303,6 +306,7 @@ func (h *DeviceCode) Authenticate(ctx context.Context, req *http.Request, ac Aut
 	if ac.Stderr != nil {
 		h2.Stderr = ac.Stderr
 	}
+	req = requestWithContext(req, ctx)
 	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 

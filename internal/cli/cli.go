@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -830,17 +831,24 @@ func signalAwareContext() (context.Context, context.CancelFunc) {
 	ctx, cancelCause := context.WithCancelCause(context.Background())
 	sigCh := make(chan os.Signal, 1)
 	done := make(chan struct{})
+	var stopOnce sync.Once
+	stopSignals := func() {
+		stopOnce.Do(func() {
+			signal.Stop(sigCh)
+			close(done)
+		})
+	}
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		select {
 		case sig := <-sigCh:
 			cancelCause(signalCancelError{signal: sig})
+			stopSignals()
 		case <-done:
 		}
 	}()
 	cancel := func() {
-		signal.Stop(sigCh)
-		close(done)
+		stopSignals()
 		cancelCause(nil)
 	}
 	return ctx, cancel

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -688,6 +689,27 @@ func TestHookTimeout(t *testing.T) {
 				t.Errorf("HookTimeout(%q) = %v, want %v", tt.hook, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCallHookWithTimeoutContextCancellationKillsProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := writeScript(t, dir, "restish-hook-block", "#!/bin/sh\nsleep 30\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	var out pluginwire.AuthHookOutput
+	err := CallHookWithTimeoutContext(ctx, path, 30*time.Second, pluginwire.AuthHookInput{Type: "auth"}, &out)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("hook cancellation waited too long: %v", elapsed)
 	}
 }
 

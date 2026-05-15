@@ -52,7 +52,7 @@ func (c *CLI) prepareRequest(
 		return nil, err
 	}
 	if !noAuth && operationAuth == nil && apiName != "" && !explicitCredentialContext {
-		if matched, ok := c.operationAuthForGenericRequest(method, rawURL, apiName, profileName); ok {
+		if matched, ok := c.operationAuthForGenericRequest(ctx, method, rawURL, apiName, profileName); ok {
 			noAuth = matched.noAuth
 			operationAuth = matched.policy
 		}

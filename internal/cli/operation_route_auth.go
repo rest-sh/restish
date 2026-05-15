@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"net/url"
 	urlpath "path"
 	"strings"
@@ -14,7 +15,7 @@ type genericOperationAuthMatch struct {
 	noAuth bool
 }
 
-func (c *CLI) operationAuthForGenericRequest(method, rawURL, apiName, profileName string) (genericOperationAuthMatch, bool) {
+func (c *CLI) operationAuthForGenericRequest(ctx context.Context, method, rawURL, apiName, profileName string) (genericOperationAuthMatch, bool) {
 	if method == "" || c.cfg == nil || c.cfg.APIs == nil {
 		return genericOperationAuthMatch{}, false
 	}
@@ -22,7 +23,7 @@ func (c *CLI) operationAuthForGenericRequest(method, rawURL, apiName, profileNam
 	if apiCfg == nil {
 		return genericOperationAuthMatch{}, false
 	}
-	set, ok := c.cachedOperationSetForAPI(apiName, apiCfg, profileName)
+	set, ok := c.cachedOperationSetForAPI(ctx, apiName, apiCfg, profileName)
 	if !ok || len(set.Operations) == 0 {
 		return genericOperationAuthMatch{}, false
 	}

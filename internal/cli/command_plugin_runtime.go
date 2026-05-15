@@ -199,9 +199,9 @@ func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl plugi
 		if err != nil {
 			if ctxErr := cmd.Context().Err(); ctxErr != nil {
 				if excerpt := strings.TrimSpace(pluginStderr.String()); excerpt != "" {
-					loopErr = fmt.Errorf("command plugin %s canceled: stderr: %s", filepath.Base(pluginPath), redactDiagnosticSecretText(excerpt))
+					loopErr = fmt.Errorf("command plugin %s canceled: %w: stderr: %s", filepath.Base(pluginPath), ctxErr, redactDiagnosticSecretText(excerpt))
 				} else {
-					loopErr = fmt.Errorf("command plugin %s canceled", filepath.Base(pluginPath))
+					loopErr = fmt.Errorf("command plugin %s canceled: %w", filepath.Base(pluginPath), ctxErr)
 				}
 			} else if isEOFLike(err) {
 				loopErr = fmt.Errorf("command plugin %s: process died unexpectedly", filepath.Base(pluginPath))

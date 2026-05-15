@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -152,6 +153,7 @@ func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request,
 		h2.Prompt = ac.Prompter.Prompt
 		h2.CanPrompt = true
 	}
+	req = requestWithContext(req, ctx)
 	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 
@@ -373,6 +375,9 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		case err = <-errCh:
 			return CachedToken{}, fmt.Errorf("callback error: %w", err)
 		case <-ctx2.Done():
+			if errors.Is(ctx2.Err(), context.Canceled) {
+				return CachedToken{}, ctx2.Err()
+			}
 			return CachedToken{}, fmt.Errorf("timed out waiting for authorization callback")
 		}
 	}

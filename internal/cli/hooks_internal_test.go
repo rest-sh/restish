@@ -1,10 +1,16 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
@@ -115,6 +121,44 @@ func TestApplyRequestUpdateHeaderSemantics(t *testing.T) {
 	}
 	if got := req.Header.Values("X-Delete"); len(got) != 0 {
 		t.Fatalf("X-Delete = %#v, want deleted", got)
+	}
+}
+
+func TestRequestMiddlewarePluginUsesRequestContext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish-blocking-hook")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+
+	c := New()
+	c.pluginsByHook = map[string][]internalplugin.Plugin{
+		"request-middleware": {{
+			Path: path,
+			Manifest: internalplugin.Manifest{
+				Name:         "block",
+				Hooks:        []string{"request-middleware"},
+				HookTimeouts: map[string]time.Duration{"request-middleware": 30 * time.Second},
+			},
+		}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example.com", nil)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	start := time.Now()
+	err = c.runRequestMiddlewarePlugins(req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("request middleware cancellation waited too long: %v", elapsed)
 	}
 }
 

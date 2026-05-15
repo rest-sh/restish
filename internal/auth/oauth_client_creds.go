@@ -52,6 +52,7 @@ func (h *ClientCredentials) Authenticate(ctx context.Context, req *http.Request,
 	if ac.HTTPClient != nil {
 		h2.HTTPClient = ac.HTTPClient
 	}
+	req = requestWithContext(req, ctx)
 	return h2.authenticateRequest(req, authParams(ac), ac.Force)
 }
 

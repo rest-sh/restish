@@ -73,6 +73,9 @@ func (a *ExternalTool) OnRequest(req *http.Request, params map[string]string) er
 }
 
 func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[string]string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	commandLine := params["commandline"]
 	if commandLine == "" {
 		return fmt.Errorf("external-tool auth: missing required param \"commandline\"")
@@ -180,7 +183,7 @@ func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac A
 	if stderr == nil {
 		stderr = ac.Stderr
 	}
-	if req.Context() != nil {
+	if ctx == nil && req.Context() != nil {
 		ctx = req.Context()
 	}
 	return (&ExternalTool{Stderr: stderr, Timeout: a.Timeout}).run(ctx, req, ac.Params)

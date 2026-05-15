@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -312,8 +313,11 @@ func (c *CLI) runSecretCommand(commandLine string) (string, error) {
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &stderr, limit: 4096}
 	out, err := cmd.Output()
-	if ctx.Err() != nil {
-		return "", fmt.Errorf("secret command timed out or was canceled")
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if errors.Is(ctxErr, context.Canceled) {
+			return "", ctxErr
+		}
+		return "", fmt.Errorf("secret command timed out: %w", ctxErr)
 	}
 	if err != nil {
 		excerpt := strings.TrimSpace(stderr.String())

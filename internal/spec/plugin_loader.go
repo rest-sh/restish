@@ -46,7 +46,7 @@ func (l PluginLoader) LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, 
 		LocalPath:   opts.LocalPath,
 	}
 	var out pluginwire.LoaderResponse
-	if err := plugin.CallHook(l.PluginPath, in, &out); err != nil {
+	if err := plugin.CallHookContext(opts.Context, l.PluginPath, in, &out); err != nil {
 		return nil, fmt.Errorf("loader plugin %s: %w", l.PluginName, err)
 	}
 
