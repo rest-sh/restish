@@ -499,6 +499,68 @@ func TestInvalidRSHRetryFailsFast(t *testing.T) {
 	}
 }
 
+func TestNegativeNumericGlobalFlagsFailFast(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "retry",
+			args: []string{"restish", "get", "--rsh-retry", "-1", "https://api.example.com/items"},
+			want: "invalid --rsh-retry -1",
+		},
+		{
+			name: "max pages",
+			args: []string{"restish", "get", "--rsh-max-pages", "-1", "https://api.example.com/items"},
+			want: "invalid --rsh-max-pages -1",
+		},
+		{
+			name: "max items",
+			args: []string{"restish", "get", "--rsh-max-items", "-1", "https://api.example.com/items"},
+			want: "invalid --rsh-max-items -1",
+		},
+		{
+			name: "max body size",
+			args: []string{"restish", "get", "--rsh-max-body-size", "-1", "https://api.example.com/items"},
+			want: "invalid --rsh-max-body-size -1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				t.Fatal("request should not be sent with invalid numeric global flag")
+				return nil, nil
+			})
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v: expected invalid numeric flag error", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%v: expected error containing %q, got %v", tt.args, tt.want, err)
+			}
+		})
+	}
+}
+
+func TestNegativeRSHRetryFailsFast(t *testing.T) {
+	t.Setenv("RSH_RETRY", "-1")
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with invalid RSH_RETRY")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected invalid RSH_RETRY error")
+	}
+	if !strings.Contains(err.Error(), `invalid RSH_RETRY "-1"`) {
+		t.Fatalf("expected invalid RSH_RETRY error, got %v", err)
+	}
+}
+
 func TestRun_PrintsLegacyMigrationNotice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

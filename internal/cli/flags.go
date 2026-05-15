@@ -155,6 +155,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 		if err != nil {
 			return gf, fmt.Errorf("invalid RSH_RETRY %q: %w", v, err)
 		}
+		if n < 0 {
+			return gf, fmt.Errorf("invalid RSH_RETRY %q: must be greater than or equal to 0", v)
+		}
 		gf.Retry = n
 	}
 	if v := os.Getenv("RSH_RETRY_UNSAFE"); isTruthy(v) && !cmd.Flags().Changed("rsh-retry-unsafe") {
@@ -171,7 +174,26 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 		gf.Auth = v
 	}
 
+	if err := validateNonNegativeGlobalFlags(cmd, gf); err != nil {
+		return gf, err
+	}
 	return gf, nil
+}
+
+func validateNonNegativeGlobalFlags(cmd *cobra.Command, gf GlobalFlags) error {
+	if cmd.Flags().Changed("rsh-retry") && gf.Retry < 0 {
+		return fmt.Errorf("invalid --rsh-retry %d: must be greater than or equal to 0", gf.Retry)
+	}
+	if gf.MaxPages < 0 {
+		return fmt.Errorf("invalid --rsh-max-pages %d: must be greater than or equal to 0", gf.MaxPages)
+	}
+	if gf.MaxItems < 0 {
+		return fmt.Errorf("invalid --rsh-max-items %d: must be greater than or equal to 0", gf.MaxItems)
+	}
+	if gf.MaxBodySize < 0 {
+		return fmt.Errorf("invalid --rsh-max-body-size %d: must be greater than or equal to 0", gf.MaxBodySize)
+	}
+	return nil
 }
 
 func splitEnvList(v string) []string {
