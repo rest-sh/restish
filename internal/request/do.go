@@ -487,10 +487,13 @@ func RedactedURL(u *url.URL) string {
 	}
 	copyURL := *u
 	q := copyURL.Query()
-	for name := range q {
-		if IsCredentialQueryParam(name) {
-			q.Set(name, "<redacted>")
+	for name, values := range q {
+		for i, value := range values {
+			if secrets.IsQueryParamValue(name, value) {
+				values[i] = "<redacted>"
+			}
 		}
+		q[name] = values
 	}
 	copyURL.RawQuery = q.Encode()
 	return copyURL.String()

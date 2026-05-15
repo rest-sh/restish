@@ -287,14 +287,14 @@ func TestPrintRequestAndResponseTranscript(t *testing.T) {
 func TestPrintRequestHeadersRedactsSensitiveQueryParams(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	useJSONResponse(c, 200, `{"ok":true}`)
-	if err := c.Run([]string{"restish", "get", "--rsh-print", "H", "https://api.example.com/items?api_key=secret&token=abc&page=1"}); err != nil {
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "H", "https://api.example.com/items?api_key=secret&token=abc&key=testing&auth=abc123def&page=1"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := stripANSI(out.String())
-	if strings.Contains(got, "api_key=secret") || strings.Contains(got, "token=abc") {
+	if strings.Contains(got, "api_key=secret") || strings.Contains(got, "token=abc") || strings.Contains(got, "auth=abc123def") {
 		t.Fatalf("printed request leaked sensitive query params:\n%s", got)
 	}
-	for _, want := range []string{"GET /items?", "api_key=%3Credacted%3E", "token=%3Credacted%3E", "page=1"} {
+	for _, want := range []string{"GET /items?", "api_key=%3Credacted%3E", "token=%3Credacted%3E", "auth=%3Credacted%3E", "key=testing", "page=1"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("printed request missing %q:\n%s", want, got)
 		}

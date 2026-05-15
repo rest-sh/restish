@@ -1370,7 +1370,7 @@ func (c *CLI) logVerboseRequest(req *http.Request) {
 	for _, k := range sortedHeaderKeys(req.Header) {
 		vs := req.Header[k]
 		for _, v := range vs {
-			if isSensitiveHeader(k) {
+			if isSensitiveHeaderValue(k, v) {
 				v = "<redacted>"
 			}
 			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
@@ -1485,10 +1485,13 @@ func redactVerboseBody(data []byte, contentType string) string {
 	if mediaType == "application/x-www-form-urlencoded" {
 		values, err := url.ParseQuery(string(data))
 		if err == nil {
-			for key := range values {
-				if secrets.IsQueryParamName(key) {
-					values[key] = []string{"<redacted>"}
+			for key, items := range values {
+				for i, item := range items {
+					if secrets.IsQueryParamValue(key, item) {
+						items[i] = "<redacted>"
+					}
 				}
+				values[key] = items
 			}
 			return values.Encode()
 		}
@@ -1509,6 +1512,12 @@ func redactSensitiveJSON(value any) {
 	switch v := value.(type) {
 	case map[string]any:
 		for key, item := range v {
+			if stringItem, ok := item.(string); ok {
+				if redacted, changed := redactSensitiveStringValue(key, stringItem); changed {
+					v[key] = redacted
+					continue
+				}
+			}
 			if secrets.IsJSONBodyKey(key) || secrets.IsHeaderName(key) {
 				v[key] = "<redacted>"
 				continue
@@ -1520,6 +1529,32 @@ func redactSensitiveJSON(value any) {
 			redactSensitiveJSON(item)
 		}
 	}
+}
+
+func redactSensitiveStringValue(key, value string) (string, bool) {
+	if secrets.IsJSONBodyValue(key, value) {
+		return "<redacted>", true
+	}
+	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		redacted := request.RedactedURL(parsed)
+		if redacted != value {
+			return redacted, true
+		}
+	}
+	if json.Valid([]byte(value)) {
+		var nested any
+		if err := json.Unmarshal([]byte(value), &nested); err == nil {
+			before, _ := json.Marshal(nested)
+			redactSensitiveJSON(nested)
+			if out, err := json.Marshal(nested); err == nil {
+				redacted := string(out)
+				if string(before) != redacted {
+					return redacted, true
+				}
+			}
+		}
+	}
+	return value, false
 }
 
 func networkErrorHint(err error) string {
@@ -1548,10 +1583,13 @@ func redactedRequestURI(u *url.URL) string {
 	}
 	copyURL := *u
 	q := copyURL.Query()
-	for name := range q {
-		if isSensitiveQueryParam(name) {
-			q.Set(name, "<redacted>")
+	for name, values := range q {
+		for i, value := range values {
+			if secrets.IsQueryParamValue(name, value) {
+				values[i] = "<redacted>"
+			}
 		}
+		q[name] = values
 	}
 	copyURL.RawQuery = q.Encode()
 	return copyURL.RequestURI()
@@ -1565,6 +1603,10 @@ func isSensitiveQueryParam(name string) bool {
 // should be redacted in verbose output.
 func isSensitiveHeader(name string) bool {
 	return secrets.IsHeaderName(name)
+}
+
+func isSensitiveHeaderValue(name, value string) bool {
+	return secrets.IsHeaderValue(name, value)
 }
 
 // isAPIShortName reports whether arg begins with a registered API name and an

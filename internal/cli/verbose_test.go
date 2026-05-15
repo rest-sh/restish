@@ -214,16 +214,47 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/hello?api_key=secret&token=abc&page=1"})
+	err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/hello?api_key=secret&token=abc&id_token=id-secret&page=1&key=testing&auth=demo"})
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	stderr := errOut.String()
-	if strings.Contains(stderr, "api_key=secret") || strings.Contains(stderr, "token=abc") {
+	if strings.Contains(stderr, "api_key=secret") || strings.Contains(stderr, "token=abc") || strings.Contains(stderr, "id_token=id-secret") {
 		t.Fatalf("expected sensitive query values redacted, got:\n%s", stderr)
 	}
-	if !strings.Contains(stderr, "api_key=%3Credacted%3E") || !strings.Contains(stderr, "token=%3Credacted%3E") {
+	if !strings.Contains(stderr, "api_key=%3Credacted%3E") || !strings.Contains(stderr, "token=%3Credacted%3E") || !strings.Contains(stderr, "id_token=%3Credacted%3E") {
 		t.Fatalf("expected redacted query params in verbose output, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "key=testing") || !strings.Contains(stderr, "auth=demo") {
+		t.Fatalf("expected low-entropy ambiguous params to remain visible, got:\n%s", stderr)
+	}
+}
+
+func TestVerboseRedactsTokenLikeAmbiguousQueryParams(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "-v", "https://api.example.com/hello?key=kh24g2j&auth=Bearer%20abc123def&subscription-key=sub-secret"})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	stderr := errOut.String()
+	for _, leaked := range []string{"kh24g2j", "abc123def", "sub-secret"} {
+		if strings.Contains(stderr, leaked) {
+			t.Fatalf("verbose query leaked %q:\n%s", leaked, stderr)
+		}
+	}
+	if strings.Count(stderr, "%3Credacted%3E") < 3 {
+		t.Fatalf("expected ambiguous token-like query params redacted, got:\n%s", stderr)
 	}
 }
 
@@ -266,21 +297,24 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 			StatusCode: 200,
 			Proto:      "HTTP/1.1",
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"token":"response-secret","Authorization":"bearer-secret","token_type":"bearer","ok":true}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"token":"response-secret","Authorization":"bearer-secret","token_type":"bearer","key":"testing","apiUrl":"https://example.com/path?key=kh24g2j&page=1","data":"{\"api_key\":\"nested-secret\",\"name\":\"visible\"}","ok":true}`)),
 			Request:    r,
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "token: request-secret"})
+	err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "token: request-secret, key: testing"})
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
 	stderr := errOut.String()
-	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") || strings.Contains(stderr, "bearer-secret") {
+	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") || strings.Contains(stderr, "bearer-secret") || strings.Contains(stderr, "kh24g2j") || strings.Contains(stderr, "nested-secret") {
 		t.Fatalf("verbose body leaked secret:\n%s", stderr)
 	}
 	if !strings.Contains(stderr, `"token_type": "bearer"`) {
 		t.Fatalf("token_type should not be redacted, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, `"key": "testing"`) {
+		t.Fatalf("low-entropy key value should remain visible, got:\n%s", stderr)
 	}
 	if strings.Count(stderr, `\u003credacted\u003e`) < 2 && strings.Count(stderr, "<redacted>") < 2 {
 		t.Fatalf("expected redacted request and response bodies, got:\n%s", stderr)
