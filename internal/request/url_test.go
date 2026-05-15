@@ -89,6 +89,12 @@ func TestNormalize(t *testing.T) {
 			override: "https://staging.example.com/v2",
 			want:     "https://staging.example.com/v2",
 		},
+		{
+			name:     "server override supplies host for root-relative path",
+			raw:      "/items?page=2",
+			override: "https://staging.example.com/v2",
+			want:     "https://staging.example.com/v2/items?page=2",
+		},
 	}
 
 	for _, tc := range cases {
@@ -101,6 +107,16 @@ func TestNormalize(t *testing.T) {
 				t.Errorf("Normalize(%q, %q)\n  got  %q\n  want %q", tc.raw, tc.override, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeRejectsRootRelativePathWithoutServerOverride(t *testing.T) {
+	_, err := request.Normalize("/items?page=2", "")
+	if err == nil {
+		t.Fatal("expected root-relative path without server override to fail")
+	}
+	if !strings.Contains(err.Error(), "requires an API short name or --rsh-server") {
+		t.Fatalf("expected relative path diagnostic, got %v", err)
 	}
 }
 

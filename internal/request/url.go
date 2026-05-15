@@ -24,6 +24,10 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 		rawURL = "http://localhost" + rawURL
 	}
 
+	if strings.HasPrefix(rawURL, "/") && !strings.HasPrefix(rawURL, "//") && serverOverride == "" {
+		return "", fmt.Errorf("relative path %q requires an API short name or --rsh-server", rawURL)
+	}
+
 	// No scheme present: prepend https://
 	if !strings.Contains(rawURL, "://") {
 		defaultScheme := "https://"

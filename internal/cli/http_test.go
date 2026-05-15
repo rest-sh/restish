@@ -462,6 +462,40 @@ func TestHTTPServerOverridePrefixesPath(t *testing.T) {
 	}
 }
 
+func TestHTTPServerOverrideSuppliesHostForRootRelativePath(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	err := c.Run([]string{"restish", "get", "-s", "https://staging.example.com/v2", "/items?page=2"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().URL.String(); got != "https://staging.example.com/v2/items?page=2" {
+		t.Errorf("URL = %q, want override origin plus root-relative path", got)
+	}
+}
+
+func TestHTTPRootRelativePathWithoutContextFailsFast(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent for root-relative path without context")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "/relative/path", "-o", "json", "--rsh-no-cache"})
+	if err == nil {
+		t.Fatal("expected root-relative path without context to fail")
+	}
+	if !strings.Contains(err.Error(), `relative path "/relative/path" requires an API short name or --rsh-server`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(errOut.String(), "retry") {
+		t.Fatalf("relative path validation should fail before retry warnings, got stderr:\n%s", errOut.String())
+	}
+}
+
 // TestHTTPResponseBody verifies that the response body is written to stdout.
 // Uses a JSON content-type so the body is decoded and re-encoded as an object.
 func TestHTTPResponseBody(t *testing.T) {
