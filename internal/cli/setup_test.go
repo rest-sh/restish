@@ -428,7 +428,9 @@ func TestSetupUnsupportedShell(t *testing.T) {
 
 func TestSetupFishSupported(t *testing.T) {
 	home := t.TempDir()
+	configHome := filepath.Join(home, ".config")
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configHome)
 
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
@@ -436,7 +438,7 @@ func TestSetupFishSupported(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected fish setup to succeed, got: %v", err)
 	}
-	rcPath := filepath.Join(home, ".config", "fish", "config.fish")
+	rcPath := filepath.Join(configHome, "fish", "config.fish")
 	if _, statErr := os.Stat(rcPath); statErr != nil {
 		t.Fatalf("expected fish config to be written: %v", statErr)
 	}

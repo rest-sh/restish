@@ -40,6 +40,8 @@ func setLegacyConfigEnv(t *testing.T, home string) {
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", home)
 		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	}
 }
 

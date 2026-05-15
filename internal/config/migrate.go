@@ -87,19 +87,21 @@ func legacyConfigDirs() []string {
 	seen := map[string]bool{}
 	var dirs []string
 
-	if userDir, err := os.UserConfigDir(); err == nil && userDir != "" {
-		dir := filepath.Join(userDir, "restish")
-		if !seen[dir] {
-			seen[dir] = true
-			dirs = append(dirs, dir)
+	add := func(dir string) {
+		if dir == "" || seen[dir] {
+			return
 		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		dir := filepath.Join(home, ".config", "restish")
-		if !seen[dir] {
-			seen[dir] = true
-			dirs = append(dirs, dir)
-		}
+
+	if userDir, err := userConfigDirFunc(); err == nil && userDir != "" {
+		dir := filepath.Join(userDir, "restish")
+		add(dir)
+	}
+	if home, err := userHomeDirFunc(); err == nil && home != "" {
+		add(filepath.Join(home, "Library", "Application Support", "restish"))
+		add(filepath.Join(home, ".config", "restish"))
 	}
 	return dirs
 }
