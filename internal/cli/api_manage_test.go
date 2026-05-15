@@ -1039,6 +1039,47 @@ func TestAPIInspect(t *testing.T) {
 	}
 }
 
+func TestAPIInspectRejectsUnsupportedResponseTransformFlags(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "unsupported format",
+			args: []string{"restish", "api", "inspect", "myapi", "-o", "yaml"},
+			want: "supports -o json for structured output, not -o yaml",
+		},
+		{
+			name: "filter",
+			args: []string{"restish", "api", "inspect", "myapi", "-f", "base_url"},
+			want: "does not support -f/--rsh-filter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = cfgFile
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v: expected unsupported transform flag error", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%v: expected error containing %q, got %v", tt.args, tt.want, err)
+			}
+		})
+	}
+}
+
 func TestAPIInspectRedactsCredentialSecrets(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

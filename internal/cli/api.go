@@ -954,6 +954,9 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 // runAPIInspect prints the config for a named API as indented JSON,
 // with secret auth params replaced by "***".
 func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
+	if _, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	}
 	apiName := args[0]
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {

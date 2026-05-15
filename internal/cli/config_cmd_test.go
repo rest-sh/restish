@@ -80,6 +80,12 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 		t.Fatalf("config show -o json did not redact persistent request credentials correctly:\n%s", got)
 	}
 
+	if err := c.Run([]string{"restish", "config", "show", "-o", "json", "-f", "apis"}); err == nil {
+		t.Fatal("expected config show to reject unsupported filter flags")
+	} else if !strings.Contains(err.Error(), "does not support -f/--rsh-filter") {
+		t.Fatalf("unexpected config show filter error: %v", err)
+	}
+
 	if err := c.Run([]string{"restish", "config", "set", "cache.max_size: 250MB"}); err != nil {
 		t.Fatalf("config set: %v", err)
 	}

@@ -106,6 +106,31 @@ func TestAPIAuthListJSONOutput(t *testing.T) {
 	}
 }
 
+func TestAPIAuthInspectRejectsResponseTransformFlags(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {"type": "api-key", "params": {"in": "header", "name": "X-API-Key", "value": "secret"}}
+        }
+      }
+    }
+  }
+}`)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "-o", "json"})
+	if err == nil {
+		t.Fatal("expected api auth inspect -o json to fail")
+	}
+	if !strings.Contains(err.Error(), "does not support -o/--rsh-output-format") {
+		t.Fatalf("unexpected api auth inspect error: %v", err)
+	}
+}
+
 func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {

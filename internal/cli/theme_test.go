@@ -177,6 +177,18 @@ func TestThemeList(t *testing.T) {
 	}
 }
 
+func TestThemeListRejectsResponseTransformFlags(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+
+	err := c.Run([]string{"restish", "config", "theme", "list", "-o", "json"})
+	if err == nil {
+		t.Fatal("expected config theme list -o json to fail")
+	}
+	if !strings.Contains(err.Error(), "does not support -o/--rsh-output-format") {
+		t.Fatalf("unexpected config theme list error: %v", err)
+	}
+}
+
 func TestThemeSetGithubShorthandNamedThemeFallsBackToRoot(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	var requests []string

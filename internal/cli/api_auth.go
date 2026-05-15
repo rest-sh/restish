@@ -251,6 +251,9 @@ func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
+	if err := rejectResponseTransformFlags(cmd); err != nil {
+		return err
+	}
 	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
 		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth header <api-name> Authorization")

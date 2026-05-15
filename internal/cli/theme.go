@@ -54,6 +54,9 @@ func (c *CLI) newThemeResetCommand() *cobra.Command {
 }
 
 func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
+	if err := rejectResponseTransformFlags(cmd); err != nil {
+		return err
+	}
 	current := ""
 	if c.cfg != nil {
 		current = c.cfg.ThemeSource

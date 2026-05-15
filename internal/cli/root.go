@@ -105,6 +105,9 @@ func (c *CLI) addVersionCommand(root *cobra.Command) {
 		GroupID: rootGroupUtility,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectResponseTransformFlags(cmd); err != nil {
+				return err
+			}
 			fmt.Fprintln(c.Stdout, c.currentVersion())
 			return nil
 		},

@@ -64,7 +64,9 @@ func (c *CLI) runConfigPath(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
-	if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
+	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
+		return err
+	} else if jsonOut {
 		view, err := redactedConfigView(c.cfg)
 		if err != nil {
 			return err

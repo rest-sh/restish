@@ -30,6 +30,9 @@ func (c *CLI) addCertCommand(root *cobra.Command) {
 }
 
 func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
+	if err := rejectResponseTransformFlags(cmd); err != nil {
+		return err
+	}
 	opts, err := c.httpOptsFromFlags(cmd)
 	if err != nil {
 		return err

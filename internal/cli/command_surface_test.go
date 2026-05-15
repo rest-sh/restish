@@ -185,6 +185,48 @@ func TestRemovedPreReleaseCommandNames(t *testing.T) {
 	}
 }
 
+func TestPlainUtilityCommandsRejectResponseTransformFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "version output format",
+			args: []string{"restish", "version", "-o", "json"},
+			want: "does not support -o/--rsh-output-format",
+		},
+		{
+			name: "version filter",
+			args: []string{"restish", "version", "-f", "body"},
+			want: "does not support -f/--rsh-filter",
+		},
+		{
+			name: "cert output format",
+			args: []string{"restish", "cert", "https://example.com", "-o", "json"},
+			want: "does not support -o/--rsh-output-format",
+		},
+		{
+			name: "cert paging",
+			args: []string{"restish", "cert", "https://example.com", "--rsh-max-pages", "1"},
+			want: "does not support --rsh-max-pages",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v: expected unsupported transform flag error", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%v: expected error containing %q, got %v", tt.args, tt.want, err)
+			}
+		})
+	}
+}
+
 func TestWorkflowCommandHelpSurface(t *testing.T) {
 	tests := []struct {
 		name string
