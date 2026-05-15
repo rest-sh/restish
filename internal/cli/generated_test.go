@@ -59,6 +59,7 @@ func specWithOperations(baseURL string) string {
               "id": {"type": "string"},
               "amount": {"type": "string"},
               "name": {"type": "string"},
+              "note": {"type": ["string", "null"]},
               "count": {"type": "integer"},
               "meta": {
                 "type": "object",
@@ -1291,6 +1292,45 @@ func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
 	}
 	if _, ok := body["unknown"].(float64); !ok {
 		t.Fatalf("unknown = %#v (%T), want unknown fields left as parsed numbers", body["unknown"], body["unknown"])
+	}
+}
+
+func TestGeneratedCommandBodySchemaPreservesNullableStringNull(t *testing.T) {
+	var gotBodies [][]byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body, _ := io.ReadAll(r.Body)
+			gotBodies = append(gotBodies, body)
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-item", "name:", "Ada,", "note:", "null"}); err != nil {
+		t.Fatalf("create-item shorthand null: %v", err)
+	}
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-item", `{"name":"Ada","note":null}`}); err != nil {
+		t.Fatalf("create-item raw JSON null: %v", err)
+	}
+
+	if len(gotBodies) != 2 {
+		t.Fatalf("got %d request bodies, want 2", len(gotBodies))
+	}
+	for i, gotBody := range gotBodies {
+		var body map[string]any
+		if err := json.Unmarshal(gotBody, &body); err != nil {
+			t.Fatalf("body %d not valid JSON: %v — body: %s", i, err, gotBody)
+		}
+		if _, ok := body["note"]; !ok {
+			t.Fatalf("body %d missing note: %#v", i, body)
+		}
+		if body["note"] != nil {
+			t.Fatalf("body %d note = %#v (%T), want JSON null; body: %s", i, body["note"], body["note"], gotBody)
+		}
 	}
 }
 

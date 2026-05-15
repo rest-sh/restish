@@ -171,7 +171,10 @@ func coerceAnyMapPath(m map[any]any, parts []string) {
 	coercePathToString(value, parts[1:])
 }
 
-func schemaString(value any) string {
+func schemaString(value any) any {
+	if value == nil {
+		return nil
+	}
 	switch v := value.(type) {
 	case string:
 		return v

@@ -131,12 +131,13 @@ func TestBody_ShorthandCommaSemantics(t *testing.T) {
 }
 
 func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
-	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456,", "created_at:", "2026-05-11T12:34:56Z"}
+	args := []string{"id:", "123,", "count:", "7,", "meta.code:", "456,", "note:", "null,", "created_at:", "2026-05-11T12:34:56Z"}
 	body, err := input.Body(strings.NewReader(""), true, args, "", input.BodyOptions{
 		SchemaTypes: map[string]string{
 			"id":         "string",
 			"count":      "integer",
 			"meta.code":  "string",
+			"note":       "string",
 			"created_at": "string",
 		},
 	})
@@ -160,8 +161,33 @@ func TestBodyWithSchemaTypes_PreservesSchemaStrings(t *testing.T) {
 	if _, ok := m["count"].(string); ok {
 		t.Fatalf("count = %#v, want numeric because schema is integer", m["count"])
 	}
+	if got, ok := m["note"]; !ok || got != nil {
+		t.Fatalf("note = %#v, want nil preserved for schema string", got)
+	}
 	if got := m["created_at"]; got != "2026-05-11T12:34:56Z" {
 		t.Fatalf("created_at = %#v, want RFC3339 string", got)
+	}
+}
+
+func TestBodyWithSchemaTypes_PreservesStdinNullSchemaStrings(t *testing.T) {
+	body, err := input.Body(strings.NewReader(`{"note":null,"id":123}`), false, nil, "", input.BodyOptions{
+		SchemaTypes: map[string]string{
+			"id":   "string",
+			"note": "string",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	m, ok := body.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", body, body)
+	}
+	if got := m["id"]; got != "123" {
+		t.Fatalf("id = %#v, want string 123", got)
+	}
+	if got, ok := m["note"]; !ok || got != nil {
+		t.Fatalf("note = %#v, want nil preserved for schema string", got)
 	}
 }
 
