@@ -340,7 +340,7 @@ func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 	}
 }
 
-func TestAPIAuthInspectMultipleCredentialsRequiresSelection(t *testing.T) {
+func TestAPIAuthInspectMultipleCredentialsShowsAll(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {
     "myapi": {
@@ -367,17 +367,42 @@ func TestAPIAuthInspectMultipleCredentialsRequiresSelection(t *testing.T) {
   }
 }`)
 
-	c, _, _ := newTestCLI(t)
+	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
-	err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi"})
-	if err == nil {
-		t.Fatal("expected multiple credentials error")
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
-	got := err.Error()
-	for _, want := range []string{"multiple configured credentials", "PartnerKey, UserBearer", "--rsh-credential"} {
+	got := out.String()
+	for _, want := range []string{
+		"Credential: PartnerKey",
+		"Auth type: api-key",
+		"X-Partner-Key: secret",
+		"Credential: UserBearer",
+		"Auth type: bearer",
+		"Authorization: Bearer user-token",
+	} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("error missing %q: %v", want, err)
+			t.Fatalf("inspect output missing %q:\n%s", want, got)
 		}
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--redact"}); err != nil {
+		t.Fatalf("api auth inspect --redact: %v", err)
+	}
+	got = out.String()
+	for _, want := range []string{
+		"Credential: PartnerKey",
+		"X-Partner-Key: <redacted>",
+		"Credential: UserBearer",
+		"Authorization: <redacted>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("redacted inspect output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "secret") || strings.Contains(got, "user-token") {
+		t.Fatalf("redacted inspect output leaked secret:\n%s", got)
 	}
 }
 

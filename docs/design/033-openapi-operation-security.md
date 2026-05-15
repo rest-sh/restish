@@ -520,7 +520,7 @@ the full API registration flow:
 restish --rsh-profile prod api auth list example
 restish --rsh-profile prod api auth add example PartnerKey
 restish --rsh-profile prod api auth remove example AdminOAuth
-restish --rsh-profile prod api auth inspect example --rsh-credential UserOAuth
+restish --rsh-profile prod api auth inspect example
 restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
 ```
 
@@ -536,11 +536,16 @@ header, such as API keys in headers or query parameters, and combined
 requirements that attach several credentials.
 
 Default inspect output is human-oriented and shows computed auth values because
-the user explicitly asked to inspect auth material:
+the user explicitly asked to inspect auth material. If the profile has several
+configured credentials, bare inspect shows each of them; `--rsh-credential`
+narrows the output when the user wants one credential:
 
 ```text
 Credential: UserOAuth
 Authorization: Bearer user-token
+
+Credential: PartnerKey
+X-Partner-Key: partner-key
 ```
 
 For combined operation auth:

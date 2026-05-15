@@ -110,14 +110,15 @@ restish api auth list example
 restish api auth list example -o json
 restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
-restish api auth inspect example --rsh-credential PartnerKey
+restish api auth inspect example
 restish api auth inspect example --rsh-credential basicAuth --redact
 restish api auth header example Authorization basicAuth
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI
 operations. `inspect` replaces the old top-level auth helper and
-also works for non-Authorization credentials such as API-key headers.
+prints every configured credential by default. It also works for
+non-Authorization credentials such as API-key headers.
 
 ## Related Pages
 

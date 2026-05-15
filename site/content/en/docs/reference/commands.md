@@ -54,9 +54,10 @@ restish api auth header myapi Authorization UserBearer
 
 Use this before debugging a `401` or `403`. If the profile has exactly one
 configured credential, `inspect` selects it by default. When a profile has
-several credentials, pass `--rsh-credential`. `inspect` shows the computed auth
-values; add `--redact` for output you plan to paste somewhere. Use
-`api auth header` when a script needs one computed header value.
+several credentials, `inspect` prints each configured credential's computed
+auth material; pass `--rsh-credential` to narrow the output. `inspect` shows
+the computed auth values; add `--redact` for output you plan to paste
+somewhere. Use `api auth header` when a script needs one computed header value.
 
 ### `cache`
 

@@ -165,10 +165,11 @@ restish api auth header myapi Authorization UserBearer
 ```
 
 When a profile has exactly one configured credential, `inspect` selects it by
-default. When a profile has several credentials, pass `--rsh-credential` so the
-command knows which auth material to show. `inspect` shows the computed values;
-use `--redact` for shareable output, and use `api auth header` when a script
-needs exactly one header value.
+default. When a profile has several credentials, `inspect` prints each
+configured credential's computed auth material; pass `--rsh-credential` to
+narrow the output. `inspect` shows the computed values; use `--redact` for
+shareable output, and use `api auth header` when a script needs exactly one
+header value.
 
 Use verbose mode when the question is about the whole request:
 

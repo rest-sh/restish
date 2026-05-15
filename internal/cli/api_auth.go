@@ -270,19 +270,18 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, rawHeader, redact)
 	}
 
-	resolved, selectedCredential, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
-	if err != nil {
-		return err
-	}
-	if resolved.Config == nil {
-		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
-	}
-
-	req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
-	if err != nil {
-		return err
-	}
 	if rawHeader != "" {
+		resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
+		if err != nil {
+			return err
+		}
+		if resolved.Config == nil {
+			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		}
+		req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
+		if err != nil {
+			return err
+		}
 		value := req.Header.Get(rawHeader)
 		if value == "" {
 			return fmt.Errorf("auth did not set header %q", rawHeader)
@@ -290,11 +289,74 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(c.Stdout, value)
 		return nil
 	}
-	if selectedCredential != "" {
-		fmt.Fprintf(c.Stdout, "Credential: %s\n", selectedCredential)
+
+	targets, err := c.authInspectionTargets(apiName, profileName, prof, credentialID)
+	if err != nil {
+		return err
 	}
-	c.printAuthInspectionRequest(req, []*config.AuthConfig{resolved.Config}, redact)
+	if len(targets) == 0 {
+		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+	}
+	for i, target := range targets {
+		if i > 0 {
+			fmt.Fprintln(c.Stdout)
+		}
+		if target.Label != "" {
+			fmt.Fprintf(c.Stdout, "%s\n", target.Label)
+		}
+		if target.Resolved.Config == nil {
+			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		}
+		req, err := c.authInspectionRequest(cmd, apiName, profileName, target.Resolved)
+		if err != nil {
+			return err
+		}
+		c.printAuthInspectionRequest(req, []*config.AuthConfig{target.Resolved.Config}, redact)
+	}
 	return nil
+}
+
+type authInspectionTarget struct {
+	Label    string
+	Resolved resolvedAuthConfig
+}
+
+func (c *CLI) authInspectionTargets(apiName, profileName string, prof *config.ProfileConfig, credentialID string) ([]authInspectionTarget, error) {
+	if credentialID != "" {
+		resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
+		return []authInspectionTarget{{Label: fmt.Sprintf("Credential: %s", credentialID), Resolved: resolved}}, err
+	}
+
+	var targets []authInspectionTarget
+	resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
+	if err != nil {
+		return nil, err
+	}
+	if resolved.Config != nil {
+		targets = append(targets, authInspectionTarget{Resolved: resolved})
+	}
+
+	ids := configuredCredentialIDs(prof)
+	if len(ids) == 0 {
+		if len(targets) == 0 && prof != nil && len(prof.Credentials) > 0 {
+			return nil, fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth list %s\"", profileName, apiName, apiName)
+		}
+		return targets, nil
+	}
+	for _, id := range ids {
+		resolved, err := c.resolveCredentialAuth(apiName, profileName, id, prof.Credentials[id])
+		if err != nil {
+			return nil, fmt.Errorf("credential %q: %w", id, err)
+		}
+		targets = append(targets, authInspectionTarget{
+			Label:    fmt.Sprintf("Credential: %s", id),
+			Resolved: resolved,
+		})
+	}
+	if len(targets) > 1 && targets[0].Label == "" {
+		targets[0].Label = "Profile auth:"
+	}
+	return targets, nil
 }
 
 func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName, rawHeader string, redact bool) error {

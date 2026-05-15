@@ -184,11 +184,12 @@ restish api auth header myapi Authorization UserBearer
 ```
 
 The bare form works when the selected profile has profile-level auth or exactly
-one configured credential. If a profile has several credentials, pass
-`--rsh-credential`. Inspection output shows computed auth values because the
-command is explicitly for checking auth. Add `--redact` when you need shareable
-output. Verbose request diagnostics still redact common sensitive headers such
-as `Authorization`,
+one or more configured credentials. If a profile has several credentials,
+`inspect` prints each configured credential's computed auth material; pass
+`--rsh-credential` to narrow the output to one credential. Inspection output
+shows computed auth values because the command is explicitly for checking auth.
+Add `--redact` when you need shareable output. Verbose request diagnostics
+still redact common sensitive headers such as `Authorization`,
 `Cookie`, `Proxy-Authorization`, `Set-Cookie`, and common API-key headers.
 
 ## Related Pages

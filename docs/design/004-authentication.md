@@ -381,7 +381,9 @@ and operation-specific.
 Default output is human-oriented and shows the computed auth values because the
 user explicitly asked to inspect auth material. Ambient request diagnostics,
 logs, plugin payloads, and config display remain redacted by default.
-`--redact` produces shareable inspection output, and
+When several credentials are configured on the profile, bare inspect prints
+each credential's computed auth material. `--redact` produces shareable
+inspection output, and
 `restish api auth header <api> <header> [credential-id]` prints one computed
 header value for scripts.
 
