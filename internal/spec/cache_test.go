@@ -305,7 +305,7 @@ func TestLoadOperationsFromCachePreservesCredentialMetadata(t *testing.T) {
 	}
 	got := set.Operations
 	want := []CredentialAlternative{{
-		{ID: "ApiKey", Ref: "#/components/securitySchemes/ApiKey", Kind: "api-key", Source: "openapi"},
+		{ID: "ApiKey", Ref: "#/components/securitySchemes/ApiKey", Kind: "api-key", In: "header", Name: "X-API-Key", Source: "openapi"},
 	}}
 	if !reflect.DeepEqual(got[0].CredentialAlternatives, want) {
 		t.Fatalf("credential alternatives:\ngot  %#v\nwant %#v", got[0].CredentialAlternatives, want)

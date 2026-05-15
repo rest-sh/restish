@@ -255,19 +255,19 @@ paths:
 		t.Fatal("optionalPartner OptionalAuth = false, want true")
 	}
 	requireCredential(t, optional, [][]CredentialRequirement{{
-		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"},
+		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", In: "header", Name: "X-Partner-Key", Source: "openapi"},
 	}})
 
 	either := operationByID(t, ops, "partnerReport")
 	requireCredential(t, either, [][]CredentialRequirement{
 		{{ID: "UserOAuth", Ref: "#/components/securitySchemes/UserOAuth", Kind: "oauth2", Needs: []string{"items:read"}, Source: "openapi"}},
-		{{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"}},
+		{{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", In: "header", Name: "X-Partner-Key", Source: "openapi"}},
 	})
 
 	combined := operationByID(t, ops, "signedReport")
 	requireCredential(t, combined, [][]CredentialRequirement{{
 		{ID: "UserOAuth", Ref: "#/components/securitySchemes/UserOAuth", Kind: "oauth2", Needs: []string{"items:read"}, Source: "openapi"},
-		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", Source: "openapi"},
+		{ID: "PartnerKey", Ref: "#/components/securitySchemes/PartnerKey", Kind: "api-key", In: "header", Name: "X-Partner-Key", Source: "openapi"},
 	}})
 
 	roles := operationByID(t, ops, "roleReport")
@@ -277,7 +277,7 @@ paths:
 
 	uri := operationByID(t, ops, "tenantReport")
 	requireCredential(t, uri, [][]CredentialRequirement{{
-		{ID: "urn:example:auth:TenantKey", Ref: "urn:example:auth:TenantKey", Kind: "api-key", Needs: []string{"tenant:read"}, Source: "openapi", External: true},
+		{ID: "urn:example:auth:TenantKey", Ref: "urn:example:auth:TenantKey", Kind: "api-key", Needs: []string{"tenant:read"}, In: "header", Name: "X-Tenant-Key", Source: "openapi", External: true},
 	}})
 }
 

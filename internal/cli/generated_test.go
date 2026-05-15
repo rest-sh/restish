@@ -2755,6 +2755,92 @@ func TestGeneratedCommandRequiredQueryIsRequiredArgument(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandRequiredQueryAPIKeySatisfiedByAuth(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/types/board", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Trello-ish API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {"type": "apiKey", "in": "query", "name": "key"},
+      "ApiToken": {"type": "apiKey", "in": "query", "name": "token"}
+    }
+  },
+  "paths": {
+    "/types/{id}": {
+      "get": {
+        "operationId": "getTypesById",
+        "security": [{"ApiKey": [], "ApiToken": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "key", "in": "query", "required": true, "schema": {"type": "string"}},
+          {"name": "token", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: readBaseURLFromConfig(t, env.cfgFile),
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Credentials: map[string]*config.CredentialConfig{
+						"ApiKey": {
+							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "query", "name": "key", "value": "configured-key"}},
+						},
+						"ApiToken": {
+							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "query", "name": "token", "value": "configured-token"}},
+						},
+					},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-types-by-id", "--help"}); err != nil {
+		t.Fatalf("get-types-by-id --help: %v", err)
+	}
+	help := out.String()
+	if strings.Contains(help, "<key>") || strings.Contains(help, "<token>") {
+		t.Fatalf("help should not expose auth query params as required args:\n%s", help)
+	}
+	if !strings.Contains(help, "get-types-by-id <id>") {
+		t.Fatalf("help missing id-only usage:\n%s", help)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-types-by-id", "board"}); err != nil {
+		t.Fatalf("get-types-by-id with configured query auth failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("key"); got != "configured-key" {
+		t.Fatalf("key = %q, want configured-key", got)
+	}
+	if got := values.Get("token"); got != "configured-token" {
+		t.Fatalf("token = %q, want configured-token", got)
+	}
+}
+
 func TestGeneratedCommandRequiredNegativeNumberArgument(t *testing.T) {
 	var gotQuery string
 	mux := http.NewServeMux()

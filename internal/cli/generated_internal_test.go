@@ -160,6 +160,26 @@ func TestBuildOperationCommandDocumentsUndescribedPathArgument(t *testing.T) {
 	}
 }
 
+func TestGeneratedParamSatisfiedByAPIKeySecurity(t *testing.T) {
+	p := &paramInfo{in: "query", name: "key"}
+	if !generatedParamSatisfiedByAPIKeySecurity(p, []spec.CredentialAlternative{
+		{{ID: "ApiKey", Kind: "api-key", In: "query", Name: "key"}},
+	}) {
+		t.Fatal("expected matching apiKey query security to satisfy duplicated query param")
+	}
+	if generatedParamSatisfiedByAPIKeySecurity(p, []spec.CredentialAlternative{
+		{{ID: "ApiKey", Kind: "api-key", In: "query", Name: "key"}},
+		{{ID: "Bearer", Kind: "http-bearer"}},
+	}) {
+		t.Fatal("did not expect one OR alternative to satisfy all duplicated query params")
+	}
+	if generatedParamSatisfiedByAPIKeySecurity(&paramInfo{in: "header", name: "X-Key"}, []spec.CredentialAlternative{
+		{{ID: "ApiKey", Kind: "api-key", In: "header", Name: "X-Key"}},
+	}) {
+		t.Fatal("only duplicated query params should be omitted from generated arguments")
+	}
+}
+
 func TestValidateGeneratedParamValuesRejectsInvalidScalars(t *testing.T) {
 	tests := []struct {
 		name  string

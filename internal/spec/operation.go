@@ -93,6 +93,8 @@ type CredentialRequirement struct {
 	Ref      string   // canonical source ref or URI
 	Kind     string   // oauth2, api-key, http-basic, http-bearer, openid, mtls, unknown
 	Needs    []string // scopes, roles, or other requirement values
+	In       string   // api-key location, e.g. query, header, cookie
+	Name     string   // api-key parameter/header/cookie name
 	Source   string   // loader identity, e.g. openapi
 	External bool     // true when the source used a URI-style reference
 	// Deprecated is true when the source security scheme is marked deprecated.
@@ -399,6 +401,8 @@ func credentialAlternatives(requirements []*base.SecurityRequirement, schemes ma
 				Ref:        credentialRequirementRef(id, scheme),
 				Kind:       credentialRequirementKind(scheme),
 				Needs:      append([]string(nil), needs...),
+				In:         credentialRequirementIn(scheme),
+				Name:       credentialRequirementName(scheme),
 				Source:     "openapi",
 				External:   credentialRequirementExternal(id, scheme),
 				Deprecated: scheme != nil && scheme.Deprecated,
@@ -413,6 +417,20 @@ func credentialAlternatives(requirements []*base.SecurityRequirement, schemes ma
 		alternatives = append(alternatives, alternative)
 	}
 	return optional, alternatives
+}
+
+func credentialRequirementIn(scheme *v3.SecurityScheme) string {
+	if scheme == nil || scheme.Type != "apiKey" {
+		return ""
+	}
+	return scheme.In
+}
+
+func credentialRequirementName(scheme *v3.SecurityScheme) string {
+	if scheme == nil || scheme.Type != "apiKey" {
+		return ""
+	}
+	return scheme.Name
 }
 
 func credentialRequirementRef(id string, scheme *v3.SecurityScheme) string {

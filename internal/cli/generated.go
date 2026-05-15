@@ -320,6 +320,9 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		if pi == nil {
 			continue
 		}
+		if generatedParamSatisfiedByAPIKeySecurity(pi, op.CredentialAlternatives) {
+			continue
+		}
 		if p.Required {
 			required = append(required, pi)
 			continue
@@ -455,6 +458,29 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 		}
 	}
 	return cmd, nil
+}
+
+func generatedParamSatisfiedByAPIKeySecurity(p *paramInfo, alternatives []spec.CredentialAlternative) bool {
+	if p == nil || p.in != "query" || len(alternatives) == 0 {
+		return false
+	}
+	for _, alternative := range alternatives {
+		if !credentialAlternativeHasAPIKeyParam(alternative, p.in, p.name) {
+			return false
+		}
+	}
+	return true
+}
+
+func credentialAlternativeHasAPIKeyParam(alternative spec.CredentialAlternative, in, name string) bool {
+	for _, requirement := range alternative {
+		if requirement.Kind == "api-key" &&
+			strings.EqualFold(requirement.In, in) &&
+			requirement.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func generatedParamDescription(p *paramInfo) string {
