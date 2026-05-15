@@ -176,9 +176,48 @@ type flushWriter interface {
 type cascadingFlushWriter struct {
 	*bufio.Writer
 	downstream io.Writer
+	mu         sync.Mutex
+}
+
+func (w *cascadingFlushWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.Writer.Write(p)
+}
+
+func (w *cascadingFlushWriter) WriteString(s string) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.Writer.WriteString(s)
+}
+
+func (w *cascadingFlushWriter) ReadFrom(r io.Reader) (int64, error) {
+	var written int64
+	buf := make([]byte, 32*1024)
+	for {
+		nr, er := r.Read(buf)
+		if nr > 0 {
+			nw, ew := w.Write(buf[:nr])
+			written += int64(nw)
+			if ew != nil {
+				return written, ew
+			}
+			if nw != nr {
+				return written, io.ErrShortWrite
+			}
+		}
+		if er == io.EOF {
+			return written, nil
+		}
+		if er != nil {
+			return written, er
+		}
+	}
 }
 
 func (w *cascadingFlushWriter) Flush() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if err := w.Writer.Flush(); err != nil {
 		return err
 	}
