@@ -249,6 +249,59 @@ func TestDoctorAPIReportsStaleGeneratedOperations(t *testing.T) {
 	}
 }
 
+func TestDoctorAPIReportsLocalSpecGeneratedOperations(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "openapi.json")
+	if err := os.WriteFile(specPath, []byte(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Local Test API", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	c, out, errOut := newTestCLI(t)
+	configBody := fmt.Sprintf(`{"apis":{"local":{"base_url":"https://api.example.com","spec_files":[%q]}}}`, specPath)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "local"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		GeneratedOperations struct {
+			Status string `json:"status"`
+			Count  int    `json:"count"`
+		} `json:"generated_operations"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.GeneratedOperations.Status != "available" || report.GeneratedOperations.Count != 1 {
+		t.Fatalf("generated_operations = %#v, want available count 1", report.GeneratedOperations)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if err := c.Run([]string{"restish", "doctor", "api", "local"}); err != nil {
+		t.Fatalf("doctor api returned error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Generated operations: 1 available") {
+		t.Fatalf("doctor api text did not report local generated operations:\n%s", out.String())
+	}
+}
+
 func TestDoctorAPIReportsMissingEnvAuth(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{

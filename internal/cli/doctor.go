@@ -13,6 +13,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/config"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -132,6 +133,13 @@ type doctorAPIReport struct {
 	Reachability        doctorReachabilityReport        `json:"reachability"`
 }
 
+type doctorOperationInfo struct {
+	Set         spec.OperationSet
+	CacheStatus spec.OperationCacheStatus
+	Available   bool
+	Cached      bool
+}
+
 type doctorManifestReport struct {
 	Status       string `json:"status"`
 	Error        string `json:"error,omitempty"`
@@ -228,23 +236,23 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "Spec files: %v\n", api.SpecFiles)
 	}
 	profileName := c.profileFromCmd(cmd)
-	set, opStatus, hasOps := c.cachedOperationSetStatusForAPI(name, api, profileName)
+	opInfo := c.doctorOperationSetStatus(requestContext(cmd), name, api, profileName)
 	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
-		if hasOps && opStatus.Stale {
-			fmt.Fprintf(out, "Spec cache: stale (last synced %s, expired %s)\n", formatCacheTime(opStatus.FetchedAt), formatCacheTime(opStatus.ExpiresAt))
-		} else if hasOps {
-			fmt.Fprintf(out, "Spec cache: fresh (last synced %s, expires %s)\n", formatCacheTime(opStatus.FetchedAt), formatCacheTime(opStatus.ExpiresAt))
+		if opInfo.Cached && opInfo.CacheStatus.Stale {
+			fmt.Fprintf(out, "Spec cache: stale (last synced %s, expired %s)\n", formatCacheTime(opInfo.CacheStatus.FetchedAt), formatCacheTime(opInfo.CacheStatus.ExpiresAt))
+		} else if opInfo.Cached {
+			fmt.Fprintf(out, "Spec cache: fresh (last synced %s, expires %s)\n", formatCacheTime(opInfo.CacheStatus.FetchedAt), formatCacheTime(opInfo.CacheStatus.ExpiresAt))
 		} else {
 			fmt.Fprintln(out, "Spec cache: present")
 		}
 	} else {
 		fmt.Fprintln(out, "Spec cache: missing")
 	}
-	if hasOps {
-		if opStatus.Stale {
-			fmt.Fprintf(out, "Generated operations: %d available (stale; refresh with \"restish api sync %s\")\n", len(set.Operations), name)
+	if opInfo.Available {
+		if opInfo.Cached && opInfo.CacheStatus.Stale {
+			fmt.Fprintf(out, "Generated operations: %d available (stale; refresh with \"restish api sync %s\")\n", len(opInfo.Set.Operations), name)
 		} else {
-			fmt.Fprintf(out, "Generated operations: %d available\n", len(set.Operations))
+			fmt.Fprintf(out, "Generated operations: %d available\n", len(opInfo.Set.Operations))
 		}
 	} else {
 		fmt.Fprintln(out, "Generated operations: unavailable")
@@ -452,26 +460,28 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	report.SpecURL = api.SpecURL
 	report.SpecFiles = append([]string(nil), api.SpecFiles...)
 	profileName := c.profileFromCmd(cmd)
-	set, opStatus, hasOps := c.cachedOperationSetStatusForAPI(name, api, profileName)
+	opInfo := c.doctorOperationSetStatus(requestContext(cmd), name, api, profileName)
 	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
 		report.SpecCache = doctorStatusReport{Status: "present"}
-		if hasOps {
-			report.SpecCache.FetchedAt = opStatus.FetchedAt.Format(time.RFC3339)
-			report.SpecCache.ExpiresAt = opStatus.ExpiresAt.Format(time.RFC3339)
-			if opStatus.Stale {
+		if opInfo.Cached {
+			report.SpecCache.FetchedAt = opInfo.CacheStatus.FetchedAt.Format(time.RFC3339)
+			report.SpecCache.ExpiresAt = opInfo.CacheStatus.ExpiresAt.Format(time.RFC3339)
+			if opInfo.CacheStatus.Stale {
 				report.SpecCache.Status = "stale"
 			} else {
 				report.SpecCache.Status = "fresh"
 			}
 		}
 	}
-	if hasOps {
+	if opInfo.Available {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{
-			Status:    "available",
-			Count:     len(set.Operations),
-			Stale:     opStatus.Stale,
-			FetchedAt: opStatus.FetchedAt.Format(time.RFC3339),
-			ExpiresAt: opStatus.ExpiresAt.Format(time.RFC3339),
+			Status: "available",
+			Count:  len(opInfo.Set.Operations),
+		}
+		if opInfo.Cached {
+			report.GeneratedOperations.Stale = opInfo.CacheStatus.Stale
+			report.GeneratedOperations.FetchedAt = opInfo.CacheStatus.FetchedAt.Format(time.RFC3339)
+			report.GeneratedOperations.ExpiresAt = opInfo.CacheStatus.ExpiresAt.Format(time.RFC3339)
 		}
 	}
 	report.Auth = c.doctorAuthForProfile(name, profileName, profileForName(api, profileName))
@@ -480,6 +490,28 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
 	}
 	return report
+}
+
+func (c *CLI) doctorOperationSetStatus(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) doctorOperationInfo {
+	if set, status, ok := c.cachedOperationSetStatusForAPI(apiName, apiCfg, profileName); ok {
+		return doctorOperationInfo{
+			Set:         set,
+			CacheStatus: status,
+			Available:   true,
+			Cached:      true,
+		}
+	}
+	if apiCfg == nil || !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
+		return doctorOperationInfo{}
+	}
+	set, ok, err := c.operationSetForAPI(ctx, apiName, apiCfg, profileName, false)
+	if err != nil || !ok {
+		return doctorOperationInfo{}
+	}
+	return doctorOperationInfo{
+		Set:       set,
+		Available: true,
+	}
 }
 
 func (c *CLI) doctorAuthForProfile(apiName, profileName string, prof *config.ProfileConfig) doctorAuthReport {
