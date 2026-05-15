@@ -1954,6 +1954,9 @@ func (c *CLI) httpOptsFromFlags(cmd *cobra.Command) (request.Options, error) {
 		if parseErr != nil {
 			return request.Options{}, fmt.Errorf("invalid timeout %q: %w", gf.Timeout, parseErr)
 		}
+		if timeout < 0 {
+			return request.Options{}, fmt.Errorf("invalid timeout %q: must be greater than or equal to 0", gf.Timeout)
+		}
 	}
 
 	// --rsh-retry default is 2 when not set by user (flag sentinel = -1).

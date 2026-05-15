@@ -545,6 +545,47 @@ func TestNegativeNumericGlobalFlagsFailFast(t *testing.T) {
 	}
 }
 
+func TestNegativeTimeoutGlobalFlagsFailFast(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		env  string
+		want string
+	}{
+		{
+			name: "flag",
+			args: []string{"restish", "get", "--rsh-timeout", "-1s", "https://api.example.com/items"},
+			want: `invalid --rsh-timeout "-1s"`,
+		},
+		{
+			name: "env",
+			args: []string{"restish", "get", "https://api.example.com/items"},
+			env:  "-1s",
+			want: `invalid RSH_TIMEOUT "-1s"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.env != "" {
+				t.Setenv("RSH_TIMEOUT", tt.env)
+			}
+			c, _, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				t.Fatal("request should not be sent with invalid timeout")
+				return nil, nil
+			})
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v: expected invalid timeout error", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%v: expected error containing %q, got %v", tt.args, tt.want, err)
+			}
+		})
+	}
+}
+
 func TestNegativeRSHRetryFailsFast(t *testing.T) {
 	t.Setenv("RSH_RETRY", "-1")
 	c, _, _ := newTestCLI(t)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -148,6 +149,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 		gf.NoCache = true
 	}
 	if v := os.Getenv("RSH_TIMEOUT"); v != "" && !cmd.Flags().Changed("rsh-timeout") {
+		if err := validateTimeoutDuration("RSH_TIMEOUT", v); err != nil {
+			return gf, err
+		}
 		gf.Timeout = v
 	}
 	if v := os.Getenv("RSH_RETRY"); v != "" && !cmd.Flags().Changed("rsh-retry") {
@@ -181,6 +185,11 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 }
 
 func validateNonNegativeGlobalFlags(cmd *cobra.Command, gf GlobalFlags) error {
+	if cmd.Flags().Changed("rsh-timeout") {
+		if err := validateTimeoutDuration("--rsh-timeout", gf.Timeout); err != nil {
+			return err
+		}
+	}
 	if cmd.Flags().Changed("rsh-retry") && gf.Retry < 0 {
 		return fmt.Errorf("invalid --rsh-retry %d: must be greater than or equal to 0", gf.Retry)
 	}
@@ -192,6 +201,17 @@ func validateNonNegativeGlobalFlags(cmd *cobra.Command, gf GlobalFlags) error {
 	}
 	if gf.MaxBodySize < 0 {
 		return fmt.Errorf("invalid --rsh-max-body-size %d: must be greater than or equal to 0", gf.MaxBodySize)
+	}
+	return nil
+}
+
+func validateTimeoutDuration(source, value string) error {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("invalid %s %q: %w", source, value, err)
+	}
+	if d < 0 {
+		return fmt.Errorf("invalid %s %q: must be greater than or equal to 0", source, value)
 	}
 	return nil
 }
