@@ -477,6 +477,11 @@ func (c *CLI) emitGeneratedCommandWarnings(apiName string, apiCfg *config.APICon
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
 	set, err := apiSpec.OperationSet(opOpts)
+	if err == nil {
+		for _, issue := range operationSecurityIssues(set.Operations) {
+			c.warnf("OpenAPI security: %s", issue)
+		}
+	}
 	quiet := c.quietGeneratedWarnings
 	c.quietGeneratedWarnings = false
 	defer func() {

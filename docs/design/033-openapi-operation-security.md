@@ -438,6 +438,12 @@ documents can be incomplete or stale, and a user who explicitly chooses an auth
 credential may know something the source document does not capture. Restish
 should preserve that escape hatch while making the mismatch visible.
 
+The same escape-hatch model applies when an operation references an undeclared
+security scheme. Restish should surface the malformed OpenAPI metadata during
+connect/sync/readiness workflows and in generated-command auth errors, but a
+user who knows which credential to send can configure it and select it with
+`--rsh-auth <credential-id>`.
+
 This override escape hatch does not apply when the operation explicitly declares
 `security: []`, because that means forced no auth for the operation.
 
@@ -533,7 +539,10 @@ restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
 
 `api auth list` should answer "what can this profile call?" by showing
 configured credentials, missing credentials, declared `satisfies` values, and
-operation coverage.
+operation coverage. If operations reference a security requirement that is not
+declared in `components.securitySchemes`, the command should report that as an
+OpenAPI metadata issue next to the affected credential ID instead of silently
+presenting the operation as a normal missing-auth case.
 
 `api auth inspect` replaces the v1/v2-draft header-only inspect behavior.
 It should inspect the credential or operation auth selected from the active API

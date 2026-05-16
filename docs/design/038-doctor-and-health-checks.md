@@ -102,6 +102,9 @@ It reports:
 - whether a cached raw spec is present
 - whether generated operation metadata is available and how many operations it
   contains
+- OpenAPI metadata issues that make generated operations hard to configure,
+  such as operation security requirements that reference undeclared security
+  schemes
 - whether profile auth or credential bindings are configured for the active
   profile
 - reachability status

@@ -78,6 +78,89 @@ type operationAuthCoverage struct {
 	FallbackLabels map[string]string
 }
 
+type operationSecurityIssueKey struct {
+	id   string
+	kind string
+	text string
+}
+
+func operationSecurityIssues(ops []spec.Operation) []string {
+	counts := map[operationSecurityIssueKey]int{}
+	for _, op := range ops {
+		seen := map[operationSecurityIssueKey]bool{}
+		for _, alternative := range op.CredentialAlternatives {
+			for _, requirement := range alternative {
+				text, ok := operationSecurityIssueText(requirement)
+				if !ok {
+					continue
+				}
+				key := operationSecurityIssueKey{id: requirement.ID, kind: requirement.Kind, text: text}
+				seen[key] = true
+			}
+		}
+		for key := range seen {
+			counts[key]++
+		}
+	}
+	return formatOperationSecurityIssues(counts, "operation")
+}
+
+func operationSecurityIssuesFromAlternatives(alternatives []spec.CredentialAlternative) []string {
+	counts := map[operationSecurityIssueKey]int{}
+	seenByAlt := map[int]map[operationSecurityIssueKey]bool{}
+	for altIndex, alternative := range alternatives {
+		for _, requirement := range alternative {
+			text, ok := operationSecurityIssueText(requirement)
+			if !ok {
+				continue
+			}
+			key := operationSecurityIssueKey{id: requirement.ID, kind: requirement.Kind, text: text}
+			if seenByAlt[altIndex] == nil {
+				seenByAlt[altIndex] = map[operationSecurityIssueKey]bool{}
+			}
+			if seenByAlt[altIndex][key] {
+				continue
+			}
+			seenByAlt[altIndex][key] = true
+			counts[key]++
+		}
+	}
+	return formatOperationSecurityIssues(counts, "alternative")
+}
+
+func operationSecurityIssueText(requirement spec.CredentialRequirement) (string, bool) {
+	switch {
+	case requirement.Undeclared:
+		return fmt.Sprintf("security scheme %q is referenced by operations but is not declared in components.securitySchemes", requirement.ID), true
+	case !authRequirementKindSupported(requirement.Kind):
+		return fmt.Sprintf("security scheme %q uses unsupported kind %q", requirement.ID, requirement.Kind), true
+	default:
+		return "", false
+	}
+}
+
+func formatOperationSecurityIssues(counts map[operationSecurityIssueKey]int, unit string) []string {
+	keys := make([]operationSecurityIssueKey, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].id != keys[j].id {
+			return keys[i].id < keys[j].id
+		}
+		return keys[i].text < keys[j].text
+	})
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		unitWord := unit + "s"
+		if counts[key] == 1 {
+			unitWord = unit
+		}
+		out = append(out, fmt.Sprintf("%s (%d %s); fix the OpenAPI document or use --rsh-auth %s with configured credentials if you know what to send", key.text, counts[key], unitWord, key.id))
+	}
+	return out
+}
+
 func (c *CLI) operationAuthCoverage(apiName, profileName string, prof *config.ProfileConfig, ops []spec.Operation) operationAuthCoverage {
 	coverage := operationAuthCoverage{
 		FallbackByID:   map[string]int{},

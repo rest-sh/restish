@@ -2591,6 +2591,48 @@ func TestAPISyncReportsSuccess(t *testing.T) {
 	}
 }
 
+func TestAPISyncWarnsAboutUndeclaredSecurityScheme(t *testing.T) {
+	c := newSpecTestCLI(t, "syncapi", "https://api.example.com")
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			return jsonResponse(200, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "paths": {
+    "/audit": {
+      "get": {
+        "operationId": "getAudit",
+        "security": [{"BearerAuth": []}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`), nil
+		default:
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		}
+	})
+	var out, errOut strings.Builder
+	c.Stdout = &out
+	c.Stderr = &errOut
+	if err := c.Run([]string{"restish", "api", "sync", "syncapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if !strings.Contains(out.String(), "Synced") {
+		t.Errorf("expected Synced in output, got: %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), `warning: OpenAPI security: security scheme "BearerAuth" is referenced`) {
+		t.Fatalf("expected undeclared security warning, got:\n%s", errOut.String())
+	}
+}
+
 func TestAPISyncNetworkFailureLeavesRegistrationAndCache(t *testing.T) {
 	c := newSpecTestCLI(t, "syncapi", "https://api.example.com")
 	cacheFile := filepath.Join(c.Hooks().SpecCachePath, "syncapi.cbor")

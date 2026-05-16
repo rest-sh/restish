@@ -299,6 +299,35 @@ paths:
 	}})
 }
 
+func TestOperationsMarksUndeclaredCredentialRequirement(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /audit:
+    get:
+      operationId: getAudit
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	op := operationByID(t, ops, "getAudit")
+	requireCredential(t, op, [][]CredentialRequirement{{
+		{ID: "BearerAuth", Ref: "#/components/securitySchemes/BearerAuth", Kind: "unknown", Source: "openapi", Undeclared: true},
+	}})
+}
+
 func TestOperationsUsesConfiguredServerVariables(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

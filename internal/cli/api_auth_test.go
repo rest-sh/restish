@@ -454,6 +454,7 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
     "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
     "/old": {"get": {"operationId": "oldReport", "security": [{"OldKey": []}], "responses": {"200": {"description": "OK"}}}},
     "/mtls": {"get": {"operationId": "mtlsReport", "security": [{"MutualTLS": []}], "responses": {"200": {"description": "OK"}}}},
+    "/ghost": {"get": {"operationId": "ghostReport", "security": [{"GhostAuth": []}], "responses": {"200": {"description": "OK"}}}},
     "/tenant": {"get": {"operationId": "tenantReport", "security": [{"urn:example:auth:TenantKey": []}], "responses": {"200": {"description": "OK"}}}}
   }
 }`, baseURL)
@@ -492,11 +493,12 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"Callable secured operations: 1/5",
+		"Callable secured operations: 1/6",
 		"UserOAuth: configured, needs items:read, satisfies items:read",
 		"PartnerKey: missing",
 		"OldKey: missing, deprecated",
 		"MutualTLS: missing, unsupported mtls",
+		"GhostAuth: missing, unsupported unknown, undeclared security scheme",
 		"urn:example:auth:TenantKey: missing, URI-backed",
 	} {
 		if !strings.Contains(got, want) {

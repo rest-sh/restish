@@ -824,6 +824,7 @@ type authRequirementSummary struct {
 	needs      []string
 	opCount    int
 	external   bool
+	undeclared bool
 	deprecated bool
 }
 
@@ -857,6 +858,9 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 		if !authRequirementKindSupported(summary.kind) {
 			parts = append(parts, "unsupported "+summary.kind)
 		}
+		if summary.undeclared {
+			parts = append(parts, "undeclared security scheme")
+		}
 		if summary.deprecated {
 			parts = append(parts, "deprecated")
 		}
@@ -885,6 +889,7 @@ func authRequirementSummaries(ops []spec.Operation) []authRequirementSummary {
 				}
 				summary.needs = mergeStringSet(summary.needs, requirement.Needs)
 				summary.external = summary.external || requirement.External
+				summary.undeclared = summary.undeclared || requirement.Undeclared
 				summary.deprecated = summary.deprecated || requirement.Deprecated
 				if opSeen[requirement.ID] == nil {
 					opSeen[requirement.ID] = map[int]bool{}

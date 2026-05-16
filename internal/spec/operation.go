@@ -99,6 +99,9 @@ type CredentialRequirement struct {
 	Name     string   // api-key parameter/header/cookie name
 	Source   string   // loader identity, e.g. openapi
 	External bool     // true when the source used a URI-style reference
+	// Undeclared is true when OpenAPI security references an ID that is absent
+	// from components.securitySchemes.
+	Undeclared bool
 	// Deprecated is true when the source security scheme is marked deprecated.
 	Deprecated bool
 }
@@ -401,6 +404,7 @@ func credentialAlternatives(requirements []*base.SecurityRequirement, schemes ma
 				Name:       credentialRequirementName(scheme),
 				Source:     "openapi",
 				External:   credentialRequirementExternal(id, scheme),
+				Undeclared: scheme == nil && !isAbsoluteURI(id),
 				Deprecated: scheme != nil && scheme.Deprecated,
 			}
 			sort.Strings(requirement.Needs)

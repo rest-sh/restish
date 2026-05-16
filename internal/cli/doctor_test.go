@@ -259,6 +259,7 @@ func TestDoctorAPIReportsLocalSpecGeneratedOperations(t *testing.T) {
     "/items": {
       "get": {
         "operationId": "listItems",
+        "security": [{"BearerAuth": []}],
         "responses": {"200": {"description": "OK"}}
       }
     }
@@ -281,8 +282,9 @@ func TestDoctorAPIReportsLocalSpecGeneratedOperations(t *testing.T) {
 	}
 	var report struct {
 		GeneratedOperations struct {
-			Status string `json:"status"`
-			Count  int    `json:"count"`
+			Status string   `json:"status"`
+			Count  int      `json:"count"`
+			Issues []string `json:"issues"`
 		} `json:"generated_operations"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
@@ -290,6 +292,9 @@ func TestDoctorAPIReportsLocalSpecGeneratedOperations(t *testing.T) {
 	}
 	if report.GeneratedOperations.Status != "available" || report.GeneratedOperations.Count != 1 {
 		t.Fatalf("generated_operations = %#v, want available count 1", report.GeneratedOperations)
+	}
+	if len(report.GeneratedOperations.Issues) != 1 || !strings.Contains(report.GeneratedOperations.Issues[0], `security scheme "BearerAuth" is referenced`) {
+		t.Fatalf("generated_operations issues = %#v, want undeclared BearerAuth issue", report.GeneratedOperations.Issues)
 	}
 
 	out.Reset()
@@ -299,6 +304,9 @@ func TestDoctorAPIReportsLocalSpecGeneratedOperations(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Generated operations: 1 available") {
 		t.Fatalf("doctor api text did not report local generated operations:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), `Issue: security scheme "BearerAuth" is referenced`) {
+		t.Fatalf("doctor api text did not report undeclared security issue:\n%s", out.String())
 	}
 }
 

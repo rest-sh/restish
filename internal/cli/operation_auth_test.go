@@ -97,6 +97,27 @@ func TestPlanOperationAuthRejectsAmbiguousProfileFallback(t *testing.T) {
 	}
 }
 
+func TestPlanOperationAuthReportsUndeclaredSecurityScheme(t *testing.T) {
+	c := &CLI{}
+	policy := &operationAuthPolicy{CredentialAlternatives: []spec.CredentialAlternative{{
+		{ID: "BearerAuth", Kind: "unknown", Undeclared: true},
+	}}}
+
+	_, _, err := c.planOperationAuth("svc", "default", nil, policy)
+	if err == nil {
+		t.Fatal("expected missing profile auth error")
+	}
+	for _, want := range []string{
+		`OpenAPI security issue: security scheme "BearerAuth" is referenced by operations but is not declared in components.securitySchemes`,
+		"--rsh-auth BearerAuth",
+		"restish api auth list svc",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error missing %q:\n%v", want, err)
+		}
+	}
+}
+
 func TestPlanOperationAuthMissingCredentialSuggestsExplicitConfiguredOverride(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{

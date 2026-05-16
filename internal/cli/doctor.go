@@ -97,11 +97,12 @@ type doctorStatusReport struct {
 }
 
 type doctorGeneratedOperationsReport struct {
-	Status    string `json:"status"`
-	Count     int    `json:"count,omitempty"`
-	Stale     bool   `json:"stale,omitempty"`
-	FetchedAt string `json:"fetched_at,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	Status    string   `json:"status"`
+	Count     int      `json:"count,omitempty"`
+	Stale     bool     `json:"stale,omitempty"`
+	FetchedAt string   `json:"fetched_at,omitempty"`
+	ExpiresAt string   `json:"expires_at,omitempty"`
+	Issues    []string `json:"issues,omitempty"`
 }
 
 type doctorAuthReport struct {
@@ -253,6 +254,9 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "Generated operations: %d available (stale; refresh with \"restish api sync %s\")\n", len(opInfo.Set.Operations), name)
 		} else {
 			fmt.Fprintf(out, "Generated operations: %d available\n", len(opInfo.Set.Operations))
+		}
+		for _, issue := range operationSecurityIssues(opInfo.Set.Operations) {
+			fmt.Fprintf(out, "  Issue: %s\n", issue)
 		}
 	} else {
 		fmt.Fprintln(out, "Generated operations: unavailable")
@@ -477,6 +481,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 		report.GeneratedOperations = doctorGeneratedOperationsReport{
 			Status: "available",
 			Count:  len(opInfo.Set.Operations),
+			Issues: operationSecurityIssues(opInfo.Set.Operations),
 		}
 		if opInfo.Cached {
 			report.GeneratedOperations.Stale = opInfo.CacheStatus.Stale
