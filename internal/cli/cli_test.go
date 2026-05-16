@@ -586,6 +586,21 @@ func TestNegativeTimeoutGlobalFlagsFailFast(t *testing.T) {
 	}
 }
 
+func TestInvalidFilterLangFailsFast(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with invalid filter language")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "--rsh-filter-lang", "nope", "-f", "body.url", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected invalid filter language error")
+	}
+	if !strings.Contains(err.Error(), `invalid --rsh-filter-lang "nope"`) {
+		t.Fatalf("expected invalid --rsh-filter-lang error, got %v", err)
+	}
+}
+
 func TestNegativeRSHRetryFailsFast(t *testing.T) {
 	t.Setenv("RSH_RETRY", "-1")
 	c, _, _ := newTestCLI(t)

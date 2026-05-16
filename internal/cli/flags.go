@@ -181,6 +181,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	if err := validateNonNegativeGlobalFlags(cmd, gf); err != nil {
 		return gf, err
 	}
+	if err := validateFilterLangFlag(cmd, gf); err != nil {
+		return gf, err
+	}
 	return gf, nil
 }
 
@@ -203,6 +206,19 @@ func validateNonNegativeGlobalFlags(cmd *cobra.Command, gf GlobalFlags) error {
 		return fmt.Errorf("invalid --rsh-max-body-size %d: must be greater than or equal to 0", gf.MaxBodySize)
 	}
 	return nil
+}
+
+func validateFilterLangFlag(cmd *cobra.Command, gf GlobalFlags) error {
+	if !cmd.Flags().Changed("rsh-filter-lang") {
+		return nil
+	}
+	value := strings.TrimSpace(gf.FilterLang)
+	switch strings.ToLower(value) {
+	case "shorthand", "jq":
+		return nil
+	default:
+		return fmt.Errorf("invalid --rsh-filter-lang %q: must be one of shorthand, jq", gf.FilterLang)
+	}
 }
 
 func validateTimeoutDuration(source, value string) error {
