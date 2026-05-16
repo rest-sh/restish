@@ -431,8 +431,15 @@ restish --rsh-profile prod example signed-report --rsh-auth UserOAuth+PartnerKey
 
 The override selects one credential alternative by requirement ID set. Restish
 should still verify that the selected profile satisfies that alternative. The
-override must not allow an operation to use a credential requirement that the
-source operation does not permit.
+override should warn when the requested credential set is not one of the
+operation's declared OpenAPI security alternatives, but it may still send the
+explicitly requested configured credential set. This is intentional: OpenAPI
+documents can be incomplete or stale, and a user who explicitly chooses an auth
+credential may know something the source document does not capture. Restish
+should preserve that escape hatch while making the mismatch visible.
+
+This override escape hatch does not apply when the operation explicitly declares
+`security: []`, because that means forced no auth for the operation.
 
 OpenAPI's empty requirement object has different semantics from `security: []`.
 For Restish:
