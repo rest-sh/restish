@@ -1392,6 +1392,54 @@ func TestAPISetShorthandAppendHeaders(t *testing.T) {
 	}
 }
 
+func TestAPISetRejectsInvalidPersistentHeaderAndQuery(t *testing.T) {
+	tests := []struct {
+		name      string
+		patch     string
+		wantError string
+	}{
+		{
+			name:      "header",
+			patch:     `profiles.default.headers[]: "X-Concurrent-A=1"`,
+			wantError: `apis.myapi.profiles.default.headers[0]: invalid header "X-Concurrent-A=1": expected "Name: Value" format`,
+		},
+		{
+			name:      "query",
+			patch:     `profiles.default.query[]: brokenquery`,
+			wantError: `apis.myapi.profiles.default.query[0]: invalid query param "brokenquery": expected "key=value" format`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgData, _ := json.Marshal(&config.Config{
+				APIs: map[string]*config.APIConfig{
+					"myapi": {BaseURL: "https://api.example.com"},
+				},
+			})
+			cfgFile := t.TempDir() + "/restish.json"
+			_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+			c, _, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = cfgFile
+			err := c.Run([]string{"restish", "api", "set", "myapi", tc.patch})
+			if err == nil {
+				t.Fatal("expected api set to reject invalid persistent request option")
+			}
+			if !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("error = %q, want to contain %q", err, tc.wantError)
+			}
+			written, err := config.Load(cfgFile)
+			if err != nil {
+				t.Fatalf("reload config: %v", err)
+			}
+			if prof := written.APIs["myapi"].Profiles["default"]; prof != nil {
+				t.Fatalf("default profile was written despite validation failure: %#v", prof)
+			}
+		})
+	}
+}
+
 func TestAPISetFullAuthObject(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

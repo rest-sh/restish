@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -50,6 +51,16 @@ func (c *CLI) validateConfigRuntime(cfg *config.Config) error {
 			}
 			if err := c.validateAuthConfig(prof.Auth); err != nil {
 				return fmt.Errorf("apis.%s.profiles.%s.auth: %w", apiName, profileName, err)
+			}
+			for i, header := range prof.Headers {
+				if _, _, err := request.ParseHeaderOption(header); err != nil {
+					return fmt.Errorf("apis.%s.profiles.%s.headers[%d]: %w", apiName, profileName, i, err)
+				}
+			}
+			for i, query := range prof.Query {
+				if _, _, err := request.ParseQueryOption(query); err != nil {
+					return fmt.Errorf("apis.%s.profiles.%s.query[%d]: %w", apiName, profileName, i, err)
+				}
 			}
 			if prof.TLSSigner != "" {
 				if _, ok := c.pluginForHook(prof.TLSSigner, "tls-signer"); !ok {

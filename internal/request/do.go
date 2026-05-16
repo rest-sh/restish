@@ -236,12 +236,10 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	// Apply extra headers. First colon separates name from value so header
 	// values that contain colons are handled correctly.
 	for _, h := range opts.Headers {
-		name, value, ok := strings.Cut(h, ":")
-		if !ok {
-			return nil, fmt.Errorf("invalid header %q: expected \"Name: Value\" format", h)
+		name, value, err := ParseHeaderOption(h)
+		if err != nil {
+			return nil, err
 		}
-		name = strings.TrimSpace(name)
-		value = strings.TrimSpace(value)
 		if strings.EqualFold(name, "Accept") || strings.EqualFold(name, "Accept-Encoding") {
 			req.Header.Set(name, value)
 			continue
@@ -257,9 +255,9 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	if len(opts.Query) > 0 {
 		q := req.URL.Query()
 		for _, kv := range opts.Query {
-			key, value, ok := strings.Cut(kv, "=")
-			if !ok {
-				return nil, fmt.Errorf("invalid query param %q: expected \"key=value\" format", kv)
+			key, value, err := ParseQueryOption(kv)
+			if err != nil {
+				return nil, err
 			}
 			q.Add(key, value)
 		}
@@ -423,6 +421,24 @@ func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) e
 		}
 	}
 	return nil
+}
+
+// ParseHeaderOption parses a CLI/config "Name: Value" header option.
+func ParseHeaderOption(h string) (name, value string, err error) {
+	name, value, ok := strings.Cut(h, ":")
+	if !ok {
+		return "", "", fmt.Errorf("invalid header %q: expected \"Name: Value\" format", h)
+	}
+	return strings.TrimSpace(name), strings.TrimSpace(value), nil
+}
+
+// ParseQueryOption parses a CLI/config "key=value" query option.
+func ParseQueryOption(kv string) (key, value string, err error) {
+	key, value, ok := strings.Cut(kv, "=")
+	if !ok {
+		return "", "", fmt.Errorf("invalid query param %q: expected \"key=value\" format", kv)
+	}
+	return key, value, nil
 }
 
 func stripBodyHeadersAfterBodylessRedirect(req *http.Request, via []*http.Request) {
