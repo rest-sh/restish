@@ -85,6 +85,7 @@ type OperationResponseHelp struct {
 // OperationHelp stores pre-rendered help snippets for generated commands.
 type OperationHelp struct {
 	Request   *OperationBodyHelp
+	Requests  []OperationBodyHelp
 	Responses []OperationResponseHelp
 	Examples  []string
 }

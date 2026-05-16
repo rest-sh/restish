@@ -40,6 +40,7 @@ func buildOperationHelp(op *v3.Operation, requestMediaType string) OperationHelp
 
 	help := OperationHelp{
 		Request:  buildRequestHelp(op, requestMediaType),
+		Requests: buildRequestHelps(op),
 		Examples: buildCommandExamples(op, requestMediaType),
 	}
 	help.Responses = buildResponseHelp(op)
@@ -70,6 +71,26 @@ func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyH
 		Schema:    schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
 		Example:   renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite)),
 	}
+}
+
+func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil {
+		return nil
+	}
+	var out []OperationBodyHelp
+	for mediaType, mt := range op.RequestBody.Content.FromOldest() {
+		if strings.TrimSpace(mediaType) == "" || mt == nil {
+			continue
+		}
+		schema := mediaTypeSchema(mt)
+		help := OperationBodyHelp{MediaType: mediaType}
+		if schema != nil {
+			help.Schema = schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
+			help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+		}
+		out = append(out, help)
+	}
+	return out
 }
 
 func buildRequestMultipartContentTypes(op *v3.Operation, requestMediaType string) map[string]string {

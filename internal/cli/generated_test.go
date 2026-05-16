@@ -141,6 +141,40 @@ func specWithOperations(baseURL string) string {
 }`, baseURL)
 }
 
+func specWithMultiBodyOperation(baseURL string) string {
+	return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Multi Body API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/multi-body": {
+      "post": {
+        "operationId": "multiBody",
+        "summary": "Accept multiple request body media types",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {"schema": {
+              "type": "object",
+              "properties": {"jsonOnly": {"type": "string"}}
+            }},
+            "application/x-www-form-urlencoded": {"schema": {
+              "type": "object",
+              "properties": {"formOnly": {"type": "string"}}
+            }},
+            "text/plain": {
+              "schema": {"type": "string"},
+              "example": "hello generated text"
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+}
+
 // generatedEnv holds shared state for generated-command tests.
 type generatedEnv struct {
 	cfgFile  string
@@ -157,6 +191,12 @@ func setupGeneratedEnv(t *testing.T, mux *http.ServeMux) *generatedEnv {
 	t.Cleanup(srv.Close)
 
 	spec := specWithOperations(srv.URL)
+	return setupGeneratedEnvWithSpec(t, srv, mux, spec)
+}
+
+func setupGeneratedEnvWithSpec(t *testing.T, srv *httptest.Server, mux *http.ServeMux, spec string) *generatedEnv {
+	t.Helper()
+
 	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, spec)
@@ -181,6 +221,15 @@ func setupGeneratedEnv(t *testing.T, mux *http.ServeMux) *generatedEnv {
 		t.Fatalf("api sync: %v", err)
 	}
 	return env
+}
+
+func setupGeneratedEnvForSpec(t *testing.T, mux *http.ServeMux, specForBaseURL func(string) string) *generatedEnv {
+	t.Helper()
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return setupGeneratedEnvWithSpec(t, srv, mux, specForBaseURL(srv.URL))
 }
 
 // newCLI returns a fresh CLI sharing this env's config and cache.
@@ -1488,6 +1537,80 @@ func TestGeneratedCommandGenerateBodyPrintsExampleWithoutRequest(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("generated body missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestGeneratedCommandGenerateBodyHonorsContentType(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/multi-body", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("generate body should not send a request")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, specWithMultiBodyOperation)
+	tests := []struct {
+		name    string
+		args    []string
+		want    string
+		notWant string
+	}{
+		{
+			name:    "default",
+			args:    []string{"restish", "tapi", "multi-body", "--rsh-generate-body"},
+			want:    `"jsonOnly": "string"`,
+			notWant: "formOnly",
+		},
+		{
+			name:    "form",
+			args:    []string{"restish", "tapi", "multi-body", "--rsh-content-type", "application/x-www-form-urlencoded", "--rsh-generate-body"},
+			want:    `"formOnly": "string"`,
+			notWant: "jsonOnly",
+		},
+		{
+			name:    "form alias",
+			args:    []string{"restish", "tapi", "multi-body", "--rsh-content-type", "form", "--rsh-generate-body"},
+			want:    `"formOnly": "string"`,
+			notWant: "jsonOnly",
+		},
+		{
+			name:    "text",
+			args:    []string{"restish", "tapi", "multi-body", "--rsh-content-type", "text/plain", "--rsh-generate-body"},
+			want:    `"hello generated text"`,
+			notWant: "jsonOnly",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, out := env.newCaptureCLI()
+			if err := c.Run(tc.args); err != nil {
+				t.Fatalf("generate body: %v", err)
+			}
+			got := out.String()
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("generated body missing %q:\n%s", tc.want, got)
+			}
+			if strings.Contains(got, tc.notWant) {
+				t.Fatalf("generated body should not contain %q:\n%s", tc.notWant, got)
+			}
+		})
+	}
+}
+
+func TestGeneratedCommandGenerateBodyRejectsUndeclaredContentType(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, specWithMultiBodyOperation)
+	c := env.newCLI()
+	err := c.Run([]string{"restish", "tapi", "multi-body", "--rsh-content-type", "application/xml", "--rsh-generate-body"})
+	if err == nil {
+		t.Fatal("expected undeclared content type error")
+	}
+	if !strings.Contains(err.Error(), `request body content type "application/xml" is not declared`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "application/json") || !strings.Contains(err.Error(), "application/x-www-form-urlencoded") || !strings.Contains(err.Error(), "text/plain") {
+		t.Fatalf("error should list available content types: %v", err)
 	}
 }
 

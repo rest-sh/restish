@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/url"
 	"regexp"
 	"sort"
@@ -393,7 +394,8 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 				return showGeneratedOperationHelpAll(cmd)
 			}
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
-				return c.printGeneratedBodyExample(op.Help.Request)
+				gf := globalFlagsFromContext(requestContext(cmd))
+				return c.printGeneratedBodyExample(op.Help, gf.ContentType)
 			}
 			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.ResponseMediaType, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
@@ -1009,13 +1011,58 @@ func showGeneratedOperationHelpAll(cmd *cobra.Command) error {
 	return err
 }
 
-func (c *CLI) printGeneratedBodyExample(request *spec.OperationBodyHelp) error {
+func (c *CLI) printGeneratedBodyExample(help spec.OperationHelp, contentType string) error {
+	request, err := c.generatedBodyExampleRequest(help, contentType)
+	if err != nil {
+		return err
+	}
 	if request != nil && strings.TrimSpace(request.Example) != "" {
 		fmt.Fprintln(c.Stdout, request.Example)
 		return nil
 	}
 	fmt.Fprintln(c.Stdout, "{}")
 	return nil
+}
+
+func (c *CLI) generatedBodyExampleRequest(help spec.OperationHelp, contentType string) (*spec.OperationBodyHelp, error) {
+	if strings.TrimSpace(contentType) == "" {
+		return help.Request, nil
+	}
+	requested := strings.TrimSpace(contentType)
+	if alias := c.content.MIMETypeForName(requested); alias != "" {
+		requested = alias
+	}
+	for _, request := range help.Requests {
+		if mediaTypesMatch(request.MediaType, requested) {
+			selected := request
+			return &selected, nil
+		}
+	}
+	if help.Request != nil && mediaTypesMatch(help.Request.MediaType, requested) {
+		return help.Request, nil
+	}
+	available := make([]string, 0, len(help.Requests))
+	for _, request := range help.Requests {
+		if strings.TrimSpace(request.MediaType) != "" {
+			available = append(available, request.MediaType)
+		}
+	}
+	if len(available) == 0 && help.Request != nil && strings.TrimSpace(help.Request.MediaType) != "" {
+		available = append(available, help.Request.MediaType)
+	}
+	if len(available) == 0 {
+		return nil, fmt.Errorf("request body content type %q is not declared for this operation", contentType)
+	}
+	return nil, fmt.Errorf("request body content type %q is not declared for this operation; available: %s", contentType, strings.Join(available, ", "))
+}
+
+func mediaTypesMatch(a, b string) bool {
+	if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b)) {
+		return true
+	}
+	aBase, _, aErr := mime.ParseMediaType(a)
+	bBase, _, bErr := mime.ParseMediaType(b)
+	return aErr == nil && bErr == nil && strings.EqualFold(aBase, bBase)
 }
 
 func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, help spec.OperationHelp) string {
