@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -152,5 +153,84 @@ func TestAPIConnectFallbackOAuthNoninteractiveReportsSetupExpression(t *testing.
 	}
 	if strings.Contains(err.Error(), "unexpected EOF") {
 		t.Fatalf("expected direct setup diagnostic, got: %v", err)
+	}
+}
+
+func TestAPIConnectFallbackOAuthNoninteractiveUsesDefaultScopes(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "openapi.json")
+	if err := os.WriteFile(specPath, []byte(`{
+  "openapi": "3.1.0",
+  "info": {"title": "OAuth Test", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "components": {
+    "securitySchemes": {
+      "OAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {
+              "read:profile": "Read profile",
+              "read:recovery": "Read recovery"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/recovery": {
+      "get": {
+        "operationId": "getRecovery",
+        "security": [{"OAuth": ["read:profile", "read:recovery"]}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	oldOpenTTY := promptOpenTTY
+	promptOpenTTY = func() (*os.File, error) {
+		return nil, os.ErrNotExist
+	}
+	t.Cleanup(func() { promptOpenTTY = oldOpenTTY })
+
+	var stdout, stderr bytes.Buffer
+	c := New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	err := c.Run([]string{
+		"restish", "api", "connect", "whoop", "https://api.example.com",
+		"--spec", specPath,
+		"--yes",
+		"prompt.credentials.OAuth.client_id:codex-dummy",
+	})
+	if err != nil {
+		t.Fatalf("api connect: %v\nstderr:\n%s", err, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "Scopes [") {
+		t.Fatalf("noninteractive connect prompted for scopes:\n%s", stderr.String())
+	}
+
+	written, err := config.Load(c.Hooks().ConfigPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	credential := written.APIs["whoop"].Profiles["default"].Credentials["OAuth"]
+	if credential == nil || credential.Auth == nil {
+		t.Fatalf("OAuth credential missing: %#v", written.APIs["whoop"].Profiles["default"].Credentials)
+	}
+	if got := credential.Auth.Params["client_id"]; got != "codex-dummy" {
+		t.Fatalf("client_id = %q, want codex-dummy", got)
+	}
+	if got := credential.Auth.Params["scopes"]; got != "read:profile read:recovery" {
+		t.Fatalf("scopes = %q, want read:profile read:recovery", got)
 	}
 }

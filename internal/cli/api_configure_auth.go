@@ -200,6 +200,8 @@ func (c *CLI) promptAuthParams(ctx context.Context, profileName, credentialID st
 		if len(missing) > 0 {
 			return fmt.Errorf("missing required auth setup value(s) for credential %s: provide %s", credentialID, strings.Join(missing, ", "))
 		}
+		applyNoninteractiveAuthParamValues(profileName, credentialID, ac, promptParams, defaultNeeds, answers)
+		return nil
 	}
 	for _, p := range promptParams {
 		if ac.Params[p.Name] != "" {
@@ -221,6 +223,28 @@ func (c *CLI) promptAuthParams(ctx context.Context, profileName, credentialID st
 		}
 	}
 	return nil
+}
+
+func applyNoninteractiveAuthParamValues(profileName, credentialID string, ac *config.AuthConfig, params []auth.Param, defaultNeeds []string, answers configurePromptAnswers) {
+	for _, p := range params {
+		if ac.Params[p.Name] != "" {
+			continue
+		}
+		if answer, ok := answers.answerCredential(profileName, credentialID, p.Name); ok {
+			ac.Params[p.Name] = strings.TrimSpace(answer)
+			continue
+		}
+		if value := defaultAuthParamValue(p, defaultNeeds); value != "" {
+			ac.Params[p.Name] = value
+		}
+	}
+}
+
+func defaultAuthParamValue(p auth.Param, defaultNeeds []string) string {
+	if p.Name == "scopes" && len(defaultNeeds) > 0 {
+		return strings.Join(defaultNeeds, " ")
+	}
+	return ""
 }
 
 func missingAuthSetupExpressionKeys(profileName, credentialID string, ac *config.AuthConfig, params []auth.Param, answers configurePromptAnswers) []string {
