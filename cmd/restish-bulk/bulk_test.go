@@ -256,6 +256,32 @@ func TestCollectFilesMatchUsesFileContentTypes(t *testing.T) {
 	}
 }
 
+func TestBulkListFilterReportsInvalidJSONPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("broken.json", []byte(`{"title":"Broken"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := &bytes.Buffer{}
+	a := &app{client: &pluginClient{CommandClient: pluginwire.NewCommandClient(bytes.NewReader(nil), out)}}
+	meta := &Meta{Files: map[string]*File{}}
+	if err := os.MkdirAll(metaDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := meta.save(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := a.newListCmd()
+	cmd.SetArgs([]string{"--filter", "title"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected invalid JSON error")
+	}
+	if !strings.Contains(err.Error(), "broken.json contains invalid JSON") {
+		t.Fatalf("error = %v, want filename and invalid JSON context", err)
+	}
+}
+
 func TestNormalizedBaseURLUsesLocalhostHTTP(t *testing.T) {
 	if got, want := normalizedBaseURL("localhost:8080/items"), "http://localhost:8080/items"; got != want {
 		t.Fatalf("normalizedBaseURL = %q, want %q", got, want)

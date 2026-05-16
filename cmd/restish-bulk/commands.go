@@ -102,7 +102,7 @@ func (a *app) newListCmd() *cobra.Command {
 				}
 				var content any
 				if err := json.Unmarshal(data, &content); err != nil {
-					return err
+					return fmt.Errorf("%s contains invalid JSON: %w", path, err)
 				}
 				res, _, err := shorthand.GetPath(filterExpr, content, shorthand.GetOptions{})
 				if err != nil || isFalsey(res) {
