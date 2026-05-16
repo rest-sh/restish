@@ -98,7 +98,6 @@ func (c *CLI) runInferredHTTP(cmd *cobra.Command, args []string) error {
 }
 
 type requestBodyOptions struct {
-	schemaTypes               map[string]string
 	multipartPartContentTypes map[string]string
 	acceptOverride            string
 	operationAuth             *operationAuthPolicy
@@ -153,8 +152,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		stdinIsTTY := output.IsTerminalReader(c.Stdin)
 		var err error
 		bodyVal, bodyInfo, err = input.BodyWithInfo(c.Stdin, stdinIsTTY, bodyArgs, opts.ContentType, input.BodyOptions{
-			SchemaTypes: bodyOpts.schemaTypes,
-			Warnf:       c.warnf,
+			Warnf: c.warnf,
 		})
 		if err != nil {
 			return fmt.Errorf("building request body: %w", err)

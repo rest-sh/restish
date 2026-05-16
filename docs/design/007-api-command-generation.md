@@ -233,15 +233,12 @@ OpenAPI request-body modes when the operation advertises them. Multipart parts
 may carry per-part content types from OpenAPI `encoding.contentType`, and array
 file fields are encoded as repeated parts with the same field name.
 
-Generated commands may use request-body schema metadata to preserve OpenAPI
-string semantics after shorthand parsing. For example, if a generated operation
-has a JSON object request schema where `id` is `type: string`, then
-`restish api create id: 123` sends `"id": "123"` even though generic shorthand
-would normally parse `123` as a number. This schema-guided coercion is scoped to
-generated commands and is intentionally shallow: it covers simple object
-properties and dotted nested object paths without adding default-on request-body
-validation. Unknown fields are still accepted unless a future explicit
-validation mode is enabled.
+Generated command body shorthand is schema-agnostic. A generated command and a
+generic HTTP command must interpret the same body shorthand the same way:
+`id: 123` is a number, while `id: "123"` is a string. OpenAPI schema metadata
+can describe the expected shape in help and examples, but it must not silently
+rewrite request-body values before they are sent. Unknown fields are still
+accepted unless a future explicit validation mode is enabled.
 
 OpenAPI schema constructs such as `oneOf`, `anyOf`, `allOf`, nullable/type
 arrays, enum, const, defaults, examples, read-only/write-only, additional

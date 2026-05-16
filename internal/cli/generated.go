@@ -395,7 +395,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			if generateBody, _ := cmd.Flags().GetBool("rsh-generate-body"); generateBody {
 				return c.printGeneratedBodyExample(op.Help.Request)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.ResponseMediaType, op.RequestSchemaTypes, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.ResponseMediaType, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1165,7 +1165,6 @@ func generatedOperationExamples(commandName, apiName, use string, examples []str
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
 	apiName, opPath, operationServer, method, requestMediaType, responseMediaType string,
-	requestSchemaTypes map[string]string,
 	requestMultipartContentTypes map[string]string,
 	bodyRequired bool,
 	noAuth bool,
@@ -1243,7 +1242,6 @@ func (c *CLI) runGeneratedOp(
 	bodyArgs := args[bodyArgStart:]
 	gf := globalFlagsFromContext(requestContext(cmd))
 	return c.runHTTPWithOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
-		schemaTypes:               requestSchemaTypes,
 		multipartPartContentTypes: requestMultipartContentTypes,
 		acceptOverride:            responseMediaType,
 		bodyRequired:              bodyRequired,

@@ -142,9 +142,6 @@ type Operation struct {
 	// ResponseMediaType is the deterministic preferred Accept value from
 	// successful response content, if the operation declares one.
 	ResponseMediaType string
-	// RequestSchemaTypes maps dotted request-body property paths to simple
-	// OpenAPI schema types for generated-command shorthand coercion.
-	RequestSchemaTypes map[string]string
 	// RequestMultipartContentTypes maps multipart/form-data property names to
 	// per-part Content-Type values from the OpenAPI encoding object.
 	RequestMultipartContentTypes map[string]string
@@ -313,7 +310,6 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		},
 	}
 	o.Help = buildOperationHelp(op, o.RequestMediaType)
-	o.RequestSchemaTypes = buildRequestSchemaTypes(op, o.RequestMediaType)
 	o.RequestMultipartContentTypes = buildRequestMultipartContentTypes(op, o.RequestMediaType)
 	o.OptionalAuth, o.CredentialAlternatives = credentialAlternatives(effectiveSecurity, schemes)
 

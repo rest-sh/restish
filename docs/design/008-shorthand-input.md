@@ -113,18 +113,12 @@ Quoting forces string semantics where needed. Restish should preserve the parser
 library's type-coercion contract rather than reinterpreting those values later
 in the CLI layer.
 
-The exception is generated-command request bodies when an OpenAPI request schema
-declares a body property as `type: string`. In that case Restish may coerce the
-parsed shorthand value back to a string for that generated operation only, so
-numeric-looking IDs and amounts are not sent as JSON numbers. Generic HTTP
-commands keep the raw shorthand parser semantics, and generated commands do not
-reject unknown body fields by default.
-
-This coercion is intentionally bounded. It applies to generated-command request
-body values with simple object-property paths, including dotted nested paths,
-and exists to preserve common OpenAPI string fields after shorthand parsing. It
-is not a hidden validation pass, does not make unknown body fields invalid, and
-does not replace the content registry's final serialization behavior.
+Generated-command request bodies follow the same rule. OpenAPI schemas can make
+the expected type visible in help and generated body examples, but they do not
+silently rewrite shorthand values. If an API expects a string that looks like a
+number, the user must quote it, for example `id: "123"`. Keeping generated and
+generic request bodies schema-agnostic avoids command-specific surprises and
+preserves the content registry's final serialization behavior.
 
 ## Array And Object Semantics
 

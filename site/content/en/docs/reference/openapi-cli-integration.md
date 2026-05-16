@@ -172,10 +172,10 @@ when you control the API design.
 
 ## Schemas And Generated Bodies
 
-Restish uses OpenAPI schemas for help, completions, example generation, and a
-small amount of generated-command body coercion. For example, if a request body
-property is declared as `type: string`, `id: 123` is sent as `"123"` for that
-generated command.
+Restish uses OpenAPI schemas for help, completions, and example generation.
+Generated command request bodies use the same shorthand semantics as generic
+HTTP requests. For example, `id: 123` sends a number and `id: "123"` sends a
+string, even when the OpenAPI schema says the field is a string.
 
 Schemas are not full request validators by default. Unknown body fields are
 allowed unless Restish grows an explicit validation mode. Schema constructs

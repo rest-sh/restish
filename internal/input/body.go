@@ -4,9 +4,7 @@ package input
 import (
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/danielgtaylor/shorthand/v2"
 )
@@ -15,8 +13,7 @@ const MaxStdinBodyBytes = 16 << 20
 
 // BodyOptions controls request-body parsing.
 type BodyOptions struct {
-	SchemaTypes map[string]string
-	Warnf       func(string, ...any)
+	Warnf func(string, ...any)
 }
 
 // BodyInfo describes which CLI input sources contributed to the returned body.
@@ -80,7 +77,6 @@ func BodyWithInfo(stdinReader io.Reader, stdinIsTTY bool, args []string, content
 				// Can't patch non-structured stdin; treat it as args-only.
 			} else {
 				if len(args) == 0 {
-					coerceSchemaTypes(parsed, bodyOpts.SchemaTypes)
 					return parsed, info, nil
 				}
 				if !isStructuredBody(parsed) {
@@ -106,7 +102,6 @@ func BodyWithInfo(stdinReader io.Reader, stdinIsTTY bool, args []string, content
 	if err != nil {
 		return nil, info, err
 	}
-	coerceSchemaTypes(result, bodyOpts.SchemaTypes)
 	info.UsedArgs = true
 	return result, info, nil
 }
@@ -117,75 +112,6 @@ func isStructuredBody(value any) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func coerceSchemaTypes(value any, schemaTypes map[string]string) {
-	if len(schemaTypes) == 0 {
-		return
-	}
-	for path, typ := range schemaTypes {
-		if typ != "string" {
-			continue
-		}
-		coercePathToString(value, strings.Split(path, "."))
-	}
-}
-
-func coercePathToString(value any, parts []string) {
-	if len(parts) == 0 {
-		return
-	}
-	switch m := value.(type) {
-	case map[string]any:
-		coerceStringMapPath(m, parts)
-	case map[any]any:
-		coerceAnyMapPath(m, parts)
-	}
-}
-
-func coerceStringMapPath(m map[string]any, parts []string) {
-	if len(parts) == 1 {
-		if v, ok := m[parts[0]]; ok {
-			m[parts[0]] = schemaString(v)
-		}
-		return
-	}
-	next, ok := m[parts[0]]
-	if !ok {
-		return
-	}
-	coercePathToString(next, parts[1:])
-}
-
-func coerceAnyMapPath(m map[any]any, parts []string) {
-	key := any(parts[0])
-	value, ok := m[key]
-	if !ok {
-		return
-	}
-	if len(parts) == 1 {
-		m[key] = schemaString(value)
-		return
-	}
-	coercePathToString(value, parts[1:])
-}
-
-func schemaString(value any) any {
-	if value == nil {
-		return nil
-	}
-	switch v := value.(type) {
-	case string:
-		return v
-	case float32:
-		return strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	case time.Time:
-		return v.Format(time.RFC3339Nano)
-	default:
-		return fmt.Sprint(v)
 	}
 }
 

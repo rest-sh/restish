@@ -72,22 +72,6 @@ func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyH
 	}
 }
 
-func buildRequestSchemaTypes(op *v3.Operation, requestMediaType string) map[string]string {
-	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
-		return nil
-	}
-	mt := op.RequestBody.Content.GetOrZero(requestMediaType)
-	if mt == nil {
-		return nil
-	}
-	types := map[string]string{}
-	collectRequestSchemaTypes(mediaTypeSchema(mt), "", types, map[uint64]bool{}, 0)
-	if len(types) == 0 {
-		return nil
-	}
-	return types
-}
-
 func buildRequestMultipartContentTypes(op *v3.Operation, requestMediaType string) map[string]string {
 	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
 		return nil
@@ -110,52 +94,6 @@ func buildRequestMultipartContentTypes(op *v3.Operation, requestMediaType string
 		return nil
 	}
 	return out
-}
-
-func collectRequestSchemaTypes(s *base.Schema, prefix string, out map[string]string, seen map[uint64]bool, depth int) {
-	if s == nil || depth > schemaHelpMaxDepth || skipSchemaForMode(s, schemaHelpWrite) {
-		return
-	}
-	if len(s.AllOf) > 0 || len(s.OneOf) > 0 || len(s.AnyOf) > 0 {
-		for _, schemas := range [][]*base.SchemaProxy{s.AllOf, s.OneOf, s.AnyOf} {
-			for _, proxy := range schemas {
-				collectRequestSchemaTypes(schemaFromProxy(proxy), prefix, out, seen, depth+1)
-			}
-		}
-		return
-	}
-
-	kind := schemaKind(s)
-	if prefix != "" && kind != "" {
-		out[prefix] = kind
-	}
-	if kind != "object" || s.Properties == nil {
-		return
-	}
-
-	hash := s.GoLow().Hash()
-	if seen[hash] {
-		return
-	}
-	seen[hash] = true
-	defer func() { seen[hash] = false }()
-
-	count := 0
-	for name, proxy := range s.Properties.FromOldest() {
-		if count >= schemaHelpMaxProperties {
-			break
-		}
-		prop := schemaFromProxy(proxy)
-		if prop == nil || skipSchemaForMode(prop, schemaHelpWrite) {
-			continue
-		}
-		path := name
-		if prefix != "" {
-			path = prefix + "." + name
-		}
-		collectRequestSchemaTypes(prop, path, out, seen, depth+1)
-		count++
-	}
 }
 
 func buildCommandExamples(op *v3.Operation, requestMediaType string) []string {

@@ -249,9 +249,10 @@ recurse indefinitely.
 
 ## Schema Handling
 
-Restish uses schemas for help, completions, example generation, and limited
-schema-guided body coercion. It does not reject unknown body fields by default
-and does not perform full validation before requests.
+Restish uses schemas for help, completions, and example generation. It does not
+reject unknown body fields by default, does not perform full validation before
+requests, and does not silently coerce generated-command request-body values
+based on schema metadata.
 
 Schema support should cover OpenAPI 3.0 and 3.1 shapes including:
 
@@ -274,10 +275,11 @@ deterministic first viable branch for example generation. Discriminators should
 be surfaced when useful, but lack of discriminator enforcement must not block
 command generation.
 
-For generated-command JSON bodies, schema-guided coercion may turn shorthand
-values back into strings when the request schema says a property is `type:
-string`. This coercion is scoped to generated commands and should stay bounded
-to simple property paths rather than becoming default request validation.
+Generated-command JSON bodies are schema-agnostic after shorthand parsing. A
+generated command and a generic HTTP command should send the same JSON value for
+the same shorthand expression. For example, `id: 123` remains a number even if
+the OpenAPI schema says `id` is a string; users should write `id: "123"` when
+they need string semantics.
 
 ## Servers And URLs
 

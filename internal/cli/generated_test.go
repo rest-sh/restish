@@ -61,6 +61,12 @@ func specWithOperations(baseURL string) string {
               "name": {"type": "string"},
               "note": {"type": ["string", "null"]},
               "count": {"type": "integer"},
+              "tags": {
+                "anyOf": [
+                  {"type": "array", "items": {"type": "string"}},
+                  {"type": "string"}
+                ]
+              },
               "meta": {
                 "type": "object",
                 "properties": {"code": {"type": "string"}}
@@ -1241,7 +1247,7 @@ func TestGeneratedCommandOptionalBodyCanBeOmitted(t *testing.T) {
 	}
 }
 
-func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
+func TestGeneratedCommandBodyPreservesShorthandTypes(t *testing.T) {
 	var gotBody []byte
 	mux := http.NewServeMux()
 	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
@@ -1257,7 +1263,7 @@ func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
 	err := c.Run([]string{
 		"restish", "tapi", "create-item",
 		"id:", "123,",
-		"amount:", "9223372036854775807,",
+		"amount:", "42,",
 		"count:", "7,",
 		"meta.code:", "456,",
 		"unknown:", "789",
@@ -1270,22 +1276,22 @@ func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
 		t.Fatalf("body not valid JSON: %v — body: %s", err, gotBody)
 	}
 	for _, key := range []string{"id", "amount"} {
-		if _, ok := body[key].(string); !ok {
-			t.Fatalf("%s = %#v (%T), want string", key, body[key], body[key])
+		if _, ok := body[key].(float64); !ok {
+			t.Fatalf("%s = %#v (%T), want JSON number from shorthand", key, body[key], body[key])
 		}
 	}
-	if body["id"] != "123" {
-		t.Fatalf("id = %#v, want string 123", body["id"])
+	if body["id"] != float64(123) {
+		t.Fatalf("id = %#v, want number 123", body["id"])
 	}
-	if body["amount"] != "9223372036854775807" {
-		t.Fatalf("amount = %#v, want string 9223372036854775807", body["amount"])
+	if body["amount"] != float64(42) {
+		t.Fatalf("amount = %#v, want number 42", body["amount"])
 	}
 	meta, ok := body["meta"].(map[string]any)
 	if !ok {
 		t.Fatalf("meta = %T, want object", body["meta"])
 	}
-	if meta["code"] != "456" {
-		t.Fatalf("meta.code = %#v, want string 456", meta["code"])
+	if meta["code"] != float64(456) {
+		t.Fatalf("meta.code = %#v, want number 456", meta["code"])
 	}
 	if _, ok := body["count"].(float64); !ok {
 		t.Fatalf("count = %#v (%T), want JSON number", body["count"], body["count"])
@@ -1295,7 +1301,7 @@ func TestGeneratedCommandBodySchemaPreservesStringFields(t *testing.T) {
 	}
 }
 
-func TestGeneratedCommandBodySchemaPreservesNullableStringNull(t *testing.T) {
+func TestGeneratedCommandBodyPreservesNull(t *testing.T) {
 	var gotBodies [][]byte
 	mux := http.NewServeMux()
 	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
@@ -1331,6 +1337,35 @@ func TestGeneratedCommandBodySchemaPreservesNullableStringNull(t *testing.T) {
 		if body["note"] != nil {
 			t.Fatalf("body %d note = %#v (%T), want JSON null; body: %s", i, body["note"], body["note"], gotBody)
 		}
+	}
+}
+
+func TestGeneratedCommandAnyOfBodyPreservesArrayValues(t *testing.T) {
+	var gotBody []byte
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			gotBody, _ = io.ReadAll(r.Body)
+		}
+		w.WriteHeader(http.StatusCreated)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	env := setupGeneratedEnv(t, mux)
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-item", "tags[]: alpha, tags[]: beta"}); err != nil {
+		t.Fatalf("create-item anyOf array: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(gotBody, &body); err != nil {
+		t.Fatalf("body not valid JSON: %v — body: %s", err, gotBody)
+	}
+	tags, ok := body["tags"].([]any)
+	if !ok {
+		t.Fatalf("tags = %#v (%T), want array", body["tags"], body["tags"])
+	}
+	if !reflect.DeepEqual(tags, []any{"alpha", "beta"}) {
+		t.Fatalf("tags = %#v, want [alpha beta]", tags)
 	}
 }
 
