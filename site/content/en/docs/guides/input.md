@@ -89,7 +89,7 @@ fields and reports file metadata when the request contains real file parts:
 restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
 ```
 
-The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size.
+The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size. A multipart `@path` value must point to a readable file; use `@@value` when a text field should start with a literal `@`.
 
 ## File Loading
 
@@ -99,7 +99,9 @@ restish post api.rest.sh/post 'note: @message.txt'
 ```
 
 Structured files are parsed when possible. Quote or force string behavior when a
-literal `@` should be sent as text.
+literal `@` should be sent as text. In multipart bodies, use `@@value` for a
+literal text value that starts with `@`, because `@path` is reserved for file
+parts.
 
 ## Related Pages
 

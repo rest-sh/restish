@@ -905,3 +905,27 @@ func TestMultipartBody(t *testing.T) {
 		t.Fatalf("expected upload.txt filename, got %q", filenames["file"])
 	}
 }
+
+func TestMultipartBodyRejectsMissingFileBeforeRequest(t *testing.T) {
+	requested := false
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	missing := filepath.Join(t.TempDir(), "missing.txt")
+	err := c.Run([]string{
+		"restish", "post", "-c", "multipart", "https://api.example.com/items",
+		"name:", "alice,", "file:", "@" + missing,
+	})
+	if err == nil {
+		t.Fatal("expected missing multipart file reference to fail")
+	}
+	if !strings.Contains(err.Error(), "unable to read multipart file") ||
+		!strings.Contains(err.Error(), missing) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if requested {
+		t.Fatal("request was sent despite missing multipart file reference")
+	}
+}

@@ -523,6 +523,65 @@ func TestMultipartEncodingIncludesFile(t *testing.T) {
 	}
 }
 
+func TestMultipartEncodingRejectsMissingFileReference(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.txt")
+	_, _, err := reg.EncodeWithType("multipart/form-data", map[string]any{
+		"file": "@" + missing,
+	})
+	if err == nil {
+		t.Fatal("expected missing multipart file reference to fail")
+	}
+	if !strings.Contains(err.Error(), "unable to read multipart file") ||
+		!strings.Contains(err.Error(), missing) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMultipartEncodingRejectsDirectoryFileReference(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := reg.EncodeWithType("multipart/form-data", map[string]any{
+		"file": "@" + dir,
+	})
+	if err == nil {
+		t.Fatal("expected directory multipart file reference to fail")
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMultipartEncodingEscapesAtLiteral(t *testing.T) {
+	data, contentType, err := reg.EncodeWithType("multipart/form-data", map[string]any{
+		"note": "@@handle",
+	})
+	if err != nil {
+		t.Fatalf("encode with type: %v", err)
+	}
+
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(data), params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("next part: %v", err)
+	}
+	content, err := io.ReadAll(part)
+	if err != nil {
+		t.Fatalf("read part: %v", err)
+	}
+	if part.FormName() != "note" {
+		t.Fatalf("form name: got %q", part.FormName())
+	}
+	if part.FileName() != "" {
+		t.Fatalf("filename: got %q", part.FileName())
+	}
+	if string(content) != "@handle" {
+		t.Fatalf("content: got %q", content)
+	}
+}
+
 // jsonRoundTrip is a test helper that serialises v to JSON and back, so
 // that test assertions can compare normalised representations instead of
 // direct struct equality (which fails across CBOR/msgpack integer widths).

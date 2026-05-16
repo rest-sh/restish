@@ -410,8 +410,13 @@ func addMultipartParts(writer *multipart.Writer, prefix string, v any, opts mult
 		if prefix == "" {
 			return fmt.Errorf("multipart bodies must be an object")
 		}
+		if literal, ok := multipartEscapedAtLiteral(v); ok {
+			return writeMultipartField(writer, prefix, literal, opts.contentTypes[prefix])
+		}
 		if filePath, ok := multipartFilePath(v); ok {
 			return addMultipartFile(writer, prefix, filePath, opts.contentTypes[prefix])
+		} else if err := multipartFileReferenceError(v); err != nil {
+			return err
 		}
 		return writeMultipartField(writer, prefix, v, opts.contentTypes[prefix])
 	}
@@ -452,6 +457,14 @@ func multipartFieldBytes(value any, contentType string) ([]byte, error) {
 	}
 }
 
+func multipartEscapedAtLiteral(v any) (string, bool) {
+	s, ok := v.(string)
+	if !ok || !strings.HasPrefix(s, "@@") {
+		return "", false
+	}
+	return s[1:], true
+}
+
 func multipartFilePath(v any) (string, bool) {
 	s, ok := v.(string)
 	if !ok || len(s) < 2 || !strings.HasPrefix(s, "@") {
@@ -463,6 +476,22 @@ func multipartFilePath(v any) (string, bool) {
 		return "", false
 	}
 	return path, true
+}
+
+func multipartFileReferenceError(v any) error {
+	s, ok := v.(string)
+	if !ok || len(s) < 2 || !strings.HasPrefix(s, "@") || strings.HasPrefix(s, "@@") {
+		return nil
+	}
+	path := s[1:]
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("unable to read multipart file %q: %w", path, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("unable to read multipart file %q: is a directory", path)
+	}
+	return nil
 }
 
 func addMultipartFile(writer *multipart.Writer, fieldName, path, contentType string) error {

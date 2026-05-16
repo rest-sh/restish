@@ -208,7 +208,11 @@ This is particularly important for:
 
 Generated OpenAPI commands use the same rule. Shorthand builds a logical value;
 the selected media encoder decides whether that value becomes JSON, URL-encoded
-fields, multipart fields and files, or raw bytes.
+fields, multipart fields and files, or raw bytes. For multipart bodies, a scalar
+string beginning with `@` is interpreted by the multipart encoder as a file part
+reference and fails locally if the path cannot be read. A scalar string
+beginning with `@@` escapes this multipart-only rule and sends a literal text
+value beginning with `@`.
 
 ## Reuse Outside Request Bodies
 

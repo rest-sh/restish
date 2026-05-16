@@ -51,13 +51,17 @@ JSON is the default request body encoding:
 restish post -c json api.rest.sh/post string: hello
 restish post -c yaml api.rest.sh/post string: hello
 restish post -c form api.rest.sh/login 'username: alice, password: secret'
-restish post -c multipart api.rest.sh/uploads description: docs, file: @README.md
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
 ```
 
 Shorthand builds a logical value. The selected encoder turns that value into
 JSON, YAML, CBOR, form data, multipart parts, text, or raw bytes.
 Use `-c text` for plain text request bodies; SSE responses still decode from
 `text/event-stream`.
+
+For multipart bodies, `@path` creates a file part and fails locally if the file
+cannot be read. Use `@@value` when a text field should start with a literal
+`@`.
 
 ## Response Decoding
 

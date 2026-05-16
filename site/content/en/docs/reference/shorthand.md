@@ -137,7 +137,9 @@ restish post api.rest.sh/post encoded: %photo.jpg
 ```
 
 For literal values that begin with `@` or `%`, quote or otherwise force string
-semantics in the shell command.
+semantics in the shell command. Multipart bodies treat `@path` as a file part
+reference at encoding time; use `@@value` in multipart input to send a literal
+text value that starts with `@`.
 
 ## Stdin
 

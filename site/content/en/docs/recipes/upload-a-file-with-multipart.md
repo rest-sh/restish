@@ -10,11 +10,13 @@ file parts. `-c multipart` chooses the request encoding, and `@README.md` tells
 Restish to send the file contents rather than the literal string.
 
 ```bash
-restish post -c multipart api.rest.sh/uploads description: docs, file: @README.md
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
 ```
 
 The response echoes multipart fields. If a client sends real file parts,
-`/uploads` also reports file metadata. For plain URL-encoded forms, use
-`-c form` instead; both encodings are explained in [Input and Shorthand](/docs/guides/input/).
+`/uploads` also reports file metadata. Missing file paths fail before the
+request is sent. Use `@@value` when a text field should start with a literal
+`@`. For plain URL-encoded forms, use `-c form` instead; both encodings are
+explained in [Input and Shorthand](/docs/guides/input/).
 
 Related: [Input and Shorthand](/docs/guides/input/), [Content Types](/docs/reference/content-types/).
