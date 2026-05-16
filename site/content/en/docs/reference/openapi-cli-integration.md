@@ -220,6 +220,12 @@ Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
 `https://api.vendor.test/root/v2`.
 
+If a configured server variable value is outside the OpenAPI `enum`, Restish
+warns and uses the configured value. Local config represents operator intent,
+and specs are sometimes stale. If a configured variable is not declared by any
+applicable OpenAPI server and the spec does declare server variables, Restish
+fails because the value cannot affect URL expansion.
+
 Absolute server URLs on another origin are blocked unless the API config lists
 the origin in `allowed_operation_origins`. `restish api connect --yes` can add
 detected safe entries, and interactive `api connect` asks before saving them.

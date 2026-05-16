@@ -288,11 +288,15 @@ back to the configured API base URL.
 OpenAPI server URL variables are resolved with one bounded value per variable.
 Restish first uses explicit local config values from API-level
 `server_variables`, then profile-level `server_variables` overrides, and finally
-the OpenAPI variable `default`. Server variable `enum` values may be used for
-validation or help, but they are never expanded into every possible URL. This is
-a security boundary: an untrusted spec must not be able to allocate a Cartesian
-product during command generation or silently redirect authenticated requests to
-another origin.
+the OpenAPI variable `default`. Server variable `enum` values are advisory for
+Restish: an out-of-enum local value warns because the spec and config disagree,
+but the configured value is still used. A locally configured variable that is
+not declared by any applicable OpenAPI server remains an error when the spec
+declares server variables, because it cannot change URL expansion. Server
+variables are never expanded into every possible URL. This is a security
+boundary: an untrusted spec must not be able to allocate a Cartesian product
+during command generation or silently redirect authenticated requests to another
+origin.
 
 Relative OpenAPI server URLs are resolved against the configured API
 `base_url`. Absolute server URLs are used only when they match the configured

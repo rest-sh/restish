@@ -74,8 +74,9 @@ type opsKey struct {
 	serverVariables        string
 }
 type opsEntry struct {
-	ops []Operation
-	err error
+	ops      []Operation
+	warnings []string
+	err      error
 }
 
 // OperationOptions controls config-sensitive OpenAPI operation extraction.
@@ -83,6 +84,7 @@ type OperationOptions struct {
 	BaseURL         string
 	OperationBase   string
 	ServerVariables map[string]string
+	Warnf           func(format string, args ...any)
 }
 
 func operationOptionsKey(opts OperationOptions) opsKey {

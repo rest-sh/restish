@@ -293,8 +293,12 @@ it is an absolute path prefix, not a full URL.
 
 Server variables are resolved before URL reference resolution. Values come from
 API-level `server_variables`, then profile-level overrides, then OpenAPI
-defaults. `enum` values constrain or document accepted values, but Restish does
-not expand variables into a Cartesian product of commands or URLs.
+defaults. `enum` values document accepted values and may produce warnings when
+local config chooses a different value, but they do not override explicit local
+operator intent. Variables configured locally that are not declared by any
+applicable OpenAPI server remain errors when the document declares server
+variables, because they cannot affect URL expansion and are usually typos.
+Restish does not expand variables into a Cartesian product of commands or URLs.
 
 Relative server URLs resolve against the configured API `base_url`. Absolute
 server URLs are used directly when they match the configured origin. A

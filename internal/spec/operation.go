@@ -155,13 +155,14 @@ type Operation struct {
 type OperationSet struct {
 	Info       APIInfo
 	Operations []Operation
+	Warnings   []string
 }
 
 // OperationSet returns all operations with top-level API metadata. The result
 // is keyed by base URL, operation base, and resolved OpenAPI server variable
 // values via opts.
 func (s *APISpec) OperationSet(opts OperationOptions) (OperationSet, error) {
-	ops, err := s.Operations(opts)
+	ops, warnings, err := s.operationResult(opts)
 	if err != nil {
 		return OperationSet{}, err
 	}
@@ -169,7 +170,7 @@ func (s *APISpec) OperationSet(opts OperationOptions) (OperationSet, error) {
 	if err != nil {
 		return OperationSet{}, err
 	}
-	return OperationSet{Info: info, Operations: ops}, nil
+	return OperationSet{Info: info, Operations: ops, Warnings: warnings}, nil
 }
 
 // Operations returns all HTTP operations extracted from the spec's V3 model,
@@ -181,42 +182,51 @@ func (s *APISpec) OperationSet(opts OperationOptions) (OperationSet, error) {
 //
 // Results are memoized per (baseURL, operationBase, server variables) tuple.
 func (s *APISpec) Operations(opts OperationOptions) ([]Operation, error) {
+	ops, _, err := s.operationResult(opts)
+	return ops, err
+}
+
+func (s *APISpec) operationResult(opts OperationOptions) ([]Operation, []string, error) {
 	key := operationOptionsKey(opts)
 
 	s.opsCacheMu.Lock()
 	if s.opsCache != nil {
 		if e, ok := s.opsCache[key]; ok {
 			s.opsCacheMu.Unlock()
-			return e.ops, e.err
+			emitOperationWarnings(opts.Warnf, e.warnings)
+			return e.ops, e.warnings, e.err
 		}
 	}
 	s.opsCacheMu.Unlock()
 
-	ops, err := s.buildOperations(opts)
+	ops, warnings, err := s.buildOperations(opts)
 
 	s.opsCacheMu.Lock()
 	if s.opsCache == nil {
 		s.opsCache = make(map[opsKey]opsEntry)
 	}
-	s.opsCache[key] = opsEntry{ops, err}
+	s.opsCache[key] = opsEntry{ops: ops, warnings: warnings, err: err}
 	s.opsCacheMu.Unlock()
 
-	return ops, err
+	emitOperationWarnings(opts.Warnf, warnings)
+	return ops, warnings, err
 }
 
 // buildOperations performs the actual extraction without caching.
-func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
+func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, []string, error) {
 	model, err := s.V3Model()
 	if err != nil || model == nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if model.Model.Paths == nil {
-		return []Operation{}, nil
+		return []Operation{}, nil, nil
 	}
 
 	// Use a non-nil empty slice so callers can distinguish "no paths in spec"
 	// (nil return) from "paths exist but all were filtered" (empty non-nil slice).
 	ops := make([]Operation, 0)
+	warnings := make([]string, 0)
+	warningsSeen := map[string]bool{}
 	for rawPath, pathItem := range model.Model.Paths.PathItems.FromOldest() {
 		if pathItem == nil {
 			continue
@@ -238,9 +248,15 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 			if len(mo.Op.Servers) > 0 {
 				servers = mo.Op.Servers
 			}
-			basePath, operationServer, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
+			basePath, operationServer, serverWarnings, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
 			if err != nil {
-				return nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
+				return nil, nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
+			}
+			for _, warning := range serverWarnings {
+				if !warningsSeen[warning] {
+					warningsSeen[warning] = true
+					warnings = append(warnings, warning)
+				}
 			}
 			fullPath := joinOperationPath(basePath, rawPath)
 			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components))
@@ -254,7 +270,16 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, error) {
 			ops = append(ops, op)
 		}
 	}
-	return ops, nil
+	return ops, warnings, nil
+}
+
+func emitOperationWarnings(warnf func(format string, args ...any), warnings []string) {
+	if warnf == nil {
+		return
+	}
+	for _, warning := range warnings {
+		warnf("%s", warning)
+	}
 }
 
 // extractOperation converts a single libopenapi operation to the neutral form.
@@ -497,17 +522,18 @@ func isIgnoredOpenAPIHeaderParameter(p *v3.Parameter) bool {
 // When operationBase is set, no prefix is needed (the URL prefix is resolved
 // from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
 // inspected for a URL that resolves to the same scheme+host as baseURL.
-func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, string, error) {
+func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, string, []string, error) {
 	if operationBase != "" || len(servers) == 0 {
-		return "", "", nil
+		return "", "", nil, nil
 	}
-	if err := validateConfiguredServerVariables(servers, serverVariables); err != nil {
-		return "", "", err
+	warnings, err := validateConfiguredServerVariables(servers, serverVariables)
+	if err != nil {
+		return "", "", nil, err
 	}
 
 	location, err := url.Parse(baseURL)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	resolutionBase := serverResolutionBase(location)
 	var firstCrossOrigin string
@@ -532,15 +558,15 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 			}
 			continue
 		}
-		return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), "", nil
+		return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/"), "", warnings, nil
 	}
 
 	if firstCrossOrigin != "" {
-		return "", firstCrossOrigin, nil
+		return "", firstCrossOrigin, warnings, nil
 	}
 
 	// No matching server found — fall back to the configured API base URL.
-	return "", "", nil
+	return "", "", warnings, nil
 }
 
 func serverResolutionBase(location *url.URL) *url.URL {
@@ -621,7 +647,8 @@ func resolveServerURLVariables(server *v3.Server, values map[string]string) stri
 	return endpoint
 }
 
-func validateConfiguredServerVariables(servers []*v3.Server, values map[string]string) error {
+func validateConfiguredServerVariables(servers []*v3.Server, values map[string]string) ([]string, error) {
+	var warnings []string
 	for configuredName, configuredValue := range values {
 		declared := false
 		allowedByAnyEnum := false
@@ -656,13 +683,13 @@ func validateConfiguredServerVariables(servers []*v3.Server, values map[string]s
 			if !hasDeclaredVariables {
 				continue
 			}
-			return fmt.Errorf("server variable %q is configured but not declared by the OpenAPI servers", configuredName)
+			return warnings, fmt.Errorf("server variable %q is configured but not declared by the OpenAPI servers", configuredName)
 		}
 		if hasEnum && !allowedByAnyEnum {
-			return fmt.Errorf("server variable %q value %q is not allowed by the OpenAPI enum", configuredName, configuredValue)
+			warnings = append(warnings, fmt.Sprintf("server variable %q value %q is outside the OpenAPI enum; using configured value anyway", configuredName, configuredValue))
 		}
 	}
-	return nil
+	return warnings, nil
 }
 
 // MergeParameters merges path-level and operation-level parameters.

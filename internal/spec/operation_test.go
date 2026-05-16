@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -734,12 +735,22 @@ paths:
 		t.Fatalf("load: %v", err)
 	}
 
-	_, err = loaded.Operations(OperationOptions{
+	var warnings []string
+	ops, err := loaded.Operations(OperationOptions{
 		BaseURL:         "https://api.example.com",
 		ServerVariables: map[string]string{"env": "prod"},
+		Warnf: func(format string, args ...any) {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "not allowed") {
-		t.Fatalf("expected enum mismatch error, got %v", err)
+	if err != nil {
+		t.Fatalf("operations should warn but not reject enum mismatch: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("operations = %d, want 1", len(ops))
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "outside the OpenAPI enum") {
+		t.Fatalf("expected enum mismatch warning, got %#v", warnings)
 	}
 }
 

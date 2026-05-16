@@ -717,6 +717,7 @@ func (c *CLI) cachedOperationSetStatusForAPI(apiName string, apiCfg *config.APIC
 		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
+		Warnf:           c.warnf,
 	}
 	if set, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
 		return set, status, true
@@ -734,9 +735,11 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
+		Warnf:           c.warnf,
 	}
 	if !forceRefresh {
 		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
+			c.warnOperationSetWarnings(set)
 			return set, true, nil
 		}
 	}
@@ -771,6 +774,12 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	}
 	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opts, set)
 	return set, true, nil
+}
+
+func (c *CLI) warnOperationSetWarnings(set spec.OperationSet) {
+	for _, warning := range set.Warnings {
+		c.warnf("%s", warning)
+	}
 }
 
 func (c *CLI) cachedOperationForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName, value string) (spec.Operation, bool, error) {

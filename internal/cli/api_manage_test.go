@@ -1578,6 +1578,72 @@ func TestAPISetServerVariables(t *testing.T) {
 	}
 }
 
+func TestAPISetServerVariableEnumMismatchWarnsAndSaves(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
+	specBody := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/{prefix}
+    variables:
+      prefix:
+        default: anything
+        enum: [anything]
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+`
+	if err := os.WriteFile(specPath, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com", SpecFiles: []string{specPath}},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `server_variables.prefix: other`}); err != nil {
+		t.Fatalf("api set server variable enum mismatch should warn and save: %v", err)
+	}
+	if !strings.Contains(errOut.String(), "outside the OpenAPI enum") {
+		t.Fatalf("expected enum warning, got:\n%s", errOut.String())
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].ServerVariables["prefix"]; got != "other" {
+		t.Fatalf("server_variables.prefix = %q, want other", got)
+	}
+
+	errOut.Reset()
+	err = c.Run([]string{"restish", "api", "set", "myapi", `server_variables.unknown: value`})
+	if err == nil {
+		t.Fatal("expected unknown server variable to be rejected")
+	}
+	if !strings.Contains(err.Error(), "not declared") {
+		t.Fatalf("expected undeclared server variable error, got %v", err)
+	}
+	written, err = config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload written config: %v", err)
+	}
+	if _, ok := written.APIs["myapi"].ServerVariables["unknown"]; ok {
+		t.Fatal("unknown server variable should not be saved")
+	}
+}
+
 func TestAPISetInvalidatesSpecCacheForBaseFields(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

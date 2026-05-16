@@ -59,6 +59,9 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	if ops == nil {
 		return nil
 	}
+	for _, warning := range set.Warnings {
+		c.generatedWarnf("API %q: %s", apiName, warning)
+	}
 
 	long := strings.TrimSpace(set.Info.Description)
 	if long == "" {

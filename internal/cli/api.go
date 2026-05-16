@@ -1039,6 +1039,15 @@ func (c *CLI) runAPISet(cmd *cobra.Command, args []string) error {
 	if err := validateConfigPatchArgs("api set", patchArgs); err != nil {
 		return err
 	}
+	if profiles := apiSetServerVariableValidationProfiles(patchArgs, c.cfg.APIs[apiName]); len(profiles) > 0 {
+		patchedAPI, err := c.applyAPIShorthandConfig(apiName, c.cfg.APIs[apiName], patchArgs)
+		if err != nil {
+			return err
+		}
+		if err := c.validateAPISetServerVariables(requestContext(cmd), apiName, patchedAPI, profiles); err != nil {
+			return err
+		}
+	}
 	if err := c.saveConfigShorthand("api set", []string{"apis", apiName}, patchArgs); err != nil {
 		return err
 	}
@@ -1050,6 +1059,71 @@ func validateConfigPatchArgs(label string, args []string) error {
 	for _, arg := range args {
 		if !strings.Contains(arg, ":") && !strings.Contains(arg, "^") {
 			return fmt.Errorf("%s: expected shorthand patch expression %q to contain ':' or '^'", label, arg)
+		}
+	}
+	return nil
+}
+
+func apiSetServerVariableValidationProfiles(exprs []string, apiCfg *config.APIConfig) []string {
+	if len(exprs) == 0 {
+		return nil
+	}
+	apiLevel := false
+	profiles := map[string]bool{}
+	for _, expr := range exprs {
+		path := configPatchExprPath(expr)
+		if path == "server_variables" || strings.HasPrefix(path, "server_variables.") {
+			apiLevel = true
+			continue
+		}
+		const prefix = "profiles."
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(path, prefix)
+		parts := strings.Split(rest, ".")
+		if len(parts) >= 2 && parts[1] == "server_variables" && parts[0] != "" {
+			profiles[parts[0]] = true
+		}
+	}
+	if apiLevel {
+		profiles["default"] = true
+		if apiCfg != nil {
+			for name := range apiCfg.Profiles {
+				profiles[name] = true
+			}
+		}
+	}
+	return sortedMapKeys(profiles)
+}
+
+func configPatchExprPath(expr string) string {
+	cut := len(expr)
+	if idx := strings.IndexAny(expr, ":^"); idx >= 0 {
+		cut = idx
+	}
+	return strings.TrimSpace(expr[:cut])
+}
+
+func sortedMapKeys(values map[string]bool) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func (c *CLI) validateAPISetServerVariables(ctx context.Context, apiName string, apiCfg *config.APIConfig, profiles []string) error {
+	for _, profileName := range profiles {
+		if _, _, err := c.operationSetForAPI(ctx, apiName, apiCfg, profileName, false); err != nil {
+			if profileName == "default" {
+				return fmt.Errorf("api set server_variables: %w", err)
+			}
+			return fmt.Errorf("api set profiles.%s.server_variables: %w", profileName, err)
 		}
 	}
 	return nil

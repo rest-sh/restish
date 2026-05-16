@@ -459,6 +459,7 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 		ForceRefresh:     forceRefresh,
 		Timeout:          timeout,
 		Trace:            c.contextDiscoveryTrace(ctx),
+		Warnf:            c.warnf,
 	}
 	return spec.Discover(ctx, cfg, c.loaders)
 }

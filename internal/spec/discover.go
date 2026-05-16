@@ -80,6 +80,8 @@ type DiscoverConfig struct {
 	Timeout time.Duration
 	// Trace receives verbose discovery progress messages.
 	Trace func(format string, args ...any)
+	// Warnf receives non-fatal operation extraction warnings.
+	Warnf func(format string, args ...any)
 }
 
 // Discover returns the APISpec for an API, using cache when available.
@@ -124,7 +126,7 @@ loadFresh:
 			return nil, err
 		}
 		if spec != nil && cfg.CacheDir != "" {
-			opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
+			opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables, Warnf: cfg.Warnf}
 			set, _ := spec.OperationSet(opts)
 			entry := &cacheEntry{
 				Version:   cfg.Version,
@@ -164,7 +166,7 @@ loadFresh:
 		} else {
 			expiresAt = time.Now().Add(24 * time.Hour)
 		}
-		opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables}
+		opts := OperationOptions{BaseURL: cfg.BaseURL, OperationBase: cfg.OperationBase, ServerVariables: cfg.ServerVariables, Warnf: cfg.Warnf}
 		set, _ := spec.OperationSet(opts)
 		entry := &cacheEntry{
 			Version:   cfg.Version,
