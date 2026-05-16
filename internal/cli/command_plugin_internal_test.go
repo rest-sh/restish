@@ -239,9 +239,9 @@ func TestStripHostPersistentFlagsPreservesPluginArgs(t *testing.T) {
 	cmd := &cobra.Command{Use: "plug"}
 	root.AddCommand(cmd)
 
-	args := []string{"--rsh-config", "cfg.json", "-p", "prod", "-vv", "--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
+	args := []string{"--rsh-config", "cfg.json", "-p", "prod", "-vv", "-f", "title", "--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
 	got := stripHostPersistentFlags(cmd, args)
-	want := []string{"--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
+	want := []string{"-p", "prod", "-vv", "-f", "title", "--plugin-flag", "value", "--", "--rsh-config", "plugin-owned"}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("stripHostPersistentFlags = %#v, want %#v", got, want)
 	}

@@ -215,6 +215,15 @@ func TestBulkPluginWorkflow(t *testing.T) {
 		t.Fatalf("unexpected list output:\n%s", got)
 	}
 
+	out.Reset()
+	if err := c.Run([]string{"restish", "bulk", "list", "-f", "id"}); err != nil {
+		t.Fatalf("list filter shorthand: %v", err)
+	}
+	got = out.String()
+	if !strings.Contains(got, "\"a1\"") || !strings.Contains(got, "\"b1\"") {
+		t.Fatalf("bulk list -f did not reach plugin filter:\n%s", got)
+	}
+
 	srv.items[itemPath("b", "b1")].Version = "b12"
 	srv.items[itemPath("b", "b1")].Body = map[string]any{"id": "b1", "foo": 1}
 	delete(srv.items, itemPath("c", "c1"))

@@ -44,6 +44,11 @@ Restish deliberately disables host-side flag parsing for those commands before
 launching the plugin. That lets the plugin receive raw arguments such as
 `bulk init --url-template=...` and implement its own subcommand tree, flags,
 and `--help` behavior without forcing the host to understand every plugin's UX.
+After the plugin command name, short flags such as `-f` or `-v` are
+plugin-owned even when they overlap Restish global shorthands. Explicit
+Restish-owned long flags such as `--rsh-config` may still be stripped before
+plugin launch if they were already consumed by the host, but shorthand aliases
+must not be silently removed from plugin argv.
 
 Command-name collisions must be handled explicitly. If a plugin tries to add a
 command that would shadow a built-in or another plugin command, Restish should

@@ -383,17 +383,6 @@ func stripHostPersistentFlags(cmd *cobra.Command, args []string) []string {
 				continue
 			}
 		}
-		if strings.HasPrefix(token, "-") && token != "-" && !strings.HasPrefix(token, "--") {
-			short := strings.TrimPrefix(token, "-")
-			if len(short) > 0 {
-				if flag := flags.ShorthandLookup(string(short[0])); flag != nil {
-					if flag.NoOptDefVal == "" && len(short) == 1 && i+1 < len(args) {
-						i++
-					}
-					continue
-				}
-			}
-		}
 		out = append(out, token)
 	}
 	return out
