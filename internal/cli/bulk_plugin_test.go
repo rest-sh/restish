@@ -175,6 +175,22 @@ func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 	if !strings.Contains(out.String(), "init") || !strings.Contains(out.String(), "push") {
 		t.Fatalf("expected plugin-managed subcommands in help, got:\n%s", out.String())
 	}
+
+	helpForms := [][]string{
+		{"restish", "bulk", "-h"},
+		{"restish", "bulk", "help"},
+		{"restish", "bulk", "status", "--help"},
+		{"restish", "bulk", "init", "--help"},
+	}
+	for _, args := range helpForms {
+		out.Reset()
+		if err := c.Run(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "Usage:") {
+			t.Fatalf("%v help missing usage:\n%s", args, out.String())
+		}
+	}
 }
 
 func TestBulkPluginWorkflow(t *testing.T) {
