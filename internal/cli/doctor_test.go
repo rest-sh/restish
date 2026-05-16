@@ -87,6 +87,37 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 	}
 }
 
+func TestDoctorRejectsUnsupportedOutputFormats(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "root", args: []string{"restish", "doctor", "-o", "yaml"}},
+		{name: "api", args: []string{"restish", "doctor", "api", "demo", "-o", "yaml"}},
+		{name: "plugin", args: []string{"restish", "doctor", "plugin", "demo", "-o", "yaml"}},
+		{name: "migrate", args: []string{"restish", "doctor", "migrate-v1", "-o", "yaml"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, errOut := newTestCLI(t)
+			if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v should reject unsupported output format", tt.args)
+			}
+			if !strings.Contains(err.Error(), "supports -o json for structured output, not -o yaml") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out.Len() != 0 || errOut.Len() != 0 {
+				t.Fatalf("unsupported output format should not print report, stdout=%q stderr=%q", out.String(), errOut.String())
+			}
+		})
+	}
+}
+
 func TestDoctorJSONReportsUnsupportedReferencedAuthProfile(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{

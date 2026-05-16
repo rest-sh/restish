@@ -169,7 +169,11 @@ type doctorMigrationReport struct {
 }
 
 func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
-	if doctorJSON(cmd) {
+	jsonOutput, err := doctorJSON(cmd)
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
 		return c.writeDoctorJSON(c.doctorRootReport())
 	}
 	out := c.doctorTextOutput()
@@ -213,7 +217,11 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
-	if doctorJSON(cmd) {
+	jsonOutput, err := doctorJSON(cmd)
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
 		return c.writeDoctorJSON(c.doctorAPIReport(cmd, args[0]))
 	}
 	out := c.doctorTextOutput()
@@ -286,7 +294,11 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
-	if doctorJSON(cmd) {
+	jsonOutput, err := doctorJSON(cmd)
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
 		return c.writeDoctorJSON(c.doctorPluginReport(args[0]))
 	}
 	out := c.doctorTextOutput()
@@ -322,7 +334,11 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) runDoctorMigrateV1(cmd *cobra.Command, args []string) error {
-	if doctorJSON(cmd) {
+	jsonOutput, err := doctorJSON(cmd)
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
 		return c.writeDoctorJSON(c.doctorMigrationReport())
 	}
 	out := c.doctorTextOutput()
@@ -363,8 +379,8 @@ func (c *CLI) doctorStdoutIsTerminal() bool {
 	return c.stdoutIsTerminal()
 }
 
-func doctorJSON(cmd *cobra.Command) bool {
-	return globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json"
+func doctorJSON(cmd *cobra.Command) (bool, error) {
+	return commandJSONOutputRequested(cmd)
 }
 
 func (c *CLI) writeDoctorJSON(report any) error {

@@ -63,12 +63,17 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 
 // runPluginList discovers and prints all available plugins with their hooks.
 func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
+	jsonOutput, err := commandJSONOutputRequested(cmd)
+	if err != nil {
+		return err
+	}
+
 	plugins := plugin.Discover(c.pluginDir(), func(path string, err error) {
 		c.warnf("plugin %s: %v", filepath.Base(path), err)
 	}, c.pluginManifestCachePath(), diagnosticPrefixWriter(c.Stderr))
 
 	if len(plugins) == 0 {
-		if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
+		if jsonOutput {
 			return c.writePrettyJSON([]any{})
 		}
 		fmt.Fprintln(c.Stdout, "No plugins found.")
@@ -110,7 +115,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 		}
 		entries = append(entries, entry)
 	}
-	if globalFlagsFromContext(requestContext(cmd)).OutputFormat == "json" {
+	if jsonOutput {
 		return c.writePrettyJSON(entries)
 	}
 

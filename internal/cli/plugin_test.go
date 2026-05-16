@@ -904,6 +904,20 @@ func TestPluginListShowsCommandNamesAndJSON(t *testing.T) {
 	}
 }
 
+func TestPluginListRejectsUnsupportedOutputFormat(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	err := c.Run([]string{"restish", "plugin", "list", "-o", "yaml"})
+	if err == nil {
+		t.Fatal("plugin list -o yaml should fail")
+	}
+	if !strings.Contains(err.Error(), "supports -o json for structured output, not -o yaml") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Fatalf("unsupported output format should not print listing, stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
 // TestPluginInvalidManifest verifies that a plugin that exits non-zero on
 // --rsh-plugin-manifest is reported as a warning but doesn't crash Restish.
 func TestPluginInvalidManifest(t *testing.T) {
