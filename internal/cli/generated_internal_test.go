@@ -557,6 +557,24 @@ func TestGeneratedPathHeaderCookieAndContentParamSerialization(t *testing.T) {
 		t.Fatalf("label path = %q, want .limit=10.q=cats", gotPath)
 	}
 
+	labelArray := &paramInfo{name: "id", in: "path", typ: "array", style: "label", explode: boolPtr(false)}
+	gotPath, err = serializeGeneratedPathParam(labelArray, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("label array serialize: %v", err)
+	}
+	if gotPath != ".a,b" {
+		t.Fatalf("label array path = %q, want .a,b", gotPath)
+	}
+
+	labelObject := &paramInfo{name: "filter", in: "path", typ: "object", style: "label", explode: boolPtr(false)}
+	gotPath, err = serializeGeneratedPathParam(labelObject, []string{"limit:", "10,", "q:", "cats"})
+	if err != nil {
+		t.Fatalf("label object serialize: %v", err)
+	}
+	if gotPath != ".limit,10,q,cats" {
+		t.Fatalf("label object path = %q, want .limit,10,q,cats", gotPath)
+	}
+
 	header := &paramInfo{name: "X-IDs", in: "header", typ: "array"}
 	gotHeaders, err := serializeGeneratedHeaderParam(header, []string{"a", "b"})
 	if err != nil {

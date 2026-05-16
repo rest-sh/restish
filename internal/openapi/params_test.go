@@ -58,6 +58,24 @@ func TestSerializePathHeaderCookieParamStyles(t *testing.T) {
 		t.Fatalf("label object = %q, want .q=cats", path)
 	}
 
+	explode = false
+	path, err = SerializePathParam(Param{Name: "id", In: "path", Type: "array", Style: "label", Explode: &explode}, ArrayValue([]string{"a", "b"}))
+	if err != nil {
+		t.Fatalf("label array: %v", err)
+	}
+	if path != ".a,b" {
+		t.Fatalf("label array = %q, want .a,b", path)
+	}
+
+	path, err = SerializePathParam(Param{Name: "filter", In: "path", Type: "object", Style: "label", Explode: &explode}, ObjectValue([]Field{{Key: "name", Value: "Ada"}, {Key: "role", Value: "admin"}}))
+	if err != nil {
+		t.Fatalf("label object not exploded: %v", err)
+	}
+	if path != ".name,Ada,role,admin" {
+		t.Fatalf("label object not exploded = %q, want .name,Ada,role,admin", path)
+	}
+
+	explode = true
 	headers, err := SerializeHeaderParam(Param{Name: "X-IDs", In: "header", Type: "array"}, ArrayValue([]string{"a", "b"}))
 	if err != nil {
 		t.Fatalf("header array: %v", err)

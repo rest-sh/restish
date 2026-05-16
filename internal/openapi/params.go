@@ -70,7 +70,11 @@ func SerializePathParam(p Param, value Value) (string, error) {
 	explode := ParamExplode(p)
 	switch style {
 	case "label":
-		return "." + pathDelimitedParamValue(p, value, ".", explode), nil
+		delimiter := ","
+		if explode {
+			delimiter = "."
+		}
+		return "." + pathDelimitedParamValue(p, value, delimiter, explode), nil
 	case "matrix":
 		switch {
 		case p.Type == "array" && explode:
