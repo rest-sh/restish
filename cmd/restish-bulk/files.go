@@ -117,7 +117,7 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 	}
 
 	if match != "" {
-		ast, err := mexpr.Parse(match, map[string]any{}, mexpr.UnquotedStrings)
+		ast, err := mexpr.Parse(match, nil, mexpr.UnquotedStrings)
 		if err != nil {
 			return nil, err
 		}
@@ -133,6 +133,9 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 			}
 			var content any
 			if err := json.Unmarshal(data, &content); err != nil {
+				continue
+			}
+			if err := mexpr.TypeCheck(ast, content, mexpr.UnquotedStrings); err != nil {
 				continue
 			}
 			result, err := interpreter.Run(content)

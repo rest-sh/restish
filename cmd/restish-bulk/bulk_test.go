@@ -225,6 +225,37 @@ func TestCollectFilesIncludesDotPrefixedResources(t *testing.T) {
 	}
 }
 
+func TestCollectFilesMatchUsesFileContentTypes(t *testing.T) {
+	t.Chdir(t.TempDir())
+	files := map[string]string{
+		"high.json":    `{"title":"Restish","rating_average":4.9}`,
+		"low.json":     `{"title":"Other","rating_average":4.1}`,
+		"missing.json": `{"title":"Missing"}`,
+	}
+	for name, data := range files {
+		if err := os.WriteFile(name, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	meta := &Meta{Files: map[string]*File{}}
+
+	got, err := collectFiles(meta, nil, "rating_average >= 4.8", false)
+	if err != nil {
+		t.Fatalf("collectFiles numeric match: %v", err)
+	}
+	if len(got) != 1 || got[0] != "high.json" {
+		t.Fatalf("numeric match = %#v, want [high.json]", got)
+	}
+
+	got, err = collectFiles(meta, nil, "title == Restish", false)
+	if err != nil {
+		t.Fatalf("collectFiles unquoted string match: %v", err)
+	}
+	if len(got) != 1 || got[0] != "high.json" {
+		t.Fatalf("unquoted string match = %#v, want [high.json]", got)
+	}
+}
+
 func TestNormalizedBaseURLUsesLocalhostHTTP(t *testing.T) {
 	if got, want := normalizedBaseURL("localhost:8080/items"), "http://localhost:8080/items"; got != want {
 		t.Fatalf("normalizedBaseURL = %q, want %q", got, want)
