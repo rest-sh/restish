@@ -237,6 +237,116 @@ func TestToolsFromSpecPrefersHostResolvedOperations(t *testing.T) {
 	}
 }
 
+func TestToolsFromHostOperationsPreserveContentQueryParameters(t *testing.T) {
+	s := &APISpec{
+		Name: "demo",
+		Operations: []plugin.APIOperation{
+			{
+				ID:     "listItems",
+				Method: "GET",
+				Path:   "/items",
+				Parameters: []plugin.APIParam{{
+					Name:             "filter",
+					In:               "query",
+					Required:         true,
+					Type:             "object",
+					ContentMediaType: "application/json",
+					Schema: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"name":   map[string]any{"type": "string"},
+							"active": map[string]any{"type": "boolean"},
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	tools, err := toolsFromSpec("demo", false, s, Options{})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one tool", tools)
+	}
+	props := tools[0].InputSchema["properties"].(map[string]any)
+	filter := props["filter"].(map[string]any)
+	if got := filter["type"]; got != "object" {
+		t.Fatalf("filter type = %#v, want object", got)
+	}
+	filterProps, ok := filter["properties"].(map[string]any)
+	if !ok || filterProps["active"] == nil {
+		t.Fatalf("filter properties = %#v, want active property", filter["properties"])
+	}
+
+	req, err := tools[0].Request(map[string]any{
+		"filter": map[string]any{"name": "Ada", "active": true},
+	})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	want := `demo/items?filter=%7B%22active%22%3Atrue%2C%22name%22%3A%22Ada%22%7D`
+	if req.URI != want {
+		t.Fatalf("URI = %q, want %q", req.URI, want)
+	}
+}
+
+func TestToolsFromRawSpecPreserveContentQueryParameters(t *testing.T) {
+	s := loadTestSpec(t, "demo", `{
+	  "openapi": "3.1.0",
+	  "info": {"title": "Demo", "version": "1.0.0"},
+	  "paths": {
+	    "/items": {
+	      "get": {
+	        "operationId": "listItems",
+	        "parameters": [
+	          {
+	            "name": "filter",
+	            "in": "query",
+	            "required": true,
+	            "content": {
+	              "application/json": {
+	                "schema": {
+	                  "type": "object",
+	                  "properties": {
+	                    "name": {"type": "string"},
+	                    "active": {"type": "boolean"}
+	                  }
+	                }
+	              }
+	            }
+	          }
+	        ]
+	      }
+	    }
+	  }
+	}`)
+
+	tools, err := toolsFromSpec("demo", false, s, Options{})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one tool", tools)
+	}
+	props := tools[0].InputSchema["properties"].(map[string]any)
+	filter := props["filter"].(map[string]any)
+	if got := filter["type"]; got != "object" {
+		t.Fatalf("filter type = %#v, want object", got)
+	}
+	req, err := tools[0].Request(map[string]any{
+		"filter": map[string]any{"name": "Ada", "active": true},
+	})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	want := `demo/items?filter=%7B%22active%22%3Atrue%2C%22name%22%3A%22Ada%22%7D`
+	if req.URI != want {
+		t.Fatalf("URI = %q, want %q", req.URI, want)
+	}
+}
+
 func TestToolRequestSerializesArrayParameters(t *testing.T) {
 	explode := true
 	tool := &Tool{

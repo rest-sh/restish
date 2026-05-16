@@ -113,6 +113,13 @@ func mcpParamDescriptor(p Param) openapiparam.Param {
 }
 
 func serializeMCPPathParam(p Param, value any) (string, error) {
+	if p.ContentMediaType != "" {
+		text, err := serializeMCPContentParam(p, value)
+		if err != nil {
+			return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+		}
+		return url.PathEscape(text), nil
+	}
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
@@ -127,6 +134,13 @@ func serializeMCPPathParam(p Param, value any) (string, error) {
 }
 
 func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
+	if p.ContentMediaType != "" {
+		text, err := serializeMCPContentParam(p, value)
+		if err != nil {
+			return nil, fmt.Errorf("parameter %q: %w", p.Name, err)
+		}
+		return []mcpQueryParam{{name: p.Name, value: text, allowReserved: p.AllowReserved}}, nil
+	}
 	paramValue, err := mcpParamValue(p, value)
 	if err != nil {
 		return nil, fmt.Errorf("parameter %q: %w", p.Name, err)
@@ -150,6 +164,13 @@ func serializeMCPQueryParam(p Param, value any) ([]mcpQueryParam, error) {
 }
 
 func serializeMCPHeaderParam(p Param, value any) (string, error) {
+	if p.ContentMediaType != "" {
+		text, err := serializeMCPContentParam(p, value)
+		if err != nil {
+			return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+		}
+		return text, nil
+	}
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
@@ -168,6 +189,13 @@ func serializeMCPHeaderParam(p Param, value any) (string, error) {
 }
 
 func serializeMCPCookieParam(p Param, value any) (string, error) {
+	if p.ContentMediaType != "" {
+		text, err := serializeMCPContentParam(p, value)
+		if err != nil {
+			return "", fmt.Errorf("parameter %q: %w", p.Name, err)
+		}
+		return p.Name + "=" + url.QueryEscape(text), nil
+	}
 	if isObjectValue(value) {
 		return "", fmt.Errorf("parameter %q: object values are not supported", p.Name)
 	}
@@ -183,6 +211,26 @@ func serializeMCPCookieParam(p Param, value any) (string, error) {
 		return "", err
 	}
 	return strings.Join(values, "; "), nil
+}
+
+func serializeMCPContentParam(p Param, value any) (string, error) {
+	if isMCPJSONMediaType(p.ContentMediaType) {
+		data, err := json.Marshal(value)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	text, ok := scalarValueString(value)
+	if !ok {
+		return "", fmt.Errorf("non-JSON content parameter %s requires a scalar value", p.ContentMediaType)
+	}
+	return text, nil
+}
+
+func isMCPJSONMediaType(mediaType string) bool {
+	mt := strings.ToLower(strings.TrimSpace(strings.Split(mediaType, ";")[0]))
+	return mt == "application/json" || strings.HasSuffix(mt, "+json")
 }
 
 func mcpParamValue(p Param, value any) (openapiparam.Value, error) {

@@ -357,16 +357,18 @@ func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
 				continue
 			}
 			params = append(params, pluginwire.APIParam{
-				Name:          p.Name,
-				In:            p.In,
-				Required:      p.Required,
-				Description:   p.Desc,
-				Type:          p.Type,
-				ItemType:      p.ItemType,
-				Style:         p.Style,
-				Explode:       p.Explode,
-				AllowReserved: p.AllowReserved,
-				Enum:          append([]string(nil), p.Enum...),
+				Name:             p.Name,
+				In:               p.In,
+				Required:         p.Required,
+				Description:      p.Desc,
+				Type:             p.Type,
+				ItemType:         p.ItemType,
+				Style:            p.Style,
+				Explode:          p.Explode,
+				AllowReserved:    p.AllowReserved,
+				ContentMediaType: p.ContentMediaType,
+				Schema:           cloneCommandPluginSchema(p.JSONSchema),
+				Enum:             append([]string(nil), p.Enum...),
 			})
 		}
 		out = append(out, pluginwire.APIOperation{
@@ -382,6 +384,21 @@ func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
 			RequestMediaType: op.RequestMediaType,
 			MCPIgnore:        op.MCPIgnore,
 		})
+	}
+	return out
+}
+
+func cloneCommandPluginSchema(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(in)
+	if err != nil {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil
 	}
 	return out
 }

@@ -109,8 +109,25 @@ paths:
 	if err != nil {
 		t.Fatalf("operations: %v", err)
 	}
-	if got := ops[0].Parameters[0].Schema; !strings.Contains(got, "owner") {
+	param := ops[0].Parameters[0]
+	if got := param.Schema; !strings.Contains(got, "owner") {
 		t.Fatalf("parameter schema help = %q, want owner property", got)
+	}
+	if got, want := param.ContentMediaType, "application/json"; got != want {
+		t.Fatalf("ContentMediaType = %q, want %q", got, want)
+	}
+	if got, want := param.Type, "object"; got != want {
+		t.Fatalf("Type = %q, want %q", got, want)
+	}
+	if got := param.JSONSchema["type"]; got != "object" {
+		t.Fatalf("JSONSchema type = %#v, want object", got)
+	}
+	props, ok := param.JSONSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("JSONSchema properties = %#v, want map", param.JSONSchema["properties"])
+	}
+	if _, ok := props["owner"]; !ok {
+		t.Fatalf("JSONSchema properties = %#v, want owner", props)
 	}
 }
 

@@ -63,6 +63,10 @@ MCP works well for APIs with clear operation IDs, descriptions, schemas, and
 safe auth profiles. It is a poor fit for APIs where operations are destructive
 without confirmation or where the spec hides important side effects.
 
+OpenAPI parameters that use `content` keep their declared schema in MCP tools.
+For JSON parameter content, pass the native object, array, or scalar value and
+Restish serializes it into the outgoing HTTP parameter.
+
 ## Troubleshooting
 
 - Run `restish api sync <name>` after spec changes.

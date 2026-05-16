@@ -37,15 +37,17 @@ type Tool struct {
 }
 
 type Param struct {
-	Name          string
-	In            string
-	Required      bool
-	Description   string
-	Type          string
-	ItemType      string
-	Style         string
-	Explode       *bool
-	AllowReserved bool
+	Name             string
+	In               string
+	Required         bool
+	Description      string
+	Type             string
+	ItemType         string
+	Style            string
+	Explode          *bool
+	AllowReserved    bool
+	ContentMediaType string
+	Schema           map[string]any
 }
 
 type Options struct {
@@ -190,16 +192,22 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 	var required []string
 	params := make([]Param, 0, len(op.Parameters))
 	for _, p := range op.Parameters {
+		var paramSchema map[string]any
+		if len(p.Schema) > 0 {
+			paramSchema = schemaMap(p.Schema)
+		}
 		params = append(params, Param{
-			Name:          p.Name,
-			In:            p.In,
-			Required:      p.Required,
-			Description:   p.Description,
-			Type:          p.Type,
-			ItemType:      p.ItemType,
-			Style:         p.Style,
-			Explode:       p.Explode,
-			AllowReserved: p.AllowReserved,
+			Name:             p.Name,
+			In:               p.In,
+			Required:         p.Required,
+			Description:      p.Description,
+			Type:             p.Type,
+			ItemType:         p.ItemType,
+			Style:            p.Style,
+			Explode:          p.Explode,
+			AllowReserved:    p.AllowReserved,
+			ContentMediaType: p.ContentMediaType,
+			Schema:           paramSchema,
 		})
 		prop := schemaFromOperationParam(p)
 		properties[p.Name] = prop
@@ -236,6 +244,20 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 }
 
 func schemaFromOperationParam(p plugin.APIParam) map[string]any {
+	if len(p.Schema) > 0 {
+		prop := schemaMap(p.Schema)
+		if p.Description != "" {
+			prop["description"] = p.Description
+		}
+		if len(p.Enum) > 0 {
+			enum := make([]any, len(p.Enum))
+			for i, value := range p.Enum {
+				enum[i] = value
+			}
+			prop["enum"] = enum
+		}
+		return prop
+	}
 	typ := p.Type
 	if typ == "" {
 		typ = "string"
@@ -275,20 +297,25 @@ func buildTool(apiName string, multiAPI bool, path, method string, pathParams []
 	var params []Param
 	for _, p := range spec.MergeParameters(pathParams, op.Parameters) {
 		prop := schemaMap(nil)
-		if p.Schema != nil && p.Schema.Schema() != nil {
+		contentMediaType := parameterContentMediaType(p)
+		if contentMediaType != "" {
+			prop = parameterContentSchemaMap(p, contentMediaType)
+		} else if p.Schema != nil && p.Schema.Schema() != nil {
 			prop = schemaMap(p.Schema.Schema())
 		}
 		typ, itemType := schemaTypeInfo(prop)
 		params = append(params, Param{
-			Name:          p.Name,
-			In:            p.In,
-			Required:      p.Required != nil && *p.Required,
-			Description:   p.Description,
-			Type:          typ,
-			ItemType:      itemType,
-			Style:         p.Style,
-			Explode:       p.Explode,
-			AllowReserved: p.AllowReserved,
+			Name:             p.Name,
+			In:               p.In,
+			Required:         p.Required != nil && *p.Required,
+			Description:      p.Description,
+			Type:             typ,
+			ItemType:         itemType,
+			Style:            p.Style,
+			Explode:          p.Explode,
+			AllowReserved:    p.AllowReserved,
+			ContentMediaType: contentMediaType,
+			Schema:           schemaMap(prop),
 		})
 		if p.Description != "" {
 			prop["description"] = p.Description
@@ -358,6 +385,38 @@ func bodySchema(media *v3high.MediaType, description string) map[string]any {
 		prop["description"] = description
 	}
 	return prop
+}
+
+func parameterContentMediaType(p *v3high.Parameter) string {
+	if p == nil || p.Content == nil {
+		return ""
+	}
+	var names []string
+	for name := range p.Content.FromOldest() {
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	for _, name := range names {
+		mt := strings.ToLower(strings.TrimSpace(strings.Split(name, ";")[0]))
+		if mt == "application/json" || strings.HasSuffix(mt, "+json") {
+			return name
+		}
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
+func parameterContentSchemaMap(p *v3high.Parameter, contentType string) map[string]any {
+	if p == nil || p.Content == nil || contentType == "" {
+		return schemaMap(nil)
+	}
+	media := p.Content.GetOrZero(contentType)
+	if media == nil || media.Schema == nil || media.Schema.Schema() == nil {
+		return schemaMap(nil)
+	}
+	return schemaMap(media.Schema.Schema())
 }
 
 func schemaMap(v any) map[string]any {

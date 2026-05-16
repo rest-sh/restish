@@ -331,6 +331,42 @@ func TestPluginOperationsFromSpecUsesFallbackOperationName(t *testing.T) {
 	}
 }
 
+func TestPluginOperationsFromSpecPreservesParameterContentSchema(t *testing.T) {
+	ops := pluginOperationsFromSpec([]spec.Operation{{
+		Method: "GET",
+		Path:   "/items",
+		Parameters: []spec.Param{{
+			Name:             "filter",
+			In:               "query",
+			Type:             "object",
+			ContentMediaType: "application/json",
+			JSONSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"active": map[string]any{"type": "boolean"},
+				},
+			},
+		}},
+	}})
+	if len(ops) != 1 || len(ops[0].Parameters) != 1 {
+		t.Fatalf("operations = %#v, want one operation with one parameter", ops)
+	}
+	param := ops[0].Parameters[0]
+	if got, want := param.ContentMediaType, "application/json"; got != want {
+		t.Fatalf("ContentMediaType = %q, want %q", got, want)
+	}
+	if got, want := param.Type, "object"; got != want {
+		t.Fatalf("Type = %q, want %q", got, want)
+	}
+	props, ok := param.Schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("Schema properties = %#v, want map", param.Schema["properties"])
+	}
+	if _, ok := props["active"]; !ok {
+		t.Fatalf("Schema properties = %#v, want active", props)
+	}
+}
+
 func TestHandlePluginAPISpecUsesCommandContextForDiscovery(t *testing.T) {
 	c := New()
 	c.Hooks().SpecCachePath = t.TempDir()

@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -36,6 +37,7 @@ type Param struct {
 	In               string // "path", "query", "header", "cookie"
 	Desc             string
 	Schema           string
+	JSONSchema       map[string]any
 	Required         bool
 	Type             string
 	ItemType         string
@@ -325,49 +327,22 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		}
 		var enum, defaultValues []string
 		var objectProperties []ParamObjectProperty
+		var jsonSchema map[string]any
 		var paramType, itemType, defaultValue, schemaHelp string
 		var hasDefault bool
 		if p.Schema != nil {
 			if schema := p.Schema.Schema(); schema != nil {
-				schemaHelp = buildParameterSchemaHelp(schema)
-				paramType = schemaType(schema.Type)
-				objectProperties = scalarObjectProperties(schema)
-				if len(objectProperties) > 0 && len(schema.Type) == 0 {
-					if scalarType := composedScalarType(schema); scalarType != "" {
-						paramType = scalarType
-					} else {
-						paramType = "object"
-					}
-				}
-				if paramType == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
-					if itemSchema := schema.Items.A.Schema(); itemSchema != nil {
-						itemType = schemaType(itemSchema.Type)
-					}
-				}
-				if schema.Default != nil {
-					var decoded any
-					if err := schema.Default.Decode(&decoded); err == nil {
-						if paramType == "array" {
-							defaultValues = scalarStrings(decoded)
-						}
-						defaultValue = scalarString(decoded)
-						hasDefault = true
-					}
-				}
-				for _, node := range schema.Enum {
-					if node != nil {
-						enum = append(enum, node.Value)
-					}
-				}
+				schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema = parameterSchemaDetails(schema)
 			}
 		} else if schema := preferredParameterContentSchema(p); schema != nil {
-			schemaHelp = buildParameterSchemaHelp(schema)
+			schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema = parameterSchemaDetails(schema)
 		}
 		o.Parameters = append(o.Parameters, Param{
 			Name:             p.Name,
 			In:               p.In,
 			Desc:             p.Description,
 			Schema:           schemaHelp,
+			JSONSchema:       jsonSchema,
 			Required:         p.Required != nil && *p.Required,
 			Type:             paramType,
 			ItemType:         itemType,
@@ -734,6 +709,55 @@ func schemaType(types []string) string {
 		return types[0]
 	}
 	return "string"
+}
+
+func parameterSchemaDetails(schema *base.Schema) (schemaHelp, paramType, itemType, defaultValue string, defaultValues []string, hasDefault bool, enum []string, objectProperties []ParamObjectProperty, jsonSchema map[string]any) {
+	if schema == nil {
+		return "", "", "", "", nil, false, nil, nil, nil
+	}
+	schemaHelp = buildParameterSchemaHelp(schema)
+	paramType = schemaType(schema.Type)
+	objectProperties = scalarObjectProperties(schema)
+	if len(objectProperties) > 0 && len(schema.Type) == 0 {
+		if scalarType := composedScalarType(schema); scalarType != "" {
+			paramType = scalarType
+		} else {
+			paramType = "object"
+		}
+	}
+	if paramType == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
+		if itemSchema := schema.Items.A.Schema(); itemSchema != nil {
+			itemType = schemaType(itemSchema.Type)
+		}
+	}
+	if schema.Default != nil {
+		var decoded any
+		if err := schema.Default.Decode(&decoded); err == nil {
+			if paramType == "array" {
+				defaultValues = scalarStrings(decoded)
+			}
+			defaultValue = scalarString(decoded)
+			hasDefault = true
+		}
+	}
+	enum = schemaEnumStrings(schema)
+	jsonSchema = schemaJSONMap(schema)
+	return schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema
+}
+
+func schemaJSONMap(schema *base.Schema) map[string]any {
+	if schema == nil {
+		return nil
+	}
+	data, err := json.Marshal(schema)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func scalarObjectProperties(schema *base.Schema) []ParamObjectProperty {

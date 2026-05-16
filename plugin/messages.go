@@ -122,16 +122,18 @@ type APIOperation struct {
 
 // APIParam is a resolved operation parameter for APIOperation.
 type APIParam struct {
-	Name          string   `cbor:"name"`
-	In            string   `cbor:"in"`
-	Required      bool     `cbor:"required,omitempty"`
-	Description   string   `cbor:"description,omitempty"`
-	Type          string   `cbor:"type,omitempty"`
-	ItemType      string   `cbor:"item_type,omitempty"`
-	Style         string   `cbor:"style,omitempty"`
-	Explode       *bool    `cbor:"explode,omitempty"`
-	AllowReserved bool     `cbor:"allow_reserved,omitempty"`
-	Enum          []string `cbor:"enum,omitempty"`
+	Name             string         `cbor:"name"`
+	In               string         `cbor:"in"`
+	Required         bool           `cbor:"required,omitempty"`
+	Description      string         `cbor:"description,omitempty"`
+	Type             string         `cbor:"type,omitempty"`
+	ItemType         string         `cbor:"item_type,omitempty"`
+	Style            string         `cbor:"style,omitempty"`
+	Explode          *bool          `cbor:"explode,omitempty"`
+	AllowReserved    bool           `cbor:"allow_reserved,omitempty"`
+	ContentMediaType string         `cbor:"content_media_type,omitempty"`
+	Schema           map[string]any `cbor:"schema,omitempty"`
+	Enum             []string       `cbor:"enum,omitempty"`
 }
 
 // ListAPIsMsg asks the host for the list of configured API names.

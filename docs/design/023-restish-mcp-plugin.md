@@ -159,6 +159,13 @@ abstraction.
 The plugin should prefer preserving the API author's intent over inventing a
 friendlier-but-less-faithful tool shape.
 
+Parameters that use OpenAPI `content` instead of `schema` keep their selected
+media type and JSON Schema in the host/plugin operation model. For JSON media
+types, the MCP input property remains the underlying object, array, or scalar
+schema instead of collapsing to a string. This lets MCP clients send native JSON
+values while Restish still serializes the outgoing HTTP parameter according to
+the OpenAPI parameter-content rules.
+
 ## Request Mapping
 
 When an MCP client calls a tool, the plugin:
@@ -173,6 +180,12 @@ When an MCP client calls a tool, the plugin:
 The URI uses the form `<apiName><path>?...`, which deliberately routes through
 Restish's normal API-resolution path instead of hard-coding base URLs inside
 the plugin.
+
+For OpenAPI parameter `content`, the request mapper serializes JSON media types
+as compact JSON before applying path/query/cookie encoding. Non-JSON content
+parameters accept scalar MCP values and send those values as raw text. This
+mirrors the generated CLI's intent while taking advantage of MCP's typed tool
+arguments.
 
 That means auth, profile resolution, request middleware, retries, TLS, and
 other Restish behavior still apply to MCP tool calls.
