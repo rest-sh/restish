@@ -1970,6 +1970,37 @@ func TestAPIConnectSpecLocalFile(t *testing.T) {
 	}
 }
 
+func TestAPIConnectExplicitSpecRejectsNonOpenAPIJSON(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specFile := filepath.Join(t.TempDir(), "not-openapi.json")
+	if err := os.WriteFile(specFile, []byte(`{"name":"not an API spec"}`), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request for local --spec: %s", r.URL)
+		return nil, nil
+	})
+
+	err := c.Run([]string{"restish", "api", "connect", "badapi", "https://api.example.com", "--spec", specFile})
+	if err == nil {
+		t.Fatal("expected api connect --spec to fail for non-OpenAPI JSON")
+	}
+	if !strings.Contains(err.Error(), "unsupported API spec") || !strings.Contains(err.Error(), specFile) {
+		t.Fatalf("expected unsupported explicit spec error with path, got: %v", err)
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if _, ok := written.APIs["badapi"]; ok {
+		t.Fatalf("api connect wrote badapi despite invalid explicit spec: %#v", written.APIs["badapi"])
+	}
+}
+
 func TestAPIConnectSetupExpressions(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{

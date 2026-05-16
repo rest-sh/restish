@@ -477,6 +477,21 @@ func TestLoadSpecFiles_MissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadSpecFilesRejectsNonOpenAPIJSON(t *testing.T) {
+	specPath := filepath.Join(t.TempDir(), "not-openapi.json")
+	if err := os.WriteFile(specPath, []byte(`{"name":"not an API spec"}`), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	_, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{specPath}}, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected non-OpenAPI spec file to fail")
+	}
+	if !strings.Contains(err.Error(), "unsupported API spec") || !strings.Contains(err.Error(), specPath) {
+		t.Fatalf("expected unsupported explicit spec error with path, got: %v", err)
+	}
+}
+
 func TestLoadSpecFiles_NetworkSource(t *testing.T) {
 	spec := `{"openapi":"3.1.0","info":{"title":"Network","version":"1.0.0"},"paths":{}}`
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -820,6 +835,29 @@ func TestDiscover_ExplicitSpecURL(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil spec")
+	}
+}
+
+func TestDiscoverExplicitSpecURLRejectsNonOpenAPIJSON(t *testing.T) {
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/spec.json" {
+			return httpResponse(200, "application/json", `{"name":"not an API spec"}`, nil), nil
+		}
+		return httpResponse(404, "text/plain", "not found", nil), nil
+	})
+
+	cfg := DiscoverConfig{
+		APIName:   "testapi",
+		BaseURL:   "https://api.example.com",
+		SpecURL:   "https://api.example.com/spec.json",
+		Transport: tr,
+	}
+	_, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected non-OpenAPI explicit spec URL to fail")
+	}
+	if !strings.Contains(err.Error(), "unsupported API spec") || !strings.Contains(err.Error(), "https://api.example.com/spec.json") {
+		t.Fatalf("expected unsupported explicit spec URL error, got: %v", err)
 	}
 }
 

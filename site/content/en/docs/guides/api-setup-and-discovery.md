@@ -28,9 +28,11 @@ restish api sync example
 ```
 
 Use this when discovery is unavailable or the API publishes its spec at a
-non-standard path. Once `spec_url` is configured, Restish treats it as the
-authoritative source for that API. `api sync` fetches that URL directly instead
-of falling back to well-known discovery probes.
+non-standard path. The explicit source must be a supported OpenAPI document;
+Restish fails instead of saving the API when the file or URL is readable but is
+not actually an API spec. Once `spec_url` is configured, Restish treats it as
+the authoritative source for that API. `api sync` fetches that URL directly
+instead of falling back to well-known discovery probes.
 
 ## Inspect And Edit Config
 

@@ -39,11 +39,13 @@ restish api connect example api.rest.sh --no-discover
 restish api connect example api.rest.sh --spec https://api.rest.sh/openapi.json
 ```
 
-Uses the provided OpenAPI file or URL instead of discovery. Rerun
-`api connect` to refresh generated/default material; pass `--replace` when you
-want the rerun to replace generated profile defaults instead of preserving local
-profile edits. After writing, `api connect` prints the absolute config file path
-it touched.
+Uses the provided OpenAPI file or URL instead of discovery. The explicit source
+must be a supported OpenAPI document; unlike best-effort discovery, `--spec`
+fails when the target is readable but is not an API spec. Rerun `api connect`
+to refresh generated/default material; pass `--replace` when you want the rerun
+to replace generated profile defaults instead of preserving local profile
+edits. After writing, `api connect` prints the absolute config file path it
+touched.
 
 ## Sync
 

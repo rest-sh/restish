@@ -271,6 +271,9 @@ Examples:
 - `api connect` should not blindly trust stale cached `x-cli-config`
 - `api connect <name> <url>` normalizes schemeless URLs the same way requests
   do: `https://` by default, but `http://` for localhost and loopback targets
+- explicit `--spec`, `spec_url`, and `spec_files` sources are authoritative
+  user input: if the source is readable but not a supported OpenAPI document,
+  commands should fail clearly instead of degrading to "no spec found"
 - `api connect <name> <url> [setup-expression ...]` may consume
   `prompt.*` expressions as prompt preanswers, then apply ordinary config
   shorthand expressions as final overrides before saving

@@ -357,6 +357,9 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 			if spec != nil && spec.SourceURL == "" {
 				spec.SourceURL = sourceURL
 			}
+			if priority == 0 && spec == nil && loadErr == nil {
+				loadErr = fmt.Errorf("GET %s: unsupported API spec: expected an OpenAPI 3.x document", sourceURL)
+			}
 			if loadErr != nil && ctx.Err() != nil {
 				select {
 				case ch <- discoveryResult{spec: spec, ttl: ttl, err: loadErr, priority: priority, sourceURL: sourceURL}:
@@ -682,7 +685,14 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 		opts.Context = ctx
 		opts.Transport = tr
 		opts.Trace = cfg.Trace
-		return loadWithOptions(ct, data, loaders, opts)
+		spec, err := loadWithOptions(ct, data, loaders, opts)
+		if err != nil {
+			return nil, err
+		}
+		if spec == nil {
+			return nil, fmt.Errorf("spec file %q: unsupported API spec: expected an OpenAPI 3.x document", src)
+		}
+		return spec, nil
 	}
 
 	var merged map[string]any
@@ -732,7 +742,14 @@ func loadSpecFiles(ctx context.Context, cfg DiscoverConfig, loaders []Loader) (*
 	if lastCT == "" {
 		lastCT = "application/yaml"
 	}
-	return load(lastCT, raw, loaders)
+	spec, err := load(lastCT, raw, loaders)
+	if err != nil {
+		return nil, err
+	}
+	if spec == nil {
+		return nil, fmt.Errorf("spec files: unsupported API spec: expected an OpenAPI 3.x document")
+	}
+	return spec, nil
 }
 
 // isLocalPath reports whether s is a local filesystem path rather than a URL.
