@@ -598,7 +598,7 @@ func disambiguateGeneratedFlagNames(optional []*paramInfo) []string {
 	var warnings []string
 	for _, originalFlag := range order {
 		group := groups[originalFlag]
-		if len(group) < 2 {
+		if len(group) < 2 && !isReservedGeneratedFlagName(originalFlag) {
 			continue
 		}
 		for _, p := range group {
@@ -608,15 +608,19 @@ func disambiguateGeneratedFlagNames(optional []*paramInfo) []string {
 		assigned := map[string]bool{}
 		for i, p := range group {
 			candidate := ""
-			if base, op, ok := comparisonOperatorSuffix(p.name); ok {
+			if isReservedGeneratedFlagName(originalFlag) {
+				candidate = locationPrefixedGeneratedFlagName(p)
+			} else if base, op, ok := comparisonOperatorSuffix(p.name); ok {
 				candidate = toKebabCase(base) + "-" + op
 			}
 			if candidate == "" && !assigned[originalFlag] && used[originalFlag] == 0 {
 				candidate = originalFlag
 			}
-			if candidate == "" || assigned[candidate] || used[candidate] > 0 {
+			if candidate == "" || assigned[candidate] || used[candidate] > 0 || isReservedGeneratedFlagName(candidate) {
 				candidate = fallbackDisambiguatedFlagName(originalFlag, p.name, i+1, assigned, used)
 				warnings = append(warnings, fmt.Sprintf("using --%s for parameter %q", candidate, p.name))
+			} else if isReservedGeneratedFlagName(originalFlag) {
+				warnings = append(warnings, fmt.Sprintf("using --%s for parameter %q because --%s is reserved", candidate, p.name, originalFlag))
 			}
 			p.flagName = candidate
 			assigned[candidate] = true
@@ -678,16 +682,36 @@ func comparisonOperatorSuffix(name string) (base, op string, ok bool) {
 	return "", "", false
 }
 
+func locationPrefixedGeneratedFlagName(p *paramInfo) string {
+	prefix := toKebabCase(p.in)
+	if prefix == "" {
+		prefix = "param"
+	}
+	return prefix + "-" + p.flagName
+}
+
 func fallbackDisambiguatedFlagName(originalFlag, wireName string, ordinal int, assigned map[string]bool, used map[string]int) string {
 	suffix := escapedFlagSuffix(wireName)
-	if suffix == "" || suffix == originalFlag {
+	candidates := make([]string, 0, 2)
+	if suffix != "" && suffix != originalFlag {
+		candidates = append(candidates, suffix)
+	}
+	if suffix == "" {
 		suffix = fmt.Sprintf("param-%d", ordinal)
 	}
-	candidate := originalFlag + "-" + suffix
-	for n := 2; assigned[candidate] || used[candidate] > 0; n++ {
-		candidate = fmt.Sprintf("%s-%s-%d", originalFlag, suffix, n)
+	candidates = append(candidates, originalFlag+"-"+suffix)
+	for _, candidate := range candidates {
+		if !assigned[candidate] && used[candidate] == 0 && !isReservedGeneratedFlagName(candidate) {
+			return candidate
+		}
 	}
-	return candidate
+	base := candidates[len(candidates)-1]
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s-%d", base, n)
+		if !assigned[candidate] && used[candidate] == 0 && !isReservedGeneratedFlagName(candidate) {
+			return candidate
+		}
+	}
 }
 
 func escapedFlagSuffix(name string) string {
@@ -725,6 +749,16 @@ func escapedFlagSuffix(name string) string {
 	}
 	flush()
 	return strings.Join(parts, "-")
+}
+
+var reservedGeneratedFlagNames = map[string]bool{
+	"help":              true,
+	"help-all":          true,
+	"rsh-generate-body": true,
+}
+
+func isReservedGeneratedFlagName(name string) bool {
+	return reservedGeneratedFlagNames[name] || strings.HasPrefix(name, "rsh-")
 }
 
 func operationDisplayID(op spec.Operation) string {

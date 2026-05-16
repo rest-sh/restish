@@ -2229,6 +2229,93 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandReservedFlagCollisionsAreRenamed(t *testing.T) {
+	var gotQuery string
+	var gotHeader string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/collide", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		gotHeader = r.Header.Get("X-Help")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/collide": {
+      "get": {
+        "operationId": "getCollision",
+        "parameters": [
+          {"name": "help", "in": "query", "schema": {"type": "string"}},
+          {"name": "rsh-output-format", "in": "query", "schema": {"type": "string"}},
+          {"name": "foo-bar", "in": "query", "schema": {"type": "string"}},
+          {"name": "foo_bar", "in": "query", "schema": {"type": "string"}},
+          {"name": "X-Help", "in": "header", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	var helpOut bytes.Buffer
+	c := env.newCLI()
+	c.Stdout = &helpOut
+	if err := c.Run([]string{"restish", "tapi", "get-collision", "--help"}); err != nil {
+		t.Fatalf("help failed: %v", err)
+	}
+	help := helpOut.String()
+	for _, want := range []string{"--query-help", "--query-rsh-output-format", "--foo-bar", "--foo-underscore-bar", "--x-help"} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("help missing %s:\n%s", want, help)
+		}
+	}
+	if strings.Contains(help, "--foo-bar-foo-underscore-bar") {
+		t.Fatalf("help included duplicated-base flag:\n%s", help)
+	}
+	if strings.Contains(help, "--help string") || strings.Contains(help, "--rsh-output-format string") {
+		t.Fatalf("help included shadowing generated flags:\n%s", help)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{
+		"restish", "tapi", "get-collision",
+		"--query-help", "from-query",
+		"--query-rsh-output-format", "from-query-format",
+		"--foo-bar", "from-dash",
+		"--foo-underscore-bar", "from-underscore",
+		"--x-help", "from-header",
+		"-o", "json",
+	}); err != nil {
+		t.Fatalf("get-collision failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("help"); got != "from-query" {
+		t.Fatalf("help query = %q, want from-query", got)
+	}
+	if got := values.Get("rsh-output-format"); got != "from-query-format" {
+		t.Fatalf("rsh-output-format query = %q, want from-query-format", got)
+	}
+	if got := values.Get("foo-bar"); got != "from-dash" {
+		t.Fatalf("foo-bar query = %q, want from-dash", got)
+	}
+	if got := values.Get("foo_bar"); got != "from-underscore" {
+		t.Fatalf("foo_bar query = %q, want from-underscore", got)
+	}
+	if gotHeader != "from-header" {
+		t.Fatalf("X-Help header = %q, want from-header", gotHeader)
+	}
+}
+
 func TestGeneratedCommandJSONContentQueryChildFlagsUseParentEncoding(t *testing.T) {
 	var gotQuery string
 	mux := http.NewServeMux()

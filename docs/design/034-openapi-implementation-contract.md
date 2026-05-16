@@ -172,6 +172,11 @@ they know the server supports a better representation than the spec declares.
 The original OpenAPI parameter name is preserved on the wire even when the CLI
 flag name is normalized, slugified, or overridden. This matters for names such
 as `$select`, `$filter`, `X-Stripe-Account`, and dotted vendor fields.
+Generated parameter flag names must not shadow Cobra help flags, Restish global
+flags, or generated-command local flags. Reserved-name collisions use a
+location prefix, such as query parameter `help` becoming `--query-help`, while
+duplicate normalized names prefer readable escaped wire-name hints such as
+`--foo-underscore-bar`.
 
 ## Parameter Serialization
 

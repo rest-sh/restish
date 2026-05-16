@@ -126,6 +126,8 @@ func TestBuildOperationCommandDisambiguatesNonOperatorFlagNames(t *testing.T) {
 		Parameters: []spec.Param{
 			{Name: "start_time", In: "query", Type: "string"},
 			{Name: "start-time", In: "query", Type: "string"},
+			{Name: "foo-bar", In: "query", Type: "string"},
+			{Name: "foo_bar", In: "query", Type: "string"},
 		},
 	})
 	if err != nil {
@@ -134,11 +136,61 @@ func TestBuildOperationCommandDisambiguatesNonOperatorFlagNames(t *testing.T) {
 	if cmd.Flags().Lookup("start-time") == nil {
 		t.Fatal("expected generated flag --start-time")
 	}
-	if cmd.Flags().Lookup("start-time-start-dash-time") == nil {
-		t.Fatal("expected disambiguated generated flag --start-time-start-dash-time")
+	if cmd.Flags().Lookup("start-dash-time") == nil {
+		t.Fatal("expected disambiguated generated flag --start-dash-time")
+	}
+	if cmd.Flags().Lookup("foo-bar") == nil {
+		t.Fatal("expected generated flag --foo-bar")
+	}
+	if cmd.Flags().Lookup("foo-underscore-bar") == nil {
+		t.Fatal("expected disambiguated generated flag --foo-underscore-bar")
+	}
+	if cmd.Flags().Lookup("foo-bar-foo-underscore-bar") != nil {
+		t.Fatal("did not expect duplicated-base generated flag --foo-bar-foo-underscore-bar")
 	}
 	if !strings.Contains(errOut.String(), "parameter flag collision") {
 		t.Fatalf("expected fallback warning, got: %q", errOut.String())
+	}
+}
+
+func TestBuildOperationCommandDisambiguatesReservedFlagNames(t *testing.T) {
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "search",
+		Method: "GET",
+		Path:   "/search",
+		Parameters: []spec.Param{
+			{Name: "help", In: "query", Type: "string"},
+			{Name: "rsh-output-format", In: "query", Type: "string"},
+			{Name: "help-all", In: "header", Type: "string"},
+			{Name: "rsh-generate-body", In: "cookie", Type: "string"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
+	}
+	for _, name := range []string{
+		"query-help",
+		"query-rsh-output-format",
+		"header-help-all",
+		"cookie-rsh-generate-body",
+	} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Fatalf("expected generated flag --%s", name)
+		}
+	}
+	if cmd.Flags().Lookup("help") != nil {
+		t.Fatal("did not expect generated --help flag to shadow Cobra help")
+	}
+	if cmd.Flags().Lookup("rsh-output-format") != nil {
+		t.Fatal("did not expect generated --rsh-output-format flag to shadow global output")
+	}
+	if !strings.Contains(errOut.String(), "--query-help") ||
+		!strings.Contains(errOut.String(), "--query-rsh-output-format") {
+		t.Fatalf("expected reserved-name warnings, got: %q", errOut.String())
 	}
 }
 

@@ -175,6 +175,14 @@ Parameters without a schema fall back to string handling. The original OpenAPI
 parameter name is preserved on the wire even when the CLI-facing argument or
 flag name is normalized or changed by `x-cli-name`.
 
+Generated parameter flags must not shadow Cobra help flags, Restish global
+flags, or generated-command local control flags such as `--help-all` and
+`--rsh-generate-body`. Reserved-name collisions are disambiguated with the
+parameter location, for example query parameter `help` becomes `--query-help`.
+Duplicate normalized parameter names should keep readable wire-name hints:
+`foo-bar` may remain `--foo-bar`, while `foo_bar` becomes
+`--foo-underscore-bar`.
+
 OpenAPI says header parameters named `Accept`, `Content-Type`, or
 `Authorization` are ignored. Generated commands follow that rule so content
 negotiation, request body encoding, and auth remain controlled by Restish
