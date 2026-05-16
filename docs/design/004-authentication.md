@@ -371,6 +371,19 @@ space-delimited scope string at request-build time. This keeps shared
 credential binding. If neither explicit `satisfies` nor derived scopes cover
 the operation's requirements, the strict pre-flight error remains.
 
+OAuth setup must not claim broader operation coverage than the configured
+credential can request. If the user provides an explicit OAuth `scopes` value
+during setup, generated credential bindings derive `satisfies` from that value
+rather than from every scope mentioned by the OpenAPI document.
+
+Authorization-code OAuth has two useful states: configured and usable for an
+immediate request. Client ID, endpoints, and scopes mean Restish can attempt the
+flow, but they are not a bearer token. Noninteractive execution must fail before
+sending a secured request unless the token cache already has a non-expired
+access token or a refresh-token-backed entry that can be refreshed;
+interactive execution may start the browser or manual-code flow and then attach
+the resulting token.
+
 ## Auth Inspection
 
 `restish api auth inspect <api>` reuses the same auth resolution path as real

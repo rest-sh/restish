@@ -369,6 +369,9 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 			return err
 		}
 	}
+	if err := c.ensureOAuthAuthorizationCodeReady(s.authType, s.cacheKey, s.apiName, s.profileName); err != nil {
+		return err
+	}
 	if err := s.handler.Authenticate(req.Context(), req, c.authContext(req.Context(), s.apiName, s.profileName, params, s.cacheKey, force)); err != nil {
 		return err
 	}

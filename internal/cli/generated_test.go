@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -922,6 +923,102 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 	}
 	if got["/public"].Get("X-Profile-Key") != "" || got["/public"].Get("X-User-Key") != "" || got["/public"].Get("X-Partner-Key") != "" {
 		t.Fatalf("/public headers = %#v", got["/public"])
+	}
+}
+
+func TestGeneratedCommandOAuthAuthorizationCodeRequiresCachedTokenBeforeSending(t *testing.T) {
+	var hits atomic.Int32
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/profile", func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "OAuth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "OAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {"read:profile": "Read profile"}
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/profile": {"get": {"operationId": "getProfile", "security": [{"OAuth": ["read:profile"]}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"OAuth": {
+								Auth: &config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
+									"client_id":     "client",
+									"authorize_url": "https://auth.example.com/authorize",
+									"token_url":     "https://auth.example.com/token",
+									"scopes":        "read:profile",
+								}},
+								Satisfies: []string{"read:profile"},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
+
+	c := env.newCLI()
+	c.Hooks().TokenCachePath = tokenPath
+	err := c.Run([]string{"restish", "tapi", "get-profile"})
+	if err == nil {
+		t.Fatal("expected missing cached OAuth token error")
+	}
+	if !strings.Contains(err.Error(), "no cached access token") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Fatalf("request hits = %d, want 0 before OAuth token is available", got)
+	}
+
+	if err := auth.NewTokenCache(tokenPath).Set("tapi:default:credential:OAuth", auth.CachedToken{
+		AccessToken: "cached-token",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("write token cache: %v", err)
+	}
+	c = env.newCLI()
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "tapi", "get-profile"}); err != nil {
+		t.Fatalf("generated command with cached token: %v", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("request hits = %d, want 1 with cached OAuth token", got)
+	}
+	if gotAuth != "Bearer cached-token" {
+		t.Fatalf("Authorization = %q, want Bearer cached-token", gotAuth)
 	}
 }
 

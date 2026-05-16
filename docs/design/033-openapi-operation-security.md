@@ -400,6 +400,13 @@ actionable diagnostic. This avoids treating an unknown token or key as
 authorized. Users can declare broad local coverage intentionally when they know
 their provider credential contains the needed scopes or roles.
 
+OpenAPI-derived setup should seed `satisfies` from the credential Restish is
+actually configured to request. If a user accepts default OAuth scopes, those
+defaults can become the binding's `satisfies` values. If the user supplies a
+narrower `params.scopes` value, `satisfies` must reflect that narrower value so
+coverage and generated-command preflight checks do not overstate what the
+credential can satisfy.
+
 Diagnostics must name the operation, selected profile, required alternatives,
 configured credential IDs, and missing credentials or requirement values. They
 must not print tokens, API keys, command output from secret sources, or raw

@@ -125,13 +125,13 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 			return err
 		}
 		if len(defaultNeeds) > 0 {
-			credential.Satisfies = defaultNeeds
 			if credential.Auth.Params == nil {
 				credential.Auth.Params = map[string]string{}
 			}
 			if credential.Auth.Params["scopes"] == "" {
 				credential.Auth.Params["scopes"] = strings.Join(defaultNeeds, " ")
 			}
+			credential.Satisfies = authSatisfiesValues(defaultNeeds, credential.Auth)
 		}
 		configured[scheme.ID] = true
 		if prof.Auth != nil && (scheme.GlobalDefault || len(supported) == 1) {
@@ -245,6 +245,15 @@ func defaultAuthParamValue(p auth.Param, defaultNeeds []string) string {
 		return strings.Join(defaultNeeds, " ")
 	}
 	return ""
+}
+
+func authSatisfiesValues(defaultNeeds []string, ac *config.AuthConfig) []string {
+	if ac != nil && ac.Params != nil {
+		if scopes := uniqueStrings(strings.Fields(ac.Params["scopes"])); len(scopes) > 0 {
+			return scopes
+		}
+	}
+	return append([]string(nil), defaultNeeds...)
 }
 
 func missingAuthSetupExpressionKeys(profileName, credentialID string, ac *config.AuthConfig, params []auth.Param, answers configurePromptAnswers) []string {

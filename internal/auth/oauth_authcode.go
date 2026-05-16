@@ -149,9 +149,8 @@ func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request,
 	if ac.Stderr != nil {
 		h2.Stderr = ac.Stderr
 	}
-	if ac.Prompter != nil {
+	if ac.Prompter != nil && h2.CanPrompt {
 		h2.Prompt = ac.Prompter.Prompt
-		h2.CanPrompt = true
 	}
 	req = requestWithContext(req, ctx)
 	return h2.authenticateRequest(req, authParams(ac), ac.Force)

@@ -48,8 +48,17 @@ func (c *CLI) authConfigReadiness(ac *config.AuthConfig) authReadiness {
 	return authReadiness{Configured: true, Usable: len(issues) == 0, Issues: issues}
 }
 
-func (c *CLI) resolvedAuthReadiness(resolved resolvedAuthConfig) authReadiness {
-	return c.authConfigReadiness(resolved.Config)
+func (c *CLI) resolvedAuthReadiness(apiName, profileName string, resolved resolvedAuthConfig) authReadiness {
+	readiness := c.authConfigReadiness(resolved.Config)
+	if !readiness.Configured || !readiness.Usable || resolved.Config == nil {
+		return readiness
+	}
+	if resolved.Config.Type == "oauth-authorization-code" &&
+		!c.cachedOAuthAuthCodeUsable(resolved.Config.Type, resolved.CacheKey, apiName, profileName) {
+		readiness.Usable = false
+		readiness.Issues = append(readiness.Issues, "OAuth access token not cached")
+	}
+	return readiness
 }
 
 func (c *CLI) credentialReadiness(apiName, profileName, credentialID string, credential *config.CredentialConfig) (resolvedAuthConfig, authReadiness, error) {
@@ -60,7 +69,7 @@ func (c *CLI) credentialReadiness(apiName, profileName, credentialID string, cre
 	if err != nil {
 		return resolvedAuthConfig{}, authReadiness{Configured: true, Issues: []string{err.Error()}}, err
 	}
-	return resolved, c.resolvedAuthReadiness(resolved), nil
+	return resolved, c.resolvedAuthReadiness(apiName, profileName, resolved), nil
 }
 
 func (c *CLI) profileAuthReadiness(apiName, profileName string, prof *config.ProfileConfig) (resolvedAuthConfig, authReadiness, error) {
@@ -68,7 +77,7 @@ func (c *CLI) profileAuthReadiness(apiName, profileName string, prof *config.Pro
 	if err != nil {
 		return resolvedAuthConfig{}, authReadiness{Configured: true, Issues: []string{err.Error()}}, err
 	}
-	return resolved, c.resolvedAuthReadiness(resolved), nil
+	return resolved, c.resolvedAuthReadiness(apiName, profileName, resolved), nil
 }
 
 type operationAuthCoverage struct {

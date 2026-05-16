@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
 )
 
@@ -564,6 +567,100 @@ func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("list output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "OAuth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "OAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {
+              "read:profile": "Read profile",
+              "read:recovery": "Read recovery"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/profile": {"get": {"operationId": "profile", "security": [{"OAuth": ["read:profile"]}], "responses": {"200": {"description": "OK"}}}},
+    "/recovery": {"get": {"operationId": "recovery", "security": [{"OAuth": ["read:recovery"]}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: baseURL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Credentials: map[string]*config.CredentialConfig{
+						"OAuth": {
+							Auth: &config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
+								"client_id":     "client",
+								"authorize_url": "https://auth.example.com/authorize",
+								"token_url":     "https://auth.example.com/token",
+								"scopes":        "read:profile",
+							}},
+							Satisfies: []string{"read:profile"},
+						},
+					},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
+
+	c, out := env.newCaptureCLI()
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
+		t.Fatalf("api auth list: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Callable secured operations: 0/2",
+		"OAuth: configured (OAuth access token not cached), needs read:profile read:recovery, satisfies read:profile",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("list output missing %q:\n%s", want, got)
+		}
+	}
+
+	if err := auth.NewTokenCache(tokenPath).Set("tapi:default:credential:OAuth", auth.CachedToken{
+		AccessToken: "cached-token",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("write token cache: %v", err)
+	}
+	c, out = env.newCaptureCLI()
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
+		t.Fatalf("api auth list with token: %v", err)
+	}
+	got = out.String()
+	for _, want := range []string{
+		"Callable secured operations: 1/2",
+		"OAuth: configured, needs read:profile read:recovery, satisfies read:profile",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("list output with token missing %q:\n%s", want, got)
 		}
 	}
 }

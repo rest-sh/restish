@@ -217,13 +217,13 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if len(defaultNeeds) > 0 {
-			prof.Credentials[credentialID].Satisfies = defaultNeeds
 			if prof.Credentials[credentialID].Auth.Params == nil {
 				prof.Credentials[credentialID].Auth.Params = map[string]string{}
 			}
 			if prof.Credentials[credentialID].Auth.Params["scopes"] == "" {
 				prof.Credentials[credentialID].Auth.Params["scopes"] = strings.Join(defaultNeeds, " ")
 			}
+			prof.Credentials[credentialID].Satisfies = authSatisfiesValues(defaultNeeds, prof.Credentials[credentialID].Auth)
 		}
 	}
 	if err := c.saveAPIAuthCredentialConfig(apiName, profileName, credentialID, prof.Credentials[credentialID]); err != nil {

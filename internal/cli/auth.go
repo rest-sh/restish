@@ -137,6 +137,9 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 					return err
 				}
 			}
+			if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
+				return err
+			}
 			if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, false)); err != nil {
 				return err
 			}
@@ -155,6 +158,9 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 					if err := c.ensureExternalToolApproved(req.Context(), apiName, profileName, params["commandline"]); err != nil {
 						return err
 					}
+				}
+				if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
+					return err
 				}
 				if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, true)); err != nil {
 					return err
@@ -183,7 +189,7 @@ func (c *CLI) applyCachedOAuthClientCredentials(req *http.Request, authType stri
 	if force || authType != "oauth-client-credentials" {
 		return false
 	}
-	token := c.cachedOAuthClientCredentialsToken(authType, cacheKey, apiName, profileName)
+	token := c.cachedOAuthToken(authType, cacheKey, apiName, profileName)
 	if token == "" {
 		return false
 	}
@@ -197,17 +203,58 @@ func (c *CLI) cachedOAuthClientCredentialsToken(authType string, cacheKey, apiNa
 	if authType != "oauth-client-credentials" {
 		return ""
 	}
+	return c.cachedOAuthToken(authType, cacheKey, apiName, profileName)
+}
+
+func (c *CLI) cachedOAuthToken(authType string, cacheKey, apiName, profileName string) string {
+	cached := c.cachedOAuthTokenEntry(authType, cacheKey, apiName, profileName)
+	if cached == nil || cached.IsExpired() {
+		return ""
+	}
+	return cached.AccessToken
+}
+
+func (c *CLI) cachedOAuthTokenEntry(authType string, cacheKey, apiName, profileName string) *auth.CachedToken {
+	switch authType {
+	case "oauth-authorization-code", "oauth-client-credentials", "oauth-device-code":
+	default:
+		return nil
+	}
 	if cacheKey == "" {
 		cacheKey = apiName + ":" + profileName
 	}
 	if cacheKey == ":" || cacheKey == "" {
-		return ""
+		return nil
 	}
 	cached, err := auth.NewTokenCache(c.tokenCachePath()).Get(cacheKey)
-	if err != nil || cached == nil || cached.IsExpired() {
-		return ""
+	if err != nil {
+		return nil
 	}
-	return cached.AccessToken
+	return cached
+}
+
+func (c *CLI) cachedOAuthAuthCodeUsable(authType, cacheKey, apiName, profileName string) bool {
+	if authType != "oauth-authorization-code" {
+		return false
+	}
+	cached := c.cachedOAuthTokenEntry(authType, cacheKey, apiName, profileName)
+	if cached == nil {
+		return false
+	}
+	return cached.AccessToken != "" && (!cached.IsExpired() || cached.RefreshToken != "")
+}
+
+func (c *CLI) ensureOAuthAuthorizationCodeReady(authType, cacheKey, apiName, profileName string) error {
+	if authType != "oauth-authorization-code" {
+		return nil
+	}
+	if c.cachedOAuthAuthCodeUsable(authType, cacheKey, apiName, profileName) {
+		return nil
+	}
+	if c.canPromptCode() {
+		return nil
+	}
+	return fmt.Errorf("oauth-authorization-code credential for API %q profile %q has no cached access token; rerun from an interactive terminal to complete OAuth authorization before sending the request", apiName, profileName)
 }
 
 func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.ProfileConfig) (resolvedAuthConfig, error) {
