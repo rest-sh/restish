@@ -55,3 +55,20 @@ func TestCacheMaxBytes_FromConfig(t *testing.T) {
 		t.Fatalf("cacheMaxBytes() = %d, want %d", got, want)
 	}
 }
+
+func TestBodyPrefixHintFormatsLeadingArrayIndex(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"self", "body.self"},
+		{"data.value", "body.data.value"},
+		{"0.localName", "body[0].localName"},
+		{"12.items[0].name", "body[12].items[0].name"},
+	}
+	for _, tc := range tests {
+		if got := bodyPrefixHint(tc.in); got != tc.want {
+			t.Fatalf("bodyPrefixHint(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

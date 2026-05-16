@@ -1320,7 +1320,30 @@ func (c *CLI) hintBodyPrefixOnce(filterExpr string) {
 		return
 	}
 	c.bodyPrefixHinted = true
-	c.hintf("filter returned no results; to access response body fields use 'body.%s'", strings.TrimSpace(filterExpr))
+	c.hintf("filter returned no results; to access response body fields use '%s'", bodyPrefixHint(filterExpr))
+}
+
+func bodyPrefixHint(filterExpr string) string {
+	filterExpr = strings.TrimSpace(filterExpr)
+	if index, rest, ok := leadingArrayIndexFilter(filterExpr); ok {
+		return fmt.Sprintf("body[%s]%s", index, rest)
+	}
+	return "body." + filterExpr
+}
+
+func leadingArrayIndexFilter(filterExpr string) (index, rest string, ok bool) {
+	dot := strings.IndexByte(filterExpr, '.')
+	if dot <= 0 {
+		return "", "", false
+	}
+	index = filterExpr[:dot]
+	for _, r := range index {
+		if r < '0' || r > '9' {
+			return "", "", false
+		}
+	}
+	rest = filterExpr[dot:]
+	return index, rest, true
 }
 
 func bodyPrefixTargetExists(item any, filterExpr string) bool {
