@@ -75,7 +75,8 @@ Help text must only claim env-var support that actually exists.
 Environment variables that accept repeated values should preserve their
 documented input shape. For example, comma-separated `RSH_HEADER` entries from
 v1 are parsed into multiple headers unless a future design deliberately replaces
-that syntax and documents the migration.
+that syntax and documents the migration. Literal commas in `RSH_HEADER` and
+`RSH_QUERY` values are represented with `\,`.
 
 Global flags should eventually be parsed into one structured runtime object so
 every command sees the same resolved values instead of re-reading ad-hoc state.

@@ -428,6 +428,84 @@ func TestHTTPHeaderEnvSplitsCommaSeparatedValues(t *testing.T) {
 	}
 }
 
+func TestHTTPHeaderEnvSupportsEscapedCommaValues(t *testing.T) {
+	t.Setenv("RSH_HEADER", `X-One: 1,X-List: a\,b`)
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := rr.Last().Header.Get("X-One"); got != "1" {
+		t.Fatalf("X-One = %q", got)
+	}
+	if got := rr.Last().Header.Get("X-List"); got != "a,b" {
+		t.Fatalf("X-List = %q, want a,b", got)
+	}
+}
+
+func TestHTTPQueryEnvSupportsEscapedCommaValues(t *testing.T) {
+	t.Setenv("RSH_QUERY", `env=one,list=a\,b`)
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	values := rr.Last().URL.Query()
+	if got := values.Get("env"); got != "one" {
+		t.Fatalf("env = %q", got)
+	}
+	if got := values.Get("list"); got != "a,b" {
+		t.Fatalf("list = %q, want a,b", got)
+	}
+	if got := rr.Last().URL.RawQuery; !strings.Contains(got, "list=a%2Cb") {
+		t.Fatalf("RawQuery = %q, want escaped comma", got)
+	}
+}
+
+func TestHTTPEnvHeaderAndQueryValidationFailsBeforeRequest(t *testing.T) {
+	tests := []struct {
+		name    string
+		envName string
+		value   string
+		want    string
+	}{
+		{name: "header", envName: "RSH_HEADER", value: "X-One: 1,bare", want: "invalid RSH_HEADER entry"},
+		{name: "query", envName: "RSH_QUERY", value: "env=one,bare", want: "invalid RSH_QUERY entry"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.envName, tc.value)
+			var hit bool
+			c, _, _ := newTestCLI(t)
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				hit = true
+				return jsonResponse(200, `{}`), nil
+			})
+			err := c.Run([]string{"restish", "get", "https://api.example.com/items"})
+			if err == nil {
+				t.Fatal("expected env validation error")
+			}
+			if hit {
+				t.Fatal("request should not be sent with invalid env defaults")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if strings.Contains(err.Error(), "network error") {
+				t.Fatalf("env validation should not be reported as a network error: %v", err)
+			}
+		})
+	}
+}
+
 // TestHTTPServerOverride verifies that -s replaces the scheme and host.
 func TestHTTPServerOverride(t *testing.T) {
 	var rr requestRecorder

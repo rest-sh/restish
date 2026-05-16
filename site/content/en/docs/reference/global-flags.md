@@ -33,6 +33,15 @@ restish post -c form api.rest.sh/login 'username: alice, password: secret'
 restish --rsh-server https://staging.example.com example list-images
 ```
 
+`RSH_HEADER` and `RSH_QUERY` use comma-separated entries, matching the
+repeatable `-H` and `-q` flags. Escape a literal comma in an environment value
+as `\,`:
+
+```bash
+RSH_HEADER='X-List: a\,b' restish api.rest.sh/headers
+RSH_QUERY='list=a\,b' restish api.rest.sh/get
+```
+
 Generated operation commands may also expose `--rsh-generate-body` when the
 OpenAPI operation has a request body schema. That flag prints an example body
 for the generated operation instead of sending the request.

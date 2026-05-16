@@ -14,8 +14,8 @@ override built-in defaults only when the matching flag was not set.
 
 | Flag | Short | Type | Env | Default | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `--rsh-header` | `-H` | repeat `Name: Value` | `RSH_HEADER` | empty | Env is comma-separated and prepended. |
-| `--rsh-query` | `-q` | repeat `key=value` | `RSH_QUERY` | empty | Env is comma-separated and prepended. |
+| `--rsh-header` | `-H` | repeat `Name: Value` | `RSH_HEADER` | empty | Env is comma-separated, supports `\,` for literal commas, and is prepended. |
+| `--rsh-query` | `-q` | repeat `key=value` | `RSH_QUERY` | empty | Env is comma-separated, supports `\,` for literal commas, and is prepended. |
 | `--rsh-server` | `-s` | string | | empty | Overrides scheme/host; path prefixes request path. |
 | `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | Formats the rendered body/value selected by `--rsh-print=b`; `lines` for scalar line output; no `raw` format. |
 | `--rsh-print` | | string | `RSH_PRINT` | auto | Chooses stdout parts: `H` request headers, `B` request body, `h` response status/headers, `b` rendered body, `p` pretty, `c` color. `auto` is `hbpc` on a terminal, body bytes for redirected unfiltered responses with no explicit output transform, and `bp` for filters, metadata shortcuts, and formatted/collected output. |

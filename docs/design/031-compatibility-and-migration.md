@@ -208,8 +208,8 @@ tests or migration notes:
 
 - `-H 'Accept: application/json'` narrows the accepted response types instead
   of appending to the generated Restish accept string
-- `RSH_HEADER=header1:value1,header2:value2` produces multiple headers unless
-  a future design replaces that input shape with a documented alternative
+- `RSH_HEADER=header1:value1,header2:value2` produces multiple headers, while
+  `RSH_HEADER='header1:value\,with\,commas'` produces one comma-bearing header
 - `restish edit ...` without patch args enters the supported interactive edit
   path; the v1 `-i` alias is removed before release
 - `-f headers.Date`, `-f headers`, `-f status`, and `-f @` operate on the

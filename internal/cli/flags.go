@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/rest-sh/restish/v2/internal/request"
 )
 
 // GlobalFlags holds the parsed value of every persistent rsh-* flag plus the
@@ -115,10 +117,18 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	// Apply env-var overrides (env var loses to explicit flag).
 	// For StringArray flags (header, query), env var prepends values.
 	if v := os.Getenv("RSH_HEADER"); v != "" && !cmd.Flags().Changed("rsh-header") {
-		gf.Headers = append(splitEnvList(v), gf.Headers...)
+		headers := splitEnvList(v)
+		if err := validateEnvHeaders(headers); err != nil {
+			return gf, err
+		}
+		gf.Headers = append(headers, gf.Headers...)
 	}
 	if v := os.Getenv("RSH_QUERY"); v != "" && !cmd.Flags().Changed("rsh-query") {
-		gf.Query = append(splitEnvList(v), gf.Query...)
+		query := splitEnvList(v)
+		if err := validateEnvQuery(query); err != nil {
+			return gf, err
+		}
+		gf.Query = append(query, gf.Query...)
 	}
 	if v := os.Getenv("RSH_OUTPUT_FORMAT"); v != "" && !cmd.Flags().Changed("rsh-output-format") {
 		gf.OutputFormat = v
@@ -233,7 +243,33 @@ func validateTimeoutDuration(source, value string) error {
 }
 
 func splitEnvList(v string) []string {
-	parts := strings.Split(v, ",")
+	var parts []string
+	var b strings.Builder
+	escaped := false
+	for _, r := range v {
+		if escaped {
+			if r != ',' && r != '\\' {
+				b.WriteRune('\\')
+			}
+			b.WriteRune(r)
+			escaped = false
+			continue
+		}
+		switch r {
+		case '\\':
+			escaped = true
+		case ',':
+			parts = append(parts, b.String())
+			b.Reset()
+		default:
+			b.WriteRune(r)
+		}
+	}
+	if escaped {
+		b.WriteRune('\\')
+	}
+	parts = append(parts, b.String())
+
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -242,6 +278,24 @@ func splitEnvList(v string) []string {
 		}
 	}
 	return out
+}
+
+func validateEnvHeaders(headers []string) error {
+	for _, header := range headers {
+		if _, _, err := request.ParseHeaderOption(header); err != nil {
+			return fmt.Errorf("invalid RSH_HEADER entry: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateEnvQuery(query []string) error {
+	for _, item := range query {
+		if _, _, err := request.ParseQueryOption(item); err != nil {
+			return fmt.Errorf("invalid RSH_QUERY entry: %w", err)
+		}
+	}
+	return nil
 }
 
 // isTruthy reports whether a string env value means "true".
