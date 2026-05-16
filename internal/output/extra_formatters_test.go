@@ -242,6 +242,34 @@ func TestTableFormatterSortBy(t *testing.T) {
 	}
 }
 
+func TestTableFormatterSortByNumericColumn(t *testing.T) {
+	resp := &output.Response{
+		Status: 200,
+		Body: []any{
+			map[string]any{"id": float64(10), "name": "ten"},
+			map[string]any{"id": float64(2), "name": "two"},
+			map[string]any{"id": float64(12), "name": "twelve"},
+			map[string]any{"id": float64(1), "name": "one"},
+		},
+	}
+	var buf bytes.Buffer
+	f := &output.TableFormatter{SortBy: "id"}
+	if err := f.Format(&buf, resp, false); err != nil {
+		t.Fatalf("Format: %v", err)
+	}
+	got := buf.String()
+	onePos := strings.Index(got, "one")
+	twoPos := strings.Index(got, "two")
+	tenPos := strings.Index(got, "ten")
+	twelvePos := strings.Index(got, "twelve")
+	if onePos == -1 || twoPos == -1 || tenPos == -1 || twelvePos == -1 {
+		t.Fatalf("missing names in output:\n%s", got)
+	}
+	if !(onePos < twoPos && twoPos < tenPos && tenPos < twelvePos) {
+		t.Errorf("expected 1 < 2 < 10 < 12 after SortBy, positions: %d %d %d %d\n%s", onePos, twoPos, tenPos, twelvePos, got)
+	}
+}
+
 // TestTableFormatterTruncation verifies that long cell values are truncated.
 func TestTableFormatterTruncation(t *testing.T) {
 	longValue := strings.Repeat("x", 50)

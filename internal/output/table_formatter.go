@@ -1,6 +1,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -16,7 +17,8 @@ type TableFormatter struct {
 	// Columns is the ordered list of column names to display. When empty,
 	// all keys found in the first row are used.
 	Columns []string
-	// SortBy is an optional column name to sort rows by (ascending, string compare).
+	// SortBy is an optional column name to sort rows by ascending value.
+	// Numeric cells sort numerically; other cells sort by display string.
 	SortBy string
 }
 
@@ -43,9 +45,7 @@ func (f *TableFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	if f.SortBy != "" {
 		sb := f.SortBy
 		sort.SliceStable(rows, func(i, j int) bool {
-			vi := cellString(rows[i][sb])
-			vj := cellString(rows[j][sb])
-			return vi < vj
+			return compareTableCells(rows[i][sb], rows[j][sb]) < 0
 		})
 	}
 
@@ -186,6 +186,56 @@ func cellString(v any) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+func compareTableCells(a, b any) int {
+	if af, ok := tableNumber(a); ok {
+		if bf, ok := tableNumber(b); ok {
+			switch {
+			case af < bf:
+				return -1
+			case af > bf:
+				return 1
+			default:
+				return 0
+			}
+		}
+	}
+	return strings.Compare(cellString(a), cellString(b))
+}
+
+func tableNumber(v any) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int8:
+		return float64(n), true
+	case int16:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case uint:
+		return float64(n), true
+	case uint8:
+		return float64(n), true
+	case uint16:
+		return float64(n), true
+	case uint32:
+		return float64(n), true
+	case uint64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 // truncate shortens s to at most maxRunes runes, appending "…" if cut.
