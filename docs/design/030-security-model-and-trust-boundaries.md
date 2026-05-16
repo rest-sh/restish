@@ -152,6 +152,7 @@ Sensitive data includes at least:
 - `Proxy-Authorization`
 - `Cookie`
 - `Set-Cookie`
+- URL userinfo credentials (`https://user:password@example.com`)
 - bearer tokens and API keys in query parameters
 - OAuth client secrets
 - refresh tokens

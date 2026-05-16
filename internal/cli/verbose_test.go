@@ -230,6 +230,41 @@ func TestVerboseRedactsSensitiveQueryParams(t *testing.T) {
 	}
 }
 
+func TestVerboseRedactsURLUserinfo(t *testing.T) {
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	var gotUserinfo string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.User != nil {
+			gotUserinfo = r.URL.User.String()
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "-v", "https://user:passwd@api.example.com/hello?api_key=secret&page=1"})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if gotUserinfo != "user:passwd" {
+		t.Fatalf("request userinfo = %q, want original userinfo preserved for transport", gotUserinfo)
+	}
+	stderr := errOut.String()
+	for _, leaked := range []string{"user:passwd@", "user", "passwd", "api_key=secret"} {
+		if strings.Contains(stderr, leaked) {
+			t.Fatalf("verbose output leaked %q:\n%s", leaked, stderr)
+		}
+	}
+	if !strings.Contains(stderr, "> GET https://redacted@api.example.com/hello?api_key=%3Credacted%3E&page=1") {
+		t.Fatalf("expected redacted request URL, got:\n%s", stderr)
+	}
+}
+
 func TestVerboseRedactsTokenLikeAmbiguousQueryParams(t *testing.T) {
 	c, _, errOut := newTestCLI(t)
 	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"

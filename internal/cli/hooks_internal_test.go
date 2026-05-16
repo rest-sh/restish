@@ -66,7 +66,7 @@ func TestPluginDeclaresHook(t *testing.T) {
 }
 
 func TestHookRequestForPluginIncludesBodyHashAndOptInBody(t *testing.T) {
-	req, err := http.NewRequest(http.MethodPost, "https://api.example.com/items?token=secret", strings.NewReader(`{"name":"alpha"}`))
+	req, err := http.NewRequest(http.MethodPost, "https://user:passwd@api.example.com/items?token=secret", strings.NewReader(`{"name":"alpha"}`))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
@@ -82,8 +82,11 @@ func TestHookRequestForPluginIncludesBodyHashAndOptInBody(t *testing.T) {
 	if got := firstHeaderValue(redacted.Headers, "Authorization"); got != "<redacted>" {
 		t.Fatalf("Authorization header = %q, want redacted", got)
 	}
-	if strings.Contains(redacted.URI, "secret") {
+	if strings.Contains(redacted.URI, "secret") || strings.Contains(redacted.URI, "user") || strings.Contains(redacted.URI, "passwd") {
 		t.Fatalf("URI was not redacted: %s", redacted.URI)
+	}
+	if !strings.HasPrefix(redacted.URI, "https://redacted@api.example.com/items?") {
+		t.Fatalf("URI did not preserve non-secret URL shape: %s", redacted.URI)
 	}
 
 	withBody := hookRequestForPlugin(req, internalplugin.Plugin{Manifest: internalplugin.Manifest{

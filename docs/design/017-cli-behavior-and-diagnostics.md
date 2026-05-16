@@ -163,6 +163,7 @@ Verbose logs must redact:
 
 - sensitive headers
 - sensitive query parameters
+- URL userinfo credentials
 - token-like values returned in structured remote error bodies
 
 Redaction rules are defined in design 030 and apply here.

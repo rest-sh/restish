@@ -74,6 +74,20 @@ func (t *closeCountingWrapper) CloseIdleConnections() {
 	}
 }
 
+func TestRedactedURLRemovesUserinfoAndCredentialQuery(t *testing.T) {
+	u, err := url.Parse("https://alice:s3cr3t@api.example.com/items?api_key=secret&page=1")
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+	got := request.RedactedURL(u)
+	if strings.Contains(got, "alice") || strings.Contains(got, "s3cr3t") || strings.Contains(got, "secret") {
+		t.Fatalf("redacted URL leaked credentials: %s", got)
+	}
+	if want := "https://redacted@api.example.com/items?api_key=%3Credacted%3E&page=1"; got != want {
+		t.Fatalf("redacted URL = %q, want %q", got, want)
+	}
+}
+
 func TestBuildTransportCloseFullStackOnce(t *testing.T) {
 	base := &closeCountingTransport{}
 	var wrapper *closeCountingWrapper

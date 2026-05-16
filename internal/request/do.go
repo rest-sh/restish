@@ -495,13 +495,17 @@ func IsCredentialQueryParam(name string) bool {
 	return secrets.IsQueryParamName(name)
 }
 
-// RedactedURL returns u as a string with credential query values replaced by a
-// placeholder. Non-sensitive query parameters and URL structure are preserved.
+// RedactedURL returns u as a string with URL userinfo and credential query
+// values replaced by placeholders. Non-sensitive query parameters and URL
+// structure are preserved.
 func RedactedURL(u *url.URL) string {
 	if u == nil {
 		return ""
 	}
 	copyURL := *u
+	if copyURL.User != nil {
+		copyURL.User = url.User("redacted")
+	}
 	q := copyURL.Query()
 	for name, values := range q {
 		for i, value := range values {
