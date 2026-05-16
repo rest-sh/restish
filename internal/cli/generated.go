@@ -1686,6 +1686,13 @@ func serializeGeneratedContentParam(p *paramInfo, values []string) (string, erro
 			return string(data), nil
 		}
 	}
+	if p.typ == "array" {
+		data, err := json.Marshal(openapiparam.NormalizeArrayValues(values))
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
 	parsed, err := shorthand.Unmarshal(strings.Join(values, " "), shorthand.ParseOptions{EnableObjectDetection: true}, nil)
 	if err != nil {
 		return "", fmt.Errorf("parse JSON parameter: %w", err)

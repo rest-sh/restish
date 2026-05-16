@@ -601,6 +601,23 @@ func TestGeneratedPathHeaderCookieAndContentParamSerialization(t *testing.T) {
 	if got := encodeGeneratedQuery(parts); got != "filter=%7B%22limit%22%3A10%2C%22q%22%3A%22cats%22%7D" {
 		t.Fatalf("content query = %q", got)
 	}
+
+	contentArray := &paramInfo{name: "ids", in: "query", typ: "array", contentMediaType: "application/json"}
+	parts, err = serializeGeneratedQueryParam(contentArray, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("content array serialize: %v", err)
+	}
+	if got := encodeGeneratedQuery(parts); got != "ids=%5B%22a%22%2C%22b%22%5D" {
+		t.Fatalf("content array query = %q", got)
+	}
+
+	parts, err = serializeGeneratedQueryParam(contentArray, []string{`["raw","json"]`})
+	if err != nil {
+		t.Fatalf("content array raw JSON serialize: %v", err)
+	}
+	if got := encodeGeneratedQuery(parts); got != "ids=%5B%22raw%22%2C%22json%22%5D" {
+		t.Fatalf("content array raw JSON query = %q", got)
+	}
 }
 
 func TestAppendGeneratedParamSupportNote(t *testing.T) {

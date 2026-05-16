@@ -2287,6 +2287,72 @@ func TestGeneratedCommandJSONContentQueryChildFlagsUseParentEncoding(t *testing.
 	}
 }
 
+func TestGeneratedCommandJSONContentArrayQueryFlagUsesJSONArray(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/jsoncontent", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/jsoncontent": {
+      "get": {
+        "operationId": "getJSONContent",
+        "parameters": [
+          {"name": "ids", "in": "query", "content": {
+            "application/json": {"schema": {"type": "array", "items": {"type": "string"}}}
+          }},
+          {"name": "mode", "in": "query", "content": {
+            "application/json": {"schema": {"type": "string"}}
+          }}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-json-content", "--ids", "a", "--ids", "b", "--mode", "fast"}); err != nil {
+		t.Fatalf("get-json-content failed: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(values.Get("ids")), &ids); err != nil {
+		t.Fatalf("ids is not JSON array: %v; raw query %q", err, gotQuery)
+	}
+	if !reflect.DeepEqual(ids, []string{"a", "b"}) {
+		t.Fatalf("ids = %#v, want [a b]", ids)
+	}
+	if mode := values.Get("mode"); mode != `"fast"` {
+		t.Fatalf("mode = %q, want JSON string", mode)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-json-content", "--ids", `["raw","json"]`}); err != nil {
+		t.Fatalf("get-json-content raw JSON failed: %v", err)
+	}
+	values, err = url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	if got := values.Get("ids"); got != `["raw","json"]` {
+		t.Fatalf("raw JSON ids = %q, want raw array", got)
+	}
+}
+
 func TestGeneratedCommandOptionalDefaultsSentOnlyWhenChanged(t *testing.T) {
 	var queries []string
 	mux := http.NewServeMux()
