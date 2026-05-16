@@ -2229,6 +2229,64 @@ func TestGeneratedCommandTypedQueryFlagsAndStyles(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandJSONContentQueryChildFlagsUseParentEncoding(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/jsoncontent", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/jsoncontent": {
+      "get": {
+        "operationId": "getJSONContent",
+        "parameters": [
+          {"name": "filter", "in": "query", "content": {
+            "application/json": {"schema": {
+              "type": "object",
+              "properties": {
+                "tag": {"type": "string"},
+                "limit": {"type": "integer"},
+                "active": {"type": "boolean"}
+              }
+            }}
+          }}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-json-content", "--filter-tag", "alpha", "--filter-limit", "7", "--filter-active"}); err != nil {
+		t.Fatalf("get-json-content failed: %v", err)
+	}
+	if strings.Contains(gotQuery, "filter%5B") || strings.Contains(gotQuery, "filter[") {
+		t.Fatalf("child flags used deep-object query shape: %q", gotQuery)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("ParseQuery(%q): %v", gotQuery, err)
+	}
+	var filter map[string]any
+	if err := json.Unmarshal([]byte(values.Get("filter")), &filter); err != nil {
+		t.Fatalf("filter is not JSON object: %v; raw query %q", err, gotQuery)
+	}
+	if filter["tag"] != "alpha" || filter["limit"] != float64(7) || filter["active"] != true {
+		t.Fatalf("filter = %#v, want tag alpha, limit 7, active true", filter)
+	}
+}
+
 func TestGeneratedCommandOptionalDefaultsSentOnlyWhenChanged(t *testing.T) {
 	var queries []string
 	mux := http.NewServeMux()

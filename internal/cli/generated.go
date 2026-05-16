@@ -1250,6 +1250,8 @@ func (c *CLI) runGeneratedOp(
 	if err := validateGeneratedObjectChildFlagConflicts(cmd, optional); err != nil {
 		return err
 	}
+	contentChildren := map[*paramInfo]map[string]any{}
+	var contentChildParents []*paramInfo
 	for _, p := range optional {
 		if !cmd.Flags().Changed(p.flagName) {
 			continue
@@ -1261,9 +1263,32 @@ func (c *CLI) runGeneratedOp(
 		if err := validateGeneratedParamValues(p, values, "--"+p.flagName); err != nil {
 			return err
 		}
+		if isGeneratedJSONContentChild(p) {
+			if _, ok := contentChildren[p.parent]; !ok {
+				contentChildren[p.parent] = map[string]any{}
+				contentChildParents = append(contentChildParents, p.parent)
+			}
+			value, err := generatedJSONContentChildValue(p, values)
+			if err != nil {
+				return err
+			}
+			contentChildren[p.parent][p.objectKey] = value
+			continue
+		}
 		path, query, extraHeaders, err = addGeneratedParam(path, query, extraHeaders, p, values)
 		if err != nil {
 			return err
+		}
+	}
+	for _, parent := range contentChildParents {
+		data, err := json.Marshal(contentChildren[parent])
+		if err != nil {
+			return err
+		}
+		var errAdd error
+		path, query, extraHeaders, errAdd = addGeneratedParam(path, query, extraHeaders, parent, []string{string(data)})
+		if errAdd != nil {
+			return errAdd
 		}
 	}
 
@@ -1341,6 +1366,47 @@ func generatedFlagValues(cmd *cobra.Command, p *paramInfo) ([]string, error) {
 			return nil, err
 		}
 		return []string{v}, nil
+	}
+}
+
+func isGeneratedJSONContentChild(p *paramInfo) bool {
+	return p != nil &&
+		p.parent != nil &&
+		p.in == "query" &&
+		p.parent.contentMediaType != "" &&
+		isJSONMediaType(p.parent.contentMediaType)
+}
+
+func generatedJSONContentChildValue(p *paramInfo, values []string) (any, error) {
+	switch p.typ {
+	case "boolean":
+		if len(values) == 0 {
+			return false, nil
+		}
+		return strconv.ParseBool(values[0])
+	case "integer":
+		if len(values) == 0 {
+			return int64(0), nil
+		}
+		return strconv.ParseInt(values[0], 10, 64)
+	case "number":
+		if len(values) == 0 {
+			return float64(0), nil
+		}
+		return strconv.ParseFloat(values[0], 64)
+	case "array":
+		return openapiparam.NormalizeArrayValues(values), nil
+	case "object":
+		parsed, err := shorthand.Unmarshal(strings.Join(values, " "), shorthand.ParseOptions{EnableObjectDetection: true}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("parse JSON parameter child: %w", err)
+		}
+		return parsed, nil
+	default:
+		if len(values) == 0 {
+			return "", nil
+		}
+		return values[0], nil
 	}
 }
 
