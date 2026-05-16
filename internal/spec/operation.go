@@ -146,6 +146,9 @@ type Operation struct {
 	// ResponseMediaType is the deterministic preferred Accept value from
 	// successful response content, if the operation declares one.
 	ResponseMediaType string
+	// ResponseMediaTypes are all declared successful response content types in
+	// deterministic response-code and spec declaration order.
+	ResponseMediaTypes []string
 	// RequestMultipartContentTypes maps multipart/form-data property names to
 	// per-part Content-Type values from the OpenAPI encoding object.
 	RequestMultipartContentTypes map[string]string
@@ -292,19 +295,20 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		effectiveSecurity = op.Security
 	}
 	o := Operation{
-		ID:                op.OperationId,
-		Method:            method,
-		Path:              path,
-		Summary:           op.Summary,
-		Description:       op.Description,
-		Deprecated:        op.Deprecated != nil && *op.Deprecated,
-		Tags:              op.Tags,
-		HasBody:           op.RequestBody != nil,
-		BodyRequired:      op.RequestBody != nil && op.RequestBody.Required != nil && *op.RequestBody.Required,
-		NoAuth:            effectiveSecurity != nil && len(effectiveSecurity) == 0,
-		MCPIgnore:         OpExtBool(op, "x-mcp-ignore"),
-		RequestMediaType:  preferredRequestMediaType(op),
-		ResponseMediaType: preferredOperationResponseMediaType(op),
+		ID:                 op.OperationId,
+		Method:             method,
+		Path:               path,
+		Summary:            op.Summary,
+		Description:        op.Description,
+		Deprecated:         op.Deprecated != nil && *op.Deprecated,
+		Tags:               op.Tags,
+		HasBody:            op.RequestBody != nil,
+		BodyRequired:       op.RequestBody != nil && op.RequestBody.Required != nil && *op.RequestBody.Required,
+		NoAuth:             effectiveSecurity != nil && len(effectiveSecurity) == 0,
+		MCPIgnore:          OpExtBool(op, "x-mcp-ignore"),
+		RequestMediaType:   preferredRequestMediaType(op),
+		ResponseMediaType:  preferredOperationResponseMediaType(op),
+		ResponseMediaTypes: operationResponseMediaTypes(op),
 		XCLI: OperationXCLI{
 			Ignore:      OpExtBool(op, "x-cli-ignore"),
 			Hidden:      OpExtBool(op, "x-cli-hidden"),
@@ -951,6 +955,32 @@ func preferredOperationResponseMediaType(op *v3.Operation) string {
 		}
 	}
 	return ""
+}
+
+func operationResponseMediaTypes(op *v3.Operation) []string {
+	if op == nil || op.Responses == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, code := range responseCodes(op) {
+		if !isSuccessResponseCode(code) {
+			continue
+		}
+		resp := responseForCode(op, code)
+		if resp == nil || resp.Content == nil {
+			continue
+		}
+		for mediaType := range resp.Content.FromOldest() {
+			key := strings.ToLower(strings.TrimSpace(mediaType))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, mediaType)
+		}
+	}
+	return out
 }
 
 func joinOperationPath(basePath, opPath string) string {

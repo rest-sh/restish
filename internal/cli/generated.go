@@ -397,7 +397,8 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 				gf := globalFlagsFromContext(requestContext(cmd))
 				return c.printGeneratedBodyExample(op.Help, gf.ContentType)
 			}
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, op.ResponseMediaType, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			acceptOverride := c.generatedOperationAcceptHeader(op.ResponseMediaTypes, op.ResponseMediaType)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1063,6 +1064,13 @@ func mediaTypesMatch(a, b string) bool {
 	aBase, _, aErr := mime.ParseMediaType(a)
 	bBase, _, bErr := mime.ParseMediaType(b)
 	return aErr == nil && bErr == nil && strings.EqualFold(aBase, bBase)
+}
+
+func (c *CLI) generatedOperationAcceptHeader(mediaTypes []string, fallback string) string {
+	if header := c.content.AcceptHeaderFor(mediaTypes); header != "" {
+		return header
+	}
+	return fallback
 }
 
 func appendGeneratedOperationHelp(long string, required, optional []*paramInfo, help spec.OperationHelp) string {

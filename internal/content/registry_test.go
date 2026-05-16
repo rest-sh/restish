@@ -259,6 +259,21 @@ func TestAcceptHeaderCacheInvalidatesOnNewRegistration(t *testing.T) {
 	}
 }
 
+func TestAcceptHeaderForUsesRequestedSupportedMediaTypes(t *testing.T) {
+	r := content.Default()
+	got := r.AcceptHeaderFor([]string{
+		"application/vnd.example+json",
+		"application/cbor",
+		"application/unknown",
+		"text/plain",
+		"application/json",
+	})
+	want := "application/cbor;q=0.9, application/vnd.example+json;q=0.5, application/json;q=0.5, text/plain;q=0.2"
+	if got != want {
+		t.Fatalf("AcceptHeaderFor() = %q, want %q", got, want)
+	}
+}
+
 func TestGzipDecompression(t *testing.T) {
 	// Build a gzip-compressed JSON payload.
 	var buf bytes.Buffer

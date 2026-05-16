@@ -162,6 +162,34 @@ func (r *Registry) AcceptHeader() string {
 	return r.acceptHeader
 }
 
+// AcceptHeaderFor returns an Accept header value for the requested media types
+// that the registry can decode, ordered by registered quality descending.
+func (r *Registry) AcceptHeaderFor(mediaTypes []string) string {
+	var entries []qualityEntry
+	seen := make(map[string]int)
+	for _, mediaType := range mediaTypes {
+		mediaType = strings.TrimSpace(mediaType)
+		if mediaType == "" {
+			continue
+		}
+		ct := r.find(mediaType)
+		if ct == nil {
+			continue
+		}
+		key := canonicalMediaType(mediaType)
+		if idx, ok := seen[key]; ok {
+			entries[idx] = qualityEntry{name: mediaType, q: ct.Quality}
+			continue
+		}
+		seen[key] = len(entries)
+		entries = append(entries, qualityEntry{
+			name: mediaType,
+			q:    ct.Quality,
+		})
+	}
+	return buildQualityHeader(entries)
+}
+
 // AcceptEncodingHeader returns a sorted Accept-Encoding header value built
 // from all registered encodings, ordered by quality descending.
 func (r *Registry) AcceptEncodingHeader() string {

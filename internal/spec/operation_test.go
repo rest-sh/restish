@@ -77,6 +77,10 @@ paths:
 	if got, want := ops[0].ResponseMediaType, "application/vnd.api+json"; got != want {
 		t.Fatalf("ResponseMediaType = %q, want %q", got, want)
 	}
+	wantMediaTypes := []string{"application/xml", "application/vnd.api+json"}
+	if !reflect.DeepEqual(ops[0].ResponseMediaTypes, wantMediaTypes) {
+		t.Fatalf("ResponseMediaTypes = %#v, want %#v", ops[0].ResponseMediaTypes, wantMediaTypes)
+	}
 }
 
 func TestOperationsIncludesContentParameterSchemaHelp(t *testing.T) {

@@ -161,6 +161,14 @@ Header parameters named `Accept`, `Content-Type`, or `Authorization` are ignored
 per OpenAPI. They are controlled by Restish content negotiation, body encoding,
 and auth policy instead of generated as ordinary parameters.
 
+Generated commands derive their default `Accept` header from successful
+OpenAPI response `content` entries. Restish should advertise every declared
+response media type that the active content registry can decode, ordered by
+registry preference. It should not speculate about undeclared efficient
+transports such as CBOR or MessagePack for generated commands; users can still
+override the header explicitly with `-H Accept: ...` or a profile header when
+they know the server supports a better representation than the spec declares.
+
 The original OpenAPI parameter name is preserved on the wire even when the CLI
 flag name is normalized, slugified, or overridden. This matters for names such
 as `$select`, `$filter`, `X-Stripe-Account`, and dotted vendor fields.

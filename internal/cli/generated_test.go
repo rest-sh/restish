@@ -175,6 +175,33 @@ func specWithMultiBodyOperation(baseURL string) string {
 }`, baseURL)
 }
 
+func specWithAcceptOperation(baseURL string) string {
+	return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Accept API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/negotiated": {
+      "get": {
+        "operationId": "getNegotiated",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/vnd.example+json": {"schema": {"type": "object"}},
+              "application/json": {"schema": {"type": "object"}},
+              "application/cbor": {"schema": {"type": "object"}},
+              "text/plain": {"schema": {"type": "string"}},
+              "application/x-unknown": {"schema": {"type": "string"}}
+            }
+          }
+        }
+      }
+    }
+  }
+}`, baseURL)
+}
+
 // generatedEnv holds shared state for generated-command tests.
 type generatedEnv struct {
 	cfgFile  string
@@ -1611,6 +1638,35 @@ func TestGeneratedCommandGenerateBodyRejectsUndeclaredContentType(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "application/json") || !strings.Contains(err.Error(), "application/x-www-form-urlencoded") || !strings.Contains(err.Error(), "text/plain") {
 		t.Fatalf("error should list available content types: %v", err)
+	}
+}
+
+func TestGeneratedCommandAcceptHeaderIncludesDeclaredSupportedResponseTypes(t *testing.T) {
+	var gotAccept string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/negotiated", func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, specWithAcceptOperation)
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-negotiated"}); err != nil {
+		t.Fatalf("get-negotiated: %v", err)
+	}
+	want := "application/cbor;q=0.9, application/vnd.example+json;q=0.5, application/json;q=0.5, text/plain;q=0.2"
+	if gotAccept != want {
+		t.Fatalf("Accept = %q, want %q", gotAccept, want)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-negotiated", "-H", "Accept: text/plain"}); err != nil {
+		t.Fatalf("get-negotiated override: %v", err)
+	}
+	if gotAccept != "text/plain" {
+		t.Fatalf("overridden Accept = %q, want text/plain", gotAccept)
 	}
 }
 
