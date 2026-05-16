@@ -101,6 +101,7 @@ type requestBodyOptions struct {
 	multipartPartContentTypes map[string]string
 	acceptOverride            string
 	operationAuth             *operationAuthPolicy
+	explicitAPIName           string
 	bodyRequired              bool
 	bodyOverrideSet           bool
 	bodyOverride              any
@@ -175,7 +176,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		}
 	}
 
-	prepared, err := c.prepareRequest(requestContext(cmd), method, rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth)
+	prepared, err := c.prepareRequest(requestContext(cmd), method, rawURL, profileName, opts, bodyVal, extraHeaders, noAuth, authOpts, bodyOpts.operationAuth, bodyOpts.explicitAPIName)
 	if err != nil {
 		return err
 	}

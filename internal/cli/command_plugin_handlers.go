@@ -187,7 +187,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Con
 		defer cancel()
 	}
 
-	prepared, err := c.prepareRequest(reqCtx, method, msg.URI, profileName, opts, msg.Body, nil, false, authHandlerOptions{}, nil)
+	prepared, err := c.prepareRequest(reqCtx, method, msg.URI, profileName, opts, msg.Body, nil, false, authHandlerOptions{}, nil, "")
 	if err != nil {
 		return writer.WriteMessage(pluginwire.HTTPResponseMsg{
 			Type:      pluginwire.MsgTypeHTTPResponse,

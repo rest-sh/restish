@@ -37,6 +37,7 @@ func (c *CLI) prepareRequest(
 	noAuth bool,
 	authOpts authHandlerOptions,
 	operationAuth *operationAuthPolicy,
+	explicitAPIName string,
 ) (*preparedRequest, error) {
 	opts = cloneRequestOptions(opts)
 	opts.HeaderTimeoutOnly = true
@@ -50,6 +51,15 @@ func (c *CLI) prepareRequest(
 	rawURL, apiName, opts, err := c.applyAPIProfile(rawURL, profileName, opts, authOpts)
 	if err != nil {
 		return nil, err
+	}
+	if apiName == "" && explicitAPIName != "" {
+		if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[explicitAPIName] == nil {
+			return nil, fmt.Errorf("API %q is not configured", explicitAPIName)
+		}
+		apiName = explicitAPIName
+		if opts.CacheNamespace == "" {
+			opts.CacheNamespace = apiName + ":" + profileName
+		}
 	}
 	if !noAuth && operationAuth == nil && apiName != "" && !explicitCredentialContext {
 		if matched, ok := c.operationAuthForGenericRequest(ctx, method, rawURL, apiName, profileName); ok {

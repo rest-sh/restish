@@ -315,7 +315,11 @@ selected API profile. If no OpenAPI server matches the configured origin and no
 cross-origin server is present, Restish falls back to `base_url`.
 
 An untrusted spec must not be able to redirect authenticated generated commands
-to another origin by declaring a different server URL.
+to another origin by declaring a different server URL. Once an operator has
+allowed an operation server origin, generated requests to that origin still run
+under the selected API profile and operation security policy; the allowlist is
+the explicit trust boundary that permits those operation credentials to be
+applied off the API base origin.
 The origin comparison is shared with request redirects, external ref loading,
 and pagination: scheme, hostname, and effective port must match. Unknown schemes
 without explicit ports are not treated as same-origin.

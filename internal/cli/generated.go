@@ -1245,6 +1245,7 @@ func (c *CLI) runGeneratedOp(
 		multipartPartContentTypes: requestMultipartContentTypes,
 		acceptOverride:            responseMediaType,
 		bodyRequired:              bodyRequired,
+		explicitAPIName:           apiName,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
 			CredentialAlternatives: credentialAlternatives,

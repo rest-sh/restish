@@ -3991,6 +3991,105 @@ func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandCrossOriginOperationServerAppliesOperationAuth(t *testing.T) {
+	got := map[string]*http.Request{}
+	operationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got[r.URL.Path] = r.Clone(r.Context())
+		got[r.URL.Path].Header = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+	t.Cleanup(operationServer.Close)
+
+	controlMux := http.NewServeMux()
+	control := httptest.NewServer(controlMux)
+	t.Cleanup(control.Close)
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Cross-Origin Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {"type": "http", "scheme": "bearer"},
+      "BasicAuth": {"type": "http", "scheme": "basic"},
+      "HeaderKey": {"type": "apiKey", "in": "header", "name": "X-API-Key"},
+      "QueryKey": {"type": "apiKey", "in": "query", "name": "api_key"},
+      "CookieKey": {"type": "apiKey", "in": "cookie", "name": "session"}
+    }
+  },
+  "paths": {
+    "/bearer": {"get": {"operationId": "getBearer", "servers": [{"url": %q}], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "OK"}}}},
+    "/basic": {"get": {"operationId": "getBasic", "servers": [{"url": %q}], "security": [{"BasicAuth": []}], "responses": {"200": {"description": "OK"}}}},
+    "/header": {"get": {"operationId": "getHeader", "servers": [{"url": %q}], "security": [{"HeaderKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/query": {"get": {"operationId": "getQuery", "servers": [{"url": %q}], "security": [{"QueryKey": []}], "responses": {"200": {"description": "OK"}}}},
+    "/cookie": {"get": {"operationId": "getCookie", "servers": [{"url": %q}], "security": [{"CookieKey": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, control.URL, operationServer.URL, operationServer.URL, operationServer.URL, operationServer.URL, operationServer.URL)
+	controlMux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	controlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cacheDir := t.TempDir()
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL:                 control.URL,
+			AllowedOperationOrigins: []string{operationServer.URL},
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Credentials: map[string]*config.CredentialConfig{
+						"BearerAuth": {Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "bearer-token"}}},
+						"BasicAuth":  {Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "u", "password": "p"}}},
+						"HeaderKey":  {Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "header-token"}}},
+						"QueryKey":   {Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "query", "name": "api_key", "value": "query-token"}}},
+						"CookieKey":  {Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "cookie", "name": "session", "value": "cookie-token"}}},
+					},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		return c
+	}
+	if err := newCLI().Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	for _, command := range []string{"get-bearer", "get-basic", "get-header", "get-query", "get-cookie"} {
+		if err := newCLI().Run([]string{"restish", "tapi", command}); err != nil {
+			t.Fatalf("%s failed: %v", command, err)
+		}
+	}
+
+	if got["/bearer"].Header.Get("Authorization") != "Bearer bearer-token" {
+		t.Fatalf("/bearer Authorization = %q", got["/bearer"].Header.Get("Authorization"))
+	}
+	if got["/basic"].Header.Get("Authorization") != "Basic dTpw" {
+		t.Fatalf("/basic Authorization = %q", got["/basic"].Header.Get("Authorization"))
+	}
+	if got["/header"].Header.Get("X-API-Key") != "header-token" {
+		t.Fatalf("/header X-API-Key = %q", got["/header"].Header.Get("X-API-Key"))
+	}
+	if got["/query"].URL.Query().Get("api_key") != "query-token" {
+		t.Fatalf("/query api_key = %q", got["/query"].URL.Query().Get("api_key"))
+	}
+	if cookie, err := got["/cookie"].Cookie("session"); err != nil || cookie.Value != "cookie-token" {
+		t.Fatalf("/cookie session cookie = %#v, %v", cookie, err)
+	}
+}
+
 func TestGeneratedStripeDeepObjectQueryFlags(t *testing.T) {
 	var gotQueries []url.Values
 	mux := http.NewServeMux()
