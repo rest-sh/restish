@@ -1891,6 +1891,72 @@ func TestGeneratedCommandGenerateBodyPrintsExampleWithoutRequest(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandGenerateBodyNormalizesScalarExamples(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("generate body should not send a request")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Body Types", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/probe": {
+      "post": {
+        "operationId": "createProbe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {"type": "boolean", "default": "false"},
+                  "count": {"type": "integer", "example": "7"},
+                  "ratio": {"type": "number", "examples": ["1.5"]},
+                  "tags": {"type": "array", "items": {"type": "integer"}, "example": ["1", "2"]},
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {"type": "boolean"},
+                    "example": {"flag": "true"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-probe", "--rsh-generate-body"}); err != nil {
+		t.Fatalf("generate body: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &body); err != nil {
+		t.Fatalf("generated body should be JSON: %v\n%s", err, out.String())
+	}
+	want := map[string]any{
+		"enabled":  false,
+		"count":    float64(7),
+		"ratio":    1.5,
+		"tags":     []any{float64(1), float64(2)},
+		"metadata": map[string]any{"flag": true},
+	}
+	if !reflect.DeepEqual(body, want) {
+		t.Fatalf("generated body = %#v, want %#v\nraw:\n%s", body, want, out.String())
+	}
+	if strings.Contains(out.String(), `"false"`) || strings.Contains(out.String(), `"7"`) || strings.Contains(out.String(), `"1.5"`) {
+		t.Fatalf("generated body should not quote typed scalar examples:\n%s", out.String())
+	}
+}
+
 func TestGeneratedCommandGenerateBodyHonorsContentType(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/multi-body", func(w http.ResponseWriter, r *http.Request) {
