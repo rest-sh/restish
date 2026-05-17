@@ -2392,6 +2392,120 @@ func TestAPIConnectFallbackMultiCredentialSetup(t *testing.T) {
 	}
 }
 
+func TestAPIConnectFallbackRejectsUnknownCredentialSetupPaths(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {"type": "http", "scheme": "bearer"}
+    }
+  },
+  "security": [{"bearerAuth": []}],
+  "paths": {}
+}`
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{
+		"restish", "api", "connect", "myapi", "api.example.com", "--yes",
+		`prompt.credentials.BearerAuth.token: env:API_TOKEN`,
+		`prompt.credentials.bearerAuth.value: env:API_TOKEN`,
+	})
+	if err == nil {
+		t.Fatal("expected unknown credential setup paths to fail")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"unused auth setup value(s)",
+		"prompt.credentials.BearerAuth.token",
+		"prompt.credentials.bearerAuth.value",
+		"valid credential setup value(s)",
+		"prompt.credentials.bearerAuth.token",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error missing %q:\n%v", want, err)
+		}
+	}
+	written, loadErr := config.Load(cfgFile)
+	if loadErr != nil {
+		t.Fatalf("load config: %v", loadErr)
+	}
+	if written.APIs["myapi"] != nil {
+		t.Fatalf("api connect wrote config despite invalid setup paths: %#v", written.APIs["myapi"])
+	}
+}
+
+func TestAPIConnectRejectsCredentialSetupWhenNoAuthSchemesConsumeIt(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "paths": {}
+}`
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{
+		"restish", "api", "connect", "myapi", "api.example.com", "--yes",
+		`prompt.credentials.BearerAuth.token: env:API_TOKEN`,
+	})
+	if err == nil {
+		t.Fatal("expected unused credential setup path to fail")
+	}
+	if got := err.Error(); !strings.Contains(got, "unused auth setup value(s)") || !strings.Contains(got, "prompt.credentials.BearerAuth.token") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	written, loadErr := config.Load(cfgFile)
+	if loadErr != nil {
+		t.Fatalf("load config: %v", loadErr)
+	}
+	if written.APIs["myapi"] != nil {
+		t.Fatalf("api connect wrote config despite invalid setup path: %#v", written.APIs["myapi"])
+	}
+}
+
 func TestAPIConnectFallbackExplicitCredentialWithAnonymousDefault(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{

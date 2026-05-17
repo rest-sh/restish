@@ -316,6 +316,9 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		}
 		apiCfg = patched
 	}
+	if unused := promptAnswers.unusedCredentialAnswerPaths(); len(unused) > 0 {
+		return fmt.Errorf("unused auth setup value(s): %s; check credential IDs and field names", strings.Join(unused, ", "))
+	}
 	if apiSpec != nil {
 		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
 		c.printAuthCoverage(apiName, "default", apiCfg, discovery)
@@ -531,8 +534,9 @@ func normalizeAPIBaseURL(raw string) (string, error) {
 }
 
 type configurePromptAnswers struct {
-	profiles    map[string]map[string]string
-	credentials map[string]map[string]map[string]string
+	profiles       map[string]map[string]string
+	credentials    map[string]map[string]map[string]string
+	usedCredential map[string]map[string]map[string]bool
 }
 
 func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, []string, error) {
@@ -540,8 +544,9 @@ func parseAPIConfigureSetupExpressions(args []string) (configurePromptAnswers, [
 		return configurePromptAnswers{}, nil, nil
 	}
 	answers := configurePromptAnswers{
-		profiles:    map[string]map[string]string{},
-		credentials: map[string]map[string]map[string]string{},
+		profiles:       map[string]map[string]string{},
+		credentials:    map[string]map[string]map[string]string{},
+		usedCredential: map[string]map[string]map[string]bool{},
 	}
 	var patchArgs []string
 	for _, arg := range args {
@@ -646,6 +651,7 @@ func (a configurePromptAnswers) answerCredential(profileName, credentialID, name
 	if profileAnswers := a.credentials[profileName]; profileAnswers != nil {
 		if credentialAnswers := profileAnswers[credentialID]; credentialAnswers != nil {
 			if value, ok := credentialAnswers[name]; ok {
+				a.markCredentialAnswerUsed(profileName, credentialID, name)
 				return value, true
 			}
 		}
@@ -654,12 +660,26 @@ func (a configurePromptAnswers) answerCredential(profileName, credentialID, name
 		if profileAnswers := a.credentials["default"]; profileAnswers != nil {
 			if credentialAnswers := profileAnswers[credentialID]; credentialAnswers != nil {
 				if value, ok := credentialAnswers[name]; ok {
+					a.markCredentialAnswerUsed("default", credentialID, name)
 					return value, true
 				}
 			}
 		}
 	}
 	return a.answer(profileName, name)
+}
+
+func (a configurePromptAnswers) markCredentialAnswerUsed(profileName, credentialID, name string) {
+	if a.usedCredential == nil {
+		return
+	}
+	if a.usedCredential[profileName] == nil {
+		a.usedCredential[profileName] = map[string]map[string]bool{}
+	}
+	if a.usedCredential[profileName][credentialID] == nil {
+		a.usedCredential[profileName][credentialID] = map[string]bool{}
+	}
+	a.usedCredential[profileName][credentialID][name] = true
 }
 
 func (a configurePromptAnswers) hasCredentialAnswer(profileName, credentialID string) bool {
@@ -672,6 +692,31 @@ func (a configurePromptAnswers) hasCredentialAnswer(profileName, credentialID st
 		}
 	}
 	return false
+}
+
+func (a configurePromptAnswers) unusedCredentialAnswerPaths() []string {
+	var paths []string
+	for profileName, profileAnswers := range a.credentials {
+		for credentialID, credentialAnswers := range profileAnswers {
+			for name := range credentialAnswers {
+				if a.usedCredential[profileName] != nil &&
+					a.usedCredential[profileName][credentialID] != nil &&
+					a.usedCredential[profileName][credentialID][name] {
+					continue
+				}
+				paths = append(paths, credentialAnswerPath(profileName, credentialID, name))
+			}
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func credentialAnswerPath(profileName, credentialID, name string) string {
+	if profileName == "" || profileName == "default" {
+		return "prompt.credentials." + credentialID + "." + name
+	}
+	return "prompt." + profileName + ".credentials." + credentialID + "." + name
 }
 
 func (c *CLI) promptXCLIConfig(ctx context.Context, xcli *spec.XCLIConfig, answers configurePromptAnswers) error {

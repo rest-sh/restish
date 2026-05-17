@@ -97,6 +97,9 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 	if len(supported) == 0 {
 		return nil
 	}
+	if err := c.validateFallbackCredentialAnswers("default", prof, d, answers); err != nil {
+		return err
+	}
 
 	fmt.Fprintf(c.Stdout, "Configure auth for profile %q.\n\n", "default")
 	configured := map[string]bool{}
@@ -147,6 +150,74 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 		prof.Auth = nil
 	}
 	return nil
+}
+
+func (c *CLI) validateFallbackCredentialAnswers(profileName string, prof *config.ProfileConfig, d configureAuthDiscovery, answers configurePromptAnswers) error {
+	profileAnswers := answers.credentials[profileName]
+	if len(profileAnswers) == 0 {
+		return nil
+	}
+	valid := map[string]map[string]bool{}
+	for _, scheme := range d.schemes {
+		if !scheme.Supported {
+			continue
+		}
+		credential := prof.Credentials[scheme.ID]
+		if credential == nil || credential.Auth == nil {
+			continue
+		}
+		handler, err := c.authHandlerFor(credential.Auth, authHandlerOptions{})
+		if err != nil {
+			return err
+		}
+		params := configureAuthPromptParams(handler, d.needDefaults[scheme.ID])
+		if len(params) == 0 {
+			continue
+		}
+		if valid[scheme.ID] == nil {
+			valid[scheme.ID] = map[string]bool{}
+		}
+		for _, p := range params {
+			valid[scheme.ID][p.Name] = true
+		}
+	}
+	var invalid []string
+	for credentialID, credentialAnswers := range profileAnswers {
+		for name := range credentialAnswers {
+			if valid[credentialID][name] {
+				continue
+			}
+			invalid = append(invalid, credentialAnswerPath(profileName, credentialID, name))
+		}
+	}
+	if len(invalid) == 0 {
+		return nil
+	}
+	sort.Strings(invalid)
+	return fmt.Errorf("unused auth setup value(s): %s; valid credential setup value(s): %s", strings.Join(invalid, ", "), strings.Join(validCredentialAnswerPaths(profileName, valid), ", "))
+}
+
+func validCredentialAnswerPaths(profileName string, valid map[string]map[string]bool) []string {
+	var paths []string
+	var credentialIDs []string
+	for credentialID := range valid {
+		credentialIDs = append(credentialIDs, credentialID)
+	}
+	sort.Strings(credentialIDs)
+	for _, credentialID := range credentialIDs {
+		var names []string
+		for name := range valid[credentialID] {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			paths = append(paths, credentialAnswerPath(profileName, credentialID, name))
+		}
+	}
+	if len(paths) == 0 {
+		return []string{"none"}
+	}
+	return paths
 }
 
 func configuredGlobalScheme(schemes []spec.SecuritySchemeSummary, configured map[string]bool) bool {
