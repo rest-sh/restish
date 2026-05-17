@@ -336,7 +336,10 @@ func firstMediaTypeExample(mt *v3.MediaType, schema *base.Schema, mode schemaHel
 		return nil
 	}
 	if v, ok := decodeYAMLNode(mt.Example); ok {
-		return normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0)
+		if normalized, ok := normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0); ok {
+			return normalized
+		}
+		return genSchemaExample(schema, mode, map[uint64]bool{}, 0)
 	}
 	if mt.Examples != nil {
 		for _, ex := range mt.Examples.FromOldest() {
@@ -344,7 +347,10 @@ func firstMediaTypeExample(mt *v3.MediaType, schema *base.Schema, mode schemaHel
 				continue
 			}
 			if v, ok := decodeYAMLNode(ex.Value); ok {
-				return normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0)
+				if normalized, ok := normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0); ok {
+					return normalized
+				}
+				return genSchemaExample(schema, mode, map[uint64]bool{}, 0)
 			}
 		}
 	}
@@ -403,26 +409,47 @@ func genSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool,
 			return result
 		}
 	}
+	if example, ok := annotatedSchemaExample(s, mode, seen, depth); ok {
+		return example
+	}
+
+	return genSchemaShapeExample(s, mode, seen, depth)
+}
+
+func annotatedSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool, depth int) (any, bool) {
 	if v, ok := decodeYAMLNode(s.Example); ok {
-		return normalizeSchemaExampleValue(s, v, mode, seen, depth)
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
 	}
 	if len(s.Examples) > 0 {
 		if v, ok := decodeYAMLNode(s.Examples[0]); ok {
-			return normalizeSchemaExampleValue(s, v, mode, seen, depth)
+			if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+				return normalized, true
+			}
 		}
 	}
 	if v, ok := decodeYAMLNode(s.Const); ok {
-		return normalizeSchemaExampleValue(s, v, mode, seen, depth)
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
 	}
 	if v, ok := decodeYAMLNode(s.Default); ok {
-		return normalizeSchemaExampleValue(s, v, mode, seen, depth)
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
 	}
 	if len(s.Enum) > 0 {
 		if v, ok := decodeYAMLNode(s.Enum[0]); ok {
-			return normalizeSchemaExampleValue(s, v, mode, seen, depth)
+			if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+				return normalized, true
+			}
 		}
 	}
+	return nil, false
+}
 
+func genSchemaShapeExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool, depth int) any {
 	switch schemaKind(s) {
 	case "boolean":
 		return true
@@ -502,49 +529,85 @@ func genSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool,
 	}
 }
 
-func normalizeSchemaExampleValue(s *base.Schema, value any, mode schemaHelpMode, seen map[uint64]bool, depth int) any {
+func normalizeSchemaExampleValue(s *base.Schema, value any, mode schemaHelpMode, seen map[uint64]bool, depth int) (any, bool) {
 	if s == nil || depth > schemaHelpMaxDepth {
-		return value
+		return value, true
 	}
 	switch schemaKind(s) {
 	case "boolean":
+		if _, ok := value.(bool); ok {
+			return value, true
+		}
 		if text, ok := value.(string); ok {
 			if parsed, err := strconv.ParseBool(strings.TrimSpace(text)); err == nil {
-				return parsed
+				return parsed, true
 			}
 		}
 	case "integer":
+		switch typed := value.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			return typed, true
+		case float64:
+			if typed == float64(int64(typed)) {
+				return typed, true
+			}
+		case float32:
+			if typed == float32(int64(typed)) {
+				return typed, true
+			}
+		}
 		if text, ok := value.(string); ok {
 			if parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64); err == nil {
-				return parsed
+				return parsed, true
 			}
 		}
 	case "number":
+		switch typed := value.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			return typed, true
+		}
 		if text, ok := value.(string); ok {
 			if parsed, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
-				return parsed
+				return parsed, true
 			}
 		}
+	case "string":
+		if _, ok := value.(string); ok {
+			return value, true
+		}
 	case "array":
+		if value == nil {
+			return value, true
+		}
 		items := schemaFromDynamicValue(s.Items)
 		if items == nil {
-			return value
+			if _, ok := value.([]any); ok {
+				return value, true
+			}
+			return nil, false
 		}
 		if values, ok := value.([]any); ok {
 			out := make([]any, len(values))
 			for i, item := range values {
-				out[i] = normalizeSchemaExampleValue(items, item, mode, seen, depth+1)
+				normalized, ok := normalizeSchemaExampleValue(items, item, mode, seen, depth+1)
+				if !ok {
+					return nil, false
+				}
+				out[i] = normalized
 			}
-			return out
+			return out, true
 		}
 	case "object":
+		if value == nil {
+			return value, true
+		}
 		values, ok := value.(map[string]any)
 		if !ok {
-			return value
+			return nil, false
 		}
 		hash := s.GoLow().Hash()
 		if seen[hash] {
-			return value
+			return value, true
 		}
 		seen[hash] = true
 		defer func() { seen[hash] = false }()
@@ -556,11 +619,16 @@ func normalizeSchemaExampleValue(s *base.Schema, value any, mode schemaHelpMode,
 				out[name] = item
 				continue
 			}
-			out[name] = normalizeSchemaExampleValue(prop, item, mode, seen, depth+1)
+			normalized, ok := normalizeSchemaExampleValue(prop, item, mode, seen, depth+1)
+			if !ok {
+				out[name] = item
+				continue
+			}
+			out[name] = normalized
 		}
-		return out
+		return out, true
 	}
-	return value
+	return nil, false
 }
 
 func schemaObjectExampleProperty(s *base.Schema, name string, mode schemaHelpMode) *base.Schema {

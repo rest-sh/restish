@@ -1957,6 +1957,59 @@ func TestGeneratedCommandGenerateBodyNormalizesScalarExamples(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandGenerateBodyIgnoresConflictingTypedAnnotations(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mixed", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("generate body should not send a request")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Mixed", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/mixed": {
+      "post": {
+        "operationId": "mixedEnum",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {"type": "integer"}
+                },
+                "const": [null, "test", 1, ["nested", false]],
+                "enum": [[null, "test", 1, ["nested", false]]]
+              }
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "mixed-enum", "--rsh-generate-body"}); err != nil {
+		t.Fatalf("generate body: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &body); err != nil {
+		t.Fatalf("generated body should fall back to object shape: %v\n%s", err, out.String())
+	}
+	if !reflect.DeepEqual(body, map[string]any{"id": float64(1)}) {
+		t.Fatalf("generated body = %#v, want object shape\nraw:\n%s", body, out.String())
+	}
+	if strings.Contains(out.String(), `"nested"`) {
+		t.Fatalf("generated body should ignore conflicting root enum/const:\n%s", out.String())
+	}
+}
+
 func TestGeneratedCommandGenerateBodyHonorsContentType(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/multi-body", func(w http.ResponseWriter, r *http.Request) {
