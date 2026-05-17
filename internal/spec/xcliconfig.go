@@ -124,9 +124,9 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 	var chosenName string
 	var chosenScheme *v3high.SecurityScheme
 	for _, name := range preferredNames {
-		if s := schemes.GetOrZero(name); s != nil {
+		if scheme := schemes.GetOrZero(name); fallbackSchemeSupported(scheme) {
 			chosenName = name
-			chosenScheme = s
+			chosenScheme = scheme
 			break
 		}
 	}
@@ -190,6 +190,16 @@ func FallbackXCLIConfig(s *APISpec) *XCLIConfig {
 			"default": profile,
 		},
 	}
+}
+
+func fallbackSchemeSupported(scheme *v3high.SecurityScheme) bool {
+	if scheme == nil {
+		return false
+	}
+	if scheme.Type == "apiKey" {
+		return scheme.Name != ""
+	}
+	return SchemeToXCLIAuth(scheme, nil) != nil || SchemeToXCLIAPIKeyProfile(scheme) != nil
 }
 
 func referencedFallbackSecuritySchemeNames(model v3high.Document) []string {

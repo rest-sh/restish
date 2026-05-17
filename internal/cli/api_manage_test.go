@@ -2257,6 +2257,114 @@ func TestAPIConnectFallbackMultiCredentialSetup(t *testing.T) {
 	}
 }
 
+func TestAPIConnectFallbackExplicitCredentialWithAnonymousDefault(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{}`)
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Optional Auth API", "version": "1.0"},
+  "components": {
+    "securitySchemes": {
+      "petstore_auth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/token",
+            "scopes": {"read:pets": "Read pets"}
+          }
+        }
+      },
+      "api_key": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+  },
+  "security": [{}],
+  "paths": {
+    "/oauth": {
+      "get": {
+        "operationId": "getOAuthOnly",
+        "security": [{"petstore_auth": ["read:pets"]}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/pets/{id}": {
+      "get": {
+        "operationId": "getPetById",
+        "security": [{"api_key": []}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/inventory": {
+      "get": {
+        "operationId": "getInventory",
+        "security": [{"api_key": []}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/status": {
+      "get": {
+        "operationId": "status",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{
+		"restish", "api", "connect", "optional", "api.example.com",
+		`prompt.credentials.api_key.value:env:REDOC16_API_KEY`,
+	}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	outText := out.String()
+	for _, want := range []string{
+		"configured: api_key",
+		"skipped:    petstore_auth",
+		"callable:   2/3 secured operations",
+	} {
+		if !strings.Contains(outText, want) {
+			t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)
+		}
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	prof := written.APIs["optional"].Profiles["default"]
+	credential := prof.Credentials["api_key"]
+	if credential == nil || credential.Auth == nil {
+		t.Fatalf("api_key credential = %#v", credential)
+	}
+	if got := credential.Auth.Params["value"]; got != "env:REDOC16_API_KEY" {
+		t.Fatalf("api_key value = %q, want env:REDOC16_API_KEY", got)
+	}
+	if prof.Credentials["petstore_auth"] != nil {
+		t.Fatalf("expected petstore_auth to be skipped, got %#v", prof.Credentials["petstore_auth"])
+	}
+}
+
 func TestAPIConnectFallbackAuthDiscoveryFlow(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{}`)
 	specBody := `{
