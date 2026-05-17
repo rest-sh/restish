@@ -40,7 +40,8 @@ credential inside that profile according to normalized operation requirements.
   Restish profile.
 - Preserve explicit profile selection as the user's consent boundary; do not
   silently switch profiles based on operation metadata.
-- Keep `security: []` as a reliable no-auth escape hatch.
+- Keep `security: []` as a reliable no-auth default unless the user explicitly
+  asks Restish to send a configured credential.
 - Implement OpenAPI's OR and AND security semantics closely enough for correct
   request planning and useful diagnostics.
 - Represent OAuth scopes, OpenAPI roles, and similar requirement values in
@@ -79,7 +80,19 @@ profile auth behavior.
 
 Generated operations carry `NoAuth` when the OpenAPI operation declares
 `security: []`. In that case request execution suppresses profile auth for that
-operation, including matching generic URL requests.
+operation by default, including matching generic URL requests. An explicit
+`--rsh-auth` override is a deliberate user request and may still send a
+configured credential.
+
+An operation with no effective OpenAPI security requirement is different from
+`security: []`. When the OpenAPI document does not declare operation auth and
+there is no inherited top-level security requirement, Restish treats that as
+"no declared requirement", not as a command to strip user-configured API/profile
+auth. If the user configured auth for the selected API profile, the request may
+still send it. This favors explicit user configuration over incomplete OpenAPI
+metadata. Users can use `security: []` in the spec to suppress configured auth
+by default, while `--rsh-auth` remains the explicit escape hatch when they know
+auth should still be sent.
 
 `api connect` can read standard OpenAPI security schemes and the custom
 `x-cli-config` extension to pre-populate a profile. The current extension shape
@@ -362,9 +375,9 @@ the operation security policy before auth callbacks are attached.
 
 The algorithm is:
 
-1. If the operation has explicit `security: []`, send no auth. Do not run
-   built-in auth, auth hooks, API-key auth, or profile credential headers/query
-   that are known to be sensitive.
+1. If the operation has explicit `security: []` and no explicit auth override,
+   send no auth. Do not run built-in auth, auth hooks, API-key auth, or profile
+   credential headers/query that are known to be sensitive.
 2. Resolve the effective credential alternatives from operation metadata.
 3. If there is no effective security policy, use ordinary selected-profile auth
    behavior for compatibility with generic requests and specs that omit auth.
@@ -451,13 +464,15 @@ connect/sync/readiness workflows and in generated-command auth errors, but a
 user who knows which credential to send can configure it and select it with
 `--rsh-auth <credential-id>`.
 
-This override escape hatch does not apply when the operation explicitly declares
-`security: []`, because that means forced no auth for the operation.
+This override escape hatch applies even when the operation explicitly declares
+`security: []`: the empty security array suppresses configured auth by default,
+but it does not overrule an explicit user request to send a configured
+credential.
 
 OpenAPI's empty requirement object has different semantics from `security: []`.
 For Restish:
 
-- `security: []` means forced no auth;
+- `security: []` means no auth by default;
 - `security: [{}]` means anonymous-only access;
 - `security: [{}, {UserOAuth: [read]}]` means optional auth.
 
@@ -862,7 +877,8 @@ scheme.
 - document-level default security applies to operations that omit `security`;
 - operation security overrides document defaults;
 - operation `security: []` suppresses built-in auth, auth hooks, profile auth,
-  and sensitive credential headers/query;
+  and sensitive credential headers/query unless the user passes an explicit
+  auth override;
 - alternative requirements accept any satisfied alternative in spec order;
 - combined requirements require every credential requirement in the alternative;
 - explicit `--rsh-auth` selects a permitted alternative and rejects a
