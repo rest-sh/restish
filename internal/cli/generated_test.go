@@ -3425,6 +3425,112 @@ func TestGeneratedCommandOctetStreamRequestBody(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandXMLRequestBodySendsRawFileWithDeclaredContentType(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webdav", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "WebDAV-ish API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/webdav": {
+      "post": {
+        "operationId": "webdavOperation",
+        "requestBody": {
+          "content": {
+            "application/xml": {
+              "schema": {"type": "string"}
+            }
+          }
+        },
+        "responses": {"207": {"description": "Multi-Status"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	bodyPath := filepath.Join(t.TempDir(), "propfind.xml")
+	wantBody := `<propfind xmlns="DAV:"><prop><displayname/></prop></propfind>`
+	if err := os.WriteFile(bodyPath, []byte(wantBody), 0o600); err != nil {
+		t.Fatalf("write xml body: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "webdav-operation", "@" + bodyPath}); err != nil {
+		t.Fatalf("webdav-operation failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/xml") {
+		t.Fatalf("Content-Type = %q, want application/xml", gotContentType)
+	}
+	if gotBody != wantBody {
+		t.Fatalf("body = %q, want raw XML %q", gotBody, wantBody)
+	}
+}
+
+func TestGeneratedCommandNDJSONRequestBodySendsRawFileWithDeclaredContentType(t *testing.T) {
+	var gotContentType, gotBody string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/insert", func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		data, _ := io.ReadAll(r.Body)
+		gotBody = string(data)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Logs API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/insert": {
+      "post": {
+        "operationId": "insertJSONLine",
+        "requestBody": {
+          "content": {
+            "application/x-ndjson": {
+              "schema": {"type": "string"}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	bodyPath := filepath.Join(t.TempDir(), "sample.ndjson")
+	wantBody := "{\"_time\":\"2026-05-17T00:00:00Z\",\"message\":\"one\"}\n{\"_time\":\"2026-05-17T00:00:01Z\",\"message\":\"two\"}\n"
+	if err := os.WriteFile(bodyPath, []byte(wantBody), 0o600); err != nil {
+		t.Fatalf("write ndjson body: %v", err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "insert-json-line", "@" + bodyPath}); err != nil {
+		t.Fatalf("insert-json-line failed: %v", err)
+	}
+	if !strings.HasPrefix(gotContentType, "application/x-ndjson") {
+		t.Fatalf("Content-Type = %q, want application/x-ndjson", gotContentType)
+	}
+	if gotBody != wantBody {
+		t.Fatalf("body = %q, want raw NDJSON %q", gotBody, wantBody)
+	}
+}
+
 func TestGeneratedCommandGETRequestBody(t *testing.T) {
 	var gotBody string
 	mux := http.NewServeMux()

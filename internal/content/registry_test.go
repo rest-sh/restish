@@ -59,6 +59,48 @@ func TestYAMLRoundTrip(t *testing.T) {
 	}
 }
 
+func TestXMLEncodesRawTextAndRejectsStructuredValues(t *testing.T) {
+	data, err := reg.Encode("application/xml", `<propfind xmlns="DAV:"><prop><displayname/></prop></propfind>`)
+	if err != nil {
+		t.Fatalf("encode xml string: %v", err)
+	}
+	if got, want := string(data), `<propfind xmlns="DAV:"><prop><displayname/></prop></propfind>`; got != want {
+		t.Fatalf("XML string encode = %q, want %q", got, want)
+	}
+	data, err = reg.Encode("application/merge+xml", []byte(`<merge/>`))
+	if err != nil {
+		t.Fatalf("encode +xml bytes: %v", err)
+	}
+	if got, want := string(data), `<merge/>`; got != want {
+		t.Fatalf("+xml bytes encode = %q, want %q", got, want)
+	}
+	_, err = reg.Encode("application/xml", map[string]any{"displayname": true})
+	if err == nil {
+		t.Fatal("expected structured XML encode error")
+	}
+	if !strings.Contains(err.Error(), "XML request bodies must be supplied as raw text or @file input") {
+		t.Fatalf("unexpected XML encode error: %v", err)
+	}
+}
+
+func TestNDJSONPreservesRawTextInput(t *testing.T) {
+	raw := "{\"message\":\"one\"}\n{\"message\":\"two\"}\n"
+	data, err := reg.Encode("application/x-ndjson", raw)
+	if err != nil {
+		t.Fatalf("encode ndjson string: %v", err)
+	}
+	if got := string(data); got != raw {
+		t.Fatalf("NDJSON string encode = %q, want raw input %q", got, raw)
+	}
+	data, err = reg.Encode("application/jsonl", []byte(raw))
+	if err != nil {
+		t.Fatalf("encode jsonl bytes: %v", err)
+	}
+	if got := string(data); got != raw {
+		t.Fatalf("JSONL bytes encode = %q, want raw input %q", got, raw)
+	}
+}
+
 func TestDecodeIdentityContentType(t *testing.T) {
 	out, err := reg.Decode("identity", []byte("plain response"))
 	if err != nil {

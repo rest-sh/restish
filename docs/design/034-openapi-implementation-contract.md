@@ -248,6 +248,10 @@ Supported request body media behaviors include:
 - `multipart/form-data` string fields, file fields, repeated file fields for
   arrays, and OpenAPI `encoding.contentType` as per-part content metadata;
 - `application/octet-stream` and other binary bodies from raw input or files;
+- XML request bodies from raw string or whole-body `@file` input, preserving
+  bytes with the declared XML media type;
+- NDJSON/JSON Lines request bodies from raw string or whole-body `@file` input,
+  while structured arrays remain encodable as one JSON record per line;
 - non-JSON structured content when a registered content type can marshal it.
 
 GET, DELETE, and other operations with request bodies are allowed because

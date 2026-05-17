@@ -156,13 +156,20 @@ can grow deliberately.
 Generated commands use the normal Restish body syntax. JSON and `+json` media
 types use shorthand assignments, form bodies use form encoding, multipart
 bodies can include fields, repeated file-array fields, and
-`encoding.contentType` per-part metadata, and `application/octet-stream` sends
-raw string or file input:
+`encoding.contentType` per-part metadata, and opaque body media types such as
+`application/octet-stream`, XML, and NDJSON send raw string or file input:
 
 ```bash
 restish myapi upload-item name: alice, file: @photo.jpg
 restish myapi put-blob @payload.bin
+restish myapi webdav-operation @propfind.xml
+restish myapi insert-json-line @events.ndjson
 ```
+
+Generated help prefers `@file` for whole-body file input because it keeps the
+body source attached to the command invocation. Redirected stdin works too, but
+`@file` is easier to copy, review, and combine with required operation
+arguments and flags.
 
 OpenAPI allows request bodies on methods such as `GET` and `DELETE`. Restish
 will send them when the spec defines a request body and the user supplies body

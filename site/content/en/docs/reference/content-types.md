@@ -28,6 +28,7 @@ restish content-types -o json
 | --- | --- |
 | `json` | `application/json` |
 | `ndjson` | `application/x-ndjson`, `application/ndjson`, `application/jsonl`, `application/jsonlines` |
+| `xml` | `application/xml`, `text/xml` |
 | `yaml` | `application/yaml`, `application/x-yaml`, `text/yaml`, `text/x-yaml` |
 | `cbor` | `application/cbor` |
 | `msgpack` | `application/msgpack`, `application/x-msgpack`, `application/vnd.msgpack` |
@@ -42,6 +43,8 @@ JSON-family structured types with `+json`, such as
 `application/problem+json`, decode as JSON. Structured suffixes win before broad
 wildcards, so a response labeled `text/example+json` is treated as JSON rather
 than plain `text/*` unless an exact handler is registered for that MIME type.
+XML-family media types with `+xml`, such as `application/soap+xml`, use the XML
+handler.
 
 ## Request Encoding
 
@@ -55,9 +58,21 @@ restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.
 ```
 
 Shorthand builds a logical value. The selected encoder turns that value into
-JSON, YAML, CBOR, form data, multipart parts, text, or raw bytes.
+JSON, YAML, CBOR, form data, multipart parts, text, XML, NDJSON, or raw bytes.
 Use `-c text` for plain text request bodies; SSE responses still decode from
 `text/event-stream`.
+
+For media types that are already textual payload formats, prefer `@file` when
+the file should become the whole request body:
+
+```bash
+restish post -c xml api.example.test/webdav @propfind.xml
+restish post -c ndjson api.example.test/logs @events.ndjson
+```
+
+XML request bodies accept raw string or `@file` input. NDJSON accepts raw
+string or `@file` input, and still encodes structured arrays as one JSON record
+per line.
 
 For multipart bodies, `@path` creates a file part and fails locally if the file
 cannot be read. Use `@@value` when a text field should start with a literal

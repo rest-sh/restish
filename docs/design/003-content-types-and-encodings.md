@@ -144,13 +144,16 @@ Conceptually, request body handling proceeds as follows:
 4. otherwise infer a logical content type from the body source:
    - shorthand/object/array structured values default to a structured encoder
    - raw text input defaults to text when no structured parse occurred
-   - file or stream passthrough may preserve raw bytes instead of re-encoding
+   - whole-body `@file` or stream passthrough may preserve raw bytes instead
+     of re-encoding
 5. ask the selected encoder for the concrete wire `Content-Type`
 6. serialize the body and attach the final header
 
 The key rule is that body shape and body source both matter. A pipeline that
-received raw bytes from stdin should not silently reinterpret them as JSON just
-because JSON is the most common format in the registry.
+received raw bytes from stdin or whole-body `@file` input should not silently
+reinterpret them as JSON just because JSON is the most common format in the
+registry. For textual wire formats such as XML and NDJSON/JSON Lines, raw
+string and whole-file input is preserved with the declared `Content-Type`.
 
 ## Unknown Content Types
 

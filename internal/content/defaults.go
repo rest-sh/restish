@@ -76,6 +76,17 @@ func Default() *Registry {
 	})
 
 	r.AddContentType(&ContentType{
+		Name:      "xml",
+		MIMETypes: []string{"application/xml", "text/xml"},
+		Suffixes:  []string{"+xml"},
+		Quality:   0.2,
+		Marshal:   marshalRawText("XML"),
+		Unmarshal: func(data []byte) (any, error) {
+			return string(data), nil
+		},
+	})
+
+	r.AddContentType(&ContentType{
 		Name:      "yaml",
 		MIMETypes: []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"},
 		Suffixes:  []string{"+yaml"},
@@ -283,6 +294,9 @@ func unmarshalJSONSequence(data []byte) ([]any, error) {
 }
 
 func marshalNDJSON(v any) ([]byte, error) {
+	if data, ok := rawTextBytes(v); ok {
+		return data, nil
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	rv := reflect.ValueOf(v)
@@ -300,6 +314,28 @@ func marshalNDJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func marshalRawText(name string) func(any) ([]byte, error) {
+	return func(v any) ([]byte, error) {
+		if data, ok := rawTextBytes(v); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf("%s request bodies must be supplied as raw text or @file input", name)
+	}
+}
+
+func rawTextBytes(v any) ([]byte, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, true
+	case []byte:
+		return t, true
+	case string:
+		return []byte(t), true
+	default:
+		return nil, false
+	}
 }
 
 func marshalForm(v any) ([]byte, error) {
