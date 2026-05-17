@@ -444,10 +444,17 @@ func TestIgnoreStatusCode(t *testing.T) {
 // TestUnknownOutputFormat verifies that -o nosuchformat returns an error.
 func TestUnknownOutputFormat(t *testing.T) {
 	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{}`)
+	requested := false
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
 	err := c.Run([]string{"restish", "get", "-o", "nosuchformat", "https://api.example.com/items"})
 	if err == nil {
 		t.Fatal("expected error for unknown output format, got nil")
+	}
+	if requested {
+		t.Fatal("request should not be sent with unknown output format")
 	}
 }
 
@@ -500,7 +507,11 @@ func TestPrintResponseHeadersAndBody(t *testing.T) {
 
 func TestPrintRejectsRawPart(t *testing.T) {
 	c, _, _ := newTestCLI(t)
-	useJSONResponse(c, 200, `{}`)
+	requested := false
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
 	err := c.Run([]string{"restish", "get", "--rsh-print", "rb", "https://api.example.com/items"})
 	if err == nil {
 		t.Fatal("expected --rsh-print raw part to be rejected")
@@ -508,6 +519,49 @@ func TestPrintRejectsRawPart(t *testing.T) {
 	if !strings.Contains(err.Error(), `unknown part "r"`) ||
 		!strings.Contains(err.Error(), "H, B, h, b, p, c") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if requested {
+		t.Fatal("request should not be sent with invalid --rsh-print")
+	}
+}
+
+func TestOutputValidationPreventsRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "unknown output format",
+			args: []string{"restish", "get", "-o", "nope", "https://api.example.com/items"},
+			want: `unknown output format "nope"`,
+		},
+		{
+			name: "unknown print part",
+			args: []string{"restish", "get", "--rsh-print", "nope", "https://api.example.com/items"},
+			want: `invalid --rsh-print value "nope"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requested := false
+			c, _, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				requested = true
+				return jsonResponse(200, `{}`), nil
+			})
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v should fail", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if requested {
+				t.Fatalf("%v sent a request before output validation failed", tt.args)
+			}
+		})
 	}
 }
 

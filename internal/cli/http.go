@@ -97,6 +97,17 @@ func (c *CLI) runInferredHTTP(cmd *cobra.Command, args []string) error {
 	return c.runHTTPWithOptions(cmd, "", args, false, nil, false, "", "", requestBodyOptions{})
 }
 
+func (c *CLI) validateHTTPOutputFlags(cmd *cobra.Command, gf GlobalFlags) error {
+	if _, err := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printBoundedResponse); err != nil {
+		return err
+	}
+	if gf.OutputFormat == "" {
+		return nil
+	}
+	_, err := c.selectFormatter(cmd, gf.OutputFormat, c.stdoutIsTerminal())
+	return err
+}
+
 type requestBodyOptions struct {
 	multipartPartContentTypes map[string]string
 	acceptOverride            string
@@ -120,6 +131,10 @@ type requestBodyOptions struct {
 // redirect to a different host, preventing credentialed SSRF via a compromised
 // response-middleware plugin.
 func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []string, followMode bool, extraHeaders []string, noAuth bool, firstPartyHost string, contentTypeOverride string, bodyOpts requestBodyOptions) error {
+	gf := globalFlagsFromContext(requestContext(cmd))
+	if err := c.validateHTTPOutputFlags(cmd, gf); err != nil {
+		return err
+	}
 	c.requestExecutionStarted = true
 	trace := ensureRequestTrace(cmd)
 	rawURL := args[0]
@@ -261,7 +276,6 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	// Decide whether this response needs decoded/interpreted body handling
 	// before normalizing. Raw downloads must not unmarshal JSON/CBOR/YAML, and
 	// explicit body-free print specs should not block on or validate the body.
-	gf := globalFlagsFromContext(requestContext(cmd))
 	tty := c.stdoutIsTerminal()
 	printSpec, err := c.resolvePrintSpec(gf, tty, printBoundedResponse)
 	if err != nil {
