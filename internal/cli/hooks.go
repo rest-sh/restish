@@ -171,7 +171,7 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 		}
 		responseHeaders := cloneHeaderMap(resp.Headers)
 		if !p.Manifest.NeedsAuthSecrets {
-			redactCredentialHeaders(responseHeaders)
+			redactCredentialHeaders(nil, responseHeaders)
 		}
 		in := pluginwire.ResponseMiddlewareInput{
 			Type:    "response-middleware",
@@ -271,8 +271,8 @@ func hookRequestForPlugin(req *http.Request, p plugin.Plugin) pluginwire.HookReq
 	headers := cloneHeaderMap(req.Header)
 	uri := req.URL.String()
 	if !p.Manifest.NeedsAuthSecrets {
-		redactCredentialHeaders(headers)
-		uri = request.RedactedURL(req.URL)
+		redactCredentialHeaders(req, headers)
+		uri = request.RedactedRequestURL(req)
 	}
 	hookReq := pluginwire.HookRequest{
 		Method:  req.Method,
@@ -316,9 +316,9 @@ func manifestRequiresFeature(m plugin.Manifest, feature string) bool {
 
 // redactCredentialHeaders replaces values for known credential-bearing headers
 // with "<redacted>" so plugins receive the request shape without the secrets.
-func redactCredentialHeaders(headers map[string][]string) {
+func redactCredentialHeaders(req *http.Request, headers map[string][]string) {
 	for name := range headers {
-		if request.IsCredentialHeader(name) {
+		if request.IsCredentialHeader(name) || request.IsMarkedCredentialHeader(req, name) {
 			headers[name] = []string{"<redacted>"}
 		}
 	}

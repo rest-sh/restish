@@ -375,6 +375,7 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 	if err := s.handler.Authenticate(req.Context(), req, c.authContext(req.Context(), s.apiName, s.profileName, params, s.cacheKey, force)); err != nil {
 		return err
 	}
+	markAuthCredentialTargets(req, s.authType, params)
 	return nil
 }
 

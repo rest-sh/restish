@@ -623,6 +623,76 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
+	var gotHeader string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/protected", func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Environment-Key")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "security": [{"EnvironmentKey": []}],
+  "components": {
+    "securitySchemes": {
+      "EnvironmentKey": {"type": "apiKey", "in": "header", "name": "X-Environment-Key"}
+    }
+  },
+  "paths": {
+    "/protected": {
+      "get": {
+        "operationId": "getProtected",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"EnvironmentKey": {
+								Auth: &config.AuthConfig{
+									Type:   "api-key",
+									Params: map[string]string{"in": "header", "name": "X-Environment-Key", "value": "dummy"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, output := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-protected", "-v"}); err != nil {
+		t.Fatalf("get-protected failed: %v", err)
+	}
+	if gotHeader != "dummy" {
+		t.Fatalf("X-Environment-Key = %q, want configured credential", gotHeader)
+	}
+	stderr := output.String()
+	if strings.Contains(stderr, "dummy") {
+		t.Fatalf("verbose output leaked generated API-key header:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "> X-Environment-Key: <redacted>") {
+		t.Fatalf("expected generated API-key header redacted, got:\n%s", stderr)
+	}
+}
+
 func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
 	var got []string
 	mux := http.NewServeMux()

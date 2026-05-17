@@ -143,6 +143,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, false)); err != nil {
 				return err
 			}
+			markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 		}
 		if _, ok := handler.(auth.ForceCapable); ok {
@@ -165,6 +166,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 				if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, true)); err != nil {
 					return err
 				}
+				markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 			}
 		}
@@ -183,6 +185,22 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
 	return callbacks
+}
+
+func markAuthCredentialTargets(req *http.Request, authType string, params map[string]string) {
+	if req == nil || authType != "api-key" {
+		return
+	}
+	location := strings.ToLower(strings.TrimSpace(params["in"]))
+	name := strings.TrimSpace(params["name"])
+	switch location {
+	case "header":
+		request.MarkCredentialHeader(req, name)
+	case "query":
+		request.MarkCredentialQueryParam(req, name)
+	case "cookie":
+		request.MarkCredentialCookie(req, name)
+	}
 }
 
 func (c *CLI) applyCachedOAuthClientCredentials(req *http.Request, authType string, cacheKey, apiName, profileName string, force bool) bool {

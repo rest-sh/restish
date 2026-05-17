@@ -750,7 +750,7 @@ func (c *CLI) writeRequestPreamble(prepared *preparedRequest, color bool) error 
 	req := prepared.actualRequest
 	uri := "/"
 	if req.URL != nil {
-		uri = redactedRequestURI(req.URL)
+		uri = request.RedactedRequestURI(req)
 		if uri == "" {
 			uri = "/"
 		}
@@ -771,7 +771,7 @@ func (c *CLI) writeRequestPreamble(prepared *preparedRequest, color bool) error 
 	keys := sortedHeaderKeys(req.Header)
 	for _, key := range keys {
 		for _, value := range req.Header[key] {
-			if secrets.IsHeaderName(key) {
+			if secrets.IsHeaderName(key) || request.IsMarkedCredentialHeader(req, key) {
 				value = "<redacted>"
 			}
 			fmt.Fprintf(&preamble, "%s: %s\n", key, value)
@@ -1402,11 +1402,11 @@ func (c *CLI) logVerboseRequest(req *http.Request) {
 	if req == nil {
 		return
 	}
-	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, redactedRequestURL(req.URL))
+	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, request.RedactedRequestURL(req))
 	for _, k := range sortedHeaderKeys(req.Header) {
 		vs := req.Header[k]
 		for _, v := range vs {
-			if isSensitiveHeaderValue(k, v) {
+			if isSensitiveHeaderValue(k, v) || request.IsMarkedCredentialHeader(req, k) {
 				v = "<redacted>"
 			}
 			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
@@ -1607,28 +1607,6 @@ func networkErrorHint(err error) string {
 	default:
 		return ""
 	}
-}
-
-func redactedRequestURL(u *url.URL) string {
-	return request.RedactedURL(u)
-}
-
-func redactedRequestURI(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	copyURL := *u
-	q := copyURL.Query()
-	for name, values := range q {
-		for i, value := range values {
-			if secrets.IsQueryParamValue(name, value) {
-				values[i] = "<redacted>"
-			}
-		}
-		q[name] = values
-	}
-	copyURL.RawQuery = q.Encode()
-	return copyURL.RequestURI()
 }
 
 func isSensitiveQueryParam(name string) bool {

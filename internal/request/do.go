@@ -499,24 +499,7 @@ func IsCredentialQueryParam(name string) bool {
 // values replaced by placeholders. Non-sensitive query parameters and URL
 // structure are preserved.
 func RedactedURL(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	copyURL := *u
-	if copyURL.User != nil {
-		copyURL.User = url.User("redacted")
-	}
-	q := copyURL.Query()
-	for name, values := range q {
-		for i, value := range values {
-			if secrets.IsQueryParamValue(name, value) {
-				values[i] = "<redacted>"
-			}
-		}
-		q[name] = values
-	}
-	copyURL.RawQuery = q.Encode()
-	return copyURL.String()
+	return redactedURL(u, nil)
 }
 
 // SameOrigin reports whether a and b share scheme, hostname, and effective port.
