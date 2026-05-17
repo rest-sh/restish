@@ -14,8 +14,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	restishcli "github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 // specWithXCLIConfig returns an OpenAPI spec with x-cli-config pre-populating
@@ -383,6 +386,85 @@ func TestAPIConnectConcurrentUpdatesPreserveBothAPIs(t *testing.T) {
 	}
 	if cfg.APIs["one"] == nil || cfg.APIs["two"] == nil {
 		t.Fatalf("concurrent api connect lost update: %#v", cfg.APIs)
+	}
+}
+
+func TestAPIConnectConcurrentUpdatesPreserveSpecCaches(t *testing.T) {
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+	twoSpecRequested := make(chan struct{})
+	releaseTwoSpec := make(chan struct{})
+	errCh := make(chan error, 1)
+
+	go func() {
+		c, _, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		var once sync.Once
+		useTransport(c, func(r *http.Request) (*http.Response, error) {
+			switch r.URL.String() {
+			case "https://two.example.com":
+				return jsonResponse(200, ""), nil
+			case "https://two.example.com/openapi.json":
+				once.Do(func() { close(twoSpecRequested) })
+				<-releaseTwoSpec
+				return jsonResponse(200, specWithOperations("https://two.example.com")), nil
+			default:
+				return jsonResponse(404, "{}"), nil
+			}
+		})
+		errCh <- c.Run([]string{"restish", "api", "connect", "two", "https://two.example.com"})
+	}()
+
+	select {
+	case <-twoSpecRequested:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for second api connect to reach spec discovery")
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://one.example.com":
+			return jsonResponse(200, ""), nil
+		case "https://one.example.com/openapi.json":
+			return jsonResponse(200, specWithOperations("https://one.example.com")), nil
+		default:
+			return jsonResponse(404, "{}"), nil
+		}
+	})
+	if err := c.Run([]string{"restish", "api", "connect", "one", "https://one.example.com"}); err != nil {
+		t.Fatalf("first api connect: %v", err)
+	}
+
+	close(releaseTwoSpec)
+	if err := <-errCh; err != nil {
+		t.Fatalf("second api connect: %v", err)
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.APIs["one"] == nil || cfg.APIs["two"] == nil {
+		t.Fatalf("concurrent api connect lost config update: %#v", cfg.APIs)
+	}
+	for _, tc := range []struct {
+		name    string
+		baseURL string
+	}{
+		{"one", "https://one.example.com"},
+		{"two", "https://two.example.com"},
+	} {
+		set, ok := spec.LoadOperationSetFromCache(cacheDir, tc.name, restishcli.Version, nil, spec.OperationOptions{BaseURL: tc.baseURL})
+		if !ok || len(set.Operations) == 0 {
+			t.Fatalf("expected generated operation cache for %s, ok=%v set=%#v", tc.name, ok, set)
+		}
 	}
 }
 

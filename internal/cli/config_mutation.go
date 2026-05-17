@@ -96,7 +96,7 @@ func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *c
 	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
 		return err
 	}
-	return c.reloadConfigAfterMutation(label, oldCfg)
+	return c.reloadConfigAfterAPIMutation(label, oldCfg, apiName)
 }
 
 func (c *CLI) saveConfigMutation(label string, mutate func(*config.Config) error) error {
@@ -163,4 +163,25 @@ func (c *CLI) reloadConfigAfterMutation(label string, oldCfg *config.Config) err
 	}
 	c.cfg = newCfg
 	return nil
+}
+
+func (c *CLI) reloadConfigAfterAPIMutation(label string, oldCfg *config.Config, apiName string) error {
+	newCfg, err := c.loadConfig()
+	if err != nil {
+		return err
+	}
+	if apiSpecCacheRelevantFieldsChanged(apiConfigByName(oldCfg, apiName), apiConfigByName(newCfg, apiName)) {
+		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
+			return fmt.Errorf("%s: invalidate spec cache for %q: %w", label, apiName, err)
+		}
+	}
+	c.cfg = newCfg
+	return nil
+}
+
+func apiConfigByName(cfg *config.Config, apiName string) *config.APIConfig {
+	if cfg == nil || cfg.APIs == nil {
+		return nil
+	}
+	return cfg.APIs[apiName]
 }
