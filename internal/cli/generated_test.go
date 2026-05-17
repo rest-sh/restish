@@ -1634,6 +1634,12 @@ func TestGeneratedCommandEnumTypeMismatchUsesStringFlag(t *testing.T) {
 	if !strings.Contains(help, "--mag-id") || !strings.Contains(help, "enum:mag_kts,mms,sq_NM") {
 		t.Fatalf("help missing enum detail:\n%s", help)
 	}
+	if !strings.Contains(help, "--mag-id: (string enum:mag_kts,mms,sq_NM)") {
+		t.Fatalf("help schema should use effective string type:\n%s", help)
+	}
+	if strings.Contains(help, "--mag-id: (integer enum:mag_kts,mms,sq_NM)") {
+		t.Fatalf("help schema should not keep incompatible source integer type:\n%s", help)
+	}
 
 	c = env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "list-events", "--mag-id", "mag_kts", "--limit", "1"}); err != nil {

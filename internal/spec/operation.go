@@ -749,9 +749,19 @@ func parameterSchemaDetails(schema *base.Schema) (schemaHelp, paramType, itemTyp
 	enum = schemaEnumStrings(schema)
 	if enumIncompatibleWithType(paramType, enum) {
 		paramType = "string"
+		schemaHelp = buildParameterSchemaHelpWithType(schema, paramType)
 	}
 	jsonSchema = schemaJSONMap(schema)
 	return schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema
+}
+
+func buildParameterSchemaHelpWithType(schema *base.Schema, typ string) string {
+	if schema == nil || typ == "" {
+		return buildParameterSchemaHelp(schema)
+	}
+	normalized := *schema
+	normalized.Type = []string{typ}
+	return buildParameterSchemaHelp(&normalized)
 }
 
 func schemaJSONMap(schema *base.Schema) map[string]any {
