@@ -329,6 +329,12 @@ multiple-of constraints where present. `--help-all` on a generated operation
 shows the full Cobra help, including global request, output, auth, TLS,
 pagination, cache, and config flags.
 
+Generated API root help should stay scannable even when the OpenAPI
+`info.description` is README-length. Ordinary `restish <api> --help` uses a
+bounded prefix of a very long root description plus a note that points to
+`--help-all`. `restish <api> --help-all` shows the full provider description so
+users can still access the original spec text from the CLI.
+
 ## Name-Collision Policy
 
 Collisions can happen between:

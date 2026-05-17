@@ -348,6 +348,59 @@ func TestGeneratedAPIHelpUsesSpecDescriptionFromOperationCache(t *testing.T) {
 	}
 }
 
+func TestGeneratedAPIHelpTruncatesLongDescriptionAndHelpAllShowsFull(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	var descLines []string
+	for i := 1; i <= 20; i++ {
+		descLines = append(descLines, fmt.Sprintf("Line %02d: generated API description detail.", i))
+	}
+	descLines = append(descLines, "FULL DESCRIPTION SENTINEL")
+	description := strings.Join(descLines, "\n")
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Long Help API", "version": "1.0", "description": %q},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {"get": {"operationId": "listItems", "responses": {"200": {"description": "OK"}}}}
+  }
+}`, description, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Line 01: generated API description detail.") {
+		t.Fatalf("expected leading API description in help, got:\n%s", got)
+	}
+	if strings.Contains(got, "FULL DESCRIPTION SENTINEL") {
+		t.Fatalf("expected default help to truncate full API description, got:\n%s", got)
+	}
+	if !strings.Contains(got, `Description truncated; run "restish tapi --help-all" to show the full API description.`) {
+		t.Fatalf("expected truncation note in help, got:\n%s", got)
+	}
+	if !strings.Contains(got, "list-items") {
+		t.Fatalf("expected generated command list after truncated description, got:\n%s", got)
+	}
+
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help-all", "--help"}); err != nil {
+		t.Fatalf("tapi --help-all --help: %v", err)
+	}
+	got = out.String()
+	if !strings.Contains(got, "FULL DESCRIPTION SENTINEL") {
+		t.Fatalf("expected help-all to show full API description, got:\n%s", got)
+	}
+	if strings.Contains(got, "Description truncated;") {
+		t.Fatalf("did not expect truncation note in help-all output, got:\n%s", got)
+	}
+}
+
 func TestGeneratedAPIHelpUsesStaleOperationCache(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {

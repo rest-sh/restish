@@ -24,7 +24,12 @@ import (
 const (
 	generatedOperationAnnotation              = "restish.generated.operation"
 	generatedOperationRequiredTypesAnnotation = "restish.generated.requiredTypes"
+	generatedAPIHelpShortAnnotation           = "restish.generated.api.helpShort"
+	generatedAPIHelpFullAnnotation            = "restish.generated.api.helpFull"
 	generatedNegativeNumberArgPrefix          = "__restish_negative_number_arg__"
+
+	generatedAPIHelpDescriptionMaxLines = 12
+	generatedAPIHelpDescriptionMaxRunes = 1200
 )
 
 // buildAPICommand constructs a Cobra command group for a registered API and
@@ -68,6 +73,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	if long == "" {
 		long = strings.TrimSpace(set.Info.Summary)
 	}
+	long, fullLong := generatedAPIHelpDescription(apiName, long)
 
 	apiCmd := &cobra.Command{
 		Use:     apiName,
@@ -80,6 +86,12 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			}
 			return cmd.Help()
 		},
+	}
+	if fullLong != "" {
+		apiCmd.Annotations = map[string]string{
+			generatedAPIHelpShortAnnotation: long,
+			generatedAPIHelpFullAnnotation:  fullLong,
+		}
 	}
 
 	tagsSeen := map[string]bool{}
@@ -152,6 +164,57 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	}
 
 	return apiCmd
+}
+
+func generatedAPIHelpDescription(apiName, description string) (string, string) {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return "", ""
+	}
+	short, truncated := truncateGeneratedAPIHelpDescription(description)
+	if !truncated {
+		return description, ""
+	}
+	short = strings.TrimSpace(short)
+	if short != "" && !strings.HasSuffix(short, "...") {
+		short += "\n..."
+	}
+	note := fmt.Sprintf("Description truncated; run \"restish %s --help-all\" to show the full API description.", apiName)
+	if short == "" {
+		return note, description
+	}
+	return short + "\n\n" + note, description
+}
+
+func truncateGeneratedAPIHelpDescription(description string) (string, bool) {
+	lines := strings.Split(description, "\n")
+	runeCount := utf8.RuneCountInString(description)
+	if len(lines) <= generatedAPIHelpDescriptionMaxLines && runeCount <= generatedAPIHelpDescriptionMaxRunes {
+		return description, false
+	}
+
+	var b strings.Builder
+	remaining := generatedAPIHelpDescriptionMaxRunes
+	for i, line := range lines {
+		if i >= generatedAPIHelpDescriptionMaxLines || remaining <= 0 {
+			break
+		}
+		if i > 0 {
+			b.WriteByte('\n')
+			remaining--
+			if remaining <= 0 {
+				break
+			}
+		}
+		lineRunes := []rune(line)
+		if len(lineRunes) > remaining {
+			b.WriteString(string(lineRunes[:remaining]))
+			break
+		}
+		b.WriteString(line)
+		remaining -= len(lineRunes)
+	}
+	return strings.TrimSpace(b.String()), true
 }
 
 func (c *CLI) filterGeneratedAliases(apiName string, cmd *cobra.Command, collisionScope map[string]bool) []string {
