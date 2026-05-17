@@ -649,6 +649,9 @@ func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []strin
 			return err
 		}
 		args = shieldGeneratedNegativeNumberArgs(root, args)
+		if err := rejectUnknownSubcommandHelp(root, args[1:]); err != nil {
+			return err
+		}
 		root.SetArgs(args[1:])
 	}
 	root.SetOut(c.Stdout)

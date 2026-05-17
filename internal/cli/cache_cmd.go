@@ -14,6 +14,7 @@ func (c *CLI) addCacheCommand(root *cobra.Command) {
 		Use:     "cache",
 		Short:   "Manage the HTTP response cache",
 		GroupID: rootGroupConfig,
+		RunE:    unknownSubcommandRun("cache"),
 	}
 	cacheCmd.AddCommand(c.newCacheInfoCmd(), c.newCacheClearCmd())
 	root.AddCommand(cacheCmd)

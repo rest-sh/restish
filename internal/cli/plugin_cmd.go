@@ -30,6 +30,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Use:     "plugin",
 		Short:   "Manage restish plugins",
 		GroupID: rootGroupPlugin,
+		RunE:    unknownSubcommandRun("plugin"),
 	}
 	listCmd := &cobra.Command{
 		Use:   "list",

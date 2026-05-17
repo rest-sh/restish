@@ -185,6 +185,63 @@ func TestRemovedPreReleaseCommandNames(t *testing.T) {
 	}
 }
 
+func TestUnknownSubcommandsRejectConsistently(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "api",
+			args: []string{"restish", "api", "wat"},
+			want: `unknown api command "wat"`,
+		},
+		{
+			name: "cache",
+			args: []string{"restish", "cache", "wat"},
+			want: `unknown cache command "wat"`,
+		},
+		{
+			name: "config",
+			args: []string{"restish", "config", "wat"},
+			want: `unknown config command "wat"`,
+		},
+		{
+			name: "plugin",
+			args: []string{"restish", "plugin", "wat"},
+			want: `unknown plugin command "wat"`,
+		},
+		{
+			name: "api help",
+			args: []string{"restish", "api", "does-not-exist", "--help"},
+			want: `unknown api command "does-not-exist"`,
+		},
+		{
+			name: "cache help",
+			args: []string{"restish", "cache", "does-not-exist", "--help"},
+			want: `unknown cache command "does-not-exist"`,
+		},
+		{
+			name: "plugin help",
+			args: []string{"restish", "plugin", "does-not-exist", "--help"},
+			want: `unknown plugin command "does-not-exist"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			err := c.Run(tt.args)
+			if err == nil {
+				t.Fatalf("%v: expected unknown subcommand error", tt.args)
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%v: expected error containing %q, got %v", tt.args, tt.want, err)
+			}
+		})
+	}
+}
+
 func TestPlainUtilityCommandsRejectResponseTransformFlags(t *testing.T) {
 	tests := []struct {
 		name string
@@ -311,5 +368,12 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 	}
 	if strings.Contains(opHelp, "--rsh-header") {
 		t.Fatalf("focused generated operation help should hide inherited request flags:\n%s", opHelp)
+	}
+
+	c, _ = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "not-real", "--help"}); err == nil {
+		t.Fatal("expected generated API unknown command help to fail")
+	} else if !strings.Contains(err.Error(), `unknown command "not-real" for "tapi"`) {
+		t.Fatalf("unexpected generated unknown command help error: %v", err)
 	}
 }
