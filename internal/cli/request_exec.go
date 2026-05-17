@@ -72,7 +72,9 @@ func (c *CLI) prepareRequest(
 	}
 	if !noAuth && operationAuth != nil && apiName != "" {
 		prof := profileForName(c.cfg.APIs[apiName], profileName)
-		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, operationAuth)
+		policy := *operationAuth
+		policy.Transport = opts
+		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, &policy)
 		if err != nil {
 			return nil, err
 		}

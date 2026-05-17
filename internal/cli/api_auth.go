@@ -837,7 +837,14 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 	for _, summary := range summaries {
 		status := "missing"
 		var satisfies []string
-		if prof != nil && prof.Credentials != nil {
+		if summary.kind == "mtls" {
+			if mtlsStatus, usable := operationMTLSStatusFromProfile(prof); mtlsStatus != "" {
+				status = mtlsStatus
+				if !usable {
+					status = "configured (" + mtlsStatus + ")"
+				}
+			}
+		} else if prof != nil && prof.Credentials != nil {
 			if credential := prof.Credentials[summary.id]; credential != nil {
 				_, ready, _ := c.credentialReadiness(apiName, profileName, summary.id, credential)
 				status = ready.status("empty")
@@ -930,7 +937,7 @@ func mergeStringSet(existing, values []string) []string {
 
 func authRequirementKindSupported(kind string) bool {
 	switch kind {
-	case "api-key", "http-basic", "http-bearer", "oauth2":
+	case "api-key", "http-basic", "http-bearer", "oauth2", "mtls":
 		return true
 	default:
 		return false

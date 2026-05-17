@@ -8,6 +8,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -15,6 +16,7 @@ type operationAuthPolicy struct {
 	OptionalAuth           bool
 	CredentialAlternatives []spec.CredentialAlternative
 	Override               string
+	Transport              request.Options
 }
 
 type selectedOperationAuth struct {
@@ -31,13 +33,6 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		return nil, false, nil
 	}
 	securityIssueSuffix := operationSecurityIssueErrorSuffix(policy.CredentialAlternatives)
-	if prof == nil {
-		if policy.OptionalAuth {
-			return nil, true, nil
-		}
-		return nil, false, fmt.Errorf("operation requires credentials for API %q but profile %q is not configured%s; %s", apiName, profileName, securityIssueSuffix, operationAuthSetupHint(apiName, profileName))
-	}
-
 	var missing []string
 	var needErrors []string
 	for _, alternative := range policy.CredentialAlternatives {
@@ -45,6 +40,19 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		alternativeMissing := false
 		alternativeNeedErrors := false
 		for _, requirement := range alternative {
+			if requirement.Kind == "mtls" {
+				if operationMTLSSatisfiedByRequestOptions(policy.Transport) {
+					continue
+				}
+				alternativeNeedErrors = true
+				needErrors = append(needErrors, operationMTLSMissingRequirementMessage(requirement))
+				continue
+			}
+			if prof == nil {
+				alternativeMissing = true
+				missing = append(missing, requirement.ID)
+				continue
+			}
 			credential := prof.Credentials[requirement.ID]
 			if credential == nil {
 				alternativeMissing = true
@@ -80,7 +88,7 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		}
 	}
 
-	if canUseProfileAuthFallback(policy) {
+	if prof != nil && canUseProfileAuthFallback(policy) {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
 		if err != nil {
 			return nil, false, err
@@ -93,6 +101,19 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		return nil, true, nil
 	}
 
+	if prof == nil {
+		var details []string
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			details = append(details, "missing credential bindings: "+strings.Join(uniqueStrings(missing), ", "))
+		}
+		if len(needErrors) > 0 {
+			sort.Strings(needErrors)
+			details = append(details, strings.Join(uniqueStrings(needErrors), "; "))
+		}
+		details = append(details, operationAuthSetupHint(apiName, profileName))
+		return nil, false, fmt.Errorf("operation requires credentials for API %q but profile %q is not configured%s; %s", apiName, profileName, securityIssueSuffix, strings.Join(details, "; "))
+	}
 	if len(needErrors) > 0 {
 		sort.Strings(needErrors)
 		return nil, false, fmt.Errorf("profile %q of API %q has credential bindings that do not satisfy this operation: %s%s%s", profileName, apiName, strings.Join(uniqueStrings(needErrors), "; "), securityIssueSuffix, operationAuthConfiguredOverrideHint(prof, policy.CredentialAlternatives))
@@ -121,10 +142,7 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 		}
 		c.warnf("auth override %q is not listed in this operation's OpenAPI security requirements; using configured credential override", override)
 	}
-	if prof == nil {
-		return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings; %s", override, profileName, apiName, operationAuthSetupHint(apiName, profileName))
-	}
-	selected, missing, needErrors, err := c.selectOperationAlternative(apiName, profileName, prof, alternative)
+	selected, missing, needErrors, err := c.selectOperationAlternative(apiName, profileName, prof, alternative, policy.Transport)
 	if err != nil {
 		return nil, false, err
 	}
@@ -134,6 +152,9 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
+		if prof == nil {
+			return nil, false, fmt.Errorf("auth override %q requires profile %q of API %q to configure credential bindings: %s; %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "), operationAuthSetupHint(apiName, profileName))
+		}
 		return nil, false, fmt.Errorf("auth override %q requires missing credential bindings in profile %q of API %q: %s; %s", override, profileName, apiName, strings.Join(uniqueStrings(missing), ", "), operationAuthSetupHint(apiName, profileName))
 	}
 	if err := rejectConflictingSelectedAuth(selected); err != nil {
@@ -189,11 +210,21 @@ func operationAuthConfiguredOverrideHint(prof *config.ProfileConfig, alternative
 	}
 }
 
-func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *config.ProfileConfig, alternative spec.CredentialAlternative) ([]selectedOperationAuth, []string, []string, error) {
+func (c *CLI) selectOperationAlternative(apiName, profileName string, prof *config.ProfileConfig, alternative spec.CredentialAlternative, transport request.Options) ([]selectedOperationAuth, []string, []string, error) {
 	selected := make([]selectedOperationAuth, 0, len(alternative))
 	var missing []string
 	var needErrors []string
 	for _, requirement := range alternative {
+		if requirement.Kind == "mtls" {
+			if !operationMTLSSatisfiedByRequestOptions(transport) {
+				needErrors = append(needErrors, operationMTLSMissingRequirementMessage(requirement))
+			}
+			continue
+		}
+		if prof == nil {
+			missing = append(missing, requirement.ID)
+			continue
+		}
 		credential := prof.Credentials[requirement.ID]
 		if credential == nil {
 			missing = append(missing, requirement.ID)
@@ -403,10 +434,49 @@ func credentialSatisfies(requirement spec.CredentialRequirement, credential *con
 	return nil
 }
 
+func operationMTLSSatisfiedByRequestOptions(opts request.Options) bool {
+	return (opts.ClientCertPath != "" && opts.ClientKeyPath != "") ||
+		opts.TLSSignerName != "" ||
+		opts.TLSSignerPath != ""
+}
+
+func operationMTLSSatisfiedByProfile(prof *config.ProfileConfig) bool {
+	if prof == nil {
+		return false
+	}
+	return (prof.ClientCertPath != "" && prof.ClientKeyPath != "") ||
+		prof.TLSSigner != ""
+}
+
+func operationMTLSStatusFromProfile(prof *config.ProfileConfig) (string, bool) {
+	if prof == nil {
+		return "", false
+	}
+	if prof.TLSSigner != "" {
+		return "configured via profile TLS signer", true
+	}
+	if prof.ClientCertPath != "" && prof.ClientKeyPath != "" {
+		return "configured via profile client certificate", true
+	}
+	if prof.ClientCertPath != "" || prof.ClientKeyPath != "" {
+		return "client certificate and key are both required", false
+	}
+	return "", false
+}
+
+func operationMTLSMissingRequirementMessage(requirement spec.CredentialRequirement) string {
+	id := requirement.ID
+	if id == "" {
+		id = "mutualTLS"
+	}
+	return fmt.Sprintf("%s requires mutual TLS; supply --rsh-client-cert and --rsh-client-key, or configure profile client_cert/client_key or tls_signer", id)
+}
+
 func canUseProfileAuthFallback(policy *operationAuthPolicy) bool {
 	return policy != nil &&
 		len(policy.CredentialAlternatives) == 1 &&
-		len(policy.CredentialAlternatives[0]) == 1
+		len(policy.CredentialAlternatives[0]) == 1 &&
+		policy.CredentialAlternatives[0][0].Kind != "mtls"
 }
 
 func parseAuthOverride(value string) (map[string]bool, error) {

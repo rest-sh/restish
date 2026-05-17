@@ -211,6 +211,13 @@ func (c *CLI) operationHasUsableNamedAlternative(apiName, profileName string, pr
 	for _, alternative := range alternatives {
 		ok := true
 		for _, requirement := range alternative {
+			if requirement.Kind == "mtls" {
+				if !operationMTLSSatisfiedByProfile(prof) {
+					ok = false
+					break
+				}
+				continue
+			}
 			credential := prof.Credentials[requirement.ID]
 			resolved, ready, err := c.credentialReadiness(apiName, profileName, requirement.ID, credential)
 			if err != nil || !ready.Usable || resolved.Config == nil {

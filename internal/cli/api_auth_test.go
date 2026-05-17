@@ -500,7 +500,7 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 		"UserOAuth: configured, needs items:read, satisfies items:read",
 		"PartnerKey: missing",
 		"OldKey: missing, deprecated",
-		"MutualTLS: missing, unsupported mtls",
+		"MutualTLS: missing, 1 operation",
 		"GhostAuth: missing, unsupported unknown, undeclared security scheme",
 		"urn:example:auth:TenantKey: missing, URI-backed",
 	} {

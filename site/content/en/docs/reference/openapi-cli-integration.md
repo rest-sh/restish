@@ -286,6 +286,9 @@ Generated commands honor operation-level security:
 - A single effective requirement can use profile-level `auth` for compatibility.
 - Multiple alternatives or combined requirements use
   `profiles.<name>.credentials.<credential-id>` bindings.
+- `mutualTLS` requirements are satisfied by TLS settings, not prompt-backed
+  credentials. Use `--rsh-client-cert` with `--rsh-client-key`, profile
+  `client_cert`/`client_key`, or a profile/flag TLS signer.
 - `--rsh-auth PartnerKey` or `--rsh-auth UserOAuth+PartnerKey` selects
   one allowed alternative for an operation.
 

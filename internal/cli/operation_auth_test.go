@@ -9,6 +9,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -272,6 +273,73 @@ func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialEnvMissing(t *testi
 	}
 }
 
+func TestPlanOperationAuthSatisfiesMTLSWithTransportClientCertificate(t *testing.T) {
+	c := &CLI{}
+	policy := &operationAuthPolicy{
+		CredentialAlternatives: []spec.CredentialAlternative{{
+			{ID: "ClientCert", Kind: "mtls"},
+		}},
+		Transport: request.Options{
+			ClientCertPath: "client.pem",
+			ClientKeyPath:  "client-key.pem",
+		},
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", nil, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want transport-only mTLS", selected, handled)
+	}
+}
+
+func TestPlanOperationAuthRequiresMTLSConfiguration(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "not-mtls"}},
+	}
+	policy := &operationAuthPolicy{
+		CredentialAlternatives: []spec.CredentialAlternative{{
+			{ID: "ClientCert", Kind: "mtls"},
+		}},
+	}
+
+	_, _, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err == nil {
+		t.Fatal("expected missing mTLS configuration error")
+	}
+	for _, want := range []string{"ClientCert requires mutual TLS", "--rsh-client-cert", "--rsh-client-key", "client_cert/client_key", "tls_signer"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error missing %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "profile auth fallback") {
+		t.Fatalf("mTLS should not fall back to bearer profile auth: %v", err)
+	}
+}
+
+func TestPlanOperationAuthOverrideSatisfiesMTLSWithTransportSigner(t *testing.T) {
+	c := &CLI{}
+	policy := &operationAuthPolicy{
+		CredentialAlternatives: []spec.CredentialAlternative{{
+			{ID: "ClientCert", Kind: "mtls"},
+		}},
+		Override: "ClientCert",
+		Transport: request.Options{
+			TLSSignerName: "pkcs11",
+		},
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", nil, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth override: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want transport-only mTLS override", selected, handled)
+	}
+}
+
 func TestPlanOperationAuthOverrideValidation(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{
@@ -354,6 +422,27 @@ func TestOperationAuthCoverageCountsOptionalAnonymousAsCallable(t *testing.T) {
 	coverage := c.operationAuthCoverage("svc", "default", prof, ops)
 	if coverage.Callable != 1 || coverage.Secured != 2 {
 		t.Fatalf("coverage = callable %d secured %d, want 1/2", coverage.Callable, coverage.Secured)
+	}
+}
+
+func TestOperationAuthCoverageCountsProfileMTLSAsCallable(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		ClientCertPath: "client.pem",
+		ClientKeyPath:  "client-key.pem",
+	}
+	ops := []spec.Operation{
+		{
+			ID: "mtls",
+			CredentialAlternatives: []spec.CredentialAlternative{{
+				{ID: "ClientCert", Kind: "mtls"},
+			}},
+		},
+	}
+
+	coverage := c.operationAuthCoverage("svc", "default", prof, ops)
+	if coverage.Callable != 1 || coverage.Secured != 1 {
+		t.Fatalf("coverage = callable %d secured %d, want 1/1", coverage.Callable, coverage.Secured)
 	}
 }
 

@@ -1339,6 +1339,56 @@ func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissin
 	}
 }
 
+func TestGeneratedCommandMutualTLSUsesClientCertificateFlags(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/secure", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("request should fail while loading the test client certificate")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "mTLS API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ClientCert": {"type": "mutualTLS"}
+    }
+  },
+  "security": [{"ClientCert": []}],
+  "paths": {
+    "/secure": {"get": {"operationId": "getSecure", "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	err := c.Run([]string{"restish", "tapi", "get-secure"})
+	if err == nil {
+		t.Fatal("expected missing mTLS configuration error")
+	}
+	if !strings.Contains(err.Error(), "ClientCert requires mutual TLS") || !strings.Contains(err.Error(), "--rsh-client-cert") {
+		t.Fatalf("error = %v, want mTLS configuration hint", err)
+	}
+
+	c = env.newCLI()
+	err = c.Run([]string{
+		"restish", "tapi", "get-secure",
+		"--rsh-client-cert", "/no/such/client.pem",
+		"--rsh-client-key", "/no/such/client-key.pem",
+	})
+	if err == nil {
+		t.Fatal("expected TLS client certificate loading error")
+	}
+	if !strings.Contains(err.Error(), "loading client certificate") {
+		t.Fatalf("error = %v, want TLS file loading error after auth gate", err)
+	}
+	if strings.Contains(err.Error(), "missing credential bindings") || strings.Contains(err.Error(), "requires mutual TLS") {
+		t.Fatalf("mTLS flags should satisfy OpenAPI auth gate before TLS validation: %v", err)
+	}
+}
+
 func TestGeneratedCommandOAuthAuthorizationCodeRequiresCachedTokenBeforeSending(t *testing.T) {
 	var hits atomic.Int32
 	var gotAuth string

@@ -250,6 +250,8 @@ The OpenAPI loader owns:
 The core request pipeline owns:
 
 - matching selected profile credentials to normalized requirements;
+- matching OpenAPI `mutualTLS` requirements to the resolved TLS transport
+  identity from flags or profile TLS settings;
 - deciding which auth handlers to run;
 - suppressing auth for forced no-auth operations;
 - prompting and writing local config during setup;
@@ -260,6 +262,13 @@ requirements without making Restish config a mirror of the OpenAPI object model.
 The config still uses OpenAPI scheme names by default because those are stable
 and visible to users, but the matching engine should treat them as credential
 requirement IDs rather than as raw OpenAPI concepts.
+
+`mutualTLS` is the exception to token-like credential binding. The OpenAPI
+scheme still appears as a credential requirement so operations can express it in
+OR/AND alternatives, but satisfying it uses the transport configuration:
+`--rsh-client-cert`/`--rsh-client-key`, profile `client_cert`/`client_key`, or a
+profile/flag TLS signer. It does not create a prompt-backed API key or bearer
+credential.
 
 ## Config Model
 

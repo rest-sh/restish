@@ -292,6 +292,59 @@ func TestAPIConnectExplicitSpecServedAsTextPlain(t *testing.T) {
 	}
 }
 
+func TestAPIConnectReportsMutualTLSAsTransportAuth(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "mTLS API", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "components": {
+    "securitySchemes": {
+      "ClientCert": {"type": "mutualTLS"}
+    }
+  },
+  "security": [{"ClientCert": []}],
+  "paths": {
+    "/secure": {"get": {"operationId": "getSecure", "responses": {"200": {"description": "OK"}}}}
+  }
+}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specBody)),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "connect", "mtls", "https://api.example.com", "--yes"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "ClientCert") || !strings.Contains(got, "use TLS client certificate or signer") {
+		t.Fatalf("expected mTLS transport auth guidance, got:\n%s", got)
+	}
+	if strings.Contains(got, "unsupported") {
+		t.Fatalf("mutualTLS should not be reported as unsupported auth, got:\n%s", got)
+	}
+}
+
 func TestAPIConnectExplicitSwaggerSpecReportsUnsupported(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 	c, _, _ := newTestCLI(t)

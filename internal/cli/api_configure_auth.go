@@ -67,7 +67,9 @@ func (c *CLI) printAPIDiscovery(apiName, baseURL string, d configureAuthDiscover
 		if scheme.GlobalDefault {
 			details = append(details, "global default")
 		}
-		if !scheme.Supported {
+		if scheme.Kind == "mtls" {
+			details = append(details, "use TLS client certificate or signer")
+		} else if !scheme.Supported {
 			details = append(details, "unsupported")
 		}
 		if scheme.Deprecated {

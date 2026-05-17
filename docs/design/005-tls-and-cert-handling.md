@@ -101,6 +101,14 @@ When client certificate support is configured, Restish should:
 There is no silent fallback to anonymous TLS if the user explicitly requested
 client authentication.
 
+OpenAPI `mutualTLS` security requirements are satisfied by the same resolved
+TLS option model. A generated operation that requires `mutualTLS` should proceed
+when the effective request has a client cert/key pair or a TLS signer, then let
+normal TLS setup validate files and plugins. Without either transport identity,
+the generated auth gate should explain that `--rsh-client-cert` plus
+`--rsh-client-key`, profile `client_cert`/`client_key`, or profile
+`tls_signer` is required.
+
 Certificate and key material should be loaded once per resolved runtime config
 when practical, not re-read for every request in a command that issues multiple
 requests. This reduces repeated filesystem work and ensures failures happen
