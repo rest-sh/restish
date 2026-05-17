@@ -135,6 +135,87 @@ paths:
 	}
 }
 
+func TestOperationHelpRendersConditionalRequestSchema(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /events:
+    post:
+      operationId: subscribeEvents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                types:
+                  type: array
+                  items:
+                    type: string
+                addresses:
+                  type: array
+                  items:
+                    type: string
+                trace_external_hash_norms:
+                  type: array
+                  items:
+                    type: string
+                include_metadata:
+                  type: boolean
+              allOf:
+                - if:
+                    properties:
+                      types:
+                        contains:
+                          const: trace
+                  then:
+                    required:
+                      - trace_external_hash_norms
+                  else:
+                    required:
+                      - addresses
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if ops[0].Help.Request == nil {
+		t.Fatal("expected request help")
+	}
+	got := ops[0].Help.Request.Schema
+	for _, want := range []string{
+		"types: [",
+		"addresses: [",
+		"trace_external_hash_norms: [",
+		"include_metadata: (boolean)",
+		"allOf{",
+		"if{",
+		"contains: (string const:trace)",
+		"then{",
+		"required: trace_external_hash_norms",
+		"else{",
+		"required: addresses",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("request schema should contain %q, got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "allOf{\n  (string)") {
+		t.Fatalf("conditional allOf branches should not render as strings, got:\n%s", got)
+	}
+}
+
 func TestOperationsExtractsEffectiveCredentialRequirements(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

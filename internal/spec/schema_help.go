@@ -512,6 +512,22 @@ func (r schemaHelpRenderer) render(s *base.Schema, indent string) string {
 	if r.depth >= schemaHelpMaxDepth {
 		return "<...>"
 	}
+	if hasSchemaConditional(s) {
+		return r.renderConditional(s, indent)
+	}
+	if hasDirectObjectShape(s) {
+		rendered := r.renderObject(s, indent)
+		if hasSchemaComposite(s) {
+			rendered += "\n" + r.renderComposite(s, indent)
+		}
+		return rendered
+	}
+	if hasRequiredOnlyConstraint(s) {
+		return r.renderRequired(s)
+	}
+	if s.Contains != nil {
+		return r.renderContains(s, indent)
+	}
 	if len(s.AllOf) > 0 || len(s.OneOf) > 0 || len(s.AnyOf) > 0 {
 		return r.renderComposite(s, indent)
 	}
@@ -532,9 +548,81 @@ func (r schemaHelpRenderer) render(s *base.Schema, indent string) string {
 	}
 }
 
+func hasSchemaConditional(s *base.Schema) bool {
+	return s != nil && (s.If != nil || s.Then != nil || s.Else != nil)
+}
+
+func hasSchemaComposite(s *base.Schema) bool {
+	return s != nil && (len(s.AllOf) > 0 || len(s.OneOf) > 0 || len(s.AnyOf) > 0)
+}
+
+func hasDirectObjectShape(s *base.Schema) bool {
+	return s != nil && ((s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil)
+}
+
+func hasRequiredOnlyConstraint(s *base.Schema) bool {
+	if s == nil || len(s.Required) == 0 {
+		return false
+	}
+	return len(s.Type) == 0 &&
+		s.Items == nil &&
+		!hasDirectObjectShape(s) &&
+		!hasSchemaComposite(s) &&
+		!hasSchemaConditional(s) &&
+		s.Contains == nil
+}
+
 func (r schemaHelpRenderer) child() schemaHelpRenderer {
 	r.depth++
 	return r
+}
+
+func (r schemaHelpRenderer) renderConditional(s *base.Schema, indent string) string {
+	var out strings.Builder
+	for _, item := range []struct {
+		label string
+		proxy *base.SchemaProxy
+	}{
+		{"if", s.If},
+		{"then", s.Then},
+		{"else", s.Else},
+	} {
+		if item.proxy == nil {
+			continue
+		}
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		child := r.child()
+		out.WriteString(item.label + "{\n")
+		out.WriteString(indent + "  " + child.render(schemaFromProxy(item.proxy), indent+"  ") + "\n")
+		out.WriteString(indent + "}")
+	}
+	if out.Len() == 0 {
+		return "<any>"
+	}
+	return out.String()
+}
+
+func (r schemaHelpRenderer) renderRequired(s *base.Schema) string {
+	required := append([]string(nil), s.Required...)
+	sort.Strings(required)
+	return "required: " + strings.Join(required, ",")
+}
+
+func (r schemaHelpRenderer) renderContains(s *base.Schema, indent string) string {
+	var tags []string
+	if s.MinContains != nil {
+		tags = append(tags, fmt.Sprintf("min:%d", *s.MinContains))
+	}
+	if s.MaxContains != nil {
+		tags = append(tags, fmt.Sprintf("max:%d", *s.MaxContains))
+	}
+	label := "contains"
+	if len(tags) > 0 {
+		label += " " + strings.Join(tags, " ")
+	}
+	return label + ": " + r.child().render(schemaFromProxy(s.Contains), indent)
 }
 
 func (r schemaHelpRenderer) renderComposite(s *base.Schema, indent string) string {
