@@ -59,6 +59,9 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 }
 
 func (c *CLI) runConfigPath(cmd *cobra.Command, args []string) error {
+	if err := rejectResponseTransformFlags(cmd); err != nil {
+		return err
+	}
 	fmt.Fprintln(c.Stdout, c.configFilePath())
 	return nil
 }

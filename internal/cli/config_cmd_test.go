@@ -57,6 +57,12 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 		t.Fatalf("config path = %q, want %q", got, c.Hooks().ConfigPath)
 	}
 
+	if err := c.Run([]string{"restish", "config", "path", "-o", "json"}); err == nil {
+		t.Fatal("expected config path to reject unsupported output format")
+	} else if !strings.Contains(err.Error(), "does not support -o/--rsh-output-format") {
+		t.Fatalf("unexpected config path output error: %v", err)
+	}
+
 	out.Reset()
 	if err := c.Run([]string{"restish", "config", "show"}); err != nil {
 		t.Fatalf("config show: %v", err)
