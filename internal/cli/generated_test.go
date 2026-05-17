@@ -693,6 +693,76 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandVerboseRedactsUncommonAPIKeyQuery(t *testing.T) {
+	var gotQuery url.Values
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Query Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "security": [{"QuerystringAuthentication": []}],
+  "components": {
+    "securitySchemes": {
+      "QuerystringAuthentication": {"type": "apiKey", "in": "query", "name": "u=&p="}
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"QuerystringAuthentication": {
+								Auth: &config.AuthConfig{
+									Type:   "api-key",
+									Params: map[string]string{"in": "query", "name": "u=&p=", "value": "dummy-token"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, output := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-health", "-v"}); err != nil {
+		t.Fatalf("get-health failed: %v", err)
+	}
+	if got := gotQuery.Get("u=&p="); got != "dummy-token" {
+		t.Fatalf("u=&p= query credential = %q, want dummy-token", got)
+	}
+	stderr := output.String()
+	if strings.Contains(stderr, "dummy-token") {
+		t.Fatalf("verbose output leaked generated query API key:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "u%3D%26p%3D=%3Credacted%3E") {
+		t.Fatalf("expected generated query API key redacted, got:\n%s", stderr)
+	}
+}
+
 func TestGeneratedCommandUserAgentAPIKeyOverridesDefaultUserAgent(t *testing.T) {
 	var gotUserAgents []string
 	mux := http.NewServeMux()
