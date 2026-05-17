@@ -77,6 +77,22 @@ func TestPlanOperationAuthDerivesSatisfiesFromAuthProfileScopes(t *testing.T) {
 	}
 }
 
+func TestPlanOperationAuthHandlesAnonymousOnlySecurity(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Key", "value": "env:MISSING_KEY"}},
+	}
+	policy := &operationAuthPolicy{OptionalAuth: true}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want anonymous-only handling", selected, handled)
+	}
+}
+
 func TestPlanOperationAuthRejectsAmbiguousProfileFallback(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{

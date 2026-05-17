@@ -29,7 +29,13 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 	if policy != nil && strings.TrimSpace(policy.Override) != "" {
 		return c.planOperationAuthOverride(apiName, profileName, prof, policy)
 	}
-	if policy == nil || len(policy.CredentialAlternatives) == 0 {
+	if policy == nil {
+		return nil, false, nil
+	}
+	if len(policy.CredentialAlternatives) == 0 {
+		if policy.OptionalAuth {
+			return nil, true, nil
+		}
 		return nil, false, nil
 	}
 	securityIssueSuffix := operationSecurityIssueErrorSuffix(policy.CredentialAlternatives)

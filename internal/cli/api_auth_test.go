@@ -930,6 +930,64 @@ paths:
 	}
 }
 
+func TestAPIAuthInspectAnonymousOnlyOperationSuppressesProfileAuth(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Anonymous API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+  },
+  "security": [{}],
+  "paths": {
+    "/public": {"get": {"operationId": "publicReport", "responses": {"200": {"description": "OK"}}}},
+    "/private": {"get": {"operationId": "privateReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "env:MISSING_PROFILE_KEY"}},
+						Credentials: map[string]*config.CredentialConfig{
+							"ApiKeyAuth": {
+								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:MISSING_PROFILE_KEY"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "public-report"}); err != nil {
+		t.Fatalf("api auth inspect anonymous operation: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Auth: none (security: [{}])") {
+		t.Fatalf("expected anonymous-only operation auth, got:\n%s", got)
+	}
+
+	out.Reset()
+	err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "private-report"})
+	if err == nil || !strings.Contains(err.Error(), "MISSING_PROFILE_KEY") {
+		t.Fatalf("private operation error = %v, want missing env credential", err)
+	}
+}
+
 func TestAPIAuthInspectOperationCombinedCredentials(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })

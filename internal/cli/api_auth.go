@@ -377,6 +377,13 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 		fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none (security: [])\n", op.ID)
 		return nil
 	}
+	if op.OptionalAuth && len(op.CredentialAlternatives) == 0 {
+		if rawHeader != "" {
+			return fmt.Errorf("operation %q has anonymous-only security and does not send auth header %q", operationName, rawHeader)
+		}
+		fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none (security: [{}])\n", op.ID)
+		return nil
+	}
 
 	var selected []selectedOperationAuth
 	if len(op.CredentialAlternatives) > 0 {

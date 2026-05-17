@@ -1339,6 +1339,84 @@ func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissin
 	}
 }
 
+func TestGeneratedCommandAnonymousOnlySecuritySuppressesProfileAuth(t *testing.T) {
+	got := map[string]http.Header{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/public", func(w http.ResponseWriter, r *http.Request) {
+		got["/public"] = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/private", func(w http.ResponseWriter, r *http.Request) {
+		got["/private"] = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Anonymous API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+  },
+  "security": [{}],
+  "paths": {
+    "/public": {"get": {"operationId": "publicReport", "responses": {"200": {"description": "OK"}}}},
+    "/private": {"get": {"operationId": "privateReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "env:PROFILE_KEY"}},
+						Credentials: map[string]*config.CredentialConfig{
+							"ApiKeyAuth": {
+								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:PROFILE_KEY"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "public-report"}); err != nil {
+		t.Fatalf("public-report should ignore unresolved profile auth: %v", err)
+	}
+	if got["/public"].Get("X-Profile-Key") != "" || got["/public"].Get("X-API-Key") != "" {
+		t.Fatalf("/public headers = %#v, want anonymous", got["/public"])
+	}
+
+	t.Setenv("PROFILE_KEY", "secret")
+	if err := c.Run([]string{"restish", "tapi", "public-report"}); err != nil {
+		t.Fatalf("public-report with configured auth should remain anonymous: %v", err)
+	}
+	if got["/public"].Get("X-Profile-Key") != "" || got["/public"].Get("X-API-Key") != "" {
+		t.Fatalf("/public headers with env = %#v, want anonymous", got["/public"])
+	}
+
+	if err := c.Run([]string{"restish", "tapi", "private-report"}); err != nil {
+		t.Fatalf("private-report should use operation auth when env is set: %v", err)
+	}
+	if got["/private"].Get("X-API-Key") != "secret" || got["/private"].Get("X-Profile-Key") != "" {
+		t.Fatalf("/private headers = %#v, want operation api key only", got["/private"])
+	}
+}
+
 func TestGeneratedCommandMutualTLSUsesClientCertificateFlags(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/secure", func(w http.ResponseWriter, r *http.Request) {
