@@ -1596,6 +1596,57 @@ func TestGeneratedCommandOperatorFlagNamesPreserveWireQueryNames(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandEnumTypeMismatchUsesStringFlag(t *testing.T) {
+	var gotQuery url.Values
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Enum API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/events": {
+      "get": {
+        "operationId": "listEvents",
+        "parameters": [
+          {"name": "magID", "in": "query", "schema": {"type": "integer", "enum": ["mag_kts", "mms", "sq_NM"]}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-events", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	help := out.String()
+	if !strings.Contains(help, "--mag-id") || !strings.Contains(help, "enum:mag_kts,mms,sq_NM") {
+		t.Fatalf("help missing enum detail:\n%s", help)
+	}
+
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-events", "--mag-id", "mag_kts", "--limit", "1"}); err != nil {
+		t.Fatalf("list-events with string enum value failed: %v", err)
+	}
+	if got := gotQuery.Get("magID"); got != "mag_kts" {
+		t.Fatalf("magID query = %q, want mag_kts", got)
+	}
+	if got := gotQuery.Get("limit"); got != "1" {
+		t.Fatalf("limit query = %q, want 1", got)
+	}
+}
+
 // TestGeneratedCommandShorthandBody verifies that positional args after required
 // params are parsed as shorthand and sent as the JSON request body.
 func TestGeneratedCommandShorthandBody(t *testing.T) {

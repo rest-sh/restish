@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	base "github.com/pb33f/libopenapi/datamodel/high/base"
@@ -746,6 +747,9 @@ func parameterSchemaDetails(schema *base.Schema) (schemaHelp, paramType, itemTyp
 		}
 	}
 	enum = schemaEnumStrings(schema)
+	if enumIncompatibleWithType(paramType, enum) {
+		paramType = "string"
+	}
 	jsonSchema = schemaJSONMap(schema)
 	return schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema
 }
@@ -851,6 +855,34 @@ func schemaEnumStrings(schema *base.Schema) []string {
 		}
 	}
 	return enum
+}
+
+func enumIncompatibleWithType(typ string, enum []string) bool {
+	if typ == "" || typ == "string" || len(enum) == 0 {
+		return false
+	}
+	for _, value := range enum {
+		if validateScalarType(typ, value) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func validateScalarType(typ, value string) error {
+	switch typ {
+	case "integer":
+		_, err := strconv.ParseInt(value, 10, 64)
+		return err
+	case "number":
+		_, err := strconv.ParseFloat(value, 64)
+		return err
+	case "boolean":
+		_, err := strconv.ParseBool(value)
+		return err
+	default:
+		return nil
+	}
 }
 
 func scalarString(value any) string {
