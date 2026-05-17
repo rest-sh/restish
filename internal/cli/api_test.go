@@ -261,8 +261,7 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 }
 
 // TestFlagHeaderTakesPrecedenceOverProfile verifies that a header supplied via
-// -H overrides the same header from the profile (last write wins for Add, but
-// flag values appear after profile values in the header list).
+// -H replaces the same header from the profile.
 func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)
@@ -285,24 +284,12 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	}`
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
-	// Flag-supplied header should appear in the request (both values are sent
-	// via Add; the test just verifies the flag value is present).
 	if err := c.Run([]string{"restish", "get", "-H", "X-Token: from-flag", "myapi/items"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	vals := rr.Last().Header.Values("X-Token")
-	if len(vals) == 0 {
-		t.Fatal("expected X-Token header, got none")
-	}
-	// Flag value must be present.
-	found := false
-	for _, v := range vals {
-		if v == "from-flag" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected 'from-flag' in X-Token values, got %v", vals)
+	if len(vals) != 1 || vals[0] != "from-flag" {
+		t.Fatalf("X-Token values = %#v, want [from-flag]", vals)
 	}
 }
 

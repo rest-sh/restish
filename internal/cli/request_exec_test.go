@@ -459,6 +459,41 @@ func TestApplyAPIProfilePrefersLongestOperationBasePrefix(t *testing.T) {
 	}
 }
 
+func TestApplyAPIProfileMergesHeadersByName(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Headers: []string{"X-Foo: profile", "X-Keep: profile"},
+					},
+				},
+			},
+		},
+	}
+
+	_, _, opts, err := c.applyAPIProfile(
+		"https://api.example.com/items",
+		"default",
+		request.Options{Headers: []string{"x-foo: flag", "X-New: flag"}},
+		authHandlerOptions{},
+	)
+	if err != nil {
+		t.Fatalf("applyAPIProfile() error = %v", err)
+	}
+	headers := strings.Join(opts.Headers, "\n")
+	for _, want := range []string{"x-foo: flag", "X-Keep: profile", "X-New: flag"} {
+		if !strings.Contains(headers, want) {
+			t.Fatalf("headers missing %q:\n%s", want, headers)
+		}
+	}
+	if strings.Contains(headers, "X-Foo: profile") {
+		t.Fatalf("profile header should be replaced by request header:\n%s", headers)
+	}
+}
+
 func TestApplyAPIProfileAmbiguousDuplicateBaseURLRunsUnaffiliated(t *testing.T) {
 	c := New()
 	var errOut bytes.Buffer

@@ -1678,10 +1678,14 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 		opts.OnUnauthorized = callbacks.OnUnauthorized
 	}
 
-	// Prepend persistent profile headers/query so flag-supplied values take
-	// precedence (they appear later in the slice, and are applied last).
+	// Merge persistent profile headers with request-specific headers so
+	// request-specific values replace matching profile defaults. Query params
+	// keep append semantics because repeated query keys are often intentional.
 	if match.profile != nil {
-		opts.Headers = append(append([]string(nil), match.profile.Headers...), opts.Headers...)
+		opts.Headers, err = mergeHeaderOptions(match.profile.Headers, opts.Headers)
+		if err != nil {
+			return rawURL, match.apiName, opts, err
+		}
 		opts.Query = append(append([]string(nil), match.profile.Query...), opts.Query...)
 		callbacks := c.authOnRequest(match.apiName, profileName, match.profile, authOpts)
 		opts.OnRequest = callbacks.OnRequest

@@ -114,15 +114,26 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	gf.MaxItems, _ = cmd.Flags().GetInt("rsh-max-items")
 	gf.MaxBodySize, _ = cmd.Flags().GetInt("rsh-max-body-size")
 
-	// Apply env-var overrides (env var loses to explicit flag).
-	// For StringArray flags (header, query), env var prepends values.
-	if v := os.Getenv("RSH_HEADER"); v != "" && !cmd.Flags().Changed("rsh-header") {
+	// Apply env-var overrides (env var loses to explicit flag). Headers are
+	// merged by name so CLI values replace matching env defaults instead of
+	// becoming multi-value headers.
+	if v := os.Getenv("RSH_HEADER"); v != "" {
 		headers := splitEnvList(v)
 		if err := validateEnvHeaders(headers); err != nil {
 			return gf, err
 		}
-		gf.Headers = append(headers, gf.Headers...)
+		if cmd.Flags().Changed("rsh-header") {
+			var err error
+			gf.Headers, err = mergeHeaderOptions(headers, gf.Headers)
+			if err != nil {
+				return gf, err
+			}
+		} else {
+			gf.Headers = headers
+		}
 	}
+	// For query StringArray flags, preserve the existing flag-replaces-env
+	// semantics until query merge behavior is designed separately.
 	if v := os.Getenv("RSH_QUERY"); v != "" && !cmd.Flags().Changed("rsh-query") {
 		query := splitEnvList(v)
 		if err := validateEnvQuery(query); err != nil {
@@ -287,6 +298,25 @@ func validateEnvHeaders(headers []string) error {
 		}
 	}
 	return nil
+}
+
+func mergeHeaderOptions(base, overrides []string) ([]string, error) {
+	merged := make([]string, 0, len(base)+len(overrides))
+	indexByName := map[string]int{}
+	for _, header := range append(append([]string(nil), base...), overrides...) {
+		name, _, err := request.ParseHeaderOption(header)
+		if err != nil {
+			return nil, err
+		}
+		key := strings.ToLower(strings.TrimSpace(name))
+		if idx, ok := indexByName[key]; ok {
+			merged[idx] = header
+			continue
+		}
+		indexByName[key] = len(merged)
+		merged = append(merged, header)
+	}
+	return merged, nil
 }
 
 func validateEnvQuery(query []string) error {

@@ -447,6 +447,36 @@ func TestHTTPHeaderEnvSupportsEscapedCommaValues(t *testing.T) {
 	}
 }
 
+func TestHTTPHeaderEnvMergesWithFlagByHeaderName(t *testing.T) {
+	t.Setenv("RSH_HEADER", `X-Foo: env,X-List: a\,b,X-Keep: yes`)
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{
+		"restish", "get", "https://api.example.com/items",
+		"--rsh-header", "x-foo: cli",
+		"--rsh-header", "X-New: flag",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	req := rr.Last()
+	if got := req.Header.Values("X-Foo"); len(got) != 1 || got[0] != "cli" {
+		t.Fatalf("X-Foo values = %#v, want [cli]", got)
+	}
+	if got := req.Header.Get("X-List"); got != "a,b" {
+		t.Fatalf("X-List = %q, want a,b", got)
+	}
+	if got := req.Header.Get("X-Keep"); got != "yes" {
+		t.Fatalf("X-Keep = %q, want yes", got)
+	}
+	if got := req.Header.Get("X-New"); got != "flag" {
+		t.Fatalf("X-New = %q, want flag", got)
+	}
+}
+
 func TestHTTPQueryEnvSupportsEscapedCommaValues(t *testing.T) {
 	t.Setenv("RSH_QUERY", `env=one,list=a\,b`)
 	var rr requestRecorder
