@@ -247,6 +247,31 @@ func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialMissing(t *testing.
 	}
 }
 
+func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialEnvMissing(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"PartnerKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "env:MISSING_PARTNER_KEY"}},
+			},
+		},
+	}
+	policy := &operationAuthPolicy{
+		OptionalAuth: true,
+		CredentialAlternatives: []spec.CredentialAlternative{{
+			{ID: "PartnerKey"},
+		}},
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want anonymous", selected, handled)
+	}
+}
+
 func TestPlanOperationAuthOverrideValidation(t *testing.T) {
 	c := &CLI{}
 	prof := &config.ProfileConfig{
@@ -298,6 +323,37 @@ func TestPlanOperationAuthOverrideValidation(t *testing.T) {
 	}
 	if !handled || len(selected) != 0 {
 		t.Fatalf("selected = %#v handled=%v, want anonymous", selected, handled)
+	}
+}
+
+func TestOperationAuthCoverageCountsOptionalAnonymousAsCallable(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{
+		Credentials: map[string]*config.CredentialConfig{
+			"ApiKey": {
+				Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:MISSING_API_KEY"}},
+			},
+		},
+	}
+	ops := []spec.Operation{
+		{
+			ID:           "optional",
+			OptionalAuth: true,
+			CredentialAlternatives: []spec.CredentialAlternative{{
+				{ID: "ApiKey"},
+			}},
+		},
+		{
+			ID: "required",
+			CredentialAlternatives: []spec.CredentialAlternative{{
+				{ID: "ApiKey"},
+			}},
+		},
+	}
+
+	coverage := c.operationAuthCoverage("svc", "default", prof, ops)
+	if coverage.Callable != 1 || coverage.Secured != 2 {
+		t.Fatalf("coverage = callable %d secured %d, want 1/2", coverage.Callable, coverage.Secured)
 	}
 }
 

@@ -1269,6 +1269,76 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissing(t *testing.T) {
+	got := map[string]http.Header{}
+	mux := http.NewServeMux()
+	for _, path := range []string{"/optional", "/required"} {
+		path := path
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			got[path] = r.Header.Clone()
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{}`)
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Optional Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Optional-Key"}
+    }
+  },
+  "security": [{}, {"ApiKeyAuth": []}],
+  "paths": {
+    "/optional": {"get": {"operationId": "optionalReport", "responses": {"200": {"description": "OK"}}}},
+    "/required": {"get": {"operationId": "requiredReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: baseURL,
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"ApiKeyAuth": {
+								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Optional-Key", "value": "env:MISSING_OPTIONAL_KEY"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "optional-report"}); err != nil {
+		t.Fatalf("optional-report should fall back to anonymous: %v", err)
+	}
+	if got["/optional"].Get("X-Optional-Key") != "" {
+		t.Fatalf("/optional headers = %#v, want anonymous", got["/optional"])
+	}
+
+	err := c.Run([]string{"restish", "tapi", "required-report"})
+	if err == nil || !strings.Contains(err.Error(), "unresolved auth params") || !strings.Contains(err.Error(), "env:MISSING_OPTIONAL_KEY") {
+		t.Fatalf("required-report error = %v, want unresolved credential", err)
+	}
+
+	err = c.Run([]string{"restish", "tapi", "optional-report", "--rsh-auth", "ApiKeyAuth"})
+	if err == nil || !strings.Contains(err.Error(), "not satisfied") || !strings.Contains(err.Error(), "env:MISSING_OPTIONAL_KEY") {
+		t.Fatalf("explicit optional auth error = %v, want unresolved credential", err)
+	}
+}
+
 func TestGeneratedCommandOAuthAuthorizationCodeRequiresCachedTokenBeforeSending(t *testing.T) {
 	var hits atomic.Int32
 	var gotAuth string

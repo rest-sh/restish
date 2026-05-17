@@ -180,6 +180,10 @@ func (c *CLI) operationAuthCoverage(apiName, profileName string, prof *config.Pr
 			continue
 		}
 		coverage.Secured++
+		if op.OptionalAuth {
+			coverage.Callable++
+			continue
+		}
 		if c.operationHasUsableNamedAlternative(apiName, profileName, prof, op.CredentialAlternatives) {
 			coverage.Callable++
 			continue

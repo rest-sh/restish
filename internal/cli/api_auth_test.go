@@ -571,6 +571,60 @@ func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	}
 }
 
+func TestAPIAuthListCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Optional Auth API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+  },
+  "security": [{}, {"ApiKey": []}],
+  "paths": {
+    "/optional": {"get": {"operationId": "optional", "responses": {"200": {"description": "OK"}}}},
+    "/required": {"get": {"operationId": "required", "security": [{"ApiKey": []}], "responses": {"200": {"description": "OK"}}}}
+  }
+}`, baseURL)
+	})
+	baseURL := readBaseURLFromConfig(t, env.cfgFile)
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: baseURL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Credentials: map[string]*config.CredentialConfig{
+						"ApiKey": {
+							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:MISSING_API_KEY"}},
+						},
+					},
+				},
+			},
+		},
+	}})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
+		t.Fatalf("api auth list: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Callable secured operations: 1/2",
+		"ApiKey: configured (env missing: MISSING_API_KEY), 2 operations",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("list output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
