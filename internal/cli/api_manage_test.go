@@ -2340,8 +2340,9 @@ func TestAPIConnectFallbackExplicitCredentialWithAnonymousDefault(t *testing.T) 
 	outText := out.String()
 	for _, want := range []string{
 		"configured: api_key",
+		"unresolved: api_key (env missing: REDOC16_API_KEY)",
 		"skipped:    petstore_auth",
-		"callable:   2/3 secured operations",
+		"callable:   0/3 secured operations",
 	} {
 		if !strings.Contains(outText, want) {
 			t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)
@@ -2363,6 +2364,90 @@ func TestAPIConnectFallbackExplicitCredentialWithAnonymousDefault(t *testing.T) 
 	if prof.Credentials["petstore_auth"] != nil {
 		t.Fatalf("expected petstore_auth to be skipped, got %#v", prof.Credentials["petstore_auth"])
 	}
+}
+
+func TestAPIConnectAuthCoverageCountsEnvBackedCredentialsOnlyWhenEnvIsReady(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Cookie API", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "components": {
+    "securitySchemes": {
+      "sid": {"type": "apiKey", "in": "cookie", "name": "SID"}
+    }
+  },
+  "paths": {
+    "/version": {
+      "get": {
+        "operationId": "appVersionGet",
+        "security": [{"sid": []}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	runConnect := func(t *testing.T, name string) string {
+		t.Helper()
+		c, out, _ := newTestCLI(t)
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = t.TempDir()
+		useTransport(c, func(r *http.Request) (*http.Response, error) {
+			if r.URL.String() == "https://api.example.com/openapi.json" {
+				return &http.Response{
+					StatusCode: 200,
+					Proto:      "HTTP/1.1",
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(specBody)),
+					Request:    r,
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		})
+		if err := c.Run([]string{
+			"restish", "api", "connect", name, "api.example.com",
+			`prompt.credentials.sid.value:env:RESTISH_TEST_SID`,
+		}); err != nil {
+			t.Fatalf("api connect: %v", err)
+		}
+		return out.String()
+	}
+
+	t.Run("missing env", func(t *testing.T) {
+		t.Setenv("RESTISH_TEST_SID", "")
+		if err := os.Unsetenv("RESTISH_TEST_SID"); err != nil {
+			t.Fatalf("unset env: %v", err)
+		}
+		outText := runConnect(t, "cookiemissing")
+		for _, want := range []string{
+			"configured: sid",
+			"unresolved: sid (env missing: RESTISH_TEST_SID)",
+			"callable:   0/1 secured operations",
+		} {
+			if !strings.Contains(outText, want) {
+				t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)
+			}
+		}
+	})
+
+	t.Run("ready env", func(t *testing.T) {
+		t.Setenv("RESTISH_TEST_SID", "cookie-secret")
+		outText := runConnect(t, "cookieready")
+		for _, want := range []string{
+			"configured: sid",
+			"callable:   1/1 secured operations",
+		} {
+			if !strings.Contains(outText, want) {
+				t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)
+			}
+		}
+	})
 }
 
 func TestAPIConnectFallbackAuthDiscoveryFlow(t *testing.T) {
@@ -2441,8 +2526,9 @@ func TestAPIConnectFallbackAuthDiscoveryFlow(t *testing.T) {
 		"UserOAuth",
 		"global default",
 		"configured: AdminOAuth, UserOAuth",
+		"unresolved: AdminOAuth (OAuth access token not cached), UserOAuth (OAuth access token not cached)",
 		"skipped:    PartnerKey",
-		"callable:   3/4 secured operations",
+		"callable:   0/4 secured operations",
 	} {
 		if !strings.Contains(outText, want) {
 			t.Fatalf("expected stdout to contain %q, got:\n%s", want, outText)

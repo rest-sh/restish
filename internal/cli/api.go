@@ -318,7 +318,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	}
 	if apiSpec != nil {
 		discovery := newConfigureAuthDiscovery(apiSpec, baseURL)
-		c.printAuthCoverage("default", discovery, configuredCredentials(apiCfg, "default"))
+		c.printAuthCoverage(apiName, "default", apiCfg, discovery)
 	}
 
 	if err := c.saveAPIConfig("api connect", apiName, cfg, apiCfg); err != nil {

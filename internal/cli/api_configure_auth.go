@@ -427,23 +427,54 @@ func credentialNeedDefaults(ops []spec.Operation) map[string][]string {
 	return out
 }
 
-func (c *CLI) printAuthCoverage(profileName string, d configureAuthDiscovery, configured map[string]bool) {
+func (c *CLI) printAuthCoverage(apiName, profileName string, apiCfg *config.APIConfig, d configureAuthDiscovery) {
 	if len(d.schemes) == 0 {
 		return
 	}
+	configured := configuredCredentials(apiCfg, profileName)
 	var configuredIDs, skippedIDs []string
+	var unresolved []string
 	for _, scheme := range d.schemes {
 		if configured[scheme.ID] {
 			configuredIDs = append(configuredIDs, scheme.ID)
+			if apiCfg != nil {
+				if status, ok := c.authCoverageCredentialStatus(apiName, profileName, apiCfg, scheme.ID); ok && status != "" {
+					unresolved = append(unresolved, scheme.ID+" ("+status+")")
+				}
+			}
 		} else {
 			skippedIDs = append(skippedIDs, scheme.ID)
 		}
 	}
-	callable, secured := authCoverageCounts(d.operations, configured)
+	var callable, secured int
+	if apiCfg != nil {
+		prof := profileForName(apiCfg, profileName)
+		coverage := c.operationAuthCoverage(apiName, profileName, prof, d.operations)
+		callable, secured = coverage.Callable, coverage.Secured
+	}
 	fmt.Fprintf(c.Stdout, "\nAuth coverage for profile %q:\n", profileName)
 	fmt.Fprintf(c.Stdout, "  configured: %s\n", formatIDList(configuredIDs))
+	if len(unresolved) > 0 {
+		fmt.Fprintf(c.Stdout, "  unresolved: %s\n", formatIDList(unresolved))
+	}
 	fmt.Fprintf(c.Stdout, "  skipped:    %s\n", formatIDList(skippedIDs))
 	fmt.Fprintf(c.Stdout, "  callable:   %d/%d secured operations\n\n", callable, secured)
+}
+
+func (c *CLI) authCoverageCredentialStatus(apiName, profileName string, apiCfg *config.APIConfig, credentialID string) (string, bool) {
+	prof := profileForName(apiCfg, profileName)
+	if prof == nil || prof.Credentials == nil {
+		return "", false
+	}
+	credential := prof.Credentials[credentialID]
+	if credential == nil || (credential.Auth == nil && credential.AuthRef == "") {
+		return "", false
+	}
+	_, ready, err := c.credentialReadiness(apiName, profileName, credentialID, credential)
+	if err != nil || !ready.Configured || ready.Usable || len(ready.Issues) == 0 {
+		return "", false
+	}
+	return strings.Join(ready.Issues, "; "), true
 }
 
 func configuredCredentials(apiCfg *config.APIConfig, profileName string) map[string]bool {
@@ -457,30 +488,6 @@ func configuredCredentials(apiCfg *config.APIConfig, profileName string) map[str
 		}
 	}
 	return out
-}
-
-func authCoverageCounts(ops []spec.Operation, configured map[string]bool) (int, int) {
-	var callable, secured int
-	for _, op := range ops {
-		if len(op.CredentialAlternatives) == 0 {
-			continue
-		}
-		secured++
-		for _, alternative := range op.CredentialAlternatives {
-			ok := true
-			for _, requirement := range alternative {
-				if !configured[requirement.ID] {
-					ok = false
-					break
-				}
-			}
-			if ok {
-				callable++
-				break
-			}
-		}
-	}
-	return callable, secured
 }
 
 func formatIDList(ids []string) string {
