@@ -477,6 +477,75 @@ paths:
 	}
 }
 
+func TestBuildAPICommand_DuplicateHeaderParamsWithDifferentCaseDoNotSkipOperation(t *testing.T) {
+	specBody := `
+openapi: "3.1.0"
+info:
+  title: DuplicateHeaderParam
+  version: "1.0.0"
+paths:
+  /items:
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Path-level idempotency key
+        schema:
+          type: string
+    post:
+      operationId: createItem
+      parameters:
+        - name: idempotency-key
+          in: header
+          description: Operation-level idempotency key
+          schema:
+            type: string
+      responses:
+        "200": {}
+  /widgets:
+    post:
+      operationId: createWidget
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: First idempotency key
+          schema:
+            type: string
+        - name: idempotency-key
+          in: header
+          description: Second idempotency key
+          schema:
+            type: string
+      responses:
+        "200": {}
+`
+	s := buildSpecWithPaths(t, specBody)
+	c := New()
+	var errOut strings.Builder
+	c.Stderr = &errOut
+
+	apiCmd := c.buildAPICommand("myapi", &config.APIConfig{BaseURL: "https://api.example.com"}, s)
+	if apiCmd == nil {
+		t.Fatal("expected non-nil API command group")
+	}
+	cmd := childCommandForToken(apiCmd, "create-item")
+	if cmd == nil {
+		t.Fatalf("expected create-item command, got commands: %v; stderr: %q", apiCmd.Commands(), errOut.String())
+	}
+	if flag := cmd.Flags().Lookup("idempotency-key"); flag == nil {
+		t.Fatalf("expected generated --idempotency-key flag, got stderr: %q", errOut.String())
+	}
+	widgetCmd := childCommandForToken(apiCmd, "create-widget")
+	if widgetCmd == nil {
+		t.Fatalf("expected create-widget command, got commands: %v; stderr: %q", apiCmd.Commands(), errOut.String())
+	}
+	if flag := widgetCmd.Flags().Lookup("idempotency-key"); flag == nil {
+		t.Fatalf("expected generated --idempotency-key flag on duplicate operation-level params, got stderr: %q", errOut.String())
+	}
+	if strings.Contains(errOut.String(), "duplicate generated flag") || strings.Contains(errOut.String(), "warning: skipping") {
+		t.Fatalf("expected operation to generate without duplicate flag skip, got stderr: %q", errOut.String())
+	}
+}
+
 func TestBuildAPICommand_PathParamXCLIIgnoreErrors(t *testing.T) {
 	specBody := `
 openapi: "3.1.0"

@@ -675,12 +675,10 @@ func validateConfiguredServerVariables(servers []*v3.Server, values map[string]s
 
 // MergeParameters merges path-level and operation-level parameters.
 // Operation-level parameters override path-level ones with the same (in, name).
+// Header names are matched case-insensitively to match HTTP semantics.
 func MergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter {
-	if len(pathLevel) == 0 {
-		return operationLevel
-	}
-	if len(operationLevel) == 0 {
-		return pathLevel
+	if len(pathLevel) == 0 && len(operationLevel) == 0 {
+		return nil
 	}
 	merged := make([]*v3.Parameter, 0, len(pathLevel)+len(operationLevel))
 	indexes := make(map[string]int, len(pathLevel)+len(operationLevel))
@@ -688,7 +686,7 @@ func MergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter 
 		if p == nil {
 			return
 		}
-		key := p.In + "\x00" + p.Name
+		key := parameterMergeKey(p)
 		if idx, ok := indexes[key]; ok {
 			merged[idx] = p
 			return
@@ -703,6 +701,14 @@ func MergeParameters(pathLevel, operationLevel []*v3.Parameter) []*v3.Parameter 
 		add(p)
 	}
 	return merged
+}
+
+func parameterMergeKey(p *v3.Parameter) string {
+	name := p.Name
+	if strings.EqualFold(p.In, "header") {
+		name = strings.ToLower(name)
+	}
+	return p.In + "\x00" + name
 }
 
 func schemaType(types []string) string {

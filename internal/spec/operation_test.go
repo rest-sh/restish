@@ -1262,6 +1262,95 @@ components:
 	}
 }
 
+func TestOpenAPIHeaderParameterOverrideIsCaseInsensitive(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Header Parameters
+  version: "1.0.0"
+paths:
+  /items:
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Path-level idempotency key
+        schema:
+          type: string
+    post:
+      operationId: createItem
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          description: Operation-level idempotency key
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if len(ops[0].Parameters) != 1 {
+		t.Fatalf("parameters = %#v, want one overridden idempotency-key param", ops[0].Parameters)
+	}
+	got := ops[0].Parameters[0]
+	if got.Name != "idempotency-key" || got.In != "header" || !got.Required || got.Desc != "Operation-level idempotency key" {
+		t.Fatalf("header parameter = %#v, want operation-level idempotency-key header", got)
+	}
+}
+
+func TestOpenAPIOperationHeaderParameterDuplicatesAreCaseInsensitive(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Header Parameters
+  version: "1.0.0"
+paths:
+  /items:
+    post:
+      operationId: createItem
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: First idempotency key
+          schema:
+            type: string
+        - name: idempotency-key
+          in: header
+          required: true
+          description: Second idempotency key
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if len(ops[0].Parameters) != 1 {
+		t.Fatalf("parameters = %#v, want one idempotency-key param", ops[0].Parameters)
+	}
+	got := ops[0].Parameters[0]
+	if got.Name != "idempotency-key" || got.In != "header" || !got.Required || got.Desc != "Second idempotency key" {
+		t.Fatalf("header parameter = %#v, want later idempotency-key header", got)
+	}
+}
+
 func TestOpenAPICallbacksAndLinksDoNotCreateExtraOperations(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
