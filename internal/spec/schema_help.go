@@ -28,9 +28,10 @@ const (
 )
 
 type schemaHelpRenderer struct {
-	mode  schemaHelpMode
-	seen  map[uint64]bool
-	depth int
+	mode          schemaHelpMode
+	seen          map[uint64]bool
+	depth         int
+	inheritedType string
 }
 
 func buildOperationHelp(op *v3.Operation, requestMediaType string) OperationHelp {
@@ -515,7 +516,7 @@ func (r schemaHelpRenderer) render(s *base.Schema, indent string) string {
 		return r.renderComposite(s, indent)
 	}
 
-	switch schemaKind(s) {
+	switch r.schemaKind(s) {
 	case "boolean", "integer", "number", "string":
 		return r.renderScalar(s)
 	case "array":
@@ -537,6 +538,10 @@ func (r schemaHelpRenderer) child() schemaHelpRenderer {
 }
 
 func (r schemaHelpRenderer) renderComposite(s *base.Schema, indent string) string {
+	inheritedType := explicitScalarSchemaType(s)
+	if inheritedType == "" {
+		inheritedType = r.inheritedType
+	}
 	for _, item := range []struct {
 		label   string
 		schemas []*base.SchemaProxy
@@ -551,6 +556,7 @@ func (r schemaHelpRenderer) renderComposite(s *base.Schema, indent string) strin
 		var out strings.Builder
 		out.WriteString(item.label + "{\n")
 		child := r.child()
+		child.inheritedType = inheritedType
 		for _, proxy := range item.schemas {
 			out.WriteString(indent + "  " + child.render(schemaFromProxy(proxy), indent+"  ") + "\n")
 		}
@@ -663,7 +669,7 @@ func (r schemaHelpRenderer) renderScalar(s *base.Schema) string {
 	if s.MultipleOf != nil {
 		tags = append(tags, fmt.Sprintf("multiple:%v", *s.MultipleOf))
 	}
-	typ := schemaType(s.Type)
+	typ := r.scalarType(s)
 	if len(s.Type) > 1 {
 		typ = strings.Join(s.Type, "|")
 	}
@@ -678,6 +684,47 @@ func (r schemaHelpRenderer) renderScalar(s *base.Schema) string {
 		return fmt.Sprintf("(%s) %s", typ, oneLine(doc))
 	}
 	return fmt.Sprintf("(%s)", typ)
+}
+
+func (r schemaHelpRenderer) scalarType(s *base.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if len(s.Type) == 0 && r.inheritedType != "" {
+		return r.inheritedType
+	}
+	return schemaType(s.Type)
+}
+
+func (r schemaHelpRenderer) schemaKind(s *base.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if t := schemaType(s.Type); t != "" && !(t == "string" && len(s.Type) == 0) {
+		return t
+	}
+	if s.Items != nil {
+		return "array"
+	}
+	if (s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil {
+		return "object"
+	}
+	if r.inheritedType != "" {
+		return r.inheritedType
+	}
+	return "string"
+}
+
+func explicitScalarSchemaType(s *base.Schema) string {
+	if s == nil || len(s.Type) == 0 {
+		return ""
+	}
+	switch typ := schemaType(s.Type); typ {
+	case "boolean", "integer", "number", "string":
+		return typ
+	default:
+		return ""
+	}
 }
 
 func schemaKind(s *base.Schema) string {

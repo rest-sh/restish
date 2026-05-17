@@ -2070,6 +2070,14 @@ func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
           "id": {"type": "string", "format": "uuid", "default": "00000000-0000-0000-0000-000000000000"},
           "state": {"type": "string", "enum": ["new", "done"]},
           "kind": {"type": "string", "const": "item"},
+          "loginStatus": {
+            "type": "integer",
+            "oneOf": [
+              {"const": 0, "description": "Failure"},
+              {"const": 1, "description": "Success"},
+              {"const": 2, "description": "Pending"}
+            ]
+          },
           "score": {"type": "number", "minimum": 5, "maximum": 10, "multipleOf": 0.5},
           "age": {"type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 120}
         }
@@ -2144,6 +2152,9 @@ func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
 		"default:00000000-0000-0000-0000-000000000000",
 		"enum:new,done",
 		"const:item",
+		"(integer const:0) Failure",
+		"(integer const:1) Success",
+		"(integer const:2) Pending",
 		"min:5",
 		"max:10",
 		"multiple:0.5",
@@ -2155,6 +2166,9 @@ func TestGeneratedCommandHelpShowsCompositeSchemaMetadata(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected help to contain %q, got:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "(string const:0)") {
+		t.Fatalf("numeric const branches should not render as strings, got:\n%s", got)
 	}
 }
 
