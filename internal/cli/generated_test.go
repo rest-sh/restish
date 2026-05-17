@@ -693,6 +693,80 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandUserAgentAPIKeyOverridesDefaultUserAgent(t *testing.T) {
+	var gotUserAgents []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/alerts", func(w http.ResponseWriter, r *http.Request) {
+		gotUserAgents = append(gotUserAgents, r.Header.Get("User-Agent"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Weather API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "security": [{"userAgent": []}],
+  "components": {
+    "securitySchemes": {
+      "userAgent": {"type": "apiKey", "in": "header", "name": "User-Agent"}
+    }
+  },
+  "paths": {
+    "/alerts": {
+      "get": {
+        "operationId": "getAlerts",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {
+				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {
+						Credentials: map[string]*config.CredentialConfig{
+							"userAgent": {
+								Auth: &config.AuthConfig{
+									Type:   "api-key",
+									Params: map[string]string{"in": "header", "name": "User-Agent", "value": "restish-test-contact-example"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-alerts"}); err != nil {
+		t.Fatalf("get-alerts failed: %v", err)
+	}
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-alerts", "--rsh-header", "User-Agent: explicit-header-test"}); err != nil {
+		t.Fatalf("get-alerts with explicit User-Agent failed: %v", err)
+	}
+
+	if len(gotUserAgents) != 2 {
+		t.Fatalf("User-Agent requests = %v, want 2 requests", gotUserAgents)
+	}
+	if gotUserAgents[0] != "restish-test-contact-example" {
+		t.Fatalf("configured User-Agent auth = %q, want contact example", gotUserAgents[0])
+	}
+	if gotUserAgents[1] != "explicit-header-test" {
+		t.Fatalf("explicit User-Agent = %q, want explicit override", gotUserAgents[1])
+	}
+}
+
 func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
 	var got []string
 	mux := http.NewServeMux()

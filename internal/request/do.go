@@ -263,14 +263,13 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 		}
 		req.URL.RawQuery = q.Encode()
 	}
-	if opts.UserAgent != "" && req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", opts.UserAgent)
-	}
-
 	if opts.OnRequest != nil {
 		if err := opts.OnRequest(req); err != nil {
 			return nil, fmt.Errorf("auth: %w", err)
 		}
+	}
+	if opts.UserAgent != "" && req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", opts.UserAgent)
 	}
 	if opts.OnBeforeRequest != nil {
 		opts.OnBeforeRequest(req)
