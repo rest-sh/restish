@@ -152,7 +152,7 @@ func SetTheme(entries ThemeEntries) error {
 
 // BuildTheme validates user theme entries and returns a Chroma style.
 func BuildTheme(entries ThemeEntries) (*chroma.Style, error) {
-	styleEntries := make(chroma.StyleEntries, len(defaultStyleEntries)+len(entries))
+	styleEntries := make(chroma.StyleEntries, len(defaultStyleEntries))
 	for token, entry := range defaultStyleEntries {
 		styleEntries[token] = entry
 	}

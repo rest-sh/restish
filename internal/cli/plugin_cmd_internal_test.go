@@ -120,6 +120,65 @@ func TestExtractPluginArchiveRejectsTotalExtractedSize(t *testing.T) {
 	}
 }
 
+func TestExtractPluginTarGzRejectsTraversalEntry(t *testing.T) {
+	archive := testTarGzEntry(t, "../restish-test", []byte("abc"))
+	parent := t.TempDir()
+	tempDir := filepath.Join(parent, "extract")
+	if err := os.Mkdir(tempDir, 0o755); err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+
+	_, err := materializePluginDownload(bytes.NewReader(archive), "https://downloads.example/restish-test.tar.gz", tempDir, "restish-test")
+	if err == nil {
+		t.Fatal("expected traversal tar.gz entry to fail")
+	}
+	if _, statErr := os.Stat(filepath.Join(parent, "restish-test")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected parent directory to remain untouched, stat err = %v", statErr)
+	}
+}
+
+func TestExtractPluginZipRejectsTraversalEntry(t *testing.T) {
+	tests := []string{
+		"../restish-test",
+		"dir/../../restish-test",
+		`dir\..\restish-test`,
+	}
+	for _, entry := range tests {
+		t.Run(entry, func(t *testing.T) {
+			archive := testZipEntry(t, entry, []byte("abc"))
+			parent := t.TempDir()
+			tempDir := filepath.Join(parent, "extract")
+			if err := os.Mkdir(tempDir, 0o755); err != nil {
+				t.Fatalf("create temp dir: %v", err)
+			}
+
+			_, err := materializePluginDownload(bytes.NewReader(archive), "https://downloads.example/restish-test.zip", tempDir, "restish-test")
+			if err == nil {
+				t.Fatal("expected traversal zip entry to fail")
+			}
+			if _, statErr := os.Stat(filepath.Join(parent, "restish-test")); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("expected parent directory to remain untouched, stat err = %v", statErr)
+			}
+		})
+	}
+}
+
+func TestExtractPluginArchiveAcceptsNestedPluginEntry(t *testing.T) {
+	archive := testZipEntry(t, "bin/restish-test", []byte("abc"))
+	tempDir := t.TempDir()
+
+	path, err := materializePluginDownload(bytes.NewReader(archive), "https://downloads.example/restish-test.zip", tempDir, "restish-test")
+	if err != nil {
+		t.Fatalf("extract nested plugin: %v", err)
+	}
+	if filepath.Dir(path) != tempDir {
+		t.Fatalf("extracted path dir = %s, want %s", filepath.Dir(path), tempDir)
+	}
+	if filepath.Base(path) != "restish-test" {
+		t.Fatalf("extracted basename = %s, want restish-test", filepath.Base(path))
+	}
+}
+
 func TestPluginInstallKeepsExistingBinaryWhenTempManifestFails(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")

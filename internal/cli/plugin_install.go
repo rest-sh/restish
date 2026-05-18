@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -498,16 +499,14 @@ func extractPluginTarGz(r io.Reader, tempDir, pluginName string) (string, error)
 		if h.Typeflag != tar.TypeReg {
 			continue
 		}
-		if !isWantedPluginArchiveEntry(h.Name, pluginName) {
+		base, ok := safePluginArchiveEntryBase(h.Name, pluginName)
+		if !ok {
 			continue
 		}
 		if extracted+h.Size > pluginInstallLimits.ArchiveExtractBytes {
 			return "", fmt.Errorf("install: extract %s: plugin archive exceeds extracted limit of %d bytes", h.Name, pluginInstallLimits.ArchiveExtractBytes)
 		}
-		// filepath.Base intentionally flattens accepted archive paths, including
-		// POSIX names that contain backslashes, so extraction never recreates
-		// archive-controlled directories.
-		dest := filepath.Join(tempDir, filepath.Base(h.Name))
+		dest := filepath.Join(tempDir, base)
 		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			return "", fmt.Errorf("install: extract %s: %w", h.Name, err)
@@ -538,7 +537,8 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 	var candidates []string
 	var extracted int64
 	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || !isWantedPluginArchiveEntry(f.Name, pluginName) {
+		base, ok := safePluginArchiveEntryBase(f.Name, pluginName)
+		if f.FileInfo().IsDir() || !ok {
 			continue
 		}
 		if f.UncompressedSize64 > uint64(pluginInstallLimits.ArchiveMemberBytes) {
@@ -551,10 +551,7 @@ func extractPluginZip(r io.Reader, tempDir, pluginName string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("install: extract %s: %w", f.Name, err)
 		}
-		// filepath.Base intentionally flattens accepted archive paths, including
-		// POSIX names that contain backslashes, so extraction never recreates
-		// archive-controlled directories.
-		dest := filepath.Join(tempDir, filepath.Base(f.Name))
+		dest := filepath.Join(tempDir, base)
 		out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 		if err != nil {
 			_ = in.Close()
@@ -616,15 +613,43 @@ func copyArchiveMemberBytes(dst io.Writer, src io.Reader, limit int64) (int64, e
 	return n, err
 }
 
-func isWantedPluginArchiveEntry(name, pluginName string) bool {
-	base := filepath.Base(name)
-	if base == "." || base == "" {
-		return false
+func safePluginArchiveEntryBase(name, pluginName string) (string, bool) {
+	base, ok := safeArchiveEntryBase(name)
+	if !ok {
+		return "", false
 	}
 	if pluginName == "" {
-		return strings.HasPrefix(strings.TrimSuffix(base, ".exe"), "restish-")
+		return base, strings.HasPrefix(strings.TrimSuffix(base, ".exe"), "restish-")
 	}
-	return strings.TrimSuffix(base, ".exe") == strings.TrimSuffix(pluginName, ".exe")
+	return base, strings.TrimSuffix(base, ".exe") == strings.TrimSuffix(pluginName, ".exe")
+}
+
+func safeArchiveEntryBase(name string) (string, bool) {
+	if name == "" || strings.Contains(name, "..") || strings.Contains(name, "\\") || filepath.IsAbs(name) || path.IsAbs(name) || looksWindowsDrivePath(name) {
+		return "", false
+	}
+	clean := path.Clean(name)
+	if clean == "." || strings.HasPrefix(clean, "../") || clean == ".." {
+		return "", false
+	}
+	for _, part := range strings.Split(clean, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", false
+		}
+	}
+	base := path.Base(clean)
+	if base == "." || base == "/" || base == "" {
+		return "", false
+	}
+	return base, true
+}
+
+func looksWindowsDrivePath(name string) bool {
+	if len(name) < 2 || name[1] != ':' {
+		return false
+	}
+	c := name[0]
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
 }
 
 func selectExtractedPlugin(candidates []string, pluginName string) (string, error) {

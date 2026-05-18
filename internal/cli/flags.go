@@ -301,7 +301,7 @@ func validateEnvHeaders(headers []string) error {
 }
 
 func mergeHeaderOptions(base, overrides []string) ([]string, error) {
-	merged := make([]string, 0, len(base)+len(overrides))
+	merged := make([]string, 0, len(base))
 	indexByName := map[string]int{}
 	for _, header := range append(append([]string(nil), base...), overrides...) {
 		name, _, err := request.ParseHeaderOption(header)

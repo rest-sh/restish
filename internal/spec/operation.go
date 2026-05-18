@@ -585,7 +585,7 @@ func relativeEscapedServerBasePath(basePath, resolvedPath string) string {
 	for common < len(baseSegments) && common < len(resolvedSegments) && baseSegments[common] == resolvedSegments[common] {
 		common++
 	}
-	parts := make([]string, 0, len(baseSegments)-common+len(resolvedSegments)-common)
+	var parts []string
 	for i := common; i < len(baseSegments); i++ {
 		parts = append(parts, "..")
 	}

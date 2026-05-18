@@ -325,7 +325,7 @@ func relativeURLPath(basePath, targetPath string) string {
 	for i < len(baseParts) && i < len(targetParts) && baseParts[i] == targetParts[i] {
 		i++
 	}
-	parts := make([]string, 0, len(baseParts)-i+len(targetParts)-i)
+	var parts []string
 	for j := i; j < len(baseParts); j++ {
 		parts = append(parts, "..")
 	}
