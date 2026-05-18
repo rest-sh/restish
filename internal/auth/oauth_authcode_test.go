@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -68,6 +69,98 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 	}
 	if n := refreshCallCount.Load(); n != 1 {
 		t.Errorf("expected refresh endpoint called once, got %d", n)
+	}
+}
+
+func TestAuthCode_ConcurrentRefreshReusesStoredToken(t *testing.T) {
+	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
+	cache := NewTokenCache(cacheFile)
+	cacheKey := "myapi:default"
+	if err := cache.Set(cacheKey, CachedToken{
+		AccessToken:  "old-access",
+		RefreshToken: "my-refresh-token",
+		Expiry:       time.Now().Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("cache.Set: %v", err)
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var refreshCalls atomic.Int32
+	client := testHTTPClient(func(r *http.Request) (*http.Response, error) {
+		if err := r.ParseForm(); err != nil {
+			return testResponse(400, "text/plain", "bad form"), nil
+		}
+		if gt := r.FormValue("grant_type"); gt != "refresh_token" {
+			t.Fatalf("unexpected grant_type %q", gt)
+		}
+		if got := r.FormValue("refresh_token"); got != "my-refresh-token" {
+			t.Fatalf("refresh_token = %q", got)
+		}
+		if refreshCalls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600,"refresh_token":"rotated-refresh"}`), nil
+	})
+
+	params := map[string]string{
+		"client_id":  "id1",
+		"token_url":  "https://auth.example.com/token",
+		"_cache_key": cacheKey,
+	}
+	h1 := &AuthorizationCode{Cache: NewTokenCache(cacheFile), HTTPClient: client}
+	h2 := &AuthorizationCode{Cache: NewTokenCache(cacheFile), HTTPClient: client}
+	run := func(h *AuthorizationCode) (string, error) {
+		req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+		err := h.OnRequest(req, params)
+		return req.Header.Get("Authorization"), err
+	}
+
+	type result struct {
+		auth string
+		err  error
+	}
+	results := make(chan result, 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		auth, err := run(h1)
+		results <- result{auth: auth, err: err}
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first refresh did not start")
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		auth, err := run(h2)
+		results <- result{auth: auth, err: err}
+	}()
+	close(release)
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		if result.err != nil {
+			t.Fatalf("OnRequest: %v", result.err)
+		}
+		if result.auth != "Bearer refreshed-token" {
+			t.Fatalf("Authorization = %q, want refreshed token", result.auth)
+		}
+	}
+	if got := refreshCalls.Load(); got != 1 {
+		t.Fatalf("refresh calls = %d, want 1", got)
+	}
+	cached, err := NewTokenCache(cacheFile).Get(cacheKey)
+	if err != nil {
+		t.Fatalf("cache.Get: %v", err)
+	}
+	if cached == nil || cached.RefreshToken != "rotated-refresh" {
+		t.Fatalf("cached token = %+v, want rotated refresh token", cached)
 	}
 }
 

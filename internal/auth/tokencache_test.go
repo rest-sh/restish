@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -338,5 +339,65 @@ func TestTokenCache_ReloadsOnExternalChange(t *testing.T) {
 	}
 	if got == nil || got.AccessToken != "new" {
 		t.Fatalf("expected reloaded token, got %+v", got)
+	}
+}
+
+func TestTokenCache_ConcurrentRefreshReusesNewToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	tc1 := NewTokenCache(path)
+	tc2 := NewTokenCache(path)
+	if err := tc1.Set("api:default", CachedToken{
+		AccessToken:  "old",
+		RefreshToken: "refresh",
+		Expiry:       time.Now().Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var refreshCalls atomic.Int32
+	refresh := func(CachedToken) (CachedToken, error) {
+		if refreshCalls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return CachedToken{
+			AccessToken:  "new",
+			RefreshToken: "rotated",
+			Expiry:       time.Now().Add(time.Hour),
+		}, nil
+	}
+
+	errCh := make(chan error, 2)
+	tokenCh := make(chan *CachedToken, 2)
+	go func() {
+		token, _, err := tc1.Refresh("api:default", false, refresh)
+		tokenCh <- token
+		errCh <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first refresh did not start")
+	}
+	go func() {
+		token, _, err := tc2.Refresh("api:default", false, refresh)
+		tokenCh <- token
+		errCh <- err
+	}()
+	close(release)
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("Refresh: %v", err)
+		}
+		token := <-tokenCh
+		if token == nil || token.AccessToken != "new" || token.RefreshToken != "rotated" {
+			t.Fatalf("token = %+v, want refreshed token", token)
+		}
+	}
+	if got := refreshCalls.Load(); got != 1 {
+		t.Fatalf("refresh calls = %d, want 1", got)
 	}
 }

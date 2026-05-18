@@ -58,29 +58,26 @@ func (h *DeviceCode) authenticateRequest(req *http.Request, params map[string]st
 
 func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string, force bool) (string, error) {
 	cacheKey := params["_cache_key"]
-	if h.Cache != nil && cacheKey != "" {
-		cached, err := h.Cache.Get(cacheKey)
-		if err == nil && cached != nil {
-			if !force && !cached.IsExpired() {
-				return cached.AccessToken, nil
-			}
-			if cached.RefreshToken != "" {
-				tokenURL, err := h.resolveTokenURL(ctx, params)
-				if err != nil {
-					return "", err
-				}
-				refreshed, err := h.doRefresh(ctx, params, tokenURL, cached.RefreshToken)
-				if err == nil {
-					_ = h.Cache.Set(cacheKey, refreshed)
-					return refreshed.AccessToken, nil
-				}
-				if h.Stderr != nil {
-					fmt.Fprintf(h.Stderr, "OAuth refresh failed: %v\n", err)
-				}
-				if !isTokenEndpointErrorCode(err, "invalid_grant") {
-					return "", err
-				}
-			}
+	var tokenURL string
+	var tokenURLErr error
+	accessToken, ok, err := cachedOAuthAccessToken(h.Cache, cacheKey, force, func(cached CachedToken) (CachedToken, error) {
+		if tokenURL == "" && tokenURLErr == nil {
+			tokenURL, tokenURLErr = h.resolveTokenURL(ctx, params)
+		}
+		if tokenURLErr != nil {
+			return CachedToken{}, tokenURLErr
+		}
+		return h.doRefresh(ctx, params, tokenURL, cached.RefreshToken)
+	})
+	if ok {
+		return accessToken, nil
+	}
+	if err != nil {
+		if h.Stderr != nil {
+			fmt.Fprintf(h.Stderr, "OAuth refresh failed: %v\n", err)
+		}
+		if !isTokenEndpointErrorCode(err, "invalid_grant") {
+			return "", err
 		}
 	}
 

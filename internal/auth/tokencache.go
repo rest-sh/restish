@@ -123,6 +123,43 @@ func (c *TokenCache) DeletePrefix(prefix string) error {
 	return c.saveLocked(m)
 }
 
+// Refresh serializes a cached OAuth refresh for key across processes. It
+// re-reads the cache under the sibling file lock, skips refresh when another
+// process already stored a valid token, then stores the refreshed token before
+// releasing the lock.
+func (c *TokenCache) Refresh(key string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	lock, err := configpkg.LockSiblingFile(c.path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer lock.Close()
+	m, err := c.loadLocked()
+	if err != nil {
+		return nil, false, err
+	}
+	cached, ok := m[key]
+	if !ok {
+		return nil, false, nil
+	}
+	if !force && !cached.IsExpired() {
+		return &cached, false, nil
+	}
+	if cached.RefreshToken == "" {
+		return &cached, false, nil
+	}
+	refreshed, err := refresh(cached)
+	if err != nil {
+		return &cached, false, err
+	}
+	m[key] = refreshed
+	if err := c.saveLocked(m); err != nil {
+		return nil, false, err
+	}
+	return &refreshed, true, nil
+}
+
 func (c *TokenCache) load() (map[string]CachedToken, error) {
 	// Caller must hold c.mu. This uses the cached copy when file metadata is
 	// unchanged, otherwise it delegates to loadLocked for the disk read.

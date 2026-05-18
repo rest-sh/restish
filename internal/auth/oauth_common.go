@@ -462,6 +462,62 @@ func refreshOAuthToken(ctx context.Context, client *http.Client, params map[stri
 	return token, nil
 }
 
+type refreshTokenStore interface {
+	TokenStore
+	Refresh(key string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error)
+}
+
+func refreshCachedOAuthToken(cache TokenStore, cacheKey string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error) {
+	if store, ok := cache.(refreshTokenStore); ok {
+		return store.Refresh(cacheKey, force, refresh)
+	}
+	cached, err := cache.Get(cacheKey)
+	if err != nil || cached == nil {
+		return cached, false, err
+	}
+	if !force && !cached.IsExpired() {
+		return cached, false, nil
+	}
+	if cached.RefreshToken == "" {
+		return cached, false, nil
+	}
+	refreshed, err := refresh(*cached)
+	if err != nil {
+		return cached, false, err
+	}
+	if err := cache.Set(cacheKey, refreshed); err != nil {
+		return nil, false, err
+	}
+	return &refreshed, true, nil
+}
+
+func cachedOAuthAccessToken(cache TokenStore, cacheKey string, force bool, refresh func(CachedToken) (CachedToken, error)) (string, bool, error) {
+	if cache == nil || cacheKey == "" {
+		return "", false, nil
+	}
+	cached, err := cache.Get(cacheKey)
+	if err != nil || cached == nil {
+		return "", false, nil
+	}
+	if !force && !cached.IsExpired() {
+		return cached.AccessToken, true, nil
+	}
+	if cached.RefreshToken == "" {
+		return "", false, nil
+	}
+	refreshed, didRefresh, err := refreshCachedOAuthToken(cache, cacheKey, force, refresh)
+	if err != nil {
+		return "", false, err
+	}
+	if refreshed == nil {
+		return "", false, nil
+	}
+	if didRefresh || (!force && !refreshed.IsExpired()) {
+		return refreshed.AccessToken, true, nil
+	}
+	return "", false, nil
+}
+
 func extraOAuthParams(params map[string]string, reserved map[string]bool) map[string]string {
 	extra := map[string]string{}
 	for key, value := range params {
