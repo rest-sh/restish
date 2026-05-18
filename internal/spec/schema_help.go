@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"reflect"
 	"sort"
 	"strconv"
@@ -68,10 +69,16 @@ func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyH
 	if schema == nil {
 		return &OperationBodyHelp{MediaType: requestMediaType}
 	}
+	rawBinary := isRawBinaryRequestBody(requestMediaType, schema)
+	example := ""
+	if !rawBinary {
+		example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+	}
 	return &OperationBodyHelp{
 		MediaType: requestMediaType,
 		Schema:    schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
-		Example:   renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite)),
+		Example:   example,
+		RawBinary: rawBinary,
 	}
 }
 
@@ -87,8 +94,11 @@ func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
 		schema := mediaTypeSchema(mt)
 		help := OperationBodyHelp{MediaType: mediaType}
 		if schema != nil {
+			help.RawBinary = isRawBinaryRequestBody(mediaType, schema)
 			help.Schema = schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
-			help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+			if !help.RawBinary {
+				help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+			}
 		}
 		out = append(out, help)
 	}
@@ -127,7 +137,11 @@ func buildCommandExamples(op *v3.Operation, requestMediaType string) []string {
 	if mt == nil {
 		return nil
 	}
-	example := firstMediaTypeExample(mt, mediaTypeSchema(mt), schemaHelpWrite)
+	schema := mediaTypeSchema(mt)
+	if isRawBinaryRequestBody(requestMediaType, schema) {
+		return []string{"@input.bin"}
+	}
+	example := firstMediaTypeExample(mt, schema, schemaHelpWrite)
 	if example == nil {
 		return nil
 	}
@@ -138,6 +152,31 @@ func buildCommandExamples(op *v3.Operation, requestMediaType string) []string {
 		}
 	}
 	return []string{"<input.json"}
+}
+
+func isRawBinaryRequestBody(mediaType string, schema *base.Schema) bool {
+	return isBinaryStringSchema(schema) && isRawBinaryRequestMediaType(mediaType)
+}
+
+func isBinaryStringSchema(schema *base.Schema) bool {
+	if schema == nil || !strings.EqualFold(schema.Format, "binary") {
+		return false
+	}
+	typ := schemaType(schema.Type)
+	return typ == "" || typ == "string"
+}
+
+func isRawBinaryRequestMediaType(mediaType string) bool {
+	base, _, err := mime.ParseMediaType(mediaType)
+	if err != nil || base == "" {
+		base = strings.TrimSpace(mediaType)
+	}
+	base = strings.ToLower(base)
+	return base == "*/*" ||
+		base == "application/*" ||
+		base == "application/octet-stream" ||
+		strings.HasSuffix(base, "+octet-stream") ||
+		strings.HasSuffix(base, "/octet-stream")
 }
 
 func buildResponseHelp(op *v3.Operation) []OperationResponseHelp {

@@ -461,7 +461,8 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 				return c.printGeneratedBodyExample(op.Help, gf.ContentType)
 			}
 			acceptOverride := c.generatedOperationAcceptHeader(op.ResponseMediaTypes, op.ResponseMediaType)
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.BodyRequired, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			rawBinaryBody := op.Help.Request != nil && op.Help.Request.RawBinary
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1114,6 +1115,10 @@ func (c *CLI) printGeneratedBodyExample(help spec.OperationHelp, contentType str
 	if err != nil {
 		return err
 	}
+	if request != nil && request.RawBinary {
+		fmt.Fprintln(c.Stdout, "@input.bin")
+		return nil
+	}
 	if request != nil && strings.TrimSpace(request.Example) != "" {
 		fmt.Fprintln(c.Stdout, request.Example)
 		return nil
@@ -1319,6 +1324,7 @@ func (c *CLI) runGeneratedOp(
 	apiName, opPath, operationServer, method, requestMediaType, responseMediaType string,
 	requestMultipartContentTypes map[string]string,
 	bodyRequired bool,
+	rawBinaryBody bool,
 	noAuth bool,
 	optionalAuth bool,
 	credentialAlternatives []spec.CredentialAlternative,
@@ -1422,6 +1428,7 @@ func (c *CLI) runGeneratedOp(
 		multipartPartContentTypes: requestMultipartContentTypes,
 		acceptOverride:            responseMediaType,
 		bodyRequired:              bodyRequired,
+		rawBinaryBody:             rawBinaryBody,
 		explicitAPIName:           apiName,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,

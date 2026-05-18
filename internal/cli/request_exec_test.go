@@ -70,6 +70,7 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 		false,
 		authHandlerOptions{},
 		nil,
+		false,
 		"",
 	)
 	if err != nil {
@@ -129,6 +130,7 @@ func TestPrepareRequestBypassesCacheBeforeTransportForUnnamespacedAuth(t *testin
 		false,
 		authHandlerOptions{},
 		nil,
+		false,
 		"",
 	)
 	if err != nil {
@@ -256,7 +258,7 @@ func TestPrepareRequestNoAuthStripsCredentials(t *testing.T) {
 		},
 	}
 
-	prepared, err := c.prepareRequest(context.Background(), "GET", "svc/items", "default", request.Options{}, nil, nil, true, authHandlerOptions{}, nil, "")
+	prepared, err := c.prepareRequest(context.Background(), "GET", "svc/items", "default", request.Options{}, nil, nil, true, authHandlerOptions{}, nil, false, "")
 	if err != nil {
 		t.Fatalf("prepareRequest() error = %v", err)
 	}
@@ -399,7 +401,7 @@ func TestPrepareRequestMissingProfileReturnsError(t *testing.T) {
 		},
 	}
 
-	_, err := c.prepareRequest(context.Background(), "GET", "svc/items", "missing", request.Options{}, nil, nil, false, authHandlerOptions{}, nil, "")
+	_, err := c.prepareRequest(context.Background(), "GET", "svc/items", "missing", request.Options{}, nil, nil, false, authHandlerOptions{}, nil, false, "")
 	if err == nil {
 		t.Fatal("expected missing profile to return an error")
 	}

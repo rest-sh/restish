@@ -69,6 +69,7 @@ type OperationBodyHelp struct {
 	MediaType string
 	Schema    string
 	Example   string
+	RawBinary bool
 }
 
 // OperationResponseHelp is a compact response shape for generated command help.

@@ -3553,6 +3553,123 @@ func TestGeneratedCommandOctetStreamRequestBody(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandRawBinaryRequestBodyMediaTypes(t *testing.T) {
+	gotContentTypes := map[string]string{}
+	gotBodies := map[string]string{}
+	mux := http.NewServeMux()
+	for _, path := range []string{"/wildcard", "/application", "/offset"} {
+		path := path
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			gotContentTypes[path] = r.Header.Get("Content-Type")
+			data, _ := io.ReadAll(r.Body)
+			gotBodies[path] = string(data)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"ok":true}`)
+		})
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Raw Upload API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/wildcard": {
+      "patch": {
+        "operationId": "uploadWildcard",
+        "requestBody": {
+          "content": {
+            "*/*": {
+              "schema": {"type": "string", "format": "binary"}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/application": {
+      "put": {
+        "operationId": "uploadApplication",
+        "requestBody": {
+          "content": {
+            "application/*": {
+              "schema": {"type": "string", "format": "binary"}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/offset": {
+      "patch": {
+        "operationId": "resumeUpload",
+        "requestBody": {
+          "content": {
+            "application/offset+octet-stream": {
+              "schema": {"type": "string", "format": "binary"}
+            }
+          }
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	bodyPath := filepath.Join(t.TempDir(), "blob.bin")
+	if err := os.WriteFile(bodyPath, []byte("raw-binary-body"), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	c := env.newCLI()
+	tests := []struct {
+		command     string
+		path        string
+		contentType string
+	}{
+		{command: "upload-wildcard", path: "/wildcard", contentType: "*/*"},
+		{command: "upload-application", path: "/application", contentType: "application/*"},
+		{command: "resume-upload", path: "/offset", contentType: "application/offset+octet-stream"},
+	}
+	for _, tt := range tests {
+		if err := c.Run([]string{"restish", "tapi", tt.command, "@" + bodyPath}); err != nil {
+			t.Fatalf("%s failed: %v", tt.command, err)
+		}
+		if gotContentTypes[tt.path] != tt.contentType {
+			t.Fatalf("%s Content-Type = %q, want %q", tt.command, gotContentTypes[tt.path], tt.contentType)
+		}
+		if gotBodies[tt.path] != "raw-binary-body" {
+			t.Fatalf("%s body = %q, want raw body", tt.command, gotBodies[tt.path])
+		}
+	}
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "resume-upload", "--rsh-generate-body"}); err != nil {
+		t.Fatalf("generate body: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "@input.bin" {
+		t.Fatalf("generated body = %q, want @input.bin", got)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "tapi", "resume-upload", "--help-all"}); err != nil {
+		t.Fatalf("help-all: %v", err)
+	}
+	help := out.String()
+	if !strings.Contains(help, "restish tapi resume-upload @input.bin") {
+		t.Fatalf("help example missing raw file input:\n%s", help)
+	}
+	if strings.Contains(help, "<input.json") || strings.Contains(help, `"string"`) {
+		t.Fatalf("help should not suggest JSON input for raw binary body:\n%s", help)
+	}
+	if !strings.Contains(help, "Request Schema (application/offset+octet-stream):") ||
+		!strings.Contains(help, "(string format:binary)") {
+		t.Fatalf("help missing binary request schema:\n%s", help)
+	}
+}
+
 func TestGeneratedCommandXMLRequestBodySendsRawFileWithDeclaredContentType(t *testing.T) {
 	var gotContentType, gotBody string
 	mux := http.NewServeMux()

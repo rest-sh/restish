@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -37,6 +38,7 @@ func (c *CLI) prepareRequest(
 	noAuth bool,
 	authOpts authHandlerOptions,
 	operationAuth *operationAuthPolicy,
+	rawBinaryBody bool,
 	explicitAPIName string,
 ) (*preparedRequest, error) {
 	opts = cloneRequestOptions(opts)
@@ -170,7 +172,7 @@ func (c *CLI) prepareRequest(
 		prepared.actualRequest = preparedReq
 	}
 
-	bodyRaw, bodyContentType, err := c.requestBodyBytes(opts.ContentType, bodyValue, &opts.Headers)
+	bodyRaw, bodyContentType, err := c.requestBodyBytes(opts.ContentType, bodyValue, rawBinaryBody, &opts.Headers)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request body: %w", err)
 	}
@@ -267,7 +269,7 @@ func cloneRequestOptions(opts request.Options) request.Options {
 	return cloned
 }
 
-func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]string) ([]byte, string, error) {
+func (c *CLI) requestBodyBytes(contentType string, bodyValue any, rawBinary bool, headers *[]string) ([]byte, string, error) {
 	if bodyValue == nil {
 		return nil, "", nil
 	}
@@ -280,12 +282,46 @@ func (c *CLI) requestBodyBytes(contentType string, bodyValue any, headers *[]str
 	if mimeType == "" {
 		mimeType = ct
 	}
+	if rawBinary && isRawBinaryContentType(mimeType) {
+		encoded, err := rawBinaryBodyBytes(bodyValue)
+		if err != nil {
+			return nil, "", err
+		}
+		*headers = append(*headers, "Content-Type: "+mimeType)
+		return encoded, mimeType, nil
+	}
 	encoded, actualContentType, err := c.content.EncodeWithType(mimeType, bodyValue)
 	if err != nil {
 		return nil, "", err
 	}
 	*headers = append(*headers, "Content-Type: "+actualContentType)
 	return encoded, actualContentType, nil
+}
+
+func rawBinaryBodyBytes(bodyValue any) ([]byte, error) {
+	switch value := bodyValue.(type) {
+	case nil:
+		return nil, nil
+	case []byte:
+		return value, nil
+	case string:
+		return []byte(value), nil
+	default:
+		return nil, fmt.Errorf("raw binary request bodies require string, @file, or redirected stdin input; got %T", bodyValue)
+	}
+}
+
+func isRawBinaryContentType(contentType string) bool {
+	base, _, err := mime.ParseMediaType(contentType)
+	if err != nil || base == "" {
+		base = strings.TrimSpace(contentType)
+	}
+	base = strings.ToLower(base)
+	return base == "*/*" ||
+		base == "application/*" ||
+		base == "application/octet-stream" ||
+		strings.HasSuffix(base, "+octet-stream") ||
+		strings.HasSuffix(base, "/octet-stream")
 }
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {
