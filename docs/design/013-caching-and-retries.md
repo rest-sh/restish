@@ -57,6 +57,12 @@ profile on the same host. Direct URL requests that carry credential headers or
 credential-looking query parameters still bypass the cache because there is no
 stable profile namespace to key on.
 
+Embedders that bypass the CLI request-preparation path and enable
+`request.Options.CacheDir` are responsible for the same invariant: set
+`CacheNamespace` to a stable API/profile value before injecting credentials, or
+set `NoCache` for ad hoc credentialed requests. `CLI.Run` and
+`CLI.FetchResponse` preserve the stock CLI behavior.
+
 The size bound is part of the public design, not just an implementation detail.
 If a size-related config value exists, it should affect actual eviction policy.
 

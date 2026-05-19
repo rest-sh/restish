@@ -165,6 +165,9 @@ type Options struct {
 	// (no read, no write).
 	NoCache bool
 	// CacheNamespace partitions cache entries for one API/profile tuple.
+	// Embedders that set CacheDir and inject auth headers or credential query
+	// params should set this to a stable value such as "<api>:<profile>" or set
+	// NoCache for ad hoc credentialed requests.
 	CacheNamespace string
 	// CacheMaxBytes is the maximum size of the HTTP response cache in bytes.
 	// If zero, defaults to cache.DefaultMaxBytes.

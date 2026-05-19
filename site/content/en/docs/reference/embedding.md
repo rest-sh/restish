@@ -71,6 +71,30 @@ func (corpTokenHandler) Authenticate(ctx context.Context, req *http.Request, ac 
 The handler receives the request context, profile name, params, token store,
 and HTTP client used by Restish auth flows.
 
+## Response Cache Safety
+
+The stock CLI partitions cached API responses by API and profile. For example,
+requests made through the `billing` API's `prod` profile use a separate cache
+namespace from the same API's `default` profile, so credentialed responses are
+not reused across profiles.
+
+Embedders get that behavior when they call `Run` or `FetchResponse`, because
+Restish applies the configured API/profile before building the request
+transport. If you build lower-level `request.Options` yourself and set
+`CacheDir`, also set `CacheNamespace` for any request context that may carry
+credentials:
+
+```go
+opts := request.Options{
+	CacheDir:       cacheDir,
+	CacheNamespace: apiName + ":" + profileName,
+}
+```
+
+Use a stable namespace such as `<api>:<profile>`. Disable caching with
+`NoCache` for ad hoc credentialed raw requests that do not have a stable
+profile boundary.
+
 ## Custom Content Or Output
 
 Embedder-facing registration methods let custom CLIs add content types,
