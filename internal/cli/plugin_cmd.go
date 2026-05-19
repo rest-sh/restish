@@ -30,34 +30,44 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Use:     "plugin",
 		Short:   "Manage restish plugins",
 		GroupID: rootGroupPlugin,
-		RunE:    unknownSubcommandRun("plugin"),
+		Example: fmt.Sprintf(`  %s plugin list
+  %s plugin install ./restish-example
+  %s plugin install rest-sh/restish:mcp`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		RunE: unknownSubcommandRun("plugin"),
 	}
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all discovered plugins",
-		Args:  cobra.NoArgs,
-		RunE:  c.runPluginList,
+		Example: fmt.Sprintf(`  %s plugin list
+  %s plugin list -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runPluginList,
 	}
 	pluginCmd.AddCommand(listCmd)
 	installCmd := &cobra.Command{
 		Use:   "install <source> [name]",
 		Short: "Install a plugin from a path, URL, PATH command, or GitHub release",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE:  c.runPluginInstall,
+		Example: fmt.Sprintf(`  %s plugin install ./restish-example
+  %s plugin install restish-example
+  %s plugin install rest-sh/restish:mcp`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.RangeArgs(1, 2),
+		RunE: c.runPluginInstall,
 	}
 	installCmd.Flags().Bool("yes", false, "Trust and install without an interactive confirmation")
 	pluginCmd.AddCommand(installCmd)
 	pluginCmd.AddCommand(&cobra.Command{
-		Use:   "remove <name>",
-		Short: "Remove an installed plugin",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runPluginRemove,
+		Use:     "remove <name>",
+		Short:   "Remove an installed plugin",
+		Example: fmt.Sprintf("  %s plugin remove example", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(1),
+		RunE:    c.runPluginRemove,
 	})
 	pluginCmd.AddCommand(&cobra.Command{
-		Use:   "debug <name> [args...]",
-		Short: "Spawn a plugin and print decoded CBOR messages to stderr",
-		Args:  cobra.MinimumNArgs(1),
-		RunE:  c.runPluginDebug,
+		Use:     "debug <name> [args...]",
+		Short:   "Spawn a plugin and print decoded CBOR messages to stderr",
+		Example: fmt.Sprintf("  %s plugin debug example -- --help", c.commandNameOrDefault()),
+		Args:    cobra.MinimumNArgs(1),
+		RunE:    c.runPluginDebug,
 	})
 	root.AddCommand(pluginCmd)
 }

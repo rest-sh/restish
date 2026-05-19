@@ -119,6 +119,7 @@ type CLI struct {
 	globalAuthPlugins       []internalplugin.Plugin
 	customAuthHandlers      map[string]auth.Handler
 	explicitConfigFile      bool
+	createExplicitConfig    bool
 	retryUnsafeWarned       bool
 	signalHandling          bool
 	quietGeneratedWarnings  bool
@@ -362,7 +363,9 @@ func (c *CLI) configScopedCacheDir(base string) string {
 func (c *CLI) loadConfig() (*config.Config, error) {
 	var cfg *config.Config
 	var err error
-	if c.explicitConfigFile {
+	if c.explicitConfigFile && c.createExplicitConfig {
+		cfg, err = config.LoadExplicitOrEmpty(c.configFilePath())
+	} else if c.explicitConfigFile {
 		cfg, err = config.LoadExplicit(c.configFilePath())
 	} else {
 		cfg, err = config.Load(c.configFilePath())
@@ -485,16 +488,19 @@ func (c *CLI) Run(args []string) error {
 	c.silentMode = argScan.Silent
 	c.requestExecutionStarted = false
 	c.bodyPrefixHinted = false
+	c.createExplicitConfig = false
 	defer func() {
 		c.silentMode = false
 		c.requestExecutionStarted = false
 		c.bodyPrefixHinted = false
+		c.createExplicitConfig = false
 	}()
 
 	if c.hooks.ConfigPath == "" {
 		if argScan.ExplicitConfigPath {
 			c.Paths = config.NewPathsWithConfigFile(argScan.ConfigPath)
 			c.explicitConfigFile = true
+			c.createExplicitConfig = canCreateExplicitConfig(argScan)
 		} else if os.Getenv("RSH_CONFIG") != "" {
 			c.explicitConfigFile = true
 		}
@@ -839,6 +845,10 @@ func scanCLIArgs(args []string) cliArgScan {
 	return scan
 }
 
+func canCreateExplicitConfig(scan cliArgScan) bool {
+	return scan.FirstCommand == "api" && scan.SecondCommand == "connect"
+}
+
 func (c *CLI) refreshStaleGeneratedMetadataForCommand(ctx context.Context, scan cliArgScan, cfg *config.Config) {
 	if scan.Bootstrap || scan.GeneratedAPICommandTree || scan.FirstCommand == "" || scan.SecondCommand == "" {
 		return
@@ -995,7 +1005,7 @@ func (c *CLI) runSyncedGeneratedAPICommand(cmd *cobra.Command, apiName string, a
 		return fmt.Errorf("generated commands for API %q are unavailable after sync", apiName)
 	}
 	if !commandPathExists(apiCmd, args) {
-		return fmt.Errorf("unknown generated command %q for %q; run %q to see generated operations", args[0], apiName, cmd.CommandPath()+" --help")
+		return unknownCommandError(apiCmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see generated operations")
 	}
 	root := c.newRootCmd()
 	root.AddCommand(apiCmd)

@@ -18,14 +18,14 @@ type ClientCredentials struct {
 }
 
 func (h *ClientCredentials) Parameters() []Param {
-	return []Param{
+	return appendOAuthPassthroughParams([]Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret", Required: true, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when token_url is absent)", Required: false},
 		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request", Required: false},
-	}
+	})
 }
 
 func (h *ClientCredentials) OnRequest(req *http.Request, params map[string]string) error {

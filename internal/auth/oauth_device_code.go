@@ -32,15 +32,15 @@ type DeviceCode struct {
 }
 
 func (h *DeviceCode) Parameters() []Param {
-	return []Param{
+	return appendOAuthPassthroughParams([]Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret (optional)", Required: false, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
 		{Name: "device_authorization_url", Description: "OAuth2 device authorization endpoint URL", Required: false},
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when endpoints are absent)", Required: false},
-		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request", Required: false},
-	}
+		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request; some providers require offline_access for refresh tokens", Required: false},
+	})
 }
 
 func (h *DeviceCode) OnRequest(req *http.Request, params map[string]string) error {
@@ -79,6 +79,7 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 		if !isTokenEndpointErrorCode(err, "invalid_grant") {
 			return "", err
 		}
+		clearRejectedOAuthToken(h.Cache, cacheKey, h.Stderr)
 	}
 
 	deviceURL, tokenURL, err := h.resolveEndpoints(ctx, params)
@@ -92,6 +93,7 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 	if h.Cache != nil && cacheKey != "" {
 		_ = h.Cache.Set(cacheKey, token)
 	}
+	warnIfMissingOAuthRefreshToken(h.Stderr, params, token)
 	return token.AccessToken, nil
 }
 

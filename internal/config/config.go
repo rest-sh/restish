@@ -247,6 +247,20 @@ func LoadExplicit(path string) (*Config, error) {
 	return parseConfigBytes(path, data)
 }
 
+// LoadExplicitOrEmpty reads a user-selected config file, returning an empty
+// config when the selected file does not exist. Use this only for commands that
+// are about to write the selected config path.
+func LoadExplicitOrEmpty(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return &Config{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
+	}
+	return parseConfigBytes(path, data)
+}
+
 func parseConfigBytes(path string, data []byte) (*Config, error) {
 
 	// Strip JSONC comments before parsing so users can annotate their config.

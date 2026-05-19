@@ -169,8 +169,10 @@ func TestDeviceCode_InvalidGrantFallsThroughToDeviceFlow(t *testing.T) {
 	}
 
 	var deviceStarted bool
+	var stderr strings.Builder
 	h := &DeviceCode{
-		Cache: cache,
+		Cache:  cache,
+		Stderr: &stderr,
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			switch r.URL.String() {
 			case "https://auth.example.com/token":
@@ -212,6 +214,9 @@ func TestDeviceCode_InvalidGrantFallsThroughToDeviceFlow(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer device-token" {
 		t.Fatalf("Authorization = %q", got)
+	}
+	if !strings.Contains(stderr.String(), "cleared cached token") {
+		t.Fatalf("expected invalid_grant cache clear warning, got %q", stderr.String())
 	}
 }
 

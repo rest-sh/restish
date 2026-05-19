@@ -25,6 +25,30 @@ const (
 	maxOAuthEndpointBodyBytes   = 1 << 20
 )
 
+func appendOAuthPassthroughParams(params []Param) []Param {
+	return append(params,
+		Param{Name: "audience", Description: "OAuth2 audience/resource server identifier to pass to the provider", Required: false},
+		Param{Name: "resource", Description: "OAuth2 resource identifier to pass to providers that require it", Required: false},
+		Param{Name: "organization", Description: "OAuth2 organization or tenant identifier to pass to providers that require it", Required: false},
+	)
+}
+
+func clearRejectedOAuthToken(cache TokenStore, cacheKey string, stderr io.Writer) {
+	if cache == nil || cacheKey == "" {
+		return
+	}
+	if err := cache.Delete(cacheKey); err == nil && stderr != nil {
+		fmt.Fprintln(stderr, "OAuth refresh token was rejected; cleared cached token")
+	}
+}
+
+func warnIfMissingOAuthRefreshToken(stderr io.Writer, params map[string]string, token CachedToken) {
+	if stderr == nil || params["_cache_key"] == "" || strings.TrimSpace(token.RefreshToken) != "" {
+		return
+	}
+	fmt.Fprintln(stderr, "OAuth token response did not include a refresh token; some providers require an offline_access scope for long-lived sessions")
+}
+
 // tokenResponse is the JSON response from an OAuth2 token endpoint.
 type tokenResponse struct {
 	AccessToken  string          `json:"access_token"`

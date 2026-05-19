@@ -13,6 +13,8 @@ func (c *CLI) addLinksCommand(root *cobra.Command) {
 		Use:     "links <uri> [rel...]",
 		Short:   "GET a URI and display its hypermedia links",
 		GroupID: rootGroupUtility,
+		Example: fmt.Sprintf(`  %s links https://api.example.com/items/123
+  %s links https://api.example.com/items/123 self next`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Long: `Performs a GET request to <uri> and prints all hypermedia links
 found in the response (Link headers, HAL _links, JSON:API links, Siren links,
 JSON-LD @id). Optionally filter to specific relation types.`,

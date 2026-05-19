@@ -15,41 +15,53 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Use:     "config",
 		Short:   "Manage local Restish configuration",
 		GroupID: rootGroupConfig,
+		Example: fmt.Sprintf(`  %s config show
+  %s config path
+  %s config set 'cache.max_size: 500MB'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown config command %q", args[0])
+				return unknownNamedSubcommandError(cmd, "config", args[0], "")
 			}
 			return cmd.Help()
 		},
 	}
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "path",
-		Short: "Print the active config file path",
-		Args:  cobra.NoArgs,
-		RunE:  c.runConfigPath,
+		Use:     "path",
+		Short:   "Print the active config file path",
+		Example: fmt.Sprintf("  %s config path", c.commandNameOrDefault()),
+		Args:    cobra.NoArgs,
+		RunE:    c.runConfigPath,
 	})
 	showCmd := &cobra.Command{
 		Use:   "show",
 		Short: "Print the active config summary or redacted JSON",
-		Args:  cobra.NoArgs,
-		RunE:  c.runConfigShow,
+		Example: fmt.Sprintf(`  %s config show
+  %s config show -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runConfigShow,
 	}
 	configCmd.AddCommand(showCmd)
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "edit",
-		Short: "Open the restish config file in $VISUAL or $EDITOR",
-		Args:  cobra.NoArgs,
-		RunE:  c.runConfigEdit,
+		Use:     "edit",
+		Short:   "Open the restish config file in $VISUAL or $EDITOR",
+		Example: fmt.Sprintf("  %s config edit", c.commandNameOrDefault()),
+		Args:    cobra.NoArgs,
+		RunE:    c.runConfigEdit,
 	})
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "set <patch> [patch...]",
 		Short: "Patch config using shorthand syntax",
-		Args:  cobra.MinimumNArgs(1),
-		RunE:  c.runConfigSet,
+		Example: fmt.Sprintf(`  %s config set 'cache.max_size: 500MB'
+  %s config set 'theme.key: #afd787'`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.MinimumNArgs(1),
+		RunE: c.runConfigSet,
 	})
 	themeCmd := &cobra.Command{
 		Use:   "theme",
 		Short: "Manage terminal output highlighting theme",
+		Example: fmt.Sprintf(`  %s config theme list
+  %s config theme set one-dark-pro
+  %s config theme reset`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 	}
 	themeCmd.AddCommand(c.newThemeListCommand())
 	themeCmd.AddCommand(c.newThemeSetCommand())
@@ -252,8 +264,10 @@ func (c *CLI) addContentTypesCommand(root *cobra.Command) {
 		Use:     "content-types",
 		Short:   "List registered content types and their MIME types",
 		GroupID: rootGroupUtility,
-		Args:    cobra.NoArgs,
-		RunE:    c.runContentTypes,
+		Example: fmt.Sprintf(`  %s content-types
+  %s content-types -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runContentTypes,
 	})
 }
 

@@ -22,8 +22,10 @@ func (c *CLI) addCertCommand(root *cobra.Command) {
 		Use:     "cert <uri>",
 		Short:   "Show the TLS certificate chain for a server",
 		GroupID: rootGroupUtility,
-		Args:    cobra.ExactArgs(1),
-		RunE:    c.runCert,
+		Example: fmt.Sprintf(`  %s cert https://api.example.com
+  %s cert api.example.com --warn-days 30`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.ExactArgs(1),
+		RunE: c.runCert,
 	}
 	cmd.Flags().Int("warn-days", 0, "Exit non-zero if the leaf certificate expires within N days")
 	root.AddCommand(cmd)

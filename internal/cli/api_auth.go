@@ -17,30 +17,40 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage API auth credentials",
+		Example: fmt.Sprintf(`  %s api auth list demo
+  %s api auth inspect demo --rsh-operation list-items
+  %s api auth logout demo`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 	}
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list <api>",
 		Short: "List configured auth credentials for an API profile",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIAuthList,
+		Example: fmt.Sprintf(`  %s api auth list demo
+  %s api auth list demo -p staging`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.ExactArgs(1),
+		RunE: c.runAPIAuthList,
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "add <api> <credential-id>",
-		Short: "Add an empty credential binding to an API profile",
-		Args:  cobra.ExactArgs(2),
-		RunE:  c.runAPIAuthAdd,
+		Use:     "add <api> <credential-id>",
+		Short:   "Add an empty credential binding to an API profile",
+		Example: fmt.Sprintf("  %s api auth add demo PartnerKey", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(2),
+		RunE:    c.runAPIAuthAdd,
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "remove <api> <credential-id>",
-		Short: "Remove a credential binding from an API profile",
-		Args:  cobra.ExactArgs(2),
-		RunE:  c.runAPIAuthRemove,
+		Use:     "remove <api> <credential-id>",
+		Short:   "Remove a credential binding from an API profile",
+		Example: fmt.Sprintf("  %s api auth remove demo PartnerKey", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(2),
+		RunE:    c.runAPIAuthRemove,
 	})
 	logoutCmd := &cobra.Command{
 		Use:   "logout [api]",
 		Short: "Delete cached API auth tokens",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  c.runAPIAuthLogout,
+		Example: fmt.Sprintf(`  %s api auth logout demo
+  %s api auth logout demo --all-profiles
+  %s api auth logout --auth-profile shared-oauth`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.MaximumNArgs(1),
+		RunE: c.runAPIAuthLogout,
 	}
 	addAPIAuthLogoutFlags(logoutCmd)
 	cmd.AddCommand(logoutCmd)
@@ -59,8 +69,10 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	headerCmd := &cobra.Command{
 		Use:   "header <api> <header> [credential-id]",
 		Short: "Print one auth header value for an API profile",
-		Args:  cobra.RangeArgs(2, 3),
-		RunE:  c.runAPIAuthHeader,
+		Example: fmt.Sprintf(`  %s api auth header demo Authorization
+  %s api auth header demo X-API-Key PartnerKey`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.RangeArgs(2, 3),
+		RunE: c.runAPIAuthHeader,
 	}
 	headerCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
 	headerCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")
@@ -68,8 +80,10 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIAuthInspect,
+		Example: fmt.Sprintf(`  %s api auth inspect demo
+  %s api auth inspect demo --rsh-operation list-items --redact`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.ExactArgs(1),
+		RunE: c.runAPIAuthInspect,
 	}
 	inspectCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
 	inspectCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")

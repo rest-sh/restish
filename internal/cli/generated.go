@@ -82,7 +82,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		GroupID: rootGroupAPI,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown command %q for %q; run %q to see generated operations", args[0], cmd.Name(), cmd.CommandPath()+" --help")
+				return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see generated operations")
 			}
 			return cmd.Help()
 		},
@@ -265,7 +265,7 @@ func newGeneratedTagCommand(name, tag string) *cobra.Command {
 		Short: fmt.Sprintf("Operations tagged %s", tag),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown command %q for %q; run %q to see tagged operations", args[0], cmd.Name(), cmd.CommandPath()+" --help")
+				return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see tagged operations")
 			}
 			return cmd.Help()
 		},
@@ -1293,14 +1293,19 @@ func indentSchemaContinuation(schema, indent string) string {
 }
 
 func generatedOperationExamples(commandName, apiName, use string, examples []string) string {
-	if len(examples) == 0 {
-		return ""
-	}
 	if commandName == "" {
 		commandName = "restish"
 	}
+	hasBody := strings.Contains(use, " [body...]") || strings.Contains(use, " <body...>")
 	use = strings.TrimSuffix(use, " [body...]")
 	use = strings.TrimSuffix(use, " <body...>")
+	if len(examples) == 0 {
+		example := "  " + commandName + " " + apiName + " " + use
+		if hasBody {
+			example += " --rsh-generate-body"
+		}
+		return example
+	}
 	var b strings.Builder
 	for _, ex := range examples {
 		b.WriteString("  ")

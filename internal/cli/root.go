@@ -38,12 +38,13 @@ quick one-off requests, and generates documented, shell-completed
 commands for registered APIs via OpenAPI 3.`
 	}
 	root := &cobra.Command{
-		Use:           use,
-		Short:         short,
-		Long:          long,
-		Version:       c.currentVersion(),
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use:                        use,
+		Short:                      short,
+		Long:                       long,
+		Version:                    c.currentVersion(),
+		SilenceUsage:               true,
+		SilenceErrors:              true,
+		SuggestionsMinimumDistance: 2,
 		// ArbitraryArgs prevents cobra's legacyArgs validator from rejecting
 		// unrecognised args before our RunE can inspect them (which we need for
 		// bare-URL dispatch: "restish https://api.example.com").
@@ -69,7 +70,7 @@ commands for registered APIs via OpenAPI 3.`
 			if strings.ContainsAny(args[0], ".:/") || c.isAPIShortName(args[0]) {
 				return c.runInferredHTTP(cmd, args)
 			}
-			return fmt.Errorf("unknown command %q for %q; run %q to see available commands or use a full URL", args[0], cmd.Name(), cmd.CommandPath()+" --help")
+			return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see available commands or use a full URL")
 		},
 	}
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
@@ -119,6 +120,13 @@ func (c *CLI) currentVersion() string {
 		return c.commandVersion
 	}
 	return Version
+}
+
+func (c *CLI) commandNameOrDefault() string {
+	if c.commandName != "" {
+		return c.commandName
+	}
+	return "restish"
 }
 
 func addRootCommandGroups(root *cobra.Command) {

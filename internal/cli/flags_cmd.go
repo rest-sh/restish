@@ -28,7 +28,10 @@ func (c *CLI) addFlagsCommand(root *cobra.Command) {
 		Short:   "Show Restish global flag reference",
 		GroupID: rootGroupHelp,
 		Hidden:  true,
-		Args:    cobra.NoArgs,
+		Example: fmt.Sprintf(`  %s flags
+  %s flags output
+  %s flags auth`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.printFlagReference(cmd.Root().PersistentFlags(), "")
 		},
@@ -36,9 +39,10 @@ func (c *CLI) addFlagsCommand(root *cobra.Command) {
 	for _, item := range flagReferenceGroups {
 		item := item
 		flagsCmd.AddCommand(&cobra.Command{
-			Use:   item.Name,
-			Short: item.Short,
-			Args:  cobra.NoArgs,
+			Use:     item.Name,
+			Short:   item.Short,
+			Example: fmt.Sprintf("  %s flags %s", c.commandNameOrDefault(), item.Name),
+			Args:    cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.printFlagReference(cmd.Root().PersistentFlags(), item.Group)
 			},

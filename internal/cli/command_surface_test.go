@@ -153,6 +153,27 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 	}
 }
 
+func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
+	commands := [][]string{
+		{"restish", "get", "--help"},
+		{"restish", "api", "connect", "--help"},
+		{"restish", "api", "set", "--help"},
+		{"restish", "api", "auth", "inspect", "--help"},
+		{"restish", "plugin", "install", "--help"},
+		{"restish", "config", "set", "--help"},
+		{"restish", "doctor", "--help"},
+	}
+	for _, args := range commands {
+		c, out, _ := newTestCLI(t)
+		if err := c.Run(args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "Examples:") {
+			t.Fatalf("%v: help missing examples:\n%s", args, out.String())
+		}
+	}
+}
+
 func TestFlagsCommandSurface(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "flags", "output"}); err != nil {
@@ -361,7 +382,7 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 		t.Fatalf("get-item --help: %v", err)
 	}
 	opHelp := out.String()
-	for _, want := range []string{"get-item <id>", "--format", "--help-all", "The item ID"} {
+	for _, want := range []string{"get-item <id>", "--format", "--help-all", "The item ID", "Examples:", "restish tapi get-item <id>"} {
 		if !strings.Contains(opHelp, want) {
 			t.Fatalf("generated operation help missing %q:\n%s", want, opHelp)
 		}
@@ -371,9 +392,10 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 	}
 
 	c, _ = env.newCaptureCLI()
-	if err := c.Run([]string{"restish", "tapi", "not-real", "--help"}); err == nil {
+	if err := c.Run([]string{"restish", "tapi", "get-itm", "--help"}); err == nil {
 		t.Fatal("expected generated API unknown command help to fail")
-	} else if !strings.Contains(err.Error(), `unknown command "not-real" for "tapi"`) {
+	} else if !strings.Contains(err.Error(), `unknown command "get-itm" for "tapi"`) ||
+		!strings.Contains(err.Error(), `did you mean "get-item"?`) {
 		t.Fatalf("unexpected generated unknown command help error: %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -9,6 +10,68 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
+	for name, params := range map[string][]Param{
+		"auth-code":          (&AuthorizationCode{}).Parameters(),
+		"device-code":        (&DeviceCode{}).Parameters(),
+		"client-credentials": (&ClientCredentials{}).Parameters(),
+	} {
+		for _, want := range []string{"audience", "resource", "organization"} {
+			if !hasAuthParam(params, want) {
+				t.Fatalf("%s parameters missing %q: %#v", name, want, params)
+			}
+		}
+	}
+	for name, params := range map[string][]Param{
+		"auth-code":   (&AuthorizationCode{}).Parameters(),
+		"device-code": (&DeviceCode{}).Parameters(),
+	} {
+		scopes, ok := authParam(params, "scopes")
+		if !ok || !strings.Contains(scopes.Description, "offline_access") {
+			t.Fatalf("%s scopes help should mention offline_access, got %#v", name, scopes)
+		}
+	}
+}
+
+func TestClearRejectedOAuthTokenDeletesCacheEntry(t *testing.T) {
+	cache := NewTokenCache(t.TempDir() + "/tokens.cbor")
+	if err := cache.Set("svc:default", CachedToken{AccessToken: "old", RefreshToken: "bad"}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	var stderr bytes.Buffer
+	clearRejectedOAuthToken(cache, "svc:default", &stderr)
+	if got, err := cache.Get("svc:default"); err != nil {
+		t.Fatalf("get cache: %v", err)
+	} else if got != nil {
+		t.Fatalf("cache entry still present: %#v", got)
+	}
+	if !strings.Contains(stderr.String(), "cleared cached token") {
+		t.Fatalf("expected clear warning, got %q", stderr.String())
+	}
+}
+
+func TestWarnIfMissingOAuthRefreshToken(t *testing.T) {
+	var stderr bytes.Buffer
+	warnIfMissingOAuthRefreshToken(&stderr, map[string]string{"_cache_key": "svc:default"}, CachedToken{AccessToken: "token"})
+	if !strings.Contains(stderr.String(), "offline_access") {
+		t.Fatalf("expected offline_access warning, got %q", stderr.String())
+	}
+}
+
+func hasAuthParam(params []Param, name string) bool {
+	_, ok := authParam(params, name)
+	return ok
+}
+
+func authParam(params []Param, name string) (Param, bool) {
+	for _, param := range params {
+		if param.Name == name {
+			return param, true
+		}
+	}
+	return Param{}, false
+}
 
 func TestValidateOIDCEndpoints(t *testing.T) {
 	cases := []struct {

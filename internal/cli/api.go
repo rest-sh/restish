@@ -24,9 +24,12 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Use:     "api",
 		Short:   "Manage registered API configurations",
 		GroupID: rootGroupConfig,
+		Example: fmt.Sprintf(`  %s api connect demo https://api.example.com
+  %s api list
+  %s api set demo 'profiles.staging.base_url: https://staging.example.com'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown api command %q", args[0])
+				return unknownNamedSubcommandError(cmd, "api", args[0], "")
 			}
 			return cmd.Help()
 		},
@@ -35,28 +38,36 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all configured APIs",
-		Args:  cobra.NoArgs,
-		RunE:  c.runAPIList,
+		Example: fmt.Sprintf(`  %s api list
+  %s api list -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runAPIList,
 	})
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "remove <name>",
-		Short: "Remove a configured API",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIRemove,
+		Use:     "remove <name>",
+		Short:   "Remove a configured API",
+		Example: fmt.Sprintf("  %s api remove demo", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(1),
+		RunE:    c.runAPIRemove,
 	})
 	syncCmd := &cobra.Command{
 		Use:   "sync <name>",
 		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPISync,
+		Example: fmt.Sprintf(`  %s api sync demo
+  %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.ExactArgs(1),
+		RunE: c.runAPISync,
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host for this sync run")
 	apiCmd.AddCommand(syncCmd)
 	connectCmd := &cobra.Command{
 		Use:   "connect <name> <url> [setup-expression ...]",
 		Short: "Connect Restish to an API and discover generated commands",
-		Args:  cobra.MinimumNArgs(2),
-		RunE:  c.runAPIConnect,
+		Example: fmt.Sprintf(`  %s api connect demo https://api.example.com
+  %s api connect demo https://api.example.com 'prompt.api_key: env:DEMO_API_KEY'
+  %s api connect demo https://api.example.com --spec ./openapi.yaml`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.MinimumNArgs(2),
+		RunE: c.runAPIConnect,
 	}
 	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
 	connectCmd.Flags().Bool("no-discover", false, "Register the API locally without network spec discovery")
@@ -65,16 +76,20 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd.Flags().Bool("yes", false, "Accept safe api connect prompts without asking")
 	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
-		Use:   "inspect <name>",
-		Short: "Print the config for a registered API as JSON",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runAPIInspect,
+		Use:     "inspect <name>",
+		Short:   "Print the config for a registered API as JSON",
+		Example: fmt.Sprintf("  %s api inspect demo", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(1),
+		RunE:    c.runAPIInspect,
 	})
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "set <name> <patch> [patch...]",
 		Short: "Patch API config using shorthand syntax",
-		Args:  cobra.MinimumNArgs(2),
-		RunE:  c.runAPISet,
+		Example: fmt.Sprintf(`  %s api set demo 'profiles.default.headers[]: X-Trace-Id: abc'
+  %s api set demo 'base_url: https://staging.example.com'
+  %s api set demo 'profiles.prod.auth.type: oauth-client-credentials'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.MinimumNArgs(2),
+		RunE: c.runAPISet,
 	})
 	root.AddCommand(apiCmd)
 }

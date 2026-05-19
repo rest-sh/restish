@@ -11,7 +11,7 @@ import (
 func unknownSubcommandRun(command string) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
-			return fmt.Errorf("unknown %s command %q", command, args[0])
+			return unknownNamedSubcommandError(cmd, command, args[0], "")
 		}
 		return cmd.Help()
 	}
@@ -94,13 +94,78 @@ func commandFlag(cmd *cobra.Command, arg string) *pflag.Flag {
 func unknownSubcommandError(cmd *cobra.Command, arg string) error {
 	switch cmd.Name() {
 	case "api", "cache", "completion", "config", "plugin", "shell":
-		return fmt.Errorf("unknown %s command %q", cmd.Name(), arg)
+		return unknownNamedSubcommandError(cmd, cmd.Name(), arg, "")
 	default:
 		if cmd.Annotations != nil {
 			if cmd.Annotations[generatedAPIHelpShortAnnotation] != "" || cmd.Annotations[generatedAPIHelpFullAnnotation] != "" {
-				return fmt.Errorf("unknown command %q for %q; run %q to see generated operations", arg, cmd.Name(), cmd.CommandPath()+" --help")
+				return unknownCommandError(cmd, arg, "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see generated operations")
 			}
 		}
-		return fmt.Errorf("unknown command %q for %q", arg, cmd.Name())
+		return unknownCommandError(cmd, arg, "")
 	}
+}
+
+func unknownNamedSubcommandError(cmd *cobra.Command, group, arg, hint string) error {
+	msg := fmt.Sprintf("unknown %s command %q", group, arg)
+	if suggestion := commandSuggestionHint(cmd, arg); suggestion != "" {
+		msg += "; " + suggestion
+	}
+	if hint != "" {
+		msg += "; " + hint
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+func unknownCommandError(cmd *cobra.Command, arg, hint string) error {
+	msg := fmt.Sprintf("unknown command %q for %q", arg, cmd.Name())
+	if suggestion := commandSuggestionHint(cmd, arg); suggestion != "" {
+		msg += "; " + suggestion
+	}
+	if hint != "" {
+		msg += "; " + hint
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+func commandSuggestionHint(cmd *cobra.Command, arg string) string {
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	suggestions := cmd.SuggestionsFor(arg)
+	if len(suggestions) == 0 {
+		if replacement := commandReplacementSuggestion(cmd, arg); replacement != "" {
+			return fmt.Sprintf("did you mean %q?", replacement)
+		}
+		return ""
+	}
+	if len(suggestions) == 1 {
+		return fmt.Sprintf("did you mean %q?", suggestions[0])
+	}
+	return fmt.Sprintf("did you mean one of %s?", strings.Join(quoteStrings(suggestions), ", "))
+}
+
+func commandReplacementSuggestion(cmd *cobra.Command, arg string) string {
+	if cmd.Name() != "api" {
+		return ""
+	}
+	switch arg {
+	case "add", "configure":
+		return "connect"
+	case "delete":
+		return "remove"
+	default:
+		return ""
+	}
+}
+
+func quoteStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, strconvQuote(value))
+	}
+	return out
+}
+
+func strconvQuote(value string) string {
+	return fmt.Sprintf("%q", value)
 }

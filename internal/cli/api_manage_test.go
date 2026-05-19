@@ -2647,6 +2647,8 @@ func TestAPIConnectRejectsRemovedCommandNames(t *testing.T) {
 		c, _, _ := newTestCLI(t)
 		if err := c.Run(args); err == nil {
 			t.Fatalf("%v: expected unknown command error", args)
+		} else if !strings.Contains(err.Error(), "did you mean") {
+			t.Fatalf("%v: expected suggestion in unknown command error, got %v", args, err)
 		}
 	}
 }

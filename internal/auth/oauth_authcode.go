@@ -50,17 +50,17 @@ type AuthorizationCode struct {
 }
 
 func (h *AuthorizationCode) Parameters() []Param {
-	return []Param{
+	return appendOAuthPassthroughParams([]Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret (optional for public clients)", Required: false, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
 		{Name: "authorize_url", Description: "OAuth2 authorization endpoint URL", Required: false},
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when authorize_url/token_url are absent)", Required: false},
-		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request", Required: false},
+		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request; some providers require offline_access for refresh tokens", Required: false},
 		{Name: "redirect_port", Description: fmt.Sprintf("Local port for the redirect callback (default %s)", defaultRedirectPort), Required: false},
 		{Name: "redirect_path", Description: "Local path for the redirect callback (default /)", Required: false},
-	}
+	})
 }
 
 func (h *AuthorizationCode) OnRequest(req *http.Request, params map[string]string) error {
@@ -101,6 +101,7 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 		if !isTokenEndpointErrorCode(err, "invalid_grant") {
 			return "", err
 		}
+		clearRejectedOAuthToken(h.Cache, cacheKey, h.Stderr)
 		// Refresh token rejected — fall through to interactive auth.
 	}
 
@@ -118,6 +119,7 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 	if h.Cache != nil && cacheKey != "" {
 		_ = h.Cache.Set(cacheKey, ct)
 	}
+	warnIfMissingOAuthRefreshToken(h.Stderr, params, ct)
 	return ct.AccessToken, nil
 }
 

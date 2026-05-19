@@ -374,8 +374,11 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 
 func TestUnknownCommand(t *testing.T) {
 	c, _, _ := newTestCLI(t)
-	if err := c.Run([]string{"restish", "no-such-command"}); err == nil {
+	err := c.Run([]string{"restish", "apis"})
+	if err == nil {
 		t.Error("expected error for unknown command, got nil")
+	} else if !strings.Contains(err.Error(), `did you mean "api"?`) {
+		t.Fatalf("expected suggestion for api command, got %v", err)
 	}
 }
 
@@ -401,6 +404,35 @@ func TestExplicitConfigFlagWritesSelectedFile(t *testing.T) {
 	}
 	if got := cfg.APIs["myapi"].BaseURL; got != "https://api.example.com" {
 		t.Fatalf("base_url = %q", got)
+	}
+}
+
+func TestExplicitConfigFlagConnectCreatesSelectedFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "nested", "project-restish.json")
+
+	var stdout, stderr bytes.Buffer
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	if err := c.Run([]string{"restish", "--rsh-config", cfgPath, "api", "connect", "myapi", "https://api.example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	info, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("stat explicit config: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode = %o, want 600", got)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load explicit config: %v", err)
+	}
+	if got := cfg.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("base_url = %q, want https://api.example.com", got)
 	}
 }
 

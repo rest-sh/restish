@@ -73,6 +73,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 			Use:     use,
 			Aliases: []string{method},
 			Short:   v.short,
+			Example: genericHTTPExamples(c.commandName, v.name),
 			GroupID: rootGroupHTTP,
 			Annotations: map[string]string{
 				requestHelpAnnotation: "true",
@@ -84,6 +85,26 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 			},
 		}
 		root.AddCommand(cmd)
+	}
+}
+
+func genericHTTPExamples(commandName, verb string) string {
+	if commandName == "" {
+		commandName = "restish"
+	}
+	switch verb {
+	case "get":
+		return fmt.Sprintf("  %s get https://api.example.com/items\n  %s get https://api.example.com/items -f body.items -o table", commandName, commandName)
+	case "post":
+		return fmt.Sprintf("  %s post https://api.example.com/items name: Ada active: true\n  %s post -c json https://api.example.com/items @item.json", commandName, commandName)
+	case "put":
+		return fmt.Sprintf("  %s put https://api.example.com/items/123 name: Ada\n  %s put -c json https://api.example.com/items/123 @item.json", commandName, commandName)
+	case "patch":
+		return fmt.Sprintf("  %s patch https://api.example.com/items/123 active: false\n  %s patch https://api.example.com/items/123 --rsh-if-match abc123 active: false", commandName, commandName)
+	case "delete":
+		return fmt.Sprintf("  %s delete https://api.example.com/items/123\n  %s delete https://api.example.com/items/123 --rsh-ignore-status-code", commandName, commandName)
+	default:
+		return fmt.Sprintf("  %s %s https://api.example.com/items", commandName, verb)
 	}
 }
 

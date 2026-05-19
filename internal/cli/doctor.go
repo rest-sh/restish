@@ -22,28 +22,36 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 		Use:     "doctor",
 		Short:   "Diagnose Restish configuration and runtime paths",
 		GroupID: rootGroupUtility,
-		Args:    cobra.NoArgs,
-		RunE:    c.runDoctor,
+		Example: fmt.Sprintf(`  %s doctor
+  %s doctor -o json
+  %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runDoctor,
 	}
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "api <name>",
 		Short: "Diagnose a registered API",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runDoctorAPI,
+		Example: fmt.Sprintf(`  %s doctor api demo
+  %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.ExactArgs(1),
+		RunE: c.runDoctorAPI,
 	})
 	doctorAPI := doctorCmd.Commands()[0]
 	doctorAPI.Flags().Bool("check-network", false, "Make a bounded network request to check API reachability")
 	doctorCmd.AddCommand(&cobra.Command{
-		Use:   "plugin <name>",
-		Short: "Diagnose a Restish plugin executable",
-		Args:  cobra.ExactArgs(1),
-		RunE:  c.runDoctorPlugin,
+		Use:     "plugin <name>",
+		Short:   "Diagnose a Restish plugin executable",
+		Example: fmt.Sprintf("  %s doctor plugin mcp", c.commandNameOrDefault()),
+		Args:    cobra.ExactArgs(1),
+		RunE:    c.runDoctorPlugin,
 	})
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "migrate-v1",
 		Short: "Run default-location v1 config migration if eligible",
-		Args:  cobra.NoArgs,
-		RunE:  c.runDoctorMigrateV1,
+		Example: fmt.Sprintf(`  %s doctor migrate-v1
+  %s doctor migrate-v1 --to ./restish.json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: c.runDoctorMigrateV1,
 	})
 	root.AddCommand(doctorCmd)
 }
