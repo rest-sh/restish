@@ -63,5 +63,6 @@ Prefer these types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, 
 Invoke these skills when relevant:
 
 - `rsh-review` for code review feedback on code changes
+- `rsh-test` for writing concise, behavior-focused Restish tests
 - `rsh-docs` for writing and maintaining documentation
 - `rsh-simplify` for approved simplification and dead-code cleanup work

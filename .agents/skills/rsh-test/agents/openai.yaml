@@ -1,0 +1,4 @@
+interface:
+  display_name: "Restish Tests"
+  short_description: "Write dense, useful Restish Go tests"
+  default_prompt: "Use $rsh-test to add concise Go tests for a Restish behavior using the right level of CLI, package, or integration coverage."
