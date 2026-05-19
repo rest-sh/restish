@@ -29,7 +29,10 @@ import (
 // still load when it only needs features this host supports.
 const CurrentPluginAPIVersion = 2
 
-const maxManifestStderrBytes = 8 << 10
+const (
+	maxManifestOutputBytes = 1 << 20
+	maxManifestStderrBytes = 8 << 10
+)
 
 var knownHooks = map[string]bool{
 	"auth":                true,
@@ -153,13 +156,16 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagManifest)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
-	var stdout bytes.Buffer
+	stdout := &limitedBuffer{limit: maxManifestOutputBytes + 1}
 	stderr := &limitedBuffer{limit: maxManifestStderrBytes}
-	cmd.Stdout = &stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	err := cmd.Run()
 	if err != nil {
 		return nil, manifestExecError(filepath.Base(path), err, stderr)
+	}
+	if stdout.Len() > maxManifestOutputBytes || stdout.Truncated() {
+		return nil, fmt.Errorf("plugin %s: manifest output exceeded %d bytes", filepath.Base(path), maxManifestOutputBytes)
 	}
 	out := stdout.Bytes()
 	if len(out) == 0 {
@@ -168,7 +174,7 @@ func loadManifest(path string, warningWriter io.Writer) (*Manifest, error) {
 
 	var m Manifest
 	// Try CBOR first, then JSON.
-	if err := cbor.Unmarshal(out, &m); err != nil {
+	if err := pluginwire.DecMode.Unmarshal(out, &m); err != nil {
 		if err2 := json.Unmarshal(out, &m); err2 != nil {
 			return nil, fmt.Errorf("plugin %s: invalid manifest (cbor: %v; json: %v)", filepath.Base(path), err, err2)
 		}
@@ -220,11 +226,36 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (b *limitedBuffer) Bytes() []byte {
+	if b == nil {
+		return nil
+	}
+	return b.buf.Bytes()
+}
+
+func (b *limitedBuffer) Len() int {
+	if b == nil {
+		return 0
+	}
+	return b.buf.Len()
+}
+
+func (b *limitedBuffer) String() string {
+	if b == nil {
+		return ""
+	}
+	return b.buf.String()
+}
+
+func (b *limitedBuffer) Truncated() bool {
+	return b != nil && b.truncated
+}
+
 func stderrExcerpt(stderr *limitedBuffer) string {
 	if stderr == nil {
 		return ""
 	}
-	excerpt := strings.TrimSpace(stderr.buf.String())
+	excerpt := strings.TrimSpace(stderr.String())
 	if excerpt == "" {
 		return ""
 	}

@@ -14,6 +14,11 @@ import (
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
+const (
+	maxHookOutputBytes = 16 << 20
+	maxHookStderrBytes = 64 << 10
+)
+
 // HookTimeout returns the effective timeout for hookName from the manifest,
 // using a default of 5 minutes for "auth" and 30 seconds for all other hooks.
 func HookTimeout(m Manifest, hookName string) time.Duration {
@@ -41,12 +46,13 @@ func callHookRaw(ctx context.Context, path string, timeout time.Duration, in any
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var stdout, stderr bytes.Buffer
+	stdout := &limitedBuffer{limit: maxHookOutputBytes + 1}
+	stderr := &limitedBuffer{limit: maxHookStderrBytes}
 	cmd := exec.CommandContext(ctx, path)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
 	cmd.Stdin = &stdin
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -60,6 +66,9 @@ func callHookRaw(ctx context.Context, path string, timeout time.Duration, in any
 		}
 		return nil, fmt.Errorf("hook %s: exec: %w", filepath.Base(path), err)
 	}
+	if stdout.Len() > maxHookOutputBytes || stdout.Truncated() {
+		return nil, fmt.Errorf("hook %s: output exceeded %d bytes", filepath.Base(path), maxHookOutputBytes)
+	}
 	return stdout.Bytes(), nil
 }
 
@@ -70,7 +79,7 @@ type FormatterStream struct {
 	path   string
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
-	stderr bytes.Buffer
+	stderr limitedBuffer
 }
 
 // StartFormatterStream starts a formatter plugin subprocess, wires its stdout
@@ -91,6 +100,9 @@ func StartFormatterStream(ctx context.Context, path string, w io.Writer, in any)
 		path:  path,
 		cmd:   cmd,
 		stdin: stdin,
+		stderr: limitedBuffer{
+			limit: maxHookStderrBytes,
+		},
 	}
 	cmd.Stdout = w
 	cmd.Stderr = &stream.stderr

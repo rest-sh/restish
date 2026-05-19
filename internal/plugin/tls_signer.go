@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"bytes"
 	"crypto"
 	"crypto/rsa"
 	"crypto/tls"
@@ -15,6 +14,12 @@ import (
 	"time"
 
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
+)
+
+const (
+	maxTLSSignerCertificateBytes = 1 << 20
+	maxTLSSignerSignatureBytes   = 1 << 20
+	maxTLSSignerStderrBytes      = 64 << 10
 )
 
 // TLSCertificateFromPlugin starts a tls-signer plugin, waits for its ready
@@ -61,6 +66,10 @@ func TLSCertificateFromPlugin(path string, params map[string]string) (*tls.Certi
 		cleanup()
 		return nil, fmt.Errorf("tls-signer %s: ready message missing certificate", filepath.Base(path))
 	}
+	if len(der) > maxTLSSignerCertificateBytes {
+		cleanup()
+		return nil, fmt.Errorf("tls-signer %s: certificate exceeded %d bytes", filepath.Base(path), maxTLSSignerCertificateBytes)
+	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
 		cleanup()
@@ -91,13 +100,13 @@ type PluginSigner struct {
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
 	dec    *pluginwire.Decoder
-	stderr *bytes.Buffer
+	stderr *limitedBuffer
 	proc   *exec.Cmd
 	pub    crypto.PublicKey
 
-	mu          sync.Mutex
-	dead        bool   // set to true after any fatal error; guarded by mu
-	stderrSnap  string // snapshot of stderr taken after proc.Wait() completes; guarded by mu
+	mu         sync.Mutex
+	dead       bool   // set to true after any fatal error; guarded by mu
+	stderrSnap string // snapshot of stderr taken after proc.Wait() completes; guarded by mu
 }
 
 // shutdown kills the plugin process and releases its resources.
@@ -190,6 +199,10 @@ func (s *PluginSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) 
 	if len(reply.Signature) == 0 {
 		return nil, fmt.Errorf("tls-signer %s: sign reply missing signature", filepath.Base(s.path))
 	}
+	if len(reply.Signature) > maxTLSSignerSignatureBytes {
+		s.shutdown()
+		return nil, s.signError(fmt.Sprintf("signature exceeded %d bytes", maxTLSSignerSignatureBytes))
+	}
 	return reply.Signature, nil
 }
 
@@ -201,7 +214,7 @@ func (s *PluginSigner) signError(detail string) error {
 	return fmt.Errorf("%s", msg)
 }
 
-func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, *exec.Cmd, error) {
+func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *limitedBuffer, *exec.Cmd, error) {
 	proc := exec.Command(path)
 	stdin, err := proc.StdinPipe()
 	if err != nil {
@@ -212,14 +225,14 @@ func startTLSSigner(path string) (io.ReadCloser, io.WriteCloser, *bytes.Buffer, 
 		stdin.Close()
 		return nil, nil, nil, nil, fmt.Errorf("tls-signer %s: stdout pipe: %w", filepath.Base(path), err)
 	}
-	var stderr bytes.Buffer
-	proc.Stderr = &stderr
+	stderr := &limitedBuffer{limit: maxTLSSignerStderrBytes}
+	proc.Stderr = stderr
 	if err := proc.Start(); err != nil {
 		stdin.Close()
 		stdout.Close()
 		return nil, nil, nil, nil, fmt.Errorf("tls-signer %s: start: %w", filepath.Base(path), err)
 	}
-	return stdout, stdin, &stderr, proc, nil
+	return stdout, stdin, stderr, proc, nil
 }
 
 // readTLSSignerMessage reads one CBOR data item from dec with a 10-second timeout.

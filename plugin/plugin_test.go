@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -217,6 +218,95 @@ func TestLargeMessageRoundTrip(t *testing.T) {
 	}
 	if len(got) != len(large) {
 		t.Errorf("length mismatch: got %d, want %d", len(got), len(large))
+	}
+}
+
+func TestDecModeUsesPluginMessageLimits(t *testing.T) {
+	opts := plugin.DecMode.DecOptions()
+	if opts.MaxNestedLevels != 16 {
+		t.Fatalf("MaxNestedLevels = %d, want 16", opts.MaxNestedLevels)
+	}
+	if opts.MaxArrayElements != 65536 {
+		t.Fatalf("MaxArrayElements = %d, want 65536", opts.MaxArrayElements)
+	}
+	if opts.MaxMapPairs != 16384 {
+		t.Fatalf("MaxMapPairs = %d, want 16384", opts.MaxMapPairs)
+	}
+}
+
+func TestReadMessageRejectsOversizedArray(t *testing.T) {
+	tooLarge := make([]any, 65537)
+	var buf bytes.Buffer
+	if err := plugin.WriteMessage(&buf, tooLarge); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	var got any
+	err := plugin.ReadMessage(&buf, &got)
+	if err == nil {
+		t.Fatal("expected array limit error")
+	}
+	if !strings.Contains(err.Error(), "max number") {
+		t.Fatalf("error = %v, want max number limit", err)
+	}
+}
+
+func TestReadMessageRejectsOversizedMap(t *testing.T) {
+	tooLarge := make(map[string]any, 16385)
+	for i := 0; i < 16385; i++ {
+		tooLarge["k"+strconv.Itoa(i)] = nil
+	}
+	var buf bytes.Buffer
+	if err := plugin.WriteMessage(&buf, tooLarge); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	var got any
+	err := plugin.ReadMessage(&buf, &got)
+	if err == nil {
+		t.Fatal("expected map limit error")
+	}
+	if !strings.Contains(err.Error(), "max number") {
+		t.Fatalf("error = %v, want max number limit", err)
+	}
+}
+
+func TestReadMessageRejectsExcessiveNesting(t *testing.T) {
+	var nested any = "leaf"
+	for i := 0; i < 17; i++ {
+		nested = []any{nested}
+	}
+	var buf bytes.Buffer
+	if err := plugin.WriteMessage(&buf, nested); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	var got any
+	err := plugin.ReadMessage(&buf, &got)
+	if err == nil {
+		t.Fatal("expected nesting limit error")
+	}
+	if !strings.Contains(err.Error(), "nested") {
+		t.Fatalf("error = %v, want nesting limit", err)
+	}
+}
+
+func TestReadRawRejectsOversizedMap(t *testing.T) {
+	tooLarge := make(map[string]any, 16385)
+	for i := 0; i < 16385; i++ {
+		tooLarge["k"+strconv.Itoa(i)] = nil
+	}
+	var buf bytes.Buffer
+	if err := plugin.WriteMessage(&buf, tooLarge); err != nil {
+		t.Fatalf("WriteMessage: %v", err)
+	}
+
+	_, err := plugin.NewDecoder(&buf).ReadRaw()
+	if err == nil {
+		t.Fatal("expected raw map limit error")
+	}
+	if !strings.Contains(err.Error(), "max number") {
+		t.Fatalf("error = %v, want max number limit", err)
 	}
 }
 

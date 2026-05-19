@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +17,8 @@ import (
 
 const maxCommandPluginDiscoveryOutputBytes = 1 << 20
 const maxCommandPluginStderrBytes = 64 << 10
+const maxCommandPluginInboundMessageBytes = 64 << 20
+const maxCommandPluginDataBytes = 1 << 20
 
 func loadCommandPluginCommands(ctx context.Context, path string) ([]pluginwire.CommandDecl, error) {
 	timeout := commandPluginDiscoveryTimeout()
@@ -29,28 +30,20 @@ func loadCommandPluginCommands(ctx context.Context, path string) ([]pluginwire.C
 
 	cmd := exec.CommandContext(ctx, path, pluginwire.StartupFlagCommands)
 	procutil.ConfigureCommandTreeKill(ctx, cmd)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("plugin %s: command discovery stdout: %w", filepath.Base(path), err)
-	}
+	stdout := &cappedBuffer{limit: maxCommandPluginDiscoveryOutputBytes + 1}
 	stderr := &cappedBuffer{limit: maxCommandPluginStderrBytes}
+	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("plugin %s: command discovery start: %w", filepath.Base(path), err)
-	}
-	out, readErr := io.ReadAll(io.LimitReader(stdout, maxCommandPluginDiscoveryOutputBytes+1))
-	waitErr := cmd.Wait()
-	if readErr != nil {
-		return nil, fmt.Errorf("plugin %s: command discovery read: %w", filepath.Base(path), readErr)
-	}
-	if len(out) > maxCommandPluginDiscoveryOutputBytes {
+	err := cmd.Run()
+	out := stdout.Bytes()
+	if len(out) > maxCommandPluginDiscoveryOutputBytes || stdout.Truncated() {
 		return nil, fmt.Errorf("plugin %s: command discovery output exceeded %d bytes", filepath.Base(path), maxCommandPluginDiscoveryOutputBytes)
 	}
-	if waitErr != nil {
+	if err != nil {
 		if ctx.Err() != nil {
 			return nil, commandPluginDiscoveryError(filepath.Base(path), fmt.Sprintf("command discovery timed out after %s", timeout), ctx.Err(), stderr)
 		}
-		return nil, commandPluginDiscoveryError(filepath.Base(path), "command discovery", waitErr, stderr)
+		return nil, commandPluginDiscoveryError(filepath.Base(path), "command discovery", err, stderr)
 	}
 	if len(out) == 0 {
 		return nil, nil

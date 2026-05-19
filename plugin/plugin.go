@@ -8,13 +8,23 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+const (
+	maxCBORNestedLevels  = 16
+	maxCBORArrayElements = 65536
+	maxCBORMapPairs      = 16384
+)
+
 // DecMode is a CBOR decode mode configured to use map[string]any for all CBOR
 // maps (including nested ones), rather than the default map[interface{}]interface{}.
-// Plugin authors can use it to decode CBOR payloads without reimplementing the
-// same DecOptions.
+// It also applies the same structural limits that Restish uses for plugin
+// messages, so buggy plugins cannot force unbounded map, array, or nesting
+// allocations before typed validation runs.
 var DecMode = func() cbor.DecMode {
 	dm, err := cbor.DecOptions{
-		DefaultMapType: reflect.TypeOf(map[string]any{}),
+		DefaultMapType:   reflect.TypeOf(map[string]any{}),
+		MaxNestedLevels:  maxCBORNestedLevels,
+		MaxArrayElements: maxCBORArrayElements,
+		MaxMapPairs:      maxCBORMapPairs,
 	}.DecMode()
 	if err != nil {
 		panic("plugin: creating CBOR decode mode: " + err.Error())

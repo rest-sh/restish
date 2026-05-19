@@ -48,6 +48,66 @@ func TestHandleCommandPluginMessageRejectsMalformedDone(t *testing.T) {
 	}
 }
 
+func TestHandleCommandPluginMessageRejectsOversizedStdoutData(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cli := &CLI{Stdout: &stdout, Stderr: &stderr}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetErr(&stderr)
+
+	raw, err := cbor.Marshal(pluginwire.StdoutDataMsg{
+		Type: pluginwire.MsgTypeStdoutData,
+		Data: bytes.Repeat([]byte("x"), maxCommandPluginDataBytes+1),
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	done, gotErr := cli.handleCommandPluginMessage(cmd, context.Background(), nil, nil, pluginwire.MsgTypeStdoutData, raw)
+	if done {
+		t.Fatal("stdout-data should not mark command plugin done")
+	}
+	if gotErr == nil {
+		t.Fatal("expected oversized stdout-data to return an error")
+	}
+	if !strings.Contains(gotErr.Error(), "stdout data exceeded") {
+		t.Fatalf("expected output cap error, got: %v", gotErr)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("oversized stdout data was written: %d bytes", stdout.Len())
+	}
+}
+
+func TestHandleCommandPluginMessageRejectsOversizedStderrData(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cli := &CLI{Stdout: &stdout, Stderr: &stderr}
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetErr(&stderr)
+
+	raw, err := cbor.Marshal(pluginwire.StderrDataMsg{
+		Type: pluginwire.MsgTypeStderrData,
+		Data: bytes.Repeat([]byte("x"), maxCommandPluginDataBytes+1),
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	done, gotErr := cli.handleCommandPluginMessage(cmd, context.Background(), nil, nil, pluginwire.MsgTypeStderrData, raw)
+	if done {
+		t.Fatal("stderr-data should not mark command plugin done")
+	}
+	if gotErr == nil {
+		t.Fatal("expected oversized stderr-data to return an error")
+	}
+	if !strings.Contains(gotErr.Error(), "stderr data exceeded") {
+		t.Fatalf("expected output cap error, got: %v", gotErr)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("oversized stderr data was written: %d bytes", stderr.Len())
+	}
+}
+
 func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
@@ -65,6 +125,27 @@ func TestLoadCommandPluginCommandsReturnsExecError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), fmt.Sprintf("plugin %s: command discovery", filepath.Base(path))) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadCommandPluginCommandsRejectsOversizedOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restish-huge-commands")
+	script := fmt.Sprintf("#!/bin/sh\ndd if=/dev/zero bs=%d count=1 2>/dev/null\n", maxCommandPluginDiscoveryOutputBytes+1)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+
+	_, err := loadCommandPluginCommands(context.Background(), path)
+	if err == nil {
+		t.Fatal("expected oversized command discovery output to fail")
+	}
+	if !strings.Contains(err.Error(), "command discovery output exceeded") {
+		t.Fatalf("expected output cap error, got: %v", err)
 	}
 }
 

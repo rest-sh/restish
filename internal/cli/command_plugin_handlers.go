@@ -16,6 +16,10 @@ import (
 )
 
 func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.Context, writer *commandPluginWriter, requestWG *sync.WaitGroup, msgType string, raw []byte) (bool, error) {
+	if len(raw) > maxCommandPluginInboundMessageBytes {
+		return false, fmt.Errorf("command plugin: message %s exceeded %d bytes", msgType, maxCommandPluginInboundMessageBytes)
+	}
+
 	switch msgType {
 	case pluginwire.MsgTypeDone:
 		var msg pluginwire.DoneMsg
@@ -94,6 +98,9 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
 		}
+		if len(msg.Data) > maxCommandPluginDataBytes {
+			return false, fmt.Errorf("command plugin: stdout data exceeded %d bytes", maxCommandPluginDataBytes)
+		}
 		if len(msg.Data) > 0 {
 			_, _ = c.Stdout.Write(msg.Data)
 		}
@@ -101,6 +108,9 @@ func (c *CLI) handleCommandPluginMessage(cmd *cobra.Command, requestCtx context.
 		var msg pluginwire.StderrDataMsg
 		if err := decodeCommandPluginMessage(msgType, raw, &msg); err != nil {
 			return false, err
+		}
+		if len(msg.Data) > maxCommandPluginDataBytes {
+			return false, fmt.Errorf("command plugin: stderr data exceeded %d bytes", maxCommandPluginDataBytes)
 		}
 		if len(msg.Data) > 0 {
 			_, _ = cmd.ErrOrStderr().Write(msg.Data)

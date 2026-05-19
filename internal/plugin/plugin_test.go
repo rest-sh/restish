@@ -183,6 +183,22 @@ func TestLoadManifest_EmptyOutput(t *testing.T) {
 	}
 }
 
+func TestLoadManifest_OutputTooLarge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	p := writeScript(t, dir, "restish-huge-manifest", fmt.Sprintf("#!/bin/sh\ndd if=/dev/zero bs=%d count=1 2>/dev/null\n", maxManifestOutputBytes+1))
+
+	_, err := LoadManifest(p, nil)
+	if err == nil {
+		t.Fatal("expected oversized manifest output to fail")
+	}
+	if !strings.Contains(err.Error(), "manifest output exceeded") {
+		t.Fatalf("expected output cap error, got %v", err)
+	}
+}
+
 func TestLoadManifest_NonZeroExit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")
@@ -710,6 +726,23 @@ func TestCallHookWithTimeoutContextCancellationKillsProcess(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("hook cancellation waited too long: %v", elapsed)
+	}
+}
+
+func TestCallHookOutputTooLarge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := writeScript(t, dir, "restish-hook-huge", fmt.Sprintf("#!/bin/sh\ndd if=/dev/zero bs=%d count=1 2>/dev/null\n", maxHookOutputBytes+1))
+
+	var out pluginwire.AuthHookOutput
+	err := CallHook(path, pluginwire.AuthHookInput{Type: "auth"}, &out)
+	if err == nil {
+		t.Fatal("expected oversized hook output to fail")
+	}
+	if !strings.Contains(err.Error(), "output exceeded") {
+		t.Fatalf("expected output cap error, got %v", err)
 	}
 }
 
