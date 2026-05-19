@@ -337,13 +337,16 @@ func TestVerboseRedactsJSONBodies(t *testing.T) {
 		}, nil
 	})
 
-	err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "token: request-secret, key: testing"})
+	err := c.Run([]string{"restish", "post", "-v", "https://api.example.com/hello", "token: request-secret, password2: confirm-secret, max_tokens: 128, token_budget: 42, key: testing"})
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
 	stderr := errOut.String()
-	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "response-secret") || strings.Contains(stderr, "bearer-secret") || strings.Contains(stderr, "kh24g2j") || strings.Contains(stderr, "nested-secret") {
+	if strings.Contains(stderr, "request-secret") || strings.Contains(stderr, "confirm-secret") || strings.Contains(stderr, "response-secret") || strings.Contains(stderr, "bearer-secret") || strings.Contains(stderr, "kh24g2j") || strings.Contains(stderr, "nested-secret") {
 		t.Fatalf("verbose body leaked secret:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, `"max_tokens": 128`) || !strings.Contains(stderr, `"token_budget": 42`) {
+		t.Fatalf("non-secret token counters should remain visible, got:\n%s", stderr)
 	}
 	if !strings.Contains(stderr, `"token_type": "bearer"`) {
 		t.Fatalf("token_type should not be redacted, got:\n%s", stderr)

@@ -99,12 +99,19 @@ func IsQueryParamValue(name, value string) bool {
 }
 
 func IsJSONBodyKey(name string) bool {
-	return JSONBodyKeys[strings.ToLower(name)]
+	name = strings.ToLower(strings.TrimSpace(name))
+	if JSONBodyKeys[name] {
+		return true
+	}
+	return strings.Contains(name, "password") || strings.Contains(name, "passphrase")
 }
 
 func IsJSONBodyValue(name, value string) bool {
 	name = strings.ToLower(name)
 	if JSONBodyKeys[name] || IsHeaderName(name) {
+		return true
+	}
+	if IsJSONBodyKey(name) {
 		return true
 	}
 	return ambiguousQueryParamNames[name] && LooksSensitiveValue(value)

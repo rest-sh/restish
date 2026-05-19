@@ -74,7 +74,14 @@ func TestJSONBodyKeys(t *testing.T) {
 		{"Authorization", true},
 		{"Cookie", true},
 		{"client_secret", true},
+		{"password2", true},
+		{"confirm_password", true},
+		{"newPassword", true},
+		{"passphrase_hint", true},
 		{"token_type", false},
+		{"max_tokens", false},
+		{"token_budget", false},
+		{"prompt_tokens", false},
 		{"X-User-Token-Refresh-Hint", false},
 	}
 	for _, tt := range tests {
