@@ -1631,6 +1631,64 @@ func TestAPISetRootedObjectPatch(t *testing.T) {
 	}
 }
 
+func TestAPISetSwapIsRootedAtAPI(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {BaseURL: "https://profile.example.com"},
+				},
+			},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `base_url ^ profiles.default.base_url`}); err != nil {
+		t.Fatalf("api set swap: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	api := written.APIs["myapi"]
+	if api.BaseURL != "https://profile.example.com" || api.Profiles["default"].BaseURL != "https://api.example.com" {
+		t.Fatalf("api after swap: base_url=%q profiles.default.base_url=%q", api.BaseURL, api.Profiles["default"].BaseURL)
+	}
+}
+
+func TestAPISetSwapTreatsFullyQualifiedPathsAsAPILocal(t *testing.T) {
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+			"other": {BaseURL: "https://other.example.com"},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	_ = os.WriteFile(cfgFile, cfgData, 0o600)
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "set", "myapi", `apis.myapi.base_url ^ apis.other.base_url`}); err != nil {
+		t.Fatalf("api set swap with fully qualified paths: %v", err)
+	}
+
+	written, loadErr := config.Load(cfgFile)
+	if loadErr != nil {
+		t.Fatalf("reload config: %v", loadErr)
+	}
+	if got := written.APIs["myapi"].BaseURL; got != "https://api.example.com" {
+		t.Fatalf("myapi base_url = %q, want unchanged", got)
+	}
+	if got := written.APIs["other"].BaseURL; got != "https://other.example.com" {
+		t.Fatalf("other base_url = %q, want unchanged", got)
+	}
+}
+
 func TestAPISetRejectsNonPatchForm(t *testing.T) {
 	cfgData, _ := json.Marshal(&config.Config{
 		APIs: map[string]*config.APIConfig{

@@ -204,20 +204,20 @@ type shorthandPathPart struct {
 	insert bool
 }
 
-func applyShorthandPatch(root any, ops []shorthand.Operation) (any, error) {
+func applyShorthandPatch(target any, ops []shorthand.Operation) (any, error) {
 	var err error
 	for _, op := range ops {
 		switch op.Kind {
 		case shorthand.OpSet:
-			root, err = setShorthandPath(root, op.Path, op.Value)
+			target, err = setShorthandPath(target, op.Path, op.Value)
 		case shorthand.OpDelete:
-			root, err = deleteShorthandPath(root, op.Path)
+			target, err = deleteShorthandPath(target, op.Path)
 		case shorthand.OpSwap:
 			rightPath, ok := op.Value.(string)
 			if !ok {
 				return nil, fmt.Errorf("swap operation value must be a path string, got %T", op.Value)
 			}
-			root, err = swapShorthandPaths(root, op.Path, rightPath)
+			target, err = swapShorthandPaths(target, op.Path, rightPath)
 		default:
 			err = fmt.Errorf("unknown operation kind %d", op.Kind)
 		}
@@ -225,31 +225,31 @@ func applyShorthandPatch(root any, ops []shorthand.Operation) (any, error) {
 			return nil, err
 		}
 	}
-	return root, nil
+	return target, nil
 }
 
-func swapShorthandPaths(root any, leftPath, rightPath string) (any, error) {
-	left, leftOK, err := shorthand.GetPath(leftPath, root, shorthand.GetOptions{})
+func swapShorthandPaths(target any, leftPath, rightPath string) (any, error) {
+	left, leftOK, err := shorthand.GetPath(leftPath, target, shorthand.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	right, rightOK, err := shorthand.GetPath(rightPath, root, shorthand.GetOptions{})
+	right, rightOK, err := shorthand.GetPath(rightPath, target, shorthand.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	var applyErr error
 	if rightOK {
-		root, applyErr = setShorthandPath(root, leftPath, right)
+		target, applyErr = setShorthandPath(target, leftPath, right)
 	} else {
-		root, applyErr = deleteShorthandPath(root, leftPath)
+		target, applyErr = deleteShorthandPath(target, leftPath)
 	}
 	if applyErr != nil {
 		return nil, applyErr
 	}
 	if leftOK {
-		return setShorthandPath(root, rightPath, left)
+		return setShorthandPath(target, rightPath, left)
 	}
-	return deleteShorthandPath(root, rightPath)
+	return deleteShorthandPath(target, rightPath)
 }
 
 func setShorthandPath(root any, path string, value any) (any, error) {
