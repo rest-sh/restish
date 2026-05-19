@@ -364,6 +364,38 @@ func TestHTTPQuery(t *testing.T) {
 	}
 }
 
+func TestHTTPNetworkErrorRedactsURLCredentials(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	})
+
+	err := c.Run([]string{
+		"restish", "get",
+		"http://alice:s3cr3t@api.example.com/items?api_key=url-secret&normal=ok",
+		"--rsh-query", "token=flag-secret",
+		"--rsh-retry", "0",
+	})
+	if err == nil {
+		t.Fatal("expected network error")
+	}
+	got := err.Error()
+	for _, leak := range []string{"alice", "s3cr3t", "url-secret", "flag-secret"} {
+		if strings.Contains(got, leak) {
+			t.Fatalf("network error leaked %q:\n%s", leak, got)
+		}
+	}
+	for _, want := range []string{
+		"network error for GET http://redacted@api.example.com/items?api_key=%3Credacted%3E&normal=ok",
+		"token=%3Credacted%3E",
+		"connection refused",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("network error missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestHTTPAcceptHeaderOverride(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)

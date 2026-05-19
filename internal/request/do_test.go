@@ -88,6 +88,33 @@ func TestRedactedURLRemovesUserinfoAndCredentialQuery(t *testing.T) {
 	}
 }
 
+func TestDoNetworkErrorRedactsRequestURL(t *testing.T) {
+	_, err := request.Do(context.Background(), "GET", "https://alice:s3cr3t@api.example.com/items?api_key=url-secret&page=1", nil, request.Options{
+		Query: []string{"session=marked-secret", "token=flag-secret"},
+		OnRequest: func(req *http.Request) error {
+			request.MarkCredentialQueryParam(req, "session")
+			return nil
+		},
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("dial failed")
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected network error")
+	}
+	got := err.Error()
+	for _, leak := range []string{"alice", "s3cr3t", "url-secret", "marked-secret", "flag-secret"} {
+		if strings.Contains(got, leak) {
+			t.Fatalf("network error leaked %q:\n%s", leak, got)
+		}
+	}
+	for _, want := range []string{"https://redacted@api.example.com/items?", "api_key=%3Credacted%3E", "session=%3Credacted%3E", "token=%3Credacted%3E", "page=1"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("network error missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestBuildTransportCloseFullStackOnce(t *testing.T) {
 	base := &closeCountingTransport{}
 	var wrapper *closeCountingWrapper

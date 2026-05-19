@@ -211,10 +211,11 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	httpResp, err := c.sendPreparedRequest(requestContext(cmd), method, prepared)
 	if err != nil {
+		networkURL := redactedNetworkErrorURL(rawURL, opts.Server)
 		if hint := networkErrorHint(err); hint != "" {
-			return fmt.Errorf("network error for %s %s: %w\nhint: %s", method, rawURL, err, hint)
+			return fmt.Errorf("network error for %s %s: %w\nhint: %s", method, networkURL, err, hint)
 		}
-		return fmt.Errorf("network error for %s %s: %w", method, rawURL, err)
+		return fmt.Errorf("network error for %s %s: %w", method, networkURL, err)
 	}
 	trace.Step("HTTP")
 
@@ -1608,6 +1609,21 @@ func networkErrorHint(err error) string {
 	default:
 		return ""
 	}
+}
+
+func redactedNetworkErrorURL(rawURL, serverOverride string) string {
+	normalized, err := request.Normalize(rawURL, serverOverride)
+	if err != nil {
+		if parsed, parseErr := url.Parse(rawURL); parseErr == nil {
+			return request.RedactedURL(parsed)
+		}
+		return rawURL
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return normalized
+	}
+	return request.RedactedURL(parsed)
 }
 
 func isSensitiveQueryParam(name string) bool {

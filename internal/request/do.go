@@ -306,7 +306,7 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 				_ = closer.Close()
 			}
 		}
-		return nil, err
+		return nil, redactedRequestError(err, req)
 	}
 	var closeFns []func() error
 	if cancelRequest != nil {
@@ -502,6 +502,16 @@ func IsCredentialQueryParam(name string) bool {
 // structure are preserved.
 func RedactedURL(u *url.URL) string {
 	return redactedURL(u, nil)
+}
+
+func redactedRequestError(err error, req *http.Request) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	redacted := *urlErr
+	redacted.URL = RedactedRequestURL(req)
+	return &redacted
 }
 
 // SameOrigin reports whether a and b share scheme, hostname, and effective port.
