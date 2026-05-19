@@ -8,30 +8,43 @@ import (
 	"testing"
 )
 
+func linksResponse(r *http.Request, status int, headers http.Header, body string) *http.Response {
+	if headers == nil {
+		headers = http.Header{}
+	}
+	if headers.Get("Content-Type") == "" {
+		headers.Set("Content-Type", "application/json")
+	}
+	return &http.Response{
+		StatusCode: status,
+		Proto:      "HTTP/1.1",
+		Header:     headers,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    r,
+	}
+}
+
+func decodeLinksOutput(t *testing.T, out string) map[string]string {
+	t.Helper()
+	var got map[string]string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &got); err != nil {
+		t.Fatalf("parse output: %v\n%s", err, out)
+	}
+	return got
+}
+
 // TestLinksCommandLinkHeader verifies that "links" extracts Link header relations.
 func TestLinksCommandLinkHeader(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header: http.Header{
-				"Link":         []string{`</items?page=2>; rel="next", </items?page=0>; rel="prev"`},
-				"Content-Type": []string{"application/json"},
-			},
-			Body:    io.NopCloser(strings.NewReader(`[]`)),
-			Request: r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 200, http.Header{
+			"Link": []string{`</items?page=2>; rel="next", </items?page=0>; rel="prev"`},
+		}, `[]`), nil
 	})
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items"}); err != nil {
-		t.Fatalf("links: %v", err)
-	}
 
-	var got map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &got); err != nil {
-		t.Fatalf("parse output: %v\n%s", err, out.String())
-	}
+	app.Run("links", "https://api.example.com/items")
+	got := decodeLinksOutput(t, app.Stdout.String())
 	if !strings.Contains(got["next"], "page=2") {
 		t.Errorf("next: got %q", got["next"])
 	}
@@ -42,62 +55,39 @@ func TestLinksCommandLinkHeader(t *testing.T) {
 
 // TestLinksCommandHAL verifies that "links" parses HAL _links.
 func TestLinksCommandHAL(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"_links":{"self":{"href":"/items"},"next":{"href":"/items?page=2"}},"items":[]}`)),
-			Request:    r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 200, nil, `{"_links":{"self":{"href":"/items"},"next":{"href":"/items?page=2"}},"items":[]}`), nil
 	})
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items"}); err != nil {
-		t.Fatalf("links: %v", err)
-	}
 
-	var got map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &got); err != nil {
-		t.Fatalf("parse output: %v\n%s", err, out.String())
-	}
+	app.Run("links", "https://api.example.com/items")
+	got := decodeLinksOutput(t, app.Stdout.String())
 	if !strings.Contains(got["next"], "page=2") {
 		t.Errorf("next: got %q", got["next"])
 	}
 }
 
 func TestLinksCommandJSONOutputFlag(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header: http.Header{
-				"Link":         []string{`</items?page=2>; rel="next"`},
-				"Content-Type": []string{"application/json"},
-			},
-			Body:    io.NopCloser(strings.NewReader(`[]`)),
-			Request: r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 200, http.Header{
+			"Link": []string{`</items?page=2>; rel="next"`},
+		}, `[]`), nil
 	})
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "-o", "json"}); err != nil {
-		t.Fatalf("links -o json: %v", err)
-	}
 
-	var got map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &got); err != nil {
-		t.Fatalf("parse output: %v\n%s", err, out.String())
-	}
+	app.Run("links", "https://api.example.com/items", "-o", "json")
+	got := decodeLinksOutput(t, app.Stdout.String())
 	if !strings.Contains(got["next"], "page=2") {
 		t.Errorf("next: got %q", got["next"])
 	}
 }
 
 func TestLinksCommandRejectsUnsupportedOutputFormat(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	err := c.Run([]string{"restish", "links", "https://api.example.com/items", "-o", "yaml"})
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	err := app.RunErr("links", "https://api.example.com/items", "-o", "yaml")
 	if err == nil {
 		t.Fatal("expected unsupported output format error")
 	}
@@ -108,29 +98,16 @@ func TestLinksCommandRejectsUnsupportedOutputFormat(t *testing.T) {
 
 // TestLinksCommandFilterRel verifies that [rel...] args filter the output.
 func TestLinksCommandFilterRel(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header: http.Header{
-				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next", <https://api.example.com/>; rel="self"`},
-				"Content-Type": []string{"application/json"},
-			},
-			Body:    io.NopCloser(strings.NewReader(`[]`)),
-			Request: r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 200, http.Header{
+			"Link": []string{`<https://api.example.com/items?page=2>; rel="next", <https://api.example.com/>; rel="self"`},
+		}, `[]`), nil
 	})
-	// Ask only for the "next" relation.
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "next"}); err != nil {
-		t.Fatalf("links: %v", err)
-	}
 
-	var got map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &got); err != nil {
-		t.Fatalf("parse output: %v\n%s", err, out.String())
-	}
+	app.Run("links", "https://api.example.com/items", "next")
+	got := decodeLinksOutput(t, app.Stdout.String())
 	if len(got) != 1 {
 		t.Errorf("expected exactly 1 relation, got %d: %v", len(got), got)
 	}
@@ -140,65 +117,40 @@ func TestLinksCommandFilterRel(t *testing.T) {
 }
 
 func TestLinksCommandWarnsForMissingRel(t *testing.T) {
-	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Proto:      "HTTP/1.1",
-			Header: http.Header{
-				"Link":         []string{`<https://api.example.com/items?page=2>; rel="next"`},
-				"Content-Type": []string{"application/json"},
-			},
-			Body:    io.NopCloser(strings.NewReader(`[]`)),
-			Request: r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 200, http.Header{
+			"Link": []string{`<https://api.example.com/items?page=2>; rel="next"`},
+		}, `[]`), nil
 	})
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "missing"}); err != nil {
-		t.Fatalf("links: %v", err)
+	app.Run("links", "https://api.example.com/items", "missing")
+	if strings.TrimSpace(app.Stdout.String()) != "{}" {
+		t.Fatalf("expected empty object for missing rel, got:\n%s", app.Stdout.String())
 	}
-	if strings.TrimSpace(out.String()) != "{}" {
-		t.Fatalf("expected empty object for missing rel, got:\n%s", out.String())
-	}
-	if got := errOut.String(); !strings.Contains(got, `rel "missing" not found`) || !strings.Contains(got, "next") {
-		t.Fatalf("expected missing rel warning with available rels, got:\n%s", got)
-	}
+	requireContains(t, app.Stderr.String(), `rel "missing" not found`, "next")
 }
 
 func TestLinksCommandReturnsStatusError(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 500,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"error":"boom"}`)),
-			Request:    r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 500, nil, `{"error":"boom"}`), nil
 	})
-	err := c.Run([]string{"restish", "links", "https://api.example.com/items"})
+	err := app.RunErr("links", "https://api.example.com/items")
 	if err == nil {
 		t.Fatal("expected links to return a status error")
 	}
-	if strings.TrimSpace(out.String()) != "{}" {
-		t.Fatalf("expected links output before status error, got:\n%s", out.String())
+	if strings.TrimSpace(app.Stdout.String()) != "{}" {
+		t.Fatalf("expected links output before status error, got:\n%s", app.Stdout.String())
 	}
 }
 
 func TestLinksCommandIgnoreStatusCode(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"error":"missing"}`)),
-			Request:    r,
-		}, nil
+	app := newTestApp(t)
+	app.FreshConfigPath()
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		return linksResponse(r, 404, nil, `{"error":"missing"}`), nil
 	})
-	if err := c.Run([]string{"restish", "links", "https://api.example.com/items", "--rsh-ignore-status-code"}); err != nil {
-		t.Fatalf("links with ignore status: %v", err)
-	}
+	app.Run("links", "https://api.example.com/items", "--rsh-ignore-status-code")
 }

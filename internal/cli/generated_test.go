@@ -281,6 +281,25 @@ func (e *generatedEnv) newCaptureCLI() (*cli.CLI, *strings.Builder) {
 	return c, &out
 }
 
+func (e *generatedEnv) baseURL(t *testing.T) string {
+	t.Helper()
+	return strings.TrimSpace(readBaseURLFromConfig(t, e.cfgFile))
+}
+
+func (e *generatedEnv) writeAPIConfig(t *testing.T, api *config.APIConfig) {
+	t.Helper()
+	e.writeConfig(t, &config.Config{APIs: map[string]*config.APIConfig{"tapi": api}})
+}
+
+func (e *generatedEnv) writeConfig(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	writeTestFile(t, e.cfgFile, string(data))
+}
+
 func expireGeneratedSpecCache(t *testing.T, cacheDir, apiName string) {
 	t.Helper()
 	path := filepath.Join(cacheDir, apiName+".cbor")
@@ -591,21 +610,7 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnv(t, mux)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileAuth(basicAuth("alice", "secret"))))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-public"}); err != nil {
@@ -634,48 +639,13 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "security": [{"EnvironmentKey": []}],
-  "components": {
-    "securitySchemes": {
-      "EnvironmentKey": {"type": "apiKey", "in": "header", "name": "X-Environment-Key"}
-    }
-  },
-  "paths": {
-    "/protected": {
-      "get": {
-        "operationId": "getProtected",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetSpec(baseURL, "Auth API", "/protected", "getProtected",
+			openAPISecurity(`{"EnvironmentKey":[]}`),
+			openAPISecuritySchemes(`"EnvironmentKey":{"type":"apiKey","in":"header","name":"X-Environment-Key"}`))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"EnvironmentKey": {
-								Auth: &config.AuthConfig{
-									Type:   "api-key",
-									Params: map[string]string{"in": "header", "name": "X-Environment-Key", "value": "dummy"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"EnvironmentKey": testCredential(apiKeyAuth("header", "X-Environment-Key", "dummy")),
+	})))
 
 	c, output := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-protected", "-v"}); err != nil {
@@ -704,48 +674,13 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyQuery(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Query Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "security": [{"QuerystringAuthentication": []}],
-  "components": {
-    "securitySchemes": {
-      "QuerystringAuthentication": {"type": "apiKey", "in": "query", "name": "u=&p="}
-    }
-  },
-  "paths": {
-    "/health": {
-      "get": {
-        "operationId": "getHealth",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetSpec(baseURL, "Query Auth API", "/health", "getHealth",
+			openAPISecurity(`{"QuerystringAuthentication":[]}`),
+			openAPISecuritySchemes(`"QuerystringAuthentication":{"type":"apiKey","in":"query","name":"u=&p="}`))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"QuerystringAuthentication": {
-								Auth: &config.AuthConfig{
-									Type:   "api-key",
-									Params: map[string]string{"in": "query", "name": "u=&p=", "value": "dummy-token"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"QuerystringAuthentication": testCredential(apiKeyAuth("query", "u=&p=", "dummy-token")),
+	})))
 
 	c, output := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-health", "-v"}); err != nil {
@@ -774,48 +709,13 @@ func TestGeneratedCommandUserAgentAPIKeyOverridesDefaultUserAgent(t *testing.T) 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Weather API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "security": [{"userAgent": []}],
-  "components": {
-    "securitySchemes": {
-      "userAgent": {"type": "apiKey", "in": "header", "name": "User-Agent"}
-    }
-  },
-  "paths": {
-    "/alerts": {
-      "get": {
-        "operationId": "getAlerts",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetSpec(baseURL, "Weather API", "/alerts", "getAlerts",
+			openAPISecurity(`{"userAgent":[]}`),
+			openAPISecuritySchemes(`"userAgent":{"type":"apiKey","in":"header","name":"User-Agent"}`))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"userAgent": {
-								Auth: &config.AuthConfig{
-									Type:   "api-key",
-									Params: map[string]string{"in": "header", "name": "User-Agent", "value": "restish-test-contact-example"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"userAgent": testCredential(apiKeyAuth("header", "User-Agent", "restish-test-contact-example")),
+	})))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-alerts"}); err != nil {
@@ -848,46 +748,14 @@ func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "BasicAuth": {"type": "http", "scheme": "basic"}
-    }
-  },
-  "paths": {
-    "/auth/basic": {
-      "get": {
-        "operationId": "getAuthBasic",
-        "security": [{"BasicAuth": []}],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API",
+			openAPISecuritySchemes(`"BasicAuth":{"type":"http","scheme":"basic"}`),
+			openAPIPaths(openAPIGet("/auth/basic", "getAuthBasic", `"security":[{"BasicAuth":[]}]`)))
 	})
-	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"BasicAuth": {
-								Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	baseURL := env.baseURL(t)
+	env.writeAPIConfig(t, testAPIConfig(baseURL, profileCredentials(map[string]*config.CredentialConfig{
+		"BasicAuth": testCredential(basicAuth("alice", "secret")),
+	})))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", baseURL + "/auth/basic"}); err != nil {
@@ -918,43 +786,13 @@ func TestGenericURLMatchedSecurityEmptySuppressesProfileAuth(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "BasicAuth": {"type": "http", "scheme": "basic"}
-    }
-  },
-  "security": [{"BasicAuth": []}],
-  "paths": {
-    "/public": {
-      "get": {
-        "operationId": "getPublic",
-        "security": [],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API",
+			openAPISecuritySchemes(`"BasicAuth":{"type":"http","scheme":"basic"}`),
+			openAPISecurity(`{"BasicAuth":[]}`),
+			openAPIPaths(openAPIGet("/public", "getPublic", `"security":[]`)))
 	})
-	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	baseURL := env.baseURL(t)
+	env.writeAPIConfig(t, testAPIConfig(baseURL, profileAuth(basicAuth("alice", "secret"))))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", baseURL + "/public"}); err != nil {
@@ -981,50 +819,15 @@ func TestGenericURLRouteMatchPrefersExactPathOverTemplate(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "BasicAuth": {"type": "http", "scheme": "basic"}
-    }
-  },
-  "security": [{"BasicAuth": []}],
-  "paths": {
-    "/things/{id}": {
-      "get": {
-        "operationId": "getThing",
-        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "OK"}}
-      }
-    },
-    "/things/me": {
-      "get": {
-        "operationId": "getMe",
-        "security": [],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API",
+			openAPISecuritySchemes(`"BasicAuth":{"type":"http","scheme":"basic"}`),
+			openAPISecurity(`{"BasicAuth":[]}`),
+			openAPIPaths(
+				openAPIGet("/things/{id}", "getThing", `"parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}]`),
+				openAPIGet("/things/me", "getMe", `"security":[]`)))
 	})
-	baseURL := strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile))
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	baseURL := env.baseURL(t)
+	env.writeAPIConfig(t, testAPIConfig(baseURL, profileAuth(basicAuth("alice", "secret"))))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", baseURL + "/things/me"}); err != nil {
@@ -1053,41 +856,11 @@ func TestGeneratedCommandDocumentSecurityLeavesProfileAuthBehavior(t *testing.T)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "BearerAuth": {"type": "http", "scheme": "bearer"}
-    }
-  },
-  "security": [{"BearerAuth": []}],
-  "paths": {
-    "/secure": {
-      "get": {
-        "operationId": "getSecure",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/secure", "getSecure",
+			openAPISecuritySchemes(`"BearerAuth":{"type":"http","scheme":"bearer"}`),
+			openAPISecurity(`{"BearerAuth":[]}`))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "alice", "password": "secret"}},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileAuth(basicAuth("alice", "secret"))))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-secure"}); err != nil {
@@ -1107,58 +880,16 @@ func TestGeneratedCommandOAuthScopeAlternativesRequireCredentialBindings(t *test
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Scope API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "GraphOAuth": {
-        "type": "oauth2",
-        "flows": {
-          "authorizationCode": {
-            "authorizationUrl": "https://login.example.com/authorize",
-            "tokenUrl": "https://login.example.com/token",
-            "scopes": {
-              "Mail.Read": "Read mail",
-              "User.Read": "Read users"
-            }
-          }
-        }
-      },
-      "ApiKey": {"type": "apiKey", "in": "header", "name": "X-Api-Key"}
-    }
-  },
-  "security": [{"GraphOAuth": ["User.Read"]}],
-  "paths": {
-    "/me/messages": {
-      "get": {
-        "operationId": "listMessages",
-        "security": [
-          {"GraphOAuth": ["Mail.Read"]},
-          {"ApiKey": []}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Scope API",
+			openAPISecuritySchemes(
+				`"GraphOAuth":{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"https://login.example.com/authorize","tokenUrl":"https://login.example.com/token","scopes":{"Mail.Read":"Read mail","User.Read":"Read users"}}}}`,
+				`"ApiKey":{"type":"apiKey","in":"header","name":"X-Api-Key"}`),
+			openAPISecurity(`{"GraphOAuth":["User.Read"]}`),
+			openAPIPaths(openAPIGet("/me/messages", "listMessages", `"security":[{"GraphOAuth":["Mail.Read"]},{"ApiKey":[]}]`)))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Headers: []string{"Authorization: Bearer configured-token"},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Headers: []string{"Authorization: Bearer configured-token"},
+	}))
 
 	c := env.newCLI()
 	err := c.Run([]string{"restish", "tapi", "list-messages"})
@@ -1188,56 +919,28 @@ func TestGeneratedCommandUsesOperationCredentialBindings(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Security API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "UserOAuth": {"type": "oauth2", "flows": {"authorizationCode": {"authorizationUrl": "https://auth.example.com/authorize", "tokenUrl": "https://auth.example.com/token", "scopes": {"items:read": "Read items"}}}},
-      "AdminOAuth": {"type": "oauth2", "flows": {"clientCredentials": {"tokenUrl": "https://auth.example.com/token", "scopes": {"admin:read": "Read admin"}}}},
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
-    }
-  },
-  "security": [{"UserOAuth": ["items:read"]}],
-  "paths": {
-    "/user": {"get": {"operationId": "userItems", "responses": {"200": {"description": "OK"}}}},
-    "/admin": {"get": {"operationId": "adminUsers", "security": [{"AdminOAuth": ["admin:read"]}], "responses": {"200": {"description": "OK"}}}},
-    "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
-    "/either": {"get": {"operationId": "eitherReport", "security": [{"UserOAuth": ["items:read"]}, {"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
-    "/signed": {"get": {"operationId": "signedReport", "security": [{"UserOAuth": ["items:read"], "PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
-    "/public": {"get": {"operationId": "status", "security": [], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Security API",
+			openAPISecuritySchemes(
+				`"UserOAuth":{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"https://auth.example.com/authorize","tokenUrl":"https://auth.example.com/token","scopes":{"items:read":"Read items"}}}}`,
+				`"AdminOAuth":{"type":"oauth2","flows":{"clientCredentials":{"tokenUrl":"https://auth.example.com/token","scopes":{"admin:read":"Read admin"}}}}`,
+				`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPISecurity(`{"UserOAuth":["items:read"]}`),
+			openAPIPaths(
+				openAPIGet("/user", "userItems"),
+				openAPIGet("/admin", "adminUsers", `"security":[{"AdminOAuth":["admin:read"]}]`),
+				openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`),
+				openAPIGet("/either", "eitherReport", `"security":[{"UserOAuth":["items:read"]},{"PartnerKey":[]}]`),
+				openAPIGet("/signed", "signedReport", `"security":[{"UserOAuth":["items:read"],"PartnerKey":[]}]`),
+				openAPIGet("/public", "status", `"security":[]`)))
 	})
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: strings.TrimSpace(readBaseURLFromConfig(t, env.cfgFile)),
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "profile"}},
-						Credentials: map[string]*config.CredentialConfig{
-							"UserOAuth": {
-								Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-User-Key", "value": "user"}},
-								Satisfies: []string{"items:read"},
-							},
-							"AdminOAuth": {
-								Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Admin-Key", "value": "admin"}},
-								Satisfies: []string{"admin:read"},
-							},
-							"PartnerKey": {
-								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "partner"}},
-							},
-						},
-					},
-				},
-			},
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: apiKeyAuth("header", "X-Profile-Key", "profile"),
+		Credentials: map[string]*config.CredentialConfig{
+			"UserOAuth":  testCredential(apiKeyAuth("header", "X-User-Key", "user"), "items:read"),
+			"AdminOAuth": testCredential(apiKeyAuth("header", "X-Admin-Key", "admin"), "admin:read"),
+			"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "partner")),
 		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	c := env.newCLI()
 	for _, command := range []string{"user-items", "admin-users", "partner-report", "signed-report", "status"} {
@@ -1283,42 +986,16 @@ func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissin
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Optional Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-Optional-Key"}
-    }
-  },
-  "security": [{}, {"ApiKeyAuth": []}],
-  "paths": {
-    "/optional": {"get": {"operationId": "optionalReport", "responses": {"200": {"description": "OK"}}}},
-    "/required": {"get": {"operationId": "requiredReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Optional Auth API",
+			openAPISecuritySchemes(`"ApiKeyAuth":{"type":"apiKey","in":"header","name":"X-Optional-Key"}`),
+			openAPISecurity(`{}`, `{"ApiKeyAuth":[]}`),
+			openAPIPaths(
+				openAPIGet("/optional", "optionalReport"),
+				openAPIGet("/required", "requiredReport", `"security":[{"ApiKeyAuth":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"ApiKeyAuth": {
-								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Optional-Key", "value": "env:MISSING_OPTIONAL_KEY"}},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"ApiKeyAuth": testCredential(apiKeyAuth("header", "X-Optional-Key", "env:MISSING_OPTIONAL_KEY")),
+	})))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "optional-report"}); err != nil {
@@ -1355,43 +1032,19 @@ func TestGeneratedCommandAnonymousOnlySecuritySuppressesProfileAuth(t *testing.T
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Anonymous API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
-    }
-  },
-  "security": [{}],
-  "paths": {
-    "/public": {"get": {"operationId": "publicReport", "responses": {"200": {"description": "OK"}}}},
-    "/private": {"get": {"operationId": "privateReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Anonymous API",
+			openAPISecuritySchemes(`"ApiKeyAuth":{"type":"apiKey","in":"header","name":"X-API-Key"}`),
+			openAPISecurity(`{}`),
+			openAPIPaths(
+				openAPIGet("/public", "publicReport"),
+				openAPIGet("/private", "privateReport", `"security":[{"ApiKeyAuth":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "env:PROFILE_KEY"}},
-						Credentials: map[string]*config.CredentialConfig{
-							"ApiKeyAuth": {
-								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:PROFILE_KEY"}},
-							},
-						},
-					},
-				},
-			},
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: apiKeyAuth("header", "X-Profile-Key", "env:PROFILE_KEY"),
+		Credentials: map[string]*config.CredentialConfig{
+			"ApiKeyAuth": testCredential(apiKeyAuth("header", "X-API-Key", "env:PROFILE_KEY")),
 		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "public-report"}); err != nil {
@@ -1425,20 +1078,9 @@ func TestGeneratedCommandMutualTLSUsesClientCertificateFlags(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "mTLS API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "ClientCert": {"type": "mutualTLS"}
-    }
-  },
-  "security": [{"ClientCert": []}],
-  "paths": {
-    "/secure": {"get": {"operationId": "getSecure", "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPIGetSpec(baseURL, "mTLS API", "/secure", "getSecure",
+			openAPISecuritySchemes(`"ClientCert":{"type":"mutualTLS"}`),
+			openAPISecurity(`{"ClientCert":[]}`))
 	})
 
 	c := env.newCLI()
@@ -1480,55 +1122,18 @@ func TestGeneratedCommandOAuthAuthorizationCodeRequiresCachedTokenBeforeSending(
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "OAuth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "OAuth": {
-        "type": "oauth2",
-        "flows": {
-          "authorizationCode": {
-            "authorizationUrl": "https://auth.example.com/authorize",
-            "tokenUrl": "https://auth.example.com/token",
-            "scopes": {"read:profile": "Read profile"}
-          }
-        }
-      }
-    }
-  },
-  "paths": {
-    "/profile": {"get": {"operationId": "getProfile", "security": [{"OAuth": ["read:profile"]}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "OAuth API",
+			openAPISecuritySchemes(`"OAuth":{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"https://auth.example.com/authorize","tokenUrl":"https://auth.example.com/token","scopes":{"read:profile":"Read profile"}}}}`),
+			openAPIPaths(openAPIGet("/profile", "getProfile", `"security":[{"OAuth":["read:profile"]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Credentials: map[string]*config.CredentialConfig{
-							"OAuth": {
-								Auth: &config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
-									"client_id":     "client",
-									"authorize_url": "https://auth.example.com/authorize",
-									"token_url":     "https://auth.example.com/token",
-									"scopes":        "read:profile",
-								}},
-								Satisfies: []string{"read:profile"},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"OAuth": testCredential(&config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
+			"client_id":     "client",
+			"authorize_url": "https://auth.example.com/authorize",
+			"token_url":     "https://auth.example.com/token",
+			"scopes":        "read:profile",
+		}}, "read:profile"),
+	})))
 	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
 
 	c := env.newCLI()
@@ -2769,19 +2374,7 @@ func TestGeneratedCommandMissingOperationIDFallsBackToMethodAndPath(t *testing.T
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/widgets": {
-      "get": {
-        "summary": "List widgets",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API", openAPIPaths(openAPIGet("/widgets", "", `"summary":"List widgets"`)))
 	})
 
 	c := env.newCLI()
@@ -2799,21 +2392,11 @@ func TestGeneratedCommandMissingOperationIDFallbackSlugIsSafe(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/users/{user_id}/repos": {
-      "get": {
-        "parameters": [
-          {"name": "user_id", "in": "path", "required": true, "schema": {"type": "string"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API", openAPIPaths(openAPIGet(
+			"/users/{user_id}/repos",
+			"",
+			`"parameters":[{"name":"user_id","in":"path","required":true,"schema":{"type":"string"}}]`,
+		)))
 	})
 
 	c := env.newCLI()
@@ -3964,24 +3547,11 @@ func TestGeneratedCommandIgnoresReservedHeaderParameters(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Reserved Header API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/items": {
-      "get": {
-        "operationId": "listItems",
-        "parameters": [
-          {"name": "Authorization", "in": "header", "required": true, "schema": {"type": "string"}},
-          {"name": "Accept", "in": "header", "schema": {"type": "string"}},
-          {"name": "Content-Type", "in": "header", "schema": {"type": "string"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Reserved Header API", "/items", "listItems", openAPIParams(
+			openAPIParam("Authorization", "header", true, `{"type":"string"}`),
+			openAPIParam("Accept", "header", false, `{"type":"string"}`),
+			openAPIParam("Content-Type", "header", false, `{"type":"string"}`),
+		))
 	})
 	cfg, err := config.Load(env.cfgFile)
 	if err != nil {
@@ -4014,28 +3584,12 @@ func TestGeneratedCommandUsesPathItemParameters(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/tenants/{tenant}/items": {
-      "parameters": [
-        {
-          "name": "tenant",
-          "in": "path",
-          "required": true,
-          "schema": {"type": "string"},
-          "description": "Tenant name"
-        }
-      ],
-      "get": {
-        "operationId": "listTenantItems",
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Test API", openAPIPaths(
+			fmt.Sprintf(`%q:{%s,"get":{"operationId":"listTenantItems","responses":{"200":{"description":"OK"}}}}`,
+				"/tenants/{tenant}/items",
+				openAPIParams(openAPIParam("tenant", "path", true, `{"type":"string"}`, `"description":"Tenant name"`)),
+			),
+		))
 	})
 
 	c := env.newCLI()
@@ -4058,28 +3612,9 @@ func TestGeneratedCommandRequiredHeaderIsRequiredArgument(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/secure": {
-      "get": {
-        "operationId": "getSecure",
-        "parameters": [
-          {
-            "name": "X-Auth",
-            "in": "header",
-            "required": true,
-            "schema": {"type": "string"},
-            "description": "Auth token"
-          }
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/secure", "getSecure",
+			openAPIParams(openAPIParam("X-Auth", "header", true, `{"type":"string"}`, `"description":"Auth token"`)),
+		)
 	})
 
 	c1 := env.newCLI()
@@ -4159,22 +3694,9 @@ func TestGeneratedCommandRequiredQueryIsRequiredArgument(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/reports": {
-      "get": {
-        "operationId": "listReports",
-        "parameters": [
-          {"name": "account", "in": "query", "required": true, "schema": {"type": "string"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/reports", "listReports",
+			openAPIParams(openAPIParam("account", "query", true, `{"type":"string"}`)),
+		)
 	})
 
 	c1 := env.newCLI()
@@ -4292,24 +3814,11 @@ func TestGeneratedCommandRequiredNegativeNumberArgument(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/v1/forecast": {
-      "get": {
-        "operationId": "get-v1-forecast",
-        "parameters": [
-          {"name": "latitude", "in": "query", "required": true, "schema": {"type": "number"}},
-          {"name": "longitude", "in": "query", "required": true, "schema": {"type": "number"}},
-          {"name": "current_weather", "in": "query", "schema": {"type": "boolean"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/v1/forecast", "get-v1-forecast", openAPIParams(
+			openAPIParam("latitude", "query", true, `{"type":"number"}`),
+			openAPIParam("longitude", "query", true, `{"type":"number"}`),
+			openAPIParam("current_weather", "query", false, `{"type":"boolean"}`),
+		))
 	})
 
 	c := env.newCLI()
@@ -4344,22 +3853,9 @@ func TestGeneratedCommandRequiredCookieIsRequiredArgument(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/session": {
-      "get": {
-        "operationId": "getSession",
-        "parameters": [
-          {"name": "session", "in": "cookie", "required": true, "schema": {"type": "string"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/session", "getSession",
+			openAPIParams(openAPIParam("session", "cookie", true, `{"type":"string"}`)),
+		)
 	})
 
 	c1 := env.newCLI()
@@ -4388,23 +3884,10 @@ func TestGeneratedCommandSameNamePathAndQueryParams(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Test API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "paths": {
-    "/items/{id}": {
-      "get": {
-        "operationId": "getItem",
-        "parameters": [
-          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
-          {"name": "id", "in": "query", "schema": {"type": "string"}}
-        ],
-        "responses": {"200": {"description": "OK"}}
-      }
-    }
-  }
-}`, baseURL)
+		return openAPIGetOperationSpec(baseURL, "Test API", "/items/{id}", "getItem", openAPIParams(
+			openAPIParam("id", "path", true, `{"type":"string"}`),
+			openAPIParam("id", "query", false, `{"type":"string"}`),
+		))
 	})
 
 	c := env.newCLI()

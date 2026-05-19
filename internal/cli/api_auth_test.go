@@ -16,22 +16,11 @@ import (
 )
 
 func TestAPIAuthListAddRemove(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {}
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", &config.ProfileConfig{}))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "add", "myapi", "PartnerKey"}); err != nil {
-		t.Fatalf("api auth add: %v", err)
-	}
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "add", "myapi", "PartnerKey")
 	written, err := config.Load(cfgFile)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -40,17 +29,11 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 		t.Fatal("expected PartnerKey credential")
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "list", "myapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
-	}
-	if !strings.Contains(out.String(), "PartnerKey") {
-		t.Fatalf("expected PartnerKey in list output, got %q", out.String())
-	}
+	app.Stdout.Reset()
+	app.Run("api", "auth", "list", "myapi")
+	requireContains(t, app.Stdout.String(), "PartnerKey")
 
-	if err := c.Run([]string{"restish", "api", "auth", "remove", "myapi", "PartnerKey"}); err != nil {
-		t.Fatalf("api auth remove: %v", err)
-	}
+	app.Run("api", "auth", "remove", "myapi", "PartnerKey")
 	written, err = config.Load(cfgFile)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -61,29 +44,13 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 }
 
 func TestAPIAuthListJSONOutput(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {
-              "auth": {"type": "api-key", "params": {"in": "header", "name": "X-Partner-Key", "value": "secret"}},
-              "satisfies": ["items:read"]
-            }
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret"), "items:read"),
+	})))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "list", "myapi", "-o", "json"}); err != nil {
-		t.Fatalf("api auth list -o json: %v", err)
-	}
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "list", "myapi", "-o", "json")
 	var got struct {
 		API                        string `json:"api"`
 		Profile                    string `json:"profile"`
@@ -95,8 +62,8 @@ func TestAPIAuthListJSONOutput(t *testing.T) {
 			Satisfies []string `json:"satisfies"`
 		} `json:"credentials"`
 	}
-	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
-		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	if err := json.Unmarshal(app.Stdout.Bytes(), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, app.Stdout.String())
 	}
 	if got.API != "myapi" || got.Profile != "default" || got.ProfileAuth != "none" || got.OperationMetadataAvailable {
 		t.Fatalf("auth list JSON = %#v", got)
@@ -110,22 +77,11 @@ func TestAPIAuthListJSONOutput(t *testing.T) {
 }
 
 func TestAPIAuthInspectRejectsResponseTransformFlags(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "auth": {"type": "api-key", "params": {"in": "header", "name": "X-API-Key", "value": "secret"}}
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileAuth(apiKeyAuth("header", "X-API-Key", "secret"))))
 
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "-o", "json"})
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "inspect", "myapi", "-o", "json")
 	if err == nil {
 		t.Fatal("expected api auth inspect -o json to fail")
 	}
@@ -135,24 +91,13 @@ func TestAPIAuthInspectRejectsResponseTransformFlags(t *testing.T) {
 }
 
 func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {}
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": {},
+	})))
 
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	err := c.Run([]string{"restish", "api", "auth", "remove", "myapi", "Missing"})
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "remove", "myapi", "Missing")
 	if err == nil {
 		t.Fatal("expected missing credential removal to fail")
 	}
@@ -169,20 +114,9 @@ func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
 }
 
 func TestAPIAuthConcurrentAddsPreserveCredentials(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "Existing": {}
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"Existing": {},
+	})))
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 2)
@@ -191,9 +125,9 @@ func TestAPIAuthConcurrentAddsPreserveCredentials(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c, _, _ := newTestCLI(t)
-			c.Hooks().ConfigPath = cfgFile
-			errCh <- c.Run([]string{"restish", "api", "auth", "add", "myapi", credentialID})
+			app := newTestApp(t)
+			app.SetConfigPath(cfgFile)
+			errCh <- app.RunErr("api", "auth", "add", "myapi", credentialID)
 		}()
 	}
 	wg.Wait()
@@ -217,90 +151,49 @@ func TestAPIAuthConcurrentAddsPreserveCredentials(t *testing.T) {
 }
 
 func TestAPIAuthInspectCredentialAPIKey(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {
-              "auth": {
-                "type": "api-key",
-                "params": {"in": "header", "name": "X-Partner-Key", "value": "secret"}
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+	})))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey"}); err != nil {
-		t.Fatalf("api auth inspect: %v", err)
-	}
-	got := out.String()
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey")
+	got := app.Stdout.String()
 	if !strings.Contains(got, "X-Partner-Key: secret") {
 		t.Fatalf("expected API key inspection to show value, got %q", got)
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact"}); err != nil {
-		t.Fatalf("api auth inspect --redact: %v", err)
-	}
-	got = out.String()
+	app.Stdout.Reset()
+	app.Run("api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact")
+	got = app.Stdout.String()
 	if strings.Contains(got, "secret") || !strings.Contains(got, "X-Partner-Key: <redacted>") {
 		t.Fatalf("expected redacted API key inspection with --redact, got %q", got)
 	}
 }
 
 func TestAPIAuthInspectCredentialAPIKeyQuery(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {
-              "auth": {
-                "type": "api-key",
-                "params": {"in": "query", "name": "partner", "value": "secret"}
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("query", "partner", "secret")),
+	})))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey"}); err != nil {
-		t.Fatalf("api auth inspect: %v", err)
-	}
-	got := out.String()
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey")
+	got := app.Stdout.String()
 	if !strings.Contains(got, "Query: http://example.com?partner=secret") {
 		t.Fatalf("expected API key query inspection to show value, got %q", got)
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact"}); err != nil {
-		t.Fatalf("api auth inspect --redact: %v", err)
-	}
-	got = out.String()
+	app.Stdout.Reset()
+	app.Run("api", "auth", "inspect", "myapi", "--rsh-credential", "PartnerKey", "--redact")
+	got = app.Stdout.String()
 	if strings.Contains(got, "secret") || !strings.Contains(got, "Query: http://example.com?partner=%3Credacted%3E") {
 		t.Fatalf("expected redacted API key query inspection with --redact, got %q", got)
 	}
 }
 
 func TestAPIAuthInspectURLSuggestsV2Form(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	err := c.Run([]string{"restish", "api", "auth", "inspect", "https://api.example.com/items"})
+	err := newTestApp(t).RunErr("api", "auth", "inspect", "https://api.example.com/items")
 	if err == nil {
 		t.Fatal("expected URL argument error")
 	}
@@ -310,32 +203,14 @@ func TestAPIAuthInspectURLSuggestsV2Form(t *testing.T) {
 }
 
 func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {
-              "auth": {
-                "type": "api-key",
-                "params": {"in": "header", "name": "X-Partner-Key", "value": "secret"}
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+	})))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi"}); err != nil {
-		t.Fatalf("api auth inspect: %v", err)
-	}
-	got := out.String()
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "inspect", "myapi")
+	got := app.Stdout.String()
 	if !strings.Contains(got, "Credential: PartnerKey") {
 		t.Fatalf("expected selected credential in output, got %q", got)
 	}
@@ -343,92 +218,53 @@ func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 		t.Fatalf("expected API key inspection to show value, got %q", got)
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "header", "myapi", "X-Partner-Key"}); err != nil {
-		t.Fatalf("api auth header: %v", err)
-	}
-	if got := strings.TrimSpace(out.String()); got != "secret" {
+	app.Stdout.Reset()
+	app.Run("api", "auth", "header", "myapi", "X-Partner-Key")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
 		t.Fatalf("header = %q, want secret", got)
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "header", "myapi", "X-Partner-Key", "PartnerKey"}); err != nil {
-		t.Fatalf("api auth header with positional credential: %v", err)
-	}
-	if got := strings.TrimSpace(out.String()); got != "secret" {
+	app.Stdout.Reset()
+	app.Run("api", "auth", "header", "myapi", "X-Partner-Key", "PartnerKey")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
 		t.Fatalf("header with positional credential = %q, want secret", got)
 	}
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--raw-header", "X-Partner-Key"}); err != nil {
-		t.Fatalf("api auth inspect raw header: %v", err)
-	}
-	if got := strings.TrimSpace(out.String()); got != "secret" {
+	app.Stdout.Reset()
+	app.Run("api", "auth", "inspect", "myapi", "--raw-header", "X-Partner-Key")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
 		t.Fatalf("raw header compatibility = %q, want secret", got)
 	}
 }
 
 func TestAPIAuthInspectMultipleCredentialsShowsAll(t *testing.T) {
-	cfgFile := writeAPIConfig(t, `{
-  "apis": {
-    "myapi": {
-      "base_url": "https://api.example.com",
-      "profiles": {
-        "default": {
-          "credentials": {
-            "PartnerKey": {
-              "auth": {
-                "type": "api-key",
-                "params": {"in": "header", "name": "X-Partner-Key", "value": "secret"}
-              }
-            },
-            "UserBearer": {
-              "auth": {
-                "type": "bearer",
-                "params": {"token": "user-token"}
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}`)
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+		"UserBearer": testCredential(bearerAuth("user-token")),
+	})))
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = cfgFile
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi"}); err != nil {
-		t.Fatalf("api auth inspect: %v", err)
-	}
-	got := out.String()
-	for _, want := range []string{
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "inspect", "myapi")
+	got := app.Stdout.String()
+	requireContains(t, got,
 		"Credential: PartnerKey",
 		"Auth type: api-key",
 		"X-Partner-Key: secret",
 		"Credential: UserBearer",
 		"Auth type: bearer",
 		"Authorization: Bearer user-token",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("inspect output missing %q:\n%s", want, got)
-		}
-	}
+	)
 
-	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--redact"}); err != nil {
-		t.Fatalf("api auth inspect --redact: %v", err)
-	}
-	got = out.String()
-	for _, want := range []string{
+	app.Stdout.Reset()
+	app.Run("api", "auth", "inspect", "myapi", "--redact")
+	got = app.Stdout.String()
+	requireContains(t, got,
 		"Credential: PartnerKey",
 		"X-Partner-Key: <redacted>",
 		"Credential: UserBearer",
 		"Authorization: <redacted>",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("redacted inspect output missing %q:\n%s", want, got)
-		}
-	}
+	)
 	if strings.Contains(got, "secret") || strings.Contains(got, "user-token") {
 		t.Fatalf("redacted inspect output leaked secret:\n%s", got)
 	}
@@ -438,49 +274,25 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "UserOAuth": {"type": "oauth2", "flows": {"authorizationCode": {"authorizationUrl": "https://auth.example.com/authorize", "tokenUrl": "https://auth.example.com/token", "scopes": {"items:read": "Read items"}}}},
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"},
-      "OldKey": {"type": "apiKey", "in": "header", "name": "X-Old-Key", "deprecated": true},
-      "MutualTLS": {"type": "mutualTLS"},
-      "urn:example:auth:TenantKey": {"type": "apiKey", "in": "header", "name": "X-Tenant-Key"}
-    }
-  },
-  "security": [{"UserOAuth": ["items:read"]}],
-  "paths": {
-    "/items": {"get": {"operationId": "listItems", "responses": {"200": {"description": "OK"}}}},
-    "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}},
-    "/old": {"get": {"operationId": "oldReport", "security": [{"OldKey": []}], "responses": {"200": {"description": "OK"}}}},
-    "/mtls": {"get": {"operationId": "mtlsReport", "security": [{"MutualTLS": []}], "responses": {"200": {"description": "OK"}}}},
-    "/ghost": {"get": {"operationId": "ghostReport", "security": [{"GhostAuth": []}], "responses": {"200": {"description": "OK"}}}},
-    "/tenant": {"get": {"operationId": "tenantReport", "security": [{"urn:example:auth:TenantKey": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(
+				`"UserOAuth":{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"https://auth.example.com/authorize","tokenUrl":"https://auth.example.com/token","scopes":{"items:read":"Read items"}}}}`,
+				`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`,
+				`"OldKey":{"type":"apiKey","in":"header","name":"X-Old-Key","deprecated":true}`,
+				`"MutualTLS":{"type":"mutualTLS"}`,
+				`"urn:example:auth:TenantKey":{"type":"apiKey","in":"header","name":"X-Tenant-Key"}`),
+			openAPISecurity(`{"UserOAuth":["items:read"]}`),
+			openAPIPaths(
+				openAPIGet("/items", "listItems"),
+				openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`),
+				openAPIGet("/old", "oldReport", `"security":[{"OldKey":[]}]`),
+				openAPIGet("/mtls", "mtlsReport", `"security":[{"MutualTLS":[]}]`),
+				openAPIGet("/ghost", "ghostReport", `"security":[{"GhostAuth":[]}]`),
+				openAPIGet("/tenant", "tenantReport", `"security":[{"urn:example:auth:TenantKey":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Credentials: map[string]*config.CredentialConfig{
-						"UserOAuth": {
-							Auth:      &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "user-token"}},
-							Satisfies: []string{"items:read"},
-						},
-					},
-				},
-			},
-		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"UserOAuth": testCredential(bearerAuth("user-token"), "items:read"),
+	})))
 	if err := os.Chmod(env.cfgFile, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -495,7 +307,7 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 		t.Fatalf("api auth list loaded spec via loader %d times; want cached operation metadata only", got)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Callable secured operations: 1/6",
 		"UserOAuth: configured, needs items:read, satisfies items:read",
 		"PartnerKey: missing",
@@ -503,11 +315,7 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 		"MutualTLS: missing, 1 operation",
 		"GhostAuth: missing, unsupported unknown, undeclared security scheme",
 		"urn:example:auth:TenantKey: missing, URI-backed",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
@@ -515,114 +323,61 @@ func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "BearerAuth": {"type": "http", "scheme": "bearer"},
-      "InferenceBearer": {"type": "http", "scheme": "bearer"},
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
-    }
-  },
-  "paths": {
-    "/me": {"get": {"operationId": "me", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "OK"}}}},
-    "/models": {"get": {"operationId": "models", "security": [{"InferenceBearer": []}], "responses": {"200": {"description": "OK"}}}},
-    "/partner": {"get": {"operationId": "partner", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(
+				`"BearerAuth":{"type":"http","scheme":"bearer"}`,
+				`"InferenceBearer":{"type":"http","scheme":"bearer"}`,
+				`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(
+				openAPIGet("/me", "me", `"security":[{"BearerAuth":[]}]`),
+				openAPIGet("/models", "models", `"security":[{"InferenceBearer":[]}]`),
+				openAPIGet("/partner", "partner", `"security":[{"PartnerKey":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "env:READY_TOKEN"}},
-					Credentials: map[string]*config.CredentialConfig{
-						"BearerAuth": {
-							Auth: &config.AuthConfig{Type: "bearer", Params: map[string]string{"token": "env:MISSING_TOKEN"}},
-						},
-					},
-				},
-			},
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: bearerAuth("env:READY_TOKEN"),
+		Credentials: map[string]*config.CredentialConfig{
+			"BearerAuth": testCredential(bearerAuth("env:MISSING_TOKEN")),
 		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	c, out := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
 		t.Fatalf("api auth list: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Profile auth: configured",
 		"Callable secured operations: 3/3",
 		"BearerAuth: configured (env missing: MISSING_TOKEN)",
 		"InferenceBearer: missing, satisfied by profile auth fallback",
 		"PartnerKey: missing, satisfied by profile auth fallback (unchecked auth kind)",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthListCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Optional Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "ApiKey": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
-    }
-  },
-  "security": [{}, {"ApiKey": []}],
-  "paths": {
-    "/optional": {"get": {"operationId": "optional", "responses": {"200": {"description": "OK"}}}},
-    "/required": {"get": {"operationId": "required", "security": [{"ApiKey": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Optional Auth API",
+			openAPISecuritySchemes(`"ApiKey":{"type":"apiKey","in":"header","name":"X-API-Key"}`),
+			openAPISecurity(`{}`, `{"ApiKey":[]}`),
+			openAPIPaths(
+				openAPIGet("/optional", "optional"),
+				openAPIGet("/required", "required", `"security":[{"ApiKey":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Credentials: map[string]*config.CredentialConfig{
-						"ApiKey": {
-							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:MISSING_API_KEY"}},
-						},
-					},
-				},
-			},
-		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"ApiKey": testCredential(apiKeyAuth("header", "X-API-Key", "env:MISSING_API_KEY")),
+	})))
 
 	c, out := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
 		t.Fatalf("api auth list: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Callable secured operations: 1/2",
 		"ApiKey: configured (env missing: MISSING_API_KEY), 2 operations",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *testing.T) {
@@ -656,30 +411,14 @@ func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *t
   }
 }`, baseURL)
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Credentials: map[string]*config.CredentialConfig{
-						"OAuth": {
-							Auth: &config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
-								"client_id":     "client",
-								"authorize_url": "https://auth.example.com/authorize",
-								"token_url":     "https://auth.example.com/token",
-								"scopes":        "read:profile",
-							}},
-							Satisfies: []string{"read:profile"},
-						},
-					},
-				},
-			},
-		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"OAuth": testCredential(&config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
+			"client_id":     "client",
+			"authorize_url": "https://auth.example.com/authorize",
+			"token_url":     "https://auth.example.com/token",
+			"scopes":        "read:profile",
+		}}, "read:profile"),
+	})))
 	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
 
 	c, out := env.newCaptureCLI()
@@ -688,14 +427,10 @@ func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *t
 		t.Fatalf("api auth list: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Callable secured operations: 0/2",
 		"OAuth: configured (OAuth access token not cached), needs read:profile read:recovery, satisfies read:profile",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output missing %q:\n%s", want, got)
-		}
-	}
+	)
 
 	if err := auth.NewTokenCache(tokenPath).Set("tapi:default:credential:OAuth", auth.CachedToken{
 		AccessToken: "cached-token",
@@ -709,141 +444,74 @@ func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *t
 		t.Fatalf("api auth list with token: %v", err)
 	}
 	got = out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Callable secured operations: 1/2",
 		"OAuth: configured, needs read:profile read:recovery, satisfies read:profile",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output with token missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthInspectOperationLabelsProfileFallbackSource(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "InferenceBearer": {"type": "http", "scheme": "bearer"}
-    }
-  },
-  "paths": {
-    "/models": {"get": {"operationId": "listModels", "security": [{"InferenceBearer": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"InferenceBearer":{"type":"http","scheme":"bearer"}`),
+			openAPIPaths(openAPIGet("/models", "listModels", `"security":[{"InferenceBearer":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Auth: &config.AuthConfig{Type: "http-basic", Params: map[string]string{"username": "u", "password": "p"}},
-				},
-			},
-		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileAuth(basicAuth("u", "p"))))
 
 	c, out := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "list-models"}); err != nil {
 		t.Fatalf("api auth inspect operation: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Operation: listModels",
 		"Credentials: InferenceBearer",
 		"Source: profile auth fallback",
 		"Auth type: http-basic",
 		"Authorization: Basic dTpw",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("inspect output missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthListUsesImplicitDefaultProfile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
-    }
-  },
-  "security": [{"PartnerKey": []}],
-  "paths": {
-    "/partner": {"get": {"operationId": "partnerReport", "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPISecurity(`{"PartnerKey":[]}`),
+			openAPIPaths(openAPIGet("/partner", "partnerReport")))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {BaseURL: baseURL},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, &config.APIConfig{BaseURL: env.baseURL(t)})
 
 	c, out := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
 		t.Fatalf("api auth list: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Profile: default",
 		"Profile auth: none",
 		"Credentials: none",
 		"PartnerKey: missing",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("list output missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestAPIAuthAddDerivesAuthAndPromptsFromCachedSpec(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
-    }
-  },
-  "paths": {
-    "/partner": {"get": {"operationId": "partnerReport", "security": [{"PartnerKey": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {},
-			},
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL: env.baseURL(t),
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {},
 		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	})
 	if err := os.Chmod(env.cfgFile, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -934,43 +602,19 @@ func TestAPIAuthInspectAnonymousOnlyOperationSuppressesProfileAuth(t *testing.T)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Anonymous API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
-    }
-  },
-  "security": [{}],
-  "paths": {
-    "/public": {"get": {"operationId": "publicReport", "responses": {"200": {"description": "OK"}}}},
-    "/private": {"get": {"operationId": "privateReport", "security": [{"ApiKeyAuth": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Anonymous API",
+			openAPISecuritySchemes(`"ApiKeyAuth":{"type":"apiKey","in":"header","name":"X-API-Key"}`),
+			openAPISecurity(`{}`),
+			openAPIPaths(
+				openAPIGet("/public", "publicReport"),
+				openAPIGet("/private", "privateReport", `"security":[{"ApiKeyAuth":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"tapi": {
-				BaseURL: baseURL,
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {
-						Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Profile-Key", "value": "env:MISSING_PROFILE_KEY"}},
-						Credentials: map[string]*config.CredentialConfig{
-							"ApiKeyAuth": {
-								Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-API-Key", "value": "env:MISSING_PROFILE_KEY"}},
-							},
-						},
-					},
-				},
-			},
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: apiKeyAuth("header", "X-Profile-Key", "env:MISSING_PROFILE_KEY"),
+		Credentials: map[string]*config.CredentialConfig{
+			"ApiKeyAuth": testCredential(apiKeyAuth("header", "X-API-Key", "env:MISSING_PROFILE_KEY")),
 		},
-	})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	c, out := env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "public-report"}); err != nil {
@@ -992,42 +636,16 @@ func TestAPIAuthInspectOperationCombinedCredentials(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
-		return fmt.Sprintf(`{
-  "openapi": "3.1.0",
-  "info": {"title": "Auth API", "version": "1.0"},
-  "servers": [{"url": %q}],
-  "components": {
-    "securitySchemes": {
-      "UserKey": {"type": "apiKey", "in": "header", "name": "X-User-Key"},
-      "PartnerKey": {"type": "apiKey", "in": "header", "name": "X-Partner-Key"}
-    }
-  },
-  "paths": {
-    "/signed": {"get": {"operationId": "signedReport", "security": [{"UserKey": [], "PartnerKey": []}], "responses": {"200": {"description": "OK"}}}}
-  }
-}`, baseURL)
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(
+				`"UserKey":{"type":"apiKey","in":"header","name":"X-User-Key"}`,
+				`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(openAPIGet("/signed", "signedReport", `"security":[{"UserKey":[],"PartnerKey":[]}]`)))
 	})
-	baseURL := readBaseURLFromConfig(t, env.cfgFile)
-	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
-		"tapi": {
-			BaseURL: baseURL,
-			Profiles: map[string]*config.ProfileConfig{
-				"default": {
-					Credentials: map[string]*config.CredentialConfig{
-						"UserKey": {
-							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-User-Key", "value": "user-secret"}},
-						},
-						"PartnerKey": {
-							Auth: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "partner-secret"}},
-						},
-					},
-				},
-			},
-		},
-	}})
-	if err := os.WriteFile(env.cfgFile, cfgData, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"UserKey":    testCredential(apiKeyAuth("header", "X-User-Key", "user-secret")),
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "partner-secret")),
+	})))
 	if err := os.Chmod(env.cfgFile, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1037,30 +655,22 @@ func TestAPIAuthInspectOperationCombinedCredentials(t *testing.T) {
 		t.Fatalf("api auth inspect operation: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"Operation: signedReport",
 		"Credentials: UserKey, PartnerKey",
 		"X-User-Key: user-secret",
 		"X-Partner-Key: partner-secret",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("inspect output missing %q:\n%s", want, got)
-		}
-	}
+	)
 
 	out.Reset()
 	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--rsh-operation", "signedReport", "--redact"}); err != nil {
 		t.Fatalf("api auth inspect redacted operation: %v", err)
 	}
 	got = out.String()
-	for _, want := range []string{
+	requireContains(t, got,
 		"X-User-Key: <redacted>",
 		"X-Partner-Key: <redacted>",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("redacted inspect output missing %q:\n%s", want, got)
-		}
-	}
+	)
 	if strings.Contains(got, "user-secret") || strings.Contains(got, "partner-secret") {
 		t.Fatalf("redacted inspect output leaked secret:\n%s", got)
 	}

@@ -11,6 +11,22 @@ import (
 	"testing"
 )
 
+func newCacheApp(t *testing.T, cacheDir string) *testApp {
+	t.Helper()
+	app := newTestApp(t)
+	app.CLI.Hooks().CachePath = cacheDir
+	return app
+}
+
+func writeCacheConfig(t *testing.T, cfg map[string]any) string {
+	t.Helper()
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	return writeAPIConfig(t, string(data))
+}
+
 // newCacheableServer starts a test server that counts how many times it is
 // called and responds with a cacheable JSON body.
 func newCacheableServer(t *testing.T, hits *atomic.Int32) *httptest.Server {
@@ -33,23 +49,13 @@ func TestCacheSecondRequestServedFromCache(t *testing.T) {
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
 
-	c1, out1, _ := newTestCLI(t)
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("first request failed: %v", err)
-	}
-	if !strings.Contains(out1.String(), "ok") {
-		t.Errorf("expected body in first response, got: %q", out1.String())
-	}
+	first := newCacheApp(t, cacheDir)
+	first.Run("get", srv.URL)
+	requireContains(t, first.Stdout.String(), "ok")
 
-	c2, out2, _ := newTestCLI(t)
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("second request failed: %v", err)
-	}
-	if !strings.Contains(out2.String(), "ok") {
-		t.Errorf("expected body in second response, got: %q", out2.String())
-	}
+	second := newCacheApp(t, cacheDir)
+	second.Run("get", srv.URL)
+	requireContains(t, second.Stdout.String(), "ok")
 
 	if n := hits.Load(); n != 1 {
 		t.Errorf("expected server to be called once, got %d calls", n)
@@ -60,8 +66,7 @@ func TestCacheAuthenticatedProfileRequestUsesProfileNamespace(t *testing.T) {
 	var hits atomic.Int32
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
-	cfgFile := t.TempDir() + "/restish.json"
-	cfgData, _ := json.Marshal(map[string]any{
+	cfgFile := writeCacheConfig(t, map[string]any{
 		"apis": map[string]any{
 			"svc": map[string]any{
 				"base_url": srv.URL,
@@ -73,17 +78,11 @@ func TestCacheAuthenticatedProfileRequestUsesProfileNamespace(t *testing.T) {
 			},
 		},
 	})
-	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 
-	for i := range 2 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().ConfigPath = cfgFile
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", "svc/items"}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 2 {
+		app := newCacheApp(t, cacheDir)
+		app.SetConfigPath(cfgFile)
+		app.Run("get", "svc/items")
 	}
 
 	if n := hits.Load(); n != 1 {
@@ -106,35 +105,21 @@ func TestCacheExplicitAuthorizationHeaderBypassesAPINamespaceCache(t *testing.T)
 	t.Cleanup(srv.Close)
 
 	cacheDir := t.TempDir()
-	cfgFile := t.TempDir() + "/restish.json"
-	cfgData, _ := json.Marshal(map[string]any{
+	cfgFile := writeCacheConfig(t, map[string]any{
 		"apis": map[string]any{
 			"svc": map[string]any{"base_url": srv.URL},
 		},
 	})
-	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 
-	c1, out1, _ := newTestCLI(t)
-	c1.Hooks().ConfigPath = cfgFile
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", "svc/items"}); err != nil {
-		t.Fatalf("anonymous request failed: %v", err)
-	}
-	if !strings.Contains(out1.String(), "anonymous") {
-		t.Fatalf("anonymous response = %q", out1.String())
-	}
+	anonymous := newCacheApp(t, cacheDir)
+	anonymous.SetConfigPath(cfgFile)
+	anonymous.Run("get", "svc/items")
+	requireContains(t, anonymous.Stdout.String(), "anonymous")
 
-	c2, out2, _ := newTestCLI(t)
-	c2.Hooks().ConfigPath = cfgFile
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "get", "-H", "Authorization: Bearer secret", "svc/items"}); err != nil {
-		t.Fatalf("authorized request failed: %v", err)
-	}
-	if !strings.Contains(out2.String(), "auth") {
-		t.Fatalf("authorized response = %q", out2.String())
-	}
+	authorized := newCacheApp(t, cacheDir)
+	authorized.SetConfigPath(cfgFile)
+	authorized.Run("get", "-H", "Authorization: Bearer secret", "svc/items")
+	requireContains(t, authorized.Stdout.String(), "auth")
 
 	if n := hits.Load(); n != 2 {
 		t.Fatalf("authorized request should bypass anonymous API cache entry, got %d server hits", n)
@@ -146,12 +131,8 @@ func TestCacheCredentialQueryBypassesCache(t *testing.T) {
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
 
-	for i := range 2 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", srv.URL + "?api_key=secret&view=summary"}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 2 {
+		newCacheApp(t, cacheDir).Run("get", srv.URL+"?api_key=secret&view=summary")
 	}
 
 	if n := hits.Load(); n != 2 {
@@ -163,8 +144,7 @@ func TestCacheProfileCredentialQueryUsesProfileNamespace(t *testing.T) {
 	var hits atomic.Int32
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
-	cfgFile := t.TempDir() + "/restish.json"
-	cfgData, _ := json.Marshal(map[string]any{
+	cfgFile := writeCacheConfig(t, map[string]any{
 		"apis": map[string]any{
 			"svc": map[string]any{
 				"base_url": srv.URL,
@@ -176,17 +156,11 @@ func TestCacheProfileCredentialQueryUsesProfileNamespace(t *testing.T) {
 			},
 		},
 	})
-	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 
-	for i := range 2 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().ConfigPath = cfgFile
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", "svc/items"}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 2 {
+		app := newCacheApp(t, cacheDir)
+		app.SetConfigPath(cfgFile)
+		app.Run("get", "svc/items")
 	}
 
 	if n := hits.Load(); n != 1 {
@@ -201,12 +175,8 @@ func TestCacheNoCacheBypassesCache(t *testing.T) {
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
 
-	for i := range 3 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", "--rsh-no-cache", srv.URL}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 3 {
+		newCacheApp(t, cacheDir).Run("get", "--rsh-no-cache", srv.URL)
 	}
 
 	if n := hits.Load(); n != 3 {
@@ -222,28 +192,15 @@ func TestCacheClearEmptiesCache(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	// Prime the cache.
-	c1, _, _ := newTestCLI(t)
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("prime request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 
 	// Clear the cache.
-	c2, out2, _ := newTestCLI(t)
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "cache", "clear"}); err != nil {
-		t.Fatalf("cache clear failed: %v", err)
-	}
-	if !strings.Contains(out2.String(), "cleared") {
-		t.Errorf("expected cleared message, got: %q", out2.String())
-	}
+	clear := newCacheApp(t, cacheDir)
+	clear.Run("cache", "clear")
+	requireContains(t, clear.Stdout.String(), "cleared")
 
 	// Next request should hit the server again (cache is empty).
-	c3, _, _ := newTestCLI(t)
-	c3.Hooks().CachePath = cacheDir
-	if err := c3.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("post-clear request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 
 	if n := hits.Load(); n != 2 {
 		t.Errorf("expected 2 server hits (prime + post-clear), got %d", n)
@@ -263,26 +220,14 @@ func TestCacheClearPreservesSpecCache(t *testing.T) {
 		t.Fatalf("write spec cache: %v", err)
 	}
 
-	c1, _, _ := newTestCLI(t)
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("prime request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 
-	c2, _, _ := newTestCLI(t)
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "cache", "clear"}); err != nil {
-		t.Fatalf("cache clear failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("cache", "clear")
 	if _, err := os.Stat(specPath); err != nil {
 		t.Fatalf("cache clear should preserve spec metadata: %v", err)
 	}
 
-	c3, _, _ := newTestCLI(t)
-	c3.Hooks().CachePath = cacheDir
-	if err := c3.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("post-clear request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 	if got := hits.Load(); got != 2 {
 		t.Fatalf("expected response cache to be cleared, got %d server hits", got)
 	}
@@ -303,25 +248,18 @@ func TestCacheClearAPIDoesNotDeleteOtherAPIOnSameHost(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cacheDir := t.TempDir()
-	cfgFile := t.TempDir() + "/restish.json"
-	cfgData, _ := json.Marshal(map[string]any{
+	cfgFile := writeCacheConfig(t, map[string]any{
 		"apis": map[string]any{
 			"one": map[string]any{"base_url": srv.URL + "/one"},
 			"two": map[string]any{"base_url": srv.URL + "/two"},
 		},
 	})
-	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
 
 	run := func(args ...string) {
 		t.Helper()
-		c, _, _ := newTestCLI(t)
-		c.Hooks().ConfigPath = cfgFile
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run(append([]string{"restish"}, args...)); err != nil {
-			t.Fatalf("restish %v: %v", args, err)
-		}
+		app := newCacheApp(t, cacheDir)
+		app.SetConfigPath(cfgFile)
+		app.Run(args...)
 	}
 	run("get", "one")
 	run("get", "two")
@@ -338,10 +276,9 @@ func TestCacheClearAPIDoesNotDeleteOtherAPIOnSameHost(t *testing.T) {
 }
 
 func TestCacheClearAllIsAPINameNotAlias(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	c.Hooks().CachePath = t.TempDir()
-	err := c.Run([]string{"restish", "cache", "clear", "all"})
+	app := newCacheApp(t, t.TempDir())
+	app.FreshConfigPath()
+	err := app.RunErr("cache", "clear", "all")
 	if err == nil {
 		t.Fatal("expected cache clear all to require an API named all")
 	}
@@ -364,12 +301,8 @@ func TestCacheNoStoreNotCached(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cacheDir := t.TempDir()
-	for i := range 2 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 2 {
+		newCacheApp(t, cacheDir).Run("get", srv.URL)
 	}
 
 	if n := hits.Load(); n != 2 {
@@ -390,12 +323,8 @@ func TestCacheSensitiveResponseHeaderBypassesCache(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cacheDir := t.TempDir()
-	for i := range 2 {
-		c, _, _ := newTestCLI(t)
-		c.Hooks().CachePath = cacheDir
-		if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
-			t.Fatalf("request %d failed: %v", i+1, err)
-		}
+	for range 2 {
+		newCacheApp(t, cacheDir).Run("get", srv.URL)
 	}
 
 	if n := hits.Load(); n != 2 {
@@ -426,23 +355,11 @@ func TestCacheInfo(t *testing.T) {
 	cacheDir := t.TempDir()
 
 	// Prime the cache with one entry.
-	c1, _, _ := newTestCLI(t)
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("prime request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 
-	c2, out, _ := newTestCLI(t)
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "cache", "info"}); err != nil {
-		t.Fatalf("cache info failed: %v", err)
-	}
-	got := out.String()
-	for _, want := range []string{"Directory:", "Size:", "Entries:"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("cache info output missing %q:\n%s", want, got)
-		}
-	}
+	info := newCacheApp(t, cacheDir)
+	info.Run("cache", "info")
+	requireContains(t, info.Stdout.String(), "Directory:", "Size:", "Entries:")
 }
 
 func TestCacheInfoJSONOutput(t *testing.T) {
@@ -450,25 +367,18 @@ func TestCacheInfoJSONOutput(t *testing.T) {
 	srv := newCacheableServer(t, &hits)
 	cacheDir := t.TempDir()
 
-	c1, _, _ := newTestCLI(t)
-	c1.Hooks().CachePath = cacheDir
-	if err := c1.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("prime request failed: %v", err)
-	}
+	newCacheApp(t, cacheDir).Run("get", srv.URL)
 
-	c2, out, _ := newTestCLI(t)
-	c2.Hooks().CachePath = cacheDir
-	if err := c2.Run([]string{"restish", "cache", "info", "-o", "json"}); err != nil {
-		t.Fatalf("cache info -o json failed: %v", err)
-	}
+	info := newCacheApp(t, cacheDir)
+	info.Run("cache", "info", "-o", "json")
 	var got struct {
 		Directory string `json:"directory"`
 		SizeBytes int64  `json:"size_bytes"`
 		Size      string `json:"size"`
 		Entries   int    `json:"entries"`
 	}
-	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
-		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
+	if err := json.Unmarshal(info.Stdout.Bytes(), &got); err != nil {
+		t.Fatalf("parse JSON output: %v\n%s", err, info.Stdout.String())
 	}
 	if got.Directory != cacheDir || got.Entries == 0 || got.Size == "" || got.SizeBytes <= 0 {
 		t.Fatalf("cache info JSON = %#v", got)

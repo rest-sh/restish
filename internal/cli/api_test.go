@@ -17,28 +17,29 @@ func writeAPIConfig(t *testing.T, content string) string {
 		dir = configDir
 	}
 	path := filepath.Join(dir, "restish.json")
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-		t.Fatalf("writeAPIConfig: %v", err)
-	}
+	writeTestFile(t, path, content)
 	return path
+}
+
+func newAPIRecorderApp(t *testing.T, cfg string) (*testApp, *requestRecorder) {
+	t.Helper()
+	var rr requestRecorder
+	app := newTestApp(t)
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	app.SetConfigPath(writeAPIConfig(t, cfg))
+	return app, &rr
 }
 
 // TestAPIShortNameExpansion verifies that "myapi/items" is expanded to the
 // configured base URL before the request is sent.
 func TestAPIShortNameExpansion(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "myapi/items")
 	if got := rr.Last().URL.Path; got != "/items" {
 		t.Errorf("expected path /items, got %q", got)
 	}
@@ -47,19 +48,10 @@ func TestAPIShortNameExpansion(t *testing.T) {
 // TestAPIShortNameNoPath verifies that "myapi" (no trailing path) resolves to
 // the configured base URL root.
 func TestAPIShortNameNoPath(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "myapi"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("myapi")
 	if rr.Last() == nil {
 		t.Fatal("no request received")
 	}
@@ -68,21 +60,12 @@ func TestAPIShortNameNoPath(t *testing.T) {
 // TestUnknownAPINameFallback verifies that an unrecognized first segment is
 // treated as a plain URL (not a fatal error about an unknown API).
 func TestUnknownAPINameFallback(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	// Config has "myapi" but we request "otherapi/items"; fallback treats it as URL.
 	cfg := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
 	// Use a real URL so the fallback actually resolves somewhere.
-	if err := c.Run([]string{"restish", "get", "https://fallback.example.com/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "https://fallback.example.com/items")
 	if got := rr.Last().URL.Path; got != "/items" {
 		t.Errorf("expected path /items, got %q", got)
 	}
@@ -91,13 +74,6 @@ func TestUnknownAPINameFallback(t *testing.T) {
 // TestProfilePersistentHeader verifies that a header declared in the active
 // profile is included in every request to that API.
 func TestProfilePersistentHeader(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -110,24 +86,15 @@ func TestProfilePersistentHeader(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "myapi/items")
 	if got := rr.Last().Header.Get("X-Api-Key"); got != "secret" {
 		t.Errorf("expected X-Api-Key=secret, got %q", got)
 	}
 }
 
 func TestProfilePersistentHostHeader(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -140,11 +107,9 @@ func TestProfilePersistentHostHeader(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "myapi/items")
 	if got := rr.Last().Host; got != "tenant.example.com" {
 		t.Errorf("expected Host tenant.example.com, got %q", got)
 	}
@@ -153,13 +118,6 @@ func TestProfilePersistentHostHeader(t *testing.T) {
 // TestProfilePersistentQuery verifies that a query param declared in the
 // active profile is appended to every request.
 func TestProfilePersistentQuery(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -172,11 +130,9 @@ func TestProfilePersistentQuery(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "myapi/items")
 	if got := rr.Last().URL.Query().Get("version"); got != "2" {
 		t.Errorf("expected query version=2, got %q", got)
 	}
@@ -185,13 +141,6 @@ func TestProfilePersistentQuery(t *testing.T) {
 // TestProfileOverrideWithFlag verifies that -p selects a non-default profile,
 // using its base_url and headers.
 func TestProfileOverrideWithFlag(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -205,11 +154,9 @@ func TestProfileOverrideWithFlag(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "-p", "staging", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "-p", "staging", "myapi/items")
 	req := rr.Last()
 	if req == nil {
 		t.Fatal("no request received — base_url override may not have taken effect")
@@ -225,13 +172,6 @@ func TestProfileOverrideWithFlag(t *testing.T) {
 // TestProfileOverrideWithEnv verifies that RSH_PROFILE selects the profile
 // when the -p flag is not set.
 func TestProfileOverrideWithEnv(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -245,12 +185,10 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 	t.Setenv("RSH_PROFILE", "dev")
 
-	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "myapi/items")
 	req := rr.Last()
 	if req == nil {
 		t.Fatal("no request received")
@@ -263,13 +201,6 @@ func TestProfileOverrideWithEnv(t *testing.T) {
 // TestFlagHeaderTakesPrecedenceOverProfile verifies that a header supplied via
 // -H replaces the same header from the profile.
 func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
-	var rr requestRecorder
-	c, _, _ := newTestCLI(t)
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		rr.capture(r)
-		return jsonResponse(200, `{}`), nil
-	})
-
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -282,11 +213,9 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 			}
 		}
 	}`
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	app, rr := newAPIRecorderApp(t, cfg)
 
-	if err := c.Run([]string{"restish", "get", "-H", "X-Token: from-flag", "myapi/items"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	app.Run("get", "-H", "X-Token: from-flag", "myapi/items")
 	vals := rr.Last().Header.Values("X-Token")
 	if len(vals) != 1 || vals[0] != "from-flag" {
 		t.Fatalf("X-Token values = %#v, want [from-flag]", vals)

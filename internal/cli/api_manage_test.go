@@ -48,34 +48,7 @@ func TestAPIConnect(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    r,
-			}, nil
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specWithXCLIConfig("https://api.example.com"))
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -202,34 +175,7 @@ func TestAPIConnectPrimesGeneratedHelp(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = cacheDir
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    r,
-			}, nil
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specWithOperations("https://api.example.com"))),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specWithOperations("https://api.example.com"))
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -312,26 +258,7 @@ func TestAPIConnectReportsMutualTLSAsTransportAuth(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "mtls", "https://api.example.com", "--yes"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -708,22 +635,8 @@ func TestAPIConnectPreservesExistingProfilesByDefault(t *testing.T) {
 	c.Hooks().SpecCachePath = t.TempDir()
 
 	currentHeader := "Accept: application/json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    r,
-			}, nil
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+	useOpenAPISpecTransportFunc(c, func() string {
+		return fmt.Sprintf(`{
   "openapi": "3.1.0",
   "info": {"title": "Managed API", "version": "1.0"},
   "servers": [{"url": "https://api.example.com"}],
@@ -735,18 +648,7 @@ func TestAPIConnectPreservesExistingProfilesByDefault(t *testing.T) {
     }
   },
   "paths": {}
-}`, currentHeader))),
-				Request: r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
+}`, currentHeader)
 	})
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
@@ -774,22 +676,8 @@ func TestAPIConnectReplaceRefreshesProfiles(t *testing.T) {
 	c.Hooks().SpecCachePath = t.TempDir()
 
 	currentHeader := "Accept: application/json"
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    r,
-			}, nil
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+	useOpenAPISpecTransportFunc(c, func() string {
+		return fmt.Sprintf(`{
   "openapi": "3.1.0",
   "info": {"title": "Managed API", "version": "1.0"},
   "servers": [{"url": "https://api.example.com"}],
@@ -801,18 +689,7 @@ func TestAPIConnectReplaceRefreshesProfiles(t *testing.T) {
     }
   },
   "paths": {}
-}`, currentHeader))),
-				Request: r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
+}`, currentHeader)
 	})
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
@@ -869,26 +746,7 @@ func TestAPIConnectLegacyXCLIConfigPrompt(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("abc123\nacme\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -944,24 +802,7 @@ func TestAPIConnectRetriesInvalidXCLIPromptInput(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("\nqa\nprod\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -1013,24 +854,7 @@ func TestAPIConnectXCLIConfigCredentialPrompt(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("secret-key\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -1088,24 +912,7 @@ func TestAPIConnectV2ProfilePromptShape(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("tok-{org}\nacme\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -2217,26 +2024,7 @@ func TestAPIConnectSetupExpressions(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{
 		"restish", "api", "connect", "myapi", "api.example.com",
@@ -2283,26 +2071,7 @@ func TestAPIConnectFallbackAPIKeySetup(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{
 		"restish", "api", "connect", "myapi", "api.example.com",
@@ -2342,24 +2111,7 @@ func TestAPIConnectFallbackHTTPBasicPromptsCredentials(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("alice\nsecret\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -2408,24 +2160,7 @@ func TestAPIConnectFallbackMultiCredentialSetup(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("n\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{
 		"restish", "api", "connect", "myapi", "api.example.com",
@@ -2467,24 +2202,7 @@ func TestAPIConnectFallbackRejectsUnknownCredentialSetupPaths(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	err := c.Run([]string{
 		"restish", "api", "connect", "myapi", "api.example.com", "--yes",
@@ -2526,24 +2244,7 @@ func TestAPIConnectRejectsCredentialSetupWhenNoAuthSchemesConsumeIt(t *testing.T
 	c, _, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	err := c.Run([]string{
 		"restish", "api", "connect", "myapi", "api.example.com", "--yes",
@@ -2619,24 +2320,7 @@ func TestAPIConnectFallbackExplicitCredentialWithAnonymousDefault(t *testing.T) 
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{
 		"restish", "api", "connect", "optional", "api.example.com",
@@ -2699,24 +2383,7 @@ func TestAPIConnectAuthCoverageCountsEnvBackedCredentialsOnlyWhenEnvIsReady(t *t
 		c, out, _ := newTestCLI(t)
 		c.Hooks().ConfigPath = cfgFile
 		c.Hooks().SpecCachePath = t.TempDir()
-		useTransport(c, func(r *http.Request) (*http.Response, error) {
-			if r.URL.String() == "https://api.example.com/openapi.json" {
-				return &http.Response{
-					StatusCode: 200,
-					Proto:      "HTTP/1.1",
-					Header:     http.Header{"Content-Type": []string{"application/json"}},
-					Body:       io.NopCloser(strings.NewReader(specBody)),
-					Request:    r,
-				}, nil
-			}
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		})
+		useOpenAPISpecTransport(c, specBody)
 		if err := c.Run([]string{
 			"restish", "api", "connect", name, "api.example.com",
 			`prompt.credentials.sid.value:env:RESTISH_TEST_SID`,
@@ -2804,24 +2471,7 @@ func TestAPIConnectFallbackAuthDiscoveryFlow(t *testing.T) {
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	c.Hooks().PassReader = strings.NewReader("y\nuser-client\n\ny\nadmin-client\n\nn\n")
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		if r.URL.String() == "https://api.example.com/openapi.json" {
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specBody)),
-				Request:    r,
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 404,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{},
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    r,
-		}, nil
-	})
+	useOpenAPISpecTransport(c, specBody)
 
 	if err := c.Run([]string{"restish", "api", "connect", "example", "api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)
@@ -2891,34 +2541,7 @@ func TestAPIConnectPreservesJSONCComments(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
-	useTransport(c, func(r *http.Request) (*http.Response, error) {
-		switch r.URL.String() {
-		case "https://api.example.com":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    r,
-			}, nil
-		case "https://api.example.com/openapi.json":
-			return &http.Response{
-				StatusCode: 200,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
-				Request:    r,
-			}, nil
-		default:
-			return &http.Response{
-				StatusCode: 404,
-				Proto:      "HTTP/1.1",
-				Header:     http.Header{},
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Request:    r,
-			}, nil
-		}
-	})
+	useOpenAPISpecTransport(c, specWithXCLIConfig("https://api.example.com"))
 
 	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
 		t.Fatalf("api connect: %v", err)

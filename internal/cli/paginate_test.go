@@ -77,17 +77,26 @@ func useThreePageObjectTransport(c *cli.CLI) {
 	})
 }
 
+func runThreePages(t *testing.T, args ...string) *testApp {
+	t.Helper()
+	app := newTestApp(t)
+	useThreePageTransport(app.CLI)
+	app.Run(append([]string{"get", "https://api.example.com/items"}, args...)...)
+	return app
+}
+
+func runObjectPages(t *testing.T, args ...string) *testApp {
+	t.Helper()
+	app := newTestApp(t)
+	useThreePageObjectTransport(app.CLI)
+	app.Run(append([]string{"get", "https://api.example.com/items"}, args...)...)
+	return app
+}
+
 // TestPaginationThreePagesWithExplicitJSON verifies that automatic pagination
 // merges all pages into one valid JSON document when JSON output is requested.
 func TestPaginationThreePagesWithExplicitJSON(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runThreePages(t, "-o", "json").Stdout.String()
 	var values []int
 	if err := json.Unmarshal([]byte(got), &values); err != nil {
 		t.Fatalf("expected valid JSON array, got %q: %v", got, err)
@@ -100,17 +109,12 @@ func TestPaginationThreePagesWithExplicitJSON(t *testing.T) {
 }
 
 func TestPaginationDefaultRedirectPreservesFirstResponseBytes(t *testing.T) {
-	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got, want := out.String(), `[1,2,3]`; got != want {
+	app := runThreePages(t)
+	if got, want := app.Stdout.String(), `[1,2,3]`; got != want {
 		t.Fatalf("default redirected output = %q, want first response bytes %q", got, want)
 	}
-	if strings.Contains(errOut.String(), "pagination") {
-		t.Fatalf("default redirected raw output should not paginate, got stderr %q", errOut.String())
+	if strings.Contains(app.Stderr.String(), "pagination") {
+		t.Fatalf("default redirected raw output should not paginate, got stderr %q", app.Stderr.String())
 	}
 }
 
@@ -241,14 +245,7 @@ func TestPaginationBlocksHTTPSToHTTPDowngrade(t *testing.T) {
 // TestPaginationNoPaginate verifies that --rsh-no-paginate returns only the
 // first page.
 func TestPaginationNoPaginate(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-no-paginate"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runThreePages(t, "--rsh-no-paginate").Stdout.String()
 	// Should contain first page items.
 	for _, n := range []string{"1", "2", "3"} {
 		if !strings.Contains(got, n) {
@@ -326,15 +323,10 @@ func TestPaginationClearsOriginalQueryForAbsoluteNextURL(t *testing.T) {
 // TestPaginationMaxPages verifies that --rsh-max-pages 1 stops after one page
 // and emits a warning to stderr.
 func TestPaginationMaxPages(t *testing.T) {
-	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	app := runThreePages(t, "--rsh-max-pages", "1", "-o", "json")
 
 	// Only first page items.
-	got := out.String()
+	got := app.Stdout.String()
 	for _, n := range []string{"1", "2", "3"} {
 		if !strings.Contains(got, n) {
 			t.Errorf("expected item %s, got:\n%s", n, got)
@@ -348,36 +340,22 @@ func TestPaginationMaxPages(t *testing.T) {
 
 	// Warning must appear on stderr.
 	wantWarning := "pagination stopped at --rsh-max-pages=1; pass 0 for unlimited"
-	if !strings.Contains(errOut.String(), wantWarning) {
-		t.Errorf("expected max-pages warning %q on stderr, got: %q", wantWarning, errOut.String())
+	if !strings.Contains(app.Stderr.String(), wantWarning) {
+		t.Errorf("expected max-pages warning %q on stderr, got: %q", wantWarning, app.Stderr.String())
 	}
 }
 
 // TestPaginationCollect verifies that --rsh-collect + -f length returns the
 // total item count across all pages.
 func TestPaginationCollect(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-collect", "-f", ".body | length"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := strings.TrimSpace(out.String())
+	got := strings.TrimSpace(runThreePages(t, "--rsh-collect", "-f", ".body | length").Stdout.String())
 	if got != "9" {
 		t.Errorf("expected length 9, got: %q", got)
 	}
 }
 
 func TestPaginationStreamingYAMLOutputUsesFormatter(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "yaml"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runObjectPages(t, "-o", "yaml").Stdout.String()
 	for _, want := range []string{"id: 1", "id: 2", "id: 3", "id: 4"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output, got:\n%s", want, got)
@@ -389,14 +367,7 @@ func TestPaginationStreamingYAMLOutputUsesFormatter(t *testing.T) {
 }
 
 func TestPaginationNDJSONOutputStreamsRecords(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "ndjson"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := strings.TrimSpace(out.String())
+	got := strings.TrimSpace(runObjectPages(t, "-o", "ndjson").Stdout.String())
 	lines := strings.Split(got, "\n")
 	if len(lines) != 4 {
 		t.Fatalf("expected 4 NDJSON lines, got %d:\n%s", len(lines), got)
@@ -489,16 +460,12 @@ func TestPaginationDocumentPrintHeadersOnlyDoesNotFetchNextPage(t *testing.T) {
 }
 
 func TestPaginationStreamingPrintBodyOnlyOmitsPrettyFraming(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
-	useThreePageObjectTransport(c)
+	app := newTestApp(t)
+	app.SetStdoutTTY(true)
+	useThreePageObjectTransport(app.CLI)
+	app.Run("get", "https://api.example.com/items", "--rsh-print", "b")
 
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-print", "b"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := stripANSI(out.String())
+	got := stripANSI(app.Stdout.String())
 	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
 		t.Fatalf("body-only pagination output included response transcript:\n%s", got)
 	}
@@ -569,14 +536,7 @@ func TestPaginationStreamingMaxItemsLimitsRecords(t *testing.T) {
 }
 
 func TestPaginationExplicitRenderedBodyNonTTYUsesDocumentRendering(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-print", "b"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runObjectPages(t, "--rsh-print", "b").Stdout.String()
 	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
 		t.Fatalf("body-only output included response transcript:\n%s", got)
 	}
@@ -591,14 +551,7 @@ func TestPaginationExplicitRenderedBodyNonTTYUsesDocumentRendering(t *testing.T)
 }
 
 func TestPaginationStreamingAppliesFilterPerItem(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body.id"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runObjectPages(t, "-f", "body.id").Stdout.String()
 	var values []int
 	if err := json.Unmarshal([]byte(got), &values); err != nil {
 		t.Fatalf("expected valid filtered JSON array, got %q: %v", got, err)
@@ -611,16 +564,11 @@ func TestPaginationStreamingAppliesFilterPerItem(t *testing.T) {
 }
 
 func TestPaginationJSONFilterAppliesPerItemWithoutCollect(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body[0]", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	app := runObjectPages(t, "-f", "body[0]", "-o", "json")
 
 	var values []any
-	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
-		t.Fatalf("expected valid filtered JSON array, got %q: %v", out.String(), err)
+	if err := json.Unmarshal(app.Stdout.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid filtered JSON array, got %q: %v", app.Stdout.String(), err)
 	}
 	if len(values) != 4 {
 		t.Fatalf("values length = %d, want 4: %#v", len(values), values)
@@ -633,16 +581,11 @@ func TestPaginationJSONFilterAppliesPerItemWithoutCollect(t *testing.T) {
 }
 
 func TestPaginationCollectFilterUsesMergedDocument(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-collect", "-f", "body[0]", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	app := runObjectPages(t, "--rsh-collect", "-f", "body[0]", "-o", "json")
 
 	var value map[string]int
-	if err := json.Unmarshal(out.Bytes(), &value); err != nil {
-		t.Fatalf("expected valid filtered JSON object, got %q: %v", out.String(), err)
+	if err := json.Unmarshal(app.Stdout.Bytes(), &value); err != nil {
+		t.Fatalf("expected valid filtered JSON object, got %q: %v", app.Stdout.String(), err)
 	}
 	if value["id"] != 1 {
 		t.Fatalf("id = %d, want 1", value["id"])
@@ -650,14 +593,7 @@ func TestPaginationCollectFilterUsesMergedDocument(t *testing.T) {
 }
 
 func TestPaginationStreamingFilterUsesFormatter(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "yaml"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runObjectPages(t, "-f", "body", "-o", "yaml").Stdout.String()
 	for _, want := range []string{"id: 1", "id: 2", "id: 3", "id: 4"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in output, got:\n%s", want, got)
@@ -669,14 +605,7 @@ func TestPaginationStreamingFilterUsesFormatter(t *testing.T) {
 }
 
 func TestPaginationExplicitJSONFilterOmitsResponseContext(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-f", "body", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-
-	got := out.String()
+	got := runObjectPages(t, "-f", "body", "-o", "json").Stdout.String()
 	if strings.Contains(got, "HTTP/1.1 200 OK") || strings.Contains(got, "Content-Type:") {
 		t.Fatalf("explicit filtered pagination output included response preamble:\n%s", got)
 	}
@@ -688,16 +617,11 @@ func TestPaginationExplicitJSONFilterOmitsResponseContext(t *testing.T) {
 }
 
 func TestPaginationJSONOutputIsValidJSON(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageObjectTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	app := runObjectPages(t, "-o", "json")
 
 	var values []map[string]int
-	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
-		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	if err := json.Unmarshal(app.Stdout.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", app.Stdout.String(), err)
 	}
 	if len(values) != 4 || values[0]["id"] != 1 || values[3]["id"] != 4 {
 		t.Fatalf("unexpected output: %#v", values)
@@ -876,24 +800,18 @@ func TestPaginationItemsPath(t *testing.T) {
 // TestPaginationProgressOnStderr verifies that progress output goes to stderr
 // not stdout when paginating.
 func TestPaginationProgressOnStderr(t *testing.T) {
-	// Use the full CLI so we can inspect stdout vs stderr.
-	c, out, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	useThreePageTransport(c)
-	if err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-max-pages", "1", "-o", "json"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	app := runThreePages(t, "--rsh-max-pages", "1", "-o", "json")
 
 	// Warnings (stderr) must not appear in stdout.
-	if strings.Contains(out.String(), "warning") || strings.Contains(out.String(), "max-pages") {
-		t.Errorf("progress/warning leaked to stdout:\n%s", out.String())
+	if strings.Contains(app.Stdout.String(), "warning") || strings.Contains(app.Stdout.String(), "max-pages") {
+		t.Errorf("progress/warning leaked to stdout:\n%s", app.Stdout.String())
 	}
 	// Warning should be on stderr.
-	if !strings.Contains(errOut.String(), "max-pages") {
-		t.Errorf("expected warning on stderr, got: %q", errOut.String())
+	if !strings.Contains(app.Stderr.String(), "max-pages") {
+		t.Errorf("expected warning on stderr, got: %q", app.Stderr.String())
 	}
-	if strings.Contains(errOut.String(), "fetching page") {
-		t.Fatalf("pagination progress should not be printed by default, got: %q", errOut.String())
+	if strings.Contains(app.Stderr.String(), "fetching page") {
+		t.Fatalf("pagination progress should not be printed by default, got: %q", app.Stderr.String())
 	}
 }
 

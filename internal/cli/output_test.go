@@ -16,30 +16,6 @@ import (
 	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
-func useJSONResponse(c *cli.CLI, status int, body string) {
-	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: status,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(body)),
-			Request:    r,
-		}, nil
-	})
-}
-
-func useTextResponse(c *cli.CLI, status int, contentType, body string) {
-	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: status,
-			Proto:      "HTTP/1.1",
-			Header:     http.Header{"Content-Type": []string{contentType}},
-			Body:       io.NopCloser(strings.NewReader(body)),
-			Request:    r,
-		}, nil
-	})
-}
-
 func useCBORResponse(t *testing.T, c *cli.CLI, status int, value any) []byte {
 	t.Helper()
 	raw, err := cbor.Marshal(value)
@@ -117,11 +93,7 @@ func TestDefaultTTYOutputPrintsResponseTranscript(t *testing.T) {
 	}
 
 	context := stripANSI(out.String())
-	for _, want := range []string{"HTTP/1.1 200 OK", "Content-Type: application/json", "X-Trace-Token: abc123"} {
-		if !strings.Contains(context, want) {
-			t.Fatalf("stdout missing %q:\n%s", want, context)
-		}
-	}
+	requireContains(t, context, "HTTP/1.1 200 OK", "Content-Type: application/json", "X-Trace-Token: abc123")
 	if strings.Contains(context, "session=secret") || !strings.Contains(context, "Set-Cookie: <redacted>") {
 		t.Fatalf("stdout did not redact sensitive header:\n%s", context)
 	}
@@ -270,18 +242,14 @@ func TestPrintRequestAndResponseTranscript(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := stripANSI(out.String())
-	for _, want := range []string{
+	requireContains(t, got,
 		"POST /items HTTP/1.1",
 		"Host: api.example.com",
 		"Authorization: <redacted>",
 		`"name": "Alice"`,
 		"HTTP/1.1 200 OK",
 		`"ok": true`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("stdout missing %q:\n%s", want, got)
-		}
-	}
+	)
 }
 
 func TestPrintRequestHeadersRedactsSensitiveQueryParams(t *testing.T) {
@@ -294,11 +262,7 @@ func TestPrintRequestHeadersRedactsSensitiveQueryParams(t *testing.T) {
 	if strings.Contains(got, "api_key=secret") || strings.Contains(got, "token=abc") || strings.Contains(got, "auth=abc123def") {
 		t.Fatalf("printed request leaked sensitive query params:\n%s", got)
 	}
-	for _, want := range []string{"GET /items?", "api_key=%3Credacted%3E", "token=%3Credacted%3E", "auth=%3Credacted%3E", "key=testing", "page=1"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("printed request missing %q:\n%s", want, got)
-		}
-	}
+	requireContains(t, got, "GET /items?", "api_key=%3Credacted%3E", "token=%3Credacted%3E", "auth=%3Credacted%3E", "key=testing", "page=1")
 }
 
 func TestExplicitAutoOutputFormatRedirectRendersBody(t *testing.T) {
@@ -475,11 +439,7 @@ func TestPrintResponseHeadersOnly(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := stripANSI(out.String())
-	for _, want := range []string{"HTTP/1.1 200 OK", "Content-Type: application/json", "X-Custom: hello"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("stdout missing %q:\n%s", want, got)
-		}
-	}
+	requireContains(t, got, "HTTP/1.1 200 OK", "Content-Type: application/json", "X-Custom: hello")
 	if strings.Contains(got, "key") || strings.Contains(got, "value") {
 		t.Fatalf("body should not appear with --rsh-print h:\n%s", got)
 	}
