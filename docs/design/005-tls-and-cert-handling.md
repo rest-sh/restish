@@ -45,7 +45,7 @@ into concrete TLS settings.
 Conceptually, TLS assembly proceeds in this order:
 
 1. start from secure default verification settings
-2. apply minimum TLS version if configured
+2. apply minimum TLS version, defaulting to TLS 1.2
 3. apply CA-root customization
 4. resolve client-auth mode:
    - none

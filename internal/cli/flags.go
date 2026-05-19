@@ -205,6 +205,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	if err := validateFilterLangFlag(cmd, gf); err != nil {
 		return gf, err
 	}
+	if err := validateTLSMinVersionFlag(cmd, gf); err != nil {
+		return gf, err
+	}
 	return gf, nil
 }
 
@@ -240,6 +243,16 @@ func validateFilterLangFlag(cmd *cobra.Command, gf GlobalFlags) error {
 	default:
 		return fmt.Errorf("invalid --rsh-filter-lang %q: must be one of shorthand, jq", gf.FilterLang)
 	}
+}
+
+func validateTLSMinVersionFlag(cmd *cobra.Command, gf GlobalFlags) error {
+	if !cmd.Flags().Changed("rsh-tls-min-version") {
+		return nil
+	}
+	if _, err := request.TLSVersionFromString(gf.TLSMinVersion); err != nil {
+		return fmt.Errorf("invalid --rsh-tls-min-version %q: must be one of TLS1.2, TLS1.3", gf.TLSMinVersion)
+	}
+	return nil
 }
 
 func validateTimeoutDuration(source, value string) error {

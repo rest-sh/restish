@@ -601,6 +601,24 @@ func TestInvalidFilterLangFailsFast(t *testing.T) {
 	}
 }
 
+func TestInvalidTLSMinVersionFailsFast(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with invalid TLS minimum version")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "--rsh-tls-min-version", "TLS1.1", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected invalid TLS minimum version error")
+	}
+	if !strings.Contains(err.Error(), `invalid --rsh-tls-min-version "TLS1.1"`) {
+		t.Fatalf("expected invalid --rsh-tls-min-version error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "TLS1.2") || !strings.Contains(err.Error(), "TLS1.3") {
+		t.Fatalf("expected error to list supported TLS versions, got %v", err)
+	}
+}
+
 func TestNegativeRSHRetryFailsFast(t *testing.T) {
 	t.Setenv("RSH_RETRY", "-1")
 	c, _, _ := newTestCLI(t)

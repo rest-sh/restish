@@ -75,6 +75,15 @@ func TestFilterLangCompletions(t *testing.T) {
 	}
 }
 
+func TestTLSMinVersionCompletions(t *testing.T) {
+	got := runCompletion(t, "get", "--rsh-tls-min-version", "")
+	for _, want := range []string{"TLS1.2", "TLS1.3"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in --rsh-tls-min-version completions, got:\n%s", want, got)
+		}
+	}
+}
+
 func TestURLCompletionsForBareGet(t *testing.T) {
 	c, out := newCompletionFixtureCLI(t, completionFixtureConfig{})
 

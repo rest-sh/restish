@@ -56,6 +56,26 @@ func TestTLSVersionFromString(t *testing.T) {
 	}
 }
 
+func TestTLSConfigFromOptionsDefaultsToTLS12(t *testing.T) {
+	cfg, err := request.TLSConfigFromOptions(request.Options{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion = %v, want TLS 1.2", cfg.MinVersion)
+	}
+}
+
+func TestTLSConfigFromOptionsHonorsExplicitMinVersion(t *testing.T) {
+	cfg, err := request.TLSConfigFromOptions(request.Options{TLSMinVersion: tls.VersionTLS13})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MinVersion != tls.VersionTLS13 {
+		t.Fatalf("MinVersion = %v, want TLS 1.3", cfg.MinVersion)
+	}
+}
+
 func TestTLSConfigFromOptionsWithCACert(t *testing.T) {
 	caPEM, _, _ := selfSignedCert(t, "Test CA")
 	caPath := filepath.Join(t.TempDir(), "ca.pem")

@@ -90,7 +90,7 @@ restish --rsh-no-browser api connect example api.rest.sh 'prompt.api_key: docs-k
 | `--rsh-client-cert` | path | none | PEM client certificate for mTLS. |
 | `--rsh-client-key` | path | none | PEM private key for mTLS. |
 | `--rsh-insecure` | boolean | false | Disable certificate verification for debugging only. |
-| `--rsh-tls-min-version` | `TLS1.2` or `TLS1.3` | Go default | Minimum TLS version. |
+| `--rsh-tls-min-version` | `TLS1.2` or `TLS1.3` | `TLS1.2` | Minimum TLS version. |
 | `--rsh-tls-signer` | plugin name | none | TLS signer plugin for external key signing. |
 | `--rsh-tls-signer-param` | repeatable `key=value` | none | Parameters for the signer plugin. |
 

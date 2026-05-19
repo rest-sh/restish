@@ -13,6 +13,8 @@ import (
 
 var systemCertPool = x509.SystemCertPool
 
+const defaultTLSMinVersion = tls.VersionTLS12
+
 // TLSVersionFromString maps CLI values like TLS1.2 and TLS1.3 to crypto/tls constants.
 func TLSVersionFromString(v string) (uint16, error) {
 	switch strings.ToUpper(strings.TrimSpace(v)) {
@@ -38,7 +40,7 @@ func TLSConfigFromOptions(opts Options) (*tls.Config, error) {
 func TLSConfigWithCleanupFromOptions(opts Options) (*tls.Config, io.Closer, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: opts.Insecure, //nolint:gosec
-		MinVersion:         opts.TLSMinVersion,
+		MinVersion:         effectiveTLSMinVersion(opts.TLSMinVersion),
 	}
 
 	if opts.TLSSignerPath != "" && (opts.ClientCertPath != "" || opts.ClientKeyPath != "") {
@@ -95,6 +97,13 @@ func TLSConfigWithCleanupFromOptions(opts Options) (*tls.Config, io.Closer, erro
 	}
 
 	return cfg, cleanup, nil
+}
+
+func effectiveTLSMinVersion(version uint16) uint16 {
+	if version == 0 {
+		return defaultTLSMinVersion
+	}
+	return version
 }
 
 func bestEffortSystemCertPool() (*x509.CertPool, error) {

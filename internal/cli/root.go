@@ -166,7 +166,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-tls-signer", "", "TLS signer plugin to use for mTLS client certificate signing")
 	pf.StringArray("rsh-tls-signer-param", nil, `TLS signer plugin parameter in "key=value" format (repeatable)`)
 	pf.String("rsh-ca-cert", "", "Path to a PEM encoded CA certificate to trust")
-	pf.String("rsh-tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3")
+	pf.String("rsh-tls-min-version", "", "Minimum TLS version: TLS1.2 or TLS1.3 (default TLS1.2)")
 	pf.Bool("rsh-ignore-status-code", false, "Always exit 0 regardless of HTTP status")
 	pf.StringP("rsh-timeout", "t", "", "Request timeout, e.g. 30s")
 	pf.StringP("rsh-profile", "p", "", "API profile to use (overrides RSH_PROFILE env var; default: \"default\")")
@@ -260,5 +260,10 @@ func (c *CLI) registerFlagCompletions(root *cobra.Command) {
 	// --rsh-filter-lang: static list of supported filter languages.
 	_ = root.RegisterFlagCompletionFunc("rsh-filter-lang", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return []string{"shorthand", "jq"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	// --rsh-tls-min-version: static list of supported TLS floors.
+	_ = root.RegisterFlagCompletionFunc("rsh-tls-min-version", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return []string{"TLS1.2\tMinimum TLS 1.2 (default)", "TLS1.3\tRequire TLS 1.3"}, cobra.ShellCompDirectiveNoFileComp
 	})
 }

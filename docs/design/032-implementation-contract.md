@@ -34,7 +34,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-tls-signer` | | string | | empty | TLS signer plugin name/path. |
 | `--rsh-tls-signer-param` | | repeat `key=value` | | empty | Plugin params. |
 | `--rsh-ca-cert` | | string | | empty | Extra trusted CA. |
-| `--rsh-tls-min-version` | | string | | empty | `TLS1.2` or `TLS1.3`. |
+| `--rsh-tls-min-version` | | string | | `TLS1.2` | `TLS1.2` or `TLS1.3`. |
 | `--rsh-ignore-status-code` | | bool | | false | Suppresses status-derived non-zero exit. |
 | `--rsh-timeout` | `-t` | duration | `RSH_TIMEOUT` | none | Bounded request lifetime; for streams, header wait timeout before switching to stream cancellation rules. |
 | `--rsh-profile` | `-p` | string | `RSH_PROFILE` | `default` | Active API profile. |

@@ -58,6 +58,8 @@ restish \
 
 ## Minimum TLS Version
 
+Restish defaults to TLS 1.2. Pass `--rsh-tls-min-version TLS1.3` to require TLS 1.3.
+
 ```bash
 restish --rsh-tls-min-version TLS1.2 api.rest.sh
 restish --rsh-tls-min-version TLS1.3 api.rest.sh
