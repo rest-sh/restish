@@ -35,7 +35,7 @@ locally.
 
 ## Existing v1 Users
 
-If you already have Restish v1 config or plugins, read [Upgrade From v1](./upgrade-from-v1/) before editing config. The migration docs are kept out of the new-user happy path, but they are still important for existing setups.
+If you already have Restish v1 config or plugins, read [Upgrade From v1](./upgrade-from-v1/) before editing config. The migration docs are kept out of the new-user happy path, but they are still important for existing setups. The archived v1 docs remain available at [rest.sh/v1/](https://rest.sh/v1/).
 
 ## Related Pages
 

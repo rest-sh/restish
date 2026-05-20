@@ -89,7 +89,9 @@ Use `bash` or `fish` instead of `zsh` when that is your shell.
 
 Restish v2 can migrate default-location v1 config on first run. Read
 [Upgrade From v1](../upgrade-from-v1/) before editing config or replacing
-plugins.
+plugins. The archived v1 documentation remains available at
+[rest.sh/v1/](https://rest.sh/v1/) for teams that need to compare old commands during a
+migration.
 
 ## Next Step
 
@@ -104,3 +106,4 @@ next to see the major workflows before connecting your own APIs.
 - [Shell Setup](../shell-setup/)
 - [Development Setup](/docs/contributing/development-setup/)
 - [Upgrade From v1](../upgrade-from-v1/)
+- [Archived v1 Docs](https://rest.sh/v1/)

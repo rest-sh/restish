@@ -2641,7 +2641,6 @@ func TestAPIConnectAdversarialSpecShapesFailGracefully(t *testing.T) {
 func TestAPIConnectRejectsRemovedCommandNames(t *testing.T) {
 	for _, args := range [][]string{
 		{"restish", "api", "add", "myapi", "https://api.example.com"},
-		{"restish", "api", "configure", "myapi", "https://api.example.com"},
 		{"restish", "api", "delete", "myapi"},
 	} {
 		c, _, _ := newTestCLI(t)
@@ -2651,6 +2650,20 @@ func TestAPIConnectRejectsRemovedCommandNames(t *testing.T) {
 			t.Fatalf("%v: expected suggestion in unknown command error, got %v", args, err)
 		}
 	}
+}
+
+func TestAPIConfigureShowsV1MigrationMessage(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "api", "configure", "myapi", "https://api.example.com"})
+	if err == nil {
+		t.Fatal("api configure should fail with a v1 migration message")
+	}
+	requireContains(t, err.Error(),
+		"api configure was a Restish v1 command",
+		"restish api connect myapi https://api.example.com",
+		"https://rest.sh/docs/getting-started/upgrade-from-v1/",
+		"https://rest.sh/v1/",
+	)
 }
 
 func TestAPIRemovePreservesJSONCComments(t *testing.T) {

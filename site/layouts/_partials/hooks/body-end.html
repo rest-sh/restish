@@ -1,2 +1,9 @@
 <script src='{{ "js/prism-restish.js" | relURL }}'></script>
 <script src='{{ "js/restish-playground.js" | relURL }}'></script>
+<script>
+  (function () {
+    if (window.location.pathname === "/" && window.location.hash.indexOf("#/") === 0) {
+      window.location.replace("/v1/" + window.location.hash);
+    }
+  }());
+</script>

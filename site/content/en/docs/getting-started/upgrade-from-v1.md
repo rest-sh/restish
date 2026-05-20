@@ -9,6 +9,8 @@ aliases:
 
 This page is the shortest path for existing Restish v1 users who want to know
 what changed, what is preserved automatically, and what needs a manual update.
+The archived v1 documentation remains available at [rest.sh/v1/](https://rest.sh/v1/) for
+old links, internal runbooks, and side-by-side migration checks.
 
 ## What To Expect
 
@@ -115,6 +117,7 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | ------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
 | `apis.json`                           | `restish.json`                                              | API config now lives under top-level `apis`           |
 | `config.json`                         | `restish.json`                                              | v2 uses one config file                               |
+| `restish api configure <name> <url>`  | `restish api connect <name> <url>`                          | v2 prints a migration hint for `api configure`        |
 | `restish api edit`                    | `restish config edit`                                       | Config editing moved under `config`                   |
 | old interactive API setup             | `restish api connect <name> <url>`                          | v2 expects the base URL explicitly                    |
 | n/a                                   | `restish api connect <name> <url> 'path:value'`             | fast one-shot registration with shorthand expressions |
@@ -185,3 +188,4 @@ restish config edit
 - [Tour of Restish](../tour/)
 - [Config](/docs/reference/config/)
 - [Install And Use Plugins](/docs/plugins/install-and-use/)
+- [Archived v1 Docs](https://rest.sh/v1/)

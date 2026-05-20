@@ -76,6 +76,15 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd.Flags().Bool("yes", false, "Accept safe api connect prompts without asking")
 	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
+		Use:                "configure <name> [url]",
+		Short:              "Explain the v1 api configure replacement",
+		Hidden:             true,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return newUsageError(c.apiConfigureMigrationError(args))
+		},
+	})
+	apiCmd.AddCommand(&cobra.Command{
 		Use:     "inspect <name>",
 		Short:   "Print the config for a registered API as JSON",
 		Example: fmt.Sprintf("  %s api inspect demo", c.commandNameOrDefault()),
@@ -92,6 +101,28 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE: c.runAPISet,
 	})
 	root.AddCommand(apiCmd)
+}
+
+func (c *CLI) apiConfigureMigrationError(args []string) error {
+	commandName := c.commandNameOrDefault()
+	replacement := fmt.Sprintf("  %s api connect <name> <url>", commandName)
+	if len(args) == 1 && !strings.HasPrefix(args[0], "-") {
+		replacement = fmt.Sprintf("  %s api connect %s <url>", commandName, args[0])
+	} else if len(args) >= 2 && !strings.HasPrefix(args[0], "-") && !strings.HasPrefix(args[1], "-") {
+		replacement = fmt.Sprintf("  %s api connect %s %s", commandName, args[0], args[1])
+	}
+	return fmt.Errorf(`api configure was a Restish v1 command and is not available in v2.
+
+Use api connect to register an API explicitly:
+
+%s
+
+In many cases replacing "configure" with "connect" is enough. If the v1
+command prompted for auth, profiles, or other defaults, connect first and then
+adjust the API with "restish api set".
+
+Upgrade guide: https://rest.sh/docs/getting-started/upgrade-from-v1/
+Archived v1 docs: https://rest.sh/v1/`, replacement)
 }
 
 // runAPIAuthLogout deletes the token cache entry for the named API+profile.
