@@ -227,14 +227,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Con
 
 	body := resp.Body
 	if msg.Filter != "" {
-		doc := map[string]any{
-			"proto":       resp.Proto,
-			"status":      resp.Status,
-			"headers":     firstHeaderValues(resp.Headers),
-			"headers_all": resp.Headers,
-			"links":       resp.Links,
-			"body":        resp.Body,
-		}
+		doc := normalizedResponseDoc(resp)
 		filtered, ferr := filter.Apply(msg.Filter, doc, filter.LangAuto)
 		if ferr != nil {
 			return writer.WriteMessage(pluginwire.HTTPResponseMsg{

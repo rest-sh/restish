@@ -532,7 +532,7 @@ func normalizedResponseDoc(resp *output.Response) map[string]any {
 		"proto":       resp.Proto,
 		"status":      resp.Status,
 		"headers":     firstHeaderValues(resp.Headers),
-		"headers_all": resp.Headers,
+		"headers_all": allHeaderValues(resp.Headers),
 		"links":       resp.Links,
 		"body":        resp.Body,
 	}
@@ -544,6 +544,18 @@ func firstHeaderValues(headers map[string][]string) map[string]any {
 		if len(values) > 0 {
 			out[k] = values[0]
 		}
+	}
+	return out
+}
+
+func allHeaderValues(headers map[string][]string) map[string]any {
+	out := make(map[string]any, len(headers))
+	for k, values := range headers {
+		all := make([]any, len(values))
+		for i, value := range values {
+			all[i] = value
+		}
+		out[k] = all
 	}
 	return out
 }
