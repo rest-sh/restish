@@ -25,8 +25,8 @@ when the expected shape matters.
 restish api.rest.sh/images
 restish api.rest.sh/images -o json > images.json
 restish api.rest.sh/images/jpeg > dragonfly.jpg
-restish api.rest.sh/content/cbor > response.cbor
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor > response.cbor
+restish api.rest.sh/formats/cbor -o json > response.json
 restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 ```
 
@@ -56,6 +56,10 @@ the original response body bytes. That is the raw-byte path for downloads and
 binary-safe pipelines; do not choose a filter, metadata shortcut, collection, or
 `-o` format when you want the payload unchanged. Response middleware plugins do
 not run on this path, so installed plugins cannot silently rewrite saved files.
+This does not change server-side content negotiation: Restish's default
+`Accept` header prefers JSON and other text-friendly structured formats, and
+you can request CBOR, MessagePack, Ion, or another format explicitly with `-H`
+or a profile.
 
 ## Metadata Shortcuts
 

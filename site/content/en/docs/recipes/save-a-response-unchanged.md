@@ -13,7 +13,7 @@ raw-download path, so installed plugins cannot silently alter saved files.
 
 ```bash
 restish api.rest.sh/bytes/64 > sample.bin
-restish api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/formats/cbor > response.cbor
 ```
 
 For an image:
@@ -28,5 +28,8 @@ Redirected byte output still uses the body that Go's HTTP client exposes after
 any HTTP content-encoding decompression; it is not a packet capture of the exact
 wire transfer. The distinction is part of Restish's
 [output defaults](/docs/reference/output-defaults/).
+Restish's default `Accept` header still prefers JSON and other text-friendly
+structured formats; set `Accept` yourself when you want the server to send a
+binary structured format such as CBOR.
 
 Related: [Output](/docs/guides/output/).

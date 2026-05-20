@@ -36,7 +36,7 @@ func Default() *Registry {
 		Name:      "json",
 		MIMETypes: []string{"application/json"},
 		Suffixes:  []string{"+json"},
-		Quality:   0.5,
+		Quality:   0.9,
 		Marshal: func(v any) ([]byte, error) {
 			return json.Marshal(v)
 		},
@@ -55,7 +55,7 @@ func Default() *Registry {
 	r.AddContentType(&ContentType{
 		Name:      "ndjson",
 		MIMETypes: []string{"application/x-ndjson", "application/ndjson", "application/jsonl", "application/jsonlines"},
-		Quality:   0.5,
+		Quality:   0.8,
 		Marshal:   marshalNDJSON,
 		Unmarshal: func(data []byte) (any, error) {
 			lines := bytes.Split(data, []byte{'\n'})
@@ -90,7 +90,7 @@ func Default() *Registry {
 		Name:      "yaml",
 		MIMETypes: []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"},
 		Suffixes:  []string{"+yaml"},
-		Quality:   0.5,
+		Quality:   0.8,
 		Marshal: func(v any) ([]byte, error) {
 			return yaml.Marshal(v)
 		},
@@ -107,7 +107,7 @@ func Default() *Registry {
 		Name:      "cbor",
 		MIMETypes: []string{"application/cbor"},
 		Suffixes:  []string{"+cbor"},
-		Quality:   0.9,
+		Quality:   0.6,
 		Marshal: func(v any) ([]byte, error) {
 			return cbor.Marshal(v)
 		},
@@ -124,7 +124,7 @@ func Default() *Registry {
 		Name:      "msgpack",
 		MIMETypes: []string{"application/msgpack", "application/x-msgpack", "application/vnd.msgpack"},
 		Suffixes:  []string{"+msgpack"},
-		Quality:   0.8,
+		Quality:   0.6,
 		Marshal: func(v any) ([]byte, error) {
 			return msgpack.Marshal(v)
 		},
@@ -165,7 +165,7 @@ func Default() *Registry {
 		Name:      "ion",
 		MIMETypes: []string{"application/ion", "text/ion"},
 		Suffixes:  []string{"+ion"},
-		Quality:   0.8,
+		Quality:   0.6,
 		Marshal: func(v any) ([]byte, error) {
 			return ion.MarshalText(v)
 		},
@@ -178,8 +178,6 @@ func Default() *Registry {
 		},
 	})
 
-	// text/* is a catch-all for plain text responses — lowest quality so
-	// structured formats are always preferred.
 	r.AddContentType(&ContentType{
 		Name:      "form",
 		MIMETypes: []string{"application/x-www-form-urlencoded"},
@@ -238,6 +236,8 @@ func Default() *Registry {
 		},
 	})
 
+	// text/* is a catch-all for plain text responses. Keep it below explicit
+	// structured types so it does not win when a more specific format is known.
 	r.AddContentType(&ContentType{
 		Name:      "text",
 		MIMETypes: []string{"text/plain", "text/*"},

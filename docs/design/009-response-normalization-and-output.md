@@ -217,6 +217,14 @@ after HTTP content-encoding decompression. This keeps shell redirection aligned
 with the common file-saving mental model, even for structured binary formats
 such as CBOR.
 
+This raw-byte rule is separate from content negotiation. Restish's generated
+default `Accept` header should still prefer JSON and other text-friendly
+structured formats over CBOR, MessagePack, and Ion so the same command asks for
+the same broadly interoperable representation whether stdout is a terminal,
+pipe, or file. If a server returns CBOR because the user requested it, an API
+profile requested it, or the endpoint only supports it, redirected unfiltered
+output still preserves those response bytes.
+
 The practical rule is:
 
 - if Restish is still outputting the original payload unchanged, write body bytes

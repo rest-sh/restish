@@ -38,8 +38,8 @@ For redirects, unfiltered responses already write body bytes:
 
 ```bash
 restish api.rest.sh/images/jpeg > dragonfly.jpg
-restish api.rest.sh/content/cbor > response.cbor
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor > response.cbor
+restish api.rest.sh/formats/cbor -o json > response.json
 ```
 
 ## Record Formats

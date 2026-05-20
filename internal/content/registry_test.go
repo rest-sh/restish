@@ -146,17 +146,31 @@ func TestMakeJSONSafeIntegerKeys(t *testing.T) {
 
 func TestAcceptHeader(t *testing.T) {
 	h := reg.AcceptHeader()
-	// cbor q=0.9 must appear before json q=0.5
+	// JSON is the least surprising default negotiation target. Binary
+	// structured formats remain supported, but should not win by default.
 	iCBOR := strings.Index(h, "application/cbor")
 	iJSON := strings.Index(h, "application/json")
-	if iCBOR == -1 || iJSON == -1 {
+	iYAML := strings.Index(h, "application/yaml")
+	if iCBOR == -1 || iJSON == -1 || iYAML == -1 {
 		t.Fatalf("Accept header missing expected types: %q", h)
 	}
-	if iCBOR > iJSON {
-		t.Errorf("cbor should appear before json in Accept header: %q", h)
+	if iJSON > iYAML {
+		t.Errorf("json should appear before yaml in Accept header: %q", h)
+	}
+	if iYAML > iCBOR {
+		t.Errorf("yaml should appear before cbor in Accept header: %q", h)
+	}
+	if iJSON > iCBOR {
+		t.Errorf("json should appear before cbor in Accept header: %q", h)
 	}
 	if !strings.Contains(h, "application/x-ndjson") {
 		t.Fatalf("Accept header missing application/x-ndjson: %q", h)
+	}
+	if !strings.Contains(h, "application/x-ndjson;q=0.8") {
+		t.Fatalf("Accept header should prefer NDJSON below JSON: %q", h)
+	}
+	if !strings.Contains(h, "application/yaml;q=0.8") {
+		t.Fatalf("Accept header should prefer YAML below JSON: %q", h)
 	}
 	iSSE := strings.Index(h, "text/event-stream")
 	if iSSE == -1 {
@@ -310,7 +324,7 @@ func TestAcceptHeaderForUsesRequestedSupportedMediaTypes(t *testing.T) {
 		"text/plain",
 		"application/json",
 	})
-	want := "application/cbor;q=0.9, application/vnd.example+json;q=0.5, application/json;q=0.5, text/plain;q=0.2"
+	want := "application/vnd.example+json;q=0.9, application/json;q=0.9, application/cbor;q=0.6, text/plain;q=0.2"
 	if got != want {
 		t.Fatalf("AcceptHeaderFor() = %q, want %q", got, want)
 	}

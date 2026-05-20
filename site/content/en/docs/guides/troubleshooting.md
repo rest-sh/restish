@@ -54,14 +54,17 @@ Add `--rsh-print=b` when the script needs compact rendered JSON.
 **Symptom:** A redirected response is CBOR, YAML, text, or another server format
 instead of JSON.
 
-**Likely cause:** Redirected unfiltered output saves response body bytes.
+**Likely cause:** Redirected unfiltered output saves response body bytes. This
+can happen when the endpoint only returns that format, a profile or command set
+an `Accept` header, or the server ignored Restish's JSON-first default
+negotiation.
 
 **How to confirm:** Run with an explicit format.
 
 **Fix:**
 
 ```bash
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor -o json > response.json
 ```
 
 **Prevention:** Use `-o json` when a file or script needs JSON. Omit `-o` when
@@ -109,7 +112,9 @@ legacy location so they are not imported again.
 instead of JSON.
 
 **Likely cause:** Restish sends an `Accept` header listing all registered
-content types with quality values.
+content types with quality values. The default header prefers JSON and other
+text-friendly structured formats, but servers can still choose another
+supported response type or ignore client preferences.
 
 **How to confirm:** Inspect the request with `/headers` or verbose mode.
 

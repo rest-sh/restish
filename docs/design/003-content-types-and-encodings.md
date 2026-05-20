@@ -212,9 +212,23 @@ text, structured values, and raw binary.
 Restish should generate a useful `Accept` header based on registered content
 types and their quality values.
 
-That ordering is user-visible and can affect what servers return. If CBOR is
-preferred over JSON, users may observe CBOR responses from APIs that support
-both.
+That ordering is user-visible and can affect what servers return. The default
+ordering should favor broadly interoperable, text-friendly structured formats
+before compact binary structured formats such as CBOR, MessagePack, and Ion.
+JSON and vendor JSON should be the strongest default preference; NDJSON and
+YAML should remain preferred over binary structured formats without tying JSON.
+Binary formats remain first-class decoding and output targets, but binary
+response negotiation should be opt-in through an explicit `Accept` header, an
+API profile, or an endpoint that only returns that format. Separately, users can
+still emit a binary structured document from any decoded response with an
+explicit output format such as `-o cbor`.
+
+This is deliberately independent of whether stdout is a TTY. Varying
+server-side negotiation based on redirection would make the same command ask
+for different representations depending on the shell plumbing around it. The
+more predictable model is: default negotiation asks for the representation most
+likely to work everywhere; output selection decides whether Restish preserves
+the original body bytes or decodes and re-renders them.
 
 The negotiation algorithm is:
 
@@ -235,10 +249,12 @@ exact list may grow as built-in aliases are added, but the quality order and
 deduplication rules remain stable:
 
 ```text
-application/cbor;q=0.9, application/msgpack;q=0.8, application/x-msgpack;q=0.8, application/vnd.msgpack;q=0.8, application/ion;q=0.8, text/ion;q=0.8, application/json;q=0.5, application/x-ndjson;q=0.5, application/ndjson;q=0.5, application/jsonl;q=0.5, application/jsonlines;q=0.5, application/yaml;q=0.5, application/x-yaml;q=0.5, text/yaml;q=0.5, text/x-yaml;q=0.5, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, text/event-stream;q=0.2, text/plain;q=0.2, text/*;q=0.2, application/octet-stream;q=0.1, */*;q=0.1
+application/json;q=0.9, application/x-ndjson;q=0.8, application/ndjson;q=0.8, application/jsonl;q=0.8, application/jsonlines;q=0.8, application/yaml;q=0.8, application/x-yaml;q=0.8, text/yaml;q=0.8, text/x-yaml;q=0.8, application/cbor;q=0.6, application/msgpack;q=0.6, application/x-msgpack;q=0.6, application/vnd.msgpack;q=0.6, application/ion;q=0.6, text/ion;q=0.6, application/x-www-form-urlencoded;q=0.3, multipart/form-data;q=0.3, application/xml;q=0.2, text/xml;q=0.2, text/event-stream;q=0.2, text/plain;q=0.2, text/*;q=0.2, application/octet-stream;q=0.1, */*;q=0.1
 ```
 
-Quality ordering should be stable and deliberate.
+Quality ordering should be stable and deliberate. It is part of the CLI's
+product contract because generated commands, generic requests, verbose output,
+and server behavior all expose it.
 
 Restish should not advertise suffix forms like `application/*+json` unless the
 runtime has an explicit reason to do so. Accept generation is based on concrete

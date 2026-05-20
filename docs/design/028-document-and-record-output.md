@@ -136,16 +136,16 @@ The rule is:
   value without an explicit format, redirected output should default to pretty
   JSON; explicit `--rsh-print=b` selects compact rendered output for scripts
 
-Practically, saving a negotiated CBOR response keeps CBOR bytes:
+Practically, saving a CBOR response keeps CBOR bytes:
 
 ```bash
-restish api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/formats/cbor > response.cbor
 ```
 
 Converting that same response to JSON is explicit:
 
 ```bash
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor -o json > response.json
 ```
 
 ### `-o json` Preserves Document Framing

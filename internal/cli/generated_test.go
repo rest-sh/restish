@@ -1902,7 +1902,7 @@ func TestGeneratedCommandAcceptHeaderIncludesDeclaredSupportedResponseTypes(t *t
 	if err := c.Run([]string{"restish", "tapi", "get-negotiated"}); err != nil {
 		t.Fatalf("get-negotiated: %v", err)
 	}
-	want := "application/cbor;q=0.9, application/vnd.example+json;q=0.5, application/json;q=0.5, text/plain;q=0.2"
+	want := "application/vnd.example+json;q=0.9, application/json;q=0.9, application/cbor;q=0.6, text/plain;q=0.2"
 	if gotAccept != want {
 		t.Fatalf("Accept = %q, want %q", gotAccept, want)
 	}

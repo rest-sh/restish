@@ -115,22 +115,24 @@ CBOR, YAML, images, octet streams, zip files, text, and unknown payloads:
 ```bash
 restish api.rest.sh/images/jpeg > dragonfly.jpg
 restish api.rest.sh/bytes/64 > sample.bin
-restish api.rest.sh/content/cbor > response.cbor
+restish api.rest.sh/formats/cbor > response.cbor
 ```
 
 Choose an output format when you want Restish to transform the decoded body:
 
 ```bash
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor -o json > response.json
 ```
 
 Raw redirected output bypasses Restish's structured body decoding and
 formatting for presentation, but it is still based on the body after HTTP
-content-encoding decompression. `raw` is not an `-o` format. To save bytes
-unchanged, redirect stdout without choosing a filter, metadata shortcut,
-collection, or explicit output format. Response middleware plugins are skipped
-on this raw-download path; they run when Restish renders, filters, collects, or
-prints an interpreted response.
+content-encoding decompression. It also does not make Restish ask the server
+for a different representation: default `Accept` negotiation still prefers
+JSON and other text-friendly structured formats unless you set `Accept`
+yourself. `raw` is not an `-o` format. To save bytes unchanged, redirect stdout
+without choosing a filter, metadata shortcut, collection, or explicit output
+format. Response middleware plugins are skipped on this raw-download path; they
+run when Restish renders, filters, collects, or prints an interpreted response.
 
 Control exactly what stdout contains with `--rsh-print`:
 

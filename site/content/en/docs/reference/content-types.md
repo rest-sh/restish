@@ -104,13 +104,20 @@ restish -H 'Accept: image/png' api.rest.sh/images/png
 ```
 
 Restish generates an `Accept` header from registered content types, ordered by
-quality and deduplicated by canonical MIME type. If a plugin registers the same
-MIME type later, that later registration is the effective one.
+quality and deduplicated by canonical MIME type. Defaults prefer JSON and
+vendor JSON first, then other text-friendly structured formats such as NDJSON
+and YAML, before binary structured formats such as CBOR, MessagePack, and Ion.
+That ordering is least surprising in terminals, scripts, logs, and tools.
+Binary formats are still supported; request one explicitly with `-H`, a
+profile, or an endpoint that only returns that format when the API and your
+workflow benefit from it. If a plugin registers the same MIME type later, that
+later registration is the effective one.
 
 Use `-o` when you want Restish to transform a decoded response after it arrives:
 
 ```bash
-restish api.rest.sh/content/cbor -o json > response.json
+restish api.rest.sh/formats/cbor > response.cbor
+restish api.rest.sh/formats/cbor -o json > response.json
 ```
 
 ## Compression
