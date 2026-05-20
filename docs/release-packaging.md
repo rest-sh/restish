@@ -60,9 +60,10 @@ formula without fighting for the same linked executable.
 brew install rest-sh/tap/restish@1
 ```
 
-The release workflow expects `HOMEBREW_TAP_GITHUB_TOKEN` to have write access to
-`rest-sh/homebrew-tap`. GoReleaser uses it to update v2 formulae, and the
-workflow seeds the v1 formula from `packaging/homebrew/restish@1.rb`.
+The release workflow uses the existing Restish Releaser GitHub App secrets
+(`RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`) to mint a short-lived token
+with access to `rest-sh/homebrew-tap`. GoReleaser uses it to update v2 formulae,
+and the workflow seeds the v1 formula from `packaging/homebrew/restish@1.rb`.
 
 ## First-Party Plugin Artifacts
 

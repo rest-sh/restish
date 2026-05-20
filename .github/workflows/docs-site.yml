@@ -1,12 +1,14 @@
 name: Docs Site
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
-# Automatic push and pull request triggers are intentionally omitted while the
-# v2 docs site is unreleased. Before release, configure Pages to use GitHub
-# Actions, set DOCS_SITE_DEPLOY_ENABLED=true in repository variables, and add
-# the desired push trigger.
+# Branch push and pull request triggers are intentionally omitted. Version tags
+# keep docs in step with stable builds, and workflow_dispatch lets maintainers
+# publish small main-branch docs edits without waiting for another release.
 
 permissions:
   contents: read

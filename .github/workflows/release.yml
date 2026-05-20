@@ -29,11 +29,21 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Generate Homebrew tap token
+        id: releaser-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+          repositories: |
+            homebrew-tap
+            restish
+
       - name: Check out Homebrew tap
         uses: actions/checkout@v5
         with:
           repository: rest-sh/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          token: ${{ steps.releaser-token.outputs.token }}
           path: homebrew-tap
 
       - name: Ensure v1 Homebrew formula
@@ -60,4 +70,4 @@ jobs:
             release --clean --parallelism 4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.releaser-token.outputs.token }}
