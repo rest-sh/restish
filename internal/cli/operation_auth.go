@@ -14,6 +14,7 @@ import (
 
 type operationAuthPolicy struct {
 	OptionalAuth           bool
+	NoAuth                 bool
 	CredentialAlternatives []spec.CredentialAlternative
 	Override               string
 	Transport              request.Options
@@ -146,7 +147,11 @@ func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *confi
 		if len(alternative) == 0 {
 			return nil, false, fmt.Errorf("auth override %q does not match this operation; valid values: %s", override, strings.Join(authOverrideCandidates(policy.OptionalAuth, policy.CredentialAlternatives), ", "))
 		}
-		c.warnf("auth override %q is not listed in this operation's OpenAPI security requirements; using configured credential override", override)
+		if policy.NoAuth {
+			c.warnf("auth override %q is being sent for an operation with security: []", override)
+		} else {
+			c.warnf("auth override %q is not listed in this operation's OpenAPI security requirements; using configured credential override", override)
+		}
 	}
 	selected, missing, needErrors, err := c.selectOperationAlternative(apiName, profileName, prof, alternative, policy.Transport)
 	if err != nil {
@@ -174,7 +179,7 @@ func operationAuthSetupHint(apiName, profileName string) string {
 	if profileName != "" && profileName != "default" {
 		prefix += " --rsh-profile " + profileName
 	}
-	return fmt.Sprintf("run %q to inspect coverage or %q to configure a credential", prefix+" api auth list "+apiName, prefix+" api auth add "+apiName+" <credential-id>")
+	return fmt.Sprintf("run %q to inspect coverage or %q to configure a credential", prefix+" api auth inspect "+apiName, prefix+" api auth add "+apiName+" <credential-id>")
 }
 
 func operationSecurityIssueErrorSuffix(alternatives []spec.CredentialAlternative) string {

@@ -601,16 +601,23 @@ func TestGeneratedCommandKebabCase(t *testing.T) {
 
 func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	var gotAuth string
+	var gotPartnerKey string
 	mux := http.NewServeMux()
 	mux.HandleFunc("/public", func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
+		gotPartnerKey = r.Header.Get("X-Partner-Key")
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{}`)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 
 	env := setupGeneratedEnv(t, mux)
-	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileAuth(basicAuth("alice", "secret"))))
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: basicAuth("alice", "secret"),
+		Credentials: map[string]*config.CredentialConfig{
+			"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "partner")),
+		},
+	}))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-public"}); err != nil {
@@ -619,12 +626,19 @@ func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	if gotAuth != "" {
 		t.Fatalf("Authorization = %q, want empty for security: [] operation", gotAuth)
 	}
-	err := c.Run([]string{"restish", "tapi", "get-public", "--rsh-auth", "PartnerKey"})
-	if err == nil {
-		t.Fatal("expected --rsh-auth to be rejected for security: [] operation")
+	if gotPartnerKey != "" {
+		t.Fatalf("X-Partner-Key = %q, want empty by default for security: [] operation", gotPartnerKey)
 	}
-	if !strings.Contains(err.Error(), "security: []") {
-		t.Fatalf("unexpected error: %v", err)
+
+	c, output := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "get-public", "--rsh-auth", "PartnerKey"}); err != nil {
+		t.Fatalf("get-public --rsh-auth failed: %v", err)
+	}
+	if gotPartnerKey != "partner" {
+		t.Fatalf("X-Partner-Key = %q, want explicit --rsh-auth credential", gotPartnerKey)
+	}
+	if !strings.Contains(output.String(), `auth override "PartnerKey" is being sent for an operation with security: []`) {
+		t.Fatalf("expected security: [] override warning, got:\n%s", output.String())
 	}
 }
 
@@ -899,7 +913,7 @@ func TestGeneratedCommandOAuthScopeAlternativesRequireCredentialBindings(t *test
 	if !strings.Contains(err.Error(), "missing credential bindings") ||
 		!strings.Contains(err.Error(), "GraphOAuth") ||
 		!strings.Contains(err.Error(), "ApiKey") ||
-		!strings.Contains(err.Error(), "restish api auth list tapi") ||
+		!strings.Contains(err.Error(), "restish api auth inspect tapi") ||
 		!strings.Contains(err.Error(), "restish api auth add tapi <credential-id>") {
 		t.Fatalf("unexpected error: %v", err)
 	}

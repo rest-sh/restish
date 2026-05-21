@@ -37,6 +37,7 @@ func (c *CLI) addShellCommand(root *cobra.Command) {
 	shellCmd := &cobra.Command{
 		Use:   "shell",
 		Short: "Configure shell integration for restish",
+		Long:  shellLong,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown shell command %q", args[0])
@@ -50,7 +51,7 @@ func (c *CLI) addShellCommand(root *cobra.Command) {
 	setupCmd := &cobra.Command{
 		Use:       "setup <shell>",
 		Short:     "Configure your shell for restish",
-		Long:      fmt.Sprintf("Appends a noglob alias for restish to your shell rc file and installs completion for supported shells.\nSupported shells: %s", strings.Join(shells, ", ")),
+		Long:      shellSetupLong,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: shells,
 		RunE:      c.runSetup,

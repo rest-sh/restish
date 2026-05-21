@@ -61,8 +61,8 @@ type jqCacheEntry struct {
 }
 
 // Apply runs expr against doc using the chosen language and returns the result.
-// doc should be a map[string]any with keys "body", "headers", "links",
-// "status", "proto" — i.e. the full normalised Response map.
+// doc should be a map[string]any with keys "body", "headers", "headers_all",
+// "links", "status", "proto" — i.e. the full normalised Response map.
 func Apply(expr string, doc map[string]any, lang Lang) (any, error) {
 	result, err := ApplyWithInfo(expr, doc, lang)
 	if err != nil {

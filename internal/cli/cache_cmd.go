@@ -13,6 +13,7 @@ func (c *CLI) addCacheCommand(root *cobra.Command) {
 	cacheCmd := &cobra.Command{
 		Use:     "cache",
 		Short:   "Manage the HTTP response cache",
+		Long:    cacheLong,
 		GroupID: rootGroupConfig,
 		Example: fmt.Sprintf(`  %s cache info
   %s cache clear
@@ -27,6 +28,7 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
 		Short: "Print cache directory, size, entry count, and oldest entry",
+		Long:  cacheInfoLong,
 		Example: fmt.Sprintf(`  %s cache info
   %s cache info -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.NoArgs,
@@ -76,6 +78,7 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clear [api]",
 		Short: "Delete cached HTTP responses, not OAuth tokens (omit API to clear all)",
+		Long:  cacheClearLong,
 		Example: fmt.Sprintf(`  %s cache clear
   %s cache clear demo`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.MaximumNArgs(1),

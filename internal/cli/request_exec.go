@@ -69,18 +69,22 @@ func (c *CLI) prepareRequest(
 			operationAuth = matched.policy
 		}
 	}
-	if noAuth && operationAuth != nil && strings.TrimSpace(operationAuth.Override) != "" {
-		return nil, fmt.Errorf("auth override %q is not valid for an operation with security: []", operationAuth.Override)
-	}
-	if !noAuth && operationAuth != nil && apiName != "" {
+	explicitOperationAuthOverride := operationAuth != nil && strings.TrimSpace(operationAuth.Override) != ""
+	if (!noAuth || explicitOperationAuthOverride) && operationAuth != nil && apiName != "" {
 		prof := profileForName(c.cfg.APIs[apiName], profileName)
 		policy := *operationAuth
+		if noAuth {
+			policy.NoAuth = true
+		}
 		policy.Transport = opts
 		selected, handled, err := c.planOperationAuth(apiName, profileName, prof, &policy)
 		if err != nil {
 			return nil, err
 		}
 		if handled {
+			if explicitOperationAuthOverride {
+				noAuth = false
+			}
 			callbacks, err := c.operationAuthCallbacks(apiName, profileName, selected, authOpts)
 			if err != nil {
 				return nil, err

@@ -14,6 +14,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	configCmd := &cobra.Command{
 		Use:     "config",
 		Short:   "Manage local Restish configuration",
+		Long:    configLong,
 		GroupID: rootGroupConfig,
 		Example: fmt.Sprintf(`  %s config show
   %s config path
@@ -28,6 +29,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	configCmd.AddCommand(&cobra.Command{
 		Use:     "path",
 		Short:   "Print the active config file path",
+		Long:    configPathLong,
 		Example: fmt.Sprintf("  %s config path", c.commandNameOrDefault()),
 		Args:    cobra.NoArgs,
 		RunE:    c.runConfigPath,
@@ -35,6 +37,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	showCmd := &cobra.Command{
 		Use:   "show",
 		Short: "Print the active config summary or redacted JSON",
+		Long:  configShowLong,
 		Example: fmt.Sprintf(`  %s config show
   %s config show -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.NoArgs,
@@ -44,6 +47,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	configCmd.AddCommand(&cobra.Command{
 		Use:     "edit",
 		Short:   "Open the restish config file in $VISUAL or $EDITOR",
+		Long:    configEditLong,
 		Example: fmt.Sprintf("  %s config edit", c.commandNameOrDefault()),
 		Args:    cobra.NoArgs,
 		RunE:    c.runConfigEdit,
@@ -51,6 +55,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "set <patch> [patch...]",
 		Short: "Patch config using shorthand syntax",
+		Long:  configSetLong,
 		Example: fmt.Sprintf(`  %s config set 'cache.max_size: 500MB'
   %s config set 'theme.key: #afd787'`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.MinimumNArgs(1),
@@ -59,6 +64,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 	themeCmd := &cobra.Command{
 		Use:   "theme",
 		Short: "Manage terminal output highlighting theme",
+		Long:  configThemeLong,
 		Example: fmt.Sprintf(`  %s config theme list
   %s config theme set one-dark-pro
   %s config theme reset`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
@@ -263,6 +269,7 @@ func (c *CLI) addContentTypesCommand(root *cobra.Command) {
 	root.AddCommand(&cobra.Command{
 		Use:     "content-types",
 		Short:   "List registered content types and their MIME types",
+		Long:    contentTypesLong,
 		GroupID: rootGroupUtility,
 		Example: fmt.Sprintf(`  %s content-types
   %s content-types -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),

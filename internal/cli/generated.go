@@ -1437,6 +1437,7 @@ func (c *CLI) runGeneratedOp(
 		explicitAPIName:           apiName,
 		operationAuth: &operationAuthPolicy{
 			OptionalAuth:           optionalAuth,
+			NoAuth:                 noAuth,
 			CredentialAlternatives: credentialAlternatives,
 			Override:               gf.Auth,
 		},

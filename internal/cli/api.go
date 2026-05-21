@@ -23,6 +23,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd := &cobra.Command{
 		Use:     "api",
 		Short:   "Manage registered API configurations",
+		Long:    apiLong,
 		GroupID: rootGroupConfig,
 		Example: fmt.Sprintf(`  %s api connect demo https://api.example.com
   %s api list
@@ -38,6 +39,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all configured APIs",
+		Long:  apiListLong,
 		Example: fmt.Sprintf(`  %s api list
   %s api list -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.NoArgs,
@@ -46,6 +48,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:     "remove <name>",
 		Short:   "Remove a configured API",
+		Long:    apiRemoveLong,
 		Example: fmt.Sprintf("  %s api remove demo", c.commandNameOrDefault()),
 		Args:    cobra.ExactArgs(1),
 		RunE:    c.runAPIRemove,
@@ -53,6 +56,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	syncCmd := &cobra.Command{
 		Use:   "sync <name>",
 		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
+		Long:  apiSyncLong,
 		Example: fmt.Sprintf(`  %s api sync demo
   %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.ExactArgs(1),
@@ -63,6 +67,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd := &cobra.Command{
 		Use:   "connect <name> <url> [setup-expression ...]",
 		Short: "Connect Restish to an API and discover generated commands",
+		Long:  apiConnectLong,
 		Example: fmt.Sprintf(`  %s api connect demo https://api.example.com
   %s api connect demo https://api.example.com 'prompt.api_key: env:DEMO_API_KEY'
   %s api connect demo https://api.example.com --spec ./openapi.yaml`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
@@ -87,6 +92,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:     "inspect <name>",
 		Short:   "Print the config for a registered API as JSON",
+		Long:    apiInspectLong,
 		Example: fmt.Sprintf("  %s api inspect demo", c.commandNameOrDefault()),
 		Args:    cobra.ExactArgs(1),
 		RunE:    c.runAPIInspect,
@@ -94,6 +100,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "set <name> <patch> [patch...]",
 		Short: "Patch API config using shorthand syntax",
+		Long:  apiSetLong,
 		Example: fmt.Sprintf(`  %s api set demo 'profiles.default.headers[]: X-Trace-Id: abc'
   %s api set demo 'base_url: https://staging.example.com'
   %s api set demo 'profiles.prod.auth.type: oauth-client-credentials'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),

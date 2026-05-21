@@ -27,6 +27,7 @@ func (a *app) newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "bulk",
 		Short:         "Client-side bulk resource management",
+		Long:          "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.\n\nUse `bulk init` on a list endpoint that returns resource URLs and versions. Then use `bulk status`, `bulk diff`, `bulk pull`, and `bulk push` in the checkout directory.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -49,7 +50,7 @@ func (a *app) newInitCmd() *cobra.Command {
 		Use:     "init URL",
 		Aliases: []string{"i"},
 		Short:   "Initialize a new bulk checkout",
-		Long:    "Initialize a bulk checkout from a list endpoint that returns each resource URL and version, optionally transforming the list with -f and --url-template first.",
+		Long:    "Initialize a bulk checkout from a list endpoint that returns each resource URL and version.\n\nUse `-f` to project or filter the list response before URL extraction. Use `--url-template` when the list items contain IDs or fields that need to be turned into resource URLs.",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filter, _ := cmd.Flags().GetString("filter")
@@ -78,6 +79,7 @@ func (a *app) newListCmd() *cobra.Command {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List checked out files",
+		Long:    "List files tracked by the current bulk checkout.\n\nUse `--match` to restrict files by expression and `-f` to print projected content from each matching JSON file.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -129,6 +131,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 		Use:     "status",
 		Aliases: []string{"st"},
 		Short:   "Show local and remote added/changed/removed files",
+		Long:    "Show local and remote added, changed, and removed resources for the current checkout.\n\nUse this before `bulk pull` or `bulk push` to see whether the remote API or local files have changed since the last recorded version.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -171,6 +174,7 @@ func (a *app) newDiffCmd() *cobra.Command {
 		Use:     "diff [file...]",
 		Aliases: []string{"di"},
 		Short:   "Show local or remote diffs",
+		Long:    "Show local diffs for tracked files, or remote diffs with `--remote`.\n\nPass file names to focus the diff. Use `--match` to select files by expression when file paths are inconvenient.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -198,6 +202,7 @@ func (a *app) newResetCmd() *cobra.Command {
 		Use:     "reset [file...]",
 		Aliases: []string{"re"},
 		Short:   "Undo local changes to files",
+		Long:    "Undo local changes in the current checkout by restoring tracked files to their last recorded version.\n\nPass file names or use `--match` to limit what is reset. This changes local files only; it does not send requests to the remote API.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -229,6 +234,7 @@ func (a *app) newPullCmd() *cobra.Command {
 		Use:     "pull",
 		Aliases: []string{"pl"},
 		Short:   "Pull remote updates without overwriting local changes",
+		Long:    "Fetch remote changes for the current checkout without overwriting local edits.\n\nUse this after `bulk status` reports remote changes. `--jobs` controls how many resource requests run concurrently.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -247,6 +253,7 @@ func (a *app) newPushCmd() *cobra.Command {
 		Use:     "push",
 		Aliases: []string{"ps"},
 		Short:   "Upload local changes to the remote server",
+		Long:    "Upload local changes from the current checkout to the remote API.\n\nBy default, bulk uses recorded `ETag`, `Last-Modified`, or version preconditions when available so remote changes are not silently overwritten. Use `--force` only when you intentionally want to push without those guards.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {

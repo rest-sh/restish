@@ -14,9 +14,9 @@ import (
 )
 
 // TestAPIConnectBuiltinNameRejected verifies that "api connect" refuses names that
-// collide with top-level built-in commands (e.g. "api", "get", "post").
+// collide with top-level built-in commands, including hidden compatibility commands.
 func TestAPIConnectBuiltinNameRejected(t *testing.T) {
-	for _, name := range []string{"api", "get", "post", "cache", "edit"} {
+	for _, name := range []string{"api", "get", "post", "cache", "edit", "completion", "help"} {
 		var stdout, stderr bytes.Buffer
 		c := New()
 		c.Stdout = &stdout
@@ -33,9 +33,24 @@ func TestAPIConnectBuiltinNameRejected(t *testing.T) {
 	}
 }
 
+func TestAPIConnectFlagsNameAllowed(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	c := New()
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+
+	if err := c.Run([]string{"restish", "api", "connect", "flags", "https://example.com", "--no-discover"}); err != nil {
+		t.Fatalf("api connect flags: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `Connected API "flags"`) {
+		t.Fatalf("expected flags API to connect, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 // TestIsBuiltinCommandName verifies the helper covers the expected set of names.
 func TestIsBuiltinCommandName(t *testing.T) {
-	builtins := []string{"api", "cache", "cert", "completion", "config", "content-types", "delete", "doctor", "edit", "flags", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "shell", "version"}
+	builtins := []string{"api", "cache", "cert", "completion", "config", "content-types", "delete", "doctor", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "shell", "version"}
 	for _, name := range builtins {
 		if !isBuiltinCommandName(name) {
 			t.Errorf("isBuiltinCommandName(%q) = false, want true", name)
@@ -44,15 +59,15 @@ func TestIsBuiltinCommandName(t *testing.T) {
 	if isBuiltinCommandName("myapi") {
 		t.Error("isBuiltinCommandName(\"myapi\") = true, want false")
 	}
+	if isBuiltinCommandName("flags") {
+		t.Error("isBuiltinCommandName(\"flags\") = true, want false")
+	}
 }
 
 func TestBuiltinCommandNamesMatchRegisteredCommands(t *testing.T) {
 	c := New()
 	root := c.newRootCmd()
 	for _, cmd := range root.Commands() {
-		if cmd.Hidden {
-			continue
-		}
 		if !isBuiltinCommandName(cmd.Name()) {
 			t.Fatalf("registered built-in %q missing from builtinCommands", cmd.Name())
 		}

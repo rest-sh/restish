@@ -31,11 +31,7 @@ func (c *CLI) newRootCmd() *cobra.Command {
 	}
 	long := c.commandLong
 	if long == "" {
-		long = `Restish is a CLI for interacting with REST-ish HTTP APIs.
-
-Every API deserves a CLI. Restish provides generic HTTP commands for
-quick one-off requests, and generates documented, shell-completed
-commands for registered APIs via OpenAPI 3.`
+		long = rootLongDefault
 	}
 	root := &cobra.Command{
 		Use:                        use,
@@ -90,7 +86,6 @@ commands for registered APIs via OpenAPI 3.`
 	c.addCompletionCommand(root)
 	c.addShellCommand(root)
 	c.addLinksCommand(root)
-	c.addFlagsCommand(root)
 	c.addVersionCommand(root)
 	c.addDoctorCommand(root)
 	c.addPluginCommand(root)
@@ -103,6 +98,7 @@ func (c *CLI) addVersionCommand(root *cobra.Command) {
 	root.AddCommand(&cobra.Command{
 		Use:     "version",
 		Short:   "Print the Restish version",
+		Long:    versionLong,
 		GroupID: rootGroupUtility,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -188,7 +184,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.Bool("rsh-retry-unsafe", false, "Allow retries for POST, PUT, PATCH, and DELETE requests")
 	pf.String("rsh-retry-max-wait", "", "Maximum wait for Retry-After/X-Retry-In delays (default: 5m)")
 	pf.Bool("rsh-no-paginate", false, "Disable automatic pagination (return only the first page)")
-	pf.Bool("rsh-collect", false, "Collect all pages then apply filter (default: stream items as they arrive)")
+	pf.Bool("rsh-collect", false, "Collect paginated items before filtering (default: filter/render items as they arrive)")
 	pf.Int("rsh-max-pages", 25, "Maximum number of pages to fetch (0 = unlimited)")
 	pf.Int("rsh-max-items", 0, "Maximum number of paginated items or streamed events/lines to process (0 = unlimited)")
 	pf.Int("rsh-max-body-size", 0, fmt.Sprintf("Maximum response body size in MiB (0 = default %d MiB)", output.DefaultMaxBodyBytes/(1024*1024)))

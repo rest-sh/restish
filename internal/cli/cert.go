@@ -21,6 +21,7 @@ func (c *CLI) addCertCommand(root *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:     "cert <uri>",
 		Short:   "Show the TLS certificate chain for a server",
+		Long:    certLong,
 		GroupID: rootGroupUtility,
 		Example: fmt.Sprintf(`  %s cert https://api.example.com
   %s cert api.example.com --warn-days 30`, c.commandNameOrDefault(), c.commandNameOrDefault()),

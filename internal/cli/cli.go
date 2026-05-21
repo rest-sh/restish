@@ -1046,15 +1046,16 @@ func commandPathExists(cmd *cobra.Command, args []string) bool {
 	return false
 }
 
-// builtinCommands is the set of top-level subcommand names registered by the
-// CLI itself. When the first non-flag argument is one of these, the fast-path
-// skips API-name detection and loads all configured APIs.
+// builtinCommands is the set of top-level public and hidden compatibility
+// command names registered by the CLI itself. When the first non-flag argument
+// is one of these, the fast-path skips API-name detection and loads all
+// configured APIs.
 var builtinCommands = map[string]bool{
 	"api": true, "cache": true, "cert": true, "completion": true, "config": true,
 	"content-types": true, "delete": true, "doctor": true, "edit": true,
-	"flags": true, "get": true, "head": true, "help": true, "links": true,
-	"options": true, "patch": true, "plugin": true, "post": true, "put": true,
-	"shell": true, "version": true,
+	"get": true, "head": true, "help": true, "links": true, "options": true,
+	"patch": true, "plugin": true, "post": true, "put": true, "shell": true,
+	"version": true,
 }
 
 // isBuiltinCommandName reports whether name collides with a top-level built-in

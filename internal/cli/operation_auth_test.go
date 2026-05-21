@@ -127,7 +127,7 @@ func TestPlanOperationAuthReportsUndeclaredSecurityScheme(t *testing.T) {
 	for _, want := range []string{
 		`OpenAPI security issue: security scheme "BearerAuth" is referenced by operations but is not declared in components.securitySchemes`,
 		"--rsh-auth BearerAuth",
-		"restish api auth list svc",
+		"restish api auth inspect svc",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error missing %q:\n%v", want, err)

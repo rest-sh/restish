@@ -26,6 +26,7 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:     "edit <uri> [patch ...]",
 		Short:   "Fetch a resource, edit it locally, then send it back",
+		Long:    editLong,
 		GroupID: rootGroupUtility,
 		Example: fmt.Sprintf(`  %s edit https://api.example.com/items/123
   %s edit https://api.example.com/items/123 'name: Ada' --dry-run

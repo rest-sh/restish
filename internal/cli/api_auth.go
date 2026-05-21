@@ -17,21 +17,22 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage API auth credentials",
-		Example: fmt.Sprintf(`  %s api auth list demo
+		Long:  apiAuthLong,
+		Example: fmt.Sprintf(`  %s api auth inspect demo
   %s api auth inspect demo --rsh-operation list-items
   %s api auth logout demo`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+			}
+			return cmd.Help()
+		},
 	}
-	cmd.AddCommand(&cobra.Command{
-		Use:   "list <api>",
-		Short: "List configured auth credentials for an API profile",
-		Example: fmt.Sprintf(`  %s api auth list demo
-  %s api auth list demo -p staging`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.ExactArgs(1),
-		RunE: c.runAPIAuthList,
-	})
 	cmd.AddCommand(&cobra.Command{
 		Use:     "add <api> <credential-id>",
 		Short:   "Add an empty credential binding to an API profile",
+		Long:    apiAuthAddLong,
 		Example: fmt.Sprintf("  %s api auth add demo PartnerKey", c.commandNameOrDefault()),
 		Args:    cobra.ExactArgs(2),
 		RunE:    c.runAPIAuthAdd,
@@ -39,6 +40,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:     "remove <api> <credential-id>",
 		Short:   "Remove a credential binding from an API profile",
+		Long:    apiAuthRemoveLong,
 		Example: fmt.Sprintf("  %s api auth remove demo PartnerKey", c.commandNameOrDefault()),
 		Args:    cobra.ExactArgs(2),
 		RunE:    c.runAPIAuthRemove,
@@ -46,6 +48,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	logoutCmd := &cobra.Command{
 		Use:   "logout [api]",
 		Short: "Delete cached API auth tokens",
+		Long:  apiAuthLogoutLong,
 		Example: fmt.Sprintf(`  %s api auth logout demo
   %s api auth logout demo --all-profiles
   %s api auth logout --auth-profile shared-oauth`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
@@ -69,6 +72,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	headerCmd := &cobra.Command{
 		Use:   "header <api> <header> [credential-id]",
 		Short: "Print one auth header value for an API profile",
+		Long:  apiAuthHeaderLong,
 		Example: fmt.Sprintf(`  %s api auth header demo Authorization
   %s api auth header demo X-API-Key PartnerKey`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.RangeArgs(2, 3),
@@ -80,6 +84,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",
+		Long:  apiAuthInspectLong,
 		Example: fmt.Sprintf(`  %s api auth inspect demo
   %s api auth inspect demo --rsh-operation list-items --redact`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.ExactArgs(1),
@@ -99,13 +104,7 @@ func addAPIAuthLogoutFlags(cmd *cobra.Command) {
 	cmd.Flags().String("auth-profile", "", "Delete cached auth tokens for a shared auth profile instead of an API")
 }
 
-func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
-	profileName := c.profileFromCmd(cmd)
-	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
-	if err != nil {
-		return err
-	}
+func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig) {
 	set, hasOps := c.cachedOperationSetForAPI(requestContext(cmd), apiName, apiCfg, profileName)
 	_, profileReady, profileErr := c.profileAuthReadiness(apiName, profileName, prof)
 	coverage := operationAuthCoverage{}
@@ -117,59 +116,6 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
-		return err
-	} else if jsonOut {
-		type apiAuthCredentialEntry struct {
-			ID        string   `json:"id"`
-			Status    string   `json:"status"`
-			Satisfies []string `json:"satisfies,omitempty"`
-		}
-		type apiAuthListOutput struct {
-			API                          string                   `json:"api"`
-			Profile                      string                   `json:"profile"`
-			ProfileAuth                  string                   `json:"profile_auth"`
-			ProfileAuthError             string                   `json:"profile_auth_error,omitempty"`
-			OperationMetadataAvailable   bool                     `json:"operation_metadata_available"`
-			CallableSecuredOperations    int                      `json:"callable_secured_operations,omitempty"`
-			TotalSecuredOperations       int                      `json:"total_secured_operations,omitempty"`
-			OperationMetadataRefreshHint string                   `json:"operation_metadata_refresh_hint,omitempty"`
-			Credentials                  []apiAuthCredentialEntry `json:"credentials"`
-		}
-		out := apiAuthListOutput{
-			API:                        apiName,
-			Profile:                    profileName,
-			ProfileAuth:                "none",
-			OperationMetadataAvailable: hasOps,
-			Credentials:                make([]apiAuthCredentialEntry, 0, len(ids)),
-		}
-		if profileErr != nil {
-			out.ProfileAuth = "configured"
-			out.ProfileAuthError = profileErr.Error()
-		} else if profileReady.Configured {
-			out.ProfileAuth = profileReady.status("none")
-		}
-		if hasOps {
-			out.CallableSecuredOperations = coverage.Callable
-			out.TotalSecuredOperations = coverage.Secured
-		} else {
-			out.OperationMetadataRefreshHint = fmt.Sprintf("run \"restish api sync %s\" to refresh", apiName)
-		}
-		for _, id := range ids {
-			credential := prof.Credentials[id]
-			_, ready, _ := c.credentialReadiness(apiName, profileName, id, credential)
-			var satisfies []string
-			if credential != nil {
-				satisfies = append([]string(nil), credential.Satisfies...)
-			}
-			out.Credentials = append(out.Credentials, apiAuthCredentialEntry{
-				ID:        id,
-				Status:    ready.status("empty"),
-				Satisfies: satisfies,
-			})
-		}
-		return c.writePrettyJSON(out)
-	}
 	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
 	if profileErr != nil {
 		fmt.Fprintf(c.Stdout, "Profile auth: configured (%s)\n", profileErr)
@@ -202,7 +148,6 @@ func (c *CLI) runAPIAuthList(cmd *cobra.Command, args []string) error {
 		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
 		c.printAPIAuthRequirementSummary(apiName, profileName, set.Operations, prof, coverage)
 	}
-	return nil
 }
 
 func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
@@ -280,6 +225,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	credentialID, _ := cmd.Flags().GetString("rsh-credential")
 	rawHeader, _ := cmd.Flags().GetString("raw-header")
 	redact, _ := cmd.Flags().GetBool("redact")
+	focused := credentialID != "" || rawHeader != ""
 	if operation, _ := cmd.Flags().GetString("rsh-operation"); operation != "" {
 		if credentialID != "" {
 			return fmt.Errorf("--rsh-operation and --rsh-credential are mutually exclusive")
@@ -312,7 +258,16 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(targets) == 0 {
-		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		if focused {
+			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		}
+		c.printAPIAuthOverview(cmd, apiName, profileName, apiCfg, prof)
+		return nil
+	}
+	if !focused {
+		c.printAPIAuthOverview(cmd, apiName, profileName, apiCfg, prof)
+		fmt.Fprintln(c.Stdout)
+		fmt.Fprintln(c.Stdout, "Auth material:")
 	}
 	for i, target := range targets {
 		if i > 0 {
@@ -324,6 +279,16 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		if target.Resolved.Config == nil {
 			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
 		}
+		if !focused {
+			ready := c.resolvedAuthReadiness(apiName, profileName, target.Resolved)
+			if !ready.Usable {
+				if target.Resolved.Config != nil {
+					fmt.Fprintf(c.Stdout, "Auth type: %s\n", target.Resolved.Config.Type)
+				}
+				fmt.Fprintf(c.Stdout, "Auth material: unavailable (%s)\n", strings.Join(ready.Issues, "; "))
+				continue
+			}
+		}
 		req, err := c.authInspectionRequest(cmd, apiName, profileName, target.Resolved)
 		if err != nil {
 			return err
@@ -334,14 +299,15 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 }
 
 type authInspectionTarget struct {
-	Label    string
-	Resolved resolvedAuthConfig
+	Label        string
+	CredentialID string
+	Resolved     resolvedAuthConfig
 }
 
 func (c *CLI) authInspectionTargets(apiName, profileName string, prof *config.ProfileConfig, credentialID string) ([]authInspectionTarget, error) {
 	if credentialID != "" {
 		resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
-		return []authInspectionTarget{{Label: fmt.Sprintf("Credential: %s", credentialID), Resolved: resolved}}, err
+		return []authInspectionTarget{{Label: fmt.Sprintf("Credential: %s", credentialID), CredentialID: credentialID, Resolved: resolved}}, err
 	}
 
 	var targets []authInspectionTarget
@@ -355,9 +321,6 @@ func (c *CLI) authInspectionTargets(apiName, profileName string, prof *config.Pr
 
 	ids := configuredCredentialIDs(prof)
 	if len(ids) == 0 {
-		if len(targets) == 0 && prof != nil && len(prof.Credentials) > 0 {
-			return nil, fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth list %s\"", profileName, apiName, apiName)
-		}
 		return targets, nil
 	}
 	for _, id := range ids {
@@ -366,8 +329,9 @@ func (c *CLI) authInspectionTargets(apiName, profileName string, prof *config.Pr
 			return nil, fmt.Errorf("credential %q: %w", id, err)
 		}
 		targets = append(targets, authInspectionTarget{
-			Label:    fmt.Sprintf("Credential: %s", id),
-			Resolved: resolved,
+			Label:        fmt.Sprintf("Credential: %s", id),
+			CredentialID: id,
+			Resolved:     resolved,
 		})
 	}
 	if len(targets) > 1 && targets[0].Label == "" {
@@ -508,7 +472,7 @@ func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *con
 	switch len(ids) {
 	case 0:
 		if len(prof.Credentials) > 0 {
-			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth list %s\"", profileName, apiName, apiName)
+			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth inspect %s\"", profileName, apiName, apiName)
 		}
 		return resolvedAuthConfig{}, "", nil
 	case 1:

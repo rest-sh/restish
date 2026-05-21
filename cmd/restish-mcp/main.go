@@ -22,7 +22,7 @@ func main() {
 		{
 			Name:             "mcp",
 			Short:            "Serve registered APIs over the Model Context Protocol",
-			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.\n\nUsage:\n  restish mcp serve <api...>",
+			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.\n\nUse `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.",
 			PassthroughStdio: true,
 		},
 	}) {
@@ -99,11 +99,11 @@ func helpText(args []string) (string, bool) {
 }
 
 func rootHelpText() string {
-	return "Expose registered APIs as MCP tools via Restish-authenticated HTTP delegation.\n\nUsage:\n  restish mcp serve <api...>\n\nCommands:\n  serve    Serve registered APIs over stdio\n"
+	return "Expose registered APIs as MCP tools via Restish-authenticated HTTP delegation.\n\nUse `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.\n\nUsage:\n  restish mcp serve <api...>\n\nCommands:\n  serve    Serve registered APIs over stdio\n"
 }
 
 func serveHelpText() string {
-	return "Serve registered APIs over the Model Context Protocol.\n\nUsage:\n  restish mcp serve [flags] <api...>\n\nFlags:\n  --operations string        Comma-separated operationId allowlist\n  --max-result-bytes int     Maximum tool result payload size\n  --request-timeout int      Per-tool HTTP request timeout in seconds (0 disables)\n  --read-only                Expose only GET/HEAD operations\n  --allow-write-tools        Expose POST, PUT, PATCH, and DELETE operations as MCP tools\n"
+	return "Serve registered APIs over the Model Context Protocol.\n\nBy default, Restish exposes read-oriented tools and hides write operations. Use `--allow-write-tools` only for MCP clients and models you trust to make `POST`, `PUT`, `PATCH`, and `DELETE` calls against the selected APIs.\n\nUsage:\n  restish mcp serve [flags] <api...>\n\nFlags:\n  --operations string        Comma-separated operationId allowlist\n  --max-result-bytes int     Maximum tool result payload size\n  --request-timeout int      Per-tool HTTP request timeout in seconds (0 disables)\n  --read-only                Expose only GET/HEAD operations\n  --allow-write-tools        Expose POST, PUT, PATCH, and DELETE operations as MCP tools\n"
 }
 
 const stdinForwardQueueSize = 64

@@ -212,7 +212,7 @@ func TestHelpAllBypassesValidationAndExecution(t *testing.T) {
 	if called {
 		t.Fatal("help-all after URL should not execute the HTTP request")
 	}
-	if got := out.String(); !strings.Contains(got, "Perform an HTTP GET request") || !strings.Contains(got, "--rsh-header") {
+	if got := out.String(); !strings.Contains(got, "Perform an HTTP `GET` request") || !strings.Contains(got, "--rsh-header") {
 		t.Fatalf("expected GET help-all output, got:\n%s", got)
 	}
 }

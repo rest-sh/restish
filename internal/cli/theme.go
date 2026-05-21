@@ -27,6 +27,7 @@ func (c *CLI) newThemeSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <theme|path-or-url-or-user/repo> [name]",
 		Short: "Install a theme JSON or JSONC file and save it in config",
+		Long:  configThemeSetLong,
 		Example: fmt.Sprintf(`  %s config theme set one-dark-pro
   %s config theme set ./theme.json
   %s config theme set user/repo dark`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
@@ -41,6 +42,7 @@ func (c *CLI) newThemeListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Short:   "List official theme names",
+		Long:    configThemeListLong,
 		Example: fmt.Sprintf("  %s config theme list", c.commandNameOrDefault()),
 		Args:    cobra.NoArgs,
 		RunE:    c.runThemeList,
@@ -52,6 +54,7 @@ func (c *CLI) newThemeResetCommand() *cobra.Command {
 		Use:     "reset",
 		Aliases: []string{"unset"},
 		Short:   "Reset auto output highlighting to the built-in theme",
+		Long:    configThemeResetLong,
 		Example: fmt.Sprintf("  %s config theme reset", c.commandNameOrDefault()),
 		Args:    cobra.NoArgs,
 		RunE:    c.runThemeReset,

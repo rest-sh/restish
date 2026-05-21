@@ -1,7 +1,6 @@
 package cli_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,7 +14,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/config"
 )
 
-func TestAPIAuthListAddRemove(t *testing.T) {
+func TestAPIAuthInspectAddRemove(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", &config.ProfileConfig{}))
 
 	app := newTestApp(t)
@@ -30,7 +29,7 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 	}
 
 	app.Stdout.Reset()
-	app.Run("api", "auth", "list", "myapi")
+	app.Run("api", "auth", "inspect", "myapi")
 	requireContains(t, app.Stdout.String(), "PartnerKey")
 
 	app.Run("api", "auth", "remove", "myapi", "PartnerKey")
@@ -40,39 +39,6 @@ func TestAPIAuthListAddRemove(t *testing.T) {
 	}
 	if written.APIs["myapi"].Profiles["default"].Credentials != nil {
 		t.Fatalf("expected credentials removed, got %#v", written.APIs["myapi"].Profiles["default"].Credentials)
-	}
-}
-
-func TestAPIAuthListJSONOutput(t *testing.T) {
-	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
-		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret"), "items:read"),
-	})))
-
-	app := newTestApp(t)
-	app.SetConfigPath(cfgFile)
-	app.Run("api", "auth", "list", "myapi", "-o", "json")
-	var got struct {
-		API                        string `json:"api"`
-		Profile                    string `json:"profile"`
-		ProfileAuth                string `json:"profile_auth"`
-		OperationMetadataAvailable bool   `json:"operation_metadata_available"`
-		Credentials                []struct {
-			ID        string   `json:"id"`
-			Status    string   `json:"status"`
-			Satisfies []string `json:"satisfies"`
-		} `json:"credentials"`
-	}
-	if err := json.Unmarshal(app.Stdout.Bytes(), &got); err != nil {
-		t.Fatalf("parse JSON output: %v\n%s", err, app.Stdout.String())
-	}
-	if got.API != "myapi" || got.Profile != "default" || got.ProfileAuth != "none" || got.OperationMetadataAvailable {
-		t.Fatalf("auth list JSON = %#v", got)
-	}
-	if len(got.Credentials) != 1 || got.Credentials[0].ID != "PartnerKey" || got.Credentials[0].Status != "configured" {
-		t.Fatalf("credentials JSON = %#v", got.Credentials)
-	}
-	if len(got.Credentials[0].Satisfies) != 1 || got.Credentials[0].Satisfies[0] != "items:read" {
-		t.Fatalf("satisfies JSON = %#v", got.Credentials[0].Satisfies)
 	}
 }
 
@@ -87,6 +53,16 @@ func TestAPIAuthInspectRejectsResponseTransformFlags(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "does not support -o/--rsh-output-format") {
 		t.Fatalf("unexpected api auth inspect error: %v", err)
+	}
+}
+
+func TestAPIAuthListCommandRemoved(t *testing.T) {
+	err := newTestApp(t).RunErr("api", "auth", "list", "myapi")
+	if err == nil {
+		t.Fatal("expected api auth list to be removed")
+	}
+	if !strings.Contains(err.Error(), `unknown command "list"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -270,7 +246,7 @@ func TestAPIAuthInspectMultipleCredentialsShowsAll(t *testing.T) {
 	}
 }
 
-func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
+func TestAPIAuthInspectUsesCachedOperationMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
@@ -300,11 +276,11 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	c, out := env.newCaptureCLI()
 	loader := &countingLoader{}
 	c.AddLoader(loader)
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
 	if got := loader.detects.Load(); got != 0 {
-		t.Fatalf("api auth list loaded spec via loader %d times; want cached operation metadata only", got)
+		t.Fatalf("api auth inspect loaded spec via loader %d times; want cached operation metadata only", got)
 	}
 	got := out.String()
 	requireContains(t, got,
@@ -318,7 +294,7 @@ func TestAPIAuthListUsesCachedOperationMetadata(t *testing.T) {
 	)
 }
 
-func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
+func TestAPIAuthInspectReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	t.Setenv("READY_TOKEN", "ready")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
@@ -341,8 +317,8 @@ func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	}))
 
 	c, out := env.newCaptureCLI()
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
 	got := out.String()
 	requireContains(t, got,
@@ -354,7 +330,7 @@ func TestAPIAuthListReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	)
 }
 
-func TestAPIAuthListCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
+func TestAPIAuthInspectCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
@@ -370,8 +346,8 @@ func TestAPIAuthListCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
 	})))
 
 	c, out := env.newCaptureCLI()
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
 	got := out.String()
 	requireContains(t, got,
@@ -380,7 +356,7 @@ func TestAPIAuthListCountsOptionalAnonymousSecurityAsCallable(t *testing.T) {
 	)
 }
 
-func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *testing.T) {
+func TestAPIAuthInspectOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
@@ -423,8 +399,8 @@ func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *t
 
 	c, out := env.newCaptureCLI()
 	c.Hooks().TokenCachePath = tokenPath
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
 	got := out.String()
 	requireContains(t, got,
@@ -440,8 +416,8 @@ func TestAPIAuthListOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t *t
 	}
 	c, out = env.newCaptureCLI()
 	c.Hooks().TokenCachePath = tokenPath
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list with token: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect with token: %v", err)
 	}
 	got = out.String()
 	requireContains(t, got,
@@ -474,7 +450,7 @@ func TestAPIAuthInspectOperationLabelsProfileFallbackSource(t *testing.T) {
 	)
 }
 
-func TestAPIAuthListUsesImplicitDefaultProfile(t *testing.T) {
+func TestAPIAuthInspectUsesImplicitDefaultProfile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
@@ -486,8 +462,8 @@ func TestAPIAuthListUsesImplicitDefaultProfile(t *testing.T) {
 	env.writeAPIConfig(t, &config.APIConfig{BaseURL: env.baseURL(t)})
 
 	c, out := env.newCaptureCLI()
-	if err := c.Run([]string{"restish", "api", "auth", "list", "tapi"}); err != nil {
-		t.Fatalf("api auth list: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi"}); err != nil {
+		t.Fatalf("api auth inspect: %v", err)
 	}
 	got := out.String()
 	requireContains(t, got,

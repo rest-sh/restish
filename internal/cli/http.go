@@ -73,6 +73,7 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 			Use:     use,
 			Aliases: []string{method},
 			Short:   v.short,
+			Long:    genericHTTPLong(method),
 			Example: genericHTTPExamples(c.commandName, v.name),
 			GroupID: rootGroupHTTP,
 			Annotations: map[string]string{
@@ -88,6 +89,25 @@ func (c *CLI) addHTTPCommands(root *cobra.Command) {
 	}
 }
 
+func genericHTTPLong(method string) string {
+	switch method {
+	case "GET", "HEAD", "OPTIONS":
+		return fmt.Sprintf("Perform an HTTP `%s` request against a full URL or registered API short-name URL.\n\n", method) +
+			"Use generic HTTP commands for one-off requests, scripting, and APIs that are not registered with `api connect`. Restish still applies global request flags, profile settings for registered API short names, response normalization, output formatting, filtering, retries, caching, pagination, and plugin hooks.\n\n" +
+			"Pass request headers with `-H`, query parameters with `-q`, filters with `-f`, and output format with `-o`."
+	case "POST", "PUT", "PATCH":
+		return fmt.Sprintf("Perform an HTTP `%s` request with optional shorthand, file, or stdin body input.\n\n", method) +
+			"Use generic HTTP commands for one-off writes, scripting, and APIs that are not registered with `api connect`. Body arguments use Restish shorthand by default; pass `@file.json`, pipe stdin, or set `--rsh-content-type` when you need a specific wire format.\n\n" +
+			"Restish still applies global request flags, response normalization, output formatting, filtering, retries, caching, pagination, and plugin hooks. Unsafe methods are not retried unless you opt in with `--rsh-retry-unsafe`."
+	case "DELETE":
+		return "Perform an HTTP `DELETE` request against a full URL or registered API short-name URL.\n\n" +
+			"Use this for direct delete requests when a generated OpenAPI command is not available or would add friction. Restish still applies global request flags, profile settings for registered API short names, response normalization, output formatting, filtering, and plugin hooks.\n\n" +
+			"By default, HTTP error statuses produce non-zero exit codes. Use `--rsh-ignore-status-code` only when a script intentionally handles those responses."
+	default:
+		return fmt.Sprintf("Perform an HTTP `%s` request with Restish's request, output, and plugin pipeline.", method)
+	}
+}
+
 func genericHTTPExamples(commandName, verb string) string {
 	if commandName == "" {
 		commandName = "restish"
@@ -96,11 +116,11 @@ func genericHTTPExamples(commandName, verb string) string {
 	case "get":
 		return fmt.Sprintf("  %s get https://api.example.com/items\n  %s get https://api.example.com/items -f body.items -o table", commandName, commandName)
 	case "post":
-		return fmt.Sprintf("  %s post https://api.example.com/items name: Ada active: true\n  %s post -c json https://api.example.com/items @item.json", commandName, commandName)
+		return fmt.Sprintf("  %s post https://api.example.com/items 'name: Ada, active: true'\n  %s post -c json https://api.example.com/items @item.json", commandName, commandName)
 	case "put":
-		return fmt.Sprintf("  %s put https://api.example.com/items/123 name: Ada\n  %s put -c json https://api.example.com/items/123 @item.json", commandName, commandName)
+		return fmt.Sprintf("  %s put https://api.example.com/items/123 'name: Ada'\n  %s put -c json https://api.example.com/items/123 @item.json", commandName, commandName)
 	case "patch":
-		return fmt.Sprintf("  %s patch https://api.example.com/items/123 active: false\n  %s patch https://api.example.com/items/123 --rsh-if-match abc123 active: false", commandName, commandName)
+		return fmt.Sprintf("  %s patch https://api.example.com/items/123 'active: false'\n  %s patch https://api.example.com/items/123 -H 'If-Match: abc123' 'active: false'", commandName, commandName)
 	case "delete":
 		return fmt.Sprintf("  %s delete https://api.example.com/items/123\n  %s delete https://api.example.com/items/123 --rsh-ignore-status-code", commandName, commandName)
 	default:

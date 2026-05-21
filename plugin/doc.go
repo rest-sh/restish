@@ -75,7 +75,7 @@
 //     output the host sends `start`, then one or more `item` messages, then
 //     `end`.
 //
-// See docs/plugin-quickstart.md for the fastest practical path to a working
-// plugin, and docs/design/019-hook-plugins.md plus docs/design/020-command-plugins.md
-// for the full protocol details.
+// See site/content/en/docs/plugins/quickstart.md for the fastest practical path
+// to a working plugin, and docs/design/019-hook-plugins.md plus
+// docs/design/020-command-plugins.md for the full protocol details.
 package plugin

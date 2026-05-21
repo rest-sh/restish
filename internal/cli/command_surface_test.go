@@ -59,7 +59,6 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 			want: []string{
 				"add",
 				"inspect",
-				"list",
 				"logout",
 				"remove",
 			},
@@ -83,7 +82,7 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 			},
 		},
 		{
-			name: "completion",
+			name: "hidden completion alias",
 			args: []string{"restish", "completion", "--help"},
 			want: []string{
 				"bash",
@@ -100,19 +99,6 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 				"api",
 				"migrate-v1",
 				"plugin",
-			},
-		},
-		{
-			name: "flags",
-			args: []string{"restish", "flags", "--help"},
-			want: []string{
-				"request",
-				"output",
-				"auth",
-				"tls",
-				"pagination",
-				"cache",
-				"general",
 			},
 		},
 		{
@@ -171,22 +157,6 @@ func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
 		if !strings.Contains(out.String(), "Examples:") {
 			t.Fatalf("%v: help missing examples:\n%s", args, out.String())
 		}
-	}
-}
-
-func TestFlagsCommandSurface(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	if err := c.Run([]string{"restish", "flags", "output"}); err != nil {
-		t.Fatalf("flags output: %v", err)
-	}
-	got := out.String()
-	for _, want := range []string{"--rsh-output-format", "--rsh-filter"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("flags output missing %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, "--rsh-query") {
-		t.Fatalf("flags output should not include request flags:\n%s", got)
 	}
 }
 

@@ -21,6 +21,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 	doctorCmd := &cobra.Command{
 		Use:     "doctor",
 		Short:   "Diagnose Restish configuration and runtime paths",
+		Long:    doctorLong,
 		GroupID: rootGroupUtility,
 		Example: fmt.Sprintf(`  %s doctor
   %s doctor -o json
@@ -31,6 +32,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "api <name>",
 		Short: "Diagnose a registered API",
+		Long:  doctorAPILong,
 		Example: fmt.Sprintf(`  %s doctor api demo
   %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.ExactArgs(1),
@@ -41,6 +43,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:     "plugin <name>",
 		Short:   "Diagnose a Restish plugin executable",
+		Long:    doctorPluginLong,
 		Example: fmt.Sprintf("  %s doctor plugin mcp", c.commandNameOrDefault()),
 		Args:    cobra.ExactArgs(1),
 		RunE:    c.runDoctorPlugin,
@@ -48,6 +51,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "migrate-v1",
 		Short: "Run default-location v1 config migration if eligible",
+		Long:  doctorMigrateV1Long,
 		Example: fmt.Sprintf(`  %s doctor migrate-v1
   %s doctor migrate-v1 --to ./restish.json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.NoArgs,
@@ -117,6 +121,7 @@ type doctorAuthReport struct {
 	Status  string   `json:"status"`
 	Sources []string `json:"sources,omitempty"`
 	Issues  []string `json:"issues,omitempty"`
+	Hint    string   `json:"hint,omitempty"`
 }
 
 type doctorReachabilityReport struct {
@@ -292,6 +297,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintln(out, "Auth: no profile auth configured")
 	}
+	fmt.Fprintf(out, "Auth details: restish api auth inspect %s\n", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		c.printAPIReachability(out, c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
@@ -514,6 +520,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 		}
 	}
 	report.Auth = c.doctorAuthForProfile(name, profileName, profileForName(api, profileName))
+	report.Auth.Hint = fmt.Sprintf("run `restish api auth inspect %s` for credential coverage and auth material", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
