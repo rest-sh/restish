@@ -50,21 +50,48 @@ The command-line flag wins over `RSH_PROFILE`.
 
 ## Fields
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `base_url` | URL | Override the API base URL for this profile. |
-| `headers` | array of `Name: Value` | Default request headers. |
-| `query` | array of `key=value` | Default query parameters. |
-| `auth` | object | Inline auth configuration. |
-| `auth_ref` | string | Reference to a shared top-level auth profile. |
-| `credentials` | object | Named OpenAPI security-scheme bindings. |
-| `ca_cert` | path | Additional PEM CA certificate. |
-| `client_cert` | path | PEM client certificate for mTLS. |
-| `client_key` | path | PEM private key for mTLS. |
-| `tls_signer` | string | TLS signer plugin name. |
-| `tls_signer_params` | object or key/value params | Parameters for the TLS signer plugin. |
-| `operation_base` | path | Profile-specific operation path prefix. |
-| `server_variables` | object | OpenAPI server variable values. |
+<!-- BEGIN GENERATED: restish-docgen profile-schema -->
+Generated from `internal/config/config.go`.
+
+### `ProfileConfig`
+
+ProfileConfig holds per-profile overrides for an API.
+
+| JSON field | Go field | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `base_url` | `BaseURL` | `string` | no | BaseURL overrides the API-level base_url when this profile is active. |
+| `operation_base` | `OperationBase` | `string` | no | OperationBase overrides API-level operation_base when this profile is active. |
+| `headers` | `Headers` | `[]string` | no | Headers is a list of persistent "Name: Value" headers sent with every request. |
+| `query` | `Query` | `[]string` | no | Query is a list of persistent "key=value" query params sent with every request. |
+| `ca_cert` | `CACertPath` | `string` | no | CACertPath is an optional PEM CA bundle for this profile. |
+| `client_cert` | `ClientCertPath` | `string` | no | ClientCertPath is the PEM client certificate path for this profile. |
+| `client_key` | `ClientKeyPath` | `string` | no | ClientKeyPath is the PEM client private key path for this profile. |
+| `tls_signer` | `TLSSigner` | `string` | no | TLSSigner selects a tls-signer plugin for mTLS client certificate signing. |
+| `tls_signer_params` | `TLSSignerParams` | `map[string]string` | no | TLSSignerParams passes plugin-specific configuration to the tls-signer. |
+| `server_variables` | `ServerVariables` | `map[string]string` | no | ServerVariables overrides API-level OpenAPI server URL variables for this profile when generating operation paths. |
+| `auth` | `Auth` | `*AuthConfig` | no | Auth holds authentication configuration for this profile. |
+| `auth_ref` | `AuthRef` | `string` | no | AuthRef names a top-level auth_profiles entry to use for this profile. |
+| `credentials` | `Credentials` | `map[string]*CredentialConfig` | no | Credentials maps operation credential requirement IDs to auth configurations that satisfy them. |
+
+### `CredentialConfig`
+
+CredentialConfig binds a local auth configuration to a generated operation credential requirement.
+
+| JSON field | Go field | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `auth` | `Auth` | `*AuthConfig` | no | Auth holds inline authentication configuration for this credential. |
+| `auth_ref` | `AuthRef` | `string` | no | AuthRef names a top-level auth_profiles entry to use for this credential. |
+| `satisfies` | `Satisfies` | `[]string` | no | Satisfies lists requirement values, such as OAuth scopes or non-OAuth roles, that this credential is intended to satisfy. |
+
+### `AuthConfig`
+
+AuthConfig holds authentication configuration for a profile.
+
+| JSON field | Go field | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `type` | `Type` | `string` | no | Type identifies the auth mechanism (e.g. "http-basic", "oauth-client-credentials"). |
+| `params` | `Params` | `map[string]string` | no | Params holds handler-specific configuration, e.g. {"username": "alice"}. |
+<!-- END GENERATED -->
 
 Command-line flags override profile fields for one invocation.
 
@@ -127,6 +154,10 @@ restish api set internal \
   'profiles.hsm.tls_signer: pkcs11' \
   'profiles.hsm.tls_signer_params.module: /usr/local/lib/opensc-pkcs11.so'
 ```
+
+Use either file-backed mTLS (`client_cert` and `client_key`) or plugin-backed
+mTLS (`tls_signer`) for a request. Restish rejects a profile or flag set that
+combines a TLS signer with client certificate/key files.
 
 ## Precedence
 

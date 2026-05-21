@@ -39,7 +39,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: site/go.sum
+          cache-dependency-path: |
+            go.sum
+            site/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -64,6 +66,9 @@ jobs:
         working-directory: site
         run: npm ci
 
+      - name: Check generated docs
+        run: go run ./cmd/restish-docgen --check
+
       - name: Build site
         if: ${{ vars.DOCS_SITE_DEPLOY_ENABLED != 'true' }}
         run: |
@@ -79,6 +84,9 @@ jobs:
 
       - name: Check docs links
         run: scripts/check-doc-links.rb
+
+      - name: Check docs examples
+        run: scripts/check-doc-examples.rb
 
       - name: Upload Pages artifact
         if: ${{ vars.DOCS_SITE_DEPLOY_ENABLED == 'true' }}

@@ -29,6 +29,12 @@ go test ./...
 go test ./internal/cli/...
 ```
 
+Run the integration-tag suite before commits that touch CLI or plugin behavior:
+
+```bash
+go test -tags=integration ./...
+```
+
 Use a temporary `GOCACHE` when your environment needs an isolated cache:
 
 ```bash
@@ -44,8 +50,16 @@ go test -update ./internal/output/...
 ## Build The Docs Site
 
 ```bash
+go run ./cmd/restish-docgen --check
 hugo --source site --quiet
 scripts/check-doc-links.rb
+```
+
+When command help, global flags, plugin protocol structs, or built-in command
+plugins change, refresh the checked-in generated regions first:
+
+```bash
+go run ./cmd/restish-docgen --write
 ```
 
 For docs changes, also check stale placeholders:

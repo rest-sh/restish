@@ -15,11 +15,12 @@ Most filters start from one of these normalized roots:
 
 | Root | Meaning |
 | --- | --- |
-| `status` | HTTP status and protocol metadata. |
+| `status` | Numeric HTTP status code. |
 | `headers` | First value for each response header. |
-| `headers_all` | Complete header map for repeated values. |
+| `headers_all` | Complete header map for repeated values. Use jq syntax such as `.headers_all["Set-Cookie"]` when you need it. |
 | `links` | Normalized hypermedia links. |
 | `body` | Decoded response body. |
+| `proto` | HTTP protocol string such as `HTTP/2.0`. |
 
 ```bash
 restish api.rest.sh/ -f headers.Content-Type
@@ -85,6 +86,7 @@ jq filters use jq's current-input root:
 restish api.rest.sh/images --rsh-collect -f '.body[] | select(.format == "jpeg") | .name' -o lines
 restish api.rest.sh/images --rsh-collect -f '.body | map(.format) | unique'
 restish api.rest.sh/images --rsh-no-paginate -f '{next: .links.next, first: .body[0].self}'
+restish api.rest.sh/ -f '.headers_all["Content-Type"]'
 restish api.rest.sh/example -f '.. | .url?'
 ```
 
@@ -143,4 +145,4 @@ program.
 - [Filtering](/docs/guides/filtering/)
 - [Output](/docs/guides/output/)
 - [Shorthand](../shorthand/)
-- [Output](../output-formats/)
+- [Output Formats](../output-formats/)

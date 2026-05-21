@@ -58,6 +58,34 @@ x-cli-aliases: [items]
 x-cli-description: List items with optional filtering.
 ```
 
+Operation-level `x-cli-name` replaces the generated command name.
+`x-cli-aliases` adds command aliases. `x-cli-description` replaces the help
+summary/description shown for the generated command.
+
+Parameters support their own command-shaping extensions:
+
+```yaml
+parameters:
+  - name: item-id
+    in: path
+    required: true
+    schema:
+      type: string
+    x-cli-name: item
+    x-cli-description: Item identifier
+  - name: debug
+    in: query
+    schema:
+      type: boolean
+    x-cli-hidden: true
+```
+
+Parameter-level `x-cli-name` changes the positional argument or flag name, while
+the original OpenAPI parameter name is preserved on the wire.
+`x-cli-description` changes generated help. Parameter-level `x-cli-ignore`
+removes that parameter from the generated CLI; `x-cli-hidden` keeps it callable
+but omits it from ordinary help.
+
 ## Hide Or Ignore Operations
 
 ```yaml
@@ -66,8 +94,10 @@ x-cli-ignore: true
 x-mcp-ignore: true
 ```
 
+`x-cli-ignore` and `x-cli-hidden` may be placed on an operation or a path item.
 Hidden operations remain callable by exact name when supported. Ignored
-operations are left out of the generated command surface.
+operations are left out of the generated command surface. `x-mcp-ignore`
+excludes an operation from MCP tool exposure.
 
 ## Query Parameter Serialization
 
@@ -160,7 +190,7 @@ bodies can include fields, repeated file-array fields, and
 `application/octet-stream`, XML, and NDJSON send raw string or file input:
 
 ```bash
-restish myapi upload-item name: alice, file: @photo.jpg
+restish myapi upload-item 'name: alice, file: @photo.jpg'
 restish myapi put-blob @payload.bin
 restish myapi webdav-operation @propfind.xml
 restish myapi insert-json-line @events.ndjson
@@ -279,6 +309,43 @@ start from the operation cache without refetching secondary reference files.
 Prefer standard OpenAPI security schemes first. Restish derives basic auth,
 API keys, and supported OAuth setup from the spec. Use `x-cli-config` only for
 Restish-specific prompting and defaults.
+
+Document-level `x-cli-config` pre-populates API profiles during `api connect`:
+
+```yaml
+x-cli-config:
+  profiles:
+    default:
+      headers:
+        - "X-Client: restish"
+      query:
+        - "trace=docs"
+      prompt:
+        api_key:
+          description: API key
+          example: sk_live_...
+      credentials:
+        PartnerKey:
+          auth:
+            type: api-key
+            params:
+              in: header
+              name: X-Partner-Key
+              value: "{api_key}"
+          satisfies: ["items:read"]
+```
+
+Supported profile fields are `headers`, `query`, `auth`, `credentials`,
+`security`, `params`, and `prompt`. Credential entries support `auth`,
+`auth_ref`, `satisfies`, `prompt`, and `params`. Prompt entries support
+`description`, `example`, `default`, `enum`, and `exclude`. `exclude` keeps the
+prompt answer out of auth params while still allowing template expansion in
+headers, params, or explicit auth params.
+
+Legacy top-level `x-cli-config` fields `security`, `headers`, `prompt`, and
+`params` are normalized into the `default` profile. Server-provided
+`x-cli-config` cannot configure `external-tool` auth; Restish skips that auth
+type because a remote spec must not cause a local executable to run.
 
 Generated commands honor operation-level security:
 

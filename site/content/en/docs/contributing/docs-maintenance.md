@@ -72,27 +72,47 @@ Before sending a docs change:
 1. build the site locally
 2. check changed links with `scripts/check-doc-links.rb`
 3. confirm examples are internally consistent
-4. compare command reference changes with current `restish --help` output
-5. prefer `api.rest.sh` examples when a live endpoint makes the explanation
+4. refresh or check generated reference regions with `restish-docgen`
+5. compare any remaining hand-written command examples with current
+   `restish --help` output
+6. prefer `api.rest.sh` examples when a live endpoint makes the explanation
    stronger
-6. grep changed docs for stale placeholders and stale source notes
+7. grep changed docs for stale placeholders and stale source notes
 
 Local build:
 
 ```bash
+go run ./cmd/restish-docgen --check
 hugo --source site --quiet
 scripts/check-doc-links.rb
+scripts/check-doc-examples.rb
 ```
 
-Generated help audit:
+Generated reference refresh:
 
 ```bash
-restish --help
-restish api --help
-restish plugin --help
-restish shell setup --help
-restish content-types
+go run ./cmd/restish-docgen --write
 ```
+
+`restish-docgen` updates marked regions in reference pages from Cobra command
+metadata, compiled built-in command plugin binaries, and the public plugin
+protocol structs, config structs, and source-scanned environment variables.
+Keep the prose around those generated regions curated by hand.
+
+Example smoke tests:
+
+```bash
+scripts/check-doc-examples.rb
+scripts/check-doc-examples.rb --mode live
+```
+
+The default example check is local and no-network. It validates every
+`restish-example` shortcode as one shell-parseable Restish command. Live mode
+builds a temporary CLI, connects the public example API in an isolated config,
+installs the CSV formatter plugin into that temp config's plugin directory, and
+runs the browser examples against `api.rest.sh`. Live mode skips intentionally
+interactive edit examples and treats documented timeout/failure examples as
+expected failures.
 
 Useful stale-text checks:
 

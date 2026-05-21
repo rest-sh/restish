@@ -124,7 +124,9 @@ restish api.rest.sh/example -f body.basics.profiles
 {{< /restish-example >}}
 
 ```bash
-restish post api.rest.sh/items 'id: docs-demo, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z'
+ITEM_ID="docs-$(date +%s)"
+restish post api.rest.sh/items "id: $ITEM_ID, name: Demo, enabled: true, updated: 2026-04-27T00:00:00Z"
+restish delete "api.rest.sh/items/$ITEM_ID" --rsh-ignore-status-code
 ```
 
 ## Streaming

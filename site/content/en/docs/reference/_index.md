@@ -14,6 +14,7 @@ single task, use recipes.
 - [HTTP Commands](./http-commands/) covers generic verbs and bare URL method inference.
 - [Global Flags](./global-flags/) lists shared request, output, auth, TLS, pagination, cache, retry, and config flags.
 - [API Management](./api-management/) covers `restish api ...`.
+- [Config Command](./config-command/), [Cache Command](./cache-command/), [Doctor](./doctor-command/), [Shell](./shell-command/), and [Utilities](./utility-commands/) cover support commands.
 - [OpenAPI](./openapi-cli-integration/) covers generated command behavior and Restish OpenAPI extensions.
 - [Edit](./edit-command/), [Plugin](./plugin-command/), and [Bulk](./bulk-command/) cover larger focused commands.
 

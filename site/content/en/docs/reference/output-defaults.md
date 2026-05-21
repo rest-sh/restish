@@ -17,7 +17,7 @@ when the expected shape matters.
 | Explicit filter selecting a scalar | plain scalar text |
 | Explicit filter selecting structured data | pretty JSON-shaped auto output |
 | Paginated items with no collect mode | stream item results as they arrive |
-| Live streams | record-oriented output; use `ndjson` or `lines` for scripts; `-o json` is rejected |
+| Live streams | record-oriented output; use `ndjson` or `lines` for scripts; plain `-o json` requires `--rsh-collect` and finite `--rsh-max-items` |
 
 ## Examples
 

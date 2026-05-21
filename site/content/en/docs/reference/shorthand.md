@@ -37,11 +37,12 @@ restish post api.rest.sh/post 'user.profile.email: alice@example.com'
 restish post api.rest.sh/post 'items[0].name: first'
 ```
 
-Multiple assignments must be comma-separated. They can be split across CLI
-arguments or written inside one quoted argument. Restish joins positional body
-arguments and parses them as one shorthand expression, so a command like
-`name: Alice enabled: true` is one `name` value, not two fields. Write
-`name: Alice, enabled: true` instead.
+Multiple assignments must be comma-separated. Restish joins positional body
+arguments with spaces and parses them as one shorthand expression, so a command
+like `name: Alice enabled: true` is one `name` value, not two fields. Write
+`name: Alice, enabled: true` instead. When quoting shorthand for the shell,
+prefer one quoted argument that contains the complete comma-separated
+expression.
 
 ## Scalars
 
@@ -70,13 +71,13 @@ keep the shorthand parser's normal scalar types.
 Append with `[]`:
 
 ```bash
-restish post api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
+restish post api.rest.sh/post 'tags[]: docs, tags[]: cli'
 ```
 
 Set by index with `[n]`:
 
 ```bash
-restish post api.rest.sh/post 'items[0].name: first' 'items[1].name: second'
+restish post api.rest.sh/post 'items[0].name: first, items[1].name: second'
 ```
 
 For config patches, `[^n]` inserts before an array index:
@@ -126,14 +127,14 @@ patch cannot escape into another API or global config.
 Plain text files become strings.
 
 ```bash
-restish post api.rest.sh/post payload: @payload.json
-restish post api.rest.sh/post note: @message.txt
+restish post api.rest.sh/post 'payload: @payload.json'
+restish post api.rest.sh/post 'note: @message.txt'
 ```
 
 Use `%path` when binary bytes should become a base64 string:
 
 ```bash
-restish post api.rest.sh/post encoded: %photo.jpg
+restish post api.rest.sh/post 'encoded: %photo.jpg'
 ```
 
 For literal values that begin with `@` or `%`, quote or otherwise force string

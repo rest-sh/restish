@@ -29,23 +29,52 @@ restish mcp serve example
 The plugin reads the registered API spec, turns operations into MCP tools, and
 delegates HTTP execution back to Restish.
 
-By default, MCP exposes read-like operations and hides `POST`, `PUT`, `PATCH`,
-and `DELETE`. Use the opt-in flag only when the connected MCP client is allowed
-to make write calls:
-
-```bash
-restish mcp serve example --allow-write-tools
-```
-
-If write operations are hidden, startup diagnostics say how many were skipped.
-Each delegated tool call also has a timeout; use `--request-timeout <seconds>`
-to tune it or `--request-timeout 0` to disable the timeout.
+The generated help below is the exact command reference, including write-tool
+opt-in, operation allowlists, timeouts, and result-size limits.
 
 Tool arguments follow the OpenAPI parameter shape. Query arrays are sent as
 repeated query keys when the spec uses the usual `form` plus `explode: true`
 style, and header arrays are comma-joined. Object parameters and unsupported
 array styles are rejected with a tool error so the client does not send
 ambiguous values.
+
+## Generated Plugin Help
+
+<!-- BEGIN GENERATED: restish-docgen mcp-help -->
+Generated from the compiled `restish-mcp` plugin binary.
+
+### `restish mcp --help`
+
+```text
+Expose registered APIs as MCP tools via Restish-authenticated HTTP delegation.
+
+Use `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.
+
+Usage:
+  restish mcp serve <api...>
+
+Commands:
+  serve    Serve registered APIs over stdio
+```
+
+### `restish mcp serve --help`
+
+```text
+Serve registered APIs over the Model Context Protocol.
+
+By default, Restish exposes read-oriented tools and hides write operations. Use `--allow-write-tools` only for MCP clients and models you trust to make `POST`, `PUT`, `PATCH`, and `DELETE` calls against the selected APIs.
+
+Usage:
+  restish mcp serve [flags] <api...>
+
+Flags:
+  --operations string        Comma-separated operationId allowlist
+  --max-result-bytes int     Maximum tool result payload size
+  --request-timeout int      Per-tool HTTP request timeout in seconds (0 disables)
+  --read-only                Expose only GET/HEAD operations
+  --allow-write-tools        Expose POST, PUT, PATCH, and DELETE operations as MCP tools
+```
+<!-- END GENERATED -->
 
 ## Hide Operations
 

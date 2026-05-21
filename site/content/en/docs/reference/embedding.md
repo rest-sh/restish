@@ -80,20 +80,13 @@ not reused across profiles.
 
 Embedders get that behavior when they call `Run` or `FetchResponse`, because
 Restish applies the configured API/profile before building the request
-transport. If you build lower-level `request.Options` yourself and set
-`CacheDir`, also set `CacheNamespace` for any request context that may carry
-credentials:
+transport and cache namespace. `FetchResponse` is the public API for
+programmatic HTTP access; it applies authentication and profile settings when
+the URL matches a configured API or API short name, and returns the normalized
+response without pagination, filtering, streaming, or writing output.
 
-```go
-opts := request.Options{
-	CacheDir:       cacheDir,
-	CacheNamespace: apiName + ":" + profileName,
-}
-```
-
-Use a stable namespace such as `<api>:<profile>`. Disable caching with
-`NoCache` for ad hoc credentialed raw requests that do not have a stable
-profile boundary.
+Disable caching with normal Restish config or flags for ad hoc credentialed raw
+requests that do not have a stable profile boundary.
 
 ## Custom Content Or Output
 

@@ -51,10 +51,11 @@ handler.
 JSON is the default request body encoding:
 
 ```bash
-restish post -c json api.rest.sh/post string: hello
-restish post -c yaml api.rest.sh/post string: hello
+restish post -c json api.rest.sh/post 'string: hello'
+restish post -c yaml api.rest.sh/post 'string: hello'
 restish post -c form api.rest.sh/login 'username: alice, password: secret'
-restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
+printf 'hello from docs\n' > upload.txt
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.txt'
 ```
 
 Shorthand builds a logical value. The selected encoder turns that value into
