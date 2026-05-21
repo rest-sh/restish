@@ -6,7 +6,13 @@
         <p class="restish-hero__lead">Discover operations, auth, and schemas from the server. No local clients to build or update.</p>
         <div class="restish-hero__actions">
           <a class="restish-button restish-button--primary" href="{{ "docs/getting-started/tour/" | relURL }}">Get started <span aria-hidden="true">&rarr;</span></a>
-          <code><span class="token-symbol">$</span> brew install rest-sh/tap/restish</code>
+          <div class="restish-install-copy" data-restish-install-copy data-copy-text="brew install rest-sh/tap/restish">
+            <code><span class="token-symbol">$</span> brew install rest-sh/tap/restish</code>
+            <button class="restish-install-copy__button" type="button" aria-label="Copy Homebrew install command" title="Copy command">
+              <i class="fas fa-copy" aria-hidden="true"></i>
+              <span class="visually-hidden" data-restish-copy-status>Copy command</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -40,7 +46,7 @@ HTTP/2.0 <span class="token-string">200</span> OK
     <div class="restish-hero__divider"></div>
 
     <div class="restish-feature-row" id="features">
-      <a class="restish-mini-feature" href="{{ "docs/reference/openapi-cli-integration/" | relURL }}">
+      <a class="restish-mini-feature" href="{{ "docs/getting-started/connect-to-an-api/" | relURL }}">
         <span class="restish-feature-icon restish-feature-icon--braces" aria-hidden="true">
 
           <svg width="36px" height="36px" viewBox="0 0 24 24" stroke-width="1.5" fill="none"
@@ -88,24 +94,18 @@ HTTP/2.0 <span class="token-string">200</span> OK
         </span>
         <span><strong>Output filtering</strong> See what you need, nothing more.</span>
       </a>
-      <a class="restish-mini-feature" href="{{ "docs/guides/output/" | relURL }}">
-        <span class="restish-feature-icon restish-feature-icon--palette" aria-hidden="true">
+      <a class="restish-mini-feature" href="{{ "docs/guides/authentication/" | relURL }}">
+        <span class="restish-feature-icon restish-feature-icon--auth" aria-hidden="true">
 
           <svg width="36px" height="36px" stroke-width="1.5" viewBox="0 0 24 24" fill="none"
             xmlns="http://www.w3.org/2000/svg" color="currentColor">
-            <path
-              d="M12 14.5C15.3137 14.5 18 11.8137 18 8.5C18 5.18629 15.3137 2.5 12 2.5C8.68629 2.5 6 5.18629 6 8.5C6 11.8137 8.68629 14.5 12 14.5Z"
-              stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path
-              d="M16 21.5C19.3137 21.5 22 18.8137 22 15.5C22 12.1863 19.3137 9.5 16 9.5C12.6863 9.5 10 12.1863 10 15.5C10 18.8137 12.6863 21.5 16 21.5Z"
-              stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path
-              d="M8 21.5C11.3137 21.5 14 18.8137 14 15.5C14 12.1863 11.3137 9.5 8 9.5C4.68629 9.5 2 12.1863 2 15.5C2 18.8137 4.68629 21.5 8 21.5Z"
-              stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M7 11V8C7 5.23858 9.23858 3 12 3C14.7614 3 17 5.23858 17 8V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M5 11H19V21H5V11Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M12 15V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
 
         </span>
-        <span><strong>Colorized output</strong> Readable, scannable, built for humans.</span>
+        <span><strong>Auth and profiles</strong> API keys, OAuth, mTLS, and reusable credentials.</span>
       </a>
     </div>
   </div>

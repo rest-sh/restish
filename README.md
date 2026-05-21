@@ -11,11 +11,22 @@ lives in [`site/`](site/), and the architecture notes live in
 
 ## Install
 
-Use Homebrew for a managed install:
+Use Homebrew for the easiest managed install on macOS:
 
 ```bash
 brew install rest-sh/tap/restish
 restish --version
+```
+
+Check `restish --version` after installation. Users who need the legacy v1 line
+can install `rest-sh/tap/restish@1`.
+
+Build from this repository when developing Restish itself:
+
+```bash
+go build ./cmd/restish
+./restish --help
+./restish api.rest.sh/
 ```
 
 Or use mise:
@@ -25,15 +36,7 @@ mise use -g restish@latest
 restish --version
 ```
 
-Build from this repository when working on v2:
-
-```bash
-go build ./cmd/restish
-./restish --help
-./restish api.rest.sh/
-```
-
-Install from source with Go:
+Install the latest tagged v2 release from source with Go:
 
 ```bash
 go install github.com/rest-sh/restish/v2/cmd/restish@latest

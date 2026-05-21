@@ -561,21 +561,21 @@ Add focused auth-management commands so users can update auth without rerunning
 the full API registration flow:
 
 ```bash
-restish --rsh-profile prod api auth list example
+restish --rsh-profile prod api auth inspect example
 restish --rsh-profile prod api auth add example PartnerKey
 restish --rsh-profile prod api auth remove example AdminOAuth
-restish --rsh-profile prod api auth inspect example
 restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
 ```
 
-`api auth list` should answer "what can this profile call?" by showing
-configured credentials, missing credentials, declared `satisfies` values, and
-operation coverage. If operations reference a security requirement that is not
-declared in `components.securitySchemes`, the command should report that as an
-OpenAPI metadata issue next to the affected credential ID instead of silently
-presenting the operation as a normal missing-auth case.
+`api auth inspect` is the canonical auth debugging surface. Bare inspect should
+answer "what can this profile call?" by showing configured credentials, missing
+credentials, declared `satisfies` values, and operation coverage. If operations
+reference a security requirement that is not declared in
+`components.securitySchemes`, the command should report that as an OpenAPI
+metadata issue next to the affected credential ID instead of silently presenting
+the operation as a normal missing-auth case.
 
-`api auth inspect` replaces the v1/v2-draft header-only inspect behavior.
+`api auth inspect` also replaces the v1/v2-draft header-only inspect behavior.
 It should inspect the credential or operation auth selected from the active API
 profile without sending the full application request. Unlike the old narrow
 behavior, it must handle credentials that do not produce an `Authorization`
@@ -822,12 +822,14 @@ need significant changes.
 
 ## Compatibility And Migration
 
-The current `security: []` behavior is retained.
+The current `security: []` default behavior is retained, with `--rsh-auth`
+available as an explicit override.
 
 Existing profile-level `auth` and `auth_ref` remain valid. For generated
 commands:
 
-- if an operation has explicit `security: []`, no auth is sent;
+- if an operation has explicit `security: []`, no auth is sent unless the user
+  passes an explicit `--rsh-auth` credential override;
 - if an API has exactly one effective supported credential requirement,
   profile-level auth may satisfy that requirement for compatibility;
 - if a profile was created by `api connect` from a known OpenAPI scheme or
@@ -890,8 +892,9 @@ scheme.
   auth override;
 - alternative requirements accept any satisfied alternative in spec order;
 - combined requirements require every credential requirement in the alternative;
-- explicit `--rsh-auth` selects a permitted alternative and rejects a
-  credential not allowed by the operation;
+- explicit `--rsh-auth` selects a declared alternative, or warns and sends a
+  configured credential set that the user explicitly requested outside the
+  operation's declared security metadata;
 - OAuth scopes and non-OAuth requirement values appear in diagnostics and are
   checked against binding `satisfies` declarations;
 - missing requirement values fail before request;
@@ -910,10 +913,11 @@ scheme.
 - `x-cli-config` single-scheme legacy shape normalizes to `credentials`;
 - `x-cli-config.credentials` drives prompts and written config without
   redefining operation policy;
-- `api auth list/add/remove` preserve comments and validate config paths;
+- `api auth add/remove` preserve comments and validate config paths;
 - `api auth inspect` handles profile-level auth, credential-specific auth,
   operation-selected auth, non-Authorization credentials, combined credentials,
-  and explicit raw header output;
+  operation coverage, readiness diagnostics, explicit redaction, and explicit
+  raw header output;
 - the old API-or-URI, Authorization-header-only `api auth inspect` behavior is
   removed.
 
@@ -936,7 +940,7 @@ Update user docs before release:
   first-class `api-key` auth;
 - profile reference: explain profiles as environment/consent boundary rather
   than per-endpoint auth selection;
-- API management reference: document `api auth list/add/remove/inspect` and
+- API management reference: document `api auth inspect/add/remove` and
   configure behavior;
 - migration notes: document removal of the old header-only inspect behavior and
   the equivalent `api auth header <api> Authorization` flow;

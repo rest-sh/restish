@@ -16,15 +16,17 @@ need different security schemes or alternatives.
 | `bearer` | `token` | | Sets `Authorization: Bearer <token>`. |
 | `http-basic` | `username` | `password` | Sets HTTP Basic auth. If `password` is omitted and prompting is available, Restish prompts. |
 | `api-key` | `in`, `name`, `value` | | Sends an API key in a `header`, `query`, or `cookie`. |
-| `oauth-client-credentials` | `client_id`, `client_secret`, plus `token_url` or `issuer_url` | `auth_method`, `scopes` | Fetches and caches a bearer token with the OAuth client credentials flow. |
-| `oauth-authorization-code` | `client_id`, plus endpoint params or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_port`, `redirect_path` | Runs an OAuth authorization-code flow with PKCE and caches the token. |
-| `oauth-device-code` | `client_id`, plus endpoint params or `issuer_url` | `client_secret`, `auth_method`, `scopes` | Runs the OAuth device-code flow and caches the token. |
+| `oauth-client-credentials` | `client_id`, `client_secret`, plus `token_url` or `issuer_url` | `auth_method`, `scopes`, provider-specific token params such as `audience` | Fetches and caches a bearer token with the OAuth client credentials flow. |
+| `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_port`, `redirect_path`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
+| `oauth-device-code` | `client_id`, plus `device_authorization_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, provider-specific token params | Runs the OAuth device-code flow and caches the token. |
 | `external-tool` | `commandline` | `omitbody`, `output` | Runs a local helper that can mutate request headers or URI. |
 
 OAuth `auth_method` accepts `client_secret_post` by default or
 `client_secret_basic`. OAuth endpoints must use HTTPS except for localhost or
 loopback development URLs. `issuer_url` uses OIDC discovery when direct
-endpoint URLs are absent.
+endpoint URLs are absent. Unknown non-reserved OAuth params are forwarded to
+token requests, which is how provider-specific values such as `audience` are
+sent.
 
 For `oauth-authorization-code`, the default browser callback URL to allow in
 the OAuth app is `http://localhost:8484/`. `redirect_port` changes `8484`, and
@@ -183,18 +185,20 @@ restish api auth inspect myapi --rsh-credential UserBearer --redact
 restish api auth header myapi Authorization UserBearer
 ```
 
-The bare form works when the selected profile has profile-level auth or exactly
-one or more configured credentials. If a profile has several credentials,
-`inspect` prints each configured credential's computed auth material; pass
-`--rsh-credential` to narrow the output to one credential. Inspection output
-shows computed auth values because the command is explicitly for checking auth.
-Add `--redact` when you need shareable output. Verbose request diagnostics
-still redact common sensitive headers such as `Authorization`,
+The bare form shows profile auth, configured credential readiness, generated
+operation coverage when cached metadata is available, and computed auth material
+when it can be built without starting a new OAuth flow. If a profile has several
+credentials, `inspect` prints each configured credential's computed auth
+material; pass `--rsh-credential` to narrow the output to one credential.
+Inspection output shows computed auth values because the command is explicitly
+for checking auth. Add `--redact` when you need shareable output. Verbose
+request diagnostics still redact common sensitive headers such as `Authorization`,
 `Cookie`, `Proxy-Authorization`, `Set-Cookie`, and common API-key headers.
 
 ## Related Pages
 
 - [Authentication Guide](/docs/guides/authentication/)
+- [OAuth Guide](/docs/guides/oauth/)
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
 - [API Management](/docs/reference/api-management/)

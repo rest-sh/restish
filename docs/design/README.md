@@ -31,6 +31,9 @@ They should now be treated as implementation-grade design records rather than
 light sketches. A contributor should be able to read this corpus and recover:
 
 - product goals and non-goals
+- the "trust explicit operator intent" tenet: clear explicit user choices
+  generally win over heuristics and extra ceremony, while hidden side effects
+  still deserve guardrails
 - persistent data models and compatibility rules
 - request/response execution order
 - extension points and lifecycle contracts
@@ -163,9 +166,10 @@ were a recurring source of remediation work.
 - [031-compatibility-and-migration.md](./031-compatibility-and-migration.md) - v1-to-v2 compatibility goals, intentional breaks, migration path, and release-readiness checklist for user-visible behavior.
 - [032-implementation-contract.md](./032-implementation-contract.md) - Cross-cutting implementation matrix for global flags, config schema, command precedence, plugin message families, and output ownership.
 - [035-javascript-implementation-boundary.md](./035-javascript-implementation-boundary.md) - Boundary for docs-site JavaScript after removing the v1 tree and WASM prototype: useful UI, not a second CLI source of truth.
-- [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) - Accepted v2 command/control surface decision, framed as a v1-to-v2 update for config, auth cache, flags, MCP, and shell setup.
+- [037-v2-command-surface-review.md](./037-v2-command-surface-review.md) - Accepted v2 command/control surface decision, framed as a v1-to-v2 update for config, auth cache, global flag help, MCP, and shell setup.
 - [038-doctor-and-health-checks.md](./038-doctor-and-health-checks.md) - Operator diagnostics, health checks, stderr behavior, bounded network probing, and v1 migration recovery.
 - [039-http-cache-spike.md](./039-http-cache-spike.md) - Spike comparing the current HTTP cache transport with a maintained fork and defining acceptance tests for a safer cache swap.
+- [040-generated-docs-and-drift-checks.md](./040-generated-docs-and-drift-checks.md) - Maintainer docs generation, inline generated regions, plugin-binary command references, and CI drift checks.
 
 **Extensibility**
 

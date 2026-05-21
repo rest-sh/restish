@@ -83,8 +83,9 @@ restish api.rest.sh/images -o ndjson -f body.self
 
 This distinction matters for pagination and live streams. A live stream may
 never finish, so `-o ndjson` is the right shape for structured stream output.
-Restish rejects `-o json` on stream responses with an error that points to
-`-o ndjson`.
+Restish rejects plain `-o json` on stream responses with an error that points
+to `-o ndjson`; if you explicitly want one JSON document, combine `-o json`
+with `--rsh-collect` and a finite `--rsh-max-items`.
 
 Output format does not change paginated filter scope. Without `--rsh-collect`,
 Restish filters each item through a mini response wrapper where the current

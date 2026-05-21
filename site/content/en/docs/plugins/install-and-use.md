@@ -35,10 +35,18 @@ The second argument is expanded to a plugin binary name, so `csv` means
 extracts it, verifies the plugin manifest, and copies the binary into your
 plugin directory.
 
+For plugin development, build the plugin from this repository and install that
+local binary instead:
+
+```bash
+go build ./cmd/restish-csv
+restish plugin install ./restish-csv
+```
+
 `plugin install` prints the source, resolved file or download URL, manifest
 name/version, and declared capabilities before installing. In a terminal,
-confirm the trust prompt to continue. In automation, pass `--yes` after pinning
-the source you intend to trust:
+confirm the trust prompt to continue. In automation, pass `--yes` after choosing
+a source you intend to trust:
 
 ```bash
 restish plugin install rest-sh/restish csv --yes
@@ -68,7 +76,9 @@ restish plugin install ./restish-csv
 
 The plugin must be executable and compatible with the v2 plugin protocol. Every
 install path verifies the plugin manifest before keeping the binary, but
-manifest verification is not a security review. Restish shows declared
+manifest verification is protocol compatibility, not a security review. Restish
+does not verify publisher identity, pin mutable release assets, or make remote
+code safer than running any other downloaded executable. Restish shows declared
 capability families in `plugin list`, and it only enables capabilities that the
 manifest explicitly declares. Restish loads plugins only after they are
 installed into Restish's configured plugin directory; it does not scan every

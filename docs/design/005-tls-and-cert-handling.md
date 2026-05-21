@@ -147,6 +147,10 @@ Skipping certificate verification is a deliberate unsafe override. It should be:
 - visible in diagnostics when troubleshooting
 
 This flag exists as an operator escape hatch, not a silent fallback mode.
+When the user explicitly supplies `--rsh-insecure` or intentionally persists the
+equivalent profile setting, Restish should trust that choice. V2 should not add
+an additional confirmation prompt or refusal layer for this override; the right
+UX is clear naming, predictable precedence, and visible diagnostics.
 
 Verbose diagnostics should make it obvious when insecure verification is active,
 because request failures and certificate output otherwise become harder to

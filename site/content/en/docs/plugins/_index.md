@@ -25,7 +25,7 @@ Start here when you want to use an existing plugin:
 
 Start here when you are writing a plugin:
 
-- [Plugin Quickstart](./quickstart/) for a minimal working plugin.
+- [Plugin Quickstart](./quickstart/) for the first-time author path: choose a type, build locally, inspect the manifest, debug messages, and pick the next reference.
 - [Hook Plugins](./hook-plugins/) for auth, middleware, loaders, and formatters.
 - [Command Plugins](./command-plugins/) for top-level workflows.
 - [Plugin Manifest](/docs/reference/plugin-manifest/) and [Plugin Messages](/docs/reference/plugin-messages/) for protocol reference.

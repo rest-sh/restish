@@ -59,6 +59,6 @@ restish api.rest.sh/images --rsh-no-paginate -f links
 ## Related Pages
 
 - [Pagination and Links](../pagination/)
-- [Commands](/docs/reference/commands/)
+- [Utility Commands](/docs/reference/utility-commands/)
 - [Output](/docs/guides/output/)
 - [Example API](/docs/reference/example-api/)

@@ -37,7 +37,7 @@ Opt into replaying an unsafe method only when the endpoint is idempotent enough
 for your use case:
 
 ```bash
-restish post https://api.vendor.test/jobs name:demo --rsh-retry 2 --rsh-retry-unsafe
+restish post https://api.vendor.test/jobs 'name: demo' --rsh-retry 2 --rsh-retry-unsafe
 ```
 
 Disable retries for strict single-attempt debugging:
@@ -118,7 +118,7 @@ restish -H 'If-None-Match: "docs"' api.rest.sh/etag/docs --rsh-ignore-status-cod
 
 ## Related Pages
 
-- [Commands](/docs/reference/commands/)
+- [Cache Command](/docs/reference/cache-command/)
 - [Global Flags](/docs/reference/global-flags/)
 - [Command Behavior](../command-behavior/)
 - [Troubleshooting](../troubleshooting/)

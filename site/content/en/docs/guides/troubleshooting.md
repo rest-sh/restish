@@ -28,7 +28,7 @@ restish api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
 
 **Prevention:** Quote complex arguments in scripts and run `restish shell setup <shell>` for interactive use.
 
-**Related docs:** [Shell Setup](/docs/getting-started/shell-setup/), [Query Syntax](/docs/reference/query-syntax/).
+**Related docs:** [Shell Setup](/docs/getting-started/shell-setup/), [Shell Command](/docs/reference/shell-command/), [Query Syntax](/docs/reference/query-syntax/).
 
 ## I Expected JSON But Got Auto Output
 
@@ -142,9 +142,9 @@ public operation where it should have been suppressed.
 
 ```bash
 restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
+restish api auth inspect example
 restish api auth inspect example --rsh-credential basicAuth
 restish api auth header example Authorization basicAuth
-restish api auth list example
 restish -v -p token api.rest.sh/auth/bearer
 ```
 
@@ -282,7 +282,7 @@ restish cache clear
 
 **Prevention:** Use `--rsh-no-cache` while debugging server state.
 
-**Related docs:** [Retries and Caching](/docs/guides/retries-and-caching/), [Commands](/docs/reference/commands/).
+**Related docs:** [Retries and Caching](/docs/guides/retries-and-caching/), [Cache Command](/docs/reference/cache-command/).
 
 ## TLS Or mTLS Fails
 
@@ -307,7 +307,7 @@ Avoid `--rsh-insecure` except for short debugging.
 
 **Prevention:** Store TLS settings in profiles for repeated use.
 
-**Related docs:** [TLS](/docs/guides/tls/), [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/).
+**Related docs:** [TLS](/docs/guides/tls/), [Utility Commands](/docs/reference/utility-commands/), [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/).
 
 ## Plugins Are Not Discovered Or Fail
 
@@ -327,7 +327,7 @@ restish plugin debug ./path/to/plugin
 
 **Prevention:** Keep operator docs separate from author protocol docs and verify plugin discovery after installation.
 
-**Related docs:** [Install and Use Plugins](/docs/plugins/install-and-use/), [Plugin Messages](/docs/reference/plugin-messages/).
+**Related docs:** [Install and Use Plugins](/docs/plugins/install-and-use/), [Plugin Command](/docs/reference/plugin-command/), [Plugin Messages](/docs/reference/plugin-messages/).
 
 ## A CRUD Example Changed Shared State
 

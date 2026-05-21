@@ -14,7 +14,8 @@ restish --rsh-ca-cert ./corp-ca.pem https://service.internal.test/items
 ```
 
 Prerequisite: `corp-ca.pem` is the PEM-encoded CA certificate that signed the
-server certificate.
+server certificate. Replace `service.internal.test` with the internal host you
+need to reach.
 
 Inspect the chain first:
 
@@ -26,4 +27,4 @@ The `cert` command helps confirm that the server presents the certificate chain
 you expect before you debug application-level behavior. For repeated internal
 requests, store TLS settings in a profile as described in [TLS](/docs/guides/tls/).
 
-Related: [TLS](/docs/guides/tls/), [Commands](/docs/reference/commands/).
+Related: [TLS](/docs/guides/tls/), [Utility Commands](/docs/reference/utility-commands/), [Global Flags](/docs/reference/global-flags/).

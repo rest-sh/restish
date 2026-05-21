@@ -16,11 +16,16 @@ restish \
   https://mtls.internal.test/items
 ```
 
-Prerequisites: a configured signer plugin, a usable client certificate, and an
-API that requires mTLS.
+Prerequisites: a configured signer plugin that can access the client
+certificate and signing key material, and an API that requires mTLS. Replace
+`mtls.internal.test` and signer parameters with your environment's values.
 
 Use command-line flags for one-off debugging. For normal use, put signer
 settings in a profile so generated commands stay readable. The operator flow is
 covered in [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/).
 
-Related: [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/), [TLS](/docs/guides/tls/).
+Do not combine `--rsh-tls-signer` with `--rsh-client-cert` or
+`--rsh-client-key`; the signer path supplies the client certificate used for the
+handshake.
+
+Related: [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/), [TLS](/docs/guides/tls/), [Global Flags](/docs/reference/global-flags/).

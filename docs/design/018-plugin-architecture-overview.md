@@ -38,12 +38,12 @@ the configured directory is the explicit trust decision. If multiple plugins
 claim the same manifest name or command name, Restish must not silently pick one
 without surfacing the collision.
 
-Plugin installation should keep that trust decision visible. Before copying a
-binary or archive into the configured plugin directory, `plugin install` shows
-the source, resolved binary or archive, manifest identity, and declared
-capabilities. Automation can opt in with `--yes`, but the runtime still fails
-closed: a plugin must declare a hook, loader, formatter, signer, or command
-before Restish enables that capability.
+Plugin installation treats the user's source argument as the trust decision.
+Before copying a binary or archive into the configured plugin directory,
+`plugin install` shows the source, resolved binary or archive, manifest
+identity, and declared capabilities. Automation can opt in with `--yes`, but
+the runtime still fails closed: a plugin must declare a hook, loader,
+formatter, signer, or command before Restish enables that capability.
 
 Accepted install sources are intentionally explicit:
 
@@ -70,7 +70,10 @@ installed file is removed.
 
 This installation flow is a trust prompt, not a software-supply-chain proof.
 Plugins run at the user's own risk. Direct URLs and GitHub latest-release
-shorthands do not verify publisher identity. The security model already treats
+shorthands do not verify publisher identity, pin immutable artifacts, or make
+remote code safer than running any other downloaded executable. V2 should not
+add extra remote-source restrictions or warnings beyond the normal install
+confirmation and `--yes` automation path. The security model already treats
 installed plugins as trusted local executables, and the install UX must not
 imply otherwise.
 

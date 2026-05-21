@@ -52,10 +52,15 @@ Under that group, each included operation becomes a child command.
 
 Built-in commands still take precedence over API short names. The generator does
 not get to shadow core commands such as `api`, `cache`, `config`, or `shell`.
+Hidden compatibility commands are reserved too; for example, the top-level
+`completion` alias remains unavailable as an API short name even though the
+canonical user-facing command is `shell completion`.
 
 The set of reserved built-in command names should come from the actual root
-command tree or a guard test that proves the reserved list is in sync. A stale
-hand-maintained list can let generated APIs shadow core behavior.
+command tree or a guard test that proves the reserved list is in sync. Removed
+pre-release commands are not reserved unless they still exist as hidden
+compatibility commands. For v2, `flags` is not a built-in command and may be
+used as an API short name.
 
 By default, operations live in one flat namespace under the API command. APIs
 that benefit from tag hierarchy can opt into:
@@ -341,11 +346,14 @@ Collisions can happen between:
 
 - two generated operations
 - generated commands and built-ins
+- generated API short names and built-in or hidden compatibility commands
 - generated commands and plugin commands
 
 The design rule is:
 
 - built-ins win over everything else
+- hidden compatibility commands are reserved like public built-ins
+- removed commands such as `flags` are not reserved
 - duplicate generated names are reported
 - skipped commands should produce warnings or errors during generation
 

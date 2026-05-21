@@ -72,11 +72,10 @@ When a server needs a stream-specific `Accept` header, send it explicitly:
 restish -H 'Accept: text/event-stream' api.rest.sh/events --rsh-max-items 3
 {{< /restish-example >}}
 
-## Document Formats On Live Streams
+## Output Formats On Live Streams
 
-Document formats such as `json` and `yaml` require one complete document. For
-live streams, prefer `ndjson` for structured records or `lines` for filtered
-scalar values:
+For live streams, prefer `ndjson` for structured records or `lines` for
+filtered scalar values:
 
 {{< restish-example >}}
 restish api.rest.sh/events --rsh-max-items 3 -o ndjson
@@ -84,6 +83,15 @@ restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 
 ```bash
 restish api.rest.sh/events --rsh-max-items 3 -f body.data.message -o lines
+```
+
+Some formats, including `yaml`, can render one streamed value at a time. Plain
+`-o json` needs one valid JSON document, so use `--rsh-collect` together with a
+finite `--rsh-max-items` when you explicitly want JSON array output from a
+stream:
+
+```bash
+restish api.rest.sh/events --rsh-max-items 3 --rsh-collect -o json
 ```
 
 Stream filters use the same mini response wrapper as per-item pagination: the

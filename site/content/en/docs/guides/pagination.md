@@ -92,6 +92,7 @@ map and not the response body.
 ## Related Pages
 
 - [Links and Hypermedia](../links-and-hypermedia/)
-- [Commands](/docs/reference/commands/)
+- [Utility Commands](/docs/reference/utility-commands/)
 - [Output](../output/)
+- [Global Flags](/docs/reference/global-flags/)
 - [Count Items Across All Pages](/docs/recipes/count-items-across-all-pages/)

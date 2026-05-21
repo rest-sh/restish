@@ -6,11 +6,12 @@ description: Send multipart/form-data with normal fields and a file.
 ---
 
 Multipart requests are used for uploads that combine normal form fields with
-file parts. `-c multipart` chooses the request encoding, and `@README.md` tells
-Restish to send the file contents rather than the literal string.
+file parts. `-c multipart` chooses the request encoding, and `@upload.txt`
+tells Restish to send the file contents rather than the literal string.
 
 ```bash
-restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
+printf 'hello from docs\n' > upload.txt
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.txt'
 ```
 
 The response echoes multipart fields. If a client sends real file parts,

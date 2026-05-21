@@ -10,7 +10,7 @@ shorthand on the command line. Restish reads stdin, decodes the structured
 document, and sends it as the request body.
 
 ```bash
-cat payload.json | restish post api.rest.sh/post
+restish post api.rest.sh/post < payload.json
 ```
 
 Example `payload.json`:
@@ -24,7 +24,7 @@ The `/post` fixture echoes the parsed body so you can verify what was sent.
 Variant with explicit content type:
 
 ```bash
-cat payload.json | restish post -c json api.rest.sh/post
+restish post -c json api.rest.sh/post < payload.json
 ```
 
 The explicit `-c json` form is useful when stdin comes from a source without a

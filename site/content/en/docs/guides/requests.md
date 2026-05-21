@@ -24,14 +24,14 @@ Use generic requests when you are exploring, debugging, or calling an endpoint
 that has no useful spec. A bare target sends `GET` when there is no body and
 `POST` when shorthand arguments or stdin provide a body.
 
+Once a request becomes part of your normal workflow, register the API when it
+has a useful OpenAPI description. Generated commands give the same request
+pipeline a steadier name, examples, completion, profiles, and auth behavior.
+
 ## Add Headers And Query Params
 
 {{< restish-example >}}
-restish \
-  -H 'Accept: application/json' \
-  -H 'X-Demo: requests' \
-  -q search=dragonfly \
-  api.rest.sh/anything/search
+restish -H 'Accept: application/json' -H 'X-Demo: requests' -q search=dragonfly api.rest.sh/anything/search
 {{< /restish-example >}}
 
 The `/anything` fixture echoes method, path, query, headers, raw body, and
@@ -56,7 +56,7 @@ body over several words or lines. Without commas, later `key:` text remains part
 of the previous value.
 
 {{< restish-example >}}
-restish -c form post api.rest.sh/post 'username: alice, password: secret'
+restish post -c form api.rest.sh/login 'username: alice, password: secret'
 {{< /restish-example >}}
 
 For generated or larger bodies, pipe stdin:
@@ -113,4 +113,5 @@ Use `/anything` or `/headers` when you need the server to echo what it received.
 - [Authentication](../authentication/)
 - [Profiles](/docs/reference/profiles/)
 - [HTTP Commands](/docs/reference/http-commands/)
+- [API Management](/docs/reference/api-management/)
 - [Example API](/docs/reference/example-api/)

@@ -1,6 +1,6 @@
 # V2 Command Surface Decision
 
-Status: accepted and implemented for the first Restish v2 release.
+Status: accepted for the first Restish v2 release.
 
 ## Problem
 
@@ -107,8 +107,8 @@ The v2 command tree follows these rules.
    general API registration management.
 
 6. Runtime utilities are top-level when they describe Restish itself.
-   `content-types`, `flags`, `doctor`, `version`, `cert`, `edit`, and `links`
-   are not API registrations, so they should not be hidden under `api`.
+   `content-types`, `doctor`, `version`, `cert`, `edit`, and `links` are not
+   API registrations, so they should not be hidden under `api`.
 
 7. Long-running plugin actions use explicit verbs.
    A command such as `mcp` should expose `serve` rather than doing long-running
@@ -249,9 +249,11 @@ restish api auth logout --auth-profile <name>
 ```
 
 OAuth token cache state is authentication state. Keeping cache recovery beside
-`api auth list`, `api auth add`, and `api auth inspect` makes the workflow
+`api auth inspect`, `api auth add`, and `api auth remove` makes the workflow
 findable from `restish api auth --help` and avoids overloading the top-level
-`api` object with credential internals.
+`api` object with credential internals. `api auth inspect` is the canonical
+readiness and inspection surface; v2 should not keep a separate `api auth list`
+command or alias.
 
 The API argument is omitted only for `--auth-profile`, because shared auth
 profiles are not owned by a single API. `--all-profiles` still requires an API
@@ -270,9 +272,13 @@ restish <command> --help-all
 Global Restish flags are powerful, but generated operation help should stay
 focused on API parameters. Ordinary help shows common global flags and points
 to `--help-all` for the grouped request, output, auth, TLS, pagination, cache,
-and general reference. The old top-level `flags` command is hidden during v2
-development for compatibility with local scripts, but it is not part of the
-published command surface.
+and general reference.
+
+There is no public `restish flags` command in v2. `--help-all` is the canonical
+in-CLI global flag reference because it stays attached to the command context
+where those flags apply. If a development build still contains a `flags`
+command, it is not part of the stable v2 surface and should be removed before
+release rather than documented as an alias.
 
 ### MCP Uses An Explicit Service Verb
 
@@ -298,8 +304,10 @@ Shell setup installs integration such as the noglob alias and optional
 completion. The top-level word `setup` sounds like whole-tool setup or API
 setup, so v2 gives the workflow an explicit object.
 
-`completion` remains the low-level command family for printing or installing
-Cobra shell completions.
+`restish shell completion <shell>` is the canonical v2 command for printing
+Cobra shell completion scripts. The historical top-level `completion` command
+may remain as a hidden compatibility alias, but it is not part of the published
+v2 command surface.
 
 ### Content Types Are A Runtime Utility
 
@@ -316,8 +324,10 @@ top-level utility command.
 ## Compatibility And Migration
 
 Because these decisions land before the first stable v2 release, v2 does not
-need to ship aliases for command names that were not selected for the stable
-surface. The user-facing migration story should compare v1 and v2 directly.
+need to ship public aliases for command names that were not selected for the
+stable surface. Hidden bootstrap or compatibility aliases are allowed only when
+another design record calls them out explicitly. The user-facing migration story
+should compare v1 and v2 directly.
 
 Important v1-to-v2 command moves:
 
@@ -327,7 +337,7 @@ Important v1-to-v2 command moves:
 | `api edit` | `config edit` |
 | `api clear-auth-cache <name>` | `api auth logout <name>` |
 | `api content-types` | `content-types` |
-| top-level shell/setup guidance | `shell setup <shell>` plus `completion ...` |
+| top-level shell/setup guidance | `shell setup <shell>` plus `shell completion ...` |
 | direct plugin service command | explicit service verb such as `mcp serve` |
 
 The request path is intentionally stable:
@@ -349,10 +359,11 @@ Aliases are valuable after a stable release, but the first v2 surface should be
 smaller, clearer, and easier to teach. Compatibility docs can map v1 habits to
 the v2 names instead.
 
-Do not make `flags` a docs-only page.
-The full global flag surface changes with the binary. An in-CLI reference keeps
-the source of truth close to the implementation and helps users who are working
-offline or inside terminals.
+Do not keep a separate `flags` command.
+The full global flag surface changes with the binary, but a separate command
+creates a second place users and tests have to check. `--help-all` keeps the
+reference close to the command whose flags are being inspected and avoids
+another top-level noun before the first stable v2 release.
 
 Do not hide plugin services behind object commands.
 Long-running processes should be obvious in scripts, editor configs, and MCP
@@ -368,8 +379,8 @@ The command surface is product behavior and should be protected by tests.
   `config set`.
 - MCP tests cover `mcp serve` and reject running the service directly from
   `mcp <api...>`.
-- Help tests should cover root, `api`, `api auth`, `config`, `flags`, `mcp`,
-  and a generated API operation.
+- Help tests should cover root, `api`, `api auth`, `config`, `mcp`, a generated
+  API operation, and `--help-all` expansion.
 - Full CLI/plugin changes should pass `go test -tags=integration ./...` before
   release.
 
@@ -382,7 +393,7 @@ for v1 users. Pages that commonly mention these workflows include:
 - command reference
 - config and profile docs
 - auth troubleshooting
-- global flags reference
+- `--help-all` and global flag reference
 - shell setup and completion docs
 - MCP/plugin operator docs
 - upgrade-from-v1 guide
@@ -392,10 +403,11 @@ concise v1-to-v2 map.
 
 ## Outcome
 
-The implemented v2 surface follows this decision. `api` owns API registration
-and API-auth configuration, `config` owns local configuration, `flags` exposes
-global Restish controls, `content-types` is a top-level runtime utility, MCP
-uses `serve`, and shell integration lives under `shell setup`.
+The implemented v2 surface should follow this decision. `api` owns API
+registration and API-auth configuration, `config` owns local configuration,
+`--help-all` exposes global Restish controls in command context,
+`content-types` is a top-level runtime utility, MCP uses `serve`, and shell
+integration lives under `shell setup` and `shell completion`.
 
 The resulting command tree keeps the v1 request experience familiar while
 making the control plane more explicit and easier to document before v2 becomes

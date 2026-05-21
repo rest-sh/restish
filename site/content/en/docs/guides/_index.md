@@ -16,7 +16,8 @@ matches the kind of work you are doing.
 ## Start Here
 
 - [Requests](./requests/) for generic URLs, generated commands, headers, query params, and debugging.
-- [Authentication](./authentication/) for basic auth, bearer tokens, API keys, OAuth, and external tools.
+- [Authentication](./authentication/) for basic auth, bearer tokens, API keys, and external tools.
+- [OAuth](./oauth/) for client credentials, browser sign-in, device code, token cache, and provider-specific setup.
 - [Input and Shorthand](./input/) for request bodies, stdin, forms, and uploads.
 - [Output](./output/) for auto output, JSON, NDJSON, tables, raw bytes, and files.
 - [Troubleshooting](./troubleshooting/) when behavior is surprising.
@@ -27,7 +28,7 @@ matches the kind of work you are doing.
 - [Filtering](./filtering/) and [Streaming](./streaming/)
 - [Retries and Caching](./retries-and-caching/), [Command Behavior](./command-behavior/), and [Scripting and Automation](./automation/)
 - [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
-- [TLS](./tls/), [Shell Setup](/docs/getting-started/shell-setup/), [Output](./output/), and [Edit Workflow](./edit-workflow/)
+- [OAuth](./oauth/), [TLS](./tls/), [Shell Setup](/docs/getting-started/shell-setup/), [Output](./output/), [Edit Workflow](./edit-workflow/), and [Doctor](/docs/reference/doctor-command/)
 
 Guides often link inline to reference pages when exact flags or config fields
 matter. Treat those links as lookup, not required reading before you can try the

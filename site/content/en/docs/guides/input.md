@@ -86,7 +86,8 @@ Use `-c multipart` for form-style uploads. The example API echoes normal
 fields and reports file metadata when the request contains real file parts:
 
 ```bash
-restish post -c multipart api.rest.sh/uploads 'description: docs, file: @README.md'
+printf 'hello from docs\n' > upload.txt
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.txt'
 ```
 
 The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size. A multipart `@path` value must point to a readable file; use `@@value` when a text field should start with a literal `@`.

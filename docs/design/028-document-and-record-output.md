@@ -240,7 +240,9 @@ Whole-collection filters require a full logical collection, even when the
 response arrived in pages. Restish should not try to infer this from the filter
 syntax because shorthand and jq both contain expressions that are hard to
 classify safely and predictably. Users ask for whole-collection semantics with
-`--rsh-collect`.
+`--rsh-collect`. This flag is the canonical user-facing name for the mode in
+v2; Restish should improve help, hints, and examples around it rather than add
+a second spelling that makes filter scope harder to learn.
 
 Restish therefore needs an output planning step that classifies:
 

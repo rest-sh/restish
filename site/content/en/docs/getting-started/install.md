@@ -5,15 +5,43 @@ weight: 20
 description: Install or build Restish and verify that the binary can make a request.
 ---
 
-Use Homebrew when you want the managed install path. Use GitHub release
-archives, the OCI image, or a source build when those fit your environment
-better.
+This page documents the Restish v2 install path. Homebrew is the recommended
+managed install path for most macOS users. Build from source when you are
+developing Restish itself or testing changes before they are released.
+
+Always verify the major version after installation:
+
+```bash
+restish --version
+```
 
 ## Homebrew
+
+Use Homebrew for the easiest managed install on macOS:
 
 ```bash
 brew install rest-sh/tap/restish
 restish --version
+```
+
+The tap also keeps a legacy `restish@1` formula available for users who
+intentionally stay on v1 during migration.
+
+## Build From Source
+
+Use this path for development builds from the repository:
+
+```bash
+go build ./cmd/restish
+./restish --help
+./restish api.rest.sh/
+```
+
+You can also install the latest stable v2 binary into your Go bin directory:
+
+```bash
+go install github.com/rest-sh/restish/v2/cmd/restish@latest
+restish --help
 ```
 
 ## mise
@@ -25,8 +53,8 @@ mise use -g restish@latest
 restish --version
 ```
 
-After v2 is released, `latest` installs the latest stable v2 release. Pin a v1
-version when you need to stay on v1:
+`latest` installs the latest stable v2 release through the mise registry. Pin a
+v1 version when you need to stay on v1:
 
 ```bash
 mise use -g restish@0.21.2
@@ -43,25 +71,18 @@ Release archives are published for macOS, Linux, and Windows on `amd64` and
 
 ## OCI Image
 
+Run the stable image from GitHub Container Registry:
+
 ```bash
 docker run --rm ghcr.io/rest-sh/restish:latest api.rest.sh/
 ```
 
-## Build From Source
-
-From this repository:
+For local image changes, build a development image from this repository:
 
 ```bash
-go build ./cmd/restish
-./restish --help
-./restish api.rest.sh/
-```
-
-To install the binary into your Go bin directory:
-
-```bash
-go install github.com/rest-sh/restish/v2/cmd/restish@latest
-restish --help
+docker build --build-arg VERSION=dev -t restish:dev .
+docker run --rm restish:dev --version
+docker run --rm restish:dev api.rest.sh/
 ```
 
 ## Verify The Install

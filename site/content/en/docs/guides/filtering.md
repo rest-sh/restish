@@ -12,6 +12,8 @@ for direct paths and projections; use jq for richer transforms.
 
 ## Filter Roots
 
+- `proto` for the response protocol string
+- `status` for the numeric HTTP status
 - `headers` for response headers
 - `links` for normalized hypermedia links
 - `body` for decoded response body

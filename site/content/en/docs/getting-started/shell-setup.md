@@ -50,7 +50,7 @@ Without setup, these commands may fail before Restish starts:
 ```bash
 restish 'api.rest.sh/images?format=jpeg&limit=1'
 restish api.rest.sh/images --rsh-no-paginate -f 'body[0].self'
-restish post api.rest.sh/post 'tags[]: docs' 'tags[]: cli'
+restish post api.rest.sh/post 'tags[]: docs, tags[]: cli'
 ```
 
 Quoting still works, and it is the most portable habit for shared scripts. The

@@ -40,8 +40,8 @@ restish api.rest.sh/images -o csv
 
 Request middleware can update headers by returning strings, arrays of strings,
 or `null`; `null` deletes that header from the prepared request. Response
-middleware that returns `response_headers` replaces the normalized response
-headers, so include any original headers the plugin wants to keep.
+middleware can return `response.headers` to replace normalized response headers,
+so include any original headers the plugin wants to keep.
 
 Response middleware can also return a `follow` object with `method`, `uri`,
 optional `headers`, optional `body`, and optional `content_type`. Restish sends
@@ -67,6 +67,7 @@ unless the manifest opts into auth secrets.
 
 ## Related Pages
 
+- [Plugin Quickstart](../quickstart/)
 - [Plugin Manifest](/docs/reference/plugin-manifest/)
 - [Plugin Messages](/docs/reference/plugin-messages/)
 - [Command Plugins](../command-plugins/)

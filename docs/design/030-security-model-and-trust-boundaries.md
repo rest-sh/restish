@@ -83,6 +83,21 @@ Unsafe behavior must require an explicit user choice. Examples:
 - credentials are redacted from logs
 - document output should not silently dump binary data to a TTY
 
+### Trust Explicit Operator Intent
+
+Restish is a local operator tool, so explicit operator choices should generally
+win over spec assumptions, safety heuristics, and extra ceremony. If a user
+passes a flag, sets a config field, supplies a plugin source, or otherwise asks
+Restish to do something directly, Restish should do it after applying the
+minimum validation needed to keep behavior explainable.
+
+This principle does not remove all prompts. Extra approval is appropriate when
+dangerous behavior could happen later as a side effect of config or remote
+metadata, especially when it executes local code or sends credentials. For
+example, plugin install treats the source argument as the trust decision, while
+external auth commands keep a one-time approval because they can run during
+ordinary requests after config is loaded.
+
 ### No Silent Downgrade
 
 When safety or correctness checks fail, Restish should error or warn clearly.

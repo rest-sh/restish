@@ -288,6 +288,13 @@ Collection-oriented filtering still works through collect-style execution:
 restish get https://api.example.com/items --rsh-collect -f '.body | length'
 ```
 
+`--rsh-collect` is the canonical opt-in for whole-collection filter scope. It
+means "build the logical paginated result first, then evaluate the filter once"
+rather than "turn pagination on"; pagination may already happen without it when
+the output contract requires a merged document. Without `--rsh-collect`,
+paginated filters run against each item through the mini normalized response
+model where the current item is under `body`.
+
 ## Alternatives Considered
 
 ### Do Not Paginate Automatically

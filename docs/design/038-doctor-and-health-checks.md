@@ -119,8 +119,10 @@ not surprise users by contacting private APIs.
 
 API doctor should not run generated operations, refresh specs, follow
 pagination, or validate operation auth by sending application requests. Users
-can run `api sync`, `api auth list`, or real requests when they need those more
-specific checks.
+can run `api sync`, `api auth inspect`, or real requests when they need those
+more specific checks. Doctor should point to `api auth inspect` for detailed
+credential coverage, readiness, and auth material instead of duplicating that
+deeper auth-debugging surface.
 
 ## Plugin Doctor
 

@@ -57,10 +57,11 @@ That keeps Restish aligned with standard Go CLI behavior and automatically
 covers both built-in commands and generated commands that are part of the Cobra
 tree.
 
-`shell completion <shell>` is the stdout generator so package managers, shell
-frameworks, and advanced users can install the script using their preferred
-mechanism. The hidden top-level `completion` command remains as a compatibility
-alias during v2 development.
+`shell completion <shell>` is the canonical v2 stdout generator so package
+managers, shell frameworks, and advanced users can install the script using
+their preferred mechanism. The hidden top-level `completion` command may remain
+as a compatibility alias, but it is not part of the published v2 command
+surface and should not appear in user-facing examples.
 
 The v2 completion target is bash, zsh, fish, and PowerShell when PowerShell can
 be supported through Cobra's standard generator without a large custom

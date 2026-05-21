@@ -20,6 +20,10 @@ restish example --help
 Restish looks for an OpenAPI description through well-known locations and link
 relations, then caches the spec.
 
+Discovery is intentionally conservative. Restish trusts same-origin spec links
+by default; use `--allow-cross-origin-spec` only when you expect the API to
+advertise its OpenAPI document from another host and you trust that host.
+
 ## Configure With An Explicit Spec
 
 ```bash
@@ -87,5 +91,6 @@ restish api sync example
 
 - [Connect to an API](/docs/getting-started/connect-to-an-api/)
 - [API Management](/docs/reference/api-management/)
+- [Config Command](/docs/reference/config-command/)
 - [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
 - [Troubleshooting](../troubleshooting/)

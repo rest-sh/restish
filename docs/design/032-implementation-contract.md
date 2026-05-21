@@ -125,9 +125,20 @@ validation layer fails.
 
 ## Command Surface And Precedence
 
-Built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`, `delete`,
-`api`, `cache`, `cert`, `completion`, `config`, `content-types`, `doctor`,
-`edit`, `flags`, `help`, `links`, `plugin`, `shell`, and `version`.
+Public built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`,
+`delete`, `api`, `cache`, `cert`, `config`, `content-types`, `doctor`, `edit`,
+`help`, `links`, `plugin`, `shell`, and `version`.
+
+The public completion generator is `shell completion <shell>`. A top-level
+`completion` command may exist as a hidden compatibility alias, but design 037
+owns the published command surface and user-facing docs should not advertise
+the alias. There is no public `flags` command in v2; global flag discovery is
+through command help and `--help-all`.
+
+API short names must not collide with public built-ins or hidden compatibility
+commands. Removed pre-release command names are not held in reserve unless an
+actual hidden command remains. In particular, `completion` is reserved because
+the hidden alias exists, while `flags` is available as an API short name.
 
 `api auth logout` accepts either one API argument or `--auth-profile
 <name>`. The API argument is required unless `--auth-profile` is supplied.

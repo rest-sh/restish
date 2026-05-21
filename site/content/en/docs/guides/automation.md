@@ -109,5 +109,6 @@ These flags are the usual script building blocks:
 - [Global Flags](/docs/reference/global-flags/)
 - [Command Behavior](/docs/guides/command-behavior/)
 - [Retries and Caching](/docs/guides/retries-and-caching/)
+- [Cache Command](/docs/reference/cache-command/)
 - [Requests](/docs/guides/requests/)
 - [Troubleshooting](/docs/guides/troubleshooting/)

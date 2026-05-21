@@ -164,6 +164,10 @@ restish api auth inspect myapi --rsh-credential UserBearer --redact
 restish api auth header myapi Authorization UserBearer
 ```
 
+Replace `myapi`, credential IDs, and operation names with values from your
+registered API. Use bare `api auth inspect` first when you are unsure which credential
+bindings exist for the selected profile.
+
 When a profile has exactly one configured credential, `inspect` selects it by
 default. When a profile has several credentials, `inspect` prints each
 configured credential's computed auth material; pass `--rsh-credential` to
@@ -179,69 +183,32 @@ restish -v -p token api.rest.sh/auth/bearer
 
 ## OAuth
 
-OAuth examples require your provider, redirect settings, client ID, and client
-secret, so the docs use placeholder issuer hosts. Keep those examples out of
-shell history when they contain secrets.
+Restish supports OAuth client credentials, authorization code with PKCE, and
+device code auth. OAuth setup is provider-specific, so keep the exact flow,
+redirect URI, scopes, and provider parameters in the focused
+[OAuth guide](../oauth/). The reference page lists every supported auth type
+and param.
 
-Client credentials shape:
-
-```jsonc
-{
-  "auth": {
-    "type": "oauth-client-credentials",
-    "params": {
-      "token_url": "https://issuer.test/oauth/token",
-      "client_id": "env:CLIENT_ID",
-      "client_secret": "env:CLIENT_SECRET",
-      "audience": "https://api.vendor.test/"
-    }
-  }
-}
-```
-
-Authorization code shape:
+The most common profile-level shape uses an OAuth auth type plus provider
+params:
 
 ```jsonc
 {
   "auth": {
     "type": "oauth-authorization-code",
     "params": {
-      "authorize_url": "https://issuer.test/authorize",
-      "token_url": "https://issuer.test/oauth/token",
+      "issuer_url": "https://issuer.test",
       "client_id": "env:CLIENT_ID",
-      "scopes": "read:items",
+      "scopes": "read:items offline_access",
       "redirect_path": "/callback"
     }
   }
 }
 ```
 
-Restish opens a localhost callback on `redirect_port` and defaults the callback
-path to `/`.
-
-Allow this callback URL in your OAuth app by default:
-
-```text
-http://localhost:8484/
-```
-
-If you set `redirect_path`, allow the matching path instead:
-
-```text
-http://localhost:8484/callback
-```
-
-If you set `redirect_port`, allow the same path on that port. Some OAuth
-providers distinguish `localhost` from `127.0.0.1` or require loopback IP
-redirects such as `http://127.0.0.1:8484/`. Restish currently sends
-`localhost` in the authorization request, so the provider must allow the
-`localhost` URL exactly for the browser callback flow to complete.
-
-Issuers and OAuth endpoints must use HTTPS, except for localhost or loopback
-development URLs.
-
-Use `--rsh-no-browser` for headless sessions when the flow supports a manual
-browser step.
+OAuth tokens are cached separately from HTTP responses. Use
+`restish api auth logout` when a grant is revoked, consent changes, or you want
+the next request to perform a fresh sign-in.
 
 ## External Tool Auth
 
@@ -269,6 +236,8 @@ interactive `$SHELL`, and move complex logic into a script.
 
 - [Profiles](/docs/reference/profiles/)
 - [Config](/docs/reference/config/)
+- [OAuth](../oauth/)
 - [Auth Reference](/docs/reference/auth/)
+- [API Management](/docs/reference/api-management/)
 - [Use External-Tool Auth](/docs/recipes/use-external-tool-auth/)
 - [Security Design](/docs/contributing/design-records/)

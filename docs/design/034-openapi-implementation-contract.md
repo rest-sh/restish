@@ -364,10 +364,15 @@ compatibility. Multiple alternatives or combined requirements require explicit
 `profiles.<name>.credentials.<id>` bindings. Requirement values such as OAuth
 scopes or role strings are matched against a binding's `satisfies` list.
 
-`--rsh-auth` selects one allowed alternative by credential ID set, for
-example `PartnerKey` or `UserOAuth+PartnerKey`. Overrides are rejected for
-`security: []`, invalid combinations, and profiles that do not satisfy the
-selected alternative.
+`--rsh-auth` selects one alternative by credential ID set, for example
+`PartnerKey` or `UserOAuth+PartnerKey`. When the selected set matches a
+declared alternative, Restish enforces that alternative. When the selected set
+does not match the operation security metadata, including `security: []`,
+Restish treats the flag as explicit operator intent, sends the configured
+credential set if the active profile satisfies it, and emits a warning that the
+request is outside the OpenAPI contract. Overrides are still rejected for
+invalid syntax, missing credential bindings, conflicting credential mutations,
+and profiles that do not satisfy the requested credential set.
 
 As an escape hatch for provider specs that under-declare security, an explicit
 `--rsh-auth <credential-id>` may select a configured credential that is not

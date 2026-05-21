@@ -56,6 +56,10 @@ restish \
   https://mtls.internal.test/items
 ```
 
+Use TLS signer flags instead of `--rsh-client-cert` and `--rsh-client-key`.
+Restish rejects a request that combines a signer with client certificate/key
+files.
+
 ## Minimum TLS Version
 
 Restish defaults to TLS 1.2. Pass `--rsh-tls-min-version TLS1.3` to require TLS 1.3.
@@ -72,11 +76,14 @@ restish --rsh-insecure https://service.internal.test/items
 ```
 
 Use this only for short debugging sessions. Prefer `--rsh-ca-cert` for durable
-configuration.
+configuration. Restish treats `--rsh-insecure` as an explicit operator choice:
+it does not prompt again, but verbose diagnostics make insecure verification
+visible when troubleshooting.
 
 ## Related Pages
 
-- [Commands](/docs/reference/commands/)
+- [Utility Commands](/docs/reference/utility-commands/)
+- [Global Flags](/docs/reference/global-flags/)
 - [TLS Signer Plugins](/docs/plugins/tls-signer-plugins/)
 - [Use a Custom CA](/docs/recipes/use-a-custom-ca/)
 - [Use mTLS With a TLS Signer](/docs/recipes/use-mtls-with-a-tls-signer/)

@@ -3,6 +3,9 @@
 This document records the v2 release packaging decisions that are not tied to
 one package manager.
 
+The public install paths should point at the current v2 release. Keep source
+builds documented as the development path, not the primary user install path.
+
 ## GitHub Release Artifacts
 
 Tagged releases publish native archives with GoReleaser. The core CLI is built
@@ -25,9 +28,9 @@ checksums.txt
 ```
 
 The hyphenated archive names intentionally preserve the v1 GitHub Release
-asset shape used by aqua and mise metadata. Stable v2 releases should become
-the `latest` version for floating installer configs; users who need v1 can pin
-an older version such as `0.21.2`.
+asset shape used by aqua and mise metadata. Stable v2 releases become the
+`latest` version for floating installer configs; users who need v1 can pin an
+older version such as `0.21.2`.
 
 GoReleaser injects the tag version into
 `github.com/rest-sh/restish/v2/internal/cli.Version`.
@@ -64,6 +67,25 @@ The release workflow uses the existing Restish Releaser GitHub App secrets
 (`RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`) to mint a short-lived token
 with access to `rest-sh/homebrew-tap`. GoReleaser uses it to update v2 formulae,
 and the workflow seeds the v1 formula from `packaging/homebrew/restish@1.rb`.
+
+Do not use unqualified `brew install restish` for v2 verification until the
+tap/core state is checked. The documented user path is the official tap:
+`brew install rest-sh/tap/restish`.
+
+## mise
+
+The mise registry shorthand includes a `restish` entry for the v2 line:
+
+```bash
+mise use -g restish@latest
+```
+
+Verify this after publishing because the shorthand follows published release
+metadata. Users who need v1 should pin the last v1 version:
+
+```bash
+mise use -g restish@0.21.2
+```
 
 ## First-Party Plugin Artifacts
 

@@ -27,8 +27,11 @@ The root command resolves in this order:
 3. plugin-contributed commands
 4. bare-URL or bare-API generic request convenience behavior where applicable
 
-Built-ins must win over generated or plugin names. An API named `cache` should
-not accidentally shadow `restish cache`.
+Built-ins must win over generated or plugin names. Hidden compatibility
+commands are reserved for the same reason. An API named `cache` should not
+accidentally shadow `restish cache`, and an API named `completion` should not
+shadow the hidden top-level completion alias. Removed pre-release commands are
+not reserved once they are gone; for v2, `flags` is available as an API name.
 
 Bare-target generic requests are a convenience, not a replacement for command
 parsing. They must not bypass the normal subcommand tree in cases where the

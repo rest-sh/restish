@@ -34,8 +34,8 @@ restish edit --edit-format yaml api.rest.sh/types
 ## Apply A Shorthand Patch
 
 ```bash
-restish edit --dry-run api.rest.sh/types string: changed
-restish edit -y api.rest.sh/types string: changed
+restish edit --dry-run api.rest.sh/types 'string: changed'
+restish edit -y api.rest.sh/types 'string: changed'
 ```
 
 Use `--dry-run` to inspect what would be sent. Use `-y` when you want to skip

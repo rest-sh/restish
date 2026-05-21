@@ -89,6 +89,8 @@ Non-Go plugins can send the same message families directly:
 
 ## Related Pages
 
+- [Plugin Quickstart](../quickstart/)
 - [Plugin Messages](/docs/reference/plugin-messages/)
+- [Plugin Manifest](/docs/reference/plugin-manifest/)
 - [Bulk Management](/docs/plugins/bulk-management/)
 - [MCP](/docs/plugins/mcp/)

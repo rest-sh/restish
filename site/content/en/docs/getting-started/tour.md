@@ -90,9 +90,13 @@ for the pieces you usually care about:
 
 ```json
 {
+  "proto": "HTTP/2.0",
   "status": 200,
   "headers": {
     "Content-Type": "application/json"
+  },
+  "headers_all": {
+    "Content-Type": ["application/json"]
   },
   "links": {
     "next": "https://api.rest.sh/items?cursor=abc123"
@@ -103,9 +107,9 @@ for the pieces you usually care about:
 }
 ```
 
-Filters can select from `status`, `headers`, `links`, and `body` across
-different APIs. Restish shorthand is meant to cover the common cases without
-making you write a full query program:
+Filters can select from `proto`, `status`, `headers`, `headers_all`, `links`,
+and `body` across different APIs. Restish shorthand is meant to cover the
+common cases without making you write a full query program:
 
 - Field selection
   - `body.id` selects one field
@@ -277,12 +281,12 @@ writing JSON by hand. Think of it like a better JSON, where quotes are optional,
 
 | Shorthand                     | JSON                                        |
 | ----------------------------- | ------------------------------------------- |
-| Most things just work:        |
+| Most things just work:        |                                             |
 | `user.name: Alice`            | `{"user": {"name": "Alice"}}`               |
 | `price: 12.34, inStock: true` | `{"price": 12.34, "inStock": true}`         |
-| Deep nesting can be simpler:  |
+| Deep nesting can be simpler:  |                                             |
 | `base{one: 1, two.three: 3}`  | `{"base": {"one": 1, "two": {"three": 3}}}` |
-| Arrays can be appended:       |
+| Arrays can be appended:       |                                             |
 | `tags[]: red`                 | `{"tags": ["red"]}`                         |
 | `tags[].id: 123`              | `{"tags": [{"id": 123}]}`                   |
 
@@ -491,7 +495,7 @@ restish example/images -o table
 restish api.rest.sh/images -o table
 ```
 
-The operation form gives you generated help and while all forms give you shell completion:
+The operation form gives you generated help, and all forms can use shell completion:
 
 ```bash
 restish example get-image --help
@@ -608,11 +612,14 @@ Official plugins cover a few common extension points:
 | `restish-mcp` | A `restish mcp serve` command that exposes registered OpenAPI operations as MCP tools. | You want an MCP client or agent to call APIs through Restish instead of building separate auth and HTTP handling. |
 | `restish-pkcs11` | A PKCS#11 TLS signer for mTLS handshakes. | Your client private key lives in a hardware token, smart card, HSM, or PKCS#11 provider and should not be copied into Restish config. |
 
-Install the CSV formatter locally:
+Install the CSV formatter locally from the official release:
 
 ```bash
 restish plugin install rest-sh/restish csv
 ```
+
+For plugin development, build `./cmd/restish-csv` from this repository and
+install the local binary with `restish plugin install ./restish-csv`.
 
 The browser preview includes a small CSV formatter so you can see the result:
 

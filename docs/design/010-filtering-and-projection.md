@@ -123,7 +123,11 @@ that determines whether:
 - the CLI must collect the full logical result first
 
 If a filter cannot safely run incrementally, Restish should collect
-automatically or fail clearly.
+only when the user explicitly requests whole-collection semantics with
+`--rsh-collect`; otherwise it should fail clearly with a hint when Restish can
+recognize the mismatch. Restish should not infer collection from jq syntax or
+silently switch filter scope, because shorthand and jq both contain expressions
+that are hard to classify safely and users need a stable mental model.
 
 ## Shorthand Semantics
 
