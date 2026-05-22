@@ -581,6 +581,7 @@ filters and shorthand from shell globbing.
 # See official theme names, then set one
 restish config theme list
 restish config theme set one-dark-pro
+restish config theme set restish-dark
 
 # Install and set custom themes from a local path, URL, or repo
 restish config theme set ./theme.json

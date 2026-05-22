@@ -172,15 +172,18 @@ func TestThemeList(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{"catppuccin-mocha", "dracula", "vscode-dark"} {
+	for _, want := range []string{"* restish-dark", "catppuccin-mocha", "dracula", "vscode-dark"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("theme list missing %q:\n%s", want, got)
 		}
 	}
-	for _, notWant := range []string{"\x1b[", `"restish"`, "https://api.rest.sh", "200 OK"} {
+	for _, notWant := range []string{"\x1b[", `"demo"`, "url", "200 OK"} {
 		if strings.Contains(got, notWant) {
 			t.Fatalf("non-TTY theme list should not include previews or ANSI %q:\n%s", notWant, got)
 		}
+	}
+	if one, dark, light := strings.Index(got, "one-dark-pro"), strings.Index(got, "restish-dark"), strings.Index(got, "restish-light"); one < 0 || dark < 0 || light < 0 || !(one < dark && dark < light) {
+		t.Fatalf("restish-dark should be alphabetized between one-dark-pro and restish-light:\n%s", got)
 	}
 }
 
@@ -202,10 +205,47 @@ func TestThemeListShowsPreviewForTTY(t *testing.T) {
 	}
 	plain := stripANSI(got)
 	today := time.Now().Format(time.DateOnly)
-	for _, want := range []string{"dracula", "true", "42", `"restish"`, "https://api.rest.sh", today, "200 OK", "302 Found", "404 Not Found"} {
+	for _, want := range []string{"restish-dark", "dracula", "true", "42", `"demo"`, "url", today, "200 OK", "302", "404"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("TTY theme list missing preview text %q:\n%s", want, plain)
 		}
+	}
+}
+
+func TestThemeSetRestishDarkResetsTheme(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, []byte(`{
+  "theme_source": "official:dracula",
+  "theme": {
+    "key": "#ff79c6"
+  },
+  "cache": {"max_size": "10MB"}
+}
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected theme HTTP fetch: %s", r.URL.String())
+		return nil, nil
+	})
+
+	if err := c.Run([]string{"restish", "config", "theme", "set", "restish-dark"}); err != nil {
+		t.Fatalf("config theme set restish-dark: %v", err)
+	}
+	if !strings.Contains(out.String(), "Theme name: restish-dark") ||
+		!strings.Contains(out.String(), "Reset theme to built-in default.") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ThemeSource != "" || len(cfg.Theme) != 0 {
+		t.Fatalf("theme was not reset: source=%q theme=%#v", cfg.ThemeSource, cfg.Theme)
 	}
 }
 

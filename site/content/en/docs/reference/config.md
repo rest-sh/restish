@@ -246,6 +246,7 @@ Theme files may be JSON or JSONC:
 ```bash
 restish config theme list
 restish config theme set one-dark-pro
+restish config theme set restish-dark
 restish config theme set ./theme.json
 restish config theme set user/repo dark --yes
 restish config theme reset
@@ -257,7 +258,8 @@ absolute paths, and bundled official themes are stored as `official:<name>`.
 color, `header_key` to color HTTP response header names differently from JSON
 object keys, `heading` for interactive help headings, and `diagnostic_warn`,
 `diagnostic_error`, `diagnostic_hint`, or `status_2xx` to customize human
-status output. `reset` removes the saved theme and restores the built-in theme.
+status output. `reset` removes the saved theme and restores the built-in theme;
+setting `restish-dark` does the same thing.
 
 For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`
 first, then falls back to `<name>.json` at the repository root. Name-only
@@ -267,7 +269,7 @@ does not fetch from the network.
 `theme list` shows the official theme names:
 `catppuccin-mocha`, `dracula`, `github-dark`, `houston`, `minimal`,
 `monokai-pro-dark`, `monokai-pro-light`, `noctis`, `one-dark-pro`,
-`restish-light`, `synthwave-84`, and `vscode-dark`.
+`restish-dark`, `restish-light`, `synthwave-84`, and `vscode-dark`.
 
 ## Plugins
 

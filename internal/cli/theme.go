@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 const maxThemeBytes = 256 << 10
 const officialThemeSourcePrefix = "official:"
 const legacyOfficialThemeRepo = "rest-sh/restish"
+const defaultThemeName = "restish-dark"
 
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
@@ -30,12 +32,12 @@ func themePreviewSamples(today time.Time) []chroma.Token {
 	return []chroma.Token{
 		{Type: chroma.KeywordConstant, Value: "true"},
 		{Type: chroma.LiteralNumberInteger, Value: "42"},
-		{Type: chroma.LiteralStringDouble, Value: `"restish"`},
-		{Type: chroma.LiteralStringSymbol, Value: "https://api.rest.sh"},
+		{Type: chroma.LiteralStringDouble, Value: `"demo"`},
+		{Type: chroma.LiteralStringSymbol, Value: "url"},
 		{Type: chroma.LiteralDate, Value: today.Format(time.DateOnly)},
 		{Type: chroma.GenericInserted, Value: "200 OK"},
-		{Type: chroma.GenericOutput, Value: "302 Found"},
-		{Type: chroma.GenericError, Value: "404 Not Found"},
+		{Type: chroma.GenericOutput, Value: "302"},
+		{Type: chroma.GenericError, Value: "404"},
 	}
 }
 
@@ -85,7 +87,7 @@ func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
 	if c.cfg != nil {
 		current = c.cfg.ThemeSource
 	}
-	names := officialthemes.Names()
+	names := officialThemeNames()
 	showPreview := c.stdoutIsTerminal() && output.ColorEnabled(c.Stdout)
 	nameWidth := 0
 	today := time.Now()
@@ -97,7 +99,7 @@ func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
 	for _, name := range names {
 		source := officialThemeSource(name)
 		marker := " "
-		if current == source || current == legacyOfficialThemeSource(name) {
+		if (name == defaultThemeName && current == "") || current == source || current == legacyOfficialThemeSource(name) {
 			marker = "*"
 		}
 		if showPreview {
@@ -113,9 +115,13 @@ func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
 }
 
 func officialThemePreview(name string, today time.Time) string {
-	entries, err := readOfficialTheme(name)
-	if err != nil {
-		return ""
+	var entries output.ThemeEntries
+	var err error
+	if name != defaultThemeName {
+		entries, err = readOfficialTheme(name)
+		if err != nil {
+			return ""
+		}
 	}
 	style, err := output.BuildTheme(entries)
 	if err != nil {
@@ -143,6 +149,9 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Fprintf(c.Stdout, "Theme %s: %s\n", themeSourceLabel(source), themeSourceDisplay(source))
+	if isDefaultThemeSource(source) {
+		return c.runThemeReset(cmd, args)
+	}
 
 	yes, _ := cmd.Flags().GetBool("yes")
 	if c.themeSourceNeedsConfirmation(source) && !yes {
@@ -305,6 +314,9 @@ func resolveThemeSource(args []string) (string, error) {
 	if githubThemeShorthand.MatchString(source) {
 		return "https://raw.githubusercontent.com/" + source + "/HEAD/theme.json", nil
 	}
+	if isDefaultThemeName(source) {
+		return officialThemeSource(source), nil
+	}
 	if isOfficialThemeName(source) {
 		return officialThemeSource(source), nil
 	}
@@ -322,8 +334,27 @@ func legacyOfficialThemeSource(name string) string {
 	return "https://raw.githubusercontent.com/" + legacyOfficialThemeRepo + "/HEAD/themes/" + name + ".json"
 }
 
+func officialThemeNames() []string {
+	names := []string{defaultThemeName}
+	for _, name := range officialthemes.Names() {
+		if name != defaultThemeName {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func isDefaultThemeName(name string) bool {
+	return name == defaultThemeName
+}
+
+func isDefaultThemeSource(source string) bool {
+	return source == officialThemeSource(defaultThemeName)
+}
+
 func isOfficialThemeName(name string) bool {
-	for _, official := range officialthemes.Names() {
+	for _, official := range officialThemeNames() {
 		if name == official {
 			return true
 		}

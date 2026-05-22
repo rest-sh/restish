@@ -192,7 +192,7 @@ List official theme names
 
 List bundled theme names.
 
-The current configured bundled theme is marked with `*`. When stdout is a terminal, each bundled theme includes a small color preview. Custom local, URL, or GitHub themes are not expanded into this bundled list.
+The current configured bundled theme is marked with `*`; when no theme override is configured, `restish-dark` is marked as the built-in default. When stdout is a terminal, each bundled theme includes a small color preview. Custom local, URL, or GitHub themes are not expanded into this bundled list.
 
 Usage:
 
@@ -213,7 +213,7 @@ Install a theme JSON or JSONC file and save it in config
 
 Install a theme JSON or JSONC file and save it in config.
 
-Sources may be bundled theme names, local files, HTTPS URLs, or GitHub `user/repo` shorthand. Remote sources are executable in the sense that they affect terminal rendering, so Restish asks for confirmation unless the source is already trusted or you pass `--yes`.
+Sources may be bundled theme names, local files, HTTPS URLs, or GitHub `user/repo` shorthand. Setting `restish-dark` is the same as `config theme reset`. Remote sources are executable in the sense that they affect terminal rendering, so Restish asks for confirmation unless the source is already trusted or you pass `--yes`.
 
 Usage:
 
