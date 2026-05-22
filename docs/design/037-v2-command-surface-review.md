@@ -133,10 +133,10 @@ restish api
   sync <name>
   remove <name>
   auth
-    list <api>
+    inspect <api> [--redact]
     add <api> <credential-id>
     remove <api> <credential-id>
-    inspect <api>
+    header <api> <header> [credential-id]
     logout [api]
 
 restish config

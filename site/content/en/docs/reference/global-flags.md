@@ -147,9 +147,9 @@ Allow retries for POST, PUT, PATCH, and DELETE requests
 
 **`--rsh-retry`**
 
-Type: `int`; default: none
+Type: `int`; default: `2`
 
-Maximum retry attempts for network errors and transient HTTP responses (default: 2; 0 = disable)
+Maximum retry attempts for network errors and transient HTTP responses (0 = disable)
 
 **`--rsh-sort-by`**
 
@@ -209,7 +209,7 @@ Filter/project the response using shorthand or jq (auto-detected)
 
 Type: `string`; default: `auto`
 
-Output format for rendered response bodies: auto, cbor, gron, image, json, lines, ndjson, table, yaml (default: auto; use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)
+Output format for rendered response bodies: auto, cbor, gron, image, json, lines, ndjson, table, yaml (use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)
 
 **`-p`, `--rsh-profile`**
 

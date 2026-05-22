@@ -46,6 +46,14 @@ Usage:
 restish shell
 ```
 
+Examples:
+
+```bash
+  restish shell setup zsh
+  restish shell completion zsh
+  restish shell completion install zsh
+```
+
 Subcommands:
 
 **`restish shell completion`**: Generate shell completion scripts
@@ -67,6 +75,14 @@ Usage:
 
 ```text
 restish shell setup <shell> [flags]
+```
+
+Examples:
+
+```bash
+  restish shell setup zsh
+  restish shell setup fish --dry-run
+  restish shell setup bash --no-completion
 ```
 
 Flags:
@@ -105,6 +121,14 @@ Usage:
 restish shell completion
 ```
 
+Examples:
+
+```bash
+  restish shell completion zsh
+  restish shell completion bash > restish.bash
+  restish shell completion install zsh
+```
+
 Subcommands:
 
 **`restish shell completion bash`**: Generate the autocompletion script for bash
@@ -124,16 +148,22 @@ Generate the autocompletion script for bash
 
 Generate the autocompletion script for `bash`.
 
-This writes the script to stdout for package managers and manual shell setup. For user-level installation, use:
+This writes the script to stdout for package managers and manual shell setup. For managed user-level installation where supported, use:
 
 ```bash
-restish shell completion bash > /etc/bash_completion.d/restish
+restish shell completion bash > restish.bash
 ```
 
 Usage:
 
 ```text
 restish shell completion bash
+```
+
+Examples:
+
+```bash
+  restish shell completion bash > restish.bash
 ```
 
 Flags:
@@ -152,7 +182,7 @@ Generate the autocompletion script for zsh
 
 Generate the autocompletion script for `zsh`.
 
-This writes the script to stdout for package managers and manual shell setup. For user-level installation, use:
+This writes the script to stdout for package managers and manual shell setup. For managed user-level installation where supported, use:
 
 ```bash
 restish shell completion install zsh
@@ -162,6 +192,13 @@ Usage:
 
 ```text
 restish shell completion zsh [flags]
+```
+
+Examples:
+
+```bash
+  restish shell completion zsh > _restish
+  restish shell completion install zsh
 ```
 
 Flags:
@@ -180,7 +217,7 @@ Generate the autocompletion script for fish
 
 Generate the autocompletion script for `fish`.
 
-This writes the script to stdout for package managers and manual shell setup. For user-level installation, use:
+This writes the script to stdout for package managers and manual shell setup. For managed user-level installation where supported, use:
 
 ```bash
 restish shell completion install fish
@@ -190,6 +227,13 @@ Usage:
 
 ```text
 restish shell completion fish [flags]
+```
+
+Examples:
+
+```bash
+  restish shell completion fish > restish.fish
+  restish shell completion install fish
 ```
 
 Flags:
@@ -208,7 +252,7 @@ Generate the autocompletion script for powershell
 
 Generate the autocompletion script for `powershell`.
 
-This writes the script to stdout for package managers and manual shell setup. For user-level installation, use:
+This writes the script to stdout for package managers and manual shell setup. For managed user-level installation where supported, use:
 
 ```bash
 restish shell completion powershell | Out-String | Invoke-Expression
@@ -218,6 +262,12 @@ Usage:
 
 ```text
 restish shell completion powershell [flags]
+```
+
+Examples:
+
+```bash
+  restish shell completion powershell | Out-String | Invoke-Expression
 ```
 
 Flags:
@@ -242,6 +292,13 @@ Usage:
 
 ```text
 restish shell completion install <shell> [flags]
+```
+
+Examples:
+
+```bash
+  restish shell completion install zsh
+  restish shell completion install fish --dry-run
 ```
 
 Flags:
