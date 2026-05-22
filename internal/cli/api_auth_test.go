@@ -165,21 +165,21 @@ func TestAPIAuthAddRemoveSuccessMessages(t *testing.T) {
 
 func TestAPIAuthInspectCredentialAPIKey(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
-		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-API-Key", "secret")),
 	})))
 
 	app := newTestApp(t)
 	app.SetConfigPath(cfgFile)
 	app.Run("api", "auth", "inspect", "myapi", "--credential", "PartnerKey")
 	got := app.Stdout.String()
-	if !strings.Contains(got, "X-Partner-Key: secret") {
+	if !strings.Contains(got, "X-API-Key: secret") {
 		t.Fatalf("expected API key inspection to show value, got %q", got)
 	}
 
 	app.Stdout.Reset()
 	app.Run("api", "auth", "inspect", "myapi", "--credential", "PartnerKey", "--redact")
 	got = app.Stdout.String()
-	if strings.Contains(got, "secret") || !strings.Contains(got, "X-Partner-Key: <redacted>") {
+	if strings.Contains(got, "secret") || !strings.Contains(got, "X-API-Key: <redacted>") {
 		t.Fatalf("expected redacted API key inspection with --redact, got %q", got)
 	}
 }
@@ -359,7 +359,7 @@ func TestAPIAuthInspectReportsEnvReadinessAndProfileFallback(t *testing.T) {
 	}
 	got := out.String()
 	requireContains(t, got,
-		"Profile auth: configured",
+		"Generic request auth: configured",
 		"Callable secured operations: 3/3",
 		"BearerAuth: configured (env missing: MISSING_TOKEN)",
 		"InferenceBearer: missing, satisfied by profile auth fallback",
@@ -505,10 +505,18 @@ func TestAPIAuthInspectUsesImplicitDefaultProfile(t *testing.T) {
 	got := out.String()
 	requireContains(t, got,
 		"Profile: default",
-		"Profile auth: none",
+		"Generic request auth: none",
 		"Credentials: none",
 		"PartnerKey: missing",
+		`Next: run "restish api auth add tapi PartnerKey".`,
 	)
+
+	c, _ = env.newCaptureCLI()
+	err := c.Run([]string{"restish", "api", "auth", "header", "tapi", "X-Partner-Key"})
+	if err == nil {
+		t.Fatal("expected api auth header with no auth to fail")
+	}
+	requireContains(t, err.Error(), "has no auth config", "restish api auth inspect tapi", "restish api auth add tapi <credential-id>")
 }
 
 func TestAPIAuthAddDerivesAuthAndPromptsFromCachedSpec(t *testing.T) {

@@ -107,11 +107,11 @@ func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName stri
 	sort.Strings(ids)
 	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
 	if profileErr != nil {
-		fmt.Fprintf(c.Stdout, "Profile auth: %s (%s)\n", style.warn("configured"), profileErr)
+		fmt.Fprintf(c.Stdout, "Generic request auth: %s (%s)\n", style.warn("configured"), profileErr)
 	} else if profileReady.Configured {
-		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", style.authStatus(profileReady.status("none")))
+		fmt.Fprintf(c.Stdout, "Generic request auth: %s\n", style.authStatus(profileReady.status("none")))
 	} else {
-		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", style.warn("none"))
+		fmt.Fprintf(c.Stdout, "Generic request auth: %s\n", style.warn("none"))
 	}
 	if hasOps {
 		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", coverage.Callable, coverage.Secured)
@@ -136,6 +136,9 @@ func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName stri
 	if hasOps {
 		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
 		c.printAPIAuthRequirementSummary(apiName, profileName, set.Operations, prof, coverage)
+		if credentialID := nextMissingCredentialID(set.Operations, prof, coverage); credentialID != "" {
+			fmt.Fprintf(c.Stdout, "%s run \"restish api auth add %s %s\".\n", style.hint("Next:"), apiName, credentialID)
+		}
 	}
 }
 
@@ -273,7 +276,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(c.Stdout, "%s\n", target.Label)
 		}
 		if target.Resolved.Config == nil {
-			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+			return c.missingAuthConfigError(apiName, profileName)
 		}
 		if !focused {
 			ready := c.resolvedAuthReadiness(apiName, profileName, target.Resolved)
@@ -435,7 +438,7 @@ func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if resolved.Config == nil {
-		return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		return c.missingAuthConfigError(apiName, profileName)
 	}
 	req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
 	if err != nil {
@@ -478,6 +481,10 @@ func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *con
 	default:
 		return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass --credential <id>", profileName, apiName, strings.Join(ids, ", "))
 	}
+}
+
+func (c *CLI) missingAuthConfigError(apiName, profileName string) error {
+	return fmt.Errorf("profile %q of API %q has no auth config; run %q to inspect credential coverage or %q to configure a credential", profileName, apiName, c.commandNameOrDefault()+" api auth inspect "+apiName, c.commandNameOrDefault()+" api auth add "+apiName+" <credential-id>")
 }
 
 func looksLikeURLArgument(arg string) bool {
@@ -571,11 +578,12 @@ func (c *CLI) printAuthInspectionRequest(req *http.Request, configs []*config.Au
 	}
 	for _, name := range sortedHeaderKeys(req.Header) {
 		values := req.Header[name]
+		displayName := authInspectionDisplayHeaderName(configs, name)
 		for _, value := range values {
 			if redact && (isSensitiveHeader(name) || authInspectionSensitiveHeader(configs, name)) {
 				value = "<redacted>"
 			}
-			fmt.Fprintf(c.Stdout, "%s: %s\n", name, value)
+			fmt.Fprintf(c.Stdout, "%s: %s\n", displayName, value)
 		}
 	}
 	if req.URL.RawQuery != "" {
@@ -594,6 +602,15 @@ func authInspectionSensitiveHeader(configs []*config.AuthConfig, name string) bo
 		}
 	}
 	return false
+}
+
+func authInspectionDisplayHeaderName(configs []*config.AuthConfig, name string) string {
+	for _, ac := range configs {
+		if isAuthInspectionSensitiveHeader(ac, name) && ac.Params["name"] != "" {
+			return ac.Params["name"]
+		}
+	}
+	return name
 }
 
 func authInspectionSensitiveQueryParam(configs []*config.AuthConfig, name string) bool {
@@ -863,6 +880,24 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 		parts = append(parts, fmt.Sprintf("%d %s", summary.opCount, operationWord))
 		fmt.Fprintf(c.Stdout, "  %s: %s\n", summary.id, strings.Join(parts, ", "))
 	}
+}
+
+func nextMissingCredentialID(ops []spec.Operation, prof *config.ProfileConfig, coverage operationAuthCoverage) string {
+	for _, summary := range authRequirementSummaries(ops) {
+		if !authRequirementKindSupported(summary.kind) || summary.undeclared || summary.external {
+			continue
+		}
+		if coverage.FallbackByID[summary.id] > 0 {
+			continue
+		}
+		if prof != nil && prof.Credentials != nil {
+			if credential := prof.Credentials[summary.id]; credential != nil && (credential.Auth != nil || credential.AuthRef != "") {
+				continue
+			}
+		}
+		return summary.id
+	}
+	return ""
 }
 
 func authRequirementSummaries(ops []spec.Operation) []authRequirementSummary {

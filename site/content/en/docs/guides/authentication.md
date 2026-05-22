@@ -172,8 +172,9 @@ When a profile has exactly one configured credential, `inspect` selects it by
 default. When a profile has several credentials, `inspect` prints each
 configured credential's computed auth material; pass `--credential` to
 narrow the output. `inspect` shows the computed values; use `--redact` for
-shareable output, and use `api auth header` when a script needs exactly one
-header value.
+shareable output. `--redact` is safe to include even when no secrets are
+configured, which makes it a good default for bug reports. Use
+`api auth header` when a script needs exactly one header value.
 
 Use verbose mode when the question is about the whole request:
 
