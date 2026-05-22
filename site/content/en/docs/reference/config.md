@@ -267,9 +267,10 @@ theme installation uses the official themes bundled with the Restish binary and
 does not fetch from the network.
 
 `theme list` shows the official theme names:
-`catppuccin-mocha`, `dracula`, `github-dark`, `houston`, `minimal`,
-`monokai-pro-dark`, `monokai-pro-light`, `noctis`, `one-dark-pro`,
-`restish-dark`, `restish-light`, `synthwave-84`, and `vscode-dark`.
+`catppuccin-latte`, `catppuccin-mocha`, `dracula`, `github-dark`,
+`gruvbox-dark`, `gruvbox-light`, `houston`, `minimal`, `monokai-pro-dark`,
+`monokai-pro-light`, `noctis`, `nord`, `one-dark-pro`, `restish-dark`,
+`restish-light`, `solarized-dark`, `synthwave-84`, and `vscode-dark`.
 
 ## Plugins
 
