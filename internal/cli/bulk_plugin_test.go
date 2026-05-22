@@ -175,6 +175,11 @@ func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 	if !strings.Contains(out.String(), "init") || !strings.Contains(out.String(), "push") {
 		t.Fatalf("expected plugin-managed subcommands in help, got:\n%s", out.String())
 	}
+	if got := out.String(); !strings.Contains(got, "Usage:\n  restish bulk [flags]") ||
+		strings.Contains(got, "completion  Generate") ||
+		strings.Contains(got, "help        Help about any command") {
+		t.Fatalf("bulk help exposes plugin-internal shape:\n%s", got)
+	}
 
 	helpForms := [][]string{
 		{"restish", "bulk", "-h"},
@@ -189,6 +194,9 @@ func TestBulkPluginHelpAndDiscovery(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "Usage:") {
 			t.Fatalf("%v help missing usage:\n%s", args, out.String())
+		}
+		if !strings.Contains(out.String(), "Examples:") {
+			t.Fatalf("%v help missing examples:\n%s", args, out.String())
 		}
 	}
 }

@@ -48,16 +48,21 @@ Generated from the compiled `restish-bulk` plugin binary.
 ```text
 Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.
 
-Use `bulk init` on a list endpoint that returns resource URLs and versions. Then use `bulk status`, `bulk diff`, `bulk pull`, and `bulk push` in the checkout directory.
+Use `restish bulk init` on a list endpoint that returns resource URLs and versions. Then use `restish bulk status`, `restish bulk diff`, `restish bulk pull`, and `restish bulk push` in the checkout directory.
 
 Usage:
-  bulk [flags]
-  bulk [command]
+  restish bulk [flags]
+  restish bulk [command]
+
+Examples:
+  restish bulk init https://api.rest.sh/books
+  restish bulk status
+  restish bulk diff
+  restish bulk pull
+  restish bulk push
 
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
   diff        Show local or remote diffs
-  help        Help about any command
   init        Initialize a new bulk checkout
   list        List checked out files
   pull        Pull remote updates without overwriting local changes
@@ -65,10 +70,11 @@ Available Commands:
   reset       Undo local changes to files
   status      Show local and remote added/changed/removed files
 
+
 Flags:
   -h, --help   help for bulk
 
-Use "bulk [command] --help" for more information about a command.
+Use "restish bulk [command] --help" for more information about a command.
 ```
 
 ### `restish bulk init --help`
@@ -79,10 +85,12 @@ Initialize a bulk checkout from a list endpoint that returns each resource URL a
 Use `-f` to project or filter the list response before URL extraction. Use `--url-template` when the list items contain IDs or fields that need to be turned into resource URLs.
 
 Usage:
-  bulk init URL [flags]
+  restish bulk init URL [flags]
 
-Aliases:
-  init, i
+Examples:
+  restish bulk init https://api.rest.sh/books
+  restish bulk init https://api.example.com/users --url-template '/users/{id}'
+  restish bulk status
 
 Flags:
   -f, --filter string         Filter/project the list response before extracting url/version
@@ -99,10 +107,12 @@ List files tracked by the current bulk checkout.
 Use `--match` to restrict files by expression and `-f` to print projected content from each matching JSON file.
 
 Usage:
-  bulk list [flags]
+  restish bulk list [flags]
 
-Aliases:
-  list, ls
+Examples:
+  restish bulk list
+  restish bulk list --match 'id contains book'
+  restish bulk list -f title
 
 Flags:
   -f, --filter string   Show projected content for each matched file
@@ -118,10 +128,12 @@ Show local and remote added, changed, and removed resources for the current chec
 Use this before `bulk pull` or `bulk push` to see whether the remote API or local files have changed since the last recorded version.
 
 Usage:
-  bulk status [flags]
+  restish bulk status [flags]
 
-Aliases:
-  status, st
+Examples:
+  restish bulk status
+  restish bulk diff
+  restish bulk pull
 
 Flags:
   -h, --help   help for status
@@ -135,10 +147,12 @@ Show local diffs for tracked files, or remote diffs with `--remote`.
 Pass file names to focus the diff. Use `--match` to select files by expression when file paths are inconvenient.
 
 Usage:
-  bulk diff [file...] [flags]
+  restish bulk diff [file...] [flags]
 
-Aliases:
-  diff, di
+Examples:
+  restish bulk diff
+  restish bulk diff books/123.json
+  restish bulk diff --remote
 
 Flags:
   -h, --help           help for diff
@@ -154,10 +168,12 @@ Fetch remote changes for the current checkout without overwriting local edits.
 Use this after `bulk status` reports remote changes. `--jobs` controls how many resource requests run concurrently.
 
 Usage:
-  bulk pull [flags]
+  restish bulk pull [flags]
 
-Aliases:
-  pull, pl
+Examples:
+  restish bulk status
+  restish bulk pull
+  restish bulk pull --jobs 8
 
 Flags:
   -h, --help       help for pull
@@ -172,10 +188,13 @@ Upload local changes from the current checkout to the remote API.
 By default, bulk uses recorded `ETag`, `Last-Modified`, or version preconditions when available so remote changes are not silently overwritten. Use `--force` only when you intentionally want to push without those guards.
 
 Usage:
-  bulk push [flags]
+  restish bulk push [flags]
 
-Aliases:
-  push, ps
+Examples:
+  restish bulk status
+  restish bulk diff
+  restish bulk push
+  restish bulk push --force
 
 Flags:
       --force      Push without ETag/Last-Modified or matching version preconditions
@@ -191,10 +210,12 @@ Undo local changes in the current checkout by restoring tracked files to their l
 Pass file names or use `--match` to limit what is reset. This changes local files only; it does not send requests to the remote API.
 
 Usage:
-  bulk reset [file...] [flags]
+  restish bulk reset [file...] [flags]
 
-Aliases:
-  reset, re
+Examples:
+  restish bulk status
+  restish bulk reset books/123.json
+  restish bulk reset --match 'id == "123"'
 
 Flags:
   -h, --help           help for reset

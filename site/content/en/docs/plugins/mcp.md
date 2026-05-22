@@ -48,13 +48,23 @@ Generated from the compiled `restish-mcp` plugin binary.
 ```text
 Expose registered APIs as MCP tools via Restish-authenticated HTTP delegation.
 
-Use `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.
+Use `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI. By default it exposes read-oriented tools; pass `--allow-write-tools` only for MCP clients and models you trust to mutate the selected APIs.
 
 Usage:
-  restish mcp serve <api...>
+  restish mcp [command]
 
-Commands:
+Available Commands:
   serve    Serve registered APIs over stdio
+
+Examples:
+  restish mcp serve github
+  restish mcp serve github --operations listIssues,getIssue
+  restish mcp serve github --allow-write-tools
+
+Flags:
+  -h, --help   help for mcp
+
+Use "restish mcp [command] --help" for more information about a command.
 ```
 
 ### `restish mcp serve --help`
@@ -67,12 +77,18 @@ By default, Restish exposes read-oriented tools and hides write operations. Use 
 Usage:
   restish mcp serve [flags] <api...>
 
+Examples:
+  restish mcp serve github
+  restish mcp serve github stripe --operations listIssues,getCustomer
+  restish mcp serve github --allow-write-tools
+
 Flags:
   --operations string        Comma-separated operationId allowlist
   --max-result-bytes int     Maximum tool result payload size
   --request-timeout int      Per-tool HTTP request timeout in seconds (0 disables)
   --read-only                Expose only GET/HEAD operations
   --allow-write-tools        Expose POST, PUT, PATCH, and DELETE operations as MCP tools
+  -h, --help                 help for serve
 ```
 <!-- END GENERATED -->
 

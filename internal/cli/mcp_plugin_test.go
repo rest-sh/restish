@@ -71,6 +71,10 @@ func TestMCPPluginHelp(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "restish mcp serve <api...>") {
 		t.Fatalf("unexpected mcp help:\n%s", got)
+	} else if !strings.Contains(got, "Available Commands:") ||
+		!strings.Contains(got, "Examples:") ||
+		!strings.Contains(got, "--allow-write-tools") {
+		t.Fatalf("mcp root help missing Cobra-style sections:\n%s", got)
 	}
 
 	c, out, _ = newTestCLI(t)
@@ -80,6 +84,9 @@ func TestMCPPluginHelp(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "--allow-write-tools") {
 		t.Fatalf("unexpected mcp serve help:\n%s", got)
+	} else if !strings.Contains(got, "Examples:") ||
+		!strings.Contains(got, "restish mcp serve github") {
+		t.Fatalf("mcp serve help missing examples:\n%s", got)
 	}
 }
 

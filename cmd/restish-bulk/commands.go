@@ -27,14 +27,14 @@ func (a *app) newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "bulk",
 		Short:         "Client-side bulk resource management",
-		Long:          "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.\n\nUse `bulk init` on a list endpoint that returns resource URLs and versions. Then use `bulk status`, `bulk diff`, `bulk pull`, and `bulk push` in the checkout directory.",
+		Long:          "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.\n\nUse `restish bulk init` on a list endpoint that returns resource URLs and versions. Then use `restish bulk status`, `restish bulk diff`, `restish bulk pull`, and `restish bulk push` in the checkout directory.",
+		Example:       "  restish bulk init https://api.rest.sh/books\n  restish bulk status\n  restish bulk diff\n  restish bulk pull\n  restish bulk push",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
-
 	root.AddCommand(a.newInitCmd())
 	root.AddCommand(a.newListCmd())
 	root.AddCommand(a.newStatusCmd())
@@ -42,7 +42,61 @@ func (a *app) newRootCmd() *cobra.Command {
 	root.AddCommand(a.newResetCmd())
 	root.AddCommand(a.newPullCmd())
 	root.AddCommand(a.newPushCmd())
+	polishBulkHelp(root)
 	return root
+}
+
+func polishBulkHelp(root *cobra.Command) {
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetHelpCommand(&cobra.Command{
+		Use:                "help [command]",
+		Short:              "Help about any command",
+		Hidden:             true,
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := root
+			if len(args) > 0 {
+				found, _, err := root.Find(args)
+				if err != nil {
+					return err
+				}
+				target = found
+			}
+			return target.Help()
+		},
+	})
+	helpTemplate := `{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
+
+{{end}}{{if or .Runnable .HasAvailableSubCommands}}Usage:
+{{if .Runnable}}  restish {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}{{if .Runnable}}
+{{end}}  restish {{.CommandPath}} [command]{{end}}
+
+{{end}}{{with .Example}}Examples:
+{{.}}
+
+{{end}}{{if .HasAvailableSubCommands}}Available Commands:
+{{range .Commands}}{{if and (ne .Name "help") .IsAvailableCommand}}  {{rpad .Name .NamePadding }} {{.Short}}
+{{end}}{{end}}
+
+{{end}}{{if .HasAvailableLocalFlags}}Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}
+
+{{end}}{{if .HasAvailableInheritedFlags}}Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}
+
+{{end}}{{if .HasHelpSubCommands}}Additional help topics:
+{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}
+
+{{end}}{{if .HasAvailableSubCommands}}Use "restish {{.CommandPath}} [command] --help" for more information about a command.
+{{end}}`
+	setBulkHelpTemplate(root, helpTemplate)
+}
+
+func setBulkHelpTemplate(cmd *cobra.Command, tmpl string) {
+	cmd.SetHelpTemplate(tmpl)
+	for _, child := range cmd.Commands() {
+		setBulkHelpTemplate(child, tmpl)
+	}
 }
 
 func (a *app) newInitCmd() *cobra.Command {
@@ -51,6 +105,7 @@ func (a *app) newInitCmd() *cobra.Command {
 		Aliases: []string{"i"},
 		Short:   "Initialize a new bulk checkout",
 		Long:    "Initialize a bulk checkout from a list endpoint that returns each resource URL and version.\n\nUse `-f` to project or filter the list response before URL extraction. Use `--url-template` when the list items contain IDs or fields that need to be turned into resource URLs.",
+		Example: "  restish bulk init https://api.rest.sh/books\n  restish bulk init https://api.example.com/users --url-template '/users/{id}'\n  restish bulk status",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filter, _ := cmd.Flags().GetString("filter")
@@ -80,6 +135,7 @@ func (a *app) newListCmd() *cobra.Command {
 		Aliases: []string{"ls"},
 		Short:   "List checked out files",
 		Long:    "List files tracked by the current bulk checkout.\n\nUse `--match` to restrict files by expression and `-f` to print projected content from each matching JSON file.",
+		Example: "  restish bulk list\n  restish bulk list --match 'id contains book'\n  restish bulk list -f title",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -132,6 +188,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 		Aliases: []string{"st"},
 		Short:   "Show local and remote added/changed/removed files",
 		Long:    "Show local and remote added, changed, and removed resources for the current checkout.\n\nUse this before `bulk pull` or `bulk push` to see whether the remote API or local files have changed since the last recorded version.",
+		Example: "  restish bulk status\n  restish bulk diff\n  restish bulk pull",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -175,6 +232,7 @@ func (a *app) newDiffCmd() *cobra.Command {
 		Aliases: []string{"di"},
 		Short:   "Show local or remote diffs",
 		Long:    "Show local diffs for tracked files, or remote diffs with `--remote`.\n\nPass file names to focus the diff. Use `--match` to select files by expression when file paths are inconvenient.",
+		Example: "  restish bulk diff\n  restish bulk diff books/123.json\n  restish bulk diff --remote",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -203,6 +261,7 @@ func (a *app) newResetCmd() *cobra.Command {
 		Aliases: []string{"re"},
 		Short:   "Undo local changes to files",
 		Long:    "Undo local changes in the current checkout by restoring tracked files to their last recorded version.\n\nPass file names or use `--match` to limit what is reset. This changes local files only; it does not send requests to the remote API.",
+		Example: "  restish bulk status\n  restish bulk reset books/123.json\n  restish bulk reset --match 'id == \"123\"'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -235,6 +294,7 @@ func (a *app) newPullCmd() *cobra.Command {
 		Aliases: []string{"pl"},
 		Short:   "Pull remote updates without overwriting local changes",
 		Long:    "Fetch remote changes for the current checkout without overwriting local edits.\n\nUse this after `bulk status` reports remote changes. `--jobs` controls how many resource requests run concurrently.",
+		Example: "  restish bulk status\n  restish bulk pull\n  restish bulk pull --jobs 8",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
@@ -254,6 +314,7 @@ func (a *app) newPushCmd() *cobra.Command {
 		Aliases: []string{"ps"},
 		Short:   "Upload local changes to the remote server",
 		Long:    "Upload local changes from the current checkout to the remote API.\n\nBy default, bulk uses recorded `ETag`, `Last-Modified`, or version preconditions when available so remote changes are not silently overwritten. Use `--force` only when you intentionally want to push without those guards.",
+		Example: "  restish bulk status\n  restish bulk diff\n  restish bulk push\n  restish bulk push --force",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			meta, err := loadMeta()
 			if err != nil {
