@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -292,6 +293,72 @@ func TestEmptyStatesSuggestNextCommand(t *testing.T) {
 		}
 		requireContains(t, out.String(), "No plugins found.", "restish plugin install <source>")
 	})
+}
+
+func TestNonTTYOutputDoesNotUseANSIByDefault(t *testing.T) {
+	t.Setenv("COLOR", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+
+	generated := setupGeneratedEnv(t, http.NewServeMux())
+	tests := []struct {
+		name string
+		args []string
+		run  func(t *testing.T, args []string) string
+	}{
+		{name: "root help", args: []string{"restish", "--help"}},
+		{name: "request help", args: []string{"restish", "get", "--help"}},
+		{name: "doctor json", args: []string{"restish", "doctor", "-o", "json"}},
+		{name: "cache json", args: []string{"restish", "cache", "info", "-o", "json"}},
+		{name: "config json", args: []string{"restish", "config", "show", "-o", "json"}},
+		{
+			name: "generated help",
+			args: []string{"restish", "tapi", "list-items", "--help"},
+			run: func(t *testing.T, args []string) string {
+				t.Helper()
+				c, out := generated.newCaptureCLI()
+				if err := c.Run(args); err != nil {
+					t.Fatalf("generated help: %v", err)
+				}
+				return out.String()
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got string
+			if tc.run != nil {
+				got = tc.run(t, tc.args)
+			} else {
+				c, out, _ := newTestCLI(t)
+				if err := c.Run(tc.args); err != nil {
+					t.Fatalf("%s: %v", tc.name, err)
+				}
+				got = out.String()
+			}
+			if strings.Contains(got, "\x1b[") {
+				t.Fatalf("%s output should not contain ANSI by default:\n%q", tc.name, got)
+			}
+		})
+	}
+}
+
+func TestColorEnvForcesJSONColorForNonTTY(t *testing.T) {
+	t.Setenv("COLOR", "1")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "config", "show", "-o", "json"}); err != nil {
+		t.Fatalf("config show -o json: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("COLOR=1 should force color for non-TTY JSON output:\n%s", got)
+	}
+	if !json.Valid([]byte(stripANSI(got))) {
+		t.Fatalf("colored JSON should remain valid after stripping ANSI:\n%s", got)
+	}
 }
 
 func TestInvalidThemeSourceErrorIsActionable(t *testing.T) {

@@ -21,6 +21,10 @@ restish cache clear --direct
 Use `api sync` when you need to refresh a cached OpenAPI document. Use
 `api auth logout` when you need to clear cached auth tokens.
 
+Config and cache roots are separate. `RSH_CONFIG_DIR` changes which config file
+Restish reads, but it does not by itself isolate the HTTP/spec cache; set
+`RSH_CACHE_DIR` as well when tests, bug reports, or audits need a clean cache.
+
 ## Generated Command Reference
 
 <!-- BEGIN GENERATED: restish-docgen cache-command -->
