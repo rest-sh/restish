@@ -122,6 +122,22 @@ func TestBareURL(t *testing.T) {
 	}
 }
 
+func TestMalformedBareTargetFailsBeforeTransport(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("transport should not be called for malformed target: %s", r.URL)
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "://bad"})
+	if err == nil {
+		t.Fatal("expected malformed target error")
+	}
+	if !strings.Contains(err.Error(), `invalid URL "://bad"`) ||
+		!strings.Contains(err.Error(), "bare port shorthand") {
+		t.Fatalf("unexpected malformed target error: %v", err)
+	}
+}
+
 func TestBareURLWithShorthandInfersPOST(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)

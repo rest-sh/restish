@@ -194,6 +194,27 @@ across pagination, streaming, filters, and explicit formats.
 | Paginated collection vs streaming behavior | 028 and 011 |
 | SSE/NDJSON event rendering | 028 and 012 |
 
+## Local Mutation Inventory
+
+Commands that mutate local state must name what they changed and, for config
+writes, print `Wrote config: <path>` in human output. This inventory is the
+release contract for which commands touch disk and what they intentionally
+preserve.
+
+| Command | Local state touched | Safety contract |
+| --- | --- | --- |
+| `api connect` | `restish.json`, spec cache, generated-operation cache | Without `--replace`, refresh API-level metadata and cache state while preserving existing profiles and credentials. With `--replace`, regenerate replaceable profiles while preserving values that cannot be rediscovered safely. |
+| `api sync` | spec cache, generated-operation cache, sometimes `restish.json` API metadata | Refresh discovered API metadata and generated operations without replacing credential-containing profiles. |
+| `api set` | one API section in `restish.json` | Patch only the requested API fields and preserve comments/formatting when possible. |
+| `api remove` | `restish.json`, API-owned HTTP cache namespaces, API-scoped auth token cache entries | Remove the API and clean API-owned local state. Shared auth-profile tokens are removed only when no remaining API references that shared profile. |
+| `api auth add` / `api auth remove` | profile credential entries in `restish.json` | Add or remove only the named credential binding. Empty additions are allowed as an easy escape hatch before filling details with `api set`. |
+| `api auth logout` | auth token cache | Clear cached OAuth/auth tokens only; do not mutate config. |
+| `config set` / `config edit` | `restish.json` | Validate runtime config before keeping changes. Preserve comments/formatting for targeted edits when possible. |
+| `config theme set` / `config theme reset` | theme fields in `restish.json` | Remote theme sources require trust confirmation unless `--yes` is explicit. Reset removes only theme override fields. |
+| `plugin install` / `plugin remove` | plugin directory and plugin manifest cache | Install only after manifest inspection and trust confirmation unless `--yes` is explicit. Remove only installed plugin files selected by name/path. |
+| `shell setup` / `shell completion install` | shell rc files and completion files | Support dry-run, explicit confirmation, duplicate detection, and atomic writes where possible. |
+| `cache clear` | HTTP response cache | Clear all HTTP entries, one API/namespace, or direct URL requests. Do not clear spec cache or auth token cache. |
+
 ## Intentional v2 Breaks
 
 The v1 habit of whole-config editing through `api edit` is retired. v2 config

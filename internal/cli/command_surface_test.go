@@ -168,6 +168,83 @@ func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
 	}
 }
 
+func TestPublicBuiltInHelpSmoke(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantExamples bool
+	}{
+		{"root", []string{"restish", "--help"}, true},
+		{"get", []string{"restish", "get", "--help"}, true},
+		{"head", []string{"restish", "head", "--help"}, true},
+		{"options", []string{"restish", "options", "--help"}, true},
+		{"post", []string{"restish", "post", "--help"}, true},
+		{"put", []string{"restish", "put", "--help"}, true},
+		{"patch", []string{"restish", "patch", "--help"}, true},
+		{"delete", []string{"restish", "delete", "--help"}, true},
+		{"api", []string{"restish", "api", "--help"}, true},
+		{"api connect", []string{"restish", "api", "connect", "--help"}, true},
+		{"api sync", []string{"restish", "api", "sync", "--help"}, true},
+		{"api list", []string{"restish", "api", "list", "--help"}, true},
+		{"api inspect", []string{"restish", "api", "inspect", "--help"}, true},
+		{"api set", []string{"restish", "api", "set", "--help"}, true},
+		{"api remove", []string{"restish", "api", "remove", "--help"}, true},
+		{"api auth", []string{"restish", "api", "auth", "--help"}, true},
+		{"api auth add", []string{"restish", "api", "auth", "add", "--help"}, true},
+		{"api auth remove", []string{"restish", "api", "auth", "remove", "--help"}, true},
+		{"api auth logout", []string{"restish", "api", "auth", "logout", "--help"}, true},
+		{"api auth header", []string{"restish", "api", "auth", "header", "--help"}, true},
+		{"api auth inspect", []string{"restish", "api", "auth", "inspect", "--help"}, true},
+		{"cache", []string{"restish", "cache", "--help"}, true},
+		{"cache info", []string{"restish", "cache", "info", "--help"}, true},
+		{"cache clear", []string{"restish", "cache", "clear", "--help"}, true},
+		{"config", []string{"restish", "config", "--help"}, true},
+		{"config path", []string{"restish", "config", "path", "--help"}, true},
+		{"config show", []string{"restish", "config", "show", "--help"}, true},
+		{"config edit", []string{"restish", "config", "edit", "--help"}, true},
+		{"config set", []string{"restish", "config", "set", "--help"}, true},
+		{"config theme", []string{"restish", "config", "theme", "--help"}, true},
+		{"config theme list", []string{"restish", "config", "theme", "list", "--help"}, true},
+		{"config theme set", []string{"restish", "config", "theme", "set", "--help"}, true},
+		{"config theme reset", []string{"restish", "config", "theme", "reset", "--help"}, true},
+		{"doctor", []string{"restish", "doctor", "--help"}, true},
+		{"doctor api", []string{"restish", "doctor", "api", "--help"}, true},
+		{"doctor plugin", []string{"restish", "doctor", "plugin", "--help"}, true},
+		{"shell", []string{"restish", "shell", "--help"}, true},
+		{"shell setup", []string{"restish", "shell", "setup", "--help"}, true},
+		{"shell completion", []string{"restish", "shell", "completion", "--help"}, true},
+		{"shell completion bash", []string{"restish", "shell", "completion", "bash", "--help"}, true},
+		{"shell completion zsh", []string{"restish", "shell", "completion", "zsh", "--help"}, true},
+		{"shell completion fish", []string{"restish", "shell", "completion", "fish", "--help"}, true},
+		{"shell completion powershell", []string{"restish", "shell", "completion", "powershell", "--help"}, true},
+		{"shell completion install", []string{"restish", "shell", "completion", "install", "--help"}, true},
+		{"plugin", []string{"restish", "plugin", "--help"}, true},
+		{"plugin list", []string{"restish", "plugin", "list", "--help"}, true},
+		{"plugin install", []string{"restish", "plugin", "install", "--help"}, true},
+		{"plugin remove", []string{"restish", "plugin", "remove", "--help"}, true},
+		{"plugin debug", []string{"restish", "plugin", "debug", "--help"}, true},
+		{"cert", []string{"restish", "cert", "--help"}, true},
+		{"edit", []string{"restish", "edit", "--help"}, true},
+		{"links", []string{"restish", "links", "--help"}, true},
+		{"version", []string{"restish", "version", "--help"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			if err := c.Run(tt.args); err != nil {
+				t.Fatalf("%v: %v", tt.args, err)
+			}
+			got := out.String()
+			if !strings.Contains(got, "Usage:") {
+				t.Fatalf("%v: help missing Usage:\n%s", tt.args, got)
+			}
+			if tt.wantExamples && !strings.Contains(got, "Examples:") {
+				t.Fatalf("%v: help missing Examples:\n%s", tt.args, got)
+			}
+		})
+	}
+}
+
 func TestRootHelpOmitsEmptyRegisteredAPIGroup(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {

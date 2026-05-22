@@ -21,6 +21,9 @@ func Normalize(rawURL, serverOverride string) (string, error) {
 
 	// Bare port shorthand: ":8080/path" → "http://localhost:8080/path"
 	if strings.HasPrefix(rawURL, ":") {
+		if len(rawURL) == 1 || rawURL[1] < '0' || rawURL[1] > '9' {
+			return "", fmt.Errorf("invalid URL %q: bare port shorthand must start with :<port>", rawURL)
+		}
 		rawURL = "http://localhost" + rawURL
 	}
 

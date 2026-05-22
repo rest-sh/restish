@@ -2149,7 +2149,7 @@ func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) 
 		"id*: (string)",
 		"Responses 400/404/500/default (application/json):",
 		"message*: (string)",
-		"restish tapi create-pet name: Fluffy, secret_token: abc123",
+		"restish tapi create-pet 'name: Fluffy, secret_token: abc123'",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected help to contain %q, got:\n%s", want, got)
@@ -2162,10 +2162,10 @@ func TestGeneratedCommandHelpShowsSchemasExamplesAndGroupedErrors(t *testing.T) 
 		t.Fatalf("help with custom command name: %v", err)
 	}
 	got = out.String()
-	if !strings.Contains(got, "myapp tapi create-pet name: Fluffy, secret_token: abc123") {
+	if !strings.Contains(got, "myapp tapi create-pet 'name: Fluffy, secret_token: abc123'") {
 		t.Fatalf("expected generated example to use custom command name, got:\n%s", got)
 	}
-	if strings.Contains(got, "restish tapi create-pet name: Fluffy") {
+	if strings.Contains(got, "restish tapi create-pet 'name: Fluffy") {
 		t.Fatalf("generated example used hard-coded command name, got:\n%s", got)
 	}
 }

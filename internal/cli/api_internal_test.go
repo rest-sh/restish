@@ -81,6 +81,35 @@ func TestBuiltinCommandNamesMatchRegisteredCommands(t *testing.T) {
 	}
 }
 
+func TestHiddenCompatibilityCommandsAreIntentional(t *testing.T) {
+	c := New()
+	root := c.newRootCmd()
+
+	var hiddenRoot []string
+	for _, cmd := range root.Commands() {
+		if cmd.Hidden {
+			hiddenRoot = append(hiddenRoot, cmd.Name())
+		}
+	}
+	if got, want := strings.Join(hiddenRoot, ","), "completion"; got != want {
+		t.Fatalf("hidden root commands = %q, want %q", got, want)
+	}
+
+	apiCmd, _, err := root.Find([]string{"api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hiddenAPI []string
+	for _, cmd := range apiCmd.Commands() {
+		if cmd.Hidden {
+			hiddenAPI = append(hiddenAPI, cmd.Name())
+		}
+	}
+	if got, want := strings.Join(hiddenAPI, ","), "configure"; got != want {
+		t.Fatalf("hidden api commands = %q, want %q", got, want)
+	}
+}
+
 func TestXCLIPromptLooksSecretCommonNames(t *testing.T) {
 	for _, name := range []string{
 		"auth_token",

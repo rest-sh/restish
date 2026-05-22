@@ -120,6 +120,20 @@ func TestNormalizeRejectsRootRelativePathWithoutServerOverride(t *testing.T) {
 	}
 }
 
+func TestNormalizeRejectsMalformedBarePortShorthand(t *testing.T) {
+	for _, raw := range []string{"://bad", ":abc"} {
+		t.Run(raw, func(t *testing.T) {
+			_, err := request.Normalize(raw, "")
+			if err == nil {
+				t.Fatal("expected malformed bare port shorthand error")
+			}
+			if !strings.Contains(err.Error(), "bare port shorthand") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestNormalizeRejectsNonHTTPSOverrideSchemes(t *testing.T) {
 	_, err := request.Normalize("https://api.example.com/items", "file:///tmp/evil")
 	if err == nil {
