@@ -275,6 +275,25 @@ func TestCacheClearTargetErrorsAreActionable(t *testing.T) {
 	requireContains(t, err.Error(), "--direct cannot be used", "restish cache clear --direct", "restish cache clear demo")
 }
 
+func TestEmptyStatesSuggestNextCommand(t *testing.T) {
+	t.Run("api list", func(t *testing.T) {
+		c, out, _ := newTestCLI(t)
+		if err := c.Run([]string{"restish", "api", "list"}); err != nil {
+			t.Fatalf("api list: %v", err)
+		}
+		requireContains(t, out.String(), "No APIs configured.", "restish api connect <name> <url>")
+	})
+
+	t.Run("plugin list", func(t *testing.T) {
+		t.Setenv("RSH_CONFIG_DIR", t.TempDir())
+		c, out, _ := newTestCLI(t)
+		if err := c.Run([]string{"restish", "plugin", "list"}); err != nil {
+			t.Fatalf("plugin list: %v", err)
+		}
+		requireContains(t, out.String(), "No plugins found.", "restish plugin install <source>")
+	})
+}
+
 func TestInvalidThemeSourceErrorIsActionable(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	err := c.Run([]string{"restish", "config", "theme", "set", "not-a-theme"})

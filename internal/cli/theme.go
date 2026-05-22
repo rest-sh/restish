@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/rest-sh/restish/v2/internal/output"
 	officialthemes "github.com/rest-sh/restish/v2/themes"
 	"github.com/spf13/cobra"
@@ -22,6 +25,19 @@ const legacyOfficialThemeRepo = "rest-sh/restish"
 
 var githubThemeShorthand = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 var githubThemeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+func themePreviewSamples(today time.Time) []chroma.Token {
+	return []chroma.Token{
+		{Type: chroma.KeywordConstant, Value: "true"},
+		{Type: chroma.LiteralNumberInteger, Value: "42"},
+		{Type: chroma.LiteralStringDouble, Value: `"restish"`},
+		{Type: chroma.LiteralStringSymbol, Value: "https://api.rest.sh"},
+		{Type: chroma.LiteralDate, Value: today.Format(time.DateOnly)},
+		{Type: chroma.GenericInserted, Value: "200 OK"},
+		{Type: chroma.GenericOutput, Value: "302 Found"},
+		{Type: chroma.GenericError, Value: "404 Not Found"},
+	}
+}
 
 func (c *CLI) newThemeSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -69,15 +85,56 @@ func (c *CLI) runThemeList(cmd *cobra.Command, args []string) error {
 	if c.cfg != nil {
 		current = c.cfg.ThemeSource
 	}
-	for _, name := range officialthemes.Names() {
+	names := officialthemes.Names()
+	showPreview := c.stdoutIsTerminal() && output.ColorEnabled(c.Stdout)
+	nameWidth := 0
+	today := time.Now()
+	if showPreview {
+		for _, name := range names {
+			nameWidth = max(nameWidth, len(name))
+		}
+	}
+	for _, name := range names {
 		source := officialThemeSource(name)
 		marker := " "
 		if current == source || current == legacyOfficialThemeSource(name) {
 			marker = "*"
 		}
+		if showPreview {
+			preview := officialThemePreview(name, today)
+			if preview != "" {
+				fmt.Fprintf(c.Stdout, "%s %-*s  %s\n", marker, nameWidth, name, preview)
+				continue
+			}
+		}
 		fmt.Fprintf(c.Stdout, "%s %s\n", marker, name)
 	}
 	return nil
+}
+
+func officialThemePreview(name string, today time.Time) string {
+	entries, err := readOfficialTheme(name)
+	if err != nil {
+		return ""
+	}
+	style, err := output.BuildTheme(entries)
+	if err != nil {
+		return ""
+	}
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		return ""
+	}
+	var out strings.Builder
+	for i, sample := range themePreviewSamples(today) {
+		if i > 0 {
+			out.WriteByte(' ')
+		}
+		if err := formatter.Format(&out, style, chroma.Literator(sample)); err != nil {
+			return ""
+		}
+	}
+	return out.String()
 }
 
 func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
@@ -111,7 +168,9 @@ func (c *CLI) runThemeSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(c.Stdout, "Set theme from %s\n", themeSourceDisplay(source))
+	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s theme from %s.\n", style.ok("Set"), themeSourceDisplay(source))
 	return nil
 }
 
@@ -122,7 +181,9 @@ func (c *CLI) runThemeReset(cmd *cobra.Command, args []string) error {
 	if err := c.resetThemeConfig(); err != nil {
 		return err
 	}
-	fmt.Fprintln(c.Stdout, "Reset theme to built-in default")
+	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s theme to built-in default.\n", style.ok("Reset"))
 	return nil
 }
 

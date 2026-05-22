@@ -126,6 +126,43 @@ func TestAPIAuthConcurrentAddsPreserveCredentials(t *testing.T) {
 	}
 }
 
+func TestAPIAuthAddRemoveSuccessMessages(t *testing.T) {
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.example.com",
+      "profiles": {
+        "default": {
+          "credentials": {
+            "Existing": {}
+          }
+        }
+      }
+    }
+  }
+}`)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	if err := c.Run([]string{"restish", "api", "auth", "add", "myapi", "PartnerKey"}); err != nil {
+		t.Fatalf("api auth add: %v", err)
+	}
+	requireContains(t, out.String(),
+		"Wrote config: "+cfgFile,
+		`Added credential "PartnerKey" to API "myapi" profile "default".`,
+		`Next: run "restish api auth inspect myapi" to review credential readiness.`,
+	)
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "auth", "remove", "myapi", "Existing"}); err != nil {
+		t.Fatalf("api auth remove: %v", err)
+	}
+	requireContains(t, out.String(),
+		"Wrote config: "+cfgFile,
+		`Removed credential "Existing" from API "myapi" profile "default".`,
+	)
+}
+
 func TestAPIAuthInspectCredentialAPIKey(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
 		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),

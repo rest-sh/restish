@@ -92,7 +92,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 		if jsonOutput {
 			return c.writePrettyJSON([]any{})
 		}
-		fmt.Fprintln(c.Stdout, "No plugins found.")
+		fmt.Fprintf(c.Stdout, "No plugins found. Run %q to install one.\n", c.commandNameOrDefault()+" plugin install <source>")
 		return nil
 	}
 

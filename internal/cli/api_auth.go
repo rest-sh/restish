@@ -177,7 +177,12 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 	if err := c.saveAPIAuthCredentialConfig(apiName, profileName, credentialID, prof.Credentials[credentialID]); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Added credential %q to API %q profile %q\n", credentialID, apiName, profileName)
+	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s credential %q to API %q profile %q.\n", style.ok("Added"), credentialID, apiName, profileName)
+	if prof.Credentials[credentialID].Auth == nil && prof.Credentials[credentialID].AuthRef == "" {
+		fmt.Fprintf(c.Stdout, "%s run \"restish api auth inspect %s\" to review credential readiness.\n", style.hint("Next:"), apiName)
+	}
 	return nil
 }
 
@@ -194,7 +199,9 @@ func (c *CLI) runAPIAuthRemove(cmd *cobra.Command, args []string) error {
 	if err := c.removeAPIAuthCredentialConfig(apiName, profileName, credentialID); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Removed credential %q from API %q profile %q\n", credentialID, apiName, profileName)
+	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s credential %q from API %q profile %q.\n", style.ok("Removed"), credentialID, apiName, profileName)
 	return nil
 }
 

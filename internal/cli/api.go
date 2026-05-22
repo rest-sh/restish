@@ -1348,7 +1348,7 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 		} else if jsonOut {
 			return c.writePrettyJSON([]any{})
 		}
-		fmt.Fprintln(c.Stdout, "No APIs configured.")
+		fmt.Fprintf(c.Stdout, "No APIs configured. Run %q to add one.\n", c.commandNameOrDefault()+" api connect <name> <url>")
 		return nil
 	}
 	names := make([]string, 0, len(c.cfg.APIs))
@@ -1455,7 +1455,9 @@ func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	if err := c.removeAPILocalState(apiName, unusedSharedAuthRefs); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Removed API %q and cleared its local cache/auth state.\n", apiName)
+	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s API %q and cleared its local cache/auth state.\n", style.ok("Removed"), apiName)
 	return nil
 }
 

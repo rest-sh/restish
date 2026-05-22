@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 )
@@ -43,7 +44,8 @@ func TestThemeSetFromURL(t *testing.T) {
 	if !strings.Contains(out.String(), "Theme URL: https://themes.example.com/theme.json") {
 		t.Fatalf("expected resolved theme URL, got: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "Set theme from https://themes.example.com/theme.json") {
+	if !strings.Contains(out.String(), "Wrote config: "+cfgFile) ||
+		!strings.Contains(out.String(), "Set theme from https://themes.example.com/theme.json.") {
 		t.Fatalf("unexpected output: %q", out.String())
 	}
 
@@ -173,6 +175,36 @@ func TestThemeList(t *testing.T) {
 	for _, want := range []string{"catppuccin-mocha", "dracula", "vscode-dark"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("theme list missing %q:\n%s", want, got)
+		}
+	}
+	for _, notWant := range []string{"\x1b[", `"restish"`, "https://api.rest.sh", "200 OK"} {
+		if strings.Contains(got, notWant) {
+			t.Fatalf("non-TTY theme list should not include previews or ANSI %q:\n%s", notWant, got)
+		}
+	}
+}
+
+func TestThemeListShowsPreviewForTTY(t *testing.T) {
+	t.Setenv("COLOR", "1")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+
+	if err := c.Run([]string{"restish", "config", "theme", "list"}); err != nil {
+		t.Fatalf("config theme list: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("TTY theme list should colorize previews:\n%s", got)
+	}
+	plain := stripANSI(got)
+	today := time.Now().Format(time.DateOnly)
+	for _, want := range []string{"dracula", "true", "42", `"restish"`, "https://api.rest.sh", today, "200 OK", "302 Found", "404 Not Found"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("TTY theme list missing preview text %q:\n%s", want, plain)
 		}
 	}
 }
@@ -338,7 +370,8 @@ func TestThemeResetRemovesThemeConfig(t *testing.T) {
 	if err := c.Run([]string{"restish", "config", "theme", "reset"}); err != nil {
 		t.Fatalf("config theme reset: %v", err)
 	}
-	if !strings.Contains(out.String(), "Reset theme to built-in default") {
+	if !strings.Contains(out.String(), "Wrote config: "+cfgFile) ||
+		!strings.Contains(out.String(), "Reset theme to built-in default.") {
 		t.Fatalf("unexpected output: %q", out.String())
 	}
 

@@ -192,7 +192,7 @@ List official theme names
 
 List bundled theme names.
 
-The current configured bundled theme is marked with `*`. Custom local, URL, or GitHub themes are not expanded into this bundled list.
+The current configured bundled theme is marked with `*`. When stdout is a terminal, each bundled theme includes a small color preview. Custom local, URL, or GitHub themes are not expanded into this bundled list.
 
 Usage:
 

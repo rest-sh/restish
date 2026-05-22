@@ -136,7 +136,7 @@ Spawn a plugin and print decoded CBOR messages to stderr
 
 Spawn a plugin and print decoded protocol messages to stderr.
 
-Use this when a plugin is discovered but does not behave as expected. It shows the manifest/startup exchange and runtime messages so you can see whether the plugin, host, or protocol payload is failing.
+This is an advanced diagnostic command for plugin authors and support. Use it when a plugin is discovered but does not behave as expected. It shows the manifest/startup exchange and runtime messages so you can see whether the plugin, host, or protocol payload is failing.
 
 Pass plugin arguments after the plugin name. Use `--` before arguments that could otherwise be interpreted by Restish.
 

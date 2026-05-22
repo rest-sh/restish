@@ -2814,7 +2814,8 @@ func TestAPIRemovePreservesJSONCComments(t *testing.T) {
 	if err := c.Run([]string{"restish", "api", "remove", "remove"}); err != nil {
 		t.Fatalf("api remove: %v", err)
 	}
-	if !strings.Contains(out.String(), "Removed API") {
+	if !strings.Contains(out.String(), "Wrote config: "+cfgFile) ||
+		!strings.Contains(out.String(), `Removed API "remove" and cleared its local cache/auth state.`) {
 		t.Fatalf("expected remove output, got %q", out.String())
 	}
 

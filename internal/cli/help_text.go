@@ -83,7 +83,7 @@ const configThemeSetLong = "Install a theme JSON or JSONC file and save it in co
 	"Sources may be bundled theme names, local files, HTTPS URLs, or GitHub `user/repo` shorthand. Remote sources are executable in the sense that they affect terminal rendering, so Restish asks for confirmation unless the source is already trusted or you pass `--yes`."
 
 const configThemeListLong = "List bundled theme names.\n\n" +
-	"The current configured bundled theme is marked with `*`. Custom local, URL, or GitHub themes are not expanded into this bundled list."
+	"The current configured bundled theme is marked with `*`. When stdout is a terminal, each bundled theme includes a small color preview. Custom local, URL, or GitHub themes are not expanded into this bundled list."
 
 const configThemeResetLong = "Reset terminal output highlighting to the built-in theme.\n\n" +
 	"This removes the saved theme override from config. It does not delete local theme files or remote sources."
@@ -112,7 +112,7 @@ const pluginRemoveLong = "Remove an installed plugin from the Restish plugin dir
 	"You can pass either the installed file name or the plugin manifest name. Restish refuses ambiguous manifest-name matches so you can delete the intended executable explicitly."
 
 const pluginDebugLong = "Spawn a plugin and print decoded protocol messages to stderr.\n\n" +
-	"Use this when a plugin is discovered but does not behave as expected. It shows the manifest/startup exchange and runtime messages so you can see whether the plugin, host, or protocol payload is failing.\n\n" +
+	"This is an advanced diagnostic command for plugin authors and support. Use it when a plugin is discovered but does not behave as expected. It shows the manifest/startup exchange and runtime messages so you can see whether the plugin, host, or protocol payload is failing.\n\n" +
 	"Pass plugin arguments after the plugin name. Use `--` before arguments that could otherwise be interpreted by Restish."
 
 const editLong = "Fetch a resource, edit it locally, then send the changed representation back.\n\n" +
