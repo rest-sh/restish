@@ -463,7 +463,17 @@ rather than risk corrupting the URL.
 Strict OpenAPI request validation is not part of the first v2 release. Generated
 commands use schemas for help, completion, example generation, media selection,
 and bounded coercion only. A future explicit validation mode may be added, but
-default requests stay shell-native and permissive.
+default requests stay shell-native and permissive. This follows the design 030
+"trust explicit operator intent" tenet: when a user supplies a body field,
+query value, header value, or flag explicitly, Restish should send it and let
+the server validate API-specific semantics. Specs are often stale or incomplete,
+and generated commands need an easy escape hatch for real APIs that differ from
+their descriptions.
+
+Local validation is still appropriate when Restish cannot build a coherent
+request at all, such as a missing required path value, an unreadable file input,
+or an invalid local flag value. Those checks protect URL construction and CLI
+explainability; they are not full schema enforcement.
 
 Credential bindings without declared OAuth scopes or other requirement values
 may be accepted during setup so users can register an API incrementally. A

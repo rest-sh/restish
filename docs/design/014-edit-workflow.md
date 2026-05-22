@@ -124,7 +124,7 @@ update unless the workflow or options make that clearly redundant.
 Editor mode is the default whenever no shorthand patch args are present and
 `--no-editor` is not set.
 
-`-y` / `--rsh-yes` skips the confirmation prompt for automation.
+`-y` / `--yes` skips the confirmation prompt for automation.
 
 EOF must not be treated as implicit "yes". Non-interactive confirmation defaults
 should bias toward safety.

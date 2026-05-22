@@ -71,7 +71,9 @@ type DiscoverConfig struct {
 	// Transport is used for all HTTP fetches.  nil uses http.DefaultTransport.
 	Transport http.RoundTripper
 	// AllowCrossOrigin permits Link-header-discovered spec URLs on other hosts.
-	// When false, only same-host discovered links are followed.
+	// When false, only same-host discovered links are followed. Private/local
+	// cross-origin targets are still rejected unless the base URL is already in
+	// that trust class.
 	AllowCrossOrigin bool
 	// ForceRefresh bypasses any cached entry and rebuilds it from the source.
 	ForceRefresh bool

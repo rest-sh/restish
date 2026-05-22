@@ -129,6 +129,10 @@ requests. It also makes command review easier: the config trust root is visible
 in the command line or environment, and missing explicit files fail instead of
 falling back to the platform default.
 
+This is a deliberate v2 boundary, not a claim that project config discovery is
+never useful. A future design may add an explicit opt-in mode for repository
+config, but v2 should not infer it from the local directory.
+
 ### Least Necessary Exposure
 
 Restish should only expose sensitive data where it is required:
@@ -139,6 +143,11 @@ Restish should only expose sensitive data where it is required:
   intentional data selection and may expose raw response headers
 - plugin requests receive only the fields needed for their hook type
 - cache files use restrictive permissions
+
+Unix-like platforms enforce the permission diagnostic with mode-bit checks.
+Windows ACL inspection is not implemented for the first v2 release; existing
+config and token-cache files on Windows report permission status as unknown
+rather than ok so users do not get a false safety signal.
 
 ## Spec Discovery Safety
 
@@ -153,6 +162,9 @@ The design requirements are:
 - reject loopback, link-local, and RFC1918/private ranges by default during
   discovery hops unless the original configured base URL is itself in that
   trust class
+- keep those private/local follow-target checks even when cross-origin
+  discovery is explicitly enabled; direct `--spec`/`spec_url` remains the
+  operator-visible escape hatch for private spec URLs
 - bounded request timeout for every discovery probe
 - response size limits before parsing
 - cancellation through the CLI context

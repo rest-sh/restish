@@ -148,7 +148,8 @@ func (c *CLI) printConfigWrittenPath() {
 	if abs, err := filepath.Abs(cfgPath); err == nil {
 		cfgPath = abs
 	}
-	fmt.Fprintf(c.Stdout, "Wrote config: %s\n", cfgPath)
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s config: %s\n", style.ok("Wrote"), cfgPath)
 }
 
 func (c *CLI) reloadConfigAfterMutation(label string, oldCfg *config.Config) error {

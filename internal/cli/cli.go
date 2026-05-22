@@ -526,9 +526,6 @@ func (c *CLI) Run(args []string) error {
 	// shell so users discover the noglob alias before hitting the foot-gun.
 	if cfgPath := c.configFilePath(); cfgPath != "" {
 		if _, statErr := os.Stat(cfgPath); errors.Is(statErr, os.ErrNotExist) {
-			if os.Getenv("RSH_CONFIG_DIR") != "" && !c.explicitConfigFile {
-				c.infof("no config at %s; using defaults", c.configFilePath())
-			}
 			if output.IsTerminal(c.Stderr) {
 				c.hintShellSetup()
 			}
@@ -1052,10 +1049,9 @@ func commandPathExists(cmd *cobra.Command, args []string) bool {
 // configured APIs.
 var builtinCommands = map[string]bool{
 	"api": true, "cache": true, "cert": true, "completion": true, "config": true,
-	"content-types": true, "delete": true, "doctor": true, "edit": true,
-	"get": true, "head": true, "help": true, "links": true, "options": true,
-	"patch": true, "plugin": true, "post": true, "put": true, "shell": true,
-	"version": true,
+	"delete": true, "doctor": true, "edit": true, "get": true, "head": true,
+	"help": true, "links": true, "options": true, "patch": true, "plugin": true,
+	"post": true, "put": true, "shell": true, "version": true,
 }
 
 // isBuiltinCommandName reports whether name collides with a top-level built-in

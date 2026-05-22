@@ -33,7 +33,6 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 				"  plugin",
 				"Utilities",
 				"  cert",
-				"  content-types",
 				"  doctor",
 				"  edit",
 				"  links",
@@ -97,7 +96,6 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 			args: []string{"restish", "doctor", "--help"},
 			want: []string{
 				"api",
-				"migrate-v1",
 				"plugin",
 			},
 		},
@@ -167,7 +165,9 @@ func TestRemovedPreReleaseCommandNames(t *testing.T) {
 		{"restish", "api", "show", "example"},
 		{"restish", "api", "edit"},
 		{"restish", "api", "clear-auth-cache", "example"},
+		{"restish", "api", "auth", "clear-cache", "example"},
 		{"restish", "api", "content-types"},
+		{"restish", "content-types"},
 	} {
 		c, _, _ := newTestCLI(t)
 		if err := c.Run(args); err == nil {
@@ -289,7 +289,12 @@ func TestWorkflowCommandHelpSurface(t *testing.T) {
 		{
 			name: "edit",
 			args: []string{"restish", "edit", "--help"},
-			want: []string{"<uri> [patch ...]", "--edit-format", "--no-editor", "--dry-run", "--rsh-yes"},
+			want: []string{"<uri> [patch ...]", "--edit-format", "--no-editor", "--dry-run", "--yes"},
+		},
+		{
+			name: "api auth inspect",
+			args: []string{"restish", "api", "auth", "inspect", "--help"},
+			want: []string{"<api>", "--credential", "--operation", "--redact"},
 		},
 		{
 			name: "links",
@@ -313,6 +318,40 @@ func TestWorkflowCommandHelpSurface(t *testing.T) {
 			for _, want := range tt.want {
 				if !strings.Contains(got, want) {
 					t.Fatalf("%v help missing %q:\n%s", tt.args, want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestWorkflowCommandHelpOmitsOldPrefixedLocalFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		deny []string
+	}{
+		{
+			name: "edit",
+			args: []string{"restish", "edit", "--help"},
+			deny: []string{"--rsh-yes"},
+		},
+		{
+			name: "api auth inspect",
+			args: []string{"restish", "api", "auth", "inspect", "--help"},
+			deny: []string{"--rsh-credential", "--rsh-operation"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			if err := c.Run(tt.args); err != nil {
+				t.Fatalf("%v: %v", tt.args, err)
+			}
+			got := out.String()
+			for _, deny := range tt.deny {
+				if strings.Contains(got, deny) {
+					t.Fatalf("%v help should not include %q:\n%s", tt.args, deny, got)
 				}
 			}
 		})

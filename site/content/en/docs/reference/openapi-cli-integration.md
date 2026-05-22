@@ -214,12 +214,19 @@ Generated command request bodies use the same shorthand semantics as generic
 HTTP requests. For example, `id: 123` sends a number and `id: "123"` sends a
 string, even when the OpenAPI schema says the field is a string.
 
-Schemas are not full request validators by default. Unknown body fields are
-allowed unless Restish grows an explicit validation mode. Schema constructs
+Schemas are not full request validators by default. Restish trusts explicit
+input and lets the server validate API semantics. Unknown body fields are
+allowed, enum mismatches are not rejected locally, and schema constraints are
+not enforced unless Restish grows an explicit validation mode. Schema constructs
 such as `oneOf`, `anyOf`, `allOf`, `nullable`, `enum`, `const`, defaults,
 examples, numeric constraints, read-only/write-only fields, additional
 properties, and recursive references are used for help and bounded example
 bodies.
+
+Restish still fails locally when it cannot build a coherent request, such as a
+missing required path argument, an unreadable `@file`, or an invalid Restish
+flag. Those checks protect the CLI invocation itself rather than enforcing the
+remote API's schema.
 
 Use `--rsh-generate-body` on a generated command to print an example body and
 exit:
@@ -264,10 +271,11 @@ applicable OpenAPI server and the spec does declare server variables, Restish
 fails because the value cannot affect URL expansion.
 
 Absolute server URLs on another origin are blocked unless the API config lists
-the origin in `allowed_operation_origins`. `restish api connect --yes` can add
-detected safe entries, and interactive `api connect` asks before saving them.
-Without that opt-in, generated commands fail with an `allowed_operation_origins`
-hint instead of silently routing the request to `base_url`.
+the origin in `allowed_operation_origins`. `restish api connect --yes` and
+`restish api sync --yes` can add detected safe entries, and interactive connect
+or sync asks before saving them. Without that opt-in, generated commands fail
+with an `allowed_operation_origins` hint instead of silently routing the request
+to `base_url`.
 
 Same-origin absolute server URLs are used when scheme, hostname, and effective
 port all match.

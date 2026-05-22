@@ -434,25 +434,7 @@ func TestAuthLogout_RemovesEntry(t *testing.T) {
 	}
 }
 
-func TestClearAuthCache_DeprecatedAliasWarns(t *testing.T) {
-	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
-	tc := auth.NewTokenCache(cacheFile)
-	_ = tc.Set("myapi:default", auth.CachedToken{AccessToken: "tok"})
-
-	cfg := `{"apis": {"myapi": {"base_url": "https://api.example.com"}}}`
-	c, _, errOut := newTestCLI(t)
-	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
-	c.Hooks().TokenCachePath = cacheFile
-
-	if err := c.Run([]string{"restish", "api", "auth", "clear-cache", "myapi"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(errOut.String(), "api auth clear-cache is deprecated; use api auth logout") {
-		t.Fatalf("expected deprecation warning, got %q", errOut.String())
-	}
-}
-
-func TestClearAuthCache_AllProfiles(t *testing.T) {
+func TestAuthLogout_AllProfiles(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.json")
 	tc := auth.NewTokenCache(cacheFile)
 	_ = tc.Set("myapi:default", auth.CachedToken{AccessToken: "tok1"})
@@ -489,7 +471,7 @@ func TestClearAuthCache_AllProfiles(t *testing.T) {
 	}
 }
 
-func TestClearAuthCache_SharedAuthProfile(t *testing.T) {
+func TestAuthLogout_SharedAuthProfile(t *testing.T) {
 	var tokenCount atomic.Int32
 	transport := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.String() {

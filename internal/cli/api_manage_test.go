@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rest-sh/restish/v2/internal/auth"
+	cachepkg "github.com/rest-sh/restish/v2/internal/cache"
 	restishcli "github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -707,6 +709,133 @@ func TestAPIConnectReplaceRefreshesProfiles(t *testing.T) {
 	}
 	if got := written.APIs["myapi"].Profiles["default"].Headers[0]; got != currentHeader {
 		t.Fatalf("expected refreshed x-cli-config header %q, got %q", currentHeader, got)
+	}
+}
+
+func TestAPISyncUpdatesAllowedOperationOriginsAndPreservesProfiles(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "do", &config.APIConfig{
+		BaseURL: "https://api.digitalocean.com",
+		SpecURL: "https://api.digitalocean.com/openapi.json",
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {
+				Headers: []string{"Authorization: Bearer local-token"},
+			},
+		},
+	})
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "DigitalOcean", "version": "1.0"},
+  "servers": [{"url": "https://api.digitalocean.com"}],
+  "x-cli-config": {
+    "profiles": {
+      "default": {
+        "headers": ["Authorization: Bearer discovered-token"]
+      }
+    }
+  },
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "inferenceListModels",
+        "servers": [{"url": "https://inference.do-ai.run"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.digitalocean.com/openapi.json" {
+			return textResponse(200, "application/json", specBody, r), nil
+		}
+		return &http.Response{
+			StatusCode: 404,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "sync", "do", "--yes"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	api := written.APIs["do"]
+	if got := api.AllowedOperationOrigins; !reflect.DeepEqual(got, []string{"https://*.do-ai.run"}) {
+		t.Fatalf("allowed_operation_origins = %#v, want DigitalOcean wildcard", got)
+	}
+	if got := api.Profiles["default"].Headers; !reflect.DeepEqual(got, []string{"Authorization: Bearer local-token"}) {
+		t.Fatalf("profile headers = %#v, want local profile preserved", got)
+	}
+	if !strings.Contains(out.String(), "Wrote config: "+cfgFile) || !strings.Contains(out.String(), `Synced spec for "do".`) {
+		t.Fatalf("expected config write and sync confirmation, got %q", out.String())
+	}
+}
+
+func TestAPISyncPersistsDiscoveredSpecURLAndPreservesProfiles(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", &config.APIConfig{
+		BaseURL: "https://api.example.com",
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {
+				Headers: []string{"X-API-Key: local-secret"},
+			},
+		},
+	})
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Link": []string{`<https://api.example.com/linked-openapi.json>; rel="service-desc"`}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    r,
+			}, nil
+		case "https://api.example.com/linked-openapi.json":
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(specWithXCLIConfig("https://api.example.com"))),
+				Request:    r,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("not found")),
+				Request:    r,
+			}, nil
+		}
+	})
+
+	if err := c.Run([]string{"restish", "api", "sync", "myapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	api := written.APIs["myapi"]
+	if got := api.SpecURL; got != "https://api.example.com/linked-openapi.json" {
+		t.Fatalf("spec_url = %q, want discovered Link URL", got)
+	}
+	if got := api.Profiles["default"].Headers; !reflect.DeepEqual(got, []string{"X-API-Key: local-secret"}) {
+		t.Fatalf("profile headers = %#v, want local profile preserved", got)
 	}
 }
 
@@ -2702,6 +2831,140 @@ func TestAPIRemovePreservesJSONCComments(t *testing.T) {
 	}
 }
 
+func TestAPIRemoveClearsAPILocalState(t *testing.T) {
+	cacheDir := t.TempDir()
+	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "remove": {
+      "base_url": "https://remove.example.com",
+      "profiles": {
+        "default": {"auth_ref": "shared"},
+        "admin": {
+          "credentials": {
+            "OAuth": {"auth_ref": "remove-only"}
+          }
+        }
+      }
+    },
+    "keep": {
+      "base_url": "https://keep.example.com"
+    }
+  },
+  "auth_profiles": {
+    "shared": {"type": "bearer", "params": {"token": "shared"}},
+    "remove-only": {"type": "bearer", "params": {"token": "remove-only"}}
+  }
+}`)
+
+	removeCache, err := cachepkg.New(cacheDir, cachepkg.DefaultMaxBytes, "remove:default")
+	if err != nil {
+		t.Fatalf("New remove cache: %v", err)
+	}
+	removeAdminCache, err := cachepkg.New(cacheDir, cachepkg.DefaultMaxBytes, "remove:admin")
+	if err != nil {
+		t.Fatalf("New remove admin cache: %v", err)
+	}
+	keepCache, err := cachepkg.New(cacheDir, cachepkg.DefaultMaxBytes, "keep:default")
+	if err != nil {
+		t.Fatalf("New keep cache: %v", err)
+	}
+	removeCache.Set("https://remove.example.com/items", []byte("remove"))
+	removeAdminCache.Set("https://remove.example.com/admin", []byte("admin"))
+	keepCache.Set("https://keep.example.com/items", []byte("keep"))
+
+	tc := auth.NewTokenCache(tokenPath)
+	if err := tc.Set("remove:default", auth.CachedToken{AccessToken: "remove-default"}); err != nil {
+		t.Fatalf("set token: %v", err)
+	}
+	if err := tc.Set("remove:admin:credential:OAuth", auth.CachedToken{AccessToken: "remove-admin"}); err != nil {
+		t.Fatalf("set credential token: %v", err)
+	}
+	if err := tc.Set("keep:default", auth.CachedToken{AccessToken: "keep"}); err != nil {
+		t.Fatalf("set keep token: %v", err)
+	}
+	if err := tc.Set("auth_profile:shared:abc", auth.CachedToken{AccessToken: "shared"}); err != nil {
+		t.Fatalf("set shared token: %v", err)
+	}
+	if err := tc.Set("auth_profile:remove-only:abc", auth.CachedToken{AccessToken: "remove-only"}); err != nil {
+		t.Fatalf("set remove-only token: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().CachePath = cacheDir
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "api", "remove", "remove"}); err != nil {
+		t.Fatalf("api remove: %v", err)
+	}
+
+	if _, ok := removeCache.Get("https://remove.example.com/items"); ok {
+		t.Fatal("expected removed API default HTTP cache to be cleared")
+	}
+	if _, ok := removeAdminCache.Get("https://remove.example.com/admin"); ok {
+		t.Fatal("expected removed API admin HTTP cache to be cleared")
+	}
+	if got, ok := keepCache.Get("https://keep.example.com/items"); !ok || string(got) != "keep" {
+		t.Fatal("expected unrelated HTTP cache to remain")
+	}
+
+	cache := auth.NewTokenCache(tokenPath)
+	for _, key := range []string{"remove:default", "remove:admin:credential:OAuth", "auth_profile:shared:abc", "auth_profile:remove-only:abc"} {
+		got, err := cache.Get(key)
+		if err != nil {
+			t.Fatalf("read token %s: %v", key, err)
+		}
+		if got != nil {
+			t.Fatalf("expected token %s to be cleared", key)
+		}
+	}
+	got, err := cache.Get("keep:default")
+	if err != nil {
+		t.Fatalf("read keep token: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected unrelated auth token to remain")
+	}
+}
+
+func TestAPIRemoveKeepsSharedAuthProfileTokenStillReferenced(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
+	cfgFile := writeAPIConfig(t, `{
+  "apis": {
+    "remove": {
+      "base_url": "https://remove.example.com",
+      "profiles": {"default": {"auth_ref": "shared"}}
+    },
+    "keep": {
+      "base_url": "https://keep.example.com",
+      "profiles": {"default": {"auth_ref": "shared"}}
+    }
+  },
+  "auth_profiles": {
+    "shared": {"type": "bearer", "params": {"token": "shared"}}
+  }
+}`)
+
+	if err := auth.NewTokenCache(tokenPath).Set("auth_profile:shared:abc", auth.CachedToken{AccessToken: "shared"}); err != nil {
+		t.Fatalf("set shared token: %v", err)
+	}
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "api", "remove", "remove"}); err != nil {
+		t.Fatalf("api remove: %v", err)
+	}
+
+	got, err := auth.NewTokenCache(tokenPath).Get("auth_profile:shared:abc")
+	if err != nil {
+		t.Fatalf("read shared token: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected shared auth profile token to remain while another API references it")
+	}
+}
+
 // TestAPISyncClearsCache (verifies api sync already tested in spec_test.go,
 // but also that it reports success from the api subcommand path).
 func TestAPISyncReportsSuccess(t *testing.T) {
@@ -2804,21 +3067,6 @@ func TestAPISyncNetworkFailureLeavesRegistrationAndCache(t *testing.T) {
 	}
 }
 
-// TestAPIContentTypes verifies that "content-types" lists the built-in types.
-func TestAPIContentTypes(t *testing.T) {
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-
-	if err := c.Run([]string{"restish", "content-types"}); err != nil {
-		t.Fatalf("content-types: %v", err)
-	}
-	got := out.String()
-	// JSON is always registered.
-	if !strings.Contains(got, "json") {
-		t.Errorf("expected json in content-types output, got: %q", got)
-	}
-}
-
 func TestAPIListJSONOutput(t *testing.T) {
 	cfgFile := writeAPIConfig(t, `{
   "apis": {
@@ -2854,31 +3102,53 @@ func TestAPIListJSONOutput(t *testing.T) {
 	}
 }
 
-func TestContentTypesJSONOutput(t *testing.T) {
+func TestAPIListIncludesOperationCount(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
 	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      },
+      "post": {
+        "operationId": "createItem",
+        "responses": {"201": {"description": "Created"}}
+      }
+    }
+  }
+}`)
 
-	if err := c.Run([]string{"restish", "content-types", "-o", "json"}); err != nil {
-		t.Fatalf("content-types -o json: %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "example", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "list"}); err != nil {
+		t.Fatalf("api list: %v", err)
+	}
+	wantList := "example  https://api.example.com  2 operations  0 profiles\n"
+	if out.String() != wantList {
+		t.Fatalf("api list output = %q, want %q", out.String(), wantList)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "api", "list", "-o", "json"}); err != nil {
+		t.Fatalf("api list -o json: %v", err)
 	}
 	var got []struct {
-		Name      string   `json:"name"`
-		MIMETypes []string `json:"mime_types"`
-		Suffixes  []string `json:"suffixes"`
+		Name           string `json:"name"`
+		OperationCount int    `json:"operation_count"`
 	}
-	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
 		t.Fatalf("parse JSON output: %v\n%s", err, out.String())
 	}
-	foundJSON := false
-	for _, ct := range got {
-		if ct.Name == "json" {
-			foundJSON = true
-			if len(ct.MIMETypes) == 0 {
-				t.Fatalf("json content type missing MIME types: %#v", ct)
-			}
-		}
-	}
-	if !foundJSON {
-		t.Fatalf("expected json content type in %#v", got)
+	if len(got) != 1 || got[0].Name != "example" || got[0].OperationCount != 2 {
+		t.Fatalf("api list JSON operation count = %#v", got)
 	}
 }

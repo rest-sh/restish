@@ -128,6 +128,49 @@ func TestInfo_WithEntries(t *testing.T) {
 	}
 }
 
+func TestInfo_BreakdownByHostAndNamespace(t *testing.T) {
+	dir := t.TempDir()
+	defaultCache, err := New(dir, DefaultMaxBytes, "")
+	if err != nil {
+		t.Fatalf("New default cache: %v", err)
+	}
+	apiCache, err := New(dir, DefaultMaxBytes, "myapi:default")
+	if err != nil {
+		t.Fatalf("New API cache: %v", err)
+	}
+	otherCache, err := New(dir, DefaultMaxBytes, "other:default")
+	if err != nil {
+		t.Fatalf("New other cache: %v", err)
+	}
+
+	defaultCache.Set("https://api.example.com/a", []byte("small"))
+	apiCache.Set("https://api.example.com/b", []byte("larger-payload"))
+	otherCache.Set("https://other.example.com/c", []byte("tiny"))
+
+	info, err := defaultCache.Info()
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if len(info.Hosts) != 2 {
+		t.Fatalf("Hosts = %#v, want two hosts", info.Hosts)
+	}
+	if info.Hosts[0].Name != "api.example.com" || info.Hosts[0].EntryCount != 2 {
+		t.Fatalf("first host breakdown = %#v", info.Hosts[0])
+	}
+	if len(info.Namespaces) != 3 {
+		t.Fatalf("Namespaces = %#v, want three namespaces", info.Namespaces)
+	}
+	foundAPI := false
+	for _, namespace := range info.Namespaces {
+		if namespace.Name == "myapi:default" {
+			foundAPI = true
+		}
+	}
+	if !foundAPI {
+		t.Fatalf("expected decoded namespace myapi:default in %#v", info.Namespaces)
+	}
+}
+
 func TestClear_All(t *testing.T) {
 	c, _ := New(t.TempDir(), DefaultMaxBytes, "")
 	c.Set("https://api.example.com/x", []byte("a"))
@@ -175,7 +218,7 @@ func TestClearNamespacePrefixOnlyMatchesNamespaceLayer(t *testing.T) {
 	otherHost, _ := New(dir, DefaultMaxBytes, "api")
 	otherHost.Set("https://other.example.com/items", []byte("other-host"))
 
-	if err := apiHost.ClearNamespacePrefix("api"); err != nil {
+	if _, err := apiHost.ClearNamespacePrefix("api"); err != nil {
 		t.Fatalf("ClearNamespacePrefix: %v", err)
 	}
 	if _, ok := apiHost.Get("https://api.example.com/items"); !ok {
@@ -396,8 +439,10 @@ func TestClearNamespacePrefixUsesRawNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New clearer: %v", err)
 	}
-	if err := clearer.ClearNamespacePrefix("myapi:"); err != nil {
+	if cleared, err := clearer.ClearNamespacePrefix("myapi:"); err != nil {
 		t.Fatalf("ClearNamespacePrefix: %v", err)
+	} else if cleared != 1 {
+		t.Fatalf("ClearNamespacePrefix cleared %d namespaces, want 1", cleared)
 	}
 	if _, ok := c.Get(key); ok {
 		t.Fatal("expected myapi namespace to be cleared")

@@ -98,16 +98,17 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 	// Check if the alias is already present to avoid duplicates.
 	existing, _ := os.ReadFile(rcPath)
 	aliasConfigured := strings.Contains(string(existing), setup.alias)
+	style := humanTextStyleFor(c.Stdout)
 	if aliasConfigured && !withCompletion {
-		fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
+		fmt.Fprintf(c.Stdout, "Shell %s: %s already contains the restish alias.\n", style.ok("already configured"), rcPath)
 		return nil
 	}
 
 	if dryRun {
 		if aliasConfigured {
-			fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
+			fmt.Fprintf(c.Stdout, "Shell %s: %s already contains the restish alias.\n", style.ok("already configured"), rcPath)
 		} else {
-			fmt.Fprintf(c.Stdout, "Would update %s with:\n%s\n", rcPath, setup.alias)
+			fmt.Fprintf(c.Stdout, "%s %s with:\n%s\n", style.hint("Would update"), rcPath, setup.alias)
 		}
 		if withCompletion {
 			return c.installCompletion(cmd, completionInstallOptions{Shell: shell, DryRun: true})
@@ -126,7 +127,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if !ok {
-			fmt.Fprintln(c.Stdout, "Cancelled.")
+			fmt.Fprintf(c.Stdout, "%s.\n", style.warn("Cancelled"))
 			return fmt.Errorf("setup: cancelled")
 		}
 	}
@@ -141,9 +142,9 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("setup: write %s: %w", rcPath, err)
 		}
 
-		fmt.Fprintf(c.Stdout, "Configured %s: appended alias to %s\n", shell, rcPath)
+		fmt.Fprintf(c.Stdout, "%s %s: appended alias to %s\n", style.ok("Configured"), shell, rcPath)
 	} else {
-		fmt.Fprintf(c.Stdout, "Shell already configured: %s already contains the restish alias.\n", rcPath)
+		fmt.Fprintf(c.Stdout, "Shell %s: %s already contains the restish alias.\n", style.ok("already configured"), rcPath)
 	}
 
 	if withCompletion {
@@ -152,7 +153,7 @@ func (c *CLI) runSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
+	fmt.Fprintf(c.Stdout, "%s source %s\n", style.hint("Restart your shell or run:"), rcPath)
 	return nil
 }
 
@@ -200,7 +201,7 @@ func detectRunningShell() (string, string) {
 		if ppid > 1 {
 			out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", ppid), "-o", "comm=").Output()
 			if err == nil {
-				name := strings.ToLower(filepath.Base(strings.TrimSpace(string(out))))
+				name := normalizeShellName(strings.TrimSpace(string(out)))
 				if name != "" {
 					return name, "ppid"
 				}
@@ -212,5 +213,10 @@ func detectRunningShell() (string, string) {
 	if shellPath == "" {
 		return "", ""
 	}
-	return strings.ToLower(filepath.Base(shellPath)), "$SHELL"
+	return normalizeShellName(shellPath), "$SHELL"
+}
+
+func normalizeShellName(name string) string {
+	name = strings.ToLower(filepath.Base(strings.TrimSpace(name)))
+	return strings.TrimLeft(name, "-")
 }

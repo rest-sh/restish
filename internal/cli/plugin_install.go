@@ -69,14 +69,16 @@ func (c *CLI) runPluginInstall(cmd *cobra.Command, args []string) error {
 	if err := validatePluginManifestName(manifest.Name); err != nil {
 		return fmt.Errorf("install: manifest name: %w", err)
 	}
-	fmt.Fprintf(c.Stderr, "Manifest: %s %s\n", manifest.Name, manifest.Version)
-	fmt.Fprintf(c.Stderr, "Capabilities: %s\n", pluginCapabilitySummary(*manifest))
+	errStyle := humanTextStyleFor(c.Stderr)
+	fmt.Fprintf(c.Stderr, "%s %s %s\n", errStyle.key("Manifest:"), manifest.Name, manifest.Version)
+	fmt.Fprintf(c.Stderr, "%s %s\n", errStyle.key("Capabilities:"), pluginCapabilitySummary(*manifest))
 	installedName, err := c.installResolvedPlugin(resolved, *manifest)
 	if err != nil {
 		return err
 	}
 	c.warnf("installed plugins are trusted executables and may run arbitrary code on future restish invocations")
-	fmt.Fprintf(c.Stdout, "Installed plugin %s\n", installedName)
+	outStyle := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s plugin %s\n", outStyle.ok("Installed"), installedName)
 	return nil
 }
 

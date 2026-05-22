@@ -159,8 +159,8 @@ full request:
 
 ```bash
 restish api auth inspect myapi
-restish api auth inspect myapi --rsh-credential PartnerKey
-restish api auth inspect myapi --rsh-credential UserBearer --redact
+restish api auth inspect myapi --credential PartnerKey
+restish api auth inspect myapi --credential UserBearer --redact
 restish api auth header myapi Authorization UserBearer
 ```
 
@@ -170,7 +170,7 @@ bindings exist for the selected profile.
 
 When a profile has exactly one configured credential, `inspect` selects it by
 default. When a profile has several credentials, `inspect` prints each
-configured credential's computed auth material; pass `--rsh-credential` to
+configured credential's computed auth material; pass `--credential` to
 narrow the output. `inspect` shows the computed values; use `--redact` for
 shareable output, and use `api auth header` when a script needs exactly one
 header value.
@@ -189,6 +189,11 @@ redirect URI, scopes, and provider parameters in the focused
 [OAuth guide](../oauth/). The reference page lists every supported auth type
 and param.
 
+For remote terminals, use `--rsh-no-browser` with authorization code auth when
+you need to copy the authorization URL and paste the returned code manually.
+Use `oauth-device-code` when the provider documents device authorization for
+CLI use. Restish does not automatically switch between those OAuth flows.
+
 The most common profile-level shape uses an OAuth auth type plus provider
 params:
 
@@ -206,9 +211,10 @@ params:
 }
 ```
 
-OAuth tokens are cached separately from HTTP responses. Use
-`restish api auth logout` when a grant is revoked, consent changes, or you want
-the next request to perform a fresh sign-in.
+OAuth tokens are cached separately from HTTP responses. When an OAuth-backed API
+request returns `401 Unauthorized`, Restish forces fresh auth and retries that
+request once. Use `restish api auth logout` when a grant is revoked, consent
+changes, or you want the next request to perform a fresh sign-in.
 
 ## External Tool Auth
 

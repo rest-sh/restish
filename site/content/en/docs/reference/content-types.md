@@ -17,11 +17,12 @@ not change what the server sends.
 
 ## Built-In Types
 
-`restish content-types` lists the registered content aliases and MIME types:
+`restish doctor` lists the registered content type aliases. Use JSON doctor
+output when you need MIME types, suffixes, and quality values:
 
 ```bash
-restish content-types
-restish content-types -o json
+restish doctor
+restish doctor -o json
 ```
 
 | Alias | MIME types |
@@ -137,7 +138,7 @@ is not a capture of compressed wire bytes.
 ## Plugins
 
 Content plugins can add request encoders, response decoders, and output
-formatters. Use `restish content-types` and `restish plugin list` to confirm
+formatters. Use `restish doctor -o json` and `restish plugin list` to confirm
 what your current binary can handle.
 
 ## Related Pages

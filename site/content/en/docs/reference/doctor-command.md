@@ -2,7 +2,7 @@
 title: Doctor Command
 linkTitle: Doctor
 weight: 16
-description: Reference for diagnosing Restish configuration, registered APIs, plugins, and v1 migration.
+description: Reference for diagnosing Restish configuration, registered APIs, plugins, and runtime state.
 ---
 
 Use `restish doctor` when behavior looks environment-specific: the wrong config
@@ -17,11 +17,27 @@ restish doctor -o json
 restish doctor api example
 restish doctor api example --check-network
 restish doctor plugin mcp
-restish doctor migrate-v1
 ```
 
 Prefer JSON output when attaching diagnostics to an issue or comparing results
 across machines.
+
+TTY human output colorizes status words when terminal color is enabled. JSON
+output is stable and uncolored.
+
+`doctor api <name>` and `doctor plugin <name>` exit non-zero when the named API
+or plugin does not exist. They still print the diagnostic report they can
+produce so the output is useful in bug reports.
+
+Permission diagnostics are strongest on Unix-like systems, where Restish checks
+config and token-cache mode bits. On Windows, existing config and token-cache
+files report permission status as `unknown` because ACL inspection is not yet
+implemented; this avoids reporting `ok` for a file Restish did not actually
+verify.
+
+The root report also lists installed plugins and registered content type
+aliases. Use `-o json` for plugin paths, detailed plugin capabilities, MIME
+types, structured suffixes, and quality values.
 
 ## Generated Command Reference
 
@@ -53,8 +69,6 @@ Examples:
 Subcommands:
 
 **`restish doctor api`**: Diagnose a registered API
-
-**`restish doctor migrate-v1`**: Run default-location v1 config migration if eligible
 
 **`restish doctor plugin`**: Diagnose a Restish plugin executable
 
@@ -108,28 +122,6 @@ Examples:
 
 ```bash
   restish doctor plugin mcp
-```
-
-
-### `restish doctor migrate-v1`
-
-Run default-location v1 config migration if eligible
-
-Run default-location Restish v1 config migration if eligible.
-
-Use this when upgrading a machine that still has a v1 config in the default location. The command reports whether migration is possible, where files would be written, and why migration may be skipped.
-
-Usage:
-
-```text
-restish doctor migrate-v1
-```
-
-Examples:
-
-```bash
-  restish doctor migrate-v1
-  restish doctor migrate-v1 --to ./restish.json
 ```
 <!-- END GENERATED -->
 

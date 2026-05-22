@@ -95,7 +95,9 @@ restish --rsh-config ./restish.json example list-images
 ```
 
 An explicit config file is the source of truth for that invocation. It is not
-merged with the global config.
+merged with the global config. Restish does not automatically discover
+`./restish.json`; keep passing `--rsh-config` or set `RSH_CONFIG` when a project
+should use that file.
 
 ## Next Step
 

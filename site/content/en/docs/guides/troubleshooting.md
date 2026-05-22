@@ -143,7 +143,7 @@ public operation where it should have been suppressed.
 ```bash
 restish -H 'Authorization: Bearer docs-token' api.rest.sh/auth/bearer
 restish api auth inspect example
-restish api auth inspect example --rsh-credential basicAuth
+restish api auth inspect example --credential basicAuth
 restish api auth header example Authorization basicAuth
 restish -v -p token api.rest.sh/auth/bearer
 ```
@@ -152,6 +152,11 @@ For generated OpenAPI commands, errors mentioning missing credential bindings
 mean the selected profile does not have a `credentials.<id>` entry for that
 operation. Errors mentioning missing requirement values mean the binding's
 `satisfies` list does not include the required scope or role.
+
+For OAuth-backed requests, Restish automatically forces fresh auth and retries
+once after a `401 Unauthorized`. If you still see `401` after that retry, inspect
+the active profile, confirm scopes/roles, or clear cached auth so the next
+request performs a fresh flow.
 
 **Prevention:** Put auth in profiles and keep public/private operation security accurate in OpenAPI.
 
@@ -237,11 +242,14 @@ document format.
 ```bash
 restish api.rest.sh/events --rsh-max-items 3 -o ndjson
 restish api.rest.sh/events --rsh-max-items 3 -f body.data.message -o lines
+restish api.rest.sh/events --rsh-collect --rsh-max-items 3 -o json
 ```
 
 **Prevention:** Use `--rsh-max-items` for fixed samples and `--rsh-timeout` for
-time-bounded stream checks. For SSE, parsed event payload fields live under
-`body.data`; for NDJSON records, fields live directly under `body`.
+time-bounded stream checks. Use `-o ndjson` for record-by-record JSON output,
+or pair `--rsh-collect` with a finite `--rsh-max-items` when you explicitly want
+one JSON document. For SSE, parsed event payload fields live under `body.data`;
+for NDJSON records, fields live directly under `body`.
 
 **Related docs:** [Streaming](/docs/guides/streaming/), [Output Formats](/docs/reference/output-formats/).
 

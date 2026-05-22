@@ -14,22 +14,22 @@ const apiLong = "Manage APIs registered in the local Restish config.\n\n" +
 	"Registered APIs turn OpenAPI descriptions into generated commands with shell completion, persistent profiles, and auth-aware requests. Use `api connect` to add an API, `api sync` after its OpenAPI document changes, and `api set` for local profile edits."
 
 const apiListLong = "List every API registered in the active Restish config.\n\n" +
-	"Use `-o json` when scripts need stable fields such as API names, base URLs, and profile counts. Human output is a compact inventory for deciding what to inspect, sync, or remove next."
+	"Use `-o json` when scripts need stable fields such as API names, base URLs, operation counts, and profile counts. Human output is a compact inventory for deciding what to inspect, sync, or remove next."
 
 const apiRemoveLong = "Remove a registered API from the local config.\n\n" +
-	"This deletes the saved API definition and generated-command source for that name. It does not contact the remote API, delete server-side resources, or remove unrelated HTTP cache and token cache entries."
+	"This deletes the saved API definition, generated-command source, HTTP response cache entries, and API-scoped auth token cache entries for that name. Unreferenced shared auth-profile tokens used only by the removed API are cleared too. It does not contact the remote API, delete server-side resources, or remove unrelated cache entries."
 
 const apiSyncLong = "Force re-fetch of the cached OpenAPI spec for a named API.\n\n" +
-	"Use this after the API publishes new operations, updates parameter schemas, or changes `x-cli-config` defaults that should affect generated commands.\n\n" +
-	"By default, sync follows the same-origin spec source already recorded for the API. Use `--allow-cross-origin-spec` only when you trust a `Link` header or saved spec source that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified IP literal spec targets are still rejected."
+	"Use this after the API publishes new operations, updates parameter schemas, moves the discovered spec URL, or adds operation servers that generated commands should know about. Sync refreshes spec-derived API metadata, but preserves local profiles because they may contain credentials.\n\n" +
+	"By default, sync follows the same-origin spec source already recorded for the API. Use `--allow-cross-origin-spec` only when you trust a `Link` header or saved spec source that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local. Use `api set` to update `spec_url`, or reconnect with `--spec`, when you need to name a private spec URL directly."
 
 const apiConnectLong = "Connect Restish to an API, discover its OpenAPI description, and save a named API profile.\n\n" +
 	"Use this when repeated work against an API deserves generated commands, shell completion, auth setup, and profile-aware defaults.\n\n" +
 	"Common choices:\n\n" +
 	"- Use `--spec` when discovery is blocked, the API does not advertise its spec, or you want to pin setup to a known OpenAPI URL or local file.\n" +
-	"- Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified IP literal spec targets are still rejected.\n" +
+	"- Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local; use `--spec` when you need to name a private spec URL directly.\n" +
 	"- Use `--no-discover` to save a base URL without fetching a spec.\n" +
-	"- Use `--replace` when reconnecting should replace generated OpenAPI or `x-cli-config` profile defaults instead of preserving local profile edits.\n" +
+	"- Use `--replace` when reconnecting should replace existing profiles with generated OpenAPI or `x-cli-config` profile defaults. Without it, existing profiles are preserved, while API-level discovery fields are refreshed from the new connect run.\n" +
 	"- Use `--yes` only for safe connect prompts you have already decided to accept in automation."
 
 const apiInspectLong = "Print the saved config for one registered API as JSON.\n\n" +
@@ -56,10 +56,10 @@ const apiAuthLogoutLong = "Delete cached API auth tokens.\n\n" +
 	"- Use `--auth-profile` to clear a shared auth profile cache without naming an API."
 
 const apiAuthHeaderLong = "Print one auth header value that Restish would apply for an API profile.\n\n" +
-	"Use this for debugging generated-command auth without sending a request. Pass `--rsh-operation` to inspect operation-specific security requirements, or `--rsh-credential` to inspect a named credential binding directly."
+	"Use this for debugging generated-command auth without sending a request. Pass `--operation` to inspect operation-specific security requirements, or `--credential` to inspect a named credential binding directly."
 
 const apiAuthInspectLong = "Inspect auth readiness and material for an API profile.\n\n" +
-	"By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--rsh-operation` for operation-specific OpenAPI security requirements or `--rsh-credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked."
+	"By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--operation` for operation-specific OpenAPI security requirements or `--credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked."
 
 const configLong = "Manage local Restish configuration.\n\n" +
 	"The config stores registered APIs, profiles, auth settings, plugin settings, cache preferences, and output theme choices. Use `config show` for a redacted summary, `config path` to locate the file, and `config set` for scripted changes."
@@ -89,13 +89,13 @@ const configThemeResetLong = "Reset terminal output highlighting to the built-in
 	"This removes the saved theme override from config. It does not delete local theme files or remote sources."
 
 const cacheLong = "Manage Restish's HTTP response cache.\n\n" +
-	"The HTTP cache stores reusable responses for requests that are safe to cache. It is separate from the OpenAPI spec cache and OAuth token cache. Use `cache info` to inspect size and location, and `cache clear` when cached responses should no longer be reused."
+	"The HTTP cache stores reusable responses for requests that are safe to cache. It is separate from the OpenAPI spec cache and OAuth token cache. Use `cache info` to inspect size, location, largest cached hosts, and API/profile usage, and `cache clear` when cached responses should no longer be reused."
 
-const cacheInfoLong = "Print the HTTP response cache directory, size, entry count, and oldest entry.\n\n" +
-	"Use `-o json` for scripts that need stable fields. This command does not inspect the OpenAPI spec cache or auth token cache."
+const cacheInfoLong = "Print the HTTP response cache directory, size, entry count, oldest entry, and largest hosts.\n\n" +
+	"TTY output includes a compact API/profile usage map. Human output also shows the largest cached hosts and API/profile namespaces with size percentages so you can see where disk space is going. Unregistered namespaces, such as old cache entries from a previous Restish version or manual cache files, are marked clearly and can be cleared by their namespace prefix. Use `-o json` for stable fields including host and API/profile breakdowns. This command does not inspect the OpenAPI spec cache or auth token cache."
 
 const cacheClearLong = "Delete cached HTTP responses.\n\n" +
-	"Omit the API name to clear every HTTP response cache entry. Pass an API name to clear only entries for that registered API. OAuth tokens and cached OpenAPI documents are not removed."
+	"Omit the API name to clear every HTTP response cache entry. Pass an API name to clear entries for that registered API. Use `--direct` to clear direct URL requests that are not associated with a registered API. If an unregistered namespace remains from an older Restish version or manual cache files, pass the namespace prefix shown by `cache info` to clear it. OAuth tokens and cached OpenAPI documents are not removed."
 
 const pluginLong = "Manage Restish plugins.\n\n" +
 	"Plugins are executable programs that can add commands, content loaders, output formatters, hooks, or TLS signing behavior. Use `plugin list` to see discovered plugins, `plugin install` for trusted plugin binaries, and `plugin debug` when a plugin is discovered but not behaving correctly."
@@ -115,15 +115,12 @@ const pluginDebugLong = "Spawn a plugin and print decoded protocol messages to s
 	"Use this when a plugin is discovered but does not behave as expected. It shows the manifest/startup exchange and runtime messages so you can see whether the plugin, host, or protocol payload is failing.\n\n" +
 	"Pass plugin arguments after the plugin name. Use `--` before arguments that could otherwise be interpreted by Restish."
 
-const contentTypesLong = "List content types registered with Restish and the MIME types they handle.\n\n" +
-	"Use this when content negotiation, request decoding, response formatting, or plugin-provided loaders do not behave as expected. Pass `-o json` for a machine-readable list including suffixes and quality values."
-
 const editLong = "Fetch a resource, edit it locally, then send the changed representation back.\n\n" +
 	"Restish first sends `GET`, opens the response body as JSON or YAML, then sends either `PATCH` with JSON Merge Patch when supported or `PUT` otherwise. Use shorthand patch arguments for non-interactive edits.\n\n" +
 	"Safety controls:\n\n" +
 	"- Use `--dry-run` to print the diff without sending an update.\n" +
 	"- Use `--no-editor` to print or patch the editable body without launching `$VISUAL` or `$EDITOR`.\n" +
-	"- Use `--rsh-yes` only after reviewing the diff in automation."
+	"- Use `--yes` only after reviewing the diff in automation."
 
 const certLong = "Show the TLS certificate chain for an HTTPS server.\n\n" +
 	"Use this to inspect certificate subjects, issuers, DNS names, validity windows, and expiry timing with the same TLS-related flags Restish uses for requests. `--warn-days` exits non-zero when the leaf certificate expires soon, which is useful in monitoring scripts."
@@ -139,9 +136,6 @@ const doctorAPILong = "Diagnose one registered API.\n\n" +
 
 const doctorPluginLong = "Diagnose one Restish plugin executable.\n\n" +
 	"The report checks plugin discovery, executable status, manifest loading, declared capabilities, and Restish plugin protocol compatibility."
-
-const doctorMigrateV1Long = "Run default-location Restish v1 config migration if eligible.\n\n" +
-	"Use this when upgrading a machine that still has a v1 config in the default location. The command reports whether migration is possible, where files would be written, and why migration may be skipped."
 
 const shellLong = "Configure shell integration for Restish.\n\n" +
 	"Shell setup prevents common glob-expansion issues and can install shell completion where supported. Use `shell setup <shell>` for the managed setup flow, or `shell completion` when you only need completion scripts."

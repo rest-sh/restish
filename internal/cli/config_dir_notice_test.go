@@ -2,12 +2,11 @@ package cli_test
 
 import (
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestRSHConfigDirMissingConfigNotice(t *testing.T) {
+func TestRSHConfigDirMissingConfigDoesNotEmitNotice(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("RSH_CONFIG_DIR", dir)
 	c, _, stderr := newTestCLI(t)
@@ -19,8 +18,7 @@ func TestRSHConfigDirMissingConfigNotice(t *testing.T) {
 	if err := c.Run([]string{"restish", "get", "--rsh-no-cache", "https://api.example.com/items"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := filepath.Join(dir, "restish.json")
-	if got := stderr.String(); !strings.Contains(got, "no config at "+want) {
-		t.Fatalf("expected missing config notice for %s, got:\n%s", want, got)
+	if got := stderr.String(); strings.Contains(got, "no config") || strings.Contains(got, "using defaults") {
+		t.Fatalf("missing config should not emit startup notice, got:\n%s", got)
 	}
 }

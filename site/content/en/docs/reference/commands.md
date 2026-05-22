@@ -64,13 +64,11 @@ heavy use of filters, query strings, or shorthand in interactive shells.
 
 ## Utilities
 
-Utilities help inspect TLS, links, content types, runtime health, and editable
-resources.
+Utilities help inspect TLS, links, runtime health, and editable resources.
 
 ```bash
 restish cert api.rest.sh
 restish links api.rest.sh/images next
-restish content-types
 restish doctor -o json
 restish edit api.rest.sh/types
 ```

@@ -266,7 +266,7 @@ responses remain visible to Restish.
 Authorization code flow should support both:
 
 - local-browser callback on localhost
-- headless/manual fallback or device-code alternative for SSH/remote use
+- explicit headless/manual fallback for SSH/remote use
 
 The localhost callback server must:
 
@@ -284,6 +284,13 @@ Manual-code fallback must also shut down cleanly. If the callback, timeout, or
 context cancellation wins the race, any goroutine waiting for manual input must
 exit without leaking. The full authorization URL should only be printed when
 browser launch fails or verbose mode is enabled.
+
+Device authorization is a separate explicit OAuth type, not an automatic
+fallback from authorization code. Restish should not silently switch a profile
+from `oauth-authorization-code` to `oauth-device-code` just because issuer
+discovery advertises a device endpoint. Flow choice affects provider client
+registration, redirect URI policy, consent UX, token semantics, and debugging;
+the operator should choose it in config.
 
 Local HTTPS callbacks are a post-release extension, not a v2 release blocker.
 If added, the callback listener should be explicit and operator-controlled:
@@ -335,14 +342,19 @@ OAuth token exchange for provider-specific systems should be modeled as an auth
 hook/plugin pattern when the built-in flows are not enough. The core should keep
 generic OAuth helpers, not vendor-specific token exchange parameters.
 
-### Device Code Or Headless Alternative
+### Browserless OAuth
 
-Remote and SSH users need a browserless path. Restish should provide either:
+Remote and SSH users have two explicit browserless paths in v2:
 
-- device code flow where supported, or
-- an explicit manual-code fallback
+- `oauth-device-code` when the provider supports device authorization or
+  recommends it for CLIs; and
+- `oauth-authorization-code` with `--rsh-no-browser`, which prints the
+  authorization URL and prompts for a pasted authorization code.
 
-before v2 release.
+Restish keeps these paths explicit instead of auto-detecting and switching
+flows. That makes the configured auth profile match the provider registration
+and keeps failures understandable when a provider supports one OAuth extension
+but not another.
 
 ## 401 Retry Semantics
 

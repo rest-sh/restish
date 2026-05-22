@@ -2,23 +2,21 @@
 title: Utility Commands
 linkTitle: Utilities
 weight: 18
-description: "Reference for smaller Restish utility commands: cert, content-types, links, and version."
+description: "Reference for smaller Restish utility commands: cert, links, and version."
 aliases:
   - /docs/reference/cert-command/
   - /docs/reference/links-command/
 ---
 
 Utility commands inspect supporting HTTP and runtime details without changing
-remote resources. Use them to check TLS certificates, inspect content handlers,
-extract hypermedia links, and report the Restish version.
+remote resources. Use them to check TLS certificates, extract hypermedia links,
+and report the Restish version.
 
 ## Common Examples
 
 ```bash
 restish cert api.rest.sh
 restish cert api.rest.sh --warn-days 30
-restish content-types
-restish content-types -o json
 restish links api.rest.sh/images next
 restish version
 ```
@@ -57,28 +55,6 @@ Type: `int`; default: `0`
 
 Exit non-zero if the leaf certificate expires within N days
 
-
-
-### `restish content-types`
-
-List registered content types and their MIME types
-
-List content types registered with Restish and the MIME types they handle.
-
-Use this when content negotiation, request decoding, response formatting, or plugin-provided loaders do not behave as expected. Pass `-o json` for a machine-readable list including suffixes and quality values.
-
-Usage:
-
-```text
-restish content-types
-```
-
-Examples:
-
-```bash
-  restish content-types
-  restish content-types -o json
-```
 
 
 ### `restish links`

@@ -19,7 +19,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Short: "Manage API auth credentials",
 		Long:  apiAuthLong,
 		Example: fmt.Sprintf(`  %s api auth inspect demo
-  %s api auth inspect demo --rsh-operation list-items
+  %s api auth inspect demo --operation list-items
   %s api auth logout demo`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,18 +57,6 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	}
 	addAPIAuthLogoutFlags(logoutCmd)
 	cmd.AddCommand(logoutCmd)
-	clearCacheCmd := &cobra.Command{
-		Use:    "clear-cache [api]",
-		Short:  "Delete cached API auth tokens",
-		Hidden: true,
-		Args:   cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c.warnf("api auth clear-cache is deprecated; use api auth logout")
-			return c.runAPIAuthLogout(cmd, args)
-		},
-	}
-	addAPIAuthLogoutFlags(clearCacheCmd)
-	cmd.AddCommand(clearCacheCmd)
 	headerCmd := &cobra.Command{
 		Use:   "header <api> <header> [credential-id]",
 		Short: "Print one auth header value for an API profile",
@@ -78,20 +66,20 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Args: cobra.RangeArgs(2, 3),
 		RunE: c.runAPIAuthHeader,
 	}
-	headerCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
-	headerCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")
+	headerCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
+	headerCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
 	cmd.AddCommand(headerCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",
 		Long:  apiAuthInspectLong,
 		Example: fmt.Sprintf(`  %s api auth inspect demo
-  %s api auth inspect demo --rsh-operation list-items --redact`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+  %s api auth inspect demo --operation list-items --redact`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.ExactArgs(1),
 		RunE: c.runAPIAuthInspect,
 	}
-	inspectCmd.Flags().String("rsh-credential", "", "Credential ID to inspect instead of profile-level auth")
-	inspectCmd.Flags().String("rsh-operation", "", "Operation ID or command name to inspect")
+	inspectCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
+	inspectCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
 	inspectCmd.Flags().Bool("redact", false, "Redact sensitive auth values for shareable output")
 	inspectCmd.Flags().String("raw-header", "", "Deprecated: use \"restish api auth header <api> <header>\"")
 	_ = inspectCmd.Flags().MarkHidden("raw-header")
@@ -105,6 +93,7 @@ func addAPIAuthLogoutFlags(cmd *cobra.Command) {
 }
 
 func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig) {
+	style := humanTextStyleFor(c.Stdout)
 	set, hasOps := c.cachedOperationSetForAPI(requestContext(cmd), apiName, apiCfg, profileName)
 	_, profileReady, profileErr := c.profileAuthReadiness(apiName, profileName, prof)
 	coverage := operationAuthCoverage{}
@@ -118,26 +107,26 @@ func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName stri
 	sort.Strings(ids)
 	fmt.Fprintf(c.Stdout, "API: %s\nProfile: %s\n", apiName, profileName)
 	if profileErr != nil {
-		fmt.Fprintf(c.Stdout, "Profile auth: configured (%s)\n", profileErr)
+		fmt.Fprintf(c.Stdout, "Profile auth: %s (%s)\n", style.warn("configured"), profileErr)
 	} else if profileReady.Configured {
-		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", profileReady.status("none"))
+		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", style.authStatus(profileReady.status("none")))
 	} else {
-		fmt.Fprintln(c.Stdout, "Profile auth: none")
+		fmt.Fprintf(c.Stdout, "Profile auth: %s\n", style.warn("none"))
 	}
 	if hasOps {
 		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", coverage.Callable, coverage.Secured)
 	} else {
-		fmt.Fprintf(c.Stdout, "Operation metadata: unavailable (run \"restish api sync %s\" to refresh)\n", apiName)
+		fmt.Fprintf(c.Stdout, "Operation metadata: %s (%s)\n", style.warn("unavailable"), style.hint("run \"restish api sync "+apiName+"\" to refresh"))
 	}
 	if len(ids) == 0 {
-		fmt.Fprintln(c.Stdout, "Credentials: none")
+		fmt.Fprintf(c.Stdout, "Credentials: %s\n", style.warn("none"))
 	} else {
 		fmt.Fprintln(c.Stdout, "Credentials:")
 		for _, id := range ids {
 			credential := prof.Credentials[id]
 			_, ready, _ := c.credentialReadiness(apiName, profileName, id, credential)
 			status := ready.status("empty")
-			fmt.Fprintf(c.Stdout, "  %s: %s", id, status)
+			fmt.Fprintf(c.Stdout, "  %s: %s", id, style.authStatus(status))
 			if len(credential.Satisfies) > 0 {
 				fmt.Fprintf(c.Stdout, " (satisfies: %s)", strings.Join(credential.Satisfies, ", "))
 			}
@@ -222,13 +211,13 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	credentialID, _ := cmd.Flags().GetString("rsh-credential")
+	credentialID, _ := cmd.Flags().GetString("credential")
 	rawHeader, _ := cmd.Flags().GetString("raw-header")
 	redact, _ := cmd.Flags().GetBool("redact")
 	focused := credentialID != "" || rawHeader != ""
-	if operation, _ := cmd.Flags().GetString("rsh-operation"); operation != "" {
+	if operation, _ := cmd.Flags().GetString("operation"); operation != "" {
 		if credentialID != "" {
-			return fmt.Errorf("--rsh-operation and --rsh-credential are mutually exclusive")
+			return fmt.Errorf("--operation and --credential are mutually exclusive")
 		}
 		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, rawHeader, redact)
 	}
@@ -415,10 +404,10 @@ func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
 	if looksLikeURLArgument(apiName) {
 		return fmt.Errorf("api auth header expects an API name, not a URL")
 	}
-	credentialID, _ := cmd.Flags().GetString("rsh-credential")
+	credentialID, _ := cmd.Flags().GetString("credential")
 	if len(args) == 3 {
 		if credentialID != "" {
-			return fmt.Errorf("pass credential ID either as an argument or --rsh-credential, not both")
+			return fmt.Errorf("pass credential ID either as an argument or --credential, not both")
 		}
 		credentialID = args[2]
 	}
@@ -427,9 +416,9 @@ func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if operation, _ := cmd.Flags().GetString("rsh-operation"); operation != "" {
+	if operation, _ := cmd.Flags().GetString("operation"); operation != "" {
 		if credentialID != "" {
-			return fmt.Errorf("--rsh-operation and credential ID are mutually exclusive")
+			return fmt.Errorf("--operation and credential ID are mutually exclusive")
 		}
 		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, headerName, false)
 	}
@@ -480,7 +469,7 @@ func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *con
 		resolved, err := c.resolveCredentialAuth(apiName, profileName, credentialID, prof.Credentials[credentialID])
 		return resolved, credentialID, err
 	default:
-		return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass --rsh-credential <id>", profileName, apiName, strings.Join(ids, ", "))
+		return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass --credential <id>", profileName, apiName, strings.Join(ids, ", "))
 	}
 }
 
@@ -818,6 +807,7 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 	if len(summaries) == 0 {
 		return
 	}
+	style := humanTextStyleFor(c.Stdout)
 	fmt.Fprintln(c.Stdout, "Declared credentials:")
 	for _, summary := range summaries {
 		status := "missing"
@@ -837,7 +827,7 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 			}
 		}
 		var parts []string
-		parts = append(parts, status)
+		parts = append(parts, style.authStatus(status))
 		if status == "missing" && coverage.FallbackByID[summary.id] > 0 {
 			parts = append(parts, coverage.FallbackLabels[summary.id])
 		}

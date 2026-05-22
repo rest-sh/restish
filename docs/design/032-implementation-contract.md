@@ -60,10 +60,16 @@ and `%APPDATA%\restish\restish.json` on Windows.
 merge them with the default config. Token and external-tool approval sidecars
 live next to the selected explicit config. HTTP response and spec caches stay
 under the cache root, with a namespace derived from the explicit config path.
+Restish v2 does not search the current directory or ancestors for project
+config files; project-local config is explicit only.
 
-TODO: add a Windows ACL implementation for config and token-cache permission
-diagnostics. The current Unix mode-bit check has no Windows equivalent yet, so
-Windows reports no insecure-permission finding until ACL inspection is added.
+Windows ACL inspection is not implemented for the first v2 release. Existing
+config and token-cache files on Windows therefore report permission diagnostics
+as `unknown`, not `ok`. Startup remains non-blocking on Windows because Restish
+cannot yet prove the ACL is insecure, but `doctor` must not imply that a
+secret-bearing file was checked successfully. A future hardening pass may add
+native ACL inspection and turn broad read access into the same warning/failure
+path used for Unix mode bits.
 
 ## Config Schema
 
@@ -126,8 +132,8 @@ validation layer fails.
 ## Command Surface And Precedence
 
 Public built-ins own: `get`, `head`, `options`, `post`, `put`, `patch`,
-`delete`, `api`, `cache`, `cert`, `config`, `content-types`, `doctor`, `edit`,
-`help`, `links`, `plugin`, `shell`, and `version`.
+`delete`, `api`, `cache`, `cert`, `config`, `doctor`, `edit`, `help`, `links`,
+`plugin`, `shell`, and `version`.
 
 The public completion generator is `shell completion <shell>`. A top-level
 `completion` command may exist as a hidden compatibility alias, but design 037
@@ -138,7 +144,8 @@ through command help and `--help-all`.
 API short names must not collide with public built-ins or hidden compatibility
 commands. Removed pre-release command names are not held in reserve unless an
 actual hidden command remains. In particular, `completion` is reserved because
-the hidden alias exists, while `flags` is available as an API short name.
+the hidden alias exists, while `content-types` and `flags` are available as API
+short names.
 
 `api auth logout` accepts either one API argument or `--auth-profile
 <name>`. The API argument is required unless `--auth-profile` is supplied.

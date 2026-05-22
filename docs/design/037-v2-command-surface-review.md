@@ -35,7 +35,7 @@ making the control surface easier to explain, document, test, and extend.
 
 - Do not force generated API calls under `restish api call`.
 - Do not remove the `--rsh-*` namespace for Restish-owned request and output
-  flags.
+  flags on generated API commands and generic HTTP commands.
 - Do not preserve every v1 command name when a new object/action shape is
   clearer before the first v2 release.
 - Do not make this document a full command reference. User-facing reference
@@ -107,8 +107,10 @@ The v2 command tree follows these rules.
    general API registration management.
 
 6. Runtime utilities are top-level when they describe Restish itself.
-   `content-types`, `doctor`, `version`, `cert`, `edit`, and `links` are not
-   API registrations, so they should not be hidden under `api`.
+   `doctor`, `version`, `cert`, `edit`, and `links` are not API registrations,
+   so they should not be hidden under `api`. Rarely used runtime inventory,
+   such as the content-type registry, belongs in `doctor` rather than owning a
+   top-level command word.
 
 7. Long-running plugin actions use explicit verbs.
    A command such as `mcp` should expose `serve` rather than doing long-running
@@ -148,8 +150,6 @@ restish cache
   info
   clear [api]
 
-restish content-types
-
 restish plugin
   list
   install <source>
@@ -162,7 +162,7 @@ restish mcp
 restish bulk ...
 restish shell completion bash|zsh|fish|powershell
 restish shell setup <shell>
-restish doctor [api|plugin|migrate-v1]
+restish doctor [api|plugin]
 restish cert <uri>
 restish links <uri> [rel...]
 restish edit <uri> [patch ...] [--no-editor]
@@ -196,8 +196,21 @@ attempts spec discovery by default, applies OpenAPI-derived setup hints when a
 spec is found, and still registers the API when discovery does not find a spec.
 `--no-discover` performs minimal local registration with no spec probes.
 `--spec <url-or-file>` uses an explicit OpenAPI source. `--replace` allows a
-rerun to replace generated or default material that would otherwise be
-preserved as user-owned local config.
+rerun to replace existing profiles with generated or default profile material.
+Without `--replace`, existing profiles are preserved because they may contain
+credential material that cannot be recovered from the API later. API-level
+fields such as `base_url`, `spec_url`, `allow_cross_origin_spec`,
+`operation_base`, pagination, server variables, retry settings, and
+`allowed_operation_origins` are refreshed from the new connect run or left to
+explicit `api set`/`config edit` changes; they are not covered by the profile
+preservation rule.
+
+`api sync <name>` refreshes the cached OpenAPI source and may persist
+spec-derived API metadata that changed after registration, such as a newly
+discovered `spec_url` or operation-server origins. It does not overwrite
+profiles or apply new `x-cli-config` profile defaults; profiles only change via
+explicit profile/auth commands, `api set`, config editing, or reconnecting with
+`--replace`.
 
 V2 does not keep older API setup aliases. Multiple setup verbs would make
 scripts, docs, help output, and support answers less clear before the first
@@ -309,17 +322,20 @@ Cobra shell completion scripts. The historical top-level `completion` command
 may remain as a hidden compatibility alias, but it is not part of the published
 v2 command surface.
 
-### Content Types Are A Runtime Utility
+### Content Types Are Doctor Inventory
 
 V2 uses:
 
 ```text
-restish content-types
+restish doctor
+restish doctor -o json
 ```
 
 The content-type registry describes what the current Restish runtime can encode
-or decode. It is not a property of a single API registration, so it is a
-top-level utility command.
+or decode. It is not a property of a single API registration, and day-to-day
+users rarely need a standalone command for it. The root doctor report includes
+a human `Content types:` line, and JSON doctor output includes the detailed
+names, MIME types, suffixes, and quality values for support/debugging use.
 
 ## Compatibility And Migration
 
@@ -336,7 +352,7 @@ Important v1-to-v2 command moves:
 | `api show <name>` | `api inspect <name>` |
 | `api edit` | `config edit` |
 | `api clear-auth-cache <name>` | `api auth logout <name>` |
-| `api content-types` | `content-types` |
+| `api content-types` | `doctor` / `doctor -o json` content-type diagnostics |
 | top-level shell/setup guidance | `shell setup <shell>` plus `shell completion ...` |
 | direct plugin service command | explicit service verb such as `mcp serve` |
 
@@ -346,7 +362,14 @@ The request path is intentionally stable:
 - bare URLs with shorthand or stdin body input infer POST
 - HTTP verb commands remain at the root
 - generated API commands remain at the root under the API name
-- Restish-owned flags retain the `--rsh-*` namespace
+- generated API commands use `--rsh-*` for Restish-owned flags so OpenAPI
+  parameter flags can stay unprefixed without collisions
+- generic HTTP commands use the same `--rsh-*` request, auth, output, TLS,
+  pagination, cache, retry, and streaming controls for consistency with
+  generated commands
+- command-local workflow flags outside those request surfaces stay unprefixed,
+  such as `api connect --spec`, `api auth inspect --operation`, `edit --yes`,
+  `cache clear --direct`, and `doctor api --check-network`
 
 ## Rejected Alternatives
 
@@ -406,7 +429,7 @@ concise v1-to-v2 map.
 The implemented v2 surface should follow this decision. `api` owns API
 registration and API-auth configuration, `config` owns local configuration,
 `--help-all` exposes global Restish controls in command context,
-`content-types` is a top-level runtime utility, MCP uses `serve`, and shell
+content-type registry diagnostics live in `doctor`, MCP uses `serve`, and shell
 integration lives under `shell setup` and `shell completion`.
 
 The resulting command tree keeps the v1 request experience familiar while

@@ -82,7 +82,6 @@ func (c *CLI) newRootCmd() *cobra.Command {
 	c.addAPICommand(root)
 	c.addCacheCommand(root)
 	c.addConfigCommand(root)
-	c.addContentTypesCommand(root)
 	c.addCompletionCommand(root)
 	c.addShellCommand(root)
 	c.addLinksCommand(root)

@@ -81,6 +81,12 @@ explicit config file is an error so operators do not accidentally run with the
 global default after mistyping a project path. The ordinary platform-default
 config path keeps the v1 migration and auto-create behavior described below.
 
+Restish v2 does not search the current working directory or parent directories
+for project config. Project-local configuration is selected explicitly with
+`--rsh-config` or `RSH_CONFIG`. That keeps repository checkout state from
+silently changing request behavior; an implicit project-discovery mode can be
+designed later if a real workflow needs it.
+
 Sidecar state that belongs to the selected config trust root, such as OAuth
 token caches and external-tool approval records, lives next to the explicit
 config file. Response and spec caches remain under the cache root, but explicit
@@ -101,12 +107,24 @@ diagnostic-only and should direct operators to set `RSH_CACHE_DIR`,
 
 Config writes preserve permissions on an existing config directory. Missing
 config directories are created with the restrictive default mode.
+On Unix-like systems, Restish detects group/world-readable config and token
+cache files as insecure. On Windows, ACL inspection is not implemented for the
+first v2 release, so existing secret-bearing files report permission status as
+unknown rather than ok.
 
 Config writes should use the shared atomic-write helper used by the rest of
 Restish's local state, while preserving config-specific locking and directory
 permission behavior. The helper exists to keep temp-file creation, file modes,
 sync/rename cleanup, and parent-directory sync consistent across config, token,
 spec, HTTP cache, plugin manifest cache, and shell/completion setup writes.
+
+Removing an API should remove its API-scoped local state at the same time:
+the saved API entry, generated-command/spec cache, HTTP response cache
+namespaces, and API-scoped auth token cache entries. Shared `auth_profiles`
+remain configured globally, but cached tokens for a shared auth profile are
+cleared when the removed API was the last remaining API that referenced that
+auth profile. Restish should not keep a `--keep-cache` or `--keep-auth` escape
+hatch unless real user demand appears before or after v2.
 
 ## Primary Config Shape
 

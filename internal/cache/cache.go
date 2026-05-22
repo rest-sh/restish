@@ -239,6 +239,16 @@ type Info struct {
 	SizeBytes   int64
 	EntryCount  int
 	OldestEntry time.Time
+	Hosts       []Breakdown
+	Namespaces  []Breakdown
+}
+
+// Breakdown summarizes a cache slice, such as one host or cache namespace.
+type Breakdown struct {
+	Name        string
+	SizeBytes   int64
+	EntryCount  int
+	OldestEntry time.Time
 }
 
 // Info returns current cache statistics.
@@ -253,7 +263,76 @@ func (c *DiskCache) Info() (*Info, error) {
 			info.OldestEntry = e.mtime
 		}
 	}
+	info.Hosts = c.breakdown(entries, cacheBreakdownHost)
+	info.Namespaces = c.breakdown(entries, cacheBreakdownNamespace)
 	return info, nil
+}
+
+type cacheBreakdownKind int
+
+const (
+	cacheBreakdownHost cacheBreakdownKind = iota
+	cacheBreakdownNamespace
+)
+
+func (c *DiskCache) breakdown(entries []fileEntry, kind cacheBreakdownKind) []Breakdown {
+	byName := map[string]*Breakdown{}
+	for _, e := range entries {
+		name := c.breakdownName(e.path, kind)
+		item := byName[name]
+		if item == nil {
+			item = &Breakdown{Name: name}
+			byName[name] = item
+		}
+		item.SizeBytes += e.size
+		item.EntryCount++
+		if item.OldestEntry.IsZero() || e.mtime.Before(item.OldestEntry) {
+			item.OldestEntry = e.mtime
+		}
+	}
+	out := make([]Breakdown, 0, len(byName))
+	for _, item := range byName {
+		out = append(out, *item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SizeBytes == out[j].SizeBytes {
+			if out[i].EntryCount == out[j].EntryCount {
+				return out[i].Name < out[j].Name
+			}
+			return out[i].EntryCount > out[j].EntryCount
+		}
+		return out[i].SizeBytes > out[j].SizeBytes
+	})
+	return out
+}
+
+func (c *DiskCache) breakdownName(path string, kind cacheBreakdownKind) string {
+	rel, err := filepath.Rel(c.dir, path)
+	if err != nil {
+		return "_"
+	}
+	parts := strings.Split(rel, string(os.PathSeparator))
+	switch kind {
+	case cacheBreakdownHost:
+		if len(parts) > 0 {
+			return cacheDisplayComponent(parts[0])
+		}
+	case cacheBreakdownNamespace:
+		if len(parts) > 1 {
+			return cacheDisplayComponent(parts[1])
+		}
+	}
+	return "_"
+}
+
+func cacheDisplayComponent(component string) string {
+	if component == "" {
+		return "_"
+	}
+	if decoded, err := url.QueryUnescape(component); err == nil && decoded != "" {
+		return decoded
+	}
+	return component
 }
 
 // Clear deletes HTTP response cache entries. If host is non-empty, only entries
@@ -322,19 +401,21 @@ func (c *DiskCache) ClearNamespaces(namespaces []string) error {
 	return err
 }
 
-// ClearNamespacePrefix deletes entries for every namespace with prefix.
-func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
+// ClearNamespacePrefix deletes entries for every namespace with prefix and
+// returns the number of namespace directories removed.
+func (c *DiskCache) ClearNamespacePrefix(prefix string) (int, error) {
 	if prefix == "" {
-		return nil
+		return 0, nil
 	}
 	encodedPrefix := cachePathComponent(prefix)
 	hosts, err := os.ReadDir(c.dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return 0, nil
 		}
-		return err
+		return 0, err
 	}
+	cleared := 0
 	for _, host := range hosts {
 		if !host.IsDir() {
 			continue
@@ -345,19 +426,22 @@ func (c *DiskCache) ClearNamespacePrefix(prefix string) error {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return err
+			return cleared, err
 		}
 		for _, namespace := range namespaces {
 			if !namespace.IsDir() {
 				continue
 			}
 			if stringsHasNamespacePrefix(namespace.Name(), prefix, encodedPrefix) {
-				_ = os.RemoveAll(filepath.Join(hostPath, namespace.Name()))
+				if err := os.RemoveAll(filepath.Join(hostPath, namespace.Name())); err != nil {
+					return cleared, err
+				}
+				cleared++
 			}
 		}
 	}
 	c.recomputeSizeEstimate()
-	return nil
+	return cleared, nil
 }
 
 func stringsHasNamespacePrefix(name, rawPrefix, encodedPrefix string) bool {

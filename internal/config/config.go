@@ -181,18 +181,27 @@ func NeedsPatchToPreserveFormatting(path string) bool {
 	return string(jsonc.ToJSON(data)) != string(data)
 }
 
+// ErrPermissionCheckUnsupported reports that Restish cannot verify file
+// permissions on the current platform.
+var ErrPermissionCheckUnsupported = errors.New("permission check unsupported on this platform")
+
 // ConfigFileHasInsecurePermissions reports whether path is readable by group or others.
-// On Windows this returns false because Unix permission bits are not authoritative.
+// On Windows, existing files return ErrPermissionCheckUnsupported because Unix
+// permission bits are not authoritative and ACL inspection is not implemented.
 func ConfigFileHasInsecurePermissions(path string) (bool, error) {
-	if runtime.GOOS == "windows" {
-		return false, nil
-	}
+	return configFileHasInsecurePermissions(path, runtime.GOOS)
+}
+
+func configFileHasInsecurePermissions(path, goos string) (bool, error) {
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
+	}
+	if goos == "windows" {
+		return false, fmt.Errorf("%w: Windows ACL inspection is not implemented", ErrPermissionCheckUnsupported)
 	}
 	return info.Mode().Perm()&0o077 != 0, nil
 }
@@ -239,7 +248,7 @@ func Load(path string) (*Config, error) {
 func LoadExplicit(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("config: --rsh-config %s does not exist; v2 does not fall back to the default config — run \"restish doctor migrate-v1 --to %s\" or remove the flag", path, path)
+		return nil, fmt.Errorf("config: --rsh-config %s does not exist; v2 does not fall back to the default config; create the file or remove the flag", path)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)

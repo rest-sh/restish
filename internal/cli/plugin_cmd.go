@@ -135,6 +135,7 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 		return c.writePrettyJSON(entries)
 	}
 
+	style := humanTextStyleFor(c.Stdout)
 	for _, entry := range entries {
 		m := plugin.Manifest{
 			Name:               entry.Name,
@@ -144,12 +145,12 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 			FormatterNames:     entry.Formatters,
 			LoaderContentTypes: entry.Loaders,
 		}
-		fmt.Fprintf(c.Stdout, "%-20s %-10s capabilities: %s\n", m.Name, m.Version, pluginCapabilitySummary(m))
+		fmt.Fprintf(c.Stdout, "%s %-10s %s %s\n", style.key(fmt.Sprintf("%-20s", m.Name)), m.Version, style.key("capabilities:"), pluginCapabilitySummary(m))
 		if len(entry.Commands) > 0 {
-			fmt.Fprintf(c.Stdout, "  commands: %s\n", strings.Join(entry.Commands, ", "))
+			fmt.Fprintf(c.Stdout, "  %s %s\n", style.key("commands:"), strings.Join(entry.Commands, ", "))
 		}
 		if len(entry.Formatters) > 0 {
-			fmt.Fprintf(c.Stdout, "  formatters: %s\n", strings.Join(entry.Formatters, ", "))
+			fmt.Fprintf(c.Stdout, "  %s %s\n", style.key("formatters:"), strings.Join(entry.Formatters, ", "))
 		}
 		if m.Description != "" {
 			fmt.Fprintf(c.Stdout, "  %s\n", m.Description)
@@ -175,7 +176,8 @@ func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 	if err := os.Remove(path); err != nil {
 		if runtime.GOOS == "windows" && filepath.Ext(name) == "" && errors.Is(err, os.ErrNotExist) {
 			if exeErr := os.Remove(path + ".exe"); exeErr == nil {
-				fmt.Fprintf(c.Stdout, "Removed plugin %s\n", name)
+				style := humanTextStyleFor(c.Stdout)
+				fmt.Fprintf(c.Stdout, "%s plugin %s\n", style.ok("Removed"), name)
 				return nil
 			} else if !errors.Is(exeErr, os.ErrNotExist) {
 				return fmt.Errorf("remove: %w", exeErr)
@@ -186,7 +188,8 @@ func (c *CLI) runPluginRemove(cmd *cobra.Command, args []string) error {
 		}
 		return fmt.Errorf("remove: %w", err)
 	}
-	fmt.Fprintf(c.Stdout, "Removed plugin %s\n", displayName)
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s plugin %s\n", style.ok("Removed"), displayName)
 	return nil
 }
 

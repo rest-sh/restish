@@ -173,10 +173,24 @@ Cache inspection and management are exposed directly in the CLI:
 restish cache info
 restish cache clear
 restish cache clear myapi
+restish cache clear --direct
 ```
 
 Those commands are part of the operator model for working with a disk-backed
 cache, not an afterthought.
+
+`cache info` should make cache growth understandable without requiring users to
+inspect the cache directory by hand. Human output reports total size, entry
+count, oldest entry, the largest cached hosts, and the largest API/profile
+namespaces. TTY output may include a compact API/profile usage map before the
+detailed lists so users can see the overall shape of cache usage quickly. Human
+output should include a percentage column for both host and API/profile tables.
+Stale namespaces left behind after an API is removed should be marked as
+unregistered but still clearable by passing their namespace prefix to
+`restish cache clear`. Direct URL requests use their own namespace and should be
+clearable with `restish cache clear --direct`. JSON output includes host and
+API/profile breakdowns so support/debugging workflows can distinguish "one
+domain is large" from "one registered API/profile is large."
 
 ## Examples
 

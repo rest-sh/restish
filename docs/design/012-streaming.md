@@ -125,10 +125,21 @@ Restish therefore treats:
 - `-o ndjson` as the explicit record-oriented JSON stream format
 - `-o auto` as an incremental human view
 - `-o json` as a bounded-document request that should reject clearly live
-  streams
+  streams unless paired with explicit collection and a finite item cap
 
 Auto output remains valid for streams, but it is an incremental human view,
 not one coherent machine document.
+
+The accepted v2 escape hatch for JSON document output from a stream is:
+
+```bash
+restish get https://api.example.com/events --rsh-collect --rsh-max-items 10 -o json
+```
+
+That combination is intentionally verbose. `--rsh-collect` says the user wants
+a document instead of incremental records, and `--rsh-max-items` gives Restish a
+finite stop condition before building that document. Plain `-o json` on a live
+stream should fail with a hint to use `-o ndjson` for record-by-record JSON.
 
 ## Stream Planner Rules
 
@@ -216,6 +227,12 @@ that behavior explicitly can choose:
 
 ```bash
 restish get https://api.example.com/events -o ndjson
+```
+
+Users who need one bounded JSON fixture from a stream can opt into collection:
+
+```bash
+restish get https://api.example.com/events --rsh-collect --rsh-max-items 3 -o json
 ```
 
 To stop after a bounded number of events:

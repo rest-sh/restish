@@ -92,7 +92,8 @@ The command behavior is now:
 - `api set` preserves comments while applying API-scoped shorthand patches
 - `api auth add/remove` preserves comments around profile and credential
   entries that it does not change
-- `api remove` preserves comments around unaffected entries
+- `api remove` preserves comments around unaffected entries while also clearing
+  local cache/auth state owned by the removed API
 - `config set` preserves comments while applying full-config shorthand patches
 - `config theme set` preserves comments while replacing the `theme` object
 - `config edit` does not patch individual spans, but it validates the edited

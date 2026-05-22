@@ -109,6 +109,15 @@ unknown fields, dotted paths, line/column positions, closest field suggestions,
 and migration hints. That path is read-only and explanatory. Strict parsing is
 the only path for normal execution and config mutation.
 
+## Help Output
+
+Help is part of the interactive UX and should be readable at a glance without
+hurting copy/paste or scripting. TTY help may use the active theme to highlight
+Markdown descriptions and section headings. Individual command names, flags,
+usage lines, and next-step hints should remain plain so the help surface does
+not become visually noisy. Non-TTY help must remain plain text with the same
+content and ordering.
+
 ## Stdout And Stderr Contract
 
 The channel split is strict:
@@ -266,19 +275,22 @@ expectations.
 TTY diagnostics should make those categories visually scannable without
 changing the stdout/stderr contract. When stderr is color-capable according to
 Restish's normal color rules (`NO_COLOR`/`NOCOLOR` disable color, `COLOR`
-forces it, otherwise a TTY enables it), Restish colorizes only the diagnostic
-label, such as `info:`, `warning:`, `error:`, `hint:`, or `tip:`. The message
-body remains plain so it can be copied, searched, and read in low-contrast
-themes.
+forces it, otherwise a TTY enables it), Restish colorizes diagnostic labels
+such as `info:`, `warning:`, `error:`, `hint:`, or `tip:`. Human-oriented
+status reports may also color the specific status word or short remediation
+hint, for example `configured`, `missing`, `Installed`, `Cache cleared`, or
+`run "restish api sync demo"`. The surrounding message body remains plain so it
+can be copied, searched, and read in low-contrast themes.
 
 Diagnostic label colors are part of the same theme system as auto response
-output and printed HTTP transcripts. Themes may override `diagnostic_info`, `diagnostic_warn`,
-`diagnostic_error`, and `diagnostic_hint`; otherwise Restish uses the built-in
-theme colors. Non-TTY stderr, disabled color, and raw plugin stderr pass-through
-must remain free of injected ANSI escapes. Structured plugin messages that the
-host renders as warnings, progress, or logs may use the host diagnostic helper,
-but opaque plugin stderr bytes are already owned by the plugin and should not be
-rewritten.
+output and printed HTTP transcripts. Themes may override `diagnostic_info`,
+`diagnostic_warn`, `diagnostic_error`, `diagnostic_hint`, `status_2xx`, and
+`key`; otherwise Restish uses the built-in theme colors. Non-TTY output,
+disabled color, JSON/machine output, generated completion scripts, and raw
+plugin stderr pass-through must remain free of injected ANSI escapes.
+Structured plugin messages that the host renders as warnings, progress, or logs
+may use the host diagnostic helper, but opaque plugin stderr bytes are already
+owned by the plugin and should not be rewritten.
 
 In addition, diagnostics should preserve user-actionable context. Good stderr
 messages explain:

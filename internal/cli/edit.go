@@ -37,7 +37,7 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")
 	cmd.Flags().Bool("no-editor", false, "Do not open an editor; with no patch args, print the editable resource")
 	cmd.Flags().Bool("dry-run", false, "Show the diff without sending the update")
-	cmd.Flags().BoolP("rsh-yes", "y", false, "Skip the confirmation prompt")
+	cmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
 	root.AddCommand(cmd)
 }
 
@@ -193,7 +193,7 @@ func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
 		c.warnf("edit: response did not include ETag or Last-Modified; update is not guarded against concurrent edits")
 	}
 
-	skipPrompt, _ := cmd.Flags().GetBool("rsh-yes")
+	skipPrompt, _ := cmd.Flags().GetBool("yes")
 	if !skipPrompt {
 		ok, err := c.Confirm(cmd.Context(), "Continue? [Y/n] ")
 		if err != nil {

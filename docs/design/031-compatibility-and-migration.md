@@ -115,9 +115,10 @@ Migration should not be macOS-only, Linux-only, or implicit based on whichever
 path happened to work on the developer's machine.
 
 Automatic v1 migration is limited to the default platform config path when no
-v2 config exists. `restish doctor migrate-v1` is the explicit operator command
-for running or inspecting default-location v1 migration when the normal
-first-run path is not enough.
+v2 config exists. Restish does not expose a separate manual migration command
+in v2; if migration cannot happen automatically, the normal command error and
+`restish doctor` diagnostics should explain which config path is active and why
+the automatic path was skipped.
 
 Explicit config file selection is intentionally stricter. If `--rsh-config` or
 `RSH_CONFIG` names a file that does not exist, Restish errors instead of falling
@@ -129,6 +130,11 @@ If no config root can be resolved from explicit config, `RSH_CONFIG_DIR`,
 with a setup error instead of creating relative config state in the current
 working directory. Cache-only state can use a temporary fallback, but persistent
 configuration cannot.
+
+V2 also does not discover project config by walking the current directory or
+parent directories. Users who want project-local config should pass
+`--rsh-config ./restish.json` or set `RSH_CONFIG`; implicit repository config
+discovery can be considered after v2 if the workflow proves valuable.
 
 ### API Registrations
 

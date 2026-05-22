@@ -27,7 +27,7 @@ Safety controls:
 
 - Use `--dry-run` to print the diff without sending an update.
 - Use `--no-editor` to print or patch the editable body without launching `$VISUAL` or `$EDITOR`.
-- Use `--rsh-yes` only after reviewing the diff in automation.
+- Use `--yes` only after reviewing the diff in automation.
 
 Usage:
 
@@ -63,7 +63,7 @@ Type: `string`; default: `json`
 
 Editor file format: json or yaml
 
-**`-y`, `--rsh-yes`**
+**`-y`, `--yes`**
 
 Type: `bool`; default: `false`
 

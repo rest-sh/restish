@@ -33,24 +33,28 @@ func TestAPIConnectBuiltinNameRejected(t *testing.T) {
 	}
 }
 
-func TestAPIConnectFlagsNameAllowed(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	c := New()
-	c.Stdout = &stdout
-	c.Stderr = &stderr
-	c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
+func TestAPIConnectRemovedCommandNamesAllowed(t *testing.T) {
+	for _, name := range []string{"flags", "content-types"} {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			c := New()
+			c.Stdout = &stdout
+			c.Stderr = &stderr
+			c.Hooks().ConfigPath = filepath.Join(t.TempDir(), "restish.json")
 
-	if err := c.Run([]string{"restish", "api", "connect", "flags", "https://example.com", "--no-discover"}); err != nil {
-		t.Fatalf("api connect flags: %v", err)
-	}
-	if !strings.Contains(stdout.String(), `Connected API "flags"`) {
-		t.Fatalf("expected flags API to connect, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+			if err := c.Run([]string{"restish", "api", "connect", name, "https://example.com", "--no-discover"}); err != nil {
+				t.Fatalf("api connect %s: %v", name, err)
+			}
+			if !strings.Contains(stdout.String(), `Connected API "`+name+`"`) {
+				t.Fatalf("expected %s API to connect, got stdout=%q stderr=%q", name, stdout.String(), stderr.String())
+			}
+		})
 	}
 }
 
 // TestIsBuiltinCommandName verifies the helper covers the expected set of names.
 func TestIsBuiltinCommandName(t *testing.T) {
-	builtins := []string{"api", "cache", "cert", "completion", "config", "content-types", "delete", "doctor", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "shell", "version"}
+	builtins := []string{"api", "cache", "cert", "completion", "config", "delete", "doctor", "edit", "get", "head", "help", "links", "options", "patch", "plugin", "post", "put", "shell", "version"}
 	for _, name := range builtins {
 		if !isBuiltinCommandName(name) {
 			t.Errorf("isBuiltinCommandName(%q) = false, want true", name)
@@ -61,6 +65,9 @@ func TestIsBuiltinCommandName(t *testing.T) {
 	}
 	if isBuiltinCommandName("flags") {
 		t.Error("isBuiltinCommandName(\"flags\") = true, want false")
+	}
+	if isBuiltinCommandName("content-types") {
+		t.Error("isBuiltinCommandName(\"content-types\") = true, want false")
 	}
 }
 

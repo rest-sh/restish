@@ -109,7 +109,7 @@ func (c *CLI) runCert(cmd *cobra.Command, args []string) error {
 		leaf := state.PeerCertificates[0]
 		deadline := time.Now().Add(time.Duration(warnDays) * 24 * time.Hour)
 		if leaf.NotAfter.Before(deadline) {
-			fmt.Fprintf(c.Stderr, "warning: certificate for %s expires within %d days: %s expires at %s (%s)\n",
+			c.warnf("certificate for %s expires within %d days: %s expires at %s (%s)",
 				u.Hostname(), warnDays, leaf.Subject.String(), leaf.NotAfter.Format(time.RFC3339), relativeExpiry(leaf.NotAfter))
 			return &ExitCodeError{Code: 1}
 		}

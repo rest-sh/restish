@@ -579,15 +579,16 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 	existingScript, _ := os.ReadFile(scriptPath)
 	scriptChanged := !bytes.Equal(existingScript, script.Bytes())
 
+	style := humanTextStyleFor(c.Stdout)
 	if !scriptChanged && !rcChanged {
-		fmt.Fprintf(c.Stdout, "Zsh completion already installed: %s\n", scriptPath)
+		fmt.Fprintf(c.Stdout, "Zsh completion %s: %s\n", style.ok("already installed"), scriptPath)
 		return nil
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(c.Stdout, "Would write zsh completion script to %s\n", scriptPath)
+		fmt.Fprintf(c.Stdout, "%s zsh completion script to %s\n", style.hint("Would write"), scriptPath)
 		if rcChanged {
-			fmt.Fprintf(c.Stdout, "Would update %s with:\n%s\n", rcPath, rcBlock)
+			fmt.Fprintf(c.Stdout, "%s %s with:\n%s\n", style.hint("Would update"), rcPath, rcBlock)
 		}
 		return nil
 	}
@@ -599,7 +600,7 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 			return err
 		}
 		if !ok {
-			fmt.Fprintln(c.Stdout, "Cancelled.")
+			fmt.Fprintf(c.Stdout, "%s.\n", style.warn("Cancelled"))
 			return fmt.Errorf("completion install: cancelled")
 		}
 	}
@@ -618,12 +619,12 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 		}
 	}
 
-	fmt.Fprintf(c.Stdout, "Installed zsh completion: %s\n", scriptPath)
+	fmt.Fprintf(c.Stdout, "%s zsh completion: %s\n", style.ok("Installed"), scriptPath)
 	if rcChanged {
-		fmt.Fprintf(c.Stdout, "Updated %s\n", rcPath)
+		fmt.Fprintf(c.Stdout, "%s %s\n", style.ok("Updated"), rcPath)
 	}
 	if !opts.SuppressRestartHint {
-		fmt.Fprintf(c.Stdout, "Restart your shell or run: source %s\n", rcPath)
+		fmt.Fprintf(c.Stdout, "%s source %s\n", style.hint("Restart your shell or run:"), rcPath)
 	}
 	return nil
 }
@@ -641,13 +642,14 @@ func (c *CLI) installFishCompletion(cmd *cobra.Command, opts completionInstallOp
 
 	existingScript, _ := os.ReadFile(scriptPath)
 	scriptChanged := !bytes.Equal(existingScript, script.Bytes())
+	style := humanTextStyleFor(c.Stdout)
 	if !scriptChanged {
-		fmt.Fprintf(c.Stdout, "Fish completion already installed: %s\n", scriptPath)
+		fmt.Fprintf(c.Stdout, "Fish completion %s: %s\n", style.ok("already installed"), scriptPath)
 		return nil
 	}
 
 	if opts.DryRun {
-		fmt.Fprintf(c.Stdout, "Would write fish completion script to %s\n", scriptPath)
+		fmt.Fprintf(c.Stdout, "%s fish completion script to %s\n", style.hint("Would write"), scriptPath)
 		return nil
 	}
 
@@ -658,7 +660,7 @@ func (c *CLI) installFishCompletion(cmd *cobra.Command, opts completionInstallOp
 			return err
 		}
 		if !ok {
-			fmt.Fprintln(c.Stdout, "Cancelled.")
+			fmt.Fprintf(c.Stdout, "%s.\n", style.warn("Cancelled"))
 			return fmt.Errorf("completion install: cancelled")
 		}
 	}
@@ -667,8 +669,8 @@ func (c *CLI) installFishCompletion(cmd *cobra.Command, opts completionInstallOp
 		return fmt.Errorf("completion install: write %s: %w", scriptPath, err)
 	}
 
-	fmt.Fprintf(c.Stdout, "Installed fish completion: %s\n", scriptPath)
-	fmt.Fprintln(c.Stdout, "Start a new fish session for completion to take effect.")
+	fmt.Fprintf(c.Stdout, "%s fish completion: %s\n", style.ok("Installed"), scriptPath)
+	fmt.Fprintf(c.Stdout, "%s\n", style.hint("Start a new fish session for completion to take effect."))
 	return nil
 }
 

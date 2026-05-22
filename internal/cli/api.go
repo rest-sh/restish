@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/auth"
+	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
@@ -58,11 +59,13 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
 		Long:  apiSyncLong,
 		Example: fmt.Sprintf(`  %s api sync demo
-  %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+  %s api sync demo --yes
+  %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: cobra.ExactArgs(1),
 		RunE: c.runAPISync,
 	}
-	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host for this sync run")
+	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host for this sync run")
+	syncCmd.Flags().Bool("yes", false, "Accept safe api sync prompts without asking")
 	apiCmd.AddCommand(syncCmd)
 	connectCmd := &cobra.Command{
 		Use:   "connect <name> <url> [setup-expression ...]",
@@ -74,7 +77,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Args: cobra.MinimumNArgs(2),
 		RunE: c.runAPIConnect,
 	}
-	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected")
+	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host; private/local follow targets are still rejected")
 	connectCmd.Flags().Bool("no-discover", false, "Register the API locally without network spec discovery")
 	connectCmd.Flags().String("spec", "", "OpenAPI spec URL or local file to use instead of discovery")
 	connectCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
@@ -198,7 +201,8 @@ func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runAPISync force-invalidates the cached spec for an API and fetches a fresh one.
+// runAPISync force-invalidates the cached spec for an API, fetches a fresh one,
+// and persists non-profile metadata that can be discovered safely from it.
 func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
 	apiCfg, err := c.requireAPI(apiName)
@@ -207,7 +211,9 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	}
 
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
-	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, c.profileFromCmd(cmd))
+	yes, _ := cmd.Flags().GetBool("yes")
+	profileName := c.profileFromCmd(cmd)
+	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
 	if err != nil {
 		return err
 	}
@@ -221,7 +227,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		SpecFiles:        apiCfg.SpecFiles,
 		CacheDir:         c.specCacheDir(),
 		OperationBase:    apiCfg.OperationBase,
-		ServerVariables:  effectiveServerVariables(apiCfg, c.profileFromCmd(cmd)),
+		ServerVariables:  effectiveServerVariables(apiCfg, profileName),
 		Version:          Version,
 		Transport:        transport,
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
@@ -234,10 +240,37 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	}
 
 	if apiSpec != nil {
-		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, c.profileFromCmd(cmd))
-		fmt.Fprintf(c.Stdout, "Synced spec for %q.\n", apiName)
+		syncedCfg, err := cloneAPIConfig(apiCfg)
+		if err != nil {
+			return err
+		}
+		if syncedCfg.SpecURL == "" && len(syncedCfg.SpecFiles) == 0 && apiSpec.SourceURL != "" {
+			syncedCfg.SpecURL = apiSpec.SourceURL
+		}
+		if err := c.configureAllowedOperationOrigins(cmd, apiName, syncedCfg, apiSpec, yes); err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(apiCfg, syncedCfg) {
+			if err := c.saveAPIConfig("api sync", apiName, c.cfg, syncedCfg); err != nil {
+				return err
+			}
+			c.printConfigWrittenPath()
+			apiCfg = syncedCfg
+		}
+		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, profileName)
+		opOpts := spec.OperationOptions{
+			BaseURL:         apiCfg.BaseURL,
+			OperationBase:   apiCfg.OperationBase,
+			ServerVariables: effectiveServerVariables(apiCfg, profileName),
+		}
+		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
+			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
+		}
+		style := humanTextStyleFor(c.Stdout)
+		fmt.Fprintf(c.Stdout, "%s spec for %q.\n", style.ok("Synced"), apiName)
 	} else {
-		fmt.Fprintf(c.Stdout, "No spec found for %q.\n", apiName)
+		style := humanTextStyleFor(c.Stdout)
+		fmt.Fprintf(c.Stdout, "%s for %q.\n", style.warn("No spec found"), apiName)
 	}
 	return nil
 }
@@ -392,16 +425,17 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		}
 	}
 	c.printConfigWrittenPath()
+	style := humanTextStyleFor(c.Stdout)
 	if len(preservedProfiles) > 0 {
-		fmt.Fprintf(c.Stdout, "Preserved existing profile(s): %s (use --replace to recreate from discovered defaults)\n", strings.Join(preservedProfiles, ", "))
+		fmt.Fprintf(c.Stdout, "%s existing profile(s): %s (%s)\n", style.info("Preserved"), strings.Join(preservedProfiles, ", "), style.hint("use --replace to recreate from discovered defaults"))
 	}
 	if apiSpec != nil {
 		opCount := connectedOperationCount(apiSpec, apiCfg)
-		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (%d operations discovered — run 'restish %s --help')\n", apiName, baseURL, opCount, apiName)
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%d operations discovered — %s)\n", style.ok("Connected"), apiName, baseURL, opCount, style.hint("run 'restish "+apiName+" --help'"))
 	} else if noDiscover {
-		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (discovery skipped — run 'restish api sync %s' later)\n", apiName, baseURL, apiName)
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("discovery skipped"), style.hint("run 'restish api sync "+apiName+"' later"))
 	} else {
-		fmt.Fprintf(c.Stdout, "Connected API %q with base URL %s (no spec found — run 'restish api sync %s' after connecting)\n", apiName, baseURL, apiName)
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("no spec found"), style.hint("run 'restish api sync "+apiName+"' after connecting"))
 	}
 	return nil
 }
@@ -1305,7 +1339,8 @@ func cloneConfig(src *config.Config) (*config.Config, error) {
 	return &dst, nil
 }
 
-// runAPIList prints all configured APIs with their base URL and profile count.
+// runAPIList prints all configured APIs with their base URL, generated
+// operation count, and profile count.
 func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 	if c.cfg == nil || len(c.cfg.APIs) == 0 {
 		if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
@@ -1325,10 +1360,11 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 		return err
 	} else if jsonOut {
 		type apiListEntry struct {
-			Name         string   `json:"name"`
-			BaseURL      string   `json:"base_url"`
-			ProfileCount int      `json:"profile_count"`
-			Profiles     []string `json:"profiles,omitempty"`
+			Name           string   `json:"name"`
+			BaseURL        string   `json:"base_url"`
+			OperationCount int      `json:"operation_count"`
+			ProfileCount   int      `json:"profile_count"`
+			Profiles       []string `json:"profiles,omitempty"`
 		}
 		entries := make([]apiListEntry, 0, len(names))
 		for _, name := range names {
@@ -1339,32 +1375,75 @@ func (c *CLI) runAPIList(cmd *cobra.Command, args []string) error {
 			}
 			sort.Strings(profiles)
 			entries = append(entries, apiListEntry{
-				Name:         name,
-				BaseURL:      api.BaseURL,
-				ProfileCount: len(api.Profiles),
-				Profiles:     profiles,
+				Name:           name,
+				BaseURL:        api.BaseURL,
+				OperationCount: c.apiListOperationCount(name, api),
+				ProfileCount:   len(api.Profiles),
+				Profiles:       profiles,
 			})
 		}
 		return c.writePrettyJSON(entries)
 	}
+	type apiListRow struct {
+		Name           string
+		BaseURL        string
+		OperationCount int
+		OperationWord  string
+		ProfileCount   int
+		ProfileWord    string
+	}
+	rows := make([]apiListRow, 0, len(names))
+	nameWidth, baseURLWidth, operationDigits, profileDigits := 0, 0, 1, 1
 	for _, name := range names {
 		api := c.cfg.APIs[name]
+		operationCount := c.apiListOperationCount(name, api)
 		profileCount := len(api.Profiles)
-		profileSuffix := fmt.Sprintf("%d profile", profileCount)
-		if profileCount != 1 {
-			profileSuffix += "s"
+		row := apiListRow{
+			Name:           name,
+			BaseURL:        api.BaseURL,
+			OperationCount: operationCount,
+			OperationWord:  "operation",
+			ProfileCount:   profileCount,
+			ProfileWord:    "profile",
 		}
-		fmt.Fprintf(c.Stdout, "%-20s %-40s %s\n", name, api.BaseURL, profileSuffix)
+		if operationCount != 1 {
+			row.OperationWord = "operations"
+		}
+		if profileCount != 1 {
+			row.ProfileWord = "profiles"
+		}
+		rows = append(rows, row)
+		nameWidth = max(nameWidth, len(name))
+		baseURLWidth = max(baseURLWidth, len(api.BaseURL))
+		operationDigits = max(operationDigits, len(fmt.Sprint(operationCount)))
+		profileDigits = max(profileDigits, len(fmt.Sprint(profileCount)))
+	}
+	for _, row := range rows {
+		fmt.Fprintf(c.Stdout, "%-*s  %-*s  %*d %-10s  %*d %s\n",
+			nameWidth, row.Name,
+			baseURLWidth, row.BaseURL,
+			operationDigits, row.OperationCount, row.OperationWord,
+			profileDigits, row.ProfileCount, row.ProfileWord)
 	}
 	return nil
+}
+
+func (c *CLI) apiListOperationCount(apiName string, apiCfg *config.APIConfig) int {
+	set, _, ok := c.cachedOperationSetStatusForAPI(apiName, apiCfg, "default")
+	if !ok {
+		return 0
+	}
+	return len(set.Operations)
 }
 
 // runAPIRemove removes a configured API and saves the updated config.
 func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
-	if _, err := c.requireAPI(apiName); err != nil {
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
 		return err
 	}
+	unusedSharedAuthRefs := c.unusedSharedAuthRefsAfterAPIRemove(apiName, apiCfg)
 	oldCfg, err := cloneConfig(c.cfg)
 	if err != nil {
 		return err
@@ -1373,6 +1452,101 @@ func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	if err := c.deleteAPIConfig("api remove", apiName, c.cfg, oldCfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(c.Stdout, "Removed API %q\n", apiName)
+	if err := c.removeAPILocalState(apiName, unusedSharedAuthRefs); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.Stdout, "Removed API %q and cleared its local cache/auth state.\n", apiName)
 	return nil
+}
+
+func (c *CLI) removeAPILocalState(apiName string, sharedAuthRefs []string) error {
+	dc, err := cache.New(c.cacheDir(), cache.DefaultMaxBytes, "")
+	if err != nil {
+		return fmt.Errorf("api remove: clear HTTP cache: %w", err)
+	}
+	if _, err := dc.ClearNamespacePrefix(apiName + ":"); err != nil {
+		return fmt.Errorf("api remove: clear HTTP cache for %q: %w", apiName, err)
+	}
+
+	tc := auth.NewTokenCache(c.tokenCachePath())
+	if err := tc.DeletePrefix(apiName + ":"); err != nil {
+		return fmt.Errorf("api remove: clear auth cache for %q: %w", apiName, err)
+	}
+	for _, ref := range sharedAuthRefs {
+		if err := tc.DeletePrefix("auth_profile:" + ref + ":"); err != nil {
+			return fmt.Errorf("api remove: clear auth cache for auth profile %q: %w", ref, err)
+		}
+	}
+	return nil
+}
+
+func (c *CLI) unusedSharedAuthRefsAfterAPIRemove(apiName string, apiCfg *config.APIConfig) []string {
+	if apiCfg == nil {
+		return nil
+	}
+	refs := sharedAuthRefsForAPI(apiCfg)
+	if len(refs) == 0 {
+		return nil
+	}
+	var unused []string
+	for _, ref := range refs {
+		usedElsewhere := false
+		for otherName, otherCfg := range c.cfg.APIs {
+			if otherName == apiName || otherCfg == nil {
+				continue
+			}
+			if apiUsesSharedAuthRef(otherCfg, ref) {
+				usedElsewhere = true
+				break
+			}
+		}
+		if !usedElsewhere {
+			unused = append(unused, ref)
+		}
+	}
+	return unused
+}
+
+func sharedAuthRefsForAPI(apiCfg *config.APIConfig) []string {
+	seen := map[string]bool{}
+	var refs []string
+	add := func(ref string) {
+		if ref == "" || seen[ref] {
+			return
+		}
+		seen[ref] = true
+		refs = append(refs, ref)
+	}
+	for _, prof := range apiCfg.Profiles {
+		if prof == nil {
+			continue
+		}
+		add(prof.AuthRef)
+		for _, credential := range prof.Credentials {
+			if credential != nil {
+				add(credential.AuthRef)
+			}
+		}
+	}
+	return refs
+}
+
+func apiUsesSharedAuthRef(apiCfg *config.APIConfig, ref string) bool {
+	if ref == "" || apiCfg == nil {
+		return false
+	}
+	for _, prof := range apiCfg.Profiles {
+		if prof == nil {
+			continue
+		}
+		if prof.AuthRef == ref {
+			return true
+		}
+		for _, credential := range prof.Credentials {
+			if credential != nil && credential.AuthRef == ref {
+				return true
+			}
+		}
+	}
+	return false
 }

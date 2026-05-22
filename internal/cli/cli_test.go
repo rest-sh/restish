@@ -127,6 +127,27 @@ func TestHelp(t *testing.T) {
 	}
 }
 
+func TestHelpColorizesWhenColorEnabled(t *testing.T) {
+	t.Setenv("COLOR", "1")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "--help"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected colored help output, got:\n%s", got)
+	}
+	plain := stripANSI(got)
+	for _, want := range []string{"Usage:", "Generic HTTP Commands", "get"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("colored help should preserve %q in plain text:\n%s", want, plain)
+		}
+	}
+}
+
 func TestHelpHidesRequestFlagsForNonRequestCommands(t *testing.T) {
 	for _, args := range [][]string{
 		{"restish", "shell", "setup", "--help"},
@@ -474,7 +495,7 @@ func TestExplicitConfigMissingErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--rsh-config") ||
 		!strings.Contains(err.Error(), "v2 does not fall back to the default config") ||
-		!strings.Contains(err.Error(), `restish doctor migrate-v1 --to`) {
+		!strings.Contains(err.Error(), "create the file or remove the flag") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

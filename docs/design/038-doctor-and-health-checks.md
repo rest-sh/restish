@@ -53,7 +53,6 @@ The accepted command family is:
 restish doctor
 restish doctor api <name> [--check-network]
 restish doctor plugin <name>
-restish doctor migrate-v1
 ```
 
 `doctor` is a diagnostic command. When stdout is a terminal, it writes the
@@ -62,11 +61,16 @@ policy. When stdout is redirected, it writes the human report to stdout and
 prints a one-line stderr hint pointing to `-o json` for machine-readable output.
 This makes `restish doctor > report.txt` capture the report users intended to
 share while preserving stderr for diagnostics about doctor itself.
+Human status words may be colorized when terminal color is enabled: okay states
+use the success/status theme color, warnings and unknown states use the warning
+diagnostic color, failures use the error diagnostic color, and remediation hints
+use the hint diagnostic color. Redirected output remains plain by default and
+JSON output is never colorized.
 
 `-o json` is the explicit machine mode for the entire command family. In JSON
-mode, `doctor`, `doctor api`, `doctor plugin`, and `doctor migrate-v1` write
-one structured JSON document to stdout and keep normal human diagnostics off
-stderr unless a lower-level plugin manifest probe writes its own stderr.
+mode, `doctor`, `doctor api`, and `doctor plugin` write one structured JSON
+document to stdout and keep normal human diagnostics off stderr unless a
+lower-level plugin manifest probe writes its own stderr.
 
 ## Root Doctor
 
@@ -81,6 +85,10 @@ stderr unless a lower-level plugin manifest probe writes its own stderr.
 - spec-cache path
 - token-cache path and permission status
 - plugin directory path
+- installed plugin names, versions, and capability summaries in human output,
+  with paths and capability details in JSON output
+- registered content-type names in human output, with names, MIME types,
+  suffixes, and quality values in JSON output
 - shell setup hint for supported detected shells
 
 The root command should not fail just because it found a problem it could
@@ -132,6 +140,8 @@ Resolution rules:
 
 - an absolute or path-like argument is used directly
 - a bare plugin name is resolved under the configured plugin directory
+- bare names without the `restish-` executable prefix are resolved as
+  `restish-<name>`, so `restish doctor plugin csv` inspects `restish-csv`
 
 The command reports:
 
@@ -147,21 +157,6 @@ a sandbox: it is the same trust boundary used during plugin discovery and
 installation. Doctor should make the path and manifest identity visible so the
 operator can see exactly what was inspected.
 
-## v1 Migration Doctor
-
-`restish doctor migrate-v1` runs the default-location v1 migration path if and
-only if that path is eligible:
-
-- explicit config selection skips migration
-- an existing v2 config skips migration
-- inaccessible config paths are reported without crashing
-- no eligible v1 config is reported as a clean diagnostic outcome
-- successful migration reports the v1 source and backup path
-
-This command exists because automatic migration only runs in the default config
-path case. Users who are debugging a migration should have a named command that
-explains whether migration is skipped, impossible, unnecessary, or completed.
-
 ## Failure And Exit Behavior
 
 Doctor findings are not normal request failures. The command should usually
@@ -170,9 +165,11 @@ such as "invalid", "missing", or "insecure".
 
 Non-zero exit is reserved for cases where doctor cannot perform the requested
 diagnostic action, such as an internal I/O failure while reading diagnostic
-inputs or an invalid command invocation. This keeps doctor usable in support
-sessions: users can paste the report without first deciding which findings were
-fatal.
+inputs, an invalid command invocation, or a named target that does not exist
+(`doctor api <missing>` / `doctor plugin <missing>`). Doctor should still print
+the diagnostic report it can produce before returning non-zero. This keeps
+doctor usable in support sessions: users can paste the report without first
+deciding which findings were fatal.
 
 When stdout is a terminal, the absence of stdout is not a bug: stderr carries
 the human report. When stdout is redirected, stdout carries the human report so

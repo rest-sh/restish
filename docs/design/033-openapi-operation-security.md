@@ -564,7 +564,7 @@ the full API registration flow:
 restish --rsh-profile prod api auth inspect example
 restish --rsh-profile prod api auth add example PartnerKey
 restish --rsh-profile prod api auth remove example AdminOAuth
-restish --rsh-profile prod api auth inspect example --rsh-operation signedReport
+restish --rsh-profile prod api auth inspect example --operation signedReport
 ```
 
 `api auth inspect` is the canonical auth debugging surface. Bare inspect should
@@ -584,7 +584,7 @@ requirements that attach several credentials.
 
 Default inspect output is human-oriented and shows computed auth values because
 the user explicitly asked to inspect auth material. If the profile has several
-configured credentials, bare inspect shows each of them; `--rsh-credential`
+configured credentials, bare inspect shows each of them; `--credential`
 narrows the output when the user wants one credential:
 
 ```text
@@ -607,7 +607,7 @@ X-Partner-Key: partner-key
 For shareable diagnostics, `api auth inspect` offers explicit redaction:
 
 ```bash
-restish api auth inspect example --rsh-credential UserOAuth --redact
+restish api auth inspect example --credential UserOAuth --redact
 ```
 
 For script compatibility with the old narrow behavior and for discoverability,
@@ -615,7 +615,7 @@ For script compatibility with the old narrow behavior and for discoverability,
 
 ```bash
 restish api auth header example Authorization UserOAuth
-restish api auth header example X-Partner-Key --rsh-operation signedReport
+restish api auth header example X-Partner-Key --operation signedReport
 ```
 
 Ambient request and response output remains redacted by default; auth inspection
@@ -643,6 +643,15 @@ user-owned state. By default, Restish should refresh discovery/spec metadata and
 may add newly discovered profile names, but it must not overwrite a profile that
 already exists in local config. Users who want to recreate profile setup from
 OpenAPI and `x-cli-config` hints must opt in with `--replace`.
+
+This preservation boundary is intentionally profile-scoped. Profiles may contain
+credentials or auth references that are hard to recover once overwritten.
+API-level fields such as `base_url`, `spec_url`, `operation_base`, pagination,
+server variables, `allowed_operation_origins`, and retry settings are not
+protected by the profile-preservation rule. Reconnect may rebuild them from the
+new connect run, and sync may refresh spec-derived metadata such as a newly
+discovered `spec_url` or operation-server origins. Users should manage durable
+local overrides with `api set`, `config edit`, or explicit setup expressions.
 
 ## `x-cli-config`
 

@@ -24,6 +24,12 @@ policy.
 Use `external-tool` instead when your organization already has an SSO helper or
 request signer that should stay in charge of tokens.
 
+Restish does not automatically switch an authorization-code profile into device
+code, even when issuer discovery advertises both endpoints. Choose the flow that
+matches the OAuth client registration and provider instructions. Use
+`--rsh-no-browser` for a one-off browserless authorization-code sign-in; use
+`oauth-device-code` when device authorization is the intended CLI flow.
+
 ## Store OAuth Config
 
 For one API/profile, put OAuth directly under the profile's `auth` field. For
@@ -141,6 +147,11 @@ restish --rsh-no-browser myapi list-items
 Restish prints the authorization URL and, when prompting is available, asks you
 to paste the authorization code.
 
+This keeps the configured flow as authorization code. It is useful over SSH, in
+remote terminals, and on machines where opening the local browser is not
+possible, as long as the provider allows copying the final authorization code
+back into the terminal.
+
 ## Device Code
 
 Device code auth prints the provider's verification instructions and polls the
@@ -158,6 +169,11 @@ token endpoint until you finish authorization or the provider's code expires.
 ```
 
 Without discovery, set both `device_authorization_url` and `token_url`.
+
+Choose device code when the provider documents it for CLI use, when a localhost
+callback is impractical, or when the OAuth app is registered for device
+authorization rather than redirect-based sign-in. Do not rely on Restish to
+infer this from the issuer metadata; make the auth type explicit in config.
 
 ## Generated APIs
 
@@ -192,6 +208,13 @@ Restish caches OAuth tokens by API/profile or shared auth profile. Expired
 access tokens are refreshed when a refresh token is available. If refresh fails
 with `invalid_grant`, Restish clears that cached token and reruns the
 interactive flow when the flow supports it.
+
+If an API returns `401 Unauthorized` for a token-bearing OAuth request, Restish
+forces fresh auth and retries that request once. This handles tokens that look
+valid locally but were revoked, expired early, or rejected by the API's auth
+layer. Restish does not keep retrying beyond that one controlled recovery; if
+the retried request is still unauthorized, inspect or clear the cached auth
+state.
 
 Clear a cached OAuth token when consent changes, a grant is revoked, or you
 want the next request to force a fresh sign-in:

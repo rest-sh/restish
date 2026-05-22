@@ -103,10 +103,11 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 		authProfileCount = len(c.cfg.AuthProfiles)
 		pluginCount = len(c.cfg.Plugins)
 	}
-	fmt.Fprintf(c.Stdout, "Config file: %s\n", c.configFilePath())
-	fmt.Fprintf(c.Stdout, "APIs: %d\n", apiCount)
-	fmt.Fprintf(c.Stdout, "Auth profiles: %d\n", authProfileCount)
-	fmt.Fprintf(c.Stdout, "Plugins: %d\n", pluginCount)
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Config file:"), c.configFilePath())
+	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("APIs:"), apiCount)
+	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("Auth profiles:"), authProfileCount)
+	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("Plugins:"), pluginCount)
 	return nil
 }
 
@@ -263,45 +264,4 @@ func isSensitiveConfigKey(key string) bool {
 		lower == "access_key" ||
 		lower == "private_key" ||
 		lower == "client_secret"
-}
-
-func (c *CLI) addContentTypesCommand(root *cobra.Command) {
-	root.AddCommand(&cobra.Command{
-		Use:     "content-types",
-		Short:   "List registered content types and their MIME types",
-		Long:    contentTypesLong,
-		GroupID: rootGroupUtility,
-		Example: fmt.Sprintf(`  %s content-types
-  %s content-types -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
-		RunE: c.runContentTypes,
-	})
-}
-
-func (c *CLI) runContentTypes(cmd *cobra.Command, args []string) error {
-	if jsonOut, err := commandJSONOutputRequested(cmd); err != nil {
-		return err
-	} else if jsonOut {
-		type contentTypeOutput struct {
-			Name      string   `json:"name"`
-			MIMETypes []string `json:"mime_types"`
-			Suffixes  []string `json:"suffixes,omitempty"`
-			Quality   float32  `json:"quality"`
-		}
-		contentTypes := c.content.ContentTypes()
-		out := make([]contentTypeOutput, 0, len(contentTypes))
-		for _, ct := range contentTypes {
-			out = append(out, contentTypeOutput{
-				Name:      ct.Name,
-				MIMETypes: append([]string(nil), ct.MIMETypes...),
-				Suffixes:  append([]string(nil), ct.Suffixes...),
-				Quality:   ct.Quality,
-			})
-		}
-		return c.writePrettyJSON(out)
-	}
-	for _, ct := range c.content.ContentTypes() {
-		fmt.Fprintf(c.Stdout, "%-12s %s\n", ct.Name, strings.Join(ct.MIMETypes, ", "))
-	}
-	return nil
 }

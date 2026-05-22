@@ -28,6 +28,13 @@ endpoint URLs are absent. Unknown non-reserved OAuth params are forwarded to
 token requests, which is how provider-specific values such as `audience` are
 sent.
 
+OAuth flow selection is explicit. Restish does not automatically switch an
+`oauth-authorization-code` profile to `oauth-device-code` because issuer
+discovery advertises a device endpoint. Use `oauth-device-code` when the OAuth
+client is registered for device authorization. Use `--rsh-no-browser` with
+`oauth-authorization-code` when you want the same redirect-based flow but need
+to copy the authorization URL and pasted code manually.
+
 For `oauth-authorization-code`, the default browser callback URL to allow in
 the OAuth app is `http://localhost:8484/`. `redirect_port` changes `8484`, and
 `redirect_path` changes `/`, for example `http://localhost:8484/callback`.
@@ -174,14 +181,23 @@ Set `output` to `bearer-token` when stdout is a plain bearer token instead of
 the JSON response shape. Restish records approved command hashes so a changed
 external tool must be approved again.
 
+## OAuth 401 Recovery
+
+For token-bearing OAuth handlers, Restish may retry once after the target API
+returns `401 Unauthorized`. The retry forces fresh auth state, then sends the
+same request one more time. This recovers from cached access tokens that appear
+unexpired locally but were revoked or rejected by the API. Restish does not
+loop beyond the single auth recovery attempt; persistent failures should be
+debugged with `api auth inspect` or cleared with `api auth logout`.
+
 ## Inspection And Redaction
 
 Inspect configured auth without sending the target request:
 
 ```bash
 restish api auth inspect myapi
-restish api auth inspect myapi --rsh-credential PartnerKey
-restish api auth inspect myapi --rsh-credential UserBearer --redact
+restish api auth inspect myapi --credential PartnerKey
+restish api auth inspect myapi --credential UserBearer --redact
 restish api auth header myapi Authorization UserBearer
 ```
 
@@ -189,7 +205,7 @@ The bare form shows profile auth, configured credential readiness, generated
 operation coverage when cached metadata is available, and computed auth material
 when it can be built without starting a new OAuth flow. If a profile has several
 credentials, `inspect` prints each configured credential's computed auth
-material; pass `--rsh-credential` to narrow the output to one credential.
+material; pass `--credential` to narrow the output to one credential.
 Inspection output shows computed auth values because the command is explicitly
 for checking auth. Add `--redact` when you need shareable output. Verbose
 request diagnostics still redact common sensitive headers such as `Authorization`,

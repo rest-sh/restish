@@ -104,8 +104,19 @@ literal `@` should be sent as text. In multipart bodies, use `@@value` for a
 literal text value that starts with `@`, because `@path` is reserved for file
 parts.
 
+## Generated Command Schemas
+
+Generated OpenAPI commands use schemas for help, completions, examples, media
+selection, and bounded coercion. They do not reject explicit body fields just
+because the schema says a value has a different type, enum, or shape. Restish
+sends what you ask for and lets the server validate API-specific semantics.
+
+Restish still fails locally when the CLI cannot build a request, such as a
+missing required path argument, unreadable `@file`, or invalid Restish flag.
+
 ## Related Pages
 
 - [Shorthand Reference](/docs/reference/shorthand/)
 - [Content Types](/docs/reference/content-types/)
+- [OpenAPI CLI Integration](/docs/reference/openapi-cli-integration/)
 - [Requests](../requests/)

@@ -73,6 +73,9 @@ The design requirements are:
 - explicit opt-in before following cross-origin discovery links
 - reject private-range or loopback follow targets by default unless the original
   configured API is itself in that trust class
+- keep private, loopback, link-local, multicast, and unspecified follow targets
+  rejected even when `--allow-cross-origin-spec` is set, unless the original
+  API is already in that trust class
 - treat DNS lookup errors and lookup timeouts as non-public when validating
   cross-origin discovery targets; the current validation timeout is 2 seconds
 - only `http` and `https` are valid remote schemes
@@ -84,6 +87,14 @@ The current implementation resolves hostnames before fetching but does not yet
 dial by the resolved IP literal, so a DNS rebinding race between validation and
 transport dial remains a residual risk for cross-origin discovery. Cross-origin
 follow is opt-in and unknown/private targets fail closed.
+
+The explicit escape hatch for unusual topology is `--spec` or a saved
+`spec_url`. If the operator names `http://127.0.0.1/...`,
+`http://192.168.0.10/...`, or another private/local spec URL directly, Restish
+trusts that explicit source. What stays blocked is a public remote API choosing
+a private/local discovery target on the user's behalf. This stricter model is
+the v2 release default; it can be relaxed later if real users run into a valid
+workflow that needs it.
 
 ## Probe Execution
 
@@ -277,8 +288,18 @@ Examples:
 - `api connect <name> <url> [setup-expression ...]` may consume
   `prompt.*` expressions as prompt preanswers, then apply ordinary config
   shorthand expressions as final overrides before saving
+- when reconnecting an existing API without `--replace`, `api connect`
+  preserves existing profiles only; API-level discovery/config fields are
+  rebuilt from the new connect run or explicit setup expressions
 - `api sync` should refresh from the authoritative source; when `spec_url` is
   configured, that means fetching exactly `spec_url`
+- `api sync` should also persist newly discovered non-profile API metadata such
+  as a Link-discovered `spec_url` or newly discovered
+  `allowed_operation_origins`, because those describe where the API and its
+  generated operations now live
+- `api sync` must not overwrite profiles or apply new `x-cli-config` profile
+  defaults; profiles are user-owned credential-bearing state, and users who
+  want profile defaults recreated should use `api connect --replace`
 - `api set` and `config edit` should invalidate cached specs when fields that
   affect discovery or operation generation change, including `base_url`,
   `spec_url`, `spec_files`, `operation_base`, and OpenAPI server variables

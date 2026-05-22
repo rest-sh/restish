@@ -34,6 +34,18 @@ func TestDetectRunningShell_FallbackToEnv(t *testing.T) {
 	}
 }
 
+func TestNormalizeShellNameStripsLoginShellPrefix(t *testing.T) {
+	for _, input := range []string{"-zsh", "/bin/-zsh", " /usr/bin/-bash\n"} {
+		got := normalizeShellName(input)
+		if strings.HasPrefix(got, "-") {
+			t.Fatalf("normalizeShellName(%q) = %q, still has login-shell prefix", input, got)
+		}
+	}
+	if got := normalizeShellName("-zsh"); got != "zsh" {
+		t.Fatalf("normalizeShellName(-zsh) = %q, want zsh", got)
+	}
+}
+
 func TestHintShellSetup_FallbackNote(t *testing.T) {
 	oldGOOS := setupRuntimeGOOS
 	setupRuntimeGOOS = "unknown"

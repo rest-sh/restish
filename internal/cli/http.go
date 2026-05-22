@@ -1457,18 +1457,20 @@ func (c *CLI) logVerboseRequest(req *http.Request) {
 	if req == nil {
 		return
 	}
-	fmt.Fprintf(c.Stderr, "> %s %s\n", req.Method, request.RedactedRequestURL(req))
+	style := humanTextStyleFor(c.Stderr)
+	reqMark := style.info(">")
+	fmt.Fprintf(c.Stderr, "%s %s %s\n", reqMark, req.Method, request.RedactedRequestURL(req))
 	for _, k := range sortedHeaderKeys(req.Header) {
 		vs := req.Header[k]
 		for _, v := range vs {
 			if isSensitiveHeaderValue(k, v) || request.IsMarkedCredentialHeader(req, k) {
 				v = "<redacted>"
 			}
-			fmt.Fprintf(c.Stderr, "> %s: %s\n", k, v)
+			fmt.Fprintf(c.Stderr, "%s %s: %s\n", reqMark, k, v)
 		}
 	}
 	c.logVerboseRequestBody(req)
-	fmt.Fprintln(c.Stderr, ">")
+	fmt.Fprintln(c.Stderr, reqMark)
 }
 
 // logVerboseResponse prints response summary lines to stderr. At verbose >= 2
@@ -1478,20 +1480,23 @@ func (c *CLI) logVerboseResponse(resp *http.Response, verbose int) {
 	if resp == nil {
 		return
 	}
+	style := humanTextStyleFor(c.Stderr)
+	infoMark := style.info("*")
+	respMark := style.info("<")
 	if resp.Header.Get("X-From-Cache") != "" {
-		fmt.Fprintln(c.Stderr, "* Cache: HIT")
+		fmt.Fprintf(c.Stderr, "%s %s %s\n", infoMark, style.key("Cache:"), style.ok("HIT"))
 	}
-	fmt.Fprintf(c.Stderr, "< %s %d %s\n", resp.Proto, resp.StatusCode, http.StatusText(resp.StatusCode))
+	fmt.Fprintf(c.Stderr, "%s %s %s %s\n", respMark, resp.Proto, style.httpStatus(resp.StatusCode, fmt.Sprintf("%d", resp.StatusCode)), http.StatusText(resp.StatusCode))
 	for _, k := range sortedHeaderKeys(resp.Header) {
 		vs := resp.Header[k]
 		for _, v := range vs {
 			if isSensitiveHeader(k) {
 				v = "<redacted>"
 			}
-			fmt.Fprintf(c.Stderr, "< %s: %s\n", k, v)
+			fmt.Fprintf(c.Stderr, "%s %s: %s\n", respMark, k, v)
 		}
 	}
-	fmt.Fprintln(c.Stderr, "<")
+	fmt.Fprintln(c.Stderr, respMark)
 
 	if verbose >= 2 && resp.TLS != nil {
 		tlsVersionName := map[uint16]string{
@@ -1504,15 +1509,15 @@ func (c *CLI) logVerboseResponse(resp *http.Response, verbose int) {
 		if !ok {
 			ver = fmt.Sprintf("TLS 0x%04x", resp.TLS.Version)
 		}
-		fmt.Fprintf(c.Stderr, "* TLS: %s %s\n", ver, tls.CipherSuiteName(resp.TLS.CipherSuite))
+		fmt.Fprintf(c.Stderr, "%s %s %s %s\n", infoMark, style.key("TLS:"), ver, tls.CipherSuiteName(resp.TLS.CipherSuite))
 		for i, cert := range resp.TLS.PeerCertificates {
 			label := "Leaf"
 			if i > 0 {
 				label = fmt.Sprintf("Chain %d", i)
 			}
-			fmt.Fprintf(c.Stderr, "* %s Subject: %s\n", label, cert.Subject)
-			fmt.Fprintf(c.Stderr, "* %s Issuer: %s\n", label, cert.Issuer)
-			fmt.Fprintf(c.Stderr, "* %s Expiry: %s (%s)\n", label, cert.NotAfter.Format(time.RFC3339), relativeExpiry(cert.NotAfter))
+			fmt.Fprintf(c.Stderr, "%s %s Subject: %s\n", infoMark, label, cert.Subject)
+			fmt.Fprintf(c.Stderr, "%s %s Issuer: %s\n", infoMark, label, cert.Issuer)
+			fmt.Fprintf(c.Stderr, "%s %s Expiry: %s (%s)\n", infoMark, label, cert.NotAfter.Format(time.RFC3339), relativeExpiry(cert.NotAfter))
 		}
 	}
 }

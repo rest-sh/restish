@@ -62,9 +62,9 @@ Use this when repeated work against an API deserves generated commands, shell co
 Common choices:
 
 - Use `--spec` when discovery is blocked, the API does not advertise its spec, or you want to pin setup to a known OpenAPI URL or local file.
-- Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified IP literal spec targets are still rejected.
+- Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local; use `--spec` when you need to name a private spec URL directly.
 - Use `--no-discover` to save a base URL without fetching a spec.
-- Use `--replace` when reconnecting should replace generated OpenAPI or `x-cli-config` profile defaults instead of preserving local profile edits.
+- Use `--replace` when reconnecting should replace existing profiles with generated OpenAPI or `x-cli-config` profile defaults. Without it, existing profiles are preserved, while API-level discovery fields are refreshed from the new connect run.
 - Use `--yes` only for safe connect prompts you have already decided to accept in automation.
 
 Usage:
@@ -87,7 +87,7 @@ Flags:
 
 Type: `bool`; default: `false`
 
-Allow Link-header spec discovery from another host; private and loopback IP literals are still rejected
+Allow safe Link-header spec discovery from another host; private/local follow targets are still rejected
 
 **`--no-discover`**
 
@@ -121,9 +121,9 @@ Force re-fetch of the cached OpenAPI spec for a named API
 
 Force re-fetch of the cached OpenAPI spec for a named API.
 
-Use this after the API publishes new operations, updates parameter schemas, or changes `x-cli-config` defaults that should affect generated commands.
+Use this after the API publishes new operations, updates parameter schemas, moves the discovered spec URL, or adds operation servers that generated commands should know about. Sync refreshes spec-derived API metadata, but preserves local profiles because they may contain credentials.
 
-By default, sync follows the same-origin spec source already recorded for the API. Use `--allow-cross-origin-spec` only when you trust a `Link` header or saved spec source that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified IP literal spec targets are still rejected.
+By default, sync follows the same-origin spec source already recorded for the API. Use `--allow-cross-origin-spec` only when you trust a `Link` header or saved spec source that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local. Use `api set` to update `spec_url`, or reconnect with `--spec`, when you need to name a private spec URL directly.
 
 Usage:
 
@@ -135,6 +135,7 @@ Examples:
 
 ```bash
   restish api sync demo
+  restish api sync demo --yes
   restish api sync demo --allow-cross-origin-spec
 ```
 
@@ -144,7 +145,13 @@ Flags:
 
 Type: `bool`; default: `false`
 
-Allow Link-header spec discovery from another host for this sync run
+Allow safe Link-header spec discovery from another host for this sync run
+
+**`--yes`**
+
+Type: `bool`; default: `false`
+
+Accept safe api sync prompts without asking
 
 
 
@@ -154,7 +161,7 @@ List all configured APIs
 
 List every API registered in the active Restish config.
 
-Use `-o json` when scripts need stable fields such as API names, base URLs, and profile counts. Human output is a compact inventory for deciding what to inspect, sync, or remove next.
+Use `-o json` when scripts need stable fields such as API names, base URLs, operation counts, and profile counts. Human output is a compact inventory for deciding what to inspect, sync, or remove next.
 
 Usage:
 
@@ -222,7 +229,7 @@ Remove a configured API
 
 Remove a registered API from the local config.
 
-This deletes the saved API definition and generated-command source for that name. It does not contact the remote API, delete server-side resources, or remove unrelated HTTP cache and token cache entries.
+This deletes the saved API definition, generated-command source, HTTP response cache entries, and API-scoped auth token cache entries for that name. Unreferenced shared auth-profile tokens used only by the removed API are cleared too. It does not contact the remote API, delete server-side resources, or remove unrelated cache entries.
 
 Usage:
 
@@ -257,7 +264,7 @@ Examples:
 
 ```bash
   restish api auth inspect demo
-  restish api auth inspect demo --rsh-operation list-items
+  restish api auth inspect demo --operation list-items
   restish api auth logout demo
 ```
 
@@ -364,7 +371,7 @@ Print one auth header value for an API profile
 
 Print one auth header value that Restish would apply for an API profile.
 
-Use this for debugging generated-command auth without sending a request. Pass `--rsh-operation` to inspect operation-specific security requirements, or `--rsh-credential` to inspect a named credential binding directly.
+Use this for debugging generated-command auth without sending a request. Pass `--operation` to inspect operation-specific security requirements, or `--credential` to inspect a named credential binding directly.
 
 Usage:
 
@@ -381,13 +388,13 @@ Examples:
 
 Flags:
 
-**`--rsh-credential`**
+**`--credential`**
 
 Type: `string`; default: none
 
 Credential ID to inspect instead of profile-level auth
 
-**`--rsh-operation`**
+**`--operation`**
 
 Type: `string`; default: none
 
@@ -401,7 +408,7 @@ Inspect the auth material applied for an API profile
 
 Inspect auth readiness and material for an API profile.
 
-By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--rsh-operation` for operation-specific OpenAPI security requirements or `--rsh-credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked.
+By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--operation` for operation-specific OpenAPI security requirements or `--credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked.
 
 Usage:
 
@@ -413,28 +420,28 @@ Examples:
 
 ```bash
   restish api auth inspect demo
-  restish api auth inspect demo --rsh-operation list-items --redact
+  restish api auth inspect demo --operation list-items --redact
 ```
 
 Flags:
+
+**`--credential`**
+
+Type: `string`; default: none
+
+Credential ID to inspect instead of profile-level auth
+
+**`--operation`**
+
+Type: `string`; default: none
+
+Operation ID or command name to inspect
 
 **`--redact`**
 
 Type: `bool`; default: `false`
 
 Redact sensitive auth values for shareable output
-
-**`--rsh-credential`**
-
-Type: `string`; default: none
-
-Credential ID to inspect instead of profile-level auth
-
-**`--rsh-operation`**
-
-Type: `string`; default: none
-
-Operation ID or command name to inspect
 <!-- END GENERATED -->
 
 ## Workflow Examples
@@ -450,6 +457,12 @@ restish api inspect example
 The generated command reference above covers discovery flags, explicit spec
 sources, cross-origin trust, replacement behavior, non-interactive prompts,
 spec refresh, list output, and inspection output.
+
+Reconnecting an existing API without `--replace` preserves existing profiles
+only. That protects credential-bearing local profile state. API-level fields are
+refreshed from the new connect run or explicit setup expressions. Use
+`--replace` when OpenAPI or `x-cli-config` profile defaults should recreate
+existing profiles.
 
 When a spec omits `x-cli-config`, Restish can derive initial auth setup from
 OpenAPI security requirements. Declared but unused `components.securitySchemes`
@@ -503,16 +516,16 @@ cache entries.
 restish api auth inspect example
 restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
-restish api auth inspect example --rsh-credential basicAuth --redact
-restish api auth inspect example --rsh-operation list-items --redact
+restish api auth inspect example --credential basicAuth --redact
+restish api auth inspect example --operation list-items --redact
 restish api auth header example Authorization basicAuth
-restish api auth header example Authorization --rsh-operation list-items
+restish api auth header example Authorization --operation list-items
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI
 operations. `inspect` replaces the old top-level auth helper and
 prints every configured credential by default. It also works for
-non-Authorization credentials such as API-key headers. Use `--rsh-operation`
+non-Authorization credentials such as API-key headers. Use `--operation`
 when an operation's OpenAPI security policy affects which credential applies.
 
 ## Related Pages

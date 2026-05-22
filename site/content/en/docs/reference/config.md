@@ -41,6 +41,10 @@ If no default config directory can be determined, set `RSH_CONFIG` or
 Cache-only state may use a temporary directory until `RSH_CACHE_DIR` or
 `XDG_CACHE_HOME` is available.
 
+Restish does not search the current directory or parent directories for project
+config in v2. Use `--rsh-config ./restish.json` or `RSH_CONFIG=./restish.json`
+when a repository should carry its own config.
+
 On Unix-like systems, Restish refuses group/world-readable config files because
 profiles and auth settings may contain secrets:
 
@@ -222,8 +226,9 @@ elsewhere.
 
 Cache settings control the HTTP response cache, not OAuth/auth token cache.
 Use `restish cache info` to inspect runtime cache location, size, entry count,
-and oldest entry. Restish does not write cache entries for responses that carry
-credential-bearing headers such as `Set-Cookie` or common API-key headers.
+oldest entry, largest cached hosts, and API/profile cache usage. Restish does
+not write cache entries for responses that carry credential-bearing headers
+such as `Set-Cookie` or common API-key headers.
 
 ```bash
 restish config set 'cache.max_size: 250MB'
@@ -248,10 +253,11 @@ restish config theme reset
 
 `theme_source` records where the theme came from. Local paths are stored as
 absolute paths, and bundled official themes are stored as `official:<name>`.
-`theme` stores the resolved highlighting values. Use
-`text` for the base text color and `header_key` to color HTTP response header
-names differently from JSON object keys. `reset` removes the saved
-theme and restores the built-in theme.
+`theme` stores the resolved highlighting values. Use `text` for the base text
+color, `header_key` to color HTTP response header names differently from JSON
+object keys, `heading` for interactive help headings, and `diagnostic_warn`,
+`diagnostic_error`, `diagnostic_hint`, or `status_2xx` to customize human
+status output. `reset` removes the saved theme and restores the built-in theme.
 
 For GitHub shorthand with a theme name, Restish tries `themes/<name>.json`
 first, then falls back to `<name>.json` at the repository root. Name-only
@@ -319,7 +325,8 @@ Request behavior is layered from lower to higher precedence:
 5. command-line flags
 
 Explicit config selection is not layered. `--rsh-config` or `RSH_CONFIG`
-selects one config file for the invocation.
+selects one config file for the invocation. Project-local config is explicit;
+Restish does not auto-discover config files from the current directory.
 
 ## Related Pages
 

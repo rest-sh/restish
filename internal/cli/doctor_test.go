@@ -3,15 +3,19 @@ package cli_test
 import (
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
@@ -36,6 +40,17 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 	}
 }
 
+func assertDoctorExitCode(t *testing.T, err error, code int) {
+	t.Helper()
+	var exitErr *cli.ExitCodeError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitCodeError{%d}, got %T: %v", code, err, err)
+	}
+	if exitErr.Code != code {
+		t.Fatalf("exit code = %d, want %d", exitErr.Code, code)
+	}
+}
+
 func TestDoctorTextWritesToStderrWhenStdoutIsTTY(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
@@ -49,8 +64,33 @@ func TestDoctorTextWritesToStderrWhenStdoutIsTTY(t *testing.T) {
 	if !strings.Contains(errOut.String(), "Config file:") {
 		t.Fatalf("expected text report on stderr, got:\n%s", errOut.String())
 	}
+	if !strings.Contains(errOut.String(), "Content types:") ||
+		!strings.Contains(errOut.String(), "json") {
+		t.Fatalf("expected content type summary on stderr, got:\n%s", errOut.String())
+	}
 	if strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
 		t.Fatalf("tty doctor should not print redirected-output JSON hint, got:\n%s", errOut.String())
+	}
+}
+
+func TestDoctorTextColorizesStatusesWhenColorEnabled(t *testing.T) {
+	t.Setenv("NOCOLOR", "")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("COLOR", "1")
+
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+
+	if err := c.Run([]string{"restish", "doctor"}); err != nil {
+		t.Fatalf("doctor returned error: %v", err)
+	}
+	got := errOut.String()
+	if !strings.Contains(got, "Config parse:") ||
+		!strings.Contains(got, "Config permissions:") {
+		t.Fatalf("expected doctor status lines, got:\n%s", got)
+	}
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected colorized doctor statuses, got:\n%q", got)
 	}
 }
 
@@ -71,7 +111,14 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 			Status   string `json:"status"`
 			APICount int    `json:"api_count"`
 		} `json:"config_parse"`
-		PluginDirectory string `json:"plugin_directory"`
+		ContentTypes []struct {
+			Name      string   `json:"name"`
+			MIMETypes []string `json:"mime_types"`
+		} `json:"content_types"`
+		PluginDirectory  string `json:"plugin_directory"`
+		InstalledPlugins []struct {
+			Name string `json:"name"`
+		} `json:"installed_plugins"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
 		t.Fatalf("doctor -o json output is not JSON: %v\n%s", err, out.String())
@@ -85,6 +132,94 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 	if report.PluginDirectory == "" {
 		t.Fatal("expected plugin_directory in doctor report")
 	}
+	if report.InstalledPlugins == nil {
+		t.Fatal("expected installed_plugins in doctor report")
+	}
+	foundJSON := false
+	for _, ct := range report.ContentTypes {
+		if ct.Name == "json" {
+			foundJSON = true
+			if len(ct.MIMETypes) == 0 {
+				t.Fatalf("json content type missing MIME types: %#v", ct)
+			}
+		}
+	}
+	if !foundJSON {
+		t.Fatalf("expected json content type in doctor report: %#v", report.ContentTypes)
+	}
+}
+
+func TestDoctorReportsInstalledPlugins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script plugin tests not supported on Windows")
+	}
+	c, out, errOut := newTestCLI(t)
+	pluginDir := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("create plugin dir: %v", err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-csv")
+	script := `#!/bin/sh
+echo '{"name":"csv","version":"test","restish_api_version":2,"hooks":["formatter"],"formatter_names":["csv"]}'
+`
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "doctor"}); err != nil {
+		t.Fatalf("doctor returned error: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Installed plugins:") ||
+		!strings.Contains(got, "csv test capabilities: formatter, formatter(csv)") {
+		t.Fatalf("expected installed plugin summary, got:\n%s\nstderr:\n%s", got, errOut.String())
+	}
+}
+
+func TestDoctorJSONReportsInstalledPlugins(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script plugin tests not supported on Windows")
+	}
+	c, out, errOut := newTestCLI(t)
+	pluginDir := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("create plugin dir: %v", err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-csv")
+	script := `#!/bin/sh
+echo '{"name":"csv","version":"test","restish_api_version":2,"hooks":["formatter"],"formatter_names":["csv"]}'
+`
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "doctor", "-o", "json"}); err != nil {
+		t.Fatalf("doctor -o json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor -o json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		InstalledPlugins []struct {
+			Name         string   `json:"name"`
+			Version      string   `json:"version"`
+			Path         string   `json:"path"`
+			Capabilities []string `json:"capabilities"`
+			Formatters   []string `json:"formatters"`
+		} `json:"installed_plugins"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor -o json output is not JSON: %v\n%s", err, out.String())
+	}
+	if len(report.InstalledPlugins) != 1 {
+		t.Fatalf("installed_plugins = %#v, want one plugin", report.InstalledPlugins)
+	}
+	plugin := report.InstalledPlugins[0]
+	if plugin.Name != "csv" || plugin.Version != "test" || plugin.Path != pluginPath ||
+		!reflect.DeepEqual(plugin.Capabilities, []string{"formatter"}) ||
+		!reflect.DeepEqual(plugin.Formatters, []string{"csv"}) {
+		t.Fatalf("unexpected plugin report: %#v", plugin)
+	}
 }
 
 func TestDoctorRejectsUnsupportedOutputFormats(t *testing.T) {
@@ -95,7 +230,6 @@ func TestDoctorRejectsUnsupportedOutputFormats(t *testing.T) {
 		{name: "root", args: []string{"restish", "doctor", "-o", "yaml"}},
 		{name: "api", args: []string{"restish", "doctor", "api", "demo", "-o", "yaml"}},
 		{name: "plugin", args: []string{"restish", "doctor", "plugin", "demo", "-o", "yaml"}},
-		{name: "migrate", args: []string{"restish", "doctor", "migrate-v1", "-o", "yaml"}},
 	}
 
 	for _, tt := range tests {
@@ -115,6 +249,73 @@ func TestDoctorRejectsUnsupportedOutputFormats(t *testing.T) {
 				t.Fatalf("unsupported output format should not print report, stdout=%q stderr=%q", out.String(), errOut.String())
 			}
 		})
+	}
+}
+
+func TestDoctorPluginBareNameUsesRestishExecutablePrefix(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	assertDoctorExitCode(t, c.Run([]string{"restish", "doctor", "plugin", "csv", "-o", "json"}), 2)
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor plugin -o json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		Plugin string `json:"plugin"`
+		Path   string `json:"path"`
+		Found  bool   `json:"found"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor plugin -o json output is not JSON: %v\n%s", err, out.String())
+	}
+	wantPath := filepath.Join(filepath.Dir(c.Hooks().ConfigPath), "plugins", "restish-csv")
+	if report.Plugin != "csv" || report.Path != wantPath {
+		t.Fatalf("plugin report = %#v, want plugin csv path %s", report, wantPath)
+	}
+	if report.Found || report.Error != "not found" {
+		t.Fatalf("expected missing prefixed plugin report, got %#v", report)
+	}
+}
+
+func TestDoctorAPIUnknownTargetExitsNonZero(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	assertDoctorExitCode(t, c.Run([]string{"restish", "doctor", "api", "missing"}), 2)
+	if !strings.Contains(out.String(), `API "missing": not registered`) {
+		t.Fatalf("expected missing API report, got stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+func TestDoctorAPIUnknownTargetJSONExitsNonZero(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	assertDoctorExitCode(t, c.Run([]string{"restish", "doctor", "api", "missing", "-o", "json"}), 2)
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report struct {
+		API        string `json:"api"`
+		Registered bool   `json:"registered"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
+	}
+	if report.API != "missing" || report.Registered {
+		t.Fatalf("unexpected missing API report: %#v", report)
+	}
+}
+
+func TestDoctorPluginUnknownTargetTextExitsNonZero(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+
+	assertDoctorExitCode(t, c.Run([]string{"restish", "doctor", "plugin", "csv"}), 2)
+	if !strings.Contains(out.String(), `Plugin "csv": not found`) {
+		t.Fatalf("expected missing plugin report, got stdout=%q stderr=%q", out.String(), errOut.String())
 	}
 }
 
