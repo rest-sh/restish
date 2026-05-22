@@ -1007,9 +1007,13 @@ func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissin
 				openAPIGet("/optional", "optionalReport"),
 				openAPIGet("/required", "requiredReport", `"security":[{"ApiKeyAuth":[]}]`)))
 	})
-	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
-		"ApiKeyAuth": testCredential(apiKeyAuth("header", "X-Optional-Key", "env:MISSING_OPTIONAL_KEY")),
-	})))
+	authConfig := apiKeyAuth("header", "X-Optional-Key", "env:MISSING_OPTIONAL_KEY")
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), &config.ProfileConfig{
+		Auth: authConfig,
+		Credentials: map[string]*config.CredentialConfig{
+			"ApiKeyAuth": testCredential(authConfig),
+		},
+	}))
 
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "optional-report"}); err != nil {
@@ -1020,13 +1024,22 @@ func TestGeneratedCommandOptionalAuthFallsBackToAnonymousWhenCredentialEnvMissin
 	}
 
 	err := c.Run([]string{"restish", "tapi", "required-report"})
-	if err == nil || !strings.Contains(err.Error(), "unresolved auth params") || !strings.Contains(err.Error(), "env:MISSING_OPTIONAL_KEY") {
-		t.Fatalf("required-report error = %v, want unresolved credential", err)
+	if err == nil || !strings.Contains(err.Error(), "environment variable MISSING_OPTIONAL_KEY is not set") {
+		t.Fatalf("required-report error = %v, want missing env credential", err)
 	}
 
 	err = c.Run([]string{"restish", "tapi", "optional-report", "--rsh-auth", "ApiKeyAuth"})
 	if err == nil || !strings.Contains(err.Error(), "not satisfied") || !strings.Contains(err.Error(), "env:MISSING_OPTIONAL_KEY") {
 		t.Fatalf("explicit optional auth error = %v, want unresolved credential", err)
+	}
+
+	t.Setenv("MISSING_OPTIONAL_KEY", "ready")
+	c = env.newCLI()
+	if err := c.Run([]string{"restish", "tapi", "optional-report"}); err != nil {
+		t.Fatalf("optional-report with ready credential: %v", err)
+	}
+	if got["/optional"].Get("X-Optional-Key") != "ready" {
+		t.Fatalf("/optional headers with env = %#v, want configured auth", got["/optional"])
 	}
 }
 

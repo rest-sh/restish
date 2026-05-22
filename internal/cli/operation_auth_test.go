@@ -289,6 +289,31 @@ func TestPlanOperationAuthUsesAnonymousWhenOptionalCredentialEnvMissing(t *testi
 	}
 }
 
+func TestPlanOperationAuthUsesAnonymousBeforeProfileFallbackWhenOptionalCredentialEnvMissing(t *testing.T) {
+	c := &CLI{}
+	sharedAuth := &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-Partner-Key", "value": "env:MISSING_PARTNER_KEY"}}
+	prof := &config.ProfileConfig{
+		Auth: sharedAuth,
+		Credentials: map[string]*config.CredentialConfig{
+			"PartnerKey": {Auth: sharedAuth},
+		},
+	}
+	policy := &operationAuthPolicy{
+		OptionalAuth: true,
+		CredentialAlternatives: []spec.CredentialAlternative{{
+			{ID: "PartnerKey"},
+		}},
+	}
+
+	selected, handled, err := c.planOperationAuth("svc", "default", prof, policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 0 {
+		t.Fatalf("selected = %#v handled=%v, want anonymous before profile fallback", selected, handled)
+	}
+}
+
 func TestPlanOperationAuthSatisfiesMTLSWithTransportClientCertificate(t *testing.T) {
 	c := &CLI{}
 	policy := &operationAuthPolicy{

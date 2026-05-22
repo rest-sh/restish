@@ -95,6 +95,10 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		}
 	}
 
+	if policy.OptionalAuth {
+		return nil, true, nil
+	}
+
 	if prof != nil && canUseProfileAuthFallback(policy) {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
 		if err != nil {
@@ -103,9 +107,6 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		if resolved.Config != nil {
 			return []selectedOperationAuth{{requirement: policy.CredentialAlternatives[0][0], resolved: resolved, source: "profile auth fallback"}}, true, nil
 		}
-	}
-	if policy.OptionalAuth {
-		return nil, true, nil
 	}
 
 	if prof == nil {
