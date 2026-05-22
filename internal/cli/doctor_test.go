@@ -35,7 +35,7 @@ func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 		!strings.Contains(got, "before the next OAuth request") {
 		t.Fatalf("expected token cache remediation, got:\n%s", got)
 	}
-	if !strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
+	if !strings.Contains(errOut.String(), "Tip: use -o json for machine-readable output.") {
 		t.Fatalf("expected redirected-output JSON hint on stderr, got:\n%s", errOut.String())
 	}
 }
@@ -70,6 +70,13 @@ func TestDoctorTextWritesToStderrWhenStdoutIsTTY(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "Use -o json for machine-readable output.") {
 		t.Fatalf("tty doctor should not print redirected-output JSON hint, got:\n%s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "Restish version:") ||
+		!strings.Contains(errOut.String(), "Platform:") ||
+		!strings.Contains(errOut.String(), "HTTP cache summary:") ||
+		!strings.Contains(errOut.String(), "APIs:") ||
+		!strings.Contains(errOut.String(), "Theme:") {
+		t.Fatalf("expected support-bundle fields on stderr, got:\n%s", errOut.String())
 	}
 }
 
@@ -106,11 +113,30 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 		t.Fatalf("doctor -o json should keep stderr quiet, got:\n%s", errOut.String())
 	}
 	var report struct {
-		ConfigFile  string `json:"config_file"`
+		ConfigFile string `json:"config_file"`
+		Runtime    struct {
+			Version        string `json:"version"`
+			GOOS           string `json:"goos"`
+			GOARCH         string `json:"goarch"`
+			StdoutTerminal bool   `json:"stdout_terminal"`
+			ColorEnabled   bool   `json:"color_enabled"`
+		} `json:"runtime"`
 		ConfigParse struct {
 			Status   string `json:"status"`
 			APICount int    `json:"api_count"`
 		} `json:"config_parse"`
+		HTTPCacheSummary struct {
+			Directory string `json:"directory"`
+			Size      string `json:"size"`
+			Entries   int    `json:"entries"`
+		} `json:"http_cache_summary"`
+		Theme struct {
+			Status string `json:"status"`
+		} `json:"theme"`
+		APIs struct {
+			Count int      `json:"count"`
+			Names []string `json:"names"`
+		} `json:"apis"`
 		ContentTypes []struct {
 			Name      string   `json:"name"`
 			MIMETypes []string `json:"mime_types"`
@@ -128,6 +154,18 @@ func TestDoctorJSONWritesMachineReadableReport(t *testing.T) {
 	}
 	if report.ConfigParse.Status != "ok" || report.ConfigParse.APICount != 1 {
 		t.Fatalf("unexpected config parse report: %#v", report.ConfigParse)
+	}
+	if report.Runtime.Version == "" || report.Runtime.GOOS == "" || report.Runtime.GOARCH == "" {
+		t.Fatalf("runtime report missing fields: %#v", report.Runtime)
+	}
+	if report.HTTPCacheSummary.Directory == "" {
+		t.Fatalf("cache summary missing directory: %#v", report.HTTPCacheSummary)
+	}
+	if report.Theme.Status == "" {
+		t.Fatalf("theme report missing status: %#v", report.Theme)
+	}
+	if report.APIs.Count != 1 || !reflect.DeepEqual(report.APIs.Names, []string{"demo"}) {
+		t.Fatalf("API inventory = %#v, want demo", report.APIs)
 	}
 	if report.PluginDirectory == "" {
 		t.Fatal("expected plugin_directory in doctor report")
@@ -307,6 +345,21 @@ func TestDoctorAPIUnknownTargetJSONExitsNonZero(t *testing.T) {
 	}
 	if report.API != "missing" || report.Registered {
 		t.Fatalf("unexpected missing API report: %#v", report)
+	}
+}
+
+func TestDoctorAPIHintsSyncWhenSpecCacheMissing(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"apis":{"demo":{"base_url":"https://api.example.com"}}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if err := c.Run([]string{"restish", "doctor", "api", "demo"}); err != nil {
+		t.Fatalf("doctor api: %v", err)
+	}
+	requireContains(t, out.String(), "Spec cache: missing", `run "restish api sync demo"`, "Generated operations: unavailable")
+	if !strings.Contains(errOut.String(), "Tip: use -o json for machine-readable output.") {
+		t.Fatalf("doctor api should print redirected-output JSON hint, got:\n%s", errOut.String())
 	}
 }
 

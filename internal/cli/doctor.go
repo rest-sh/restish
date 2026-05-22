@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/internal/config"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -94,18 +95,50 @@ type doctorInstalledPluginReport struct {
 	Version      string   `json:"version,omitempty"`
 	Path         string   `json:"path"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	Commands     []string `json:"commands,omitempty"`
 	Formatters   []string `json:"formatters,omitempty"`
 	Loaders      []string `json:"loaders,omitempty"`
 }
 
+type doctorRuntimeReport struct {
+	Version        string `json:"version"`
+	GOOS           string `json:"goos"`
+	GOARCH         string `json:"goarch"`
+	StdoutTerminal bool   `json:"stdout_terminal"`
+	ColorEnabled   bool   `json:"color_enabled"`
+}
+
+type doctorCacheSummaryReport struct {
+	Directory   string `json:"directory"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	Size        string `json:"size,omitempty"`
+	Entries     int    `json:"entries,omitempty"`
+	OldestEntry string `json:"oldest_entry,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type doctorThemeReport struct {
+	Status string `json:"status"`
+	Source string `json:"source,omitempty"`
+}
+
+type doctorAPIInventoryReport struct {
+	Count int      `json:"count"`
+	Names []string `json:"names,omitempty"`
+}
+
 type doctorRootReport struct {
 	ConfigFile            string                        `json:"config_file"`
+	Runtime               doctorRuntimeReport           `json:"runtime"`
 	ConfigParse           doctorConfigParseReport       `json:"config_parse"`
 	ConfigPermissions     doctorPermissionReport        `json:"config_permissions"`
 	HTTPCache             string                        `json:"http_cache"`
+	HTTPCacheSummary      doctorCacheSummaryReport      `json:"http_cache_summary"`
 	SpecCache             string                        `json:"spec_cache"`
 	TokenCache            string                        `json:"token_cache"`
 	TokenCachePermissions doctorPermissionReport        `json:"token_cache_permissions"`
+	Theme                 doctorThemeReport             `json:"theme"`
+	APIs                  doctorAPIInventoryReport      `json:"apis"`
 	PluginDirectory       string                        `json:"plugin_directory"`
 	InstalledPlugins      []doctorInstalledPluginReport `json:"installed_plugins"`
 	ContentTypes          []doctorContentTypeReport     `json:"content_types"`
@@ -171,6 +204,7 @@ type doctorManifestReport struct {
 	Name         string `json:"name,omitempty"`
 	Version      string `json:"version,omitempty"`
 	Capabilities string `json:"capabilities,omitempty"`
+	Commands     string `json:"commands,omitempty"`
 	APIVersion   int    `json:"api_version,omitempty"`
 }
 
@@ -193,8 +227,13 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 	out := c.doctorTextOutput()
 	style := humanTextStyleFor(out)
+	runtimeReport := c.doctorRuntimeReport()
+	fmt.Fprintf(out, "Restish version: %s\n", runtimeReport.Version)
+	fmt.Fprintf(out, "Platform: %s/%s\n", runtimeReport.GOOS, runtimeReport.GOARCH)
+	fmt.Fprintf(out, "Terminal: stdout=%t color=%t\n", runtimeReport.StdoutTerminal, runtimeReport.ColorEnabled)
 	cfgPath := c.configFilePath()
 	fmt.Fprintf(out, "Config file: %s\n", cfgPath)
+	var loadedCfg *config.Config
 	if cfg, err := c.loadConfig(); err != nil {
 		fmt.Fprintf(out, "Config parse: %s\n  %v\n", style.error("invalid"), err)
 		c.printConfigDiagnostics(out, cfgPath)
@@ -202,6 +241,7 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "Config parse: %s\n  %v\n", style.error("invalid"), err)
 		c.printConfigDiagnostics(out, cfgPath)
 	} else {
+		loadedCfg = cfg
 		apiCount := 0
 		if cfg.APIs != nil {
 			apiCount = len(cfg.APIs)
@@ -209,6 +249,8 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "Config parse: %s (%d APIs)\n", style.ok("ok"), apiCount)
 		c.printConfigDiagnostics(out, cfgPath)
 	}
+	c.printDoctorTheme(out, style, loadedCfg)
+	c.printDoctorAPIInventory(out, style, loadedCfg)
 	if insecure, err := config.ConfigFileHasInsecurePermissions(cfgPath); err != nil {
 		fmt.Fprintf(out, "Config permissions: %s (%v)\n", style.warn("unknown"), err)
 	} else if insecure {
@@ -216,7 +258,13 @@ func (c *CLI) runDoctor(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(out, "Config permissions: %s\n", style.ok("ok"))
 	}
-	fmt.Fprintf(out, "HTTP cache: %s\n", c.configScopedCacheDir(c.paths().Cache()))
+	cacheSummary := c.doctorCacheSummaryReport()
+	fmt.Fprintf(out, "HTTP cache: %s\n", cacheSummary.Directory)
+	if cacheSummary.Error != "" {
+		fmt.Fprintf(out, "HTTP cache summary: %s (%s)\n", style.warn("unavailable"), cacheSummary.Error)
+	} else {
+		fmt.Fprintf(out, "HTTP cache summary: %s, %d entries\n", cacheSummary.Size, cacheSummary.Entries)
+	}
 	fmt.Fprintf(out, "Spec cache: %s\n", c.specCacheDir())
 	tokenCachePath := c.tokenCachePath()
 	fmt.Fprintf(out, "Token cache: %s\n", tokenCachePath)
@@ -281,7 +329,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "Spec cache: %s\n", style.ok("present"))
 		}
 	} else {
-		fmt.Fprintf(out, "Spec cache: %s\n", style.warn("missing"))
+		fmt.Fprintf(out, "Spec cache: %s (%s)\n", style.warn("missing"), style.hint("run \"restish api sync "+name+"\""))
 	}
 	if opInfo.Available {
 		if opInfo.Cached && opInfo.CacheStatus.Stale {
@@ -293,7 +341,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "  %s: %s\n", style.error("Issue"), issue)
 		}
 	} else {
-		fmt.Fprintf(out, "Generated operations: %s\n", style.warn("unavailable"))
+		fmt.Fprintf(out, "Generated operations: %s (%s)\n", style.warn("unavailable"), style.hint("run \"restish api sync "+name+"\""))
 	}
 	if auth := c.doctorAuthForProfile(name, profileName, profileForName(api, profileName)); auth.Status == "configured" {
 		if len(auth.Sources) > 0 {
@@ -368,6 +416,12 @@ func (c *CLI) runDoctorPlugin(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(out, "Manifest: %s %s\n", manifest.Name, manifest.Version)
 	fmt.Fprintf(out, "Declared capabilities: %s\n", pluginCapabilitySummary(*manifest))
+	if pluginDeclaresHook(*manifest, "command") {
+		commands := c.doctorCommandPluginNames(path)
+		if len(commands) > 0 {
+			fmt.Fprintf(out, "Commands: %s\n", strings.Join(commands, ", "))
+		}
+	}
 	fmt.Fprintf(out, "Protocol startup: %s (API v%d)\n", style.ok("ok"), manifest.RestishAPIVersion)
 	return nil
 }
@@ -376,7 +430,7 @@ func (c *CLI) doctorTextOutput() io.Writer {
 	if c.doctorStdoutIsTerminal() {
 		return c.Stderr
 	}
-	fmt.Fprintln(c.Stderr, "Use -o json for machine-readable output.")
+	fmt.Fprintln(c.Stderr, "Tip: use -o json for machine-readable output.")
 	return c.Stdout
 }
 
@@ -396,12 +450,16 @@ func (c *CLI) doctorRootReport() doctorRootReport {
 	cfgPath := c.configFilePath()
 	return doctorRootReport{
 		ConfigFile:            cfgPath,
+		Runtime:               c.doctorRuntimeReport(),
 		ConfigParse:           c.doctorConfigParseReport(cfgPath),
 		ConfigPermissions:     doctorFilePermissionReport(cfgPath, "run chmod 600 "+cfgPath),
-		HTTPCache:             c.configScopedCacheDir(c.paths().Cache()),
+		HTTPCache:             c.cacheDir(),
+		HTTPCacheSummary:      c.doctorCacheSummaryReport(),
 		SpecCache:             c.specCacheDir(),
 		TokenCache:            c.tokenCachePath(),
 		TokenCachePermissions: doctorFilePermissionReport(c.tokenCachePath(), "run chmod 600 "+c.tokenCachePath()+" before the next OAuth request"),
+		Theme:                 c.doctorThemeReport(),
+		APIs:                  c.doctorAPIInventoryReport(),
 		PluginDirectory:       c.pluginDir(),
 		InstalledPlugins:      c.doctorInstalledPluginsReport(),
 		ContentTypes:          c.doctorContentTypesReport(),
@@ -425,17 +483,117 @@ func (c *CLI) printInstalledPlugins(out io.Writer, style humanTextStyle) {
 			parts = append(parts, "capabilities: "+summary)
 		}
 		fmt.Fprintf(out, "  %s\n", strings.Join(parts, " "))
+		if len(p.Commands) > 0 {
+			fmt.Fprintf(out, "    %s %s\n", style.key("commands:"), strings.Join(p.Commands, ", "))
+		}
 	}
+}
+
+func (c *CLI) doctorRuntimeReport() doctorRuntimeReport {
+	return doctorRuntimeReport{
+		Version:        c.currentVersion(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		StdoutTerminal: c.stdoutIsTerminal(),
+		ColorEnabled:   humanTextStyleFor(c.Stdout).color,
+	}
+}
+
+func (c *CLI) doctorCacheSummaryReport() doctorCacheSummaryReport {
+	dir := c.cacheDir()
+	report := doctorCacheSummaryReport{Directory: dir}
+	dc, err := cache.New(dir, cache.DefaultMaxBytes, "")
+	if err != nil {
+		report.Error = err.Error()
+		return report
+	}
+	info, err := dc.Info()
+	if err != nil {
+		report.Error = err.Error()
+		return report
+	}
+	report.SizeBytes = info.SizeBytes
+	report.Size = formatBytes(info.SizeBytes)
+	report.Entries = info.EntryCount
+	if !info.OldestEntry.IsZero() {
+		report.OldestEntry = info.OldestEntry.Format(time.RFC3339)
+	}
+	return report
+}
+
+func (c *CLI) doctorThemeReport() doctorThemeReport {
+	cfg := c.cfg
+	if cfg == nil {
+		return doctorThemeReport{Status: "default"}
+	}
+	if cfg.ThemeSource != "" {
+		return doctorThemeReport{Status: "configured", Source: cfg.ThemeSource}
+	}
+	if len(cfg.Theme) > 0 {
+		return doctorThemeReport{Status: "configured"}
+	}
+	return doctorThemeReport{Status: "default"}
+}
+
+func (c *CLI) printDoctorTheme(out io.Writer, style humanTextStyle, cfg *config.Config) {
+	report := doctorThemeReport{Status: "default"}
+	if cfg != nil {
+		if cfg.ThemeSource != "" {
+			report = doctorThemeReport{Status: "configured", Source: cfg.ThemeSource}
+		} else if len(cfg.Theme) > 0 {
+			report = doctorThemeReport{Status: "configured"}
+		}
+	}
+	if report.Source != "" {
+		fmt.Fprintf(out, "Theme: %s (%s)\n", style.ok(report.Status), report.Source)
+		return
+	}
+	if report.Status == "configured" {
+		fmt.Fprintf(out, "Theme: %s\n", style.ok(report.Status))
+		return
+	}
+	fmt.Fprintf(out, "Theme: %s\n", style.ok(report.Status))
+}
+
+func (c *CLI) doctorAPIInventoryReport() doctorAPIInventoryReport {
+	cfg := c.cfg
+	if cfg == nil {
+		return doctorAPIInventoryReport{}
+	}
+	names := make([]string, 0, len(cfg.APIs))
+	for name := range cfg.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return doctorAPIInventoryReport{Count: len(names), Names: names}
+}
+
+func (c *CLI) printDoctorAPIInventory(out io.Writer, style humanTextStyle, cfg *config.Config) {
+	if cfg == nil || len(cfg.APIs) == 0 {
+		fmt.Fprintf(out, "APIs: %s\n", style.warn("none"))
+		return
+	}
+	names := make([]string, 0, len(cfg.APIs))
+	for name := range cfg.APIs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	fmt.Fprintf(out, "APIs: %d (%s)\n", len(names), strings.Join(names, ", "))
 }
 
 func (c *CLI) doctorInstalledPluginsReport() []doctorInstalledPluginReport {
 	out := make([]doctorInstalledPluginReport, 0, len(c.plugins))
 	for _, p := range c.plugins {
+		commands := []string(nil)
+		if pluginDeclaresHook(p.Manifest, "command") {
+			commands = c.doctorCommandPluginNames(p.Path)
+		}
 		out = append(out, doctorInstalledPluginReport{
 			Name:         p.Manifest.Name,
 			Version:      p.Manifest.Version,
 			Path:         p.Path,
 			Capabilities: append([]string(nil), p.Manifest.Hooks...),
+			Commands:     commands,
 			Formatters:   append([]string(nil), p.Manifest.FormatterNames...),
 			Loaders:      append([]string(nil), p.Manifest.LoaderContentTypes...),
 		})
@@ -458,6 +616,26 @@ func installedPluginCapabilitySummary(p doctorInstalledPluginReport) string {
 		LoaderContentTypes: p.Loaders,
 	}
 	return pluginCapabilitySummary(m)
+}
+
+func (c *CLI) doctorCommandPluginNames(path string) []string {
+	ctx := c.runCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	decls, err := loadCommandPluginCommands(ctx, path)
+	if err != nil {
+		c.warnf("plugin %s: %v", filepath.Base(path), err)
+		return nil
+	}
+	names := make([]string, 0, len(decls))
+	for _, decl := range decls {
+		if decl.Name != "" {
+			names = append(names, decl.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (c *CLI) doctorContentTypesReport() []doctorContentTypeReport {
@@ -694,6 +872,9 @@ func (c *CLI) doctorPluginReport(name string) doctorPluginReport {
 		Version:      manifest.Version,
 		Capabilities: pluginCapabilitySummary(*manifest),
 		APIVersion:   manifest.RestishAPIVersion,
+	}
+	if pluginDeclaresHook(*manifest, "command") {
+		report.Manifest.Commands = strings.Join(c.doctorCommandPluginNames(path), ", ")
 	}
 	return report
 }
