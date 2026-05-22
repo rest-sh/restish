@@ -16,7 +16,7 @@ func (c *CLI) addLinksCommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s links https://api.example.com/items/123
   %s links https://api.example.com/items/123 self next`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Long: linksLong,
-		Args: cobra.MinimumNArgs(1),
+		Args: usageMinimumNArgs(1),
 		RunE: c.runLinksCmd,
 	})
 }

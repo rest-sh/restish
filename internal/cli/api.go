@@ -43,7 +43,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Long:  apiListLong,
 		Example: fmt.Sprintf(`  %s api list
   %s api list -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: c.runAPIList,
 	})
 	apiCmd.AddCommand(&cobra.Command{
@@ -51,7 +51,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Short:   "Remove a configured API",
 		Long:    apiRemoveLong,
 		Example: fmt.Sprintf("  %s api remove demo", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(1),
+		Args:    usageExactArgs(1),
 		RunE:    c.runAPIRemove,
 	})
 	syncCmd := &cobra.Command{
@@ -61,7 +61,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s api sync demo
   %s api sync demo --yes
   %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.ExactArgs(1),
+		Args: usageExactArgs(1),
 		RunE: c.runAPISync,
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host for this sync run")
@@ -74,7 +74,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s api connect demo https://api.example.com
   %s api connect demo https://api.example.com 'prompt.api_key: env:DEMO_API_KEY'
   %s api connect demo https://api.example.com --spec ./openapi.yaml`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.MinimumNArgs(2),
+		Args: usageMinimumNArgs(2),
 		RunE: c.runAPIConnect,
 	}
 	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host; private/local follow targets are still rejected")
@@ -97,7 +97,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Short:   "Print the config for a registered API as JSON",
 		Long:    apiInspectLong,
 		Example: fmt.Sprintf("  %s api inspect demo", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(1),
+		Args:    usageExactArgs(1),
 		RunE:    c.runAPIInspect,
 	})
 	apiCmd.AddCommand(&cobra.Command{
@@ -107,7 +107,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s api set demo 'profiles.default.headers[]: X-Trace-Id: abc'
   %s api set demo 'base_url: https://staging.example.com'
   %s api set demo 'profiles.prod.auth.type: oauth-client-credentials'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.MinimumNArgs(2),
+		Args: usageMinimumNArgs(2),
 		RunE: c.runAPISet,
 	})
 	root.AddCommand(apiCmd)

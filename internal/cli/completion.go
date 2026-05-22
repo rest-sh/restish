@@ -40,6 +40,9 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 		Use:   "completion",
 		Short: "Generate or install shell completion scripts",
 		Long:  completionLong,
+		Example: fmt.Sprintf(`  %s shell completion zsh
+  %s shell completion bash > restish.bash
+  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown completion command %q", args[0])
@@ -59,8 +62,9 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	bash := &cobra.Command{
 		Use:                   "bash",
 		Short:                 fmt.Sprintf(shortDesc, "bash"),
-		Long:                  shellCompletionLong("bash", "restish shell completion bash > /etc/bash_completion.d/restish"),
-		Args:                  cobra.NoArgs,
+		Long:                  shellCompletionLong("bash", "restish shell completion bash > restish.bash"),
+		Example:               fmt.Sprintf("  %s shell completion bash > restish.bash", c.commandNameOrDefault()),
+		Args:                  usageNoArgs,
 		DisableFlagsInUseLine: true,
 		ValidArgsFunction:     cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,20 +72,24 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 		},
 	}
 	zsh := &cobra.Command{
-		Use:               "zsh",
-		Short:             fmt.Sprintf(shortDesc, "zsh"),
-		Long:              shellCompletionLong("zsh", "restish shell completion install zsh"),
-		Args:              cobra.NoArgs,
+		Use:   "zsh",
+		Short: fmt.Sprintf(shortDesc, "zsh"),
+		Long:  shellCompletionLong("zsh", "restish shell completion install zsh"),
+		Example: fmt.Sprintf(`  %s shell completion zsh > _restish
+  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return generateCompletionScript(cmd.Root(), "zsh", noDesc, c.Stdout)
 		},
 	}
 	fish := &cobra.Command{
-		Use:               "fish",
-		Short:             fmt.Sprintf(shortDesc, "fish"),
-		Long:              shellCompletionLong("fish", "restish shell completion install fish"),
-		Args:              cobra.NoArgs,
+		Use:   "fish",
+		Short: fmt.Sprintf(shortDesc, "fish"),
+		Long:  shellCompletionLong("fish", "restish shell completion install fish"),
+		Example: fmt.Sprintf(`  %s shell completion fish > restish.fish
+  %s shell completion install fish`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return generateCompletionScript(cmd.Root(), "fish", noDesc, c.Stdout)
@@ -91,7 +99,8 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 		Use:               "powershell",
 		Short:             fmt.Sprintf(shortDesc, "powershell"),
 		Long:              shellCompletionLong("powershell", "restish shell completion powershell | Out-String | Invoke-Expression"),
-		Args:              cobra.NoArgs,
+		Example:           fmt.Sprintf("  %s shell completion powershell | Out-String | Invoke-Expression", c.commandNameOrDefault()),
+		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return generateCompletionScript(cmd.Root(), "powershell", noDesc, c.Stdout)
@@ -102,10 +111,12 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	}
 
 	installCmd := &cobra.Command{
-		Use:               "install <shell>",
-		Short:             "Install shell completion for your user account",
-		Long:              completionInstallLong,
-		Args:              cobra.ExactArgs(1),
+		Use:   "install <shell>",
+		Short: "Install shell completion for your user account",
+		Long:  completionInstallLong,
+		Example: fmt.Sprintf(`  %s shell completion install zsh
+  %s shell completion install fish --dry-run`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args:              usageExactArgs(1),
 		ValidArgs:         []string{"zsh", "fish"},
 		ValidArgsFunction: cobra.FixedCompletions([]cobra.Completion{"zsh", "fish"}, cobra.ShellCompDirectiveNoFileComp),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -521,7 +532,7 @@ func allCompletionValuesAreAPISeeds(values []string) bool {
 
 func shellCompletionLong(shell, installExample string) string {
 	return fmt.Sprintf("Generate the autocompletion script for `%s`.\n\n"+
-		"This writes the script to stdout for package managers and manual shell setup. For user-level installation, use:\n\n"+
+		"This writes the script to stdout for package managers and manual shell setup. For managed user-level installation where supported, use:\n\n"+
 		"```bash\n%s\n```\n", shell, installExample)
 }
 

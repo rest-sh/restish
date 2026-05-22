@@ -42,7 +42,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Long:  pluginListLong,
 		Example: fmt.Sprintf(`  %s plugin list
   %s plugin list -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: c.runPluginList,
 	}
 	pluginCmd.AddCommand(listCmd)
@@ -53,7 +53,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s plugin install ./restish-example
   %s plugin install restish-example
   %s plugin install rest-sh/restish mcp`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.RangeArgs(1, 2),
+		Args: usageRangeArgs(1, 2),
 		RunE: c.runPluginInstall,
 	}
 	installCmd.Flags().Bool("yes", false, "Trust and install without an interactive confirmation")
@@ -63,7 +63,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Short:   "Remove an installed plugin",
 		Long:    pluginRemoveLong,
 		Example: fmt.Sprintf("  %s plugin remove example", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(1),
+		Args:    usageExactArgs(1),
 		RunE:    c.runPluginRemove,
 	})
 	pluginCmd.AddCommand(&cobra.Command{
@@ -71,7 +71,7 @@ func (c *CLI) addPluginCommand(root *cobra.Command) {
 		Short:   "Spawn a plugin and print decoded CBOR messages to stderr",
 		Long:    pluginDebugLong,
 		Example: fmt.Sprintf("  %s plugin debug example -- --help", c.commandNameOrDefault()),
-		Args:    cobra.MinimumNArgs(1),
+		Args:    usageMinimumNArgs(1),
 		RunE:    c.runPluginDebug,
 	})
 	root.AddCommand(pluginCmd)

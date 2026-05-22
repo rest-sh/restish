@@ -34,7 +34,7 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 		Long:  cacheInfoLong,
 		Example: fmt.Sprintf(`  %s cache info
   %s cache info -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := c.cacheDir()
 			dc, err := cache.New(dir, cache.DefaultMaxBytes, "")
@@ -250,9 +250,9 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
   %s cache clear --direct`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if direct && len(args) > 0 {
-				return fmt.Errorf("--direct cannot be used with an API or namespace argument")
+				return newUsageError(fmt.Errorf("--direct cannot be used with an API or namespace argument; use either %q or %q", cmd.CommandPath()+" --direct", cmd.CommandPath()+" "+args[0]))
 			}
-			return cobra.MaximumNArgs(1)(cmd, args)
+			return usageMaximumNArgs(1)(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := c.cacheDir()
@@ -278,7 +278,7 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 					return err
 				}
 				if !registered && cleared == 0 {
-					return fmt.Errorf("unknown API or cached namespace %q", apiName)
+					return fmt.Errorf("unknown API or cached namespace %q; run %q to see cached API/profile namespaces, or omit the argument to clear every HTTP cache entry", apiName, c.commandNameOrDefault()+" cache info")
 				}
 				style := humanTextStyleFor(c.Stdout)
 				if registered {

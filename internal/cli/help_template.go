@@ -100,10 +100,10 @@ Examples:
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
 
 Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}{{if rshGroupHasAvailableCommands $cmds .ID}}
 
 {{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
 
 Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}{{with rshLocalFlagUsages . .LocalFlags}}
@@ -141,8 +141,18 @@ func setupGroupedUsage(root *cobra.Command) {
 		cobra.AddTemplateFunc("rshLocalFlagUsages", groupedLocalFlagUsages)
 		cobra.AddTemplateFunc("rshInheritedFlagUsages", groupedInheritedFlagUsages)
 		cobra.AddTemplateFunc("rshShowAllInheritedFlags", showAllInheritedFlags)
+		cobra.AddTemplateFunc("rshGroupHasAvailableCommands", groupHasAvailableCommands)
 	})
 	root.SetUsageTemplate(groupedUsageTemplate)
+}
+
+func groupHasAvailableCommands(commands []*cobra.Command, groupID string) bool {
+	for _, cmd := range commands {
+		if cmd.GroupID == groupID && (cmd.IsAvailableCommand() || cmd.Name() == "help") {
+			return true
+		}
+	}
+	return false
 }
 
 func groupedFlagUsages(flags *pflag.FlagSet) string {

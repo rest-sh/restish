@@ -139,6 +139,7 @@ func TestBuiltInCommandSurfaceMap(t *testing.T) {
 
 func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
 	commands := [][]string{
+		{"restish", "--help"},
 		{"restish", "get", "--help"},
 		{"restish", "api", "connect", "--help"},
 		{"restish", "api", "set", "--help"},
@@ -146,6 +147,14 @@ func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
 		{"restish", "plugin", "install", "--help"},
 		{"restish", "config", "set", "--help"},
 		{"restish", "doctor", "--help"},
+		{"restish", "shell", "--help"},
+		{"restish", "shell", "setup", "--help"},
+		{"restish", "shell", "completion", "--help"},
+		{"restish", "shell", "completion", "bash", "--help"},
+		{"restish", "shell", "completion", "zsh", "--help"},
+		{"restish", "shell", "completion", "fish", "--help"},
+		{"restish", "shell", "completion", "powershell", "--help"},
+		{"restish", "shell", "completion", "install", "--help"},
 	}
 	for _, args := range commands {
 		c, out, _ := newTestCLI(t)
@@ -155,6 +164,30 @@ func TestHighTrafficCommandHelpIncludesExamples(t *testing.T) {
 		if !strings.Contains(out.String(), "Examples:") {
 			t.Fatalf("%v: help missing examples:\n%s", args, out.String())
 		}
+	}
+}
+
+func TestRootHelpOmitsEmptyRegisteredAPIGroup(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "--help"}); err != nil {
+		t.Fatalf("root help: %v", err)
+	}
+	if strings.Contains(out.String(), "Registered APIs") {
+		t.Fatalf("root help should omit empty Registered APIs group:\n%s", out.String())
+	}
+}
+
+func TestHelpAllDoesNotDuplicateGlobalFlagDefaults(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	if err := c.Run([]string{"restish", "get", "--help-all", "--help"}); err != nil {
+		t.Fatalf("get --help-all: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, `(default: auto`) && strings.Contains(got, `(default "auto")`) {
+		t.Fatalf("rsh-output-format help should not show duplicate defaults:\n%s", got)
+	}
+	if strings.Contains(got, "(default )") {
+		t.Fatalf("help should not show empty defaults:\n%s", got)
 	}
 }
 
@@ -174,6 +207,81 @@ func TestRemovedPreReleaseCommandNames(t *testing.T) {
 			t.Fatalf("%v should be removed before v2 release", args)
 		}
 	}
+}
+
+func TestUserFacingArgErrorsIncludeHelpNextStep(t *testing.T) {
+	tests := [][]string{
+		{"restish", "get"},
+		{"restish", "api", "remove"},
+		{"restish", "api", "connect", "demo"},
+		{"restish", "api", "auth", "add", "demo"},
+		{"restish", "config", "set"},
+		{"restish", "shell", "setup"},
+		{"restish", "plugin", "install"},
+		{"restish", "cert"},
+		{"restish", "edit"},
+		{"restish", "links"},
+	}
+	for _, args := range tests {
+		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			err := c.Run(args)
+			if err == nil {
+				t.Fatalf("%v: expected usage error", args)
+			}
+			got := err.Error()
+			for _, raw := range []string{"accepts ", "requires at least", "requires a minimum", "arg(s)"} {
+				if strings.Contains(got, raw) {
+					t.Fatalf("%v: raw Cobra arity leaked in %q", args, got)
+				}
+			}
+			if !strings.Contains(got, "--help") {
+				t.Fatalf("%v: expected help next step, got %q", args, got)
+			}
+		})
+	}
+}
+
+func TestUnknownAPIErrorsSuggestListAndConnect(t *testing.T) {
+	for _, args := range [][]string{
+		{"restish", "api", "inspect", "missing"},
+		{"restish", "api", "set", "missing", "base_url: https://api.example.com"},
+		{"restish", "api", "auth", "header", "missing", "Authorization"},
+	} {
+		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
+			c, _, _ := newTestCLI(t)
+			err := c.Run(args)
+			if err == nil {
+				t.Fatalf("%v: expected unknown API error", args)
+			}
+			requireContains(t, err.Error(), `unknown API "missing"`, "restish api list", "restish api connect")
+		})
+	}
+}
+
+func TestCacheClearTargetErrorsAreActionable(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "cache", "clear", "all"})
+	if err == nil {
+		t.Fatal("expected cache clear target miss")
+	}
+	requireContains(t, err.Error(), `unknown API or cached namespace "all"`, "restish cache info", "omit the argument")
+
+	c, _, _ = newTestCLI(t)
+	err = c.Run([]string{"restish", "cache", "clear", "--direct", "demo"})
+	if err == nil {
+		t.Fatal("expected cache clear --direct target error")
+	}
+	requireContains(t, err.Error(), "--direct cannot be used", "restish cache clear --direct", "restish cache clear demo")
+}
+
+func TestInvalidThemeSourceErrorIsActionable(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "config", "theme", "set", "not-a-theme"})
+	if err == nil {
+		t.Fatal("expected invalid theme source error")
+	}
+	requireContains(t, err.Error(), `unknown theme source "not-a-theme"`, "official theme name", "local JSON/JSONC path", "GitHub user/repo")
 }
 
 func TestUnknownSubcommandsRejectConsistently(t *testing.T) {

@@ -34,9 +34,12 @@ func (c *CLI) newRootCmd() *cobra.Command {
 		long = rootLongDefault
 	}
 	root := &cobra.Command{
-		Use:                        use,
-		Short:                      short,
-		Long:                       long,
+		Use:   use,
+		Short: short,
+		Long:  long,
+		Example: fmt.Sprintf(`  %s get https://api.example.com/items
+  %s api connect demo https://api.example.com
+  %s doctor`, use, use, use),
 		Version:                    c.currentVersion(),
 		SilenceUsage:               true,
 		SilenceErrors:              true,
@@ -99,7 +102,7 @@ func (c *CLI) addVersionCommand(root *cobra.Command) {
 		Short:   "Print the Restish version",
 		Long:    versionLong,
 		GroupID: rootGroupUtility,
-		Args:    cobra.NoArgs,
+		Args:    usageNoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := rejectResponseTransformFlags(cmd); err != nil {
 				return err
@@ -152,7 +155,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.StringArrayP("rsh-header", "H", nil, `Request header in "Name: Value" format (repeatable)`)
 	pf.StringArrayP("rsh-query", "q", nil, `Query parameter in "key=value" format (repeatable)`)
 	pf.StringP("rsh-server", "s", "", "Override scheme://host for all requests (e.g. https://staging.example.com)")
-	pf.StringP("rsh-output-format", "o", "auto", "Output format for rendered response bodies: "+output.FormatterNames(c.formatters)+" (default: auto; use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)")
+	pf.StringP("rsh-output-format", "o", "auto", "Output format for rendered response bodies: "+output.FormatterNames(c.formatters)+" (use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)")
 	pf.String("rsh-print", "auto", "Output parts to print: auto or any of H=request headers, B=request body, h=response headers, b=rendered body, p=pretty, c=color")
 	pf.BoolP("rsh-silent", "S", false, "Suppress all output; only the exit code conveys success or failure")
 	pf.String("rsh-columns", "", "Comma-separated column names for -o table (e.g. id,name,status)")
@@ -176,9 +179,9 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.String("rsh-auth", "", `Generated operation auth override, e.g. "PartnerKey" or "UserOAuth+PartnerKey"`)
 	pf.Bool("rsh-no-cache", false, "Bypass the HTTP response cache (no read, no write)")
 	pf.Bool("rsh-no-browser", false, "Disable automatic browser launch for interactive auth flows")
-	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and transient HTTP responses (default: 2; 0 = disable)")
+	pf.Int("rsh-retry", -1, "Maximum retry attempts for network errors and transient HTTP responses (0 = disable)")
 	if flag := pf.Lookup("rsh-retry"); flag != nil {
-		flag.DefValue = ""
+		flag.DefValue = "2"
 	}
 	pf.Bool("rsh-retry-unsafe", false, "Allow retries for POST, PUT, PATCH, and DELETE requests")
 	pf.String("rsh-retry-max-wait", "", "Maximum wait for Retry-After/X-Retry-In delays (default: 5m)")

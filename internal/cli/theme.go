@@ -31,7 +31,7 @@ func (c *CLI) newThemeSetCommand() *cobra.Command {
 		Example: fmt.Sprintf(`  %s config theme set one-dark-pro
   %s config theme set ./theme.json
   %s config theme set user/repo dark`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.RangeArgs(1, 2),
+		Args: usageRangeArgs(1, 2),
 		RunE: c.runThemeSet,
 	}
 	cmd.Flags().Bool("yes", false, "Install without confirmation prompt")
@@ -44,7 +44,7 @@ func (c *CLI) newThemeListCommand() *cobra.Command {
 		Short:   "List official theme names",
 		Long:    configThemeListLong,
 		Example: fmt.Sprintf("  %s config theme list", c.commandNameOrDefault()),
-		Args:    cobra.NoArgs,
+		Args:    usageNoArgs,
 		RunE:    c.runThemeList,
 	}
 }
@@ -56,7 +56,7 @@ func (c *CLI) newThemeResetCommand() *cobra.Command {
 		Short:   "Reset auto output highlighting to the built-in theme",
 		Long:    configThemeResetLong,
 		Example: fmt.Sprintf("  %s config theme reset", c.commandNameOrDefault()),
-		Args:    cobra.NoArgs,
+		Args:    usageNoArgs,
 		RunE:    c.runThemeReset,
 	}
 }
@@ -247,7 +247,10 @@ func resolveThemeSource(args []string) (string, error) {
 	if isOfficialThemeName(source) {
 		return officialThemeSource(source), nil
 	}
-	return source, nil
+	if hasURLScheme(source) {
+		return source, nil
+	}
+	return "", fmt.Errorf("config theme set: unknown theme source %q; use an official theme name, local JSON/JSONC path, http(s) URL, or GitHub user/repo", source)
 }
 
 func officialThemeSource(name string) string {

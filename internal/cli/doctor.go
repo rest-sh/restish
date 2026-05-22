@@ -28,7 +28,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s doctor
   %s doctor -o json
   %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: c.runDoctor,
 	}
 	doctorCmd.AddCommand(&cobra.Command{
@@ -37,7 +37,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 		Long:  doctorAPILong,
 		Example: fmt.Sprintf(`  %s doctor api demo
   %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.ExactArgs(1),
+		Args: usageExactArgs(1),
 		RunE: c.runDoctorAPI,
 	})
 	doctorAPI := doctorCmd.Commands()[0]
@@ -47,7 +47,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 		Short:   "Diagnose a Restish plugin executable",
 		Long:    doctorPluginLong,
 		Example: fmt.Sprintf("  %s doctor plugin mcp", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(1),
+		Args:    usageExactArgs(1),
 		RunE:    c.runDoctorPlugin,
 	})
 	root.AddCommand(doctorCmd)

@@ -21,7 +21,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Example: fmt.Sprintf(`  %s api auth inspect demo
   %s api auth inspect demo --operation list-items
   %s api auth logout demo`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
@@ -34,7 +34,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Short:   "Add an empty credential binding to an API profile",
 		Long:    apiAuthAddLong,
 		Example: fmt.Sprintf("  %s api auth add demo PartnerKey", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(2),
+		Args:    usageExactArgs(2),
 		RunE:    c.runAPIAuthAdd,
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -42,7 +42,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Short:   "Remove a credential binding from an API profile",
 		Long:    apiAuthRemoveLong,
 		Example: fmt.Sprintf("  %s api auth remove demo PartnerKey", c.commandNameOrDefault()),
-		Args:    cobra.ExactArgs(2),
+		Args:    usageExactArgs(2),
 		RunE:    c.runAPIAuthRemove,
 	})
 	logoutCmd := &cobra.Command{
@@ -52,7 +52,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Example: fmt.Sprintf(`  %s api auth logout demo
   %s api auth logout demo --all-profiles
   %s api auth logout --auth-profile shared-oauth`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.MaximumNArgs(1),
+		Args: usageMaximumNArgs(1),
 		RunE: c.runAPIAuthLogout,
 	}
 	addAPIAuthLogoutFlags(logoutCmd)
@@ -63,7 +63,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Long:  apiAuthHeaderLong,
 		Example: fmt.Sprintf(`  %s api auth header demo Authorization
   %s api auth header demo X-API-Key PartnerKey`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.RangeArgs(2, 3),
+		Args: usageRangeArgs(2, 3),
 		RunE: c.runAPIAuthHeader,
 	}
 	headerCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
@@ -75,7 +75,7 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Long:  apiAuthInspectLong,
 		Example: fmt.Sprintf(`  %s api auth inspect demo
   %s api auth inspect demo --operation list-items --redact`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.ExactArgs(1),
+		Args: usageExactArgs(1),
 		RunE: c.runAPIAuthInspect,
 	}
 	inspectCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
@@ -957,7 +957,7 @@ func (c *CLI) saveAPIAuthCredentialConfig(apiName, profileName, credentialID str
 	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
 		apiCfg := cfg.APIs[apiName]
 		if apiCfg == nil {
-			return fmt.Errorf("unknown API %q", apiName)
+			return c.unknownAPIError(apiName)
 		}
 		if apiCfg.Profiles == nil {
 			apiCfg.Profiles = map[string]*config.ProfileConfig{}
@@ -982,7 +982,7 @@ func (c *CLI) removeAPIAuthCredentialConfig(apiName, profileName, credentialID s
 	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
 		apiCfg := cfg.APIs[apiName]
 		if apiCfg == nil {
-			return fmt.Errorf("unknown API %q", apiName)
+			return c.unknownAPIError(apiName)
 		}
 		prof := profileForName(apiCfg, profileName)
 		if prof == nil || prof.Credentials == nil || prof.Credentials[credentialID] == nil {

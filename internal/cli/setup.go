@@ -38,6 +38,9 @@ func (c *CLI) addShellCommand(root *cobra.Command) {
 		Use:   "shell",
 		Short: "Configure shell integration for restish",
 		Long:  shellLong,
+		Example: fmt.Sprintf(`  %s shell setup zsh
+  %s shell completion zsh
+  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown shell command %q", args[0])
@@ -49,10 +52,13 @@ func (c *CLI) addShellCommand(root *cobra.Command) {
 		shellCmd.GroupID = rootGroupConfig
 	}
 	setupCmd := &cobra.Command{
-		Use:       "setup <shell>",
-		Short:     "Configure your shell for restish",
-		Long:      shellSetupLong,
-		Args:      cobra.ExactArgs(1),
+		Use:   "setup <shell>",
+		Short: "Configure your shell for restish",
+		Long:  shellSetupLong,
+		Example: fmt.Sprintf(`  %s shell setup zsh
+  %s shell setup fish --dry-run
+  %s shell setup bash --no-completion`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args:      usageExactArgs(1),
 		ValidArgs: shells,
 		RunE:      c.runSetup,
 	}

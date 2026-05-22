@@ -31,7 +31,7 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 		Example: fmt.Sprintf(`  %s edit https://api.example.com/items/123
   %s edit https://api.example.com/items/123 'name: Ada' --dry-run
   %s edit demo/items/123 --no-editor`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.MinimumNArgs(1),
+		Args: usageMinimumNArgs(1),
 		RunE: c.runEdit,
 	}
 	cmd.Flags().StringP("edit-format", "e", "json", "Editor file format: json or yaml")

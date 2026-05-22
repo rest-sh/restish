@@ -11,9 +11,13 @@ import (
 
 func (c *CLI) requireAPI(apiName string) (*config.APIConfig, error) {
 	if c.cfg == nil || c.cfg.APIs == nil || c.cfg.APIs[apiName] == nil {
-		return nil, fmt.Errorf("unknown API %q", apiName)
+		return nil, c.unknownAPIError(apiName)
 	}
 	return c.cfg.APIs[apiName], nil
+}
+
+func (c *CLI) unknownAPIError(apiName string) error {
+	return fmt.Errorf("unknown API %q; run %q to list configured APIs or %q to register one", apiName, c.commandNameOrDefault()+" api list", c.commandNameOrDefault()+" api connect")
 }
 
 func (c *CLI) saveConfigValues(label string, ops []config.ConfigPatchOperation) error {

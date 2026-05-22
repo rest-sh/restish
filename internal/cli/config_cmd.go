@@ -31,7 +31,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Short:   "Print the active config file path",
 		Long:    configPathLong,
 		Example: fmt.Sprintf("  %s config path", c.commandNameOrDefault()),
-		Args:    cobra.NoArgs,
+		Args:    usageNoArgs,
 		RunE:    c.runConfigPath,
 	})
 	showCmd := &cobra.Command{
@@ -40,7 +40,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Long:  configShowLong,
 		Example: fmt.Sprintf(`  %s config show
   %s config show -o json`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: c.runConfigShow,
 	}
 	configCmd.AddCommand(showCmd)
@@ -49,7 +49,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Short:   "Open the restish config file in $VISUAL or $EDITOR",
 		Long:    configEditLong,
 		Example: fmt.Sprintf("  %s config edit", c.commandNameOrDefault()),
-		Args:    cobra.NoArgs,
+		Args:    usageNoArgs,
 		RunE:    c.runConfigEdit,
 	})
 	configCmd.AddCommand(&cobra.Command{
@@ -58,7 +58,7 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Long:  configSetLong,
 		Example: fmt.Sprintf(`  %s config set 'cache.max_size: 500MB'
   %s config set 'theme.key: #afd787'`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: cobra.MinimumNArgs(1),
+		Args: usageMinimumNArgs(1),
 		RunE: c.runConfigSet,
 	})
 	themeCmd := &cobra.Command{
