@@ -74,6 +74,15 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		long = strings.TrimSpace(set.Info.Summary)
 	}
 	long, fullLong := generatedAPIHelpDescription(apiName, long)
+	if generatedAPIHasAuth(ops) {
+		if long != "" {
+			long += "\n\n"
+		}
+		long += fmt.Sprintf("Auth: run %q for credential coverage. Use --rsh-auth on generated operations when you need an explicit credential override.", c.commandNameOrDefault()+" api auth inspect "+apiName)
+		if fullLong != "" {
+			fullLong += "\n\n" + fmt.Sprintf("Auth: run %q for credential coverage. Use --rsh-auth on generated operations when you need an explicit credential override.", c.commandNameOrDefault()+" api auth inspect "+apiName)
+		}
+	}
 
 	apiCmd := &cobra.Command{
 		Use:     apiName,
@@ -101,6 +110,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	tagCommandNameByTag := map[string]string{}
 	commandNamesByTag := map[string]map[string]bool{}
 	useTagLayout := apiCfg.CommandLayout == "tags"
+	rootExamples := make([]string, 0, 3)
 
 	for _, op := range ops {
 		tagCommandName := ""
@@ -144,6 +154,9 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		cmd.Aliases = c.filterGeneratedAliases(apiName, cmd, collisionScope)
 		if useTagLayout && tagCommandName != "" {
 			tagCommands[tagCommandName].AddCommand(cmd)
+			if !cmd.Hidden && len(rootExamples) < 3 {
+				rootExamples = append(rootExamples, generatedOperationExampleLine(c.commandNameOrDefault(), examplePrefix, cmd.Use, op.Help.Examples))
+			}
 			continue
 		}
 		commandNames[cmd.Name()] = true
@@ -156,14 +169,27 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			cmd.GroupID = tag
 		}
 		apiCmd.AddCommand(cmd)
+		if !cmd.Hidden && len(rootExamples) < 3 {
+			rootExamples = append(rootExamples, generatedOperationExampleLine(c.commandNameOrDefault(), examplePrefix, cmd.Use, op.Help.Examples))
+		}
 	}
 	if useTagLayout {
 		for _, name := range tagCommandOrder {
 			apiCmd.AddCommand(tagCommands[name])
 		}
 	}
+	apiCmd.Example = strings.Join(rootExamples, "\n")
 
 	return apiCmd
+}
+
+func generatedAPIHasAuth(ops []spec.Operation) bool {
+	for _, op := range ops {
+		if len(op.CredentialAlternatives) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func generatedAPIHelpDescription(apiName, description string) (string, string) {
@@ -1293,6 +1319,22 @@ func indentSchemaContinuation(schema, indent string) string {
 }
 
 func generatedOperationExamples(commandName, apiName, use string, examples []string) string {
+	if line := generatedOperationExampleLine(commandName, apiName, use, examples); line != "" && len(examples) <= 1 {
+		return line
+	}
+	var b strings.Builder
+	for _, ex := range examples {
+		line := generatedOperationExampleLine(commandName, apiName, use, []string{ex})
+		if line == "" {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func generatedOperationExampleLine(commandName, apiName, use string, examples []string) string {
 	if commandName == "" {
 		commandName = "restish"
 	}
@@ -1306,21 +1348,19 @@ func generatedOperationExamples(commandName, apiName, use string, examples []str
 		}
 		return example
 	}
-	var b strings.Builder
-	for _, ex := range examples {
-		b.WriteString("  ")
-		b.WriteString(commandName)
-		b.WriteString(" ")
-		b.WriteString(apiName)
-		b.WriteString(" ")
-		b.WriteString(use)
-		if ex != "" {
-			b.WriteString(" ")
-			b.WriteString(ex)
-		}
-		b.WriteString("\n")
+	ex := examples[0]
+	example := "  " + commandName + " " + apiName + " " + use
+	if ex != "" {
+		example += " " + shellQuoteGeneratedExample(ex)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return example
+}
+
+func shellQuoteGeneratedExample(ex string) string {
+	if ex == "" || strings.HasPrefix(ex, "@") || strings.HasPrefix(ex, "<") || !strings.ContainsAny(ex, " \t,[]{}()\"'") {
+		return ex
+	}
+	return "'" + strings.ReplaceAll(ex, "'", "'\\''") + "'"
 }
 
 // runGeneratedOp is the RunE handler for generated operation commands.

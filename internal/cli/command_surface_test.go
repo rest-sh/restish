@@ -571,7 +571,15 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 		t.Fatalf("tapi --help: %v", err)
 	}
 	apiHelp := out.String()
-	for _, want := range []string{"list-items", "get-item", "create-item", "get-public"} {
+	for _, want := range []string{
+		"list-items",
+		"get-item",
+		"create-item",
+		"get-public",
+		"Examples:",
+		"restish tapi list-items",
+		"restish tapi create-item",
+	} {
 		if !strings.Contains(apiHelp, want) {
 			t.Fatalf("generated API help missing %q:\n%s", want, apiHelp)
 		}
@@ -594,11 +602,34 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 		t.Fatalf("focused generated operation help should hide inherited request flags:\n%s", opHelp)
 	}
 
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "create-item", "--help"}); err != nil {
+		t.Fatalf("create-item --help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "restish tapi create-item '") {
+		t.Fatalf("generated body shorthand example should be shell-quoted:\n%s", got)
+	}
+
 	c, _ = env.newCaptureCLI()
 	if err := c.Run([]string{"restish", "tapi", "get-itm", "--help"}); err == nil {
 		t.Fatal("expected generated API unknown command help to fail")
-	} else if !strings.Contains(err.Error(), `unknown command "get-itm" for "tapi"`) ||
+	} else if !strings.Contains(err.Error(), `unknown command "get-itm" for "restish tapi"`) ||
 		!strings.Contains(err.Error(), `did you mean "get-item"?`) {
 		t.Fatalf("unexpected generated unknown command help error: %v", err)
 	}
+}
+
+func TestGeneratedAPIHelpMentionsAuthInspection(t *testing.T) {
+	mux := http.NewServeMux()
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"ApiKeyAuth":{"type":"apiKey","in":"header","name":"X-API-Key"}`),
+			openAPIPaths(openAPIGet("/secure", "getSecure", `"security":[{"ApiKeyAuth":[]}]`)))
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	requireContains(t, out.String(), `Auth: run "restish api auth inspect tapi"`, "--rsh-auth")
 }

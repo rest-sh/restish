@@ -117,7 +117,7 @@ func unknownNamedSubcommandError(cmd *cobra.Command, group, arg, hint string) er
 }
 
 func unknownCommandError(cmd *cobra.Command, arg, hint string) error {
-	msg := fmt.Sprintf("unknown command %q for %q", arg, cmd.Name())
+	msg := fmt.Sprintf("unknown command %q for %q", arg, cmd.CommandPath())
 	if suggestion := commandSuggestionHint(cmd, arg); suggestion != "" {
 		msg += "; " + suggestion
 	}
