@@ -55,8 +55,8 @@ const apiAuthLogoutLong = "Delete cached API auth tokens.\n\n" +
 	"- Add `--all-profiles` to clear every profile for that API.\n" +
 	"- Use `--auth-profile` to clear a shared auth profile cache without naming an API."
 
-const apiAuthHeaderLong = "Print one auth header value that Restish would apply for an API profile.\n\n" +
-	"Use this for debugging generated-command auth without sending a request. Pass `--operation` to inspect operation-specific security requirements, or `--credential` to inspect a named credential binding directly."
+const apiAuthGetLong = "Print curl-friendly auth material that Restish would apply for an API profile.\n\n" +
+	"Use this when another tool, such as curl, needs the configured auth without sending the target request through Restish. Header auth prints as `Name: value`; query auth prints as `?name=value`. Pass a credential ID when the profile has more than one configured credential, or use `--operation` to inspect operation-specific security requirements."
 
 const apiAuthInspectLong = "Inspect auth readiness and material for an API profile.\n\n" +
 	"By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--operation` for operation-specific OpenAPI security requirements or `--credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked."
@@ -68,7 +68,7 @@ const configPathLong = "Print the active Restish config file path.\n\n" +
 	"This honors `--rsh-config` and `RSH_CONFIG`, so it is the safest way to confirm which config a command will read or write."
 
 const configShowLong = "Print the active config summary, or redacted JSON with `-o json`.\n\n" +
-	"Human output shows counts and the config file path. JSON output is intended for inspection and support; sensitive auth values, credential-like headers, and credential-like query parameters are redacted where Restish recognizes them."
+	"Human output shows the selected file, cache/theme settings, shared auth profiles, plugin config, and registered API details without printing credential values. JSON output is intended for inspection and support; sensitive auth values, credential-like headers, and credential-like query parameters are redacted where Restish recognizes them."
 
 const configEditLong = "Open the active Restish config file in `$VISUAL` or `$EDITOR`.\n\n" +
 	"Use this for manual config edits that are easier in an editor than with `config set`. Restish creates the config file if needed and preserves the platform-specific config path unless `--rsh-config` or `RSH_CONFIG` selects another file."

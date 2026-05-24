@@ -198,8 +198,11 @@ Inspect configured auth without sending the target request:
 restish api auth inspect myapi
 restish api auth inspect myapi --credential PartnerKey
 restish api auth inspect myapi --credential UserBearer --redact
-restish api auth header myapi Authorization UserBearer
+restish api auth get myapi UserBearer
 ```
+
+`api auth get` emits one curl-friendly fragment. Header credentials print as
+`Name: value`; query credentials print as `?name=value`.
 
 The bare form shows profile auth, configured credential readiness, generated
 operation coverage when cached metadata is available, and computed auth material

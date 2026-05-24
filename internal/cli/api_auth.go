@@ -57,18 +57,19 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	}
 	addAPIAuthLogoutFlags(logoutCmd)
 	cmd.AddCommand(logoutCmd)
-	headerCmd := &cobra.Command{
-		Use:   "header <api> <header> [credential-id]",
-		Short: "Print one auth header value for an API profile",
-		Long:  apiAuthHeaderLong,
-		Example: fmt.Sprintf(`  %s api auth header demo Authorization
-  %s api auth header demo X-API-Key PartnerKey`, c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: usageRangeArgs(2, 3),
-		RunE: c.runAPIAuthHeader,
+	getCmd := &cobra.Command{
+		Use:   "get <api> [credential-id]",
+		Short: "Print curl-friendly auth material for an API profile",
+		Long:  apiAuthGetLong,
+		Example: fmt.Sprintf(`  %s api auth get demo UserBearer
+  %s api auth get demo PartnerKey
+  %s api auth get demo --operation list-items
+  curl -H "$(%s api auth get demo UserBearer)" https://api.rest.sh/items`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: usageRangeArgs(1, 2),
+		RunE: c.runAPIAuthGet,
 	}
-	headerCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
-	headerCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
-	cmd.AddCommand(headerCmd)
+	getCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	cmd.AddCommand(getCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
 		Short: "Inspect the auth material applied for an API profile",
@@ -81,8 +82,6 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 	inspectCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
 	inspectCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
 	inspectCmd.Flags().Bool("redact", false, "Redact sensitive auth values for shareable output")
-	inspectCmd.Flags().String("raw-header", "", "Deprecated: use \"restish api auth header <api> <header>\"")
-	_ = inspectCmd.Flags().MarkHidden("raw-header")
 	cmd.AddCommand(inspectCmd)
 	return cmd
 }
@@ -214,7 +213,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	}
 	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
-		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth header <api-name> Authorization")
+		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth get <api-name>")
 	}
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
@@ -222,34 +221,13 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	credentialID, _ := cmd.Flags().GetString("credential")
-	rawHeader, _ := cmd.Flags().GetString("raw-header")
 	redact, _ := cmd.Flags().GetBool("redact")
-	focused := credentialID != "" || rawHeader != ""
+	focused := credentialID != ""
 	if operation, _ := cmd.Flags().GetString("operation"); operation != "" {
 		if credentialID != "" {
 			return fmt.Errorf("--operation and --credential are mutually exclusive")
 		}
-		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, rawHeader, redact)
-	}
-
-	if rawHeader != "" {
-		resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
-		if err != nil {
-			return err
-		}
-		if resolved.Config == nil {
-			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
-		}
-		req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
-		if err != nil {
-			return err
-		}
-		value := req.Header.Get(rawHeader)
-		if value == "" {
-			return fmt.Errorf("auth did not set header %q", rawHeader)
-		}
-		fmt.Fprintln(c.Stdout, value)
-		return nil
+		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, redact)
 	}
 
 	targets, err := c.authInspectionTargets(apiName, profileName, prof, credentialID)
@@ -339,7 +317,7 @@ func (c *CLI) authInspectionTargets(apiName, profileName string, prof *config.Pr
 	return targets, nil
 }
 
-func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName, rawHeader string, redact bool) error {
+func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, redact bool) error {
 	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
 	if err != nil {
 		return err
@@ -348,16 +326,10 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 		return fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
 	}
 	if op.NoAuth {
-		if rawHeader != "" {
-			return fmt.Errorf("operation %q has security: [] and does not send auth header %q", operationName, rawHeader)
-		}
 		fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none (security: [])\n", op.ID)
 		return nil
 	}
 	if op.OptionalAuth && len(op.CredentialAlternatives) == 0 {
-		if rawHeader != "" {
-			return fmt.Errorf("operation %q has anonymous-only security and does not send auth header %q", operationName, rawHeader)
-		}
 		fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none (security: [{}])\n", op.ID)
 		return nil
 	}
@@ -373,9 +345,6 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 			return err
 		}
 		if !selectedOK || len(selected) == 0 {
-			if rawHeader != "" {
-				return fmt.Errorf("operation %q did not select auth header %q", op.ID, rawHeader)
-			}
 			fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none\n", op.ID)
 			return nil
 		}
@@ -394,14 +363,6 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 	if err != nil {
 		return err
 	}
-	if rawHeader != "" {
-		value := req.Header.Get(rawHeader)
-		if value == "" {
-			return fmt.Errorf("auth did not set header %q", rawHeader)
-		}
-		fmt.Fprintln(c.Stdout, value)
-		return nil
-	}
 	fmt.Fprintf(c.Stdout, "Operation: %s\n", op.ID)
 	fmt.Fprintf(c.Stdout, "Credentials: %s\n", strings.Join(selectedOperationCredentialIDs(selected), ", "))
 	fmt.Fprintf(c.Stdout, "Source: %s\n", strings.Join(selectedOperationSources(selected), ", "))
@@ -409,17 +370,14 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 	return nil
 }
 
-func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
-	apiName, headerName := args[0], args[1]
+func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
+	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
-		return fmt.Errorf("api auth header expects an API name, not a URL")
+		return fmt.Errorf("api auth get expects an API name, not a URL")
 	}
-	credentialID, _ := cmd.Flags().GetString("credential")
-	if len(args) == 3 {
-		if credentialID != "" {
-			return fmt.Errorf("pass credential ID either as an argument or --credential, not both")
-		}
-		credentialID = args[2]
+	credentialID := ""
+	if len(args) == 2 {
+		credentialID = args[1]
 	}
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
@@ -430,7 +388,19 @@ func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
 		if credentialID != "" {
 			return fmt.Errorf("--operation and credential ID are mutually exclusive")
 		}
-		return c.runAPIAuthInspectOperation(cmd, apiName, profileName, apiCfg, prof, operation, headerName, false)
+		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation)
+	}
+	if credentialID == "" {
+		resolvedProfile, err := c.resolveProfileAuth(apiName, profileName, prof)
+		if err != nil {
+			return err
+		}
+		if resolvedProfile.Config == nil {
+			ids := configuredCredentialIDs(prof)
+			if len(ids) > 1 {
+				return fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass a credential ID: %s api auth get %s <credential-id>", profileName, apiName, strings.Join(ids, ", "), c.commandNameOrDefault(), apiName)
+			}
+		}
 	}
 
 	resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
@@ -444,12 +414,85 @@ func (c *CLI) runAPIAuthHeader(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	value := req.Header.Get(headerName)
-	if value == "" {
-		return fmt.Errorf("auth did not set header %q", headerName)
+	configs := []*config.AuthConfig{resolved.Config}
+	fragment, err := authGetFragment(req, configs)
+	if err != nil {
+		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName)
 	}
-	fmt.Fprintln(c.Stdout, value)
+	fmt.Fprintln(c.Stdout, fragment)
 	return nil
+}
+
+func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string) error {
+	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
+	}
+	if op.NoAuth {
+		return fmt.Errorf("operation %q has security: [] and does not send auth material", op.ID)
+	}
+	if op.OptionalAuth && len(op.CredentialAlternatives) == 0 {
+		return fmt.Errorf("operation %q has anonymous-only security and does not send auth material", op.ID)
+	}
+
+	var selected []selectedOperationAuth
+	if len(op.CredentialAlternatives) > 0 {
+		var selectedOK bool
+		selected, selectedOK, err = c.planOperationAuth(apiName, profileName, prof, &operationAuthPolicy{
+			OptionalAuth:           op.OptionalAuth,
+			CredentialAlternatives: op.CredentialAlternatives,
+		})
+		if err != nil {
+			return err
+		}
+		if !selectedOK || len(selected) == 0 {
+			return fmt.Errorf("operation %q did not select auth material", op.ID)
+		}
+	} else {
+		resolved, selectedCredential, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, "")
+		if err != nil {
+			return err
+		}
+		if resolved.Config == nil {
+			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+		}
+		selected = []selectedOperationAuth{{requirement: spec.CredentialRequirement{ID: selectedCredential}, resolved: resolved, source: "profile auth"}}
+	}
+
+	req, err := c.operationAuthInspectionRequest(cmd, apiName, profileName, selected)
+	if err != nil {
+		return err
+	}
+	fragment, err := authGetFragment(req, selectedOperationAuthConfigs(selected))
+	if err != nil {
+		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName+" --operation "+operationName)
+	}
+	fmt.Fprintln(c.Stdout, fragment)
+	return nil
+}
+
+func authGetFragment(req *http.Request, configs []*config.AuthConfig) (string, error) {
+	var fragments []string
+	for _, name := range sortedHeaderKeys(req.Header) {
+		displayName := authInspectionDisplayHeaderName(configs, name)
+		for _, value := range req.Header[name] {
+			fragments = append(fragments, displayName+": "+value)
+		}
+	}
+	if req.URL != nil && req.URL.RawQuery != "" {
+		fragments = append(fragments, "?"+req.URL.RawQuery)
+	}
+	switch len(fragments) {
+	case 0:
+		return "", fmt.Errorf("auth did not produce a curl-friendly header or query fragment")
+	case 1:
+		return fragments[0], nil
+	default:
+		return "", fmt.Errorf("auth produced multiple header/query fragments")
+	}
 }
 
 func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *config.ProfileConfig, credentialID string) (resolvedAuthConfig, string, error) {

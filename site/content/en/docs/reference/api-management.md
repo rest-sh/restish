@@ -272,7 +272,7 @@ Subcommands:
 
 **`restish api auth add`**: Add an empty credential binding to an API profile
 
-**`restish api auth header`**: Print one auth header value for an API profile
+**`restish api auth get`**: Print curl-friendly auth material for an API profile
 
 **`restish api auth inspect`**: Inspect the auth material applied for an API profile
 
@@ -365,34 +365,30 @@ Delete cached auth tokens for a shared auth profile instead of an API
 
 
 
-### `restish api auth header`
+### `restish api auth get`
 
-Print one auth header value for an API profile
+Print curl-friendly auth material for an API profile
 
-Print one auth header value that Restish would apply for an API profile.
+Print curl-friendly auth material that Restish would apply for an API profile.
 
-Use this for debugging generated-command auth without sending a request. Pass `--operation` to inspect operation-specific security requirements, or `--credential` to inspect a named credential binding directly.
+Use this when another tool, such as curl, needs the configured auth without sending the target request through Restish. Header auth prints as `Name: value`; query auth prints as `?name=value`. Pass a credential ID when the profile has more than one configured credential, or use `--operation` to inspect operation-specific security requirements.
 
 Usage:
 
 ```text
-restish api auth header <api> <header> [credential-id] [flags]
+restish api auth get <api> [credential-id] [flags]
 ```
 
 Examples:
 
 ```bash
-  restish api auth header demo Authorization
-  restish api auth header demo X-API-Key PartnerKey
+  restish api auth get demo UserBearer
+  restish api auth get demo PartnerKey
+  restish api auth get demo --operation list-items
+  curl -H "$(restish api auth get demo UserBearer)" https://api.rest.sh/items
 ```
 
 Flags:
-
-**`--credential`**
-
-Type: `string`; default: none
-
-Credential ID to inspect instead of profile-level auth
 
 **`--operation`**
 
@@ -518,15 +514,17 @@ restish api auth add example PartnerKey
 restish api auth remove example PartnerKey
 restish api auth inspect example --credential basicAuth --redact
 restish api auth inspect example --operation list-items --redact
-restish api auth header example Authorization basicAuth
-restish api auth header example Authorization --operation list-items
+restish api auth get example basicAuth
+restish api auth get example --operation list-items
 ```
 
 `api auth` manages profile credential bindings for generated OpenAPI
 operations. `inspect` replaces the old top-level auth helper and
 prints every configured credential by default. It also works for
-non-Authorization credentials such as API-key headers. Use `--operation`
-when an operation's OpenAPI security policy affects which credential applies.
+non-Authorization credentials such as API-key headers and query params. Use
+`get` when another tool needs one curl-friendly auth fragment. Use
+`--operation` when an operation's OpenAPI security policy affects which
+credential applies.
 
 ## Related Pages
 

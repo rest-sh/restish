@@ -610,13 +610,18 @@ For shareable diagnostics, `api auth inspect` offers explicit redaction:
 restish api auth inspect example --credential UserOAuth --redact
 ```
 
-For script compatibility with the old narrow behavior and for discoverability,
-`api auth header` prints only the selected computed header value:
+For script compatibility with the old narrow behavior and for curl
+composition, `api auth get` prints one selected computed auth fragment:
 
 ```bash
-restish api auth header example Authorization UserOAuth
-restish api auth header example X-Partner-Key --operation signedReport
+restish api auth get example UserOAuth
+restish api auth get example PartnerKey
+restish api auth get example --operation signedReport
 ```
+
+Header auth prints as `Name: value`; query auth prints as `?name=value`. If
+the selected auth material does not collapse to exactly one header or query
+fragment, the command fails and points users to `api auth inspect`.
 
 Ambient request and response output remains redacted by default; auth inspection
 is different because it is an explicit request to show the final auth material.
@@ -849,10 +854,11 @@ commands:
   diagnostic.
 
 The old API-or-URI, Authorization-header-only inspect behavior is removed in
-v2. Its replacement is `restish api auth inspect <api>`, with explicit
-raw-output flags for scripts that need the old Authorization-header value. This
-is an intentional v2 break because operation-specific and non-Authorization
-credentials make a header-only command misleading.
+v2. Its replacements are `restish api auth inspect <api>` for diagnostics and
+`restish api auth get <api> [credential-id]` for scripts that need one
+curl-friendly auth fragment. This is an intentional v2 break because
+operation-specific, non-Authorization, and query-based credentials make a
+header-only command misleading.
 
 Existing `x-cli-config` documents are not a breaking-change surface for v2. If a
 legacy extension maps cleanly to one credential requirement, Restish should keep
@@ -925,8 +931,9 @@ scheme.
 - `api auth add/remove` preserve comments and validate config paths;
 - `api auth inspect` handles profile-level auth, credential-specific auth,
   operation-selected auth, non-Authorization credentials, combined credentials,
-  operation coverage, readiness diagnostics, explicit redaction, and explicit
-  raw header output;
+  operation coverage, readiness diagnostics, and explicit redaction;
+- `api auth get` emits exactly one curl-friendly header or query fragment and
+  points users to `api auth inspect` when selected auth material is ambiguous;
 - the old API-or-URI, Authorization-header-only `api auth inspect` behavior is
   removed.
 
@@ -952,7 +959,7 @@ Update user docs before release:
 - API management reference: document `api auth inspect/add/remove` and
   configure behavior;
 - migration notes: document removal of the old header-only inspect behavior and
-  the equivalent `api auth header <api> Authorization` flow;
+  the equivalent `api auth get <api>` flow;
 - troubleshooting guide: add missing credential/requirement diagnostics.
 
 ## Decision

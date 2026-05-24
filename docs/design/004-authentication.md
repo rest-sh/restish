@@ -409,8 +409,8 @@ logs, plugin payloads, and config display remain redacted by default.
 When several credentials are configured on the profile, bare inspect prints
 each credential's computed auth material. `--redact` produces shareable
 inspection output, and
-`restish api auth header <api> <header> [credential-id]` prints one computed
-header value for scripts.
+`restish api auth get <api> [credential-id]` prints one curl-friendly header or
+query fragment for scripts.
 
 The v1/v2-draft header-only auth-inspection behavior is removed for v2. The
 stable command keeps the `restish api auth inspect <api>` family, but it must

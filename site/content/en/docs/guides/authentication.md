@@ -161,7 +161,7 @@ full request:
 restish api auth inspect myapi
 restish api auth inspect myapi --credential PartnerKey
 restish api auth inspect myapi --credential UserBearer --redact
-restish api auth header myapi Authorization UserBearer
+restish api auth get myapi UserBearer
 ```
 
 Replace `myapi`, credential IDs, and operation names with values from your
@@ -174,7 +174,15 @@ configured credential's computed auth material; pass `--credential` to
 narrow the output. `inspect` shows the computed values; use `--redact` for
 shareable output. `--redact` is safe to include even when no secrets are
 configured, which makes it a good default for bug reports. Use
-`api auth header` when a script needs exactly one header value.
+`api auth get` when a script or curl command needs a single auth header or
+query-string fragment.
+
+For curl, pass a header fragment to `-H` or append a query fragment to the URL:
+
+```bash
+curl -H "$(restish api auth get myapi UserBearer)" https://api.rest.sh/items
+curl "https://api.rest.sh/items$(restish api auth get myapi PartnerKey)"
+```
 
 Use verbose mode when the question is about the whole request:
 

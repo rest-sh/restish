@@ -66,6 +66,16 @@ func TestAPIAuthListCommandRemoved(t *testing.T) {
 	}
 }
 
+func TestAPIAuthHeaderCommandRemoved(t *testing.T) {
+	err := newTestApp(t).RunErr("api", "auth", "header", "myapi", "Authorization")
+	if err == nil {
+		t.Fatal("expected api auth header to be removed")
+	}
+	if !strings.Contains(err.Error(), `unknown command "header"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAPIAuthRemoveMissingCredentialFails(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
 		"PartnerKey": {},
@@ -210,7 +220,7 @@ func TestAPIAuthInspectURLSuggestsV2Form(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected URL argument error")
 	}
-	if !strings.Contains(err.Error(), "v2 form: restish api auth header <api-name> Authorization") {
+	if !strings.Contains(err.Error(), "v2 form: restish api auth get <api-name>") {
 		t.Fatalf("expected v2 form hint, got: %v", err)
 	}
 }
@@ -232,21 +242,15 @@ func TestAPIAuthInspectSingleCredentialByDefault(t *testing.T) {
 	}
 
 	app.Stdout.Reset()
-	app.Run("api", "auth", "header", "myapi", "X-Partner-Key")
-	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
-		t.Fatalf("header = %q, want secret", got)
+	app.Run("api", "auth", "get", "myapi")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth get = %q, want X-Partner-Key: secret", got)
 	}
 
 	app.Stdout.Reset()
-	app.Run("api", "auth", "header", "myapi", "X-Partner-Key", "PartnerKey")
-	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
-		t.Fatalf("header with positional credential = %q, want secret", got)
-	}
-
-	app.Stdout.Reset()
-	app.Run("api", "auth", "inspect", "myapi", "--raw-header", "X-Partner-Key")
-	if got := strings.TrimSpace(app.Stdout.String()); got != "secret" {
-		t.Fatalf("raw header compatibility = %q, want secret", got)
+	app.Run("api", "auth", "get", "myapi", "PartnerKey")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth get with positional credential = %q, want X-Partner-Key: secret", got)
 	}
 }
 
@@ -281,6 +285,13 @@ func TestAPIAuthInspectMultipleCredentialsShowsAll(t *testing.T) {
 	if strings.Contains(got, "secret") || strings.Contains(got, "user-token") {
 		t.Fatalf("redacted inspect output leaked secret:\n%s", got)
 	}
+
+	app.Stdout.Reset()
+	err := app.RunErr("api", "auth", "get", "myapi")
+	if err == nil {
+		t.Fatal("expected api auth get to require a credential when multiple are configured")
+	}
+	requireContains(t, err.Error(), "multiple configured credentials", "restish api auth get myapi <credential-id>")
 }
 
 func TestAPIAuthInspectUsesCachedOperationMetadata(t *testing.T) {
@@ -512,9 +523,9 @@ func TestAPIAuthInspectUsesImplicitDefaultProfile(t *testing.T) {
 	)
 
 	c, _ = env.newCaptureCLI()
-	err := c.Run([]string{"restish", "api", "auth", "header", "tapi", "X-Partner-Key"})
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi"})
 	if err == nil {
-		t.Fatal("expected api auth header with no auth to fail")
+		t.Fatal("expected api auth get with no auth to fail")
 	}
 	requireContains(t, err.Error(), "has no auth config", "restish api auth inspect tapi", "restish api auth add tapi <credential-id>")
 }
@@ -603,11 +614,11 @@ paths:
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = cacheDir
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "controlauth", "--operation", "privateEcho", "--raw-header", "Authorization"}); err != nil {
-		t.Fatalf("api auth inspect private operation: %v", err)
+	if err := c.Run([]string{"restish", "api", "auth", "get", "controlauth", "--operation", "privateEcho"}); err != nil {
+		t.Fatalf("api auth get private operation: %v", err)
 	}
-	if got := strings.TrimSpace(out.String()); got != "Bearer local-secret" {
-		t.Fatalf("Authorization = %q, want Bearer local-secret", got)
+	if got := strings.TrimSpace(out.String()); got != "Authorization: Bearer local-secret" {
+		t.Fatalf("auth get = %q, want Authorization: Bearer local-secret", got)
 	}
 
 	out.Reset()
@@ -697,10 +708,22 @@ func TestAPIAuthInspectOperationCombinedCredentials(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := c.Run([]string{"restish", "api", "auth", "header", "tapi", "X-Partner-Key", "--operation", "signedReport"}); err != nil {
-		t.Fatalf("api auth operation header: %v", err)
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "signedReport"})
+	if err == nil {
+		t.Fatal("expected combined operation auth get to require a single fragment")
 	}
-	if got := strings.TrimSpace(out.String()); got != "partner-secret" {
-		t.Fatalf("operation header = %q, want partner-secret", got)
+	requireContains(t, err.Error(), "auth produced multiple header/query fragments", "api auth inspect tapi --operation signedReport")
+}
+
+func TestAPIAuthGetCredentialAPIKeyQuery(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("query", "partner", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "get", "myapi", "PartnerKey")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "?partner=secret" {
+		t.Fatalf("auth get query = %q, want ?partner=secret", got)
 	}
 }

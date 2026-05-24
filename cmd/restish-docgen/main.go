@@ -243,7 +243,7 @@ func renderRegions(root string, cmdRoot *cobra.Command, pluginPaths map[string]s
 	return map[string]string{
 		"global-flags":           renderGlobalFlags(cmdRoot),
 		"http-commands":          renderCommandDetails(cmdRoot, []string{"restish get", "restish head", "restish options", "restish post", "restish put", "restish patch", "restish delete"}),
-		"api-command":            renderCommandDetails(cmdRoot, []string{"restish api", "restish api connect", "restish api sync", "restish api list", "restish api inspect", "restish api set", "restish api remove", "restish api auth", "restish api auth add", "restish api auth remove", "restish api auth logout", "restish api auth header", "restish api auth inspect"}),
+		"api-command":            renderCommandDetails(cmdRoot, []string{"restish api", "restish api connect", "restish api sync", "restish api list", "restish api inspect", "restish api set", "restish api remove", "restish api auth", "restish api auth add", "restish api auth remove", "restish api auth logout", "restish api auth get", "restish api auth inspect"}),
 		"config-command":         renderCommandDetails(cmdRoot, []string{"restish config", "restish config path", "restish config show", "restish config edit", "restish config set", "restish config theme", "restish config theme list", "restish config theme set", "restish config theme reset"}),
 		"cache-command":          renderCommandDetails(cmdRoot, []string{"restish cache", "restish cache info", "restish cache clear"}),
 		"doctor-command":         renderCommandDetails(cmdRoot, []string{"restish doctor", "restish doctor api", "restish doctor plugin"}),

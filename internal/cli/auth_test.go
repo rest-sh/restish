@@ -237,7 +237,7 @@ func TestAPIKeyAuthVerboseRedactsSecret(t *testing.T) {
 	}
 }
 
-func TestAPIAuthInspectRawHeader(t *testing.T) {
+func TestAPIAuthGetProfileAuth(t *testing.T) {
 	cfg := `{
 		"apis": {
 			"myapi": {
@@ -256,14 +256,14 @@ func TestAPIAuthInspectRawHeader(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
 
-	if err := c.Run([]string{"restish", "api", "auth", "inspect", "myapi", "--raw-header", "Authorization"}); err != nil {
+	if err := c.Run([]string{"restish", "api", "auth", "get", "myapi"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("carol:pass123"))
+	want := "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("carol:pass123"))
 	got := strings.TrimSpace(out.String())
 	if got != want {
-		t.Errorf("raw header output: got %q, want %q", got, want)
+		t.Errorf("auth get output: got %q, want %q", got, want)
 	}
 }
 

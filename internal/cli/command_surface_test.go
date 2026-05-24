@@ -193,7 +193,7 @@ func TestPublicBuiltInHelpSmoke(t *testing.T) {
 		{"api auth add", []string{"restish", "api", "auth", "add", "--help"}, true},
 		{"api auth remove", []string{"restish", "api", "auth", "remove", "--help"}, true},
 		{"api auth logout", []string{"restish", "api", "auth", "logout", "--help"}, true},
-		{"api auth header", []string{"restish", "api", "auth", "header", "--help"}, true},
+		{"api auth get", []string{"restish", "api", "auth", "get", "--help"}, true},
 		{"api auth inspect", []string{"restish", "api", "auth", "inspect", "--help"}, true},
 		{"cache", []string{"restish", "cache", "--help"}, true},
 		{"cache info", []string{"restish", "cache", "info", "--help"}, true},
@@ -324,7 +324,7 @@ func TestUnknownAPIErrorsSuggestListAndConnect(t *testing.T) {
 	for _, args := range [][]string{
 		{"restish", "api", "inspect", "missing"},
 		{"restish", "api", "set", "missing", "base_url: https://api.example.com"},
-		{"restish", "api", "auth", "header", "missing", "Authorization"},
+		{"restish", "api", "auth", "get", "missing"},
 	} {
 		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
 			c, _, _ := newTestCLI(t)
