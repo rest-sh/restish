@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -95,20 +96,163 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 		return c.writePrettyJSON(view)
 	}
 
-	apiCount := 0
-	authProfileCount := 0
-	pluginCount := 0
-	if c.cfg != nil {
-		apiCount = len(c.cfg.APIs)
-		authProfileCount = len(c.cfg.AuthProfiles)
-		pluginCount = len(c.cfg.Plugins)
+	cfg := c.cfg
+	if cfg == nil {
+		cfg = &config.Config{}
 	}
 	style := humanTextStyleFor(c.Stdout)
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Config file:"), c.configFilePath())
-	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("APIs:"), apiCount)
-	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("Auth profiles:"), authProfileCount)
-	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("Plugins:"), pluginCount)
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Cache max size:"), configShowCacheMaxSize(cfg))
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Theme:"), configShowTheme(cfg))
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Auth profiles:"), configShowNamedMapSummary(cfg.AuthProfiles))
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Configured plugins:"), configShowRawMessageMapSummary(cfg.Plugins))
+	c.printConfigShowAPIs(style, cfg)
 	return nil
+}
+
+func (c *CLI) printConfigShowAPIs(style humanTextStyle, cfg *config.Config) {
+	if cfg == nil || len(cfg.APIs) == 0 {
+		fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("APIs:"), style.warn("none"), style.hint("run \"restish api connect <name> <url>\""))
+		return
+	}
+	names := sortedConfigKeys(cfg.APIs)
+	fmt.Fprintf(c.Stdout, "%s %d\n", style.key("APIs:"), len(names))
+	for _, name := range names {
+		apiCfg := cfg.APIs[name]
+		fmt.Fprintf(c.Stdout, "  %s\n", style.key(name))
+		fmt.Fprintf(c.Stdout, "    %s %s\n", style.key("Base URL:"), configShowValue(configShowBaseURL(apiCfg)))
+		fmt.Fprintf(c.Stdout, "    %s %s\n", style.key("Spec:"), configShowSpecSource(apiCfg))
+		fmt.Fprintf(c.Stdout, "    %s %s\n", style.key("Profiles:"), configShowProfiles(apiCfg))
+		fmt.Fprintf(c.Stdout, "    %s %s\n", style.key("Auth:"), c.configShowAPIAuthSummary(name, apiCfg))
+	}
+}
+
+func configShowCacheMaxSize(cfg *config.Config) string {
+	if cfg == nil || cfg.Cache.MaxSize == "" {
+		return "default"
+	}
+	return cfg.Cache.MaxSize
+}
+
+func configShowTheme(cfg *config.Config) string {
+	if cfg == nil {
+		return "built-in"
+	}
+	if cfg.ThemeSource != "" {
+		return cfg.ThemeSource
+	}
+	if len(cfg.Theme) > 0 {
+		return "custom inline"
+	}
+	return "built-in"
+}
+
+func configShowNamedMapSummary[V any](items map[string]V) string {
+	names := sortedConfigKeys(items)
+	if len(names) == 0 {
+		return "none"
+	}
+	return fmt.Sprintf("%d (%s)", len(names), strings.Join(names, ", "))
+}
+
+func configShowRawMessageMapSummary(items map[string]json.RawMessage) string {
+	names := sortedConfigKeys(items)
+	if len(names) == 0 {
+		return "none"
+	}
+	return fmt.Sprintf("%d (%s)", len(names), strings.Join(names, ", "))
+}
+
+func sortedConfigKeys[V any](items map[string]V) []string {
+	names := make([]string, 0, len(items))
+	for name := range items {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func configShowValue(value string) string {
+	if value == "" {
+		return "not configured"
+	}
+	return value
+}
+
+func configShowBaseURL(apiCfg *config.APIConfig) string {
+	if apiCfg == nil {
+		return ""
+	}
+	return apiCfg.BaseURL
+}
+
+func configShowSpecSource(apiCfg *config.APIConfig) string {
+	if apiCfg == nil {
+		return "auto-discover"
+	}
+	if len(apiCfg.SpecFiles) > 0 {
+		return strings.Join(apiCfg.SpecFiles, ", ")
+	}
+	if apiCfg.SpecURL != "" {
+		return apiCfg.SpecURL
+	}
+	return "auto-discover"
+}
+
+func configShowProfiles(apiCfg *config.APIConfig) string {
+	if apiCfg == nil || len(apiCfg.Profiles) == 0 {
+		return "default (implicit)"
+	}
+	return strings.Join(sortedConfigKeys(apiCfg.Profiles), ", ")
+}
+
+func (c *CLI) configShowAPIAuthSummary(apiName string, apiCfg *config.APIConfig) string {
+	profileNames := []string{"default"}
+	if apiCfg != nil && len(apiCfg.Profiles) > 0 {
+		profileNames = sortedConfigKeys(apiCfg.Profiles)
+	}
+	statuses := map[string]bool{}
+	sources := map[string]bool{}
+	for _, profileName := range profileNames {
+		auth := c.doctorAuthForProfile(apiName, profileName, profileForName(apiCfg, profileName))
+		statuses[auth.Status] = true
+		for _, source := range auth.Sources {
+			sources[source] = true
+		}
+	}
+	if statuses["configured-but-unresolved"] {
+		return configShowAuthWithSources("configured but unresolved", sources)
+	}
+	if statuses["configured"] {
+		if len(statuses) > 1 {
+			return configShowAuthWithSources("partially configured", sources)
+		}
+		return configShowAuthWithSources("configured", sources)
+	}
+	return "none"
+}
+
+func configShowAuthWithSources(status string, sources map[string]bool) string {
+	names := make([]string, 0, len(sources))
+	for source := range sources {
+		names = append(names, configShowAuthSourceLabel(source))
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return status
+	}
+	return fmt.Sprintf("%s (%s)", status, strings.Join(names, ", "))
+}
+
+func configShowAuthSourceLabel(source string) string {
+	switch source {
+	case "profile_auth":
+		return "profile auth"
+	case "credentials":
+		return "operation credentials"
+	default:
+		return source
+	}
 }
 
 func (c *CLI) runConfigSet(cmd *cobra.Command, args []string) error {

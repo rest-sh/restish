@@ -67,7 +67,14 @@ func TestConfigCommandPathShowAndSet(t *testing.T) {
 	if err := c.Run([]string{"restish", "config", "show"}); err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	if got := out.String(); !strings.Contains(got, "APIs: 1") || !strings.Contains(got, "Auth profiles: 1") {
+	if got := out.String(); !strings.Contains(got, "APIs: 1") ||
+		!strings.Contains(got, "Auth profiles: 1 (shared)") ||
+		!strings.Contains(got, "Base URL: https://api.example.com") ||
+		!strings.Contains(got, "Profiles: default") ||
+		!strings.Contains(got, "Auth: configured (headers, profile auth, query)") ||
+		strings.Contains(got, "profile-secret") ||
+		strings.Contains(got, "query-secret") ||
+		strings.Contains(got, "docs-key") {
 		t.Fatalf("unexpected config summary:\n%s", got)
 	}
 

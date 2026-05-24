@@ -96,7 +96,7 @@ Print the active config summary or redacted JSON
 
 Print the active config summary, or redacted JSON with `-o json`.
 
-Human output shows counts and the config file path. JSON output is intended for inspection and support; sensitive auth values, credential-like headers, and credential-like query parameters are redacted where Restish recognizes them.
+Human output shows the selected file, cache/theme settings, shared auth profiles, plugin config, and registered API details without printing credential values. JSON output is intended for inspection and support; sensitive auth values, credential-like headers, and credential-like query parameters are redacted where Restish recognizes them.
 
 Usage:
 
