@@ -5,7 +5,6 @@ weight: 10
 description: Try Restish in your browser, see the major workflows, and choose the right guide or reference page for what you want to do next.
 aliases:
   - /docs/getting-started/first-request/
-  - /docs/getting-started/tour/
 ---
 
 This tour shows the shape of Restish before you commit to a local setup. You
