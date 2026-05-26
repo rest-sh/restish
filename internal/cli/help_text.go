@@ -32,8 +32,8 @@ const apiConnectLong = "Connect Restish to an API, discover its OpenAPI descript
 	"- Use `--replace` when reconnecting should replace existing profiles with generated OpenAPI or `x-cli-config` profile defaults. Without it, existing profiles are preserved, while API-level discovery fields are refreshed from the new connect run.\n" +
 	"- Use `--yes` only for safe connect prompts you have already decided to accept in automation."
 
-const apiInspectLong = "Print the saved config for one registered API as JSON.\n\n" +
-	"Use this when you need the exact merged API entry, including profiles, headers, query defaults, auth config, spec URLs, and generated-command settings. Sensitive values may still be present if they are stored directly in config."
+const apiInspectLong = "Print the saved config for one registered API as redacted JSON.\n\n" +
+	"Use this when you need the local API entry, including profiles, headers, query defaults, auth config, spec URLs, and generated-command settings. Sensitive auth values, credential-like headers, and credential-like query parameters are redacted in the output."
 
 const apiSetLong = "Patch one registered API using Restish shorthand syntax.\n\n" +
 	"Use this for durable local overrides such as profile URLs, default headers, query parameters, auth settings, and server variables. Patches are applied to the saved config file; they do not update the remote API or the cached OpenAPI document.\n\n" +

@@ -40,7 +40,7 @@ Subcommands:
 
 **`restish api connect`**: Connect Restish to an API and discover generated commands
 
-**`restish api inspect`**: Print the config for a registered API as JSON
+**`restish api inspect`**: Print the config for a registered API as redacted JSON
 
 **`restish api list`**: List all configured APIs
 
@@ -179,11 +179,11 @@ Examples:
 
 ### `restish api inspect`
 
-Print the config for a registered API as JSON
+Print the config for a registered API as redacted JSON
 
-Print the saved config for one registered API as JSON.
+Print the saved config for one registered API as redacted JSON.
 
-Use this when you need the exact merged API entry, including profiles, headers, query defaults, auth config, spec URLs, and generated-command settings. Sensitive values may still be present if they are stored directly in config.
+Use this when you need the local API entry, including profiles, headers, query defaults, auth config, spec URLs, and generated-command settings. Sensitive auth values, credential-like headers, and credential-like query parameters are redacted in the output.
 
 Usage:
 
