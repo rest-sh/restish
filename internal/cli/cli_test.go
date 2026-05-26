@@ -428,6 +428,30 @@ func TestUnknownRestishFlagSuggestsNearestFlag(t *testing.T) {
 	}
 }
 
+func TestUnknownFlagSuggestsRestishPrefixedFlag(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--print", "hb"})
+	if err == nil {
+		t.Fatal("expected unknown flag error")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --print") ||
+		!strings.Contains(err.Error(), "did you mean --rsh-print?") {
+		t.Fatalf("unexpected flag error: %v", err)
+	}
+}
+
+func TestUnknownFlagSuggestsRestishPrefixedTypo(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--prnt", "hb"})
+	if err == nil {
+		t.Fatal("expected unknown flag error")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --prnt") ||
+		!strings.Contains(err.Error(), "did you mean --rsh-print?") {
+		t.Fatalf("unexpected flag error: %v", err)
+	}
+}
+
 func TestExplicitConfigFlagWritesSelectedFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "project-restish.json")

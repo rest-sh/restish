@@ -135,6 +135,19 @@ func flagSuggestion(cmd *cobra.Command, name string) string {
 	}
 	collectFlagNames(cmd.Root().PersistentFlags(), seen, &names)
 	sort.Strings(names)
+	if !strings.HasPrefix(name, "rsh-") {
+		prefixedName := "rsh-" + name
+		if _, ok := seen[prefixedName]; ok {
+			return prefixedName
+		}
+		if suggestion := nearestFlagSuggestion(prefixedName, names); suggestion != "" {
+			return suggestion
+		}
+	}
+	return nearestFlagSuggestion(name, names)
+}
+
+func nearestFlagSuggestion(name string, names []string) string {
 	var matches []string
 	for _, candidate := range names {
 		if levenshteinDistance(name, candidate) <= 2 {
