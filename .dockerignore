@@ -6,6 +6,9 @@ AGENTS.md
 CLAUDE.md
 issues.md
 restish
+/restish-*
+/.tmp/
+dist/
 docs/
 tmp/
 site/
