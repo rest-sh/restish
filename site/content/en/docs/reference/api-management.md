@@ -40,7 +40,7 @@ Subcommands:
 
 **`restish api connect`**: Connect Restish to an API and discover generated commands
 
-**`restish api inspect`**: Print the config for a registered API as redacted JSON
+**`restish api inspect`**: Print the config for a registered API as JSON
 
 **`restish api list`**: List all configured APIs
 
@@ -179,7 +179,7 @@ Examples:
 
 ### `restish api inspect`
 
-Print the config for a registered API as redacted JSON
+Print the config for a registered API as JSON
 
 Print the saved config for one registered API as redacted JSON.
 
