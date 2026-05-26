@@ -1,6 +1,9 @@
 package plugin
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // TerminalContext carries terminal capability flags that the Restish host
 // passes to command plugins as CLI arguments.  Plugins that care about colour
@@ -12,6 +15,8 @@ type TerminalContext struct {
 	StdoutTTY bool
 	// StderrTTY is true when the host's stderr is connected to a terminal.
 	StderrTTY bool
+	// Theme is the host's configured Restish terminal theme entries.
+	Theme map[string]string
 }
 
 // TerminalContextFromArgs parses the Restish-injected terminal flags from the
@@ -28,6 +33,11 @@ func TerminalContextFromArgs(args []string) TerminalContext {
 			ctx.StdoutTTY = v == "true"
 		} else if v, ok := strings.CutPrefix(arg, StartupFlagStderrTTY+"="); ok {
 			ctx.StderrTTY = v == "true"
+		} else if v, ok := strings.CutPrefix(arg, StartupFlagTheme+"="); ok {
+			var theme map[string]string
+			if err := json.Unmarshal([]byte(v), &theme); err == nil {
+				ctx.Theme = theme
+			}
 		}
 	}
 	return ctx

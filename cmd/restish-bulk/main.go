@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rest-sh/restish/v2/internal/output"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
@@ -28,9 +29,13 @@ func main() {
 			if command != "bulk" {
 				return fmt.Errorf("unknown command: %s", command)
 			}
+			term := pluginwire.TerminalContextFromArgs(os.Args[1:])
+			if err := output.SetTheme(output.ThemeEntries(term.Theme)); err != nil {
+				return err
+			}
 			client := &pluginClient{
 				CommandClient: base,
-				term:          pluginwire.TerminalContextFromArgs(os.Args[1:]),
+				term:          term,
 			}
 			return run(client, args)
 		},

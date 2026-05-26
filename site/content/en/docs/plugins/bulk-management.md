@@ -52,6 +52,9 @@ remote updates exist.
 Bulk metadata is saved atomically after completed file updates, so interrupted
 long pulls or pushes keep the last completed checkout state.
 
+In a color-capable terminal, status labels, diffs, and projected JSON follow
+the configured Restish output theme. Piped output stays plain.
+
 `push` is conservative. Updates and deletes require an HTTP validator
 (`ETag`/`Last-Modified`) or matching local/remote version metadata. When that
 evidence is missing or stale, the resource is refused instead of overwritten.
@@ -80,6 +83,10 @@ supports the workflow:
 ```bash
 restish bulk status --match 'rating_average >= 4.8'
 ```
+
+When resources advertise JSON Schema with a `describedby` link or `$schema`
+field, bulk uses that schema to warn about obvious match-expression type
+mistakes.
 
 ## Shape Mismatches
 

@@ -218,9 +218,34 @@ Bulk commands mostly own their own human-oriented output:
 - diffs
 - workflow help text
 
+When the host reports that color is enabled, the plugin should use the
+host-provided Restish theme entries for status labels, projected JSON, and
+diffs. Non-TTY output remains plain and deterministic.
+
+Long-running pull and push operations emit progress messages on stderr through
+the command-plugin protocol. Primary command output stays on stdout so lists,
+diffs, and summaries remain composable.
+
 When a delegated HTTP call fails and the server response is worth showing, the
 plugin can still emit a command-plugin `response` message so Restish formats the
 error using the active output settings.
+
+## Compatibility Notes
+
+The v2 plugin intentionally keeps v2 hardening while restoring useful v1
+operator affordances:
+
+- local change hashes use the same 128-bit `xxh3` normalized-JSON hash as v1
+- colorized status/diff/list output is restored for color-capable terminals
+  using the configured Restish theme
+- schema-aware `--match` diagnostics are restored when resources advertise a
+  schema through `describedby` links or `$schema`
+- relative resource URLs, malformed URLs, path escapes, and cross-base checkout
+  paths are handled more strictly than v1
+- push refuses local/remote conflicts and missing preconditions by default;
+  `--force` is the explicit escape hatch
+- pull and push use bounded concurrency through `--jobs`
+- metadata writes are atomic and still saved after completed resources
 
 ## Resource Creation Model
 

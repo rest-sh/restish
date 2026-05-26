@@ -21,6 +21,8 @@ const (
 	StartupFlagStdoutTTY = "--rsh-stdout-tty"
 	// StartupFlagStderrTTY tells a command plugin whether host stderr is a TTY.
 	StartupFlagStderrTTY = "--rsh-stderr-tty"
+	// StartupFlagTheme carries the host's configured terminal theme as JSON.
+	StartupFlagTheme = "--rsh-theme"
 )
 
 const (

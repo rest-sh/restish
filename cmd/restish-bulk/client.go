@@ -12,6 +12,7 @@ type httpResponse struct {
 	Status  int
 	Headers map[string][]string
 	URL     string
+	Links   map[string]any
 	Body    any
 	Error   string
 }
@@ -39,6 +40,7 @@ func (c *pluginClient) request(method, uri string, headers map[string]string, bo
 		Status:  reply.Status,
 		Headers: reply.Headers,
 		URL:     reply.URL,
+		Links:   reply.Links,
 		Body:    reply.Body,
 		Error:   reply.Error,
 	}

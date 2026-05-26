@@ -353,10 +353,16 @@ func terminalContextFlags(c *CLI) []string {
 	stdoutTTY := output.IsTerminal(c.Stdout)
 	stderrTTY := output.IsTerminal(c.Stderr)
 	color := output.ColorEnabled(c.Stdout)
+	var themeEntries map[string]string
+	if c.cfg != nil {
+		themeEntries = c.cfg.Theme
+	}
+	theme, _ := json.Marshal(themeEntries)
 	return []string{
 		fmt.Sprintf("%s=%v", pluginwire.StartupFlagStdoutTTY, stdoutTTY),
 		fmt.Sprintf("%s=%v", pluginwire.StartupFlagStderrTTY, stderrTTY),
 		fmt.Sprintf("%s=%v", pluginwire.StartupFlagColor, color),
+		fmt.Sprintf("%s=%s", pluginwire.StartupFlagTheme, theme),
 	}
 }
 

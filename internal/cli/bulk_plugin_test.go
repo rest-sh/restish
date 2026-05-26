@@ -327,6 +327,39 @@ func TestBulkPluginWorkflow(t *testing.T) {
 	}
 }
 
+func TestBulkPluginStatusUsesConfiguredTheme(t *testing.T) {
+	installBulkPlugin(t)
+	withWorkingDir(t)
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+	t.Setenv("COLOR", "1")
+
+	cfgPath := sharedPluginConfigPath(t)
+	if err := os.WriteFile(cfgPath, []byte(`{"theme":{"inserted":"#010203"}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	srv := newBulkServer(t, []*bulkItem{
+		{User: "a", ID: "a1", Version: "a11", Body: map[string]any{"id": "a1"}, ETag: "a11"},
+	})
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgPath
+	if err := c.Run([]string{"restish", "bulk", "init", srv.listURL(), "--url-template=/users/{user}/items/{id}"}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if err := os.WriteFile("new.json", []byte(`{"id":"new"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	if err := c.Run([]string{"restish", "bulk", "status"}); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "\x1b[38;2;1;2;3") || !strings.Contains(got, "added") {
+		t.Fatalf("status did not use configured inserted theme:\n%q", got)
+	}
+}
+
 func TestBulkPluginUserRSHManifestFlagDoesNotTriggerStartupMode(t *testing.T) {
 	installBulkPlugin(t)
 	withWorkingDir(t)

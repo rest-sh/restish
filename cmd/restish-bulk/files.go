@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +19,9 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/rest-sh/restish/v2/internal/fileutil"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -39,6 +40,7 @@ type File struct {
 	URL           string `json:"url"`
 	ETag          string `json:"etag,omitempty"`
 	LastModified  string `json:"last_modified,omitempty"`
+	Schema        string `json:"schema,omitempty"`
 	VersionRemote string `json:"version_remote,omitempty"`
 	VersionLocal  string `json:"version_local,omitempty"`
 	Hash          []byte `json:"hash,omitempty"`
@@ -84,6 +86,10 @@ func (m *Meta) save() error {
 }
 
 func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) ([]string, error) {
+	return collectFilesWithOptions(meta, args, match, includeDeleted, nil, nil)
+}
+
+func collectFilesWithOptions(meta *Meta, args []string, match string, includeDeleted bool, warn func(string) error, schemaExample func(*File) any) ([]string, error) {
 	if len(args) == 0 {
 		seen := map[string]bool{}
 		err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
@@ -117,11 +123,12 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 	}
 
 	if match != "" {
-		ast, err := mexpr.Parse(match, nil, mexpr.UnquotedStrings)
-		if err != nil {
-			return nil, err
+		type compiledMatch struct {
+			ast         *mexpr.Node
+			interpreter mexpr.Interpreter
 		}
-		interpreter := mexpr.NewInterpreter(ast, mexpr.UnquotedStrings)
+		compiled := map[string]compiledMatch{}
+		warned := map[string]bool{}
 		filtered := make([]string, 0, len(args))
 		for _, path := range args {
 			data, err := os.ReadFile(path)
@@ -135,10 +142,37 @@ func collectFiles(meta *Meta, args []string, match string, includeDeleted bool) 
 			if err := json.Unmarshal(data, &content); err != nil {
 				continue
 			}
-			if err := mexpr.TypeCheck(ast, content, mexpr.UnquotedStrings); err != nil {
+
+			schemaKey := ""
+			typeSource := content
+			if f := meta.Files[path]; f != nil && f.Schema != "" && schemaExample != nil {
+				if example := schemaExample(f); example != nil {
+					schemaKey = f.Schema
+					typeSource = example
+				}
+			}
+			cm, ok := compiled[schemaKey]
+			if !ok {
+				ast, err := mexpr.Parse(match, nil, mexpr.UnquotedStrings)
+				if err != nil {
+					return nil, err
+				}
+				cm = compiledMatch{
+					ast:         ast,
+					interpreter: mexpr.NewInterpreter(ast, mexpr.UnquotedStrings),
+				}
+				compiled[schemaKey] = cm
+			}
+			if err := mexpr.TypeCheck(cm.ast, typeSource, mexpr.UnquotedStrings); err != nil {
+				if warn != nil && !warned[err.Error()] {
+					warned[err.Error()] = true
+					if warnErr := warn(err.Pretty(match)); warnErr != nil {
+						return nil, warnErr
+					}
+				}
 				continue
 			}
-			result, err := interpreter.Run(content)
+			result, err := cm.interpreter.Run(content)
 			if err != nil || isFalsey(result) {
 				continue
 			}
@@ -195,12 +229,32 @@ func (f *File) isChangedLocal(ignoreDeleted bool) (bool, error) {
 }
 
 func (c changedFile) String() string {
+	return c.StringColor(false)
+}
+
+func (c changedFile) StringColor(color bool) string {
 	label := map[fileStatus]string{
 		statusAdded:    "added",
 		statusModified: "modified",
 		statusRemoved:  "removed",
 	}[c.Status]
-	return fmt.Sprintf("\t%8s:  %s", label, c.File.Path)
+	label = fmt.Sprintf("%8s", label)
+	if color {
+		label = colorStatusLabel(c.Status, label)
+	}
+	return fmt.Sprintf("\t%s:  %s", label, c.File.Path)
+}
+
+func colorStatusLabel(status fileStatus, label string) string {
+	token := map[fileStatus]string{
+		statusAdded:    "inserted",
+		statusModified: "status_3xx",
+		statusRemoved:  "deleted",
+	}[status]
+	if token == "" {
+		return label
+	}
+	return output.StyleText(token, label)
 }
 
 func reformat(data []byte) ([]byte, error) {
@@ -238,7 +292,7 @@ func atomicWriteBulkFile(path string, data []byte, mode os.FileMode) error {
 }
 
 func hashBytes(data []byte) []byte {
-	sum := sha256.Sum256(data)
+	sum := xxh3.Hash128(data).Bytes()
 	return sum[:]
 }
 

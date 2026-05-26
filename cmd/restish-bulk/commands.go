@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/danielgtaylor/shorthand/v2"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
 
 type app struct {
-	client *pluginClient
+	client       *pluginClient
+	schemaCache  map[string]any
+	schemaMisses map[string]bool
 }
 
 func run(client *pluginClient, args []string) error {
@@ -44,6 +48,57 @@ func (a *app) newRootCmd() *cobra.Command {
 	root.AddCommand(a.newPushCmd())
 	polishBulkHelp(root)
 	return root
+}
+
+func (a *app) colorEnabled() bool {
+	return a != nil && a.client != nil && a.client.term.Color
+}
+
+func (a *app) colorizeDiff(diff string) string {
+	if !a.colorEnabled() {
+		return diff
+	}
+	lexer := lexers.Get("diff")
+	if lexer == nil {
+		return diff
+	}
+	colored, err := output.HighlightWithLexer(lexer, []byte(diff))
+	if err != nil {
+		return diff
+	}
+	return string(colored)
+}
+
+func (a *app) colorizeJSON(data []byte) []byte {
+	if !a.colorEnabled() {
+		return data
+	}
+	colored, err := output.HighlightWithLexer(output.ReadableLexer, data)
+	if err != nil {
+		return data
+	}
+	return colored
+}
+
+func (a *app) statusLine(changed changedFile) string {
+	return changed.StringColor(a.colorEnabled())
+}
+
+func (a *app) progress(text string) error {
+	if a == nil || a.client == nil {
+		return nil
+	}
+	return a.client.Progress(text)
+}
+
+func (a *app) collectFiles(meta *Meta, args []string, match string, includeDeleted bool) ([]string, error) {
+	warn := func(text string) error {
+		if a == nil || a.client == nil {
+			return nil
+		}
+		return a.client.Warn(text)
+	}
+	return collectFilesWithOptions(meta, args, match, includeDeleted, warn, a.schemaExample)
 }
 
 func polishBulkHelp(root *cobra.Command) {
@@ -143,7 +198,7 @@ func (a *app) newListCmd() *cobra.Command {
 			}
 			match, _ := cmd.Flags().GetString("match")
 			filterExpr, _ := cmd.Flags().GetString("filter")
-			files, err := collectFiles(meta, nil, match, false)
+			files, err := a.collectFiles(meta, nil, match, false)
 			if err != nil {
 				return err
 			}
@@ -170,6 +225,7 @@ func (a *app) newListCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				formatted = a.colorizeJSON(formatted)
 				if err := a.client.WriteStdout(append(formatted, '\n')); err != nil {
 					return err
 				}
@@ -206,7 +262,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 			if len(remote) > 0 {
 				fmt.Fprintf(&buf, "Remote changes on %s\n  (use \"restish bulk pull\" to update)\n", normalizedBaseURL(meta.URL))
 				for _, changed := range remote {
-					fmt.Fprintln(&buf, changed.String())
+					fmt.Fprintln(&buf, a.statusLine(changed))
 				}
 			} else {
 				fmt.Fprintf(&buf, "You are up to date with %s\n", normalizedBaseURL(meta.URL))
@@ -218,7 +274,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 				fmt.Fprintln(&buf, "  (use \"restish bulk reset [file]...\" to undo)")
 				fmt.Fprintln(&buf, "  (use \"restish bulk diff [file]...\" to view changes)")
 				for _, changed := range local {
-					fmt.Fprintln(&buf, changed.String())
+					fmt.Fprintln(&buf, a.statusLine(changed))
 				}
 			}
 			return a.client.WriteStdout(buf.Bytes())
@@ -243,7 +299,7 @@ func (a *app) newDiffCmd() *cobra.Command {
 			if remote {
 				return a.remoteDiff(meta)
 			}
-			files, err := collectFiles(meta, args, match, true)
+			files, err := a.collectFiles(meta, args, match, true)
 			if err != nil {
 				return err
 			}
@@ -268,7 +324,7 @@ func (a *app) newResetCmd() *cobra.Command {
 				return err
 			}
 			match, _ := cmd.Flags().GetString("match")
-			files, err := collectFiles(meta, args, match, true)
+			files, err := a.collectFiles(meta, args, match, true)
 			if err != nil {
 				return err
 			}

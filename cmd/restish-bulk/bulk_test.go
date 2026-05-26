@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rest-sh/restish/v2/internal/output"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
+	"github.com/zeebo/xxh3"
 )
 
 func TestBulkRelativePath(t *testing.T) {
@@ -60,6 +62,50 @@ func TestBulkRelativePath(t *testing.T) {
 				t.Fatalf("bulkRelativePath = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestHashBytesUsesV1CompatibleXXH3(t *testing.T) {
+	data := []byte("{\n  \"id\": \"one\"\n}")
+	got := hashBytes(data)
+	want := xxh3.Hash128(data).Bytes()
+	if len(got) != 16 {
+		t.Fatalf("hash length = %d, want v1-compatible 128-bit hash", len(got))
+	}
+	if !bytes.Equal(got, want[:]) {
+		t.Fatalf("hashBytes did not match xxh3.Hash128")
+	}
+}
+
+func TestChangedFileStringColorizesStatusLabel(t *testing.T) {
+	if err := output.SetTheme(output.ThemeEntries{"inserted": "#010203"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = output.SetTheme(nil) })
+
+	changed := changedFile{Status: statusAdded, File: &File{Path: "one.json"}}
+	got := changed.StringColor(true)
+	if !strings.Contains(got, "\x1b[38;2;") || !strings.Contains(got, "added") {
+		t.Fatalf("colored status = %q, want ANSI colored added label", got)
+	}
+	if !strings.Contains(got, "1;2;3") {
+		t.Fatalf("colored status = %q, want configured theme color", got)
+	}
+	if plain := changed.String(); strings.Contains(plain, "\x1b[") {
+		t.Fatalf("plain status contains ANSI: %q", plain)
+	}
+}
+
+func TestColorizeDiffUsesTerminalContext(t *testing.T) {
+	a := &app{client: &pluginClient{term: pluginwire.TerminalContext{Color: true}}}
+	got := a.colorizeDiff("--- old\n+++ new\n@@ -1 +1 @@\n-old\n+new\n")
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("colorized diff missing ANSI: %q", got)
+	}
+	a.client.term.Color = false
+	plainInput := "--- old\n+++ new\n@@ -1 +1 @@\n-old\n+new\n"
+	if plain := a.colorizeDiff(plainInput); plain != plainInput {
+		t.Fatalf("color disabled changed diff: %q", plain)
 	}
 }
 
@@ -201,6 +247,19 @@ func TestPullIndexResolvesRelativeEntryURLsAgainstResponseURL(t *testing.T) {
 	}
 }
 
+func TestSchemaURLUsesDescribedbyLinkAndBodySchema(t *testing.T) {
+	if got := schemaURL(&httpResponse{Links: map[string]any{"describedby": "https://api.example.com/schema.json"}}); got != "https://api.example.com/schema.json" {
+		t.Fatalf("schema from describedby = %q", got)
+	}
+	got := schemaURL(&httpResponse{
+		URL:  "https://api.example.com/items/one",
+		Body: map[string]any{"$schema": "../schemas/item.json"},
+	})
+	if got != "https://api.example.com/schemas/item.json" {
+		t.Fatalf("schema from body = %q", got)
+	}
+}
+
 func TestCollectFilesIncludesDotPrefixedResources(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.MkdirAll(".well-known", 0o700); err != nil {
@@ -253,6 +312,30 @@ func TestCollectFilesMatchUsesFileContentTypes(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "high.json" {
 		t.Fatalf("unquoted string match = %#v, want [high.json]", got)
+	}
+}
+
+func TestCollectFilesMatchWarnsOnSchemaTypeMismatch(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("book.json", []byte(`{"title":"Restish"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	meta := &Meta{Files: map[string]*File{"book.json": {Path: "book.json", Schema: "https://api.example.com/schema.json"}}}
+	var warnings []string
+	got, err := collectFilesWithOptions(meta, nil, "title > 5", false, func(text string) error {
+		warnings = append(warnings, text)
+		return nil
+	}, func(*File) any {
+		return map[string]any{"title": "string"}
+	})
+	if err != nil {
+		t.Fatalf("collectFilesWithOptions: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("matched files = %#v, want none", got)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "cannot compare string with number") {
+		t.Fatalf("warnings = %#v, want type mismatch warning", warnings)
 	}
 }
 

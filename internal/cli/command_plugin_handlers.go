@@ -225,6 +225,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Con
 		})
 	}
 
+	c.ensureBodyLinks(resp)
 	body := resp.Body
 	if msg.Filter != "" {
 		doc := normalizedResponseDoc(resp)
@@ -245,6 +246,7 @@ func (c *CLI) handlePluginHTTPRequest(cmd *cobra.Command, requestCtx context.Con
 		Status:    resp.Status,
 		Headers:   resp.Headers,
 		URL:       resp.URL,
+		Links:     resp.Links,
 		Body:      body,
 	})
 }

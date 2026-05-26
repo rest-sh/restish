@@ -347,9 +347,11 @@ func TestTerminalContextFromArgsOnlyUsesInjectedPrefix(t *testing.T) {
 	ctx := plugin.TerminalContextFromArgs([]string{
 		plugin.StartupFlagColor + "=true",
 		plugin.StartupFlagStdoutTTY + "=true",
+		plugin.StartupFlagTheme + `={"inserted":"#ffffff"}`,
 		"run",
 		plugin.StartupFlagColor + "=false",
 		plugin.StartupFlagStderrTTY + "=true",
+		plugin.StartupFlagTheme + `={"inserted":"#000000"}`,
 	})
 	if !ctx.Color {
 		t.Fatal("expected color from injected prefix")
@@ -360,12 +362,16 @@ func TestTerminalContextFromArgsOnlyUsesInjectedPrefix(t *testing.T) {
 	if ctx.StderrTTY {
 		t.Fatal("stderr tty after user arg should be ignored")
 	}
+	if ctx.Theme["inserted"] != "#ffffff" {
+		t.Fatalf("theme = %#v, want injected prefix theme", ctx.Theme)
+	}
 }
 
 func TestArgsWithoutStartupFlagsPreservesUserRSHFlags(t *testing.T) {
 	got := plugin.ArgsWithoutStartupFlags([]string{
 		plugin.StartupFlagColor + "=true",
 		plugin.StartupFlagStdoutTTY + "=false",
+		plugin.StartupFlagTheme + `={"inserted":"#ffffff"}`,
 		"run",
 		plugin.StartupFlagManifest,
 	})

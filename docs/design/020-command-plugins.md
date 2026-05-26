@@ -50,6 +50,11 @@ Restish-owned long flags such as `--rsh-config` may still be stripped before
 plugin launch if they were already consumed by the host, but shorthand aliases
 must not be silently removed from plugin argv.
 
+Restish also injects terminal context flags before plugin-owned args. These
+include stdout/stderr TTY state, whether color is enabled, and the configured
+terminal theme entries. Command plugins that render human output should use
+that context so plugin output matches built-in command output and user themes.
+
 Command-name collisions must be handled explicitly. If a plugin tries to add a
 command that would shadow a built-in or another plugin command, Restish should
 skip it with a warning or fail startup, but never silently shadow the existing

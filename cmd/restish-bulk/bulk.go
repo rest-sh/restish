@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
@@ -137,9 +136,7 @@ func (a *app) pull(m *Meta, jobs int) error {
 		return a.client.WriteStdout([]byte("Already up to date.\n"))
 	}
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Pulling %d resource(s)...\n", len(updates))
-	if err := a.client.WriteStderr(buf.Bytes()); err != nil {
+	if err := a.progress(fmt.Sprintf("Pulling %d resource(s)...", len(updates))); err != nil {
 		return err
 	}
 
@@ -297,6 +294,11 @@ func (a *app) push(m *Meta, jobs int, opts pushOptions) error {
 		pushable = append(pushable, changed)
 	}
 
+	if len(pushable) > 0 {
+		if err := a.progress(fmt.Sprintf("Pushing %d resource(s)...", len(pushable))); err != nil {
+			return err
+		}
+	}
 	results := a.pushFiles(pushable, jobs, opts)
 	for result := range results {
 		if result.err != nil {
@@ -601,7 +603,7 @@ func (a *app) localDiff(meta *Meta, files []string) error {
 			return err
 		}
 		changed = true
-		diff := unifiedDiff("remote "+meta.Base+strings.TrimSuffix(path, ".json"), "local "+path, original, modified)
+		diff := a.colorizeDiff(unifiedDiff("remote "+meta.Base+strings.TrimSuffix(path, ".json"), "local "+path, original, modified))
 		if err := a.client.WriteStdout([]byte(diff)); err != nil {
 			return err
 		}
@@ -639,7 +641,7 @@ func (a *app) remoteDiff(meta *Meta) error {
 		case statusRemoved:
 			modified = nil
 		}
-		diff := unifiedDiff("local "+changed.File.Path, "remote "+meta.Base+strings.TrimSuffix(changed.File.Path, ".json"), original, modified)
+		diff := a.colorizeDiff(unifiedDiff("local "+changed.File.Path, "remote "+meta.Base+strings.TrimSuffix(changed.File.Path, ".json"), original, modified))
 		if err := a.client.WriteStdout([]byte(diff)); err != nil {
 			return err
 		}
@@ -660,6 +662,7 @@ type fetchedFile struct {
 	body         []byte
 	etag         string
 	lastModified string
+	schema       string
 }
 
 func (a *app) fetchFileData(f *File) (*fetchedFile, error) {
@@ -685,6 +688,7 @@ func (a *app) fetchFileData(f *File) (*fetchedFile, error) {
 		body:         append(body, '\n'),
 		etag:         firstHeader(resp.Headers, "Etag"),
 		lastModified: firstHeader(resp.Headers, "Last-Modified"),
+		schema:       schemaURL(resp),
 	}, nil
 }
 
@@ -703,6 +707,7 @@ func applyFetchedFile(f *File, fetched *fetchedFile) {
 	}
 	f.ETag = fetched.etag
 	f.LastModified = fetched.lastModified
+	f.Schema = fetched.schema
 }
 
 func normalizeJobs(jobs int) int {

@@ -33,6 +33,12 @@ output summarizes created, updated, deleted, skipped, and refused resources.
 
 ## Notes
 
+In terminals with color enabled, bulk output uses the configured Restish theme
+for status labels, diffs, and projected JSON. Non-terminal output is plain.
+
+When fetched resources advertise schemas through `describedby` links or a
+`$schema` field, `--match` can report obvious expression type mismatches.
+
 Bulk is provided by a command plugin. Verify plugin discovery with
 `restish plugin list` before using it. Operator setup is covered in
 [Install and Use Plugins](/docs/plugins/install-and-use/); plugin protocol

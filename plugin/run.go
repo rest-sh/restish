@@ -60,7 +60,8 @@ func isStartupPrefixArg(arg string) bool {
 	}
 	return strings.HasPrefix(arg, StartupFlagColor+"=") ||
 		strings.HasPrefix(arg, StartupFlagStdoutTTY+"=") ||
-		strings.HasPrefix(arg, StartupFlagStderrTTY+"=")
+		strings.HasPrefix(arg, StartupFlagStderrTTY+"=") ||
+		strings.HasPrefix(arg, StartupFlagTheme+"=")
 }
 
 // Run is the complete main-loop for simple command plugins. It handles
