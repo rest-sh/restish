@@ -42,7 +42,7 @@ func (c *CLI) setupMarkdownHelp(root *cobra.Command) {
 			cmd.SetOut(origOut)
 			cmd.Long = orig
 			mu.Unlock()
-			_, _ = c.Stdout.Write([]byte(colorizeHelpText(buf.String(), humanTextStyleFor(c.Stdout))))
+			_, _ = c.Stdout.Write([]byte(colorizeHelpText(buf.String(), humanTextStyleFor(c.Stdout), commandGroupHeadings(cmd))))
 			return
 		}
 		original(cmd, args)
@@ -91,7 +91,7 @@ func renderMarkdown(s string, c *CLI) (string, error) {
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
-func colorizeHelpText(text string, style humanTextStyle) string {
+func colorizeHelpText(text string, style humanTextStyle, extraHeadings map[string]bool) string {
 	if !style.color {
 		return text
 	}
@@ -104,7 +104,7 @@ func colorizeHelpText(text string, style humanTextStyle) string {
 		switch {
 		case trimmed == "":
 			out.WriteString(raw)
-		case isHelpHeading(trimmed):
+		case isHelpHeading(trimmed, extraHeadings):
 			out.WriteString(colorizeWholeLine(line, style.heading))
 			out.WriteString(newline)
 		default:
@@ -114,8 +114,24 @@ func colorizeHelpText(text string, style humanTextStyle) string {
 	return out.String()
 }
 
-func isHelpHeading(trimmed string) bool {
+func commandGroupHeadings(cmd *cobra.Command) map[string]bool {
+	if cmd == nil || len(cmd.Groups()) == 0 {
+		return nil
+	}
+	headings := make(map[string]bool, len(cmd.Groups()))
+	for _, group := range cmd.Groups() {
+		if group.Title != "" {
+			headings[group.Title] = true
+		}
+	}
+	return headings
+}
+
+func isHelpHeading(trimmed string, extraHeadings map[string]bool) bool {
 	if strings.HasSuffix(trimmed, ":") {
+		return true
+	}
+	if extraHeadings[trimmed] {
 		return true
 	}
 	switch trimmed {

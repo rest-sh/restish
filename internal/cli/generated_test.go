@@ -300,6 +300,15 @@ func (e *generatedEnv) writeConfig(t *testing.T, cfg *config.Config) {
 	writeTestFile(t, e.cfgFile, string(data))
 }
 
+func helpLineWithPlainText(help, plain string) (string, bool) {
+	for _, line := range strings.Split(help, "\n") {
+		if strings.TrimSpace(stripANSI(line)) == plain {
+			return line, true
+		}
+	}
+	return "", false
+}
+
 func expireGeneratedSpecCache(t *testing.T, cacheDir, apiName string) {
 	t.Helper()
 	path := filepath.Join(cacheDir, apiName+".cbor")
@@ -2023,6 +2032,29 @@ func TestGeneratedCommandHelpFocusesOperationAndHelpAllShowsGlobals(t *testing.T
 	}
 	if configGroupIdx < 0 || configFlagIdx < configGroupIdx {
 		t.Fatalf("help-all should group --rsh-config under general options, got:\n%s", full)
+	}
+}
+
+func TestGeneratedAPIHelpColorizesTagGroupHeadings(t *testing.T) {
+	t.Setenv("COLOR", "1")
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("api help: %v", err)
+	}
+
+	line, ok := helpLineWithPlainText(out.String(), "items")
+	if !ok {
+		t.Fatalf("expected generated tag group heading in help:\n%s", stripANSI(out.String()))
+	}
+	if !strings.Contains(line, "\x1b[") {
+		t.Fatalf("expected generated tag group heading to be colorized, got line %q in:\n%s", line, out.String())
 	}
 }
 
