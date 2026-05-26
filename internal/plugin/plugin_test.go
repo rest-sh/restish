@@ -746,6 +746,26 @@ func TestCallHookOutputTooLarge(t *testing.T) {
 	}
 }
 
+func TestCallHookRedactsSensitiveStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	path := writeScript(t, dir, "restish-hook-secret", "#!/bin/sh\necho 'Authorization: Bearer super-secret-token' >&2\nexit 1\n")
+
+	var out pluginwire.AuthHookOutput
+	err := CallHook(path, pluginwire.AuthHookInput{Type: "auth"}, &out)
+	if err == nil {
+		t.Fatal("expected hook error")
+	}
+	if strings.Contains(err.Error(), "super-secret-token") {
+		t.Fatalf("hook stderr leaked secret: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Authorization: ***") {
+		t.Fatalf("hook stderr was not redacted clearly: %v", err)
+	}
+}
+
 func TestStartFormatterStreamContextCancellationKillsProcess(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script tests not supported on Windows")

@@ -19,6 +19,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/procutil"
 	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/spf13/cobra"
 )
 
@@ -457,35 +458,7 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 }
 
 func redactDiagnosticSecretText(value string) string {
-	value = strings.TrimSpace(value)
-	for _, marker := range []string{"access_token", "refresh_token", "id_token", "client_secret", "password", "authorization"} {
-		value = redactDiagnosticAssignment(value, marker)
-	}
-	return value
-}
-
-func redactDiagnosticAssignment(value, marker string) string {
-	for _, sep := range []string{"=", ":"} {
-		lower := strings.ToLower(value)
-		needle := strings.ToLower(marker + sep)
-		searchFrom := 0
-		for {
-			idxRel := strings.Index(lower[searchFrom:], needle)
-			if idxRel < 0 {
-				break
-			}
-			idx := searchFrom + idxRel
-			start := idx + len(needle)
-			end := start
-			for end < len(value) && !strings.ContainsRune(" \t\r\n,;&", rune(value[end])) {
-				end++
-			}
-			value = value[:start] + "***" + value[end:]
-			lower = lower[:start] + "***" + lower[end:]
-			searchFrom = start + len("***")
-		}
-	}
-	return value
+	return secrets.RedactDiagnosticText(value)
 }
 
 func (c *CLI) authHTTPClient(ctx context.Context) *http.Client {

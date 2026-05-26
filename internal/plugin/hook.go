@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/procutil"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
@@ -57,12 +58,12 @@ func callHookRaw(ctx context.Context, path string, timeout time.Duration, in any
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			if msg := strings.TrimSpace(stderr.String()); msg != "" {
-				return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), ctxErr, msg)
+				return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), ctxErr, secrets.RedactDiagnosticText(msg))
 			}
 			return nil, fmt.Errorf("hook %s: exec: %w", filepath.Base(path), ctxErr)
 		}
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), err, msg)
+			return nil, fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(path), err, secrets.RedactDiagnosticText(msg))
 		}
 		return nil, fmt.Errorf("hook %s: exec: %w", filepath.Base(path), err)
 	}
@@ -150,7 +151,7 @@ func (s *FormatterStream) Close() error {
 	case err := <-done:
 		if err != nil {
 			if msg := strings.TrimSpace(s.stderr.String()); msg != "" {
-				return fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(s.path), err, msg)
+				return fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(s.path), err, secrets.RedactDiagnosticText(msg))
 			}
 			return fmt.Errorf("hook %s: exec: %w", filepath.Base(s.path), err)
 		}

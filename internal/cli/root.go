@@ -7,6 +7,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -69,11 +70,11 @@ func (c *CLI) newRootCmd() *cobra.Command {
 			if strings.ContainsAny(args[0], ".:/") || c.isAPIShortName(args[0]) {
 				return c.runInferredHTTP(cmd, args)
 			}
-			return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see available commands or use a full URL")
+			return unknownCommandError(cmd, args[0], rootUnknownCommandHint(cmd, args))
 		},
 	}
-	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return newUsageError(err)
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		return newUsageError(suggestFlagError(cmd, err))
 	})
 
 	addRootCommandGroups(root)
@@ -94,6 +95,72 @@ func (c *CLI) newRootCmd() *cobra.Command {
 	c.addCommandPlugins(root)
 	c.setupMarkdownHelp(root)
 	return root
+}
+
+func rootUnknownCommandHint(cmd *cobra.Command, args []string) string {
+	base := "run " + strconvQuote(cmd.CommandPath()+" --help") + " to see available commands or use a full URL"
+	for _, arg := range args[1:] {
+		if strings.ContainsAny(arg, ".:/") {
+			return "a URL appears later in the command; check whether a flag value with spaces needs quotes; " + base
+		}
+	}
+	return base
+}
+
+func suggestFlagError(cmd *cobra.Command, err error) error {
+	if err == nil || cmd == nil {
+		return err
+	}
+	msg := err.Error()
+	const prefix = "unknown flag: --"
+	if !strings.HasPrefix(msg, prefix) {
+		return err
+	}
+	name := strings.TrimSpace(strings.TrimPrefix(msg, prefix))
+	if name == "" {
+		return err
+	}
+	if suggestion := flagSuggestion(cmd, name); suggestion != "" {
+		return fmt.Errorf("%s; did you mean --%s?", msg, suggestion)
+	}
+	return err
+}
+
+func flagSuggestion(cmd *cobra.Command, name string) string {
+	seen := map[string]struct{}{}
+	var names []string
+	for current := cmd; current != nil; current = current.Parent() {
+		collectFlagNames(current.LocalFlags(), seen, &names)
+		collectFlagNames(current.PersistentFlags(), seen, &names)
+	}
+	collectFlagNames(cmd.Root().PersistentFlags(), seen, &names)
+	sort.Strings(names)
+	var matches []string
+	for _, candidate := range names {
+		if levenshteinDistance(name, candidate) <= 2 {
+			matches = append(matches, candidate)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
+}
+
+func collectFlagNames(flags *pflag.FlagSet, seen map[string]struct{}, names *[]string) {
+	if flags == nil {
+		return
+	}
+	flags.VisitAll(func(flag *pflag.Flag) {
+		if flag == nil || flag.Name == "" {
+			return
+		}
+		if _, ok := seen[flag.Name]; ok {
+			return
+		}
+		seen[flag.Name] = struct{}{}
+		*names = append(*names, flag.Name)
+	})
 }
 
 func (c *CLI) addVersionCommand(root *cobra.Command) {

@@ -694,6 +694,13 @@ func TestGeneratedAPICommandSurfaceMap(t *testing.T) {
 		!strings.Contains(err.Error(), `did you mean "get-item"?`) {
 		t.Fatalf("unexpected generated unknown command help error: %v", err)
 	}
+
+	c, _ = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-images"}); err == nil {
+		t.Fatal("expected stale generated command to fail")
+	} else if !strings.Contains(err.Error(), `did you mean "list-items"?`) {
+		t.Fatalf("expected stale generated command suggestion, got: %v", err)
+	}
 }
 
 func TestGeneratedAPIHelpMentionsAuthInspection(t *testing.T) {

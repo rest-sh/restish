@@ -138,6 +138,54 @@ func TestMalformedBareTargetFailsBeforeTransport(t *testing.T) {
 	}
 }
 
+func TestAuthEnvErrorIsNotReportedAsNetworkError(t *testing.T) {
+	app := newTestApp(t)
+	app.WriteConfigObject(&config.Config{APIs: map[string]*config.APIConfig{
+		"svc": {
+			BaseURL: "https://api.example.com",
+			Profiles: map[string]*config.ProfileConfig{
+				"default": {
+					Auth: &config.AuthConfig{
+						Type:   "bearer",
+						Params: map[string]string{"token": "env:RESTISH_TEST_MISSING_TOKEN"},
+					},
+				},
+			},
+		},
+	}})
+	app.UseTransport(func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("transport should not be called when auth env is missing")
+		return nil, nil
+	})
+
+	err := app.RunErr("svc/auth")
+	if err == nil {
+		t.Fatal("expected missing env auth error")
+	}
+	requireContains(t, err.Error(), `auth param "token"`, "RESTISH_TEST_MISSING_TOKEN")
+	requireNotContains(t, err.Error(), "network error")
+}
+
+func TestRawBodyReadErrorIncludesRequestContextAndHint(t *testing.T) {
+	app := newTestApp(t)
+	app.UseResponse(&http.Response{
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+		Body: io.NopCloser(readerFunc(func(p []byte) (int, error) {
+			return 0, io.ErrUnexpectedEOF
+		})),
+	})
+
+	err := app.RunErr("get", "https://api.example.com/drop")
+	if err == nil {
+		t.Fatal("expected body read error")
+	}
+	requireContains(t, err.Error(),
+		"reading response body for GET https://api.example.com/drop: unexpected EOF",
+		"hint: response ended early")
+}
+
 func TestBareURLWithShorthandInfersPOST(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)

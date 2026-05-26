@@ -403,6 +403,31 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestUnknownRootCommandWithLaterURLHintsQuoting(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "Bearer", "docs-token", "https://api.example.com/auth/bearer"})
+	if err == nil {
+		t.Fatal("expected unknown command error")
+	}
+	if !strings.Contains(err.Error(), `unknown command "Bearer"`) ||
+		!strings.Contains(err.Error(), "a URL appears later in the command") ||
+		!strings.Contains(err.Error(), "flag value with spaces needs quotes") {
+		t.Fatalf("unexpected unknown command error: %v", err)
+	}
+}
+
+func TestUnknownRestishFlagSuggestsNearestFlag(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	err := c.Run([]string{"restish", "get", "https://api.example.com/items", "--rsh-prnt", "b"})
+	if err == nil {
+		t.Fatal("expected unknown flag error")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --rsh-prnt") ||
+		!strings.Contains(err.Error(), "did you mean --rsh-print?") {
+		t.Fatalf("unexpected flag error: %v", err)
+	}
+}
+
 func TestExplicitConfigFlagWritesSelectedFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "project-restish.json")

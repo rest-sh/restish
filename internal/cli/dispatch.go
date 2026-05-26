@@ -145,17 +145,74 @@ func commandSuggestionHint(cmd *cobra.Command, arg string) string {
 }
 
 func commandReplacementSuggestion(cmd *cobra.Command, arg string) string {
-	if cmd.Name() != "api" {
+	if cmd.Name() == "api" {
+		switch arg {
+		case "add", "configure":
+			return "connect"
+		case "delete":
+			return "remove"
+		}
+	}
+	argParts := strings.Split(arg, "-")
+	if len(argParts) < 2 {
 		return ""
 	}
-	switch arg {
-	case "add", "configure":
-		return "connect"
-	case "delete":
-		return "remove"
-	default:
-		return ""
+	var matches []string
+	for _, sub := range cmd.Commands() {
+		if sub.Hidden {
+			continue
+		}
+		name := sub.Name()
+		nameParts := strings.Split(name, "-")
+		if len(nameParts) < 2 || nameParts[0] != argParts[0] {
+			continue
+		}
+		if levenshteinDistance(arg, name) <= 7 {
+			matches = append(matches, name)
+		}
 	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
+}
+
+func levenshteinDistance(a, b string) int {
+	ar := []rune(a)
+	br := []rune(b)
+	if len(ar) == 0 {
+		return len(br)
+	}
+	if len(br) == 0 {
+		return len(ar)
+	}
+	prev := make([]int, len(br)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i, ca := range ar {
+		curr := make([]int, len(br)+1)
+		curr[0] = i + 1
+		for j, cb := range br {
+			cost := 0
+			if ca != cb {
+				cost = 1
+			}
+			curr[j+1] = minInt(curr[j]+1, prev[j+1]+1, prev[j]+cost)
+		}
+		prev = curr
+	}
+	return prev[len(br)]
+}
+
+func minInt(values ...int) int {
+	min := values[0]
+	for _, value := range values[1:] {
+		if value < min {
+			min = value
+		}
+	}
+	return min
 }
 
 func quoteStrings(values []string) []string {

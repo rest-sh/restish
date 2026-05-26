@@ -252,6 +252,9 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	httpResp, err := c.sendPreparedRequest(requestContext(cmd), method, prepared)
 	if err != nil {
+		if isLocalRequestExecutionError(err) {
+			return err
+		}
 		networkURL := redactedNetworkErrorURL(rawURL, opts.Server)
 		if hint := networkErrorHint(err); hint != "" {
 			return fmt.Errorf("network error for %s %s: %w\nhint: %s", method, networkURL, err, hint)
@@ -333,7 +336,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		defer httpResp.Body.Close()
 		raw, err := c.rawResponseBodyBytes(httpResp, maxBodyBytes(cmd))
 		if err != nil {
-			return err
+			return responseBodyReadError(method, rawURL, err)
 		}
 		if gf.Verbose >= 1 {
 			c.logVerboseBody("< body", raw, httpResp.Header.Get("Content-Type"))
@@ -364,7 +367,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 
 	resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 	if err != nil {
-		return err
+		return responseBodyReadError(method, rawURL, err)
 	}
 	traceContentDecode(trace, output.Header(resp.Headers, "Content-Type"))
 	if v := globalFlagsFromContext(requestContext(cmd)).Verbose; v >= 1 {
@@ -542,6 +545,8 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response, prepared
 
 	if filtered == nil && shouldSuggestBodyPrefix(filterExpr) {
 		c.hintBodyPrefixOnce(filterExpr)
+	} else if filtered == nil && shouldSuggestJQBodyRoot(filterExpr, lang) {
+		c.hintJQBodyRootOnce(filterExpr)
 	}
 
 	return c.printResponseParts(cmd, resp, prepared, printPlan, filtered, explicitFilter)
@@ -1021,6 +1026,8 @@ func (c *CLI) filterBodyValue(cmd *cobra.Command, item any) (any, error) {
 	traceFilter(requestTraceFromContext(requestContext(cmd)), lang, filterResult.Lang)
 	if filterResult.Value == nil && bodyPrefixTargetExists(item, gf.Filter) {
 		c.hintBodyPrefixOnce(gf.Filter)
+	} else if filterResult.Value == nil && shouldSuggestJQBodyRoot(gf.Filter, lang) {
+		c.hintJQBodyRootOnce(gf.Filter)
 	}
 	return filterResult.Value, nil
 }
@@ -1345,9 +1352,25 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 	}
 	formatter, ok := fmts[fmtName]
 	if !ok {
+		if suggestion := outputFormatSuggestion(fmtName, fmts); suggestion != "" {
+			return nil, fmt.Errorf("unknown output format %q; did you mean %q?; available: %s", fmtName, suggestion, output.FormatterNames(fmts))
+		}
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
 	return formatter, nil
+}
+
+func outputFormatSuggestion(name string, fmts map[string]output.Formatter) string {
+	var matches []string
+	for candidate := range fmts {
+		if levenshteinDistance(name, candidate) <= 2 {
+			matches = append(matches, candidate)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
 }
 
 func explicitAutoOutputFormat(gf GlobalFlags) bool {
@@ -1383,12 +1406,60 @@ func shouldSuggestBodyPrefix(filterExpr string) bool {
 	return true
 }
 
+func shouldSuggestJQBodyRoot(filterExpr string, requested filter.Lang) bool {
+	if requested == filter.LangShorthand {
+		return false
+	}
+	filterExpr = strings.TrimSpace(filterExpr)
+	if filterExpr == "" || strings.Contains(filterExpr, ".body") {
+		return false
+	}
+	for _, prefix := range []string{"map(", "select(", "length", "keys", "has(", "sort", "sort_by(", "group_by(", "unique", "unique_by("} {
+		if filterExpr == prefix || strings.HasPrefix(filterExpr, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CLI) hintJQBodyRootOnce(filterExpr string) {
+	if c.bodyPrefixHinted {
+		return
+	}
+	c.bodyPrefixHinted = true
+	c.hintf("filter returned no results; this looks like jq over the response wrapper, so try '.body | %s' or pass --rsh-filter-lang jq with an explicit root", strings.TrimSpace(filterExpr))
+}
+
 func (c *CLI) hintBodyPrefixOnce(filterExpr string) {
 	if c.bodyPrefixHinted {
 		return
 	}
 	c.bodyPrefixHinted = true
 	c.hintf("filter returned no results; to access response body fields use '%s'", bodyPrefixHint(filterExpr))
+}
+
+func isLocalRequestExecutionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.HasPrefix(msg, "auth: ") ||
+		strings.HasPrefix(msg, "building request: ") ||
+		strings.HasPrefix(msg, "invalid header ") ||
+		strings.HasPrefix(msg, "invalid query ")
+}
+
+func responseBodyReadError(method, rawURL string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("reading response body for %s %s: unexpected EOF\nhint: response ended early; retry or check server/proxy stability", method, rawURL)
+	}
+	if strings.HasPrefix(err.Error(), "reading response body: ") {
+		return fmt.Errorf("reading response body for %s %s: %w", method, rawURL, err)
+	}
+	return err
 }
 
 func bodyPrefixHint(filterExpr string) string {

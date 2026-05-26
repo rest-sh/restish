@@ -422,6 +422,22 @@ func TestUnknownOutputFormat(t *testing.T) {
 	}
 }
 
+func TestUnknownOutputFormatSuggestsNearestFormat(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with unknown output format")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "jsoon", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected error for unknown output format")
+	}
+	if !strings.Contains(err.Error(), `unknown output format "jsoon"`) ||
+		!strings.Contains(err.Error(), `did you mean "json"?`) {
+		t.Fatalf("unexpected unknown output format error: %v", err)
+	}
+}
+
 // TestPrintResponseHeadersOnly verifies that --rsh-print h writes only
 // response headers and no body.
 func TestPrintResponseHeadersOnly(t *testing.T) {
@@ -814,6 +830,18 @@ func TestFilterArraySyntaxDoesNotTriggerBodyHint(t *testing.T) {
 	if strings.Contains(errOut.String(), "filter returned no results") {
 		t.Fatalf("expected no body hint for body[0], got: %q", errOut.String())
 	}
+}
+
+func TestJQLookingFilterWithoutBodyRootHints(t *testing.T) {
+	c, out, errOut := newTestCLI(t)
+	useJSONResponse(c, 200, `[{"id":"one"},{"id":"two"}]`)
+	if err := c.Run([]string{"restish", "get", "--rsh-collect", "-f", "map(.id)", "-o", "lines", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(out.String()) != "null" {
+		t.Fatalf("stdout = %q, want null", out.String())
+	}
+	requireContains(t, errOut.String(), "this looks like jq", ".body | map(.id)")
 }
 
 func TestHeadersFlagWarnsWhenOverridingFilter(t *testing.T) {

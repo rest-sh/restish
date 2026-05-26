@@ -121,6 +121,69 @@ func IsOAuthErrorBodyKey(name string) bool {
 	return OAuthErrorBodyKeys[strings.ToLower(name)]
 }
 
+// RedactDiagnosticText removes common secret assignments from plugin stderr,
+// verbose traces, and other diagnostic text that may be surfaced to users.
+func RedactDiagnosticText(value string) string {
+	value = strings.TrimSpace(value)
+	for _, marker := range []string{
+		"access_token",
+		"refresh_token",
+		"id_token",
+		"client_secret",
+		"password",
+		"authorization",
+		"proxy-authorization",
+		"cookie",
+		"set-cookie",
+		"x-api-key",
+		"x-api-token",
+		"x-auth-token",
+	} {
+		value = redactDiagnosticAssignment(value, marker)
+	}
+	return value
+}
+
+func redactDiagnosticAssignment(value, marker string) string {
+	for _, sep := range []string{"=", ":"} {
+		lower := strings.ToLower(value)
+		needle := strings.ToLower(marker + sep)
+		searchFrom := 0
+		for {
+			idxRel := strings.Index(lower[searchFrom:], needle)
+			if idxRel < 0 {
+				break
+			}
+			idx := searchFrom + idxRel
+			start := idx + len(needle)
+			for start < len(value) && (value[start] == ' ' || value[start] == '\t') {
+				start++
+			}
+			end := start
+			delimiters := "\r\n,;&"
+			if diagnosticMarkerStopsAtSpace(marker) {
+				delimiters += " \t"
+			}
+			for end < len(value) && !strings.ContainsRune(delimiters, rune(value[end])) {
+				end++
+			}
+			value = value[:start] + "***" + value[end:]
+			lower = strings.ToLower(value)
+			searchFrom = start + len("***")
+		}
+	}
+	return value
+}
+
+func diagnosticMarkerStopsAtSpace(marker string) bool {
+	switch marker {
+	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-api-token", "x-auth-token":
+		return false
+	default:
+		return true
+	}
+}
+
 // LooksSensitiveValue reports whether a value resembles an API key or token.
 // It intentionally keeps common low-entropy values such as "testing" visible
 // so ambiguous names like "key" can still be useful in verbose diagnostics.
