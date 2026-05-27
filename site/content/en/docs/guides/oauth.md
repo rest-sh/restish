@@ -138,6 +138,27 @@ Some providers distinguish `localhost` from `127.0.0.1`. Restish sends
 `localhost` in the authorization request, so exact-match providers must allow
 the `localhost` URL.
 
+The browser callback page uses the active Restish theme. To brand that local
+page, set `callback_success_html` and/or `callback_error_html` on the
+authorization-code profile:
+
+```jsonc
+{
+  "type": "oauth-authorization-code",
+  "params": {
+    "authorize_url": "https://issuer.test/authorize",
+    "token_url": "https://issuer.test/oauth/token",
+    "client_id": "env:CLIENT_ID",
+    "callback_success_html": "<html><body><h1>Signed in</h1><p>You can return to the terminal.</p></body></html>",
+    "callback_error_html": "<html><body><h1>Sign-in failed: $ERROR</h1><p>$DETAILS</p></body></html>"
+  }
+}
+```
+
+Callback HTML supports `$TITLE` and `$DETAILS`; failure HTML also supports
+`$ERROR`. Restish escapes substituted values before inserting them, and does
+not forward callback HTML params to OAuth authorization or token endpoints.
+
 Use `--rsh-no-browser` when browser launch is not possible:
 
 ```bash

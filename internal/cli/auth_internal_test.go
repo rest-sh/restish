@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
@@ -95,5 +97,35 @@ func TestConfiguredCredentialsCountsAuthRef(t *testing.T) {
 	}
 	if got["Missing"] {
 		t.Fatalf("empty credential counted as configured: %#v", got)
+	}
+}
+
+func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
+	if err := output.SetTheme(output.ThemeEntries{
+		"status_2xx":   "bold #00ff00",
+		"status_error": "italic #ff0000",
+	}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := output.SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	})
+
+	c := New()
+	handler, err := c.authHandlerFor(&config.AuthConfig{Type: "oauth-authorization-code"}, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("authHandlerFor: %v", err)
+	}
+	oauthHandler, ok := handler.(*auth.AuthorizationCode)
+	if !ok {
+		t.Fatalf("handler = %T, want *auth.AuthorizationCode", handler)
+	}
+	if oauthHandler.CallbackSuccessColor != "#00ff00" {
+		t.Fatalf("success color = %q, want #00ff00", oauthHandler.CallbackSuccessColor)
+	}
+	if oauthHandler.CallbackFailureColor != "#ff0000" {
+		t.Fatalf("failure color = %q, want #ff0000", oauthHandler.CallbackFailureColor)
 	}
 }

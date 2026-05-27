@@ -61,6 +61,27 @@ func TestBuildThemeTextToken(t *testing.T) {
 	}
 }
 
+func TestThemeTokenColorUsesActiveTheme(t *testing.T) {
+	if err := SetTheme(ThemeEntries{"status_2xx": "bold #00ff00", "status_error": "italic #ff0000"}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := SetTheme(nil); err != nil {
+			t.Fatalf("reset theme: %v", err)
+		}
+	})
+
+	if got, want := ThemeTokenColor("status_2xx"), "#00ff00"; got != want {
+		t.Fatalf("status_2xx color = %q, want %q", got, want)
+	}
+	if got, want := ThemeTokenColor("status_error"), "#ff0000"; got != want {
+		t.Fatalf("status_error color = %q, want %q", got, want)
+	}
+	if got := ThemeTokenColor("not_a_token"); got != "" {
+		t.Fatalf("unknown token color = %q, want empty", got)
+	}
+}
+
 func TestBuildThemeDefaultHeaderKeyCanDifferFromKey(t *testing.T) {
 	style, err := BuildTheme(nil)
 	if err != nil {

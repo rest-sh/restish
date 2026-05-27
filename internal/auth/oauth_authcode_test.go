@@ -704,7 +704,7 @@ func TestAuthCode_CallbackPageReflectsTokenExchangeResult(t *testing.T) {
 		if err != nil {
 			t.Fatalf("OnRequest: %v", err)
 		}
-		if body := <-bodyCh; !strings.Contains(body, "Authorization code received") || !strings.Contains(body, "Authentication successful") {
+		if body := <-bodyCh; !strings.Contains(body, "Login Successful!") || !strings.Contains(body, `class="check"`) || !strings.Contains(body, "@keyframes success-bg") {
 			t.Fatalf("callback body = %q", body)
 		}
 	})
@@ -740,10 +740,128 @@ func TestAuthCode_CallbackPageReflectsTokenExchangeResult(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected token exchange error")
 		}
-		if body := <-bodyCh; !strings.Contains(body, "Authorization code received") || !strings.Contains(body, "Authentication failed") {
+		if body := <-bodyCh; !strings.Contains(body, "Authentication failed") || !strings.Contains(body, `class="x"`) || !strings.Contains(body, "@keyframes failure-bg") {
 			t.Fatalf("callback body = %q", body)
 		}
 	})
+}
+
+func TestOAuthCallbackErrorPageEscapesDetail(t *testing.T) {
+	body := oauthCallbackErrorPage("Authentication failed", `<script>alert("nope")</script>`, "")
+	if strings.Contains(body, "<script>") {
+		t.Fatalf("callback body includes raw script: %q", body)
+	}
+	if !strings.Contains(body, `&lt;script&gt;alert(&#34;nope&#34;)&lt;/script&gt;`) {
+		t.Fatalf("callback body does not include escaped detail: %q", body)
+	}
+}
+
+func TestOAuthCallbackPageUsesConfiguredBackgroundColor(t *testing.T) {
+	body := oauthCallbackSuccessPage("Login Successful!", "Done.", "#50fa7b")
+	if !strings.Contains(body, "to { background: #50fa7b; }") {
+		t.Fatalf("callback body does not use configured color: %q", body)
+	}
+}
+
+func TestOAuthCallbackPageRejectsInvalidBackgroundColor(t *testing.T) {
+	body := oauthCallbackErrorPage("Authentication failed", "Nope.", `red; background: url("bad")`)
+	if strings.Contains(body, "url(") {
+		t.Fatalf("callback body includes invalid CSS color: %q", body)
+	}
+	if !strings.Contains(body, "to { background: #E94F37; }") {
+		t.Fatalf("callback body did not fall back to default failure color: %q", body)
+	}
+}
+
+func TestOAuthCallbackPagesUseCustomHTMLFields(t *testing.T) {
+	h := &AuthorizationCode{
+		CallbackSuccessHTML: `<html><body><h1>Welcome to my-tool</h1></body></html>`,
+		CallbackErrorHTML:   `<html><body><h1>$ERROR</h1><p>$DETAILS</p></body></html>`,
+	}
+	if got, want := h.oauthCallbackSuccessPage("Login Successful!", "Done."), h.CallbackSuccessHTML; got != want {
+		t.Fatalf("custom success body = %q, want %q", got, want)
+	}
+	got := h.oauthCallbackErrorPage("Authentication failed", `<script>alert("nope")</script>`)
+	want := `<html><body><h1>Authentication failed</h1><p>&lt;script&gt;alert(&#34;nope&#34;)&lt;/script&gt;</p></body></html>`
+	if got != want {
+		t.Fatalf("custom error body = %q, want %q", got, want)
+	}
+}
+
+func TestOAuthCallbackPagesUseCustomHTMLParams(t *testing.T) {
+	h := &AuthorizationCode{
+		CallbackSuccessHTML: `<html>field success</html>`,
+		CallbackErrorHTML:   `<html>field error</html>`,
+	}
+	pages := h.oauthCallbackPages(map[string]string{
+		callbackSuccessHTMLParam: `<html><body><h1>$TITLE</h1><p>$DETAILS</p></body></html>`,
+		callbackErrorHTMLParam:   `<html><body><h1>$ERROR</h1><p>$DETAILS</p></body></html>`,
+	})
+	if got, want := pages.successPage("Login Successful!", "Done."), `<html><body><h1>Login Successful!</h1><p>Done.</p></body></html>`; got != want {
+		t.Fatalf("custom success body = %q, want %q", got, want)
+	}
+	got := pages.errorPage("Error: access_denied", `bad <reason>`, "access_denied")
+	want := `<html><body><h1>access_denied</h1><p>bad &lt;reason&gt;</p></body></html>`
+	if got != want {
+		t.Fatalf("custom error body = %q, want %q", got, want)
+	}
+}
+
+func TestAuthCode_CustomCallbackHTMLParamsAreNotForwarded(t *testing.T) {
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			if got := r.FormValue(callbackSuccessHTMLParam); got != "" {
+				t.Fatalf("%s forwarded to token endpoint: %q", callbackSuccessHTMLParam, got)
+			}
+			if got := r.FormValue(callbackErrorHTMLParam); got != "" {
+				t.Fatalf("%s forwarded to token endpoint: %q", callbackErrorHTMLParam, got)
+			}
+			return testResponse(200, "application/json", `{"access_token":"custom-html-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			go func() {
+				authorizeURL, err := url.Parse(raw)
+				if err != nil {
+					t.Errorf("parse authorize URL: %v", err)
+					return
+				}
+				if got := authorizeURL.Query().Get(callbackSuccessHTMLParam); got != "" {
+					t.Errorf("%s forwarded to authorize endpoint: %q", callbackSuccessHTMLParam, got)
+					return
+				}
+				if got := authorizeURL.Query().Get(callbackErrorHTMLParam); got != "" {
+					t.Errorf("%s forwarded to authorize endpoint: %q", callbackErrorHTMLParam, got)
+					return
+				}
+				callbackURL, state := mustCallbackURL(t, raw)
+				resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=good-code", callbackURL, url.QueryEscape(state)))
+				if err != nil {
+					t.Errorf("callback request failed: %v", err)
+					return
+				}
+				resp.Body.Close()
+			}()
+			return nil
+		},
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":              "id1",
+		"authorize_url":          "https://auth.example.com/authorize",
+		"token_url":              "https://auth.example.com/token",
+		"redirect_port":          availablePort(t),
+		callbackSuccessHTMLParam: `<html>success</html>`,
+		callbackErrorHTMLParam:   `<html>error</html>`,
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer custom-html-token" {
+		t.Fatalf("Authorization = %q, want custom HTML token", got)
+	}
 }
 
 func TestAuthCode_ManualCodeFallback(t *testing.T) {

@@ -82,12 +82,14 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 		}, nil
 	case "oauth-authorization-code":
 		return &auth.AuthorizationCode{
-			Cache:      auth.NewTokenCache(c.tokenCachePath()),
-			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
-			Stderr:     c.Stderr,
-			CanPrompt:  c.canPromptCode(),
-			NoBrowser:  opts.NoBrowser,
-			Verbose:    opts.Verbose,
+			Cache:                auth.NewTokenCache(c.tokenCachePath()),
+			HTTPClient:           &http.Client{Transport: c.baseHTTPTransport()},
+			Stderr:               c.Stderr,
+			CanPrompt:            c.canPromptCode(),
+			NoBrowser:            opts.NoBrowser,
+			Verbose:              opts.Verbose,
+			CallbackSuccessColor: output.ThemeTokenColor("status_2xx"),
+			CallbackFailureColor: output.ThemeTokenColor("status_error"),
 		}, nil
 	case "oauth-device-code":
 		return &auth.DeviceCode{
