@@ -31,6 +31,7 @@ site/.astro/
 site/.vitepress/
 site/public/
 site/resources/
+site/static/images/social/
 site/.hugo_build.lock
 dist/
 /tmp/

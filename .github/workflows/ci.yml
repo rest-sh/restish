@@ -82,6 +82,10 @@ jobs:
       - name: Check generated docs
         run: go run ./cmd/restish-docgen --check
 
+      - name: Generate social preview images
+        working-directory: site
+        run: npm run social-images
+
       - name: Build docs site
         run: |
           hugo --source site --quiet --gc --minify \

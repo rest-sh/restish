@@ -3,12 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "hugo server",
-    "build": "hugo"
+    "social-images": "node scripts/generate-social-images.mjs",
+    "dev": "npm run social-images && hugo server",
+    "build": "npm run social-images && hugo"
   },
   "devDependencies": {
+    "@fontsource/space-grotesk": "^5.2.10",
+    "@resvg/resvg-js": "^2.6.2",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
-    "postcss-cli": "^11.0.1"
+    "postcss-cli": "^11.0.1",
+    "yaml": "^2.9.0"
   }
 }

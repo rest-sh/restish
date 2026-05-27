@@ -1,0 +1,29 @@
+{{- $imageAlt := cond .IsHome .Site.Title (printf "%s | %s" .Title .Site.Title) -}}
+<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:site_name" content="{{ .Site.Title }}">
+<meta property="og:title" content="{{ cond .IsHome .Site.Title .Title }}">
+<meta property="og:description" content="{{ partial "page-description.html" . }}">
+{{- with .Site.Language.LanguageCode }}
+<meta property="og:locale" content="{{ replace . "-" "_" }}">
+{{- end }}
+{{- if .IsPage }}
+<meta property="og:type" content="article">
+{{- with .Section }}
+<meta property="article:section" content="{{ . }}">
+{{- end }}
+{{- with .PublishDate }}
+<meta property="article:published_time" content="{{ .Format "2006-01-02T15:04:05Z07:00" }}">
+{{- end }}
+{{- with .Lastmod }}
+<meta property="article:modified_time" content="{{ .Format "2006-01-02T15:04:05Z07:00" }}">
+{{- end }}
+{{- else }}
+<meta property="og:type" content="website">
+{{- end }}
+{{- with partial "social-image.html" . }}
+<meta property="og:image" content="{{ . }}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ $imageAlt }}">
+{{- end }}
