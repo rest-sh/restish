@@ -1,0 +1,12 @@
+{{- $image := "" -}}
+{{- with .Params.social_image -}}
+  {{- $image = . -}}
+{{- else with .File -}}
+  {{- $stem := replaceRE "\\.md$" "" .Path -}}
+  {{- $stem = replaceRE "/_index$" "" $stem -}}
+  {{- if or (eq $stem "") (eq $stem "_index") -}}
+    {{- $stem = "index" -}}
+  {{- end -}}
+  {{- $image = printf "/images/social/%s.png" $stem -}}
+{{- end -}}
+{{- with $image -}}{{ . | absURL }}{{- end -}}

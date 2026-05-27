@@ -69,6 +69,10 @@ jobs:
       - name: Check generated docs
         run: go run ./cmd/restish-docgen --check
 
+      - name: Generate social preview images
+        working-directory: site
+        run: npm run social-images
+
       - name: Build site
         if: ${{ vars.DOCS_SITE_DEPLOY_ENABLED != 'true' }}
         run: |
