@@ -150,6 +150,10 @@ CBOR: `headers`; type: `map[string][]string`; required: no
 
 CBOR: `url`; type: `string`; required: no
 
+**`Links`**
+
+CBOR: `links`; type: `map[string]any`; required: no
+
 **`Body`**
 
 CBOR: `body`; type: `any`; required: yes
