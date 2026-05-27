@@ -1,3 +1,37 @@
-dist
-TODO*
-launch.json
+/.DS_Store
+
+# Local build outputs from `go build ./cmd/...`.
+/restish
+/restish-bulk
+/restish-csv
+/restish-mcp
+/restish-pkcs11
+
+# Local planning and review notes.
+/TODO.md
+/review.md
+/simplify.md
+/product.md
+/refactor.md
+/testing.md
+/test-findings.md
+
+# Local Codex skill installs.
+/skills-lock.json
+/.agents/skills/grill-me/
+/.agents/skills/grill-with-docs/
+/.agents/skills/improve-codebase-architecture/
+/.agents/skills/zoom-out/
+
+.claude/worktrees/
+
+site/node_modules/
+site/dist/
+site/.astro/
+site/.vitepress/
+site/public/
+site/resources/
+site/.hugo_build.lock
+dist/
+/tmp/
+.tmp

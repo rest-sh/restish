@@ -1,0 +1,90 @@
+<script src='{{ "js/prism-restish.js" | relURL }}'></script>
+<script src='{{ "js/restish-playground.js" | relURL }}'></script>
+<script>
+  (function () {
+    if (window.location.pathname === "/" && window.location.hash.indexOf("#/") === 0) {
+      window.location.replace("/v1/" + window.location.hash);
+    }
+  }());
+</script>
+<script>
+  (function () {
+    function fallbackCopy(text) {
+      var textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.top = "-1000px";
+      textarea.style.left = "-1000px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        return document.execCommand("copy");
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text).catch(function () {
+          if (fallbackCopy(text)) {
+            return;
+          }
+          throw new Error("copy failed");
+        });
+      }
+      if (fallbackCopy(text)) {
+        return Promise.resolve();
+      }
+      return Promise.reject(new Error("copy failed"));
+    }
+
+    document.querySelectorAll("[data-restish-install-copy]").forEach(function (root) {
+      var button = root.querySelector("button");
+      var icon = root.querySelector("i");
+      var status = root.querySelector("[data-restish-copy-status]");
+      var text = root.getAttribute("data-copy-text");
+      var resetTimer = 0;
+
+      if (!button || !text) {
+        return;
+      }
+
+      button.addEventListener("click", function () {
+        button.disabled = true;
+        copyText(text).then(function () {
+          window.clearTimeout(resetTimer);
+          button.dataset.copied = "true";
+          button.setAttribute("aria-label", "Copied Homebrew install command");
+          button.setAttribute("title", "Copied");
+          if (icon) {
+            icon.className = "fas fa-check";
+          }
+          if (status) {
+            status.textContent = "Copied";
+          }
+          resetTimer = window.setTimeout(function () {
+            delete button.dataset.copied;
+            button.setAttribute("aria-label", "Copy Homebrew install command");
+            button.setAttribute("title", "Copy command");
+            if (icon) {
+              icon.className = "fas fa-copy";
+            }
+            if (status) {
+              status.textContent = "Copy command";
+            }
+          }, 1800);
+        }).catch(function () {
+          button.setAttribute("aria-label", "Copy failed");
+          button.setAttribute("title", "Copy failed");
+          if (status) {
+            status.textContent = "Copy failed";
+          }
+        }).finally(function () {
+          button.disabled = false;
+        });
+      });
+    });
+  }());
+</script>

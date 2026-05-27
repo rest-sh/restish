@@ -1,0 +1,33 @@
+openapi: "3.1.0"
+info:
+  title: Issue 241 Recursive Composite Schema
+  version: "1.0.0"
+paths:
+  /catalog:
+    get:
+      operationId: getCatalog
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalog"
+components:
+  schemas:
+    Catalog:
+      allOf:
+        - $ref: "#/components/schemas/CatalogBase"
+        - type: object
+          properties:
+            children:
+              type: array
+              items:
+                $ref: "#/components/schemas/Catalog"
+    CatalogBase:
+      type: object
+      properties:
+        id:
+          type: string
+        parent:
+          $ref: "#/components/schemas/Catalog"

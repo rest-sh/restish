@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Generate Homebrew tap token
+        id: releaser-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_APP_PRIVATE_KEY }}
+          repositories: |
+            homebrew-tap
+            restish
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v5
+        with:
+          repository: rest-sh/homebrew-tap
+          token: ${{ steps.releaser-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Ensure v1 Homebrew formula
+        run: |
+          mkdir -p homebrew-tap/Formula
+          cp packaging/homebrew/restish@1.rb homebrew-tap/Formula/restish@1.rb
+          cd homebrew-tap
+          git config user.name "Restish Releaser"
+          git config user.email "release@rest.sh"
+          git add Formula/restish@1.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "Add Restish v1 formula"
+            git push
+          fi
+
+      - name: Run GoReleaser
+        run: |
+          docker run --rm \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e HOMEBREW_TAP_GITHUB_TOKEN="${HOMEBREW_TAP_GITHUB_TOKEN}" \
+            -v "${PWD}:/workspace" \
+            -w /workspace \
+            ghcr.io/goreleaser/goreleaser-cross:v1.25-v2.12.7 \
+            release --clean --parallelism 4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.releaser-token.outputs.token }}

@@ -1,0 +1,179 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+)
+
+var userConfigDirFunc = os.UserConfigDir
+var userCacheDirFunc = os.UserCacheDir
+var userHomeDirFunc = os.UserHomeDir
+var runtimeGOOS = runtime.GOOS
+
+// Paths provides centralized directory and path management for Restish,
+// using developer-friendly XDG-style defaults on Unix-like systems and
+// standard user directories on Windows after Restish-specific environment
+// variable overrides.
+type Paths struct {
+	// ConfigDir overrides (in order of precedence):
+	// 1. RSH_CONFIG_DIR env var
+	// 2. XDG_CONFIG_HOME/restish
+	// 3. ~/.config/restish on Unix-like systems, os.UserConfigDir()/restish on Windows
+	configDir string
+	configErr error
+
+	// CacheDir overrides (in order of precedence):
+	// 1. RSH_CACHE_DIR env var
+	// 2. XDG_CACHE_HOME/restish
+	// 3. ~/.cache/restish on Unix-like systems, os.UserCacheDir()/restish on Windows
+	cacheDir string
+	cacheErr error
+	// ConfigFile is the explicit config file path when RSH_CONFIG or
+	// --rsh-config selects a file instead of the platform default directory.
+	configFile string
+}
+
+// NewPaths creates a new Paths instance that computes directories
+// based on the current environment and OS.
+func NewPaths() *Paths {
+	if file := os.Getenv("RSH_CONFIG"); file != "" {
+		return NewPathsWithConfigFile(file)
+	}
+	configDir, configErr := computeConfigDir()
+	cacheDir, cacheErr := computeCacheDir()
+	return &Paths{
+		configDir: configDir,
+		configErr: configErr,
+		cacheDir:  cacheDir,
+		cacheErr:  cacheErr,
+	}
+}
+
+// NewPathsWithConfigFile creates Paths for an explicit config file. Sidecar
+// state stored in the config directory, such as token caches and external-tool
+// approvals, follows the selected config file.
+func NewPathsWithConfigFile(path string) *Paths {
+	path = canonicalExplicitConfigFile(path)
+	cacheDir, cacheErr := computeExplicitConfigCacheDir(path)
+	return &Paths{
+		configDir:  filepath.Dir(path),
+		configFile: path,
+		cacheDir:   cacheDir,
+		cacheErr:   cacheErr,
+	}
+}
+
+func canonicalExplicitConfigFile(path string) string {
+	if path == "" {
+		return path
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	return filepath.Clean(path)
+}
+
+// Config returns the config directory path, typically containing restish.json,
+// profiles, and auth configuration.
+func (p *Paths) Config() string {
+	return p.configDir
+}
+
+// ConfigError returns why the config directory could not be determined, if any.
+func (p *Paths) ConfigError() error {
+	if p == nil {
+		return nil
+	}
+	return p.configErr
+}
+
+// Cache returns the cache directory path for HTTP responses and other
+// transient data.
+func (p *Paths) Cache() string {
+	return p.cacheDir
+}
+
+// CacheError returns why the cache directory used a fallback, if any.
+func (p *Paths) CacheError() error {
+	if p == nil {
+		return nil
+	}
+	return p.cacheErr
+}
+
+// SpecCache returns the subdirectory for cached API spec files.
+func (p *Paths) SpecCache() string {
+	return filepath.Join(p.cacheDir, "specs")
+}
+
+// TokenCache returns the path to the token cache file.
+func (p *Paths) TokenCache() string {
+	return filepath.Join(p.configDir, "tokens.cbor")
+}
+
+// PluginManifestCache returns the directory for cached plugin manifests.
+func (p *Paths) PluginManifestCache() string {
+	return filepath.Join(p.configDir, "plugin-manifest-cache.cbor")
+}
+
+// ConfigFile returns the path to the main restish.json config file.
+func (p *Paths) ConfigFile() string {
+	if p.configFile != "" {
+		return p.configFile
+	}
+	return filepath.Join(p.configDir, "restish.json")
+}
+
+// computeConfigDir determines the configuration directory, respecting Restish's
+// explicit override before using the default config directory.
+func computeConfigDir() (string, error) {
+	if dir := os.Getenv("RSH_CONFIG_DIR"); dir != "" {
+		return dir, nil
+	}
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" && filepath.IsAbs(dir) {
+		return filepath.Join(dir, "restish"), nil
+	}
+	if runtimeGOOS == "windows" {
+		if dir, err := userConfigDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish"), nil
+		}
+	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
+		return filepath.Join(home, ".config", "restish"), nil
+	}
+	return "", fmt.Errorf("config: cannot determine config directory; set RSH_CONFIG, RSH_CONFIG_DIR, XDG_CONFIG_HOME, or HOME")
+}
+
+// computeCacheDir determines the cache directory, respecting Restish's explicit
+// override before using the default cache directory.
+func computeCacheDir() (string, error) {
+	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
+		return dir, nil
+	}
+	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" && filepath.IsAbs(dir) {
+		return filepath.Join(dir, "restish"), nil
+	}
+	if runtimeGOOS == "windows" {
+		if dir, err := userCacheDirFunc(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish"), nil
+		}
+	} else if home, err := userHomeDirFunc(); err == nil && home != "" {
+		return filepath.Join(home, ".cache", "restish"), nil
+	}
+	fallback := filepath.Join(os.TempDir(), "restish")
+	return fallback, fmt.Errorf("config: cannot determine cache directory; using %s; set RSH_CACHE_DIR, XDG_CACHE_HOME, or HOME for persistent cache state", fallback)
+}
+
+func computeExplicitConfigCacheDir(configFile string) (string, error) {
+	if dir := os.Getenv("RSH_CACHE_DIR"); dir != "" {
+		return dir, nil
+	}
+	if configFile == "" {
+		return computeCacheDir()
+	}
+	return filepath.Join(filepath.Dir(configFile), "cache"), nil
+}

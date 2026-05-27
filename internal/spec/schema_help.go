@@ -1,0 +1,1079 @@
+package spec
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"mime"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/danielgtaylor/shorthand/v2"
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+)
+
+type schemaHelpMode int
+
+const (
+	schemaHelpRead schemaHelpMode = iota
+	schemaHelpWrite
+)
+
+const (
+	schemaHelpMaxDepth       = 5
+	schemaHelpMaxProperties  = 20
+	schemaHelpMaxErrorGroups = 3
+	schemaHelpMaxExampleCLI  = 150
+)
+
+type schemaHelpRenderer struct {
+	mode          schemaHelpMode
+	seen          map[uint64]bool
+	depth         int
+	inheritedType string
+}
+
+func buildOperationHelp(op *v3.Operation, requestMediaType string) OperationHelp {
+	if op == nil {
+		return OperationHelp{}
+	}
+
+	help := OperationHelp{
+		Request:  buildRequestHelp(op, requestMediaType),
+		Requests: buildRequestHelps(op),
+		Examples: buildCommandExamples(op, requestMediaType),
+	}
+	help.Responses = buildResponseHelp(op)
+	return help
+}
+
+func buildParameterSchemaHelp(schema *base.Schema) string {
+	if schema == nil {
+		return ""
+	}
+	return schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
+}
+
+func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyHelp {
+	if op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
+		return nil
+	}
+	mt := op.RequestBody.Content.GetOrZero(requestMediaType)
+	if mt == nil {
+		return nil
+	}
+	schema := mediaTypeSchema(mt)
+	if schema == nil {
+		return &OperationBodyHelp{MediaType: requestMediaType}
+	}
+	rawBinary := isRawBinaryRequestBody(requestMediaType, schema)
+	example := ""
+	if !rawBinary {
+		example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+	}
+	return &OperationBodyHelp{
+		MediaType: requestMediaType,
+		Schema:    schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
+		Example:   example,
+		RawBinary: rawBinary,
+	}
+}
+
+func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil {
+		return nil
+	}
+	var out []OperationBodyHelp
+	for mediaType, mt := range op.RequestBody.Content.FromOldest() {
+		if strings.TrimSpace(mediaType) == "" || mt == nil {
+			continue
+		}
+		schema := mediaTypeSchema(mt)
+		help := OperationBodyHelp{MediaType: mediaType}
+		if schema != nil {
+			help.RawBinary = isRawBinaryRequestBody(mediaType, schema)
+			help.Schema = schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
+			if !help.RawBinary {
+				help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
+			}
+		}
+		out = append(out, help)
+	}
+	return out
+}
+
+func buildRequestMultipartContentTypes(op *v3.Operation, requestMediaType string) map[string]string {
+	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
+		return nil
+	}
+	if !strings.HasPrefix(strings.ToLower(requestMediaType), "multipart/form-data") {
+		return nil
+	}
+	mt := op.RequestBody.Content.GetOrZero(requestMediaType)
+	if mt == nil || mt.Encoding == nil {
+		return nil
+	}
+	out := map[string]string{}
+	for name, enc := range mt.Encoding.FromOldest() {
+		if enc == nil || strings.TrimSpace(enc.ContentType) == "" {
+			continue
+		}
+		out[name] = strings.TrimSpace(enc.ContentType)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func buildCommandExamples(op *v3.Operation, requestMediaType string) []string {
+	if op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
+		return nil
+	}
+	mt := op.RequestBody.Content.GetOrZero(requestMediaType)
+	if mt == nil {
+		return nil
+	}
+	schema := mediaTypeSchema(mt)
+	if isRawBinaryRequestBody(requestMediaType, schema) {
+		return []string{"@input.bin"}
+	}
+	example := firstMediaTypeExample(mt, schema, schemaHelpWrite)
+	if example == nil {
+		return nil
+	}
+	if body, ok := example.(map[string]any); ok {
+		rendered := shorthand.MarshalCLI(body)
+		if rendered != "" && len(rendered) <= schemaHelpMaxExampleCLI {
+			return []string{rendered}
+		}
+	}
+	return []string{"<input.json"}
+}
+
+func isRawBinaryRequestBody(mediaType string, schema *base.Schema) bool {
+	return isBinaryStringSchema(schema) && isRawBinaryRequestMediaType(mediaType)
+}
+
+func isBinaryStringSchema(schema *base.Schema) bool {
+	if schema == nil || !strings.EqualFold(schema.Format, "binary") {
+		return false
+	}
+	typ := schemaType(schema.Type)
+	return typ == "" || typ == "string"
+}
+
+func isRawBinaryRequestMediaType(mediaType string) bool {
+	base, _, err := mime.ParseMediaType(mediaType)
+	if err != nil || base == "" {
+		base = strings.TrimSpace(mediaType)
+	}
+	base = strings.ToLower(base)
+	return base == "*/*" ||
+		base == "application/*" ||
+		base == "application/octet-stream" ||
+		strings.HasSuffix(base, "+octet-stream") ||
+		strings.HasSuffix(base, "/octet-stream")
+}
+
+func buildResponseHelp(op *v3.Operation) []OperationResponseHelp {
+	if op.Responses == nil {
+		return nil
+	}
+	codes := responseCodes(op)
+	if len(codes) == 0 {
+		return nil
+	}
+
+	groupsByKey := map[string]*responseHelpGroup{}
+	var groups []*responseHelpGroup
+	for _, code := range codes {
+		resp := responseForCode(op, code)
+		if resp == nil {
+			continue
+		}
+		mtName, mt := preferredResponseMediaType(resp)
+		schema := mediaTypeSchema(mt)
+		key := responseGroupKey(mtName, schema)
+		group := groupsByKey[key]
+		if group == nil {
+			group = &responseHelpGroup{
+				mediaType: mtName,
+				schema:    schema,
+				noBody:    mt == nil || schema == nil,
+			}
+			groupsByKey[key] = group
+			groups = append(groups, group)
+		}
+		group.codes = append(group.codes, code)
+		if group.description == "" {
+			group.description = strings.TrimSpace(resp.Description)
+		}
+		group.addHeaders(resp)
+	}
+
+	var success []OperationResponseHelp
+	var errors []OperationResponseHelp
+	for _, group := range groups {
+		help := group.toHelp()
+		if len(help.Codes) == 0 {
+			continue
+		}
+		if group.hasSuccess() {
+			success = append(success, help)
+			continue
+		}
+		errors = append(errors, help)
+	}
+	sortResponseHelps(success)
+	sortResponseHelps(errors)
+	if len(errors) > schemaHelpMaxErrorGroups {
+		errors = errors[:schemaHelpMaxErrorGroups]
+	}
+
+	var out []OperationResponseHelp
+	if len(success) > 0 {
+		out = append(out, success[0])
+	}
+	out = append(out, errors...)
+	return out
+}
+
+type responseHelpGroup struct {
+	codes       []string
+	mediaType   string
+	headers     []string
+	headerSeen  map[string]bool
+	schema      *base.Schema
+	noBody      bool
+	description string
+}
+
+func (g *responseHelpGroup) addHeaders(resp *v3.Response) {
+	if resp == nil || resp.Headers == nil {
+		return
+	}
+	if g.headerSeen == nil {
+		g.headerSeen = map[string]bool{}
+	}
+	for name := range resp.Headers.KeysFromOldest() {
+		if g.headerSeen[name] {
+			continue
+		}
+		g.headerSeen[name] = true
+		g.headers = append(g.headers, name)
+	}
+}
+
+func (g *responseHelpGroup) hasSuccess() bool {
+	for _, code := range g.codes {
+		if isSuccessResponseCode(code) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *responseHelpGroup) toHelp() OperationResponseHelp {
+	sort.SliceStable(g.codes, func(i, j int) bool {
+		return responseCodeSortKey(g.codes[i]) < responseCodeSortKey(g.codes[j])
+	})
+	help := OperationResponseHelp{
+		Codes:       append([]string(nil), g.codes...),
+		MediaType:   g.mediaType,
+		Headers:     append([]string(nil), g.headers...),
+		NoBody:      g.noBody,
+		Description: g.description,
+	}
+	if g.schema != nil {
+		help.Schema = schemaHelpRenderer{mode: schemaHelpRead, seen: map[uint64]bool{}}.render(g.schema, "")
+		help.Example = renderExampleJSON(genSchemaExample(g.schema, schemaHelpRead, map[uint64]bool{}, 0))
+	}
+	return help
+}
+
+func sortResponseHelps(helps []OperationResponseHelp) {
+	sort.SliceStable(helps, func(i, j int) bool {
+		return responseCodeSortKey(helps[i].Codes[0]) < responseCodeSortKey(helps[j].Codes[0])
+	})
+}
+
+func responseCodes(op *v3.Operation) []string {
+	var codes []string
+	if op.Responses.Codes != nil {
+		for code := range op.Responses.Codes.FromOldest() {
+			codes = append(codes, code)
+		}
+	}
+	if op.Responses.Default != nil {
+		codes = append(codes, "default")
+	}
+	sort.SliceStable(codes, func(i, j int) bool {
+		return responseCodeSortKey(codes[i]) < responseCodeSortKey(codes[j])
+	})
+	return codes
+}
+
+func responseForCode(op *v3.Operation, code string) *v3.Response {
+	if code == "default" {
+		return op.Responses.Default
+	}
+	if op.Responses.Codes == nil {
+		return nil
+	}
+	return op.Responses.Codes.GetOrZero(code)
+}
+
+func responseCodeSortKey(code string) string {
+	if code == "default" {
+		return "999"
+	}
+	return code
+}
+
+func isSuccessResponseCode(code string) bool {
+	return len(code) == 3 && code[0] == '2'
+}
+
+func preferredResponseMediaType(resp *v3.Response) (string, *v3.MediaType) {
+	if resp == nil || resp.Content == nil || resp.Content.Len() == 0 {
+		return "", nil
+	}
+	names := make([]string, 0, resp.Content.Len())
+	for name := range resp.Content.FromOldest() {
+		names = append(names, name)
+	}
+	for _, name := range names {
+		mt := strings.ToLower(strings.TrimSpace(strings.Split(name, ";")[0]))
+		if mt == "application/json" || strings.HasSuffix(mt, "+json") {
+			return name, resp.Content.GetOrZero(name)
+		}
+	}
+	sort.Strings(names)
+	return names[0], resp.Content.GetOrZero(names[0])
+}
+
+func responseGroupKey(mediaType string, schema *base.Schema) string {
+	if schema == nil {
+		return mediaType + ":empty"
+	}
+	return mediaType + ":" + fmt.Sprintf("%x", schema.GoLow().Hash())
+}
+
+func mediaTypeSchema(mt *v3.MediaType) *base.Schema {
+	if mt == nil || mt.Schema == nil {
+		return nil
+	}
+	return mt.Schema.Schema()
+}
+
+func firstMediaTypeExample(mt *v3.MediaType, schema *base.Schema, mode schemaHelpMode) any {
+	if mt == nil {
+		return nil
+	}
+	if v, ok := decodeYAMLNode(mt.Example); ok {
+		if normalized, ok := normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0); ok {
+			return normalized
+		}
+		return genSchemaExample(schema, mode, map[uint64]bool{}, 0)
+	}
+	if mt.Examples != nil {
+		for _, ex := range mt.Examples.FromOldest() {
+			if ex == nil {
+				continue
+			}
+			if v, ok := decodeYAMLNode(ex.Value); ok {
+				if normalized, ok := normalizeSchemaExampleValue(schema, v, mode, map[uint64]bool{}, 0); ok {
+					return normalized
+				}
+				return genSchemaExample(schema, mode, map[uint64]bool{}, 0)
+			}
+		}
+	}
+	return genSchemaExample(schema, mode, map[uint64]bool{}, 0)
+}
+
+func renderExampleJSON(value any) string {
+	if value == nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(value); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(buf.String())
+}
+
+func decodeYAMLNode(node interface{ Decode(any) error }) (any, bool) {
+	if node == nil {
+		return nil, false
+	}
+	valueOf := reflect.ValueOf(node)
+	if valueOf.Kind() == reflect.Ptr && valueOf.IsNil() {
+		return nil, false
+	}
+	var value any
+	if err := node.Decode(&value); err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func genSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool, depth int) any {
+	if s == nil || depth > schemaHelpMaxDepth {
+		return nil
+	}
+	if len(s.OneOf) > 0 {
+		return genSchemaProxyExample(s.OneOf[0], mode, seen, depth+1)
+	}
+	if len(s.AnyOf) > 0 {
+		return genSchemaProxyExample(s.AnyOf[0], mode, seen, depth+1)
+	}
+	if len(s.AllOf) > 0 {
+		result := map[string]any{}
+		for _, proxy := range s.AllOf {
+			if part, ok := genSchemaProxyExample(proxy, mode, seen, depth+1).(map[string]any); ok {
+				for k, v := range part {
+					result[k] = v
+				}
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+	}
+	if example, ok := annotatedSchemaExample(s, mode, seen, depth); ok {
+		return example
+	}
+
+	return genSchemaShapeExample(s, mode, seen, depth)
+}
+
+func annotatedSchemaExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool, depth int) (any, bool) {
+	if v, ok := decodeYAMLNode(s.Example); ok {
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
+	}
+	if len(s.Examples) > 0 {
+		if v, ok := decodeYAMLNode(s.Examples[0]); ok {
+			if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+				return normalized, true
+			}
+		}
+	}
+	if v, ok := decodeYAMLNode(s.Const); ok {
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
+	}
+	if v, ok := decodeYAMLNode(s.Default); ok {
+		if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+			return normalized, true
+		}
+	}
+	if len(s.Enum) > 0 {
+		if v, ok := decodeYAMLNode(s.Enum[0]); ok {
+			if normalized, ok := normalizeSchemaExampleValue(s, v, mode, seen, depth); ok {
+				return normalized, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func genSchemaShapeExample(s *base.Schema, mode schemaHelpMode, seen map[uint64]bool, depth int) any {
+	switch schemaKind(s) {
+	case "boolean":
+		return true
+	case "integer":
+		return 1
+	case "number":
+		return 1.0
+	case "array":
+		if s.Items != nil && s.Items.IsA() && s.Items.A != nil {
+			return []any{genSchemaProxyExample(s.Items.A, mode, seen, depth+1)}
+		}
+		return []any{nil}
+	case "object":
+		hash := s.GoLow().Hash()
+		if seen[hash] {
+			return nil
+		}
+		seen[hash] = true
+		defer func() { seen[hash] = false }()
+
+		value := map[string]any{}
+		if s.Properties != nil {
+			count := 0
+			for name, proxy := range s.Properties.FromOldest() {
+				if count >= schemaHelpMaxProperties {
+					value["..."] = nil
+					break
+				}
+				prop := schemaFromProxy(proxy)
+				if prop == nil || skipSchemaForMode(prop, mode) {
+					continue
+				}
+				if isSensitiveSchemaName(name) {
+					value[name] = "<redacted>"
+				} else {
+					value[name] = genSchemaExample(prop, mode, seen, depth+1)
+				}
+				count++
+			}
+		}
+		if len(value) == 0 && s.AdditionalProperties != nil {
+			if s.AdditionalProperties.IsA() && s.AdditionalProperties.A != nil {
+				value["<any>"] = genSchemaProxyExample(s.AdditionalProperties.A, mode, seen, depth+1)
+			} else if s.AdditionalProperties.IsB() && s.AdditionalProperties.B {
+				value["<any>"] = nil
+			}
+		}
+		return value
+	case "string":
+		switch s.Format {
+		case "date":
+			return "2020-05-14"
+		case "time":
+			return "23:44:51-07:00"
+		case "date-time":
+			return "2020-05-14T23:44:51-07:00"
+		case "email", "idn-email":
+			return "user@example.com"
+		case "hostname", "idn-hostname":
+			return "example.com"
+		case "ipv4":
+			return "192.0.2.1"
+		case "ipv6":
+			return "2001:db8::1"
+		case "uuid":
+			return "3e4666bf-d5e5-4aa7-b8ce-cefe41c7568a"
+		case "uri", "iri":
+			return "https://example.com/"
+		case "uri-reference", "iri-reference":
+			return "/example"
+		case "password":
+			return "<redacted>"
+		}
+		return "string"
+	default:
+		return nil
+	}
+}
+
+func normalizeSchemaExampleValue(s *base.Schema, value any, mode schemaHelpMode, seen map[uint64]bool, depth int) (any, bool) {
+	if s == nil || depth > schemaHelpMaxDepth {
+		return value, true
+	}
+	switch schemaKind(s) {
+	case "boolean":
+		if _, ok := value.(bool); ok {
+			return value, true
+		}
+		if text, ok := value.(string); ok {
+			if parsed, err := strconv.ParseBool(strings.TrimSpace(text)); err == nil {
+				return parsed, true
+			}
+		}
+	case "integer":
+		switch typed := value.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			return typed, true
+		case float64:
+			if typed == float64(int64(typed)) {
+				return typed, true
+			}
+		case float32:
+			if typed == float32(int64(typed)) {
+				return typed, true
+			}
+		}
+		if text, ok := value.(string); ok {
+			if parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64); err == nil {
+				return parsed, true
+			}
+		}
+	case "number":
+		switch typed := value.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			return typed, true
+		}
+		if text, ok := value.(string); ok {
+			if parsed, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil {
+				return parsed, true
+			}
+		}
+	case "string":
+		if _, ok := value.(string); ok {
+			return value, true
+		}
+	case "array":
+		if value == nil {
+			return value, true
+		}
+		items := schemaFromDynamicValue(s.Items)
+		if items == nil {
+			if _, ok := value.([]any); ok {
+				return value, true
+			}
+			return nil, false
+		}
+		if values, ok := value.([]any); ok {
+			out := make([]any, len(values))
+			for i, item := range values {
+				normalized, ok := normalizeSchemaExampleValue(items, item, mode, seen, depth+1)
+				if !ok {
+					return nil, false
+				}
+				out[i] = normalized
+			}
+			return out, true
+		}
+	case "object":
+		if value == nil {
+			return value, true
+		}
+		values, ok := value.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		hash := s.GoLow().Hash()
+		if seen[hash] {
+			return value, true
+		}
+		seen[hash] = true
+		defer func() { seen[hash] = false }()
+
+		out := make(map[string]any, len(values))
+		for name, item := range values {
+			prop := schemaObjectExampleProperty(s, name, mode)
+			if prop == nil {
+				out[name] = item
+				continue
+			}
+			normalized, ok := normalizeSchemaExampleValue(prop, item, mode, seen, depth+1)
+			if !ok {
+				out[name] = item
+				continue
+			}
+			out[name] = normalized
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+func schemaObjectExampleProperty(s *base.Schema, name string, mode schemaHelpMode) *base.Schema {
+	if s == nil {
+		return nil
+	}
+	if s.Properties != nil {
+		if prop := schemaFromProxy(s.Properties.GetOrZero(name)); prop != nil && !skipSchemaForMode(prop, mode) {
+			return prop
+		}
+	}
+	return schemaFromDynamicValue(s.AdditionalProperties)
+}
+
+func schemaFromDynamicValue(value *base.DynamicValue[*base.SchemaProxy, bool]) *base.Schema {
+	if value != nil && value.IsA() && value.A != nil {
+		return schemaFromProxy(value.A)
+	}
+	return nil
+}
+
+func genSchemaProxyExample(proxy *base.SchemaProxy, mode schemaHelpMode, seen map[uint64]bool, depth int) any {
+	return genSchemaExample(schemaFromProxy(proxy), mode, seen, depth)
+}
+
+func (r schemaHelpRenderer) render(s *base.Schema, indent string) string {
+	if s == nil {
+		return "<any>"
+	}
+	if r.depth >= schemaHelpMaxDepth {
+		return "<...>"
+	}
+	if hasSchemaConditional(s) {
+		return r.renderConditional(s, indent)
+	}
+	if hasDirectObjectShape(s) {
+		rendered := r.renderObject(s, indent)
+		if hasSchemaComposite(s) {
+			rendered += "\n" + r.renderComposite(s, indent)
+		}
+		return rendered
+	}
+	if hasRequiredOnlyConstraint(s) {
+		return r.renderRequired(s)
+	}
+	if s.Contains != nil {
+		return r.renderContains(s, indent)
+	}
+	if len(s.AllOf) > 0 || len(s.OneOf) > 0 || len(s.AnyOf) > 0 {
+		return r.renderComposite(s, indent)
+	}
+
+	switch r.schemaKind(s) {
+	case "boolean", "integer", "number", "string":
+		return r.renderScalar(s)
+	case "array":
+		if s.Items != nil && s.Items.IsA() && s.Items.A != nil {
+			child := r.child()
+			return "[\n  " + indent + child.render(schemaFromProxy(s.Items.A), indent+"  ") + "\n" + indent + "]"
+		}
+		return "[<any>]"
+	case "object":
+		return r.renderObject(s, indent)
+	default:
+		return "<any>"
+	}
+}
+
+func hasSchemaConditional(s *base.Schema) bool {
+	return s != nil && (s.If != nil || s.Then != nil || s.Else != nil)
+}
+
+func hasSchemaComposite(s *base.Schema) bool {
+	return s != nil && (len(s.AllOf) > 0 || len(s.OneOf) > 0 || len(s.AnyOf) > 0)
+}
+
+func hasDirectObjectShape(s *base.Schema) bool {
+	return s != nil && ((s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil)
+}
+
+func hasRequiredOnlyConstraint(s *base.Schema) bool {
+	if s == nil || len(s.Required) == 0 {
+		return false
+	}
+	return len(s.Type) == 0 &&
+		s.Items == nil &&
+		!hasDirectObjectShape(s) &&
+		!hasSchemaComposite(s) &&
+		!hasSchemaConditional(s) &&
+		s.Contains == nil
+}
+
+func (r schemaHelpRenderer) child() schemaHelpRenderer {
+	r.depth++
+	return r
+}
+
+func (r schemaHelpRenderer) renderConditional(s *base.Schema, indent string) string {
+	var out strings.Builder
+	for _, item := range []struct {
+		label string
+		proxy *base.SchemaProxy
+	}{
+		{"if", s.If},
+		{"then", s.Then},
+		{"else", s.Else},
+	} {
+		if item.proxy == nil {
+			continue
+		}
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		child := r.child()
+		out.WriteString(item.label + "{\n")
+		out.WriteString(indent + "  " + child.render(schemaFromProxy(item.proxy), indent+"  ") + "\n")
+		out.WriteString(indent + "}")
+	}
+	if out.Len() == 0 {
+		return "<any>"
+	}
+	return out.String()
+}
+
+func (r schemaHelpRenderer) renderRequired(s *base.Schema) string {
+	required := append([]string(nil), s.Required...)
+	sort.Strings(required)
+	return "required: " + strings.Join(required, ",")
+}
+
+func (r schemaHelpRenderer) renderContains(s *base.Schema, indent string) string {
+	var tags []string
+	if s.MinContains != nil {
+		tags = append(tags, fmt.Sprintf("min:%d", *s.MinContains))
+	}
+	if s.MaxContains != nil {
+		tags = append(tags, fmt.Sprintf("max:%d", *s.MaxContains))
+	}
+	label := "contains"
+	if len(tags) > 0 {
+		label += " " + strings.Join(tags, " ")
+	}
+	return label + ": " + r.child().render(schemaFromProxy(s.Contains), indent)
+}
+
+func (r schemaHelpRenderer) renderComposite(s *base.Schema, indent string) string {
+	inheritedType := explicitScalarSchemaType(s)
+	if inheritedType == "" {
+		inheritedType = r.inheritedType
+	}
+	for _, item := range []struct {
+		label   string
+		schemas []*base.SchemaProxy
+	}{
+		{"allOf", s.AllOf},
+		{"oneOf", s.OneOf},
+		{"anyOf", s.AnyOf},
+	} {
+		if len(item.schemas) == 0 {
+			continue
+		}
+		var out strings.Builder
+		out.WriteString(item.label + "{\n")
+		child := r.child()
+		child.inheritedType = inheritedType
+		for _, proxy := range item.schemas {
+			out.WriteString(indent + "  " + child.render(schemaFromProxy(proxy), indent+"  ") + "\n")
+		}
+		out.WriteString(indent + "}")
+		return out.String()
+	}
+	return "<any>"
+}
+
+func (r schemaHelpRenderer) renderObject(s *base.Schema, indent string) string {
+	if s.Properties == nil || s.Properties.Len() == 0 {
+		if s.AdditionalProperties == nil {
+			return "(object)"
+		}
+	}
+	hash := s.GoLow().Hash()
+	if r.seen[hash] {
+		return "<recursive ref>"
+	}
+	r.seen[hash] = true
+	defer func() { r.seen[hash] = false }()
+
+	var out strings.Builder
+	out.WriteString("{\n")
+	count := 0
+	if s.Properties != nil {
+		for _, name := range sortedSchemaPropertyNames(s) {
+			if count >= schemaHelpMaxProperties {
+				out.WriteString(indent + "  ...: <...>\n")
+				break
+			}
+			prop := schemaFromProxy(s.Properties.GetOrZero(name))
+			if prop == nil || skipSchemaForMode(prop, r.mode) {
+				continue
+			}
+			label := name
+			if stringInSlice(name, s.Required) {
+				label += "*"
+			}
+			out.WriteString(indent + "  " + label + ": " + r.child().render(prop, indent+"  ") + "\n")
+			count++
+		}
+	}
+	if s.AdditionalProperties != nil {
+		if s.AdditionalProperties.IsA() && s.AdditionalProperties.A != nil {
+			out.WriteString(indent + "  <any>: " + r.child().render(schemaFromProxy(s.AdditionalProperties.A), indent+"  ") + "\n")
+		} else if s.AdditionalProperties.IsB() && s.AdditionalProperties.B {
+			out.WriteString(indent + "  <any>: <any>\n")
+		}
+	}
+	out.WriteString(indent + "}")
+	return out.String()
+}
+
+func (r schemaHelpRenderer) renderScalar(s *base.Schema) string {
+	var tags []string
+	if s.Format != "" {
+		tags = append(tags, "format:"+s.Format)
+	}
+	if s.Default != nil {
+		if v, ok := decodeYAMLNode(s.Default); ok {
+			tags = append(tags, "default:"+fmt.Sprint(v))
+		}
+	}
+	if s.Const != nil {
+		if v, ok := decodeYAMLNode(s.Const); ok {
+			tags = append(tags, "const:"+fmt.Sprint(v))
+		}
+	}
+	if len(s.Enum) > 0 {
+		var vals []string
+		for _, node := range s.Enum {
+			if v, ok := decodeYAMLNode(node); ok {
+				vals = append(vals, fmt.Sprint(v))
+			}
+		}
+		if len(vals) > 0 {
+			tags = append(tags, "enum:"+strings.Join(vals, ","))
+		}
+	}
+	if s.Pattern != "" {
+		tags = append(tags, "pattern:"+s.Pattern)
+	}
+	if s.MinLength != nil && *s.MinLength > 0 {
+		tags = append(tags, fmt.Sprintf("minLen:%d", *s.MinLength))
+	}
+	if s.MaxLength != nil && *s.MaxLength > 0 {
+		tags = append(tags, fmt.Sprintf("maxLen:%d", *s.MaxLength))
+	}
+	if s.Minimum != nil {
+		label := "min"
+		if s.ExclusiveMinimum != nil && s.ExclusiveMinimum.IsA() && s.ExclusiveMinimum.A {
+			label = "exclusiveMin"
+		}
+		tags = append(tags, fmt.Sprintf("%s:%v", label, *s.Minimum))
+	}
+	if s.ExclusiveMinimum != nil && s.ExclusiveMinimum.IsB() {
+		tags = append(tags, fmt.Sprintf("exclusiveMin:%v", s.ExclusiveMinimum.B))
+	}
+	if s.Maximum != nil {
+		label := "max"
+		if s.ExclusiveMaximum != nil && s.ExclusiveMaximum.IsA() && s.ExclusiveMaximum.A {
+			label = "exclusiveMax"
+		}
+		tags = append(tags, fmt.Sprintf("%s:%v", label, *s.Maximum))
+	}
+	if s.ExclusiveMaximum != nil && s.ExclusiveMaximum.IsB() {
+		tags = append(tags, fmt.Sprintf("exclusiveMax:%v", s.ExclusiveMaximum.B))
+	}
+	if s.MultipleOf != nil {
+		tags = append(tags, fmt.Sprintf("multiple:%v", *s.MultipleOf))
+	}
+	typ := r.scalarType(s)
+	if len(s.Type) > 1 {
+		typ = strings.Join(s.Type, "|")
+	}
+	if len(tags) > 0 {
+		typ += " " + strings.Join(tags, " ")
+	}
+	doc := strings.TrimSpace(s.Title)
+	if doc == "" {
+		doc = strings.TrimSpace(s.Description)
+	}
+	if doc != "" {
+		return fmt.Sprintf("(%s) %s", typ, oneLine(doc))
+	}
+	return fmt.Sprintf("(%s)", typ)
+}
+
+func (r schemaHelpRenderer) scalarType(s *base.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if len(s.Type) == 0 && r.inheritedType != "" {
+		return r.inheritedType
+	}
+	return schemaType(s.Type)
+}
+
+func (r schemaHelpRenderer) schemaKind(s *base.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if t := schemaType(s.Type); t != "" && !(t == "string" && len(s.Type) == 0) {
+		return t
+	}
+	if s.Items != nil {
+		return "array"
+	}
+	if (s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil {
+		return "object"
+	}
+	if r.inheritedType != "" {
+		return r.inheritedType
+	}
+	return "string"
+}
+
+func explicitScalarSchemaType(s *base.Schema) string {
+	if s == nil || len(s.Type) == 0 {
+		return ""
+	}
+	switch typ := schemaType(s.Type); typ {
+	case "boolean", "integer", "number", "string":
+		return typ
+	default:
+		return ""
+	}
+}
+
+func schemaKind(s *base.Schema) string {
+	if s == nil {
+		return ""
+	}
+	if t := schemaType(s.Type); t != "" && !(t == "string" && len(s.Type) == 0) {
+		return t
+	}
+	if s.Items != nil {
+		return "array"
+	}
+	if (s.Properties != nil && s.Properties.Len() > 0) || s.AdditionalProperties != nil {
+		return "object"
+	}
+	return "string"
+}
+
+func schemaFromProxy(proxy *base.SchemaProxy) *base.Schema {
+	if proxy == nil {
+		return nil
+	}
+	return proxy.Schema()
+}
+
+func skipSchemaForMode(s *base.Schema, mode schemaHelpMode) bool {
+	if s == nil {
+		return true
+	}
+	if mode == schemaHelpWrite && boolValue(s.ReadOnly) {
+		return true
+	}
+	if mode == schemaHelpRead && boolValue(s.WriteOnly) {
+		return true
+	}
+	return false
+}
+
+func boolValue(v *bool) bool {
+	return v != nil && *v
+}
+
+func sortedSchemaPropertyNames(s *base.Schema) []string {
+	if s == nil || s.Properties == nil {
+		return nil
+	}
+	var names []string
+	for name := range s.Properties.KeysFromOldest() {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func stringInSlice(needle string, haystack []string) bool {
+	for _, item := range haystack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func oneLine(value string) string {
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func isSensitiveSchemaName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, marker := range []string{"password", "secret", "token", "api_key", "apikey", "private_key", "credential", "bearer"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}

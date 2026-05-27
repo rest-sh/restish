@@ -1,0 +1,23 @@
+---
+title: Upload a File With Multipart
+linkTitle: Multipart Upload
+weight: 22
+description: Send multipart/form-data with normal fields and a file.
+---
+
+Multipart requests are used for uploads that combine normal form fields with
+file parts. `-c multipart` chooses the request encoding, and `@upload.txt`
+tells Restish to send the file contents rather than the literal string.
+
+```bash
+printf 'hello from docs\n' > upload.txt
+restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.txt'
+```
+
+The response echoes multipart fields. If a client sends real file parts,
+`/uploads` also reports file metadata. Missing file paths fail before the
+request is sent. Use `@@value` when a text field should start with a literal
+`@`. For plain URL-encoded forms, use `-c form` instead; both encodings are
+explained in [Input and Shorthand](/docs/guides/input/).
+
+Related: [Input and Shorthand](/docs/guides/input/), [Content Types](/docs/reference/content-types/).

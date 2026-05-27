@@ -1,0 +1,41 @@
+---
+title: Guides
+linkTitle: Guides
+weight: 30
+description: Task-oriented guides for the main Restish workflows.
+---
+
+Guides help you make choices across several commands. Use recipes when you need
+one narrow command; use reference when you need exact syntax.
+
+If you are new, start with the [Tour of Restish](/docs/getting-started/tour/)
+so the examples here have familiar pieces: generic requests, generated
+commands, profiles, filtering, and auto output. Then choose the guide that
+matches the kind of work you are doing.
+
+## Start Here
+
+- [Requests](./requests/) for generic URLs, generated commands, headers, query params, and debugging.
+- [Authentication](./authentication/) for basic auth, bearer tokens, API keys, and external tools.
+- [OAuth](./oauth/) for client credentials, browser sign-in, device code, token cache, and provider-specific setup.
+- [Input and Shorthand](./input/) for request bodies, stdin, forms, and uploads.
+- [Output](./output/) for auto output, JSON, NDJSON, tables, raw bytes, and files.
+- [Troubleshooting](./troubleshooting/) when behavior is surprising.
+
+## Common Workflows
+
+- [Pagination and Links](./pagination/) and [Links and Hypermedia](./links-and-hypermedia/)
+- [Filtering](./filtering/) and [Streaming](./streaming/)
+- [Retries and Caching](./retries-and-caching/), [Command Behavior](./command-behavior/), and [Scripting and Automation](./automation/)
+- [API Setup and Discovery](./api-setup-and-discovery/) and [OpenAPI Reference](/docs/reference/openapi-cli-integration/)
+- [OAuth](./oauth/), [TLS](./tls/), [Shell Setup](/docs/getting-started/shell-setup/), [Output](./output/), [Edit Workflow](./edit-workflow/), and [Doctor](/docs/reference/doctor-command/)
+
+Guides often link inline to reference pages when exact flags or config fields
+matter. Treat those links as lookup, not required reading before you can try the
+workflow.
+
+## Related Pages
+
+- [Recipes](/docs/recipes/)
+- [Reference](/docs/reference/)
+- [Example API](/docs/reference/example-api/)

@@ -1,0 +1,117 @@
+---
+title: Requests
+linkTitle: Requests
+weight: 10
+description: Build Restish requests with generic HTTP verbs, generated API commands, headers, query params, bodies, and profiles.
+aliases:
+  - /docs/recipes/call-a-json-api/
+---
+
+Restish supports two request styles: generic HTTP requests for immediate access
+and API-aware commands generated from an API description for repeated work.
+
+## Start With A Generic Request
+
+{{< restish-example >}}
+restish api.rest.sh/get
+{{< /restish-example >}}
+
+{{< restish-example >}}
+restish api.rest.sh/post 'name: Alice, enabled: true'
+{{< /restish-example >}}
+
+Use generic requests when you are exploring, debugging, or calling an endpoint
+that has no useful spec. A bare target sends `GET` when there is no body and
+`POST` when shorthand arguments or stdin provide a body.
+
+Once a request becomes part of your normal workflow, register the API when it
+has a useful OpenAPI description. Generated commands give the same request
+pipeline a steadier name, examples, completion, profiles, and auth behavior.
+
+## Add Headers And Query Params
+
+{{< restish-example >}}
+restish -H 'Accept: application/json' -H 'X-Demo: requests' -q search=dragonfly api.rest.sh/anything/search
+{{< /restish-example >}}
+
+The `/anything` fixture echoes method, path, query, headers, raw body, and
+parsed body so you can inspect the exact request shape.
+
+Use quoted URLs when you include query strings directly:
+
+{{< restish-example >}}
+restish 'api.rest.sh/anything/search?search=dragonfly&active=true'
+{{< /restish-example >}}
+
+## Send Request Bodies
+
+For small structured bodies, use shorthand:
+
+{{< restish-example >}}
+restish api.rest.sh/post 'name: Alice, tags[]: docs, tags[]: cli'
+{{< /restish-example >}}
+
+Separate multiple shorthand fields with commas, even when the shell splits the
+body over several words or lines. Without commas, later `key:` text remains part
+of the previous value.
+
+{{< restish-example >}}
+restish post -c form api.rest.sh/login 'username: alice, password: secret'
+{{< /restish-example >}}
+
+For generated or larger bodies, pipe stdin:
+
+```bash
+echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post
+```
+
+Piped structured input can be patched by shorthand arguments:
+
+```bash
+echo '{"name":"Alice","role":"user"}' | restish api.rest.sh/post 'role: admin'
+```
+
+## Use API-Aware Commands
+
+Register an API when repeated work deserves generated help and completion:
+
+```bash
+restish api connect example api.rest.sh 'prompt.api_key: docs-key'
+restish example list-images
+restish example get-image jpeg > dragonfly.jpg
+```
+
+Generated commands still support normal request flags:
+
+{{< restish-example >}}
+restish example list-images -f body.self -o lines
+{{< /restish-example >}}
+
+## Override The Server Temporarily
+
+Use `--rsh-server` when a generated command should hit a different host for one
+invocation:
+
+```bash
+restish --rsh-server https://staging.example.com example list-images
+```
+
+If you keep using the override, create a profile instead.
+
+## Debug A Request
+
+{{< restish-example >}}
+restish --rsh-ignore-status-code api.rest.sh/status/404
+{{< /restish-example >}}
+
+Verbose output goes to stderr so stdout can remain useful for response data.
+Use `/anything` or `/headers` when you need the server to echo what it received.
+
+## Related Pages
+
+- [Input and Shorthand](../input/)
+- [Authentication](../authentication/)
+- [Profiles](/docs/reference/profiles/)
+- [HTTP Commands](/docs/reference/http-commands/)
+- [API Management](/docs/reference/api-management/)
+- [Example API](/docs/reference/example-api/)

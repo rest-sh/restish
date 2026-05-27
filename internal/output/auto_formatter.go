@@ -1,0 +1,498 @@
+package output
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"mime"
+	"net/url"
+	"path"
+	"strings"
+
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/rest-sh/restish/v2/internal/content"
+	"golang.org/x/term"
+)
+
+// AutoFormatter writes the response body in the default human-friendly format.
+// It does not write status or headers; callers that want interactive HTTP
+// context should print those parts explicitly before rendering the body.
+type AutoFormatter struct{}
+
+func (f *AutoFormatter) Format(w io.Writer, resp *Response, color bool) error {
+	return writeAutoBody(w, resp, color)
+}
+
+func writeAutoBody(w io.Writer, resp *Response, color bool) error {
+	if resp.Body == nil {
+		return nil
+	}
+	if strings.HasPrefix(Header(resp.Headers, "Content-Type"), "image/") && len(resp.Raw) > 0 {
+		return (&ImageFormatter{}).Format(w, resp, color)
+	}
+
+	if data, ok := printableBody(resp); ok {
+		if len(data) == 0 || data[len(data)-1] != '\n' {
+			data = append(data, '\n')
+		}
+		if color {
+			if markdownBody(resp) {
+				rendered, err := renderMarkdownBody(w, string(data))
+				if err == nil {
+					_, err = io.WriteString(w, rendered)
+					return err
+				}
+			}
+			if lexer := textBodyLexer(resp); lexer != nil {
+				return highlight(w, lexer, data)
+			}
+		}
+		_, err := w.Write(data)
+		return err
+	}
+	if size, ok := binaryBodySize(resp); ok {
+		_, err := fmt.Fprintf(w, "Binary body omitted: %d bytes (%s). Redirect stdout without a filter or output format to write bytes.\n", size, binaryBodyContentType(resp))
+		return err
+	}
+	data, err := marshalIndentNoEscape(resp.Body)
+	if err != nil {
+		return fmt.Errorf("formatting body: %w", err)
+	}
+	data = append(data, '\n')
+
+	if !color {
+		_, err = w.Write(data)
+		return err
+	}
+
+	return highlight(w, ReadableLexer, data)
+}
+
+// StartValueStream renders each streamed value as a pretty-printed JSON block
+// for fast human feedback on TTYs.
+func (f *AutoFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
+	return &autoValueStream{w: w, color: color}, nil
+}
+
+// StartFramedValueStream renders streamed values into a JSON-shaped frame
+func (f *AutoFormatter) StartFramedValueStream(w io.Writer, base *Response, color bool, frame FramedValueTemplate) (ValueStream, error) {
+	return &autoFramedValueStream{
+		w:     w,
+		color: color,
+		frame: frame,
+	}, nil
+}
+
+type autoValueStream struct {
+	w     io.Writer
+	color bool
+	first bool
+}
+
+func (s *autoValueStream) WriteValue(value any) error {
+	if s.first {
+		if _, err := io.WriteString(s.w, "\n"); err != nil {
+			return err
+		}
+	}
+	s.first = true
+
+	data, err := marshalIndentNoEscape(value)
+	if err != nil {
+		return fmt.Errorf("formatting body: %w", err)
+	}
+	data = append(data, '\n')
+	if s.color {
+		return highlight(s.w, ReadableLexer, data)
+	}
+	_, err = s.w.Write(data)
+	return err
+}
+
+func (s *autoValueStream) Close() error {
+	return nil
+}
+
+type autoFramedValueStream struct {
+	w         io.Writer
+	color     bool
+	frame     FramedValueTemplate
+	started   bool
+	wroteItem bool
+}
+
+func (s *autoFramedValueStream) WriteValue(value any) error {
+	if !s.started {
+		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("["); err != nil {
+			return err
+		}
+		s.started = true
+	}
+
+	item, err := marshalIndentNoEscape(value)
+	if err != nil {
+		return fmt.Errorf("formatting body: %w", err)
+	}
+
+	if s.wroteItem {
+		if _, err := io.WriteString(s.w, ",\n"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := io.WriteString(s.w, "\n"); err != nil {
+			return err
+		}
+	}
+	s.wroteItem = true
+
+	item = indentBlock(item, s.frame.ItemIndent)
+	if s.color {
+		return highlightReadableWithDepth(s.w, item, s.itemDepth())
+	}
+	_, err = s.w.Write(item)
+	return err
+}
+
+func (s *autoFramedValueStream) Close() error {
+	if !s.started {
+		if _, err := io.WriteString(s.w, s.frame.Prefix); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("["); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("]"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(s.w, s.frame.Suffix+"\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if s.wroteItem {
+		if _, err := io.WriteString(s.w, "\n"+s.frame.CloseIndent); err != nil {
+			return err
+		}
+		if err := s.writeFrameBracket("]"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(s.w, s.frame.Suffix+"\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := s.writeFrameBracket("]"); err != nil {
+		return err
+	}
+	_, err := io.WriteString(s.w, s.frame.Suffix+"\n")
+	return err
+}
+
+func (s *autoFramedValueStream) writeFrameBracket(bracket string) error {
+	if !s.color {
+		_, err := io.WriteString(s.w, bracket)
+		return err
+	}
+	return highlightToken(s.w, chroma.Token{
+		Type:  shiftedIndentToken(indentLevel0, s.arrayDepth()),
+		Value: bracket,
+	})
+}
+
+func (s *autoFramedValueStream) arrayDepth() int {
+	return indentDepth(s.frame.CloseIndent)
+}
+
+func (s *autoFramedValueStream) itemDepth() int {
+	return s.arrayDepth() + 1
+}
+
+func indentDepth(indent string) int {
+	spaces := 0
+	for _, r := range indent {
+		switch r {
+		case ' ':
+			spaces++
+		case '\t':
+			spaces += 2
+		}
+	}
+	return spaces / 2
+}
+
+func indentBlock(data []byte, indent string) []byte {
+	if len(data) == 0 {
+		return []byte(indent)
+	}
+	var out bytes.Buffer
+	out.Grow(len(data) + len(indent))
+	lineStart := 0
+	for i := 0; i <= len(data); i++ {
+		if i < len(data) && data[i] != '\n' {
+			continue
+		}
+		out.WriteString(indent)
+		out.Write(data[lineStart:i])
+		if i < len(data) {
+			out.WriteByte('\n')
+		}
+		lineStart = i + 1
+	}
+	return out.Bytes()
+}
+
+// highlight tokenizes data with the given lexer and writes chroma-colored
+// output to w using the active Restish style and true-color ANSI sequences.
+// Falls back to plain output on any error.
+func highlight(w io.Writer, lexer chroma.Lexer, data []byte) error {
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		_, err := w.Write(data)
+		return err
+	}
+
+	iter, err := lexer.Tokenise(nil, string(data))
+	if err != nil {
+		_, werr := w.Write(data)
+		return werr
+	}
+
+	return formatter.Format(w, activeStyle(), iter)
+}
+
+func highlightReadableWithDepth(w io.Writer, data []byte, depth int) error {
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		_, err := w.Write(data)
+		return err
+	}
+
+	iter, err := ReadableLexer.Tokenise(nil, string(data))
+	if err != nil {
+		_, werr := w.Write(data)
+		return werr
+	}
+
+	return formatter.Format(w, activeStyle(), indentShiftIterator(iter, depth))
+}
+
+func indentShiftIterator(iter chroma.Iterator, depth int) chroma.Iterator {
+	return func() chroma.Token {
+		tok := iter()
+		if tok == chroma.EOF {
+			return tok
+		}
+		tok.Type = shiftedIndentToken(tok.Type, depth)
+		return tok
+	}
+}
+
+func shiftedIndentToken(tok chroma.TokenType, depth int) chroma.TokenType {
+	if tok < indentLevel0 || tok > indentLevel2 {
+		return tok
+	}
+	offset := int(tok - indentLevel0)
+	return indentLevel0 + chroma.TokenType((offset+depth)%3)
+}
+
+func highlightToken(w io.Writer, token chroma.Token) error {
+	formatter := formatters.Get("terminal16m")
+	if formatter == nil {
+		_, err := io.WriteString(w, token.Value)
+		return err
+	}
+	return formatter.Format(w, activeStyle(), chroma.Literator(token))
+}
+
+// HighlightWithLexer renders data with the provided chroma lexer and the
+// shared Restish terminal style. It falls back to the original data if
+// highlighting fails.
+func HighlightWithLexer(lexer chroma.Lexer, data []byte) ([]byte, error) {
+	var buf strings.Builder
+	if err := highlight(&buf, lexer, data); err != nil {
+		return data, err
+	}
+	return []byte(buf.String()), nil
+}
+
+func textBodyLexer(resp *Response) chroma.Lexer {
+	if resp == nil {
+		return nil
+	}
+	if lexer := textBodyLexerByContentType(Header(resp.Headers, "Content-Type")); lexer != nil {
+		return lexer
+	}
+	if resp.URL == "" {
+		return nil
+	}
+	name := resp.URL
+	if u, err := url.Parse(resp.URL); err == nil && u.Path != "" {
+		name = u.Path
+	}
+	if lexer := lexers.Match(name); highlightableLexer(lexer) {
+		return chroma.Coalesce(lexer)
+	}
+	return nil
+}
+
+func markdownBody(resp *Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := Header(resp.Headers, "Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "text/markdown", "text/x-markdown":
+		return true
+	}
+	if resp.URL == "" {
+		return false
+	}
+	name := resp.URL
+	if u, err := url.Parse(resp.URL); err == nil && u.Path != "" {
+		name = u.Path
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".md", ".markdown", ".mdown", ".mkd":
+		return true
+	default:
+		return false
+	}
+}
+
+func renderMarkdownBody(w io.Writer, s string) (string, error) {
+	width := 80
+	if f, ok := w.(interface{ Fd() uintptr }); ok {
+		if cols, _, err := term.GetSize(int(f.Fd())); err == nil && cols > 0 {
+			width = cols
+		}
+	}
+	r, err := NewMarkdownRenderer(width)
+	if err != nil {
+		return "", err
+	}
+	return r.Render(s)
+}
+
+func genericTextContentType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "text/plain", "application/octet-stream":
+		return true
+	default:
+		return false
+	}
+}
+
+func highlightableLexer(lexer chroma.Lexer) bool {
+	if lexer == nil || lexer == lexers.Fallback {
+		return false
+	}
+	cfg := lexer.Config()
+	if cfg == nil {
+		return false
+	}
+	name := strings.ToLower(cfg.Name)
+	if name == "plaintext" || name == "plain text" {
+		return false
+	}
+	for _, alias := range cfg.Aliases {
+		switch strings.ToLower(alias) {
+		case "text", "plain", "plaintext":
+			return false
+		}
+	}
+	return true
+}
+
+func textBodyLexerByContentType(contentType string) chroma.Lexer {
+	if contentType == "" {
+		return nil
+	}
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if !genericTextContentType(contentType) {
+		if lexer := lexers.MatchMimeType(contentType); highlightableLexer(lexer) {
+			return chroma.Coalesce(lexer)
+		}
+	}
+	return nil
+}
+
+func printableBody(resp *Response) ([]byte, bool) {
+	if resp == nil {
+		return nil, false
+	}
+	switch body := resp.Body.(type) {
+	case string:
+		data := []byte(body)
+		if len(resp.Raw) > 0 {
+			data = resp.Raw
+		}
+		if textPresentationBody(resp) {
+			return content.DisplayableText(data)
+		}
+		return content.Printable(data)
+	case []byte:
+		if textPresentationBody(resp) {
+			return content.DisplayableText(body)
+		}
+		return content.Printable(body)
+	}
+	return nil, false
+}
+
+func textPresentationBody(resp *Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := Header(resp.Headers, "Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "text/") {
+		return true
+	}
+	return markdownBody(resp) || textBodyLexer(resp) != nil
+}
+
+func binaryBodySize(resp *Response) (int, bool) {
+	if resp == nil {
+		return 0, false
+	}
+	switch body := resp.Body.(type) {
+	case []byte:
+		if len(resp.Raw) > 0 {
+			return len(resp.Raw), true
+		}
+		return len(body), true
+	case string:
+		data := []byte(body)
+		if len(resp.Raw) > 0 {
+			data = resp.Raw
+		}
+		if textPresentationBody(resp) {
+			if _, ok := content.DisplayableText(data); !ok {
+				return len(data), true
+			}
+		}
+	}
+	return 0, false
+}
+
+func binaryBodyContentType(resp *Response) string {
+	contentType := strings.TrimSpace(Header(resp.Headers, "Content-Type"))
+	if contentType == "" {
+		return "unknown content type"
+	}
+	return contentType
+}

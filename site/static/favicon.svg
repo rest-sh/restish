@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Restish">
+  <defs>
+    <linearGradient id="tile" x1="24" y1="12" x2="156" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="brace" x1="35" y1="36" x2="145" y2="144" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="36" fill="url(#tile)"/>
+  <path d="M69 26c-22 0-33 12-33 34v18c0 7-7 12-18 12 11 0 18 5 18 12v18c0 22 11 34 33 34" fill="none" stroke="url(#brace)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M111 26c22 0 33 12 33 34v18c0 7 7 12 18 12-11 0-18 5-18 12v18c0 22-11 34-33 34" fill="none" stroke="url(#brace)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="90" y="119" fill="#ff4dbd" font-family="Space Grotesk, Arial Black, Arial, sans-serif" font-size="82" font-weight="900" text-anchor="middle">R</text>
+</svg>
