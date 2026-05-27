@@ -130,12 +130,15 @@ const renderSvg = ({
   description,
   section,
   command = "$ restish docs",
-  descMaxLines = 3,
+  descMaxLines,
 }) => {
-  const titleLines = wrapText(title, 710, 68, 3);
-  const descLines = wrapText(description, 690, 30, descMaxLines);
+  const titleFontSize = title.length > 32 ? 58 : 68;
+  const titleLineHeight = titleFontSize + 10;
+  const titleLines = wrapText(title, 610, titleFontSize, 3);
+  const resolvedDescMaxLines = descMaxLines ?? Math.max(3, 6 - titleLines.length);
+  const descLines = wrapText(description, 610, 30, resolvedDescMaxLines);
   const titleY = 214;
-  const descY = titleY + titleLines.length * 78 + 30;
+  const descY = titleY + titleLines.length * titleLineHeight + 30;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
@@ -163,7 +166,7 @@ const renderSvg = ({
     ${titleLines
       .map(
         (line, index) =>
-          `<text x="0" y="${titleY + index * 78}" fill="#f8fafc" font-family="Space Grotesk, Arial, Helvetica, sans-serif" font-size="68" font-weight="700">${escapeXml(line)}</text>`,
+          `<text x="0" y="${titleY + index * titleLineHeight}" fill="#f8fafc" font-family="Space Grotesk, Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="700">${escapeXml(line)}</text>`,
       )
       .join("\n    ")}
     ${descLines
@@ -205,7 +208,6 @@ const renderPng = async (socialPath, svg) => {
   const png = new Resvg(svg, {
     fitTo: {mode: "width", value: width},
     font: {
-      defaultFontFamily: "Space Grotesk",
       fontFiles: spaceGroteskFonts,
       loadSystemFonts: true,
     },
@@ -240,7 +242,7 @@ const renderGithubOverview = () =>
         "Explore REST-ish APIs with generic HTTP verbs, generated OpenAPI commands, shorthand input, auth, response filtering & projection, pagination, and plugins.",
       section: "Always Free. Always Open Source.",
       command: "$ brew install rest-sh/tap/restish",
-      descMaxLines: 4,
+      descMaxLines: 5,
     }),
   );
 
