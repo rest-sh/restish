@@ -272,11 +272,19 @@ func TestApplyTokenAuthHeaderPercentEncodesBasicCredentials(t *testing.T) {
 func TestApplyOAuthTokenExtraParamsOmitsMetadataURL(t *testing.T) {
 	form := url.Values{}
 	applyOAuthTokenExtraParams(form, map[string]string{
-		"audience":            "https://api.example.com/",
-		"oauth2_metadata_url": "https://auth.example.com/.well-known/oauth-authorization-server",
+		"audience":               "https://api.example.com/",
+		callbackErrorHTMLParam:   "<html>error</html>",
+		callbackSuccessHTMLParam: "<html>success</html>",
+		"oauth2_metadata_url":    "https://auth.example.com/.well-known/oauth-authorization-server",
 	})
 	if got := form.Get("audience"); got != "https://api.example.com/" {
 		t.Fatalf("audience = %q", got)
+	}
+	if got := form.Get(callbackSuccessHTMLParam); got != "" {
+		t.Fatalf("%s should not be forwarded, got %q", callbackSuccessHTMLParam, got)
+	}
+	if got := form.Get(callbackErrorHTMLParam); got != "" {
+		t.Fatalf("%s should not be forwarded, got %q", callbackErrorHTMLParam, got)
 	}
 	if got := form.Get("oauth2_metadata_url"); got != "" {
 		t.Fatalf("oauth2_metadata_url should not be forwarded, got %q", got)

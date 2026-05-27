@@ -248,6 +248,8 @@ func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[
 		"_cache_key":               true,
 		"authorize_url":            true,
 		"cache_key":                true,
+		callbackErrorHTMLParam:     true,
+		callbackSuccessHTMLParam:   true,
 		"device_authorization_url": true,
 		"issuer_url":               true,
 		"redirect_port":            true,

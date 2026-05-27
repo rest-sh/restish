@@ -222,6 +222,20 @@ func StyleText(tokenName, text string) string {
 	return out.String()
 }
 
+// ThemeTokenColor returns the active theme's foreground color for tokenName.
+// It returns an empty string when the token is unknown or has no color.
+func ThemeTokenColor(tokenName string) string {
+	token, err := themeTokenType(tokenName)
+	if err != nil {
+		return ""
+	}
+	entry := activeStyle().Get(token)
+	if !entry.Colour.IsSet() {
+		return ""
+	}
+	return entry.Colour.String()
+}
+
 func activeStyle() *chroma.Style {
 	themeStateMu.RLock()
 	style := restishStyle

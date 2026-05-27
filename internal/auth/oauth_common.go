@@ -451,10 +451,12 @@ func applyTokenAuthHeader(req *http.Request, params map[string]string) {
 
 func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 	for key, value := range extraOAuthParams(params, map[string]bool{
-		"_cache_key":    true,
-		"authorize_url": true,
-		"cache_key":     true,
-		"issuer_url":    true,
+		"_cache_key":             true,
+		"authorize_url":          true,
+		"cache_key":              true,
+		callbackErrorHTMLParam:   true,
+		callbackSuccessHTMLParam: true,
+		"issuer_url":             true,
 		// TODO(openapi-3.2): use oauth2_metadata_url for RFC 8414 metadata
 		// discovery in place of, or alongside, issuer_url.
 		"oauth2_metadata_url": true,
