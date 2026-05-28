@@ -828,22 +828,23 @@ func (c *CLI) cachedOperationForAPI(ctx context.Context, apiName string, apiCfg 
 	if !ok {
 		return spec.Operation{}, false, nil
 	}
+	operationBase := effectiveOperationBase(apiCfg, profileName)
 	for _, op := range set.Operations {
-		if op.ID == value || operationCommandName(op) == value {
+		if op.ID == value || operationCommandName(op, operationBase) == value {
 			return op, true, nil
 		}
 	}
 	return spec.Operation{}, false, nil
 }
 
-func operationCommandName(op spec.Operation) string {
+func operationCommandName(op spec.Operation, operationBase string) string {
 	if op.XCLI.Name != "" {
 		return op.XCLI.Name
 	}
 	if name := toKebabCase(op.ID); name != "" {
 		return name
 	}
-	return fallbackOperationName(op.Method, op.Path)
+	return fallbackOperationName(op.Method, operationNamePath(op.Path, operationBase))
 }
 
 func configuredCredentialsForProfile(prof *config.ProfileConfig) map[string]bool {

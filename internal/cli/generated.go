@@ -330,14 +330,7 @@ type paramInfo struct {
 // operationBase, when non-empty, is removed from fallback command names derived
 // from paths. It does not affect explicit operationId or x-cli-name values.
 func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation, operationBase string) (*cobra.Command, error) {
-	// Derive command name from operationId, with x-cli-name override.
-	cmdName := toKebabCase(op.ID)
-	if cmdName == "" {
-		cmdName = fallbackOperationName(op.Method, operationNamePath(op.Path, operationBase))
-	}
-	if op.XCLI.Name != "" {
-		cmdName = op.XCLI.Name
-	}
+	cmdName := operationCommandName(op, operationBase)
 
 	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
 	pathParamOrder := extractPathParamNames(op.Path)
@@ -1969,14 +1962,15 @@ func fallbackOperationName(method, path string) string {
 func operationNamePath(path, operationBase string) string {
 	path = normalizeOperationNamePath(path)
 	base := normalizeOperationNamePath(operationBase)
-	if base == "" || base == "/" {
+	base = strings.TrimRight(base, "/")
+	if base == "" {
 		return path
 	}
 	if path == base {
 		return "/"
 	}
-	if strings.HasPrefix(path, strings.TrimRight(base, "/")+"/") {
-		return strings.TrimPrefix(path, strings.TrimRight(base, "/"))
+	if strings.HasPrefix(path, base+"/") {
+		return strings.TrimPrefix(path, base)
 	}
 	return path
 }

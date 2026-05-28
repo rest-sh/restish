@@ -403,7 +403,20 @@ func TestPluginOperationsFromSpecUsesFallbackOperationName(t *testing.T) {
 	ops := pluginOperationsFromSpec([]spec.Operation{{
 		Method: "GET",
 		Path:   "/pets/{petId}",
-	}})
+	}}, "")
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got, want := ops[0].ID, "get-pets-petid"; got != want {
+		t.Fatalf("operation ID = %q, want %q", got, want)
+	}
+}
+
+func TestPluginOperationsFromSpecUsesOperationBaseFallbackName(t *testing.T) {
+	ops := pluginOperationsFromSpec([]spec.Operation{{
+		Method: "GET",
+		Path:   "/api/rest/pets/{petId}",
+	}}, "/api/rest")
 	if len(ops) != 1 {
 		t.Fatalf("len(ops) = %d, want 1", len(ops))
 	}
@@ -428,7 +441,7 @@ func TestPluginOperationsFromSpecPreservesParameterContentSchema(t *testing.T) {
 				},
 			},
 		}},
-	}})
+	}}, "")
 	if len(ops) != 1 || len(ops[0].Parameters) != 1 {
 		t.Fatalf("operations = %#v, want one operation with one parameter", ops)
 	}
