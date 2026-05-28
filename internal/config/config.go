@@ -114,6 +114,9 @@ type PaginationConfig struct {
 	// NextPath is a filter expression that extracts the next-page URL from the
 	// response body (alternative to Link header rel="next").
 	NextPath string `json:"next_path,omitempty"`
+	// PageParam is the URL query parameter that increments between pages when
+	// an API has no next links or next_path metadata.
+	PageParam string `json:"page_param,omitempty"`
 }
 
 // ProfileConfig holds per-profile overrides for an API.

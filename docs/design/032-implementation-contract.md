@@ -102,6 +102,7 @@ API fields:
 | `preserve_header_case` | bool | Opt-in HTTP/1.x compatibility mode for broken servers that treat request header names as case-sensitive. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
+| `pagination.page_param` | string | Query parameter to increment for APIs without next links. |
 | `profiles` | map | Profile configs keyed by name. |
 
 Profile fields are `base_url`, `headers`, `query`, `tls_signer`,
