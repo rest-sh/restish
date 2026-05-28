@@ -780,6 +780,55 @@ func TestAPISyncUpdatesAllowedOperationOriginsAndPreservesProfiles(t *testing.T)
 	}
 }
 
+func TestAPISyncDoesNotPromptForOverriddenOperationServer(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "files", &config.APIConfig{
+		BaseURL: "https://api.example.com",
+		SpecURL: "https://api.example.com/openapi.json",
+		URLOverrides: map[string]string{
+			"https://upload.example.com/v2": "http://localhost:8080/upload",
+		},
+	})
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Files", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "paths": {
+    "/files": {
+      "post": {
+        "operationId": "uploadFile",
+        "servers": [{"url": "https://upload.example.com/v2"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/openapi.json" {
+			return textResponse(200, "application/json", specBody, r), nil
+		}
+		return textResponse(404, "text/plain", "not found", r), nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "sync", "files"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["files"].AllowedOperationOrigins; len(got) != 0 {
+		t.Fatalf("allowed_operation_origins = %#v, want none when url_overrides covers operation server", got)
+	}
+	if strings.Contains(out.String(), "cross-origin operation servers ignored") || strings.Contains(out.String(), "allowed_operation_origins") {
+		t.Fatalf("unexpected cross-origin warning with url_overrides:\n%s", out.String())
+	}
+}
+
 func TestAPISyncPersistsDiscoveredSpecURLAndPreservesProfiles(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", &config.APIConfig{
 		BaseURL: "https://api.example.com",

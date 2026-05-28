@@ -250,13 +250,16 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, []string,
 				continue
 			}
 			servers := model.Model.Servers
+			scope := serverScopeDocument
 			if len(pathItem.Servers) > 0 {
 				servers = pathItem.Servers
+				scope = serverScopePath
 			}
 			if len(mo.Op.Servers) > 0 {
 				servers = mo.Op.Servers
+				scope = serverScopeOperation
 			}
-			basePath, operationServer, serverWarnings, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables)
+			basePath, operationServer, serverWarnings, err := deriveBasePath(opts.BaseURL, opts.OperationBase, servers, opts.ServerVariables, scope)
 			if err != nil {
 				return nil, nil, fmt.Errorf("derive base path for %s %s: %w", mo.Method, rawPath, err)
 			}
@@ -500,11 +503,19 @@ func isIgnoredOpenAPIHeaderParameter(p *v3.Parameter) bool {
 		strings.EqualFold(p.Name, "Authorization")
 }
 
-// deriveBasePath computes the path prefix to prepend to all operation paths.
-// When operationBase is set, no prefix is needed (the URL prefix is resolved
-// from baseURL+operationBase at call time). Otherwise, the spec's servers[] list is
-// inspected for a URL that resolves to the same scheme+host as baseURL.
-func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string) (string, string, []string, error) {
+type serverScope int
+
+const (
+	serverScopeDocument serverScope = iota
+	serverScopePath
+	serverScopeOperation
+)
+
+// deriveBasePath computes the path prefix to prepend to an operation path.
+// When operationBase is set, no prefix is needed because baseURL+operationBase
+// is resolved at call time. Document-level servers only contribute a path
+// prefix; path- and operation-level servers may also select a different origin.
+func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverVariables map[string]string, scope serverScope) (string, string, []string, error) {
 	if operationBase != "" || len(servers) == 0 {
 		return "", "", nil, nil
 	}
@@ -519,6 +530,11 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 	}
 	resolutionBase := serverResolutionBase(location)
 	var firstCrossOrigin string
+
+	if scope == serverScopeDocument {
+		basePath := deriveDocumentServerBasePath(location, resolutionBase, servers, serverVariables)
+		return basePath, "", warnings, nil
+	}
 
 	for _, server := range servers {
 		if server == nil {
@@ -549,6 +565,32 @@ func deriveBasePath(baseURL, operationBase string, servers []*v3.Server, serverV
 
 	// No matching server found — fall back to the configured API base URL.
 	return "", "", warnings, nil
+}
+
+func deriveDocumentServerBasePath(location, resolutionBase *url.URL, servers []*v3.Server, serverVariables map[string]string) string {
+	var firstResolved *url.URL
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		endpoint := resolveServerURLVariables(server, serverVariables)
+		parsed, err := url.Parse(endpoint)
+		if err != nil {
+			continue
+		}
+		resolved := resolutionBase.ResolveReference(parsed)
+		if firstResolved == nil {
+			copy := *resolved
+			firstResolved = &copy
+		}
+		if resolved.Scheme == location.Scheme && resolved.Host == location.Host {
+			return strings.TrimSuffix(relativeServerBasePath(location.Path, resolved.Path), "/")
+		}
+	}
+	if firstResolved == nil {
+		return ""
+	}
+	return strings.TrimSuffix(relativeServerBasePath(location.Path, firstResolved.Path), "/")
 }
 
 func serverResolutionBase(location *url.URL) *url.URL {

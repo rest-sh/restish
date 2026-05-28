@@ -111,6 +111,51 @@ func TestPrepareRequestBuildsSharedRequestState(t *testing.T) {
 	}
 }
 
+func TestPrepareRequestAppliesURLOverridesAfterAPIExpansion(t *testing.T) {
+	c := New()
+	c.cfg = &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"svc": {
+				BaseURL: "https://api.example.com",
+				URLOverrides: map[string]string{
+					"https://api.example.com/": "http://localhost:8080/root/",
+				},
+				Profiles: map[string]*config.ProfileConfig{
+					"local": {
+						URLOverrides: map[string]string{
+							"https://api.example.com/": "http://localhost:9090/profile/",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	prepared, err := c.prepareRequest(
+		context.Background(),
+		"GET",
+		"svc/items",
+		"local",
+		request.Options{},
+		nil,
+		nil,
+		false,
+		authHandlerOptions{},
+		nil,
+		false,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("prepareRequest() error = %v", err)
+	}
+	if got, want := prepared.rawURL, "http://localhost:9090/profile/items"; got != want {
+		t.Fatalf("rawURL = %q, want %q", got, want)
+	}
+	if got, want := prepared.apiName, "svc"; got != want {
+		t.Fatalf("apiName = %q, want %q", got, want)
+	}
+}
+
 func TestPrepareRequestBypassesCacheBeforeTransportForUnnamespacedAuth(t *testing.T) {
 	c := New()
 	prepared, err := c.prepareRequest(

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -83,6 +84,10 @@ type APIConfig struct {
 	// Values are used for generated operation path resolution; enum values from
 	// remote specs are never expanded eagerly.
 	ServerVariables map[string]string `json:"server_variables,omitempty"`
+	// URLOverrides rewrites resolved request URL prefixes before execution.
+	// It is useful when an OpenAPI document names canonical servers but this
+	// profile should route requests to staging, local, or test endpoints.
+	URLOverrides map[string]string `json:"url_overrides,omitempty"`
 	// AllowedOperationOrigins permits generated commands to use operation- or
 	// path-level OpenAPI servers on origins outside base_url.
 	AllowedOperationOrigins []string `json:"allowed_operation_origins,omitempty"`
@@ -129,6 +134,9 @@ type ProfileConfig struct {
 	// ServerVariables overrides API-level OpenAPI server URL variables for this
 	// profile when generating operation paths.
 	ServerVariables map[string]string `json:"server_variables,omitempty"`
+	// URLOverrides overrides or extends API-level URL prefix rewrites for this
+	// profile.
+	URLOverrides map[string]string `json:"url_overrides,omitempty"`
 	// Auth holds authentication configuration for this profile.
 	Auth *AuthConfig `json:"auth,omitempty"`
 	// AuthRef names a top-level auth_profiles entry to use for this profile.
@@ -364,6 +372,9 @@ func Validate(cfg *Config) error {
 		if err := ValidateRetryMaxWait(api.RetryMaxWait); err != nil {
 			return fmt.Errorf("apis.%s.retry_max_wait: %w", name, err)
 		}
+		if err := ValidateURLOverrides(api.URLOverrides); err != nil {
+			return fmt.Errorf("apis.%s.url_overrides: %w", name, err)
+		}
 		for i, origin := range api.AllowedOperationOrigins {
 			if err := ValidateOperationOriginPattern(origin); err != nil {
 				return fmt.Errorf("apis.%s.allowed_operation_origins[%d]: %w", name, i, err)
@@ -389,6 +400,9 @@ func Validate(cfg *Config) error {
 				if err := ValidateBaseURLForOperationBase(baseURL); err != nil {
 					return fmt.Errorf("apis.%s.profiles.%s.base_url: %w", name, profileName, err)
 				}
+			}
+			if err := ValidateURLOverrides(prof.URLOverrides); err != nil {
+				return fmt.Errorf("apis.%s.profiles.%s.url_overrides: %w", name, profileName, err)
 			}
 			if prof.Auth != nil && prof.AuthRef != "" {
 				return fmt.Errorf("apis.%s.profiles.%s: auth and auth_ref are mutually exclusive", name, profileName)
@@ -475,6 +489,147 @@ func ValidateRetryMaxWait(raw string) error {
 	if d <= 0 {
 		return fmt.Errorf("must be greater than 0")
 	}
+	return nil
+}
+
+// ValidateURLOverrides enforces the URL prefix rewrite contract.
+func ValidateURLOverrides(overrides map[string]string) error {
+	for source, destination := range overrides {
+		if err := validateURLOverrideEndpoint(source); err != nil {
+			return fmt.Errorf("%q: %w", source, err)
+		}
+		if err := validateURLOverrideEndpoint(destination); err != nil {
+			return fmt.Errorf("%q destination: %w", source, err)
+		}
+	}
+	return nil
+}
+
+func validateURLOverrideEndpoint(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return fmt.Errorf("must be an absolute http/https URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("scheme must be http or https")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("must not include userinfo, query, or fragment")
+	}
+	return nil
+}
+
+// ApplyURLOverrides rewrites rawURL when it matches a configured URL prefix.
+// The longest matching source prefix wins. Query strings and fragments from the
+// request URL are preserved.
+func ApplyURLOverrides(rawURL string, overrides map[string]string) (string, bool, error) {
+	if len(overrides) == 0 {
+		return rawURL, false, nil
+	}
+	target, err := url.Parse(rawURL)
+	if err != nil || !target.IsAbs() || target.Host == "" {
+		return rawURL, false, nil
+	}
+	if err := ValidateURLOverrides(overrides); err != nil {
+		return rawURL, false, err
+	}
+	sources := make([]string, 0, len(overrides))
+	for source := range overrides {
+		sources = append(sources, source)
+	}
+	sort.Slice(sources, func(i, j int) bool {
+		left := normalizedOverrideSource(sources[i])
+		right := normalizedOverrideSource(sources[j])
+		if len(left) != len(right) {
+			return len(left) > len(right)
+		}
+		return left < right
+	})
+	for _, source := range sources {
+		src, _ := url.Parse(source)
+		if !urlOverrideMatches(target, src) {
+			continue
+		}
+		dst, _ := url.Parse(overrides[source])
+		rewritten := *dst
+		rewritten.RawQuery = target.RawQuery
+		rewritten.Fragment = target.Fragment
+		if err := setURLOverridePath(&rewritten, joinURLOverridePath(dst.EscapedPath(), overrideSuffixPath(target.EscapedPath(), src.EscapedPath()))); err != nil {
+			return rawURL, false, err
+		}
+		return rewritten.String(), true, nil
+	}
+	return rawURL, false, nil
+}
+
+func normalizedOverrideSource(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	p := u.EscapedPath()
+	if p == "" {
+		return "/"
+	}
+	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host) + strings.TrimRight(p, "/")
+}
+
+func urlOverrideMatches(target, source *url.URL) bool {
+	if !strings.EqualFold(target.Scheme, source.Scheme) || !strings.EqualFold(target.Host, source.Host) {
+		return false
+	}
+	sourcePath := source.EscapedPath()
+	if sourcePath == "" {
+		sourcePath = "/"
+	}
+	targetPath := target.EscapedPath()
+	if targetPath == "" {
+		targetPath = "/"
+	}
+	sourcePath = strings.TrimRight(sourcePath, "/")
+	if sourcePath == "" {
+		return true
+	}
+	return targetPath == sourcePath || strings.HasPrefix(targetPath, sourcePath+"/")
+}
+
+func overrideSuffixPath(targetPath, sourcePath string) string {
+	if targetPath == "" {
+		targetPath = "/"
+	}
+	if sourcePath == "" {
+		sourcePath = "/"
+	}
+	sourcePath = strings.TrimRight(sourcePath, "/")
+	if sourcePath == "" {
+		if targetPath == "/" {
+			return ""
+		}
+		return targetPath
+	}
+	return strings.TrimPrefix(targetPath, sourcePath)
+}
+
+func joinURLOverridePath(basePath, suffix string) string {
+	if suffix == "" {
+		if basePath == "" {
+			return ""
+		}
+		return basePath
+	}
+	if basePath == "" || basePath == "/" {
+		return suffix
+	}
+	return strings.TrimRight(basePath, "/") + suffix
+}
+
+func setURLOverridePath(u *url.URL, escapedPath string) error {
+	path, err := url.PathUnescape(escapedPath)
+	if err != nil {
+		return err
+	}
+	u.Path = path
+	u.RawPath = escapedPath
 	return nil
 }
 

@@ -69,6 +69,7 @@ ProfileConfig holds per-profile overrides for an API.
 | `tls_signer` | `TLSSigner` | `string` | no | TLSSigner selects a tls-signer plugin for mTLS client certificate signing. |
 | `tls_signer_params` | `TLSSignerParams` | `map[string]string` | no | TLSSignerParams passes plugin-specific configuration to the tls-signer. |
 | `server_variables` | `ServerVariables` | `map[string]string` | no | ServerVariables overrides API-level OpenAPI server URL variables for this profile when generating operation paths. |
+| `url_overrides` | `URLOverrides` | `map[string]string` | no | URLOverrides overrides or extends API-level URL prefix rewrites for this profile. |
 | `auth` | `Auth` | `*AuthConfig` | no | Auth holds authentication configuration for this profile. |
 | `auth_ref` | `AuthRef` | `string` | no | AuthRef names a top-level auth_profiles entry to use for this profile. |
 | `credentials` | `Credentials` | `map[string]*CredentialConfig` | no | Credentials maps operation credential requirement IDs to auth configurations that satisfy them. |

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
@@ -92,6 +93,13 @@ func (c *CLI) prepareRequest(
 			opts.OnRequest = callbacks.OnRequest
 			opts.OnUnauthorized = callbacks.OnUnauthorized
 		}
+	}
+	if apiName != "" {
+		rewritten, _, err := config.ApplyURLOverrides(rawURL, effectiveURLOverrides(c.cfg.APIs[apiName], profileName))
+		if err != nil {
+			return nil, fmt.Errorf("url_overrides: %w", err)
+		}
+		rawURL = rewritten
 	}
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {

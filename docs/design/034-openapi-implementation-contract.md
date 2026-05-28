@@ -307,6 +307,11 @@ Server resolution honors OpenAPI server precedence:
 3. document-level `servers`
 4. configured API `base_url`
 
+Document-level servers contribute the generated operation path shape, while the
+configured API/profile `base_url` supplies the default request origin. Path- and
+operation-level servers are treated as explicit routing for that part of the
+API.
+
 `operation_base` overrides OpenAPI servers for generated operation paths. In v2
 it is an absolute path prefix, not a full URL.
 
@@ -319,17 +324,18 @@ applicable OpenAPI server remain errors when the document declares server
 variables, because they cannot affect URL expansion and are usually typos.
 Restish does not expand variables into a Cartesian product of commands or URLs.
 
-Relative server URLs resolve against the configured API `base_url`. Absolute
-server URLs are used directly when they match the configured origin. A
-cross-origin path- or operation-level server is represented in operation
-metadata but may only be used when the API config explicitly allows its origin
-with `allowed_operation_origins`; otherwise the generated command fails with a
-configuration hint instead of falling back to `base_url`. If a matching absolute
-or relative server resolves outside the configured base path while staying on
-the same origin, Restish represents the generated operation path as a relative
-escape so short-name expansion reaches the intended path while keeping the
-selected API profile. If no OpenAPI server matches the configured origin and no
-cross-origin server is present, Restish falls back to `base_url`.
+Relative document server URLs resolve against the configured API `base_url`.
+Absolute document server URLs on another origin keep their path prefix but use
+the configured `base_url` origin. Absolute path- or operation-level server URLs
+are used directly when they match the configured origin. A cross-origin path- or
+operation-level server is represented in operation metadata but may only be used
+when the API config explicitly allows its origin with
+`allowed_operation_origins`, or when a configured `url_overrides` entry rewrites
+the resolved URL before execution; otherwise the generated command fails with a
+configuration hint. If a matching absolute or relative server resolves outside
+the configured base path while staying on the same origin, Restish represents
+the generated operation path as a relative escape so short-name expansion
+reaches the intended path while keeping the selected API profile.
 
 An untrusted spec must not be able to redirect authenticated generated commands
 to another origin by declaring a different server URL. Once an operator has

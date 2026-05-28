@@ -222,11 +222,11 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	}
 	discCfg := spec.DiscoverConfig{
 		APIName:          apiName,
-		BaseURL:          apiCfg.BaseURL,
+		BaseURL:          effectiveProfileBaseURL(apiCfg, profileName),
 		SpecURL:          apiCfg.SpecURL,
 		SpecFiles:        apiCfg.SpecFiles,
 		CacheDir:         c.specCacheDir(),
-		OperationBase:    apiCfg.OperationBase,
+		OperationBase:    effectiveOperationBase(apiCfg, profileName),
 		ServerVariables:  effectiveServerVariables(apiCfg, profileName),
 		Version:          Version,
 		Transport:        transport,
@@ -247,7 +247,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		if syncedCfg.SpecURL == "" && len(syncedCfg.SpecFiles) == 0 && apiSpec.SourceURL != "" {
 			syncedCfg.SpecURL = apiSpec.SourceURL
 		}
-		if err := c.configureAllowedOperationOrigins(cmd, apiName, syncedCfg, apiSpec, yes); err != nil {
+		if err := c.configureAllowedOperationOrigins(cmd, apiName, syncedCfg, apiSpec, profileName, yes); err != nil {
 			return err
 		}
 		if !reflect.DeepEqual(apiCfg, syncedCfg) {
@@ -259,8 +259,8 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		}
 		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, profileName)
 		opOpts := spec.OperationOptions{
-			BaseURL:         apiCfg.BaseURL,
-			OperationBase:   apiCfg.OperationBase,
+			BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+			OperationBase:   effectiveOperationBase(apiCfg, profileName),
 			ServerVariables: effectiveServerVariables(apiCfg, profileName),
 		}
 		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
@@ -385,7 +385,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		apiCfg.SpecURL = apiSpec.SourceURL
 	}
 	if apiSpec != nil {
-		if err := c.configureAllowedOperationOrigins(cmd, apiName, apiCfg, apiSpec, yes); err != nil {
+		if err := c.configureAllowedOperationOrigins(cmd, apiName, apiCfg, apiSpec, "default", yes); err != nil {
 			return err
 		}
 	}
@@ -416,8 +416,8 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	if apiSpec != nil {
 		c.emitGeneratedCommandWarnings(apiName, apiCfg, apiSpec, "default")
 		opOpts := spec.OperationOptions{
-			BaseURL:         apiCfg.BaseURL,
-			OperationBase:   apiCfg.OperationBase,
+			BaseURL:         effectiveProfileBaseURL(apiCfg, "default"),
+			OperationBase:   effectiveOperationBase(apiCfg, "default"),
 			ServerVariables: effectiveServerVariables(apiCfg, "default"),
 		}
 		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
@@ -455,15 +455,18 @@ func connectedOperationCount(apiSpec *spec.APISpec, apiCfg *config.APIConfig) in
 	if apiSpec == nil {
 		return 0
 	}
-	ops, err := apiSpec.Operations(spec.OperationOptions{BaseURL: apiCfg.BaseURL, OperationBase: apiCfg.OperationBase})
+	ops, err := apiSpec.Operations(spec.OperationOptions{
+		BaseURL:       effectiveProfileBaseURL(apiCfg, "default"),
+		OperationBase: effectiveOperationBase(apiCfg, "default"),
+	})
 	if err != nil {
 		return 0
 	}
 	return len(ops)
 }
 
-func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, apiSpec *spec.APISpec, yes bool) error {
-	origins := discoveredCrossOriginOperationServers(apiSpec, apiCfg)
+func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, apiSpec *spec.APISpec, profileName string, yes bool) error {
+	origins := discoveredCrossOriginOperationServers(apiSpec, apiCfg, profileName)
 	if len(origins) == 0 {
 		return nil
 	}
@@ -490,14 +493,14 @@ func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName strin
 	return nil
 }
 
-func discoveredCrossOriginOperationServers(apiSpec *spec.APISpec, apiCfg *config.APIConfig) []string {
+func discoveredCrossOriginOperationServers(apiSpec *spec.APISpec, apiCfg *config.APIConfig, profileName string) []string {
 	if apiSpec == nil || apiCfg == nil {
 		return nil
 	}
 	ops, err := apiSpec.Operations(spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
-		ServerVariables: effectiveServerVariables(apiCfg, "default"),
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	})
 	if err != nil {
 		return nil
@@ -508,6 +511,9 @@ func discoveredCrossOriginOperationServers(apiSpec *spec.APISpec, apiCfg *config
 		if op.OperationServer == "" {
 			continue
 		}
+		if operationServerURLOverridden(op, apiCfg, profileName) {
+			continue
+		}
 		origin := operationServerOrigin(op.OperationServer)
 		if !seen[origin] {
 			seen[origin] = true
@@ -516,6 +522,12 @@ func discoveredCrossOriginOperationServers(apiSpec *spec.APISpec, apiCfg *config
 	}
 	sort.Strings(origins)
 	return origins
+}
+
+func operationServerURLOverridden(op spec.Operation, apiCfg *config.APIConfig, profileName string) bool {
+	rawURL := strings.TrimRight(op.OperationServer, "/") + op.Path
+	_, rewritten, err := config.ApplyURLOverrides(rawURL, effectiveURLOverrides(apiCfg, profileName))
+	return err == nil && rewritten
 }
 
 func suggestedAllowedOperationOrigins(origins, existing []string) []string {
