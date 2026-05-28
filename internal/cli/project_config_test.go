@@ -293,6 +293,34 @@ func TestProjectConfigRejectsInlineSecrets(t *testing.T) {
 	}
 }
 
+func TestProjectConfigRejectsUnknownAuthType(t *testing.T) {
+	_, _, projectDir := setupProjectConfigTest(t)
+	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
+  "apis": {
+    "svc": {
+      "base_url": "https://project.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "mystery-auth",
+            "params": {
+              "token": "inline-secret"
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+	t.Chdir(projectDir)
+
+	c, _, _ := newProjectConfigTestCLI(t)
+	err := c.Run([]string{"restish", "config", "trust"})
+	if err == nil || !strings.Contains(err.Error(), "unknown auth type") || !strings.Contains(err.Error(), "apis.svc.profiles.default.auth") {
+		t.Fatalf("config trust err = %v, want unknown auth type path", err)
+	}
+}
+
 func TestProjectConfigAPIsAreReadOnlyForMutatingCommands(t *testing.T) {
 	_, _, projectDir := setupProjectConfigTest(t)
 	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
@@ -348,6 +376,63 @@ func TestProjectConfigDoesNotPersistThroughGlobalAPIRemove(t *testing.T) {
 	}
 	if strings.Contains(string(data), "global.example.com") {
 		t.Fatalf("global API was not removed: %s", data)
+	}
+}
+
+func TestProjectConfigAPISyncWarnsWhenOperationOriginsNeedProjectEdit(t *testing.T) {
+	_, _, projectDir := setupProjectConfigTest(t)
+	var specURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Project API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/upload": {
+      "post": {
+        "operationId": "uploadFile",
+        "servers": [{"url": "https://uploads.example.com"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, strings.TrimSuffix(specURL, "/openapi.json"))
+	}))
+	defer server.Close()
+	specURL = server.URL + "/openapi.json"
+
+	projectPath := filepath.Join(projectDir, ".restish.json")
+	writeProjectConfigTestFile(t, projectPath, fmt.Sprintf(`{
+  "apis": {
+    "svc": {
+      "base_url": %q,
+      "spec_url": %q
+    }
+  }
+}`, server.URL, specURL))
+	t.Chdir(projectDir)
+
+	c, _, _ := newProjectConfigTestCLI(t)
+	if err := c.Run([]string{"restish", "config", "trust"}); err != nil {
+		t.Fatalf("config trust: %v", err)
+	}
+
+	c, out, stderr := newProjectConfigTestCLI(t)
+	if err := c.Run([]string{"restish", "api", "sync", "svc", "--yes"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if strings.Contains(out.String(), "Wrote config:") {
+		t.Fatalf("api sync wrote read-only project config:\n%s", out.String())
+	}
+	gotErr := stderr.String()
+	for _, want := range []string{"read-only project API", "allowed_operation_origins[]", projectPath, "--rsh-config"} {
+		if !strings.Contains(gotErr, want) {
+			t.Fatalf("stderr = %q, want %q", gotErr, want)
+		}
+	}
+	if strings.Contains(gotErr, "restish api set") {
+		t.Fatalf("stderr suggested mutating read-only project API:\n%s", gotErr)
 	}
 }
 

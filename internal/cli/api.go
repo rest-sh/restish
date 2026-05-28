@@ -474,6 +474,10 @@ func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName strin
 	if len(suggestions) == 0 {
 		return nil
 	}
+	if c.projectAPI(apiName) {
+		c.warnf("cross-origin operation servers ignored for read-only project API %q: %s; edit %s and add allowed_operation_origins[]: %s, or run with --rsh-config %s to make it the selected config", apiName, strings.Join(origins, ", "), c.projectConfig.Path, suggestions[0], c.projectConfig.Path)
+		return nil
+	}
 	if yes {
 		apiCfg.AllowedOperationOrigins = append(apiCfg.AllowedOperationOrigins, suggestions...)
 		return nil

@@ -375,7 +375,7 @@ func (c *CLI) validateProjectAuthNoInlineSecrets(path string, authCfg *config.Au
 	}
 	handler, err := c.authHandlerFor(authCfg, authHandlerOptions{})
 	if err != nil {
-		return nil
+		return fmt.Errorf("%s: %w", path, err)
 	}
 	for _, param := range handler.Parameters() {
 		if !param.Secret {
