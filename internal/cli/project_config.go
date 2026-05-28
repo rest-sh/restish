@@ -267,9 +267,6 @@ func (c *CLI) projectConfigRuntimeSubset(project *projectConfigState) (*config.C
 	if err != nil {
 		return nil, nil, err
 	}
-	if projectConfigHasUnsupportedTopLevel(cfg) {
-		return nil, nil, fmt.Errorf("project config: only apis and theme are supported in %s for now", projectConfigFileName)
-	}
 	subset := &config.Config{}
 	apiNames := map[string]bool{}
 	if len(cfg.APIs) > 0 {
@@ -300,18 +297,34 @@ func parseProjectConfigFile(path string) (*config.Config, error) {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
 	stripped := jsonc.ToJSON(data)
-	var cfg config.Config
-	dec := json.NewDecoder(bytes.NewReader(stripped))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("config: invalid config %s\n  %w", path, err)
+	var raw map[string]json.RawMessage
+	if err := decodeProjectConfigJSON(path, stripped, &raw); err != nil {
+		return nil, err
 	}
-	if err := dec.Decode(new(struct{})); err == nil {
-		return nil, fmt.Errorf("config: invalid config %s\n  unexpected trailing content", path)
-	} else if !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("config: invalid config %s\n  %w", path, err)
+	for key := range raw {
+		if key != "apis" && key != "theme" {
+			return nil, fmt.Errorf("project config: only apis and theme are supported in %s for now", projectConfigFileName)
+		}
+	}
+	var cfg config.Config
+	if err := decodeProjectConfigJSON(path, stripped, &cfg); err != nil {
+		return nil, err
 	}
 	return &cfg, nil
+}
+
+func decodeProjectConfigJSON(path string, data []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return fmt.Errorf("config: invalid config %s\n  %w", path, err)
+	}
+	if err := dec.Decode(new(struct{})); err == nil {
+		return fmt.Errorf("config: invalid config %s\n  unexpected trailing content", path)
+	} else if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("config: invalid config %s\n  %w", path, err)
+	}
+	return nil
 }
 
 func (c *CLI) validateProjectConfigWithBase(project *projectConfigState, projectCfg *config.Config) error {
@@ -325,16 +338,6 @@ func (c *CLI) validateProjectConfigWithBase(project *projectConfigState, project
 		return fmt.Errorf("project config %s: %w", project.Path, err)
 	}
 	return nil
-}
-
-func projectConfigHasUnsupportedTopLevel(cfg *config.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	return len(cfg.AuthProfiles) > 0 ||
-		cfg.Cache != (config.CacheConfig{}) ||
-		len(cfg.Plugins) > 0 ||
-		cfg.ThemeSource != ""
 }
 
 func resolveProjectAPIPaths(apiCfg *config.APIConfig, baseDir string) {

@@ -56,9 +56,10 @@ APIs override global APIs with the same name, while unrelated global APIs remain
 available. Normal config-writing commands still write the global config and
 refuse to mutate APIs that came from trusted project config.
 
-Use `--rsh-config ./restish.json` or `RSH_CONFIG=./restish.json` when a command
-should use one complete project config file instead of layering trusted project
-config over the global config.
+Use `--rsh-config ./.restish.json` or `RSH_CONFIG=./.restish.json` when a
+command should use one complete project config file instead of layering trusted
+project config over the global config. Explicit config selection can point to
+any filename; `.restish.json` is only the auto-discovered project filename.
 
 On Unix-like systems, Restish refuses group/world-readable config files because
 profiles and auth settings may contain secrets:

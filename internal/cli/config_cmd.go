@@ -112,7 +112,11 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Config file:"), c.configSourceSummary())
 	if c.projectConfig != nil && c.projectConfig.Trusted {
 		names := sortedProjectAPINames(c.projectConfig.APIs)
-		fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("Project config:"), c.projectConfig.Path, strings.Join(names, ", "))
+		if len(names) > 0 {
+			fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("Project config:"), c.projectConfig.Path, strings.Join(names, ", "))
+		} else {
+			fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Project config:"), c.projectConfig.Path)
+		}
 	}
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Cache max size:"), configShowCacheMaxSize(cfg))
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Theme:"), configShowTheme(cfg))

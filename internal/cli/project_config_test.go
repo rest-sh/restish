@@ -135,6 +135,47 @@ func TestConfigTrustLayersProjectConfigAndRetrustsOnChange(t *testing.T) {
 	}
 }
 
+func TestProjectConfigShowOmitsEmptyAPIList(t *testing.T) {
+	_, _, projectDir := setupProjectConfigTest(t)
+	projectPath := filepath.Join(projectDir, ".restish.json")
+	writeProjectConfigTestFile(t, projectPath, `{
+  "theme": {"keyword": "#ff00ff"}
+}`)
+	t.Chdir(projectDir)
+
+	c, _, _ := newProjectConfigTestCLI(t)
+	if err := c.Run([]string{"restish", "config", "trust"}); err != nil {
+		t.Fatalf("config trust: %v", err)
+	}
+
+	c, out, _ := newProjectConfigTestCLI(t)
+	if err := c.Run([]string{"restish", "config", "show"}); err != nil {
+		t.Fatalf("config show: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "Project config: ") || !strings.Contains(got, ".restish.json") {
+		t.Fatalf("config show output = %q, want project config path", got)
+	}
+	if strings.Contains(got, "()") {
+		t.Fatalf("config show output = %q, want no empty project API list", got)
+	}
+}
+
+func TestProjectConfigRejectsEmptyUnsupportedTopLevelKeys(t *testing.T) {
+	_, _, projectDir := setupProjectConfigTest(t)
+	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
+  "apis": {},
+  "auth_profiles": {}
+}`)
+	t.Chdir(projectDir)
+
+	c, _, _ := newProjectConfigTestCLI(t)
+	err := c.Run([]string{"restish", "config", "trust"})
+	if err == nil || !strings.Contains(err.Error(), "only apis and theme are supported") {
+		t.Fatalf("config trust err = %v, want unsupported top-level key error", err)
+	}
+}
+
 func TestProjectConfigAPIsAreReadOnlyForMutatingCommands(t *testing.T) {
 	_, _, projectDir := setupProjectConfigTest(t)
 	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
