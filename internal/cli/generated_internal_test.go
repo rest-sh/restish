@@ -67,7 +67,7 @@ func TestBuildOperationCommandDoesNotParseOptionalDefaultsAsFlagValues(t *testin
 		Parameters: []spec.Param{
 			{Name: "enabled", In: "query", Type: "boolean", Default: "definitely", HasDefault: true},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestBuildOperationCommandDisambiguatesOperatorFlagNames(t *testing.T) {
 			{Name: "StartTime=", In: "query", Type: "string"},
 			{Name: "StartTime!=", In: "query", Type: "string"},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestBuildOperationCommandDisambiguatesNonOperatorFlagNames(t *testing.T) {
 			{Name: "foo-bar", In: "query", Type: "string"},
 			{Name: "foo_bar", In: "query", Type: "string"},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestBuildOperationCommandDisambiguatesReservedFlagNames(t *testing.T) {
 			{Name: "help-all", In: "header", Type: "string"},
 			{Name: "rsh-generate-body", In: "cookie", Type: "string"},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}
@@ -203,12 +203,59 @@ func TestBuildOperationCommandDocumentsUndescribedPathArgument(t *testing.T) {
 		Parameters: []spec.Param{
 			{Name: "petId", In: "path", Type: "integer", Required: true},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}
 	if !strings.Contains(cmd.Long, "pet-id") || !strings.Contains(cmd.Long, "path parameter") {
 		t.Fatalf("Long help = %q, want path argument row", cmd.Long)
+	}
+}
+
+func TestBuildOperationCommandFallbackNameUsesOperationBase(t *testing.T) {
+	c := New()
+	cmd, err := c.buildOperationCommand("myapi", "", spec.Operation{
+		Method:     "GET",
+		Path:       "/api/rest/foo/{id}",
+		Parameters: []spec.Param{{Name: "id", In: "path", Type: "string", Required: true}},
+	}, "/api/rest")
+	if err != nil {
+		t.Fatalf("build operation command: %v", err)
+	}
+	if cmd.Name() != "get-foo-id" {
+		t.Fatalf("command name = %q, want get-foo-id", cmd.Name())
+	}
+
+	cmd, err = c.buildOperationCommand("myapi", "", spec.Operation{
+		ID:     "getApiRestFoo",
+		Method: "GET",
+		Path:   "/api/rest/foo",
+	}, "/api/rest")
+	if err != nil {
+		t.Fatalf("build operation command with operationId: %v", err)
+	}
+	if cmd.Name() != "get-api-rest-foo" {
+		t.Fatalf("operationId command name = %q, want get-api-rest-foo", cmd.Name())
+	}
+}
+
+func TestOperationNamePathOnlyStripsOperationBaseSegment(t *testing.T) {
+	tests := []struct {
+		path          string
+		operationBase string
+		want          string
+	}{
+		{path: "/api/rest/foo", operationBase: "/api/rest", want: "/foo"},
+		{path: "/api/rest", operationBase: "/api/rest", want: "/"},
+		{path: "/apiary/foo", operationBase: "/api", want: "/apiary/foo"},
+		{path: "/api/foo", operationBase: "/", want: "/api/foo"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			if got := operationNamePath(tc.path, tc.operationBase); got != tc.want {
+				t.Fatalf("operationNamePath(%q, %q) = %q, want %q", tc.path, tc.operationBase, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -263,7 +310,7 @@ func TestValidateGeneratedFlagValueTokensRejectsFlagLikeMissingValue(t *testing.
 			{Name: "federal", In: "query", Type: "string", Enum: []string{"true", "false"}},
 			{Name: "optional", In: "query", Type: "boolean"},
 		},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("build operation command: %v", err)
 	}

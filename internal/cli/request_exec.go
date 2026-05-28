@@ -60,6 +60,9 @@ func (c *CLI) prepareRequest(
 			return nil, fmt.Errorf("API %q is not configured", explicitAPIName)
 		}
 		apiName = explicitAPIName
+		if c.cfg.APIs[explicitAPIName].PreserveHeaderCase {
+			opts.PreserveHeaderCase = true
+		}
 		if opts.CacheNamespace == "" {
 			opts.CacheNamespace = c.apiCacheNamespace(apiName, profileName)
 		}

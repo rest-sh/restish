@@ -635,7 +635,7 @@ func (c *CLI) Run(args []string) error {
 		}
 		stateName := c.apiStateName(apiName)
 		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opOpts, true); ok {
-			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
+			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set, opOpts.OperationBase); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
 			continue
@@ -654,7 +654,7 @@ func (c *CLI) Run(args []string) error {
 		if opsErr == nil {
 			_ = spec.StoreOperationSetInCache(c.specCacheDir(), stateName, Version, opOpts, set)
 		}
-		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opsErr); apiCmd != nil {
+		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opOpts.OperationBase, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)
 		}
 	}
@@ -1048,7 +1048,7 @@ func (c *CLI) runSyncedGeneratedAPICommand(cmd *cobra.Command, apiName string, a
 	if !ok {
 		return fmt.Errorf("generated commands for API %q are not available; run %q after fixing spec discovery", apiName, "api sync "+apiName)
 	}
-	apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set)
+	apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set, effectiveOperationBase(apiCfg, profileName))
 	if apiCmd == nil {
 		return fmt.Errorf("generated commands for API %q are unavailable after sync", apiName)
 	}

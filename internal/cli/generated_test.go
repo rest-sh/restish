@@ -268,6 +268,7 @@ func (e *generatedEnv) newCLI() *cli.CLI {
 	c.Stderr = io.Discard
 	c.Hooks().ConfigPath = e.cfgFile
 	c.Hooks().SpecCachePath = e.cacheDir
+	c.Hooks().CachePath = filepath.Join(e.cacheDir, "http-cache")
 	c.Hooks().RetryBaseDelay = 0
 	return c
 }
@@ -608,6 +609,123 @@ func TestGeneratedCommandKebabCase(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandPageParamPaginationRequiresPresentParam(t *testing.T) {
+	var pages []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		pages = append(pages, page)
+		w.Header().Set("Content-Type", "application/json")
+		body := `[{"id":1}]`
+		switch page {
+		case "2":
+			body = `[{"id":2}]`
+		case "3":
+			body = `[]`
+		}
+		fmt.Fprint(w, body)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:    env.baseURL(t),
+		Pagination: &config.PaginationConfig{PageParam: "page"},
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-o", "json"}); err != nil {
+		t.Fatalf("list-items without page failed: %v", err)
+	}
+	var firstOnly []map[string]int
+	if err := json.Unmarshal([]byte(out.String()), &firstOnly); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(firstOnly) != 1 || firstOnly[0]["id"] != 1 {
+		t.Fatalf("without --page output = %#v, want first page only", firstOnly)
+	}
+	if got, want := strings.Join(pages, ","), ""; got != want {
+		t.Fatalf("without --page saw page params %q, want %q", got, want)
+	}
+
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "--page", "1", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with page failed: %v", err)
+	}
+	var allPages []map[string]int
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with --page output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with --page saw page params %q, want %q", got, want)
+	}
+
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-q", "page=1", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with -q page failed: %v", err)
+	}
+	allPages = nil
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with -q page output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with -q page saw page params %q, want %q", got, want)
+	}
+
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:    env.baseURL(t),
+		Pagination: &config.PaginationConfig{PageParam: "page"},
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {Query: []string{"page=1"}},
+		},
+	})
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with profile page query failed: %v", err)
+	}
+	allPages = nil
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with profile page query output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with profile page query saw page params %q, want %q", got, want)
+	}
+}
+
 func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {
 	var gotAuth string
 	var gotPartnerKey string
@@ -683,6 +801,44 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "> X-Environment-Key: <redacted>") {
 		t.Fatalf("expected generated API-key header redacted, got:\n%s", stderr)
+	}
+}
+
+func TestGeneratedCommandPreservesOperationAPIKeyHeaderCase(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return openAPIGetSpec(baseURL, "Auth API", "/protected", "getProtected",
+			openAPISecurity(`{"SourceSystem":[]}`),
+			openAPISecuritySchemes(`"SourceSystem":{"type":"apiKey","in":"header","name":"X-SourceSystem"}`))
+	})
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:            env.baseURL(t),
+		PreserveHeaderCase: true,
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {
+				Credentials: map[string]*config.CredentialConfig{
+					"SourceSystem": testCredential(apiKeyAuth("header", "X-SourceSystem", "secret")),
+				},
+			},
+		},
+	})
+
+	c := env.newCLI()
+	var gotHeader http.Header
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		gotHeader = r.Header.Clone()
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "tapi", "get-protected"}); err != nil {
+		t.Fatalf("get-protected failed: %v", err)
+	}
+	if got := gotHeader["X-SourceSystem"]; len(got) != 1 || got[0] != "secret" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved generated API-key header", got)
+	}
+	if got := gotHeader["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("canonicalized generated API-key header was left behind: %#v", gotHeader)
 	}
 }
 
@@ -3633,6 +3789,42 @@ func TestGeneratedCommandTraceOperation(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandNoContentWithEncodingHeader(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Delete API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items/{id}": {
+      "delete": {
+        "operationId": "deleteItem",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"204": {"description": "Deleted"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "delete-item", "123"}); err != nil {
+		t.Fatalf("delete-item failed: %v", err)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("generated no-content output = %q, want empty", got)
+	}
+}
+
 func TestGeneratedCommandIgnoresReservedHeaderParameters(t *testing.T) {
 	var gotAuth string
 	mux := http.NewServeMux()
@@ -4627,6 +4819,60 @@ func TestGeneratedCommandsResolveProfileOperationBaseAtExecutionTime(t *testing.
 	}
 }
 
+func TestGeneratedFallbackCommandNameUsesProfileOperationBase(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/api/rest/foo": {
+      "get": {
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	baseURL := cfg.APIs["tapi"].BaseURL
+	cfg.APIs["tapi"].Profiles = map[string]*config.ProfileConfig{
+		"default": {},
+		"staging": {
+			BaseURL:       baseURL,
+			OperationBase: "/api/rest",
+		},
+	}
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c := env.newCLI()
+	var out strings.Builder
+	c.Stdout = &out
+	if err := c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "get-foo", "--help"}); err != nil {
+		t.Fatalf("profile fallback command help failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Usage:") {
+		t.Fatalf("expected generated command help, got:\n%s", out.String())
+	}
+
+	c = env.newCLI()
+	err = c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "get-api-rest-foo", "--help"})
+	if err == nil {
+		t.Fatal("expected unstripped fallback command name to be unavailable")
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("unexpected unavailable command error: %v", err)
+	}
+}
+
 func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {
@@ -4901,6 +5147,81 @@ func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
 	}
 	if gotInferencePath != "/v1/models" {
 		t.Fatalf("inference path = %q, want /v1/models", gotInferencePath)
+	}
+}
+
+func TestGeneratedCommandCrossOriginOperationServerPreservesHeaderCase(t *testing.T) {
+	operationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(operationServer.Close)
+
+	controlMux := http.NewServeMux()
+	control := httptest.NewServer(controlMux)
+	t.Cleanup(control.Close)
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Control API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "servers": [{"url": %q}],
+        "parameters": [
+          {"name": "X-SourceSystem", "in": "header", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, control.URL, operationServer.URL)
+	controlMux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	controlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cacheDir := t.TempDir()
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL:                 control.URL,
+			AllowedOperationOrigins: []string{operationServer.URL},
+			PreserveHeaderCase:      true,
+		},
+	}})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		return c
+	}
+
+	if err := newCLI().Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	var gotHeader http.Header
+	c := newCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		gotHeader = r.Header.Clone()
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "tapi", "list-models", "--x-source-system", "demo"}); err != nil {
+		t.Fatalf("list-models with allowed origin: %v", err)
+	}
+	if got := gotHeader["X-SourceSystem"]; len(got) != 1 || got[0] != "demo" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved operation server header param; headers=%#v", got, gotHeader)
+	}
+	if got := gotHeader["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("operation server header param was canonicalized: %#v", gotHeader)
 	}
 }
 

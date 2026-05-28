@@ -98,6 +98,11 @@ type APIConfig struct {
 	// RetryMaxWait caps Retry-After/X-Retry-In delays for this API when no
 	// command-line or environment override is supplied.
 	RetryMaxWait string `json:"retry_max_wait,omitempty"`
+	// PreserveHeaderCase sends user/API-supplied header names with their
+	// configured casing for broken HTTP/1.x servers that treat names as
+	// case-sensitive. It cannot affect HTTP/2, where header names are lowercase
+	// by protocol.
+	PreserveHeaderCase bool `json:"preserve_header_case,omitempty"`
 }
 
 // PaginationConfig holds per-API pagination settings.
@@ -109,6 +114,9 @@ type PaginationConfig struct {
 	// NextPath is a filter expression that extracts the next-page URL from the
 	// response body (alternative to Link header rel="next").
 	NextPath string `json:"next_path,omitempty"`
+	// PageParam is the URL query parameter that increments between pages when
+	// an API has no next links or next_path metadata.
+	PageParam string `json:"page_param,omitempty"`
 }
 
 // ProfileConfig holds per-profile overrides for an API.

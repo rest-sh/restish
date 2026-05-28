@@ -62,6 +62,11 @@ Operation-level `x-cli-name` replaces the generated command name.
 `x-cli-aliases` adds command aliases. `x-cli-description` replaces the help
 summary/description shown for the generated command.
 
+When an operation has no `operationId`, Restish falls back to the HTTP method
+and path. If the API config has `operation_base`, that base path is removed from
+fallback names. For example, `operation_base: /api/rest` turns
+`GET /api/rest/foo` into `get-foo`.
+
 Parameters support their own command-shaping extensions:
 
 ```yaml
@@ -98,6 +103,24 @@ x-mcp-ignore: true
 Hidden operations remain callable by exact name when supported. Ignored
 operations are left out of the generated command surface. `x-mcp-ignore`
 excludes an operation from MCP tool exposure.
+
+## Inspect Extension Effects
+
+When `api connect` or `api sync` sees behavior-changing `x-cli-*` extensions,
+Restish prints a compact summary such as renamed operations, aliases,
+hidden/ignored operations, hidden/ignored parameters, and `x-cli-config`.
+This is informational only; Restish does not block connection or prompt for
+extension approval.
+
+For a detailed view after connecting, run:
+
+```bash
+restish doctor api myapi
+```
+
+The doctor report lists where behavior-changing `x-cli-*` extensions appear
+and what each one changes. Plain `x-cli-description` help text overrides are
+not reported because they do not change which commands or inputs are available.
 
 ## Query Parameter Serialization
 

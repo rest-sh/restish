@@ -187,6 +187,7 @@ type doctorAPIReport struct {
 	SpecFiles           []string                        `json:"spec_files,omitempty"`
 	SpecCache           doctorStatusReport              `json:"spec_cache"`
 	GeneratedOperations doctorGeneratedOperationsReport `json:"generated_operations"`
+	OpenAPIXCLI         *spec.XCLIExtensionReport       `json:"openapi_x_cli_extensions,omitempty"`
 	Auth                doctorAuthReport                `json:"auth"`
 	Reachability        doctorReachabilityReport        `json:"reachability"`
 }
@@ -340,6 +341,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 		for _, issue := range operationSecurityIssues(opInfo.Set.Operations) {
 			fmt.Fprintf(out, "  %s: %s\n", style.error("Issue"), issue)
 		}
+		printXCLIExtensionDoctorDetails(out, style, opInfo.Set.XCLIExtensions)
 	} else {
 		fmt.Fprintf(out, "Generated operations: %s (%s)\n", style.warn("unavailable"), style.hint("run \"restish api sync "+name+"\""))
 	}
@@ -768,6 +770,9 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 			Status: "available",
 			Count:  len(opInfo.Set.Operations),
 			Issues: operationSecurityIssues(opInfo.Set.Operations),
+		}
+		if !opInfo.Set.XCLIExtensions.Empty() {
+			report.OpenAPIXCLI = &opInfo.Set.XCLIExtensions
 		}
 		if opInfo.Cached {
 			report.GeneratedOperations.Stale = opInfo.CacheStatus.Stale

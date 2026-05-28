@@ -708,3 +708,17 @@ func TestMsgpackRoundTripJSONNormalized(t *testing.T) {
 		t.Errorf("msgpack round-trip mismatch:\n got  %s\n want %s", got, want)
 	}
 }
+
+func TestMsgpackMalformedFixextReturnsError(t *testing.T) {
+	payloads := map[string][]byte{
+		"fixext4 missing bytes": {0xd6, 0xff},
+		"fixext8 missing bytes": {0xd7, 0xff},
+	}
+	for name, payload := range payloads {
+		t.Run(name, func(t *testing.T) {
+			if _, err := reg.Decode("application/msgpack", payload); err == nil {
+				t.Fatal("expected malformed msgpack to return an error")
+			}
+		})
+	}
+}

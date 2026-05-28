@@ -75,10 +75,30 @@ func responseURL(resp *http.Response) string {
 	return resp.Request.URL.String()
 }
 
+// ResponseHasNoBody reports whether HTTP semantics forbid a response body.
+// Some servers still send Content-Encoding on these responses; callers should
+// ignore the body instead of attempting to decompress or decode it.
+func ResponseHasNoBody(resp *http.Response) bool {
+	if resp == nil {
+		return true
+	}
+	if resp.Request != nil && strings.EqualFold(resp.Request.Method, http.MethodHead) {
+		return true
+	}
+	status := resp.StatusCode
+	return (status >= 100 && status < 200) ||
+		status == http.StatusNoContent ||
+		status == http.StatusResetContent ||
+		status == http.StatusNotModified
+}
+
 // decodeBody reads the response body, decompresses Content-Encoding if needed,
 // then decodes it using the content registry. Returns the decoded body bytes so
 // callers can write them without formatter re-encoding if needed.
 func decodeBody(resp *http.Response, reg *content.Registry, maxBytes int64) (decoded any, raw []byte, err error) {
+	if ResponseHasNoBody(resp) {
+		return nil, nil, nil
+	}
 	encoding := resp.Header.Get("Content-Encoding")
 	reader, err := reg.Decompress(encoding, resp.Body)
 	if err != nil {

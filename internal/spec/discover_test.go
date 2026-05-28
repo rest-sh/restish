@@ -467,6 +467,52 @@ x-overlay: true`
 	}
 }
 
+func TestLoadSpecFilesMultiFileIgnoresDescriptionRefObjects(t *testing.T) {
+	dir := t.TempDir()
+
+	base := `openapi: "3.1.0"
+info:
+  title: Base
+  version: "1.0.0"
+tags:
+  - name: widgets
+    description:
+      $ref: missing.md
+paths: {}`
+	overlay := `openapi: "3.1.0"
+info:
+  title: Overlay
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK`
+
+	basePath := filepath.Join(dir, "base.yaml")
+	overlayPath := filepath.Join(dir, "overlay.yaml")
+	if err := os.WriteFile(basePath, []byte(base), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	if err := os.WriteFile(overlayPath, []byte(overlay), 0o644); err != nil {
+		t.Fatalf("write overlay: %v", err)
+	}
+
+	result, err := loadSpecFiles(context.Background(), DiscoverConfig{SpecFiles: []string{basePath, overlayPath}}, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("loadSpecFiles: %v", err)
+	}
+	ops, err := result.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "listItems" {
+		t.Fatalf("operations = %#v", ops)
+	}
+}
+
 func TestLoadSpecFiles_MissingFile(t *testing.T) {
 	cfg := DiscoverConfig{
 		SpecFiles: []string{"/nonexistent/spec.yaml"},

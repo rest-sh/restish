@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
@@ -26,6 +27,7 @@ func (c *CLI) tryPaginate(
 	opts request.Options,
 	pagCfg *config.PaginationConfig,
 	prepared *preparedRequest,
+	generated bool,
 ) (bool, error) {
 	noPaginate := globalFlagsFromContext(requestContext(cmd)).NoPaginate
 	if noPaginate {
@@ -37,8 +39,31 @@ func (c *CLI) tryPaginate(
 	if err != nil {
 		return false, err
 	}
+	mode := paginationNextLink
 	if nextURL == "" {
-		return false, nil
+		if pagCfg == nil || pagCfg.PageParam == "" {
+			return false, nil
+		}
+		pageParamBaseURL := effectiveFirstURL(prepared, firstURL)
+		if generated && !paginationURLHasParam(pageParamBaseURL, pagCfg.PageParam) {
+			return false, nil
+		}
+		items, ok, err := pageParamPaginationItems(firstResp.Body, pagCfg)
+		if err != nil {
+			if !isFatalPaginationItemsPathError(err) {
+				c.warnf("pagination items_path: %v", err)
+				return false, nil
+			}
+			return false, err
+		}
+		if !ok || len(items) == 0 {
+			return false, nil
+		}
+		nextURL, err = nextPageParamURL(pageParamBaseURL, pagCfg.PageParam)
+		if err != nil {
+			return false, err
+		}
+		mode = paginationNextPageParam
 	}
 
 	gfPag := globalFlagsFromContext(requestContext(cmd))
@@ -46,8 +71,15 @@ func (c *CLI) tryPaginate(
 	maxPages := gfPag.MaxPages
 	maxItems := gfPag.MaxItems
 
-	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems, prepared)
+	return true, c.runPagination(cmd, firstResp, firstURL, nextURL, opts, pagCfg, collect, maxPages, maxItems, prepared, mode)
 }
+
+type paginationNextMode int
+
+const (
+	paginationNextLink paginationNextMode = iota
+	paginationNextPageParam
+)
 
 // runPagination drives the pagination loop starting from firstResp.
 func (c *CLI) runPagination(
@@ -60,6 +92,7 @@ func (c *CLI) runPagination(
 	collect bool,
 	maxPages, maxItems int,
 	prepared *preparedRequest,
+	nextMode paginationNextMode,
 ) (retErr error) {
 	ctx := requestContext(cmd)
 	if err := c.paginationStatusError(cmd, 1, firstResp.Status); err != nil {
@@ -138,6 +171,7 @@ func (c *CLI) runPagination(
 	visited := map[string]int{firstURL: 1}
 
 	for !done && nextURL != "" {
+		currentNextMode := nextMode
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -163,6 +197,12 @@ func (c *CLI) runPagination(
 		if err != nil {
 			return fmt.Errorf("paginate page %d: %w", page, err)
 		}
+		if currentNextMode == paginationNextPageParam && output.StatusToExitCode(httpResp.StatusCode) != 0 {
+			status := httpResp.StatusCode
+			_ = httpResp.Body.Close()
+			c.warnf("pagination page %d returned HTTP %d; stopping", page, status)
+			break
+		}
 
 		resp, err := c.normalizeHTTPResponse(httpResp, maxBodyBytes(cmd))
 		if err != nil {
@@ -181,6 +221,17 @@ func (c *CLI) runPagination(
 				return filterErr
 			}
 			c.warnf("pagination items_path: %v", filterErr)
+		}
+		var explicitNextURL string
+		if currentNextMode == paginationNextPageParam {
+			c.ensureBodyLinks(resp)
+			explicitNextURL, err = resolveNextURL(resp, pagCfg, nextURL)
+			if err != nil {
+				return err
+			}
+		}
+		if currentNextMode == paginationNextPageParam && explicitNextURL == "" && len(items) == 0 {
+			break
 		}
 		existingCount := len(allItems)
 		if !collect && streamItems {
@@ -202,7 +253,16 @@ func (c *CLI) runPagination(
 			streamedCount += len(items)
 		}
 		c.ensureBodyLinks(resp)
-		nextURL, err = resolveNextURL(resp, pagCfg, nextURL)
+		if currentNextMode == paginationNextPageParam {
+			if explicitNextURL != "" {
+				nextURL = explicitNextURL
+				nextMode = paginationNextLink
+				continue
+			}
+			nextURL, err = nextPageParamURL(nextURL, pagCfg.PageParam)
+		} else {
+			nextURL, err = resolveNextURL(resp, pagCfg, nextURL)
+		}
 		if err != nil {
 			return err
 		}
@@ -223,6 +283,25 @@ func (c *CLI) runPagination(
 		return c.formatResponse(cmd, synthetic, prepared)
 	}
 	return nil
+}
+
+func effectiveFirstURL(prepared *preparedRequest, fallback string) string {
+	if prepared != nil && prepared.actualRequest != nil && prepared.actualRequest.URL != nil {
+		return prepared.actualRequest.URL.String()
+	}
+	return fallback
+}
+
+func pageParamPaginationItems(body any, pagCfg *config.PaginationConfig) ([]any, bool, error) {
+	if pagCfg != nil && pagCfg.ItemsPath != "" {
+		items, err := pageItems(body, pagCfg)
+		if err != nil {
+			return items, false, err
+		}
+		return items, true, nil
+	}
+	items, ok := body.([]any)
+	return items, ok, nil
 }
 
 func (c *CLI) filterPaginatedItems(cmd *cobra.Command, items []any) ([]any, error) {
@@ -663,6 +742,37 @@ func resolvePaginationURL(currentURL, next string) (string, error) {
 		return "", fmt.Errorf("pagination: next URL %q: %w", next, err)
 	}
 	return base.ResolveReference(ref).String(), nil
+}
+
+func paginationURLHasParam(rawURL, param string) bool {
+	if param == "" {
+		return false
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	_, ok := u.Query()[param]
+	return ok
+}
+
+func nextPageParamURL(currentURL, param string) (string, error) {
+	u, err := url.Parse(currentURL)
+	if err != nil {
+		return "", fmt.Errorf("pagination: current URL %q: %w", currentURL, err)
+	}
+	q := u.Query()
+	page := 1
+	if raw := q.Get(param); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			return "", fmt.Errorf("pagination: page_param %q value %q is not an integer", param, raw)
+		}
+		page = n
+	}
+	q.Set(param, strconv.Itoa(page+1))
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 // applyItemLimits truncates items to stay within maxItems. Returns the

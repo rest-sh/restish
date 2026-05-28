@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // APIKey implements OpenAPI-style API key authentication in a header, query
@@ -34,7 +35,7 @@ func (h *APIKey) Authenticate(_ context.Context, req *http.Request, ac AuthConte
 
 	switch location {
 	case "header":
-		if req.Header.Get(name) == "" {
+		if getHeaderCaseInsensitive(req.Header, name) == "" {
 			req.Header.Set(name, value)
 		}
 	case "query":
@@ -51,4 +52,16 @@ func (h *APIKey) Authenticate(_ context.Context, req *http.Request, ac AuthConte
 		return fmt.Errorf("api-key: unsupported in %q (supported: header, query, cookie)", location)
 	}
 	return nil
+}
+
+func getHeaderCaseInsensitive(header http.Header, name string) string {
+	if value := header.Get(name); value != "" {
+		return value
+	}
+	for existing, values := range header {
+		if strings.EqualFold(existing, name) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
 }

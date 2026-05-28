@@ -42,6 +42,44 @@ func specWithXCLIConfig(baseURL string) string {
 }`, baseURL)
 }
 
+func specWithXCLIVisibility(baseURL string) string {
+	return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Visible XCLI API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "x-cli-config": {
+    "profiles": {
+      "default": {"headers": ["Accept: application/json"]}
+    }
+  },
+  "paths": {
+    "/hidden": {
+      "get": {
+        "operationId": "hiddenOp",
+        "x-cli-hidden": true,
+        "responses": {"200": {"description": "OK"}}
+      }
+    },
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "x-cli-name": "item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "x-cli-name": "item-id"
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+}
+
 // TestAPIConnect verifies that "api connect" fetches the spec, reads
 // x-cli-config, and writes a config file with the pre-populated fields.
 func TestAPIConnect(t *testing.T) {
@@ -84,6 +122,31 @@ func TestAPIConnect(t *testing.T) {
 	}
 	if len(prof.Headers) == 0 || !strings.Contains(prof.Headers[0], "application/json") {
 		t.Errorf("expected Accept header in default profile, got: %v", prof.Headers)
+	}
+}
+
+func TestAPIConnectPrintsXCLIExtensionSummary(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, specWithXCLIVisibility("https://api.example.com"))
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"OpenAPI x-cli extensions:",
+		"x-cli-config",
+		"1 hidden operation",
+		"1 renamed operation",
+		"1 renamed parameter",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("api connect output missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -3040,6 +3103,34 @@ func TestAPISyncReportsSuccess(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Synced") {
 		t.Errorf("expected Synced in output, got: %q", out.String())
+	}
+}
+
+func TestAPISyncPrintsXCLIExtensionSummary(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	cfgFile := c.Hooks().ConfigPath
+	cfgData := `{"apis":{"myapi":{"base_url":"https://api.example.com"}}}`
+	if err := os.WriteFile(cfgFile, []byte(cfgData), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, specWithXCLIVisibility("https://api.example.com"))
+
+	if err := c.Run([]string{"restish", "api", "sync", "myapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"OpenAPI x-cli extensions:",
+		"x-cli-config",
+		"1 hidden operation",
+		"1 renamed operation",
+		"1 renamed parameter",
+		`Synced spec for "myapi".`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("api sync output missing %q:\n%s", want, got)
+		}
 	}
 }
 

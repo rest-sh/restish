@@ -15,7 +15,7 @@ const (
 )
 
 // DecMode is a CBOR decode mode configured to use map[string]any for all CBOR
-// maps (including nested ones), rather than the default map[interface{}]interface{}.
+// maps (including nested ones), rather than the default map[any]any.
 // It also applies the same structural limits that Restish uses for plugin
 // messages, so buggy plugins cannot force unbounded map, array, or nesting
 // allocations before typed validation runs.

@@ -646,3 +646,61 @@ func TestOperationAuthCallbacksRunHookOnceForMultipleCredentials(t *testing.T) {
 		t.Fatalf("headers after operation auth = %#v", req.Header)
 	}
 }
+
+func TestOperationAuthPreservesAPIKeyHeaderCase(t *testing.T) {
+	c := &CLI{cfg: &config.Config{APIs: map[string]*config.APIConfig{
+		"svc": {PreserveHeaderCase: true},
+	}}}
+	selected := []selectedOperationAuth{{
+		requirement: spec.CredentialRequirement{ID: "SourceSystem"},
+		resolved: resolvedAuthConfig{
+			Config: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-SourceSystem", "value": "secret"}},
+		},
+	}}
+
+	callbacks, err := c.operationAuthCallbacks("svc", "default", selected, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("operationAuthCallbacks: %v", err)
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	if err := callbacks.OnRequest(req); err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := req.Header["X-SourceSystem"]; len(got) != 1 || got[0] != "secret" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved operation auth header", got)
+	}
+	if got := req.Header["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("canonicalized operation auth header was left behind: %#v", req.Header)
+	}
+}
+
+func TestOperationAuthPreserveHeaderCaseDoesNotRewriteManualHeader(t *testing.T) {
+	c := &CLI{cfg: &config.Config{APIs: map[string]*config.APIConfig{
+		"svc": {PreserveHeaderCase: true},
+	}}}
+	selected := []selectedOperationAuth{{
+		requirement: spec.CredentialRequirement{ID: "SourceSystem"},
+		resolved: resolvedAuthConfig{
+			Config: &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "X-SourceSystem", "value": "secret"}},
+		},
+	}}
+
+	callbacks, err := c.operationAuthCallbacks("svc", "default", selected, authHandlerOptions{})
+	if err != nil {
+		t.Fatalf("operationAuthCallbacks: %v", err)
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	req.Header["x-sourcesystem"] = []string{"manual"}
+	if err := callbacks.OnRequest(req); err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := req.Header["x-sourcesystem"]; len(got) != 1 || got[0] != "manual" {
+		t.Fatalf("x-sourcesystem = %#v, want manual header with user casing", got)
+	}
+	if got := req.Header["X-SourceSystem"]; len(got) != 0 {
+		t.Fatalf("manual operation auth header was rewritten: %#v", req.Header)
+	}
+	if got := req.Header["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("operation auth added canonicalized duplicate: %#v", req.Header)
+	}
+}

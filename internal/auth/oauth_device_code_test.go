@@ -41,6 +41,11 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 				if got := r.FormValue("device_code"); got != "device-123" {
 					t.Fatalf("device_code = %q", got)
 				}
+				for _, key := range []string{"redirect_scheme", "redirect_port", "redirect_path", "redirect_cert", "redirect_key"} {
+					if got := r.Form.Get(key); got != "" {
+						t.Fatalf("%s leaked into device token request: %#v", key, r.Form)
+					}
+				}
 				return testResponse(200, "application/json", `{"access_token":"device-token","token_type":"bearer","expires_in":3600}`), nil
 			default:
 				t.Fatalf("unexpected URL %q", r.URL.String())
@@ -55,7 +60,13 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 		"device_authorization_url": "https://auth.example.com/device",
 		"token_url":                "https://auth.example.com/token",
 		"audience":                 "https://api.example.com/",
+		"_base_url":                "https://api.example.com/v1",
 		"cache_key":                "local-cache-key",
+		"redirect_scheme":          "https",
+		"redirect_port":            "8484",
+		"redirect_path":            "/callback",
+		"redirect_cert":            "./localhost.pem",
+		"redirect_key":             "./localhost.key",
 	}
 	if err := h.OnRequest(req, params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -68,6 +79,14 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 	}
 	if gotStart.Get("cache_key") != "" {
 		t.Fatalf("cache_key leaked into device auth request: %#v", gotStart)
+	}
+	if gotStart.Get("_base_url") != "" {
+		t.Fatalf("_base_url leaked into device auth request: %#v", gotStart)
+	}
+	for _, key := range []string{"redirect_scheme", "redirect_port", "redirect_path", "redirect_cert", "redirect_key"} {
+		if got := gotStart.Get(key); got != "" {
+			t.Fatalf("%s leaked into device auth request: %#v", key, gotStart)
+		}
 	}
 }
 
@@ -107,6 +126,24 @@ func TestDeviceCode_OIDCDiscovery(t *testing.T) {
 	}
 	if got := req.Header.Get("Authorization"); got != "Bearer device-token" {
 		t.Fatalf("Authorization = %q", got)
+	}
+}
+
+func TestDeviceCodeResolvesRelativeEndpoints(t *testing.T) {
+	h := &DeviceCode{}
+	deviceURL, tokenURL, err := h.resolveEndpoints(context.Background(), map[string]string{
+		"device_authorization_url": "oauth2/device",
+		"token_url":                "/oauth2/token",
+		"_base_url":                "https://api.example.com/v1",
+	})
+	if err != nil {
+		t.Fatalf("resolveEndpoints: %v", err)
+	}
+	if deviceURL != "https://api.example.com/v1/oauth2/device" {
+		t.Fatalf("deviceURL = %q", deviceURL)
+	}
+	if tokenURL != "https://api.example.com/oauth2/token" {
+		t.Fatalf("tokenURL = %q", tokenURL)
 	}
 }
 

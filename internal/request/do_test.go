@@ -1,9 +1,11 @@
 package request_test
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -427,6 +429,96 @@ func TestDo_HostHeaderSetsRequestHost(t *testing.T) {
 	}
 }
 
+func TestDo_PreserveHeaderCaseWritesRawHTTP1Header(t *testing.T) {
+	raw := rawRequestForHeaders(t, request.Options{
+		Headers:            []string{"X-SourceSystem: demo"},
+		PreserveHeaderCase: true,
+	})
+	if !strings.Contains(raw, "\r\nX-SourceSystem: demo\r\n") {
+		t.Fatalf("raw request missing preserved header case:\n%s", raw)
+	}
+	if strings.Contains(raw, "\r\nX-Sourcesystem: demo\r\n") {
+		t.Fatalf("raw request used canonicalized header case:\n%s", raw)
+	}
+}
+
+func TestDo_DefaultCanonicalizesHeaderCase(t *testing.T) {
+	raw := rawRequestForHeaders(t, request.Options{
+		Headers: []string{"X-SourceSystem: demo"},
+	})
+	if !strings.Contains(raw, "\r\nX-Sourcesystem: demo\r\n") {
+		t.Fatalf("raw request missing canonicalized header case:\n%s", raw)
+	}
+}
+
+func TestDo_PreservedUserAgentSuppressesDefaultUserAgent(t *testing.T) {
+	raw := rawRequestForHeaders(t, request.Options{
+		Headers:            []string{"user-agent: custom-agent"},
+		PreserveHeaderCase: true,
+		UserAgent:          "restish-default",
+	})
+	if !strings.Contains(raw, "\r\nuser-agent: custom-agent\r\n") {
+		t.Fatalf("raw request missing preserved user-agent:\n%s", raw)
+	}
+	if strings.Contains(raw, "restish-default") {
+		t.Fatalf("default user-agent was added despite preserved user-agent:\n%s", raw)
+	}
+}
+
+func rawRequestForHeaders(t *testing.T, opts request.Options) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	rawCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		var raw strings.Builder
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				errCh <- err
+				return
+			}
+			raw.WriteString(line)
+			if line == "\r\n" {
+				break
+			}
+		}
+		if _, err := io.WriteString(conn, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"); err != nil {
+			errCh <- err
+			return
+		}
+		rawCh <- raw.String()
+	}()
+
+	resp, err := request.Do(context.Background(), "GET", "http://"+ln.Addr().String()+"/items", nil, opts)
+	if err != nil {
+		t.Fatalf("Do() error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	select {
+	case raw := <-rawCh:
+		return raw
+	case err := <-errCh:
+		t.Fatalf("server error: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for raw request")
+	}
+	return ""
+}
+
 func TestDo_InvalidHeader(t *testing.T) {
 	_, err := request.Do(context.Background(), "GET", "https://api.example.com/items", nil, request.Options{
 		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -570,6 +662,62 @@ func TestDo_SeeOtherRedirectStripsBodyHeaders(t *testing.T) {
 	}
 	if gotContentType != "" || gotContentEncoding != "" {
 		t.Fatalf("body headers crossed 303 redirect: Content-Type=%q Content-Encoding=%q", gotContentType, gotContentEncoding)
+	}
+}
+
+func TestDo_CrossOriginRedirectStripsPreservedCaseCredentialHeader(t *testing.T) {
+	var gotAuth string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+	start := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer start.Close()
+
+	resp, err := request.Do(context.Background(), "GET", start.URL, nil, request.Options{
+		Headers:            []string{"authorization: Bearer secret"},
+		PreserveHeaderCase: true,
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotAuth != "" {
+		t.Fatalf("preserved-case Authorization crossed redirect: %q", gotAuth)
+	}
+}
+
+func TestDo_CrossOriginRedirectStripsMarkedPreservedCaseCredentialHeader(t *testing.T) {
+	var gotSourceSystem string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSourceSystem = r.Header.Get("X-SourceSystem")
+		w.WriteHeader(200)
+	}))
+	defer target.Close()
+	start := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer start.Close()
+
+	resp, err := request.Do(context.Background(), "GET", start.URL, nil, request.Options{
+		Headers:            []string{"X-SourceSystem: secret"},
+		PreserveHeaderCase: true,
+		OnRequest: func(req *http.Request) error {
+			request.MarkCredentialHeader(req, "X-SourceSystem")
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if gotSourceSystem != "" {
+		t.Fatalf("marked preserved-case credential crossed redirect: %q", gotSourceSystem)
 	}
 }
 

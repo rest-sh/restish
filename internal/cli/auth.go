@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -143,8 +144,12 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
 				return err
 			}
+			preserveInsertedHeader := c.apiPreservesHeaderCase(apiName) && !authHeaderPresent(req.Header, resolvedAuth.Config.Type, params)
 			if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, false)); err != nil {
 				return err
+			}
+			if preserveInsertedHeader {
+				preserveAuthHeaderCase(req, resolvedAuth.Config.Type, params)
 			}
 			markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
@@ -166,8 +171,12 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 				if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
 					return err
 				}
+				preserveInsertedHeader := c.apiPreservesHeaderCase(apiName) && !authHeaderPresent(req.Header, resolvedAuth.Config.Type, params)
 				if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, true)); err != nil {
 					return err
+				}
+				if preserveInsertedHeader {
+					preserveAuthHeaderCase(req, resolvedAuth.Config.Type, params)
 				}
 				markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
@@ -188,6 +197,49 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
 	return callbacks
+}
+
+func (c *CLI) apiPreservesHeaderCase(apiName string) bool {
+	return c != nil && c.cfg != nil && c.cfg.APIs != nil && c.cfg.APIs[apiName] != nil && c.cfg.APIs[apiName].PreserveHeaderCase
+}
+
+func preserveAuthHeaderCase(req *http.Request, authType string, params map[string]string) {
+	if req == nil || authType != "api-key" || strings.ToLower(strings.TrimSpace(params["in"])) != "header" {
+		return
+	}
+	name := strings.TrimSpace(params["name"])
+	if name == "" {
+		return
+	}
+	var values []string
+	for existing, existingValues := range req.Header {
+		if strings.EqualFold(existing, name) {
+			values = append(values, existingValues...)
+			delete(req.Header, existing)
+		}
+	}
+	if len(values) > 0 {
+		req.Header[name] = values
+	}
+}
+
+func authHeaderPresent(header http.Header, authType string, params map[string]string) bool {
+	if authType != "api-key" || strings.ToLower(strings.TrimSpace(params["in"])) != "header" {
+		return false
+	}
+	return preservedHeaderValue(header, strings.TrimSpace(params["name"])) != ""
+}
+
+func preservedHeaderValue(header http.Header, name string) string {
+	if value := header.Get(name); value != "" {
+		return value
+	}
+	for existing, values := range header {
+		if strings.EqualFold(existing, name) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
 }
 
 func markAuthCredentialTargets(req *http.Request, authType string, params map[string]string) {
@@ -214,7 +266,7 @@ func (c *CLI) applyCachedOAuthClientCredentials(req *http.Request, authType stri
 	if token == "" {
 		return false
 	}
-	if req.Header.Get("Authorization") == "" {
+	if preservedHeaderValue(req.Header, "Authorization") == "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	return true
@@ -286,9 +338,15 @@ func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.Profi
 		return resolvedAuthConfig{}, fmt.Errorf("profile %q of API %q has both auth and auth_ref", profileName, apiName)
 	}
 	if prof.AuthRef == "" {
+		cacheKey := c.apiCacheNamespace(apiName, profileName)
+		if prof.Auth != nil {
+			if relativeKey := inlineAuthCacheKey(cacheKey, prof.Auth, c.authBaseURL(apiName, profileName)); relativeKey != "" {
+				cacheKey = relativeKey
+			}
+		}
 		return resolvedAuthConfig{
 			Config:   prof.Auth,
-			CacheKey: c.apiCacheNamespace(apiName, profileName),
+			CacheKey: cacheKey,
 		}, nil
 	}
 	if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[prof.AuthRef] == nil {
@@ -298,7 +356,7 @@ func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.Profi
 	return resolvedAuthConfig{
 		Config:   ac,
 		Ref:      prof.AuthRef,
-		CacheKey: sharedAuthCacheKey(prof.AuthRef, ac),
+		CacheKey: sharedAuthCacheKey(prof.AuthRef, ac, c.authBaseURL(apiName, profileName)),
 	}, nil
 }
 
@@ -404,6 +462,7 @@ func (c *CLI) authContext(ctx context.Context, apiName, profileName string, para
 	return auth.AuthContext{
 		APIName:     apiName,
 		ProfileName: profileName,
+		BaseURL:     c.authBaseURL(apiName, profileName),
 		CacheKey:    cacheKey,
 		Params:      params,
 		TokenStore:  auth.NewTokenCache(c.tokenCachePath()),
@@ -415,7 +474,18 @@ func (c *CLI) authContext(ctx context.Context, apiName, profileName string, para
 	}
 }
 
-func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
+func (c *CLI) authBaseURL(apiName, profileName string) string {
+	if c.cfg == nil || c.cfg.APIs == nil {
+		return ""
+	}
+	api := c.cfg.APIs[apiName]
+	if api == nil {
+		return ""
+	}
+	return effectiveProfileBaseURL(api, profileName)
+}
+
+func sharedAuthCacheKey(ref string, ac *config.AuthConfig, baseURL string) string {
 	if ac == nil {
 		return ""
 	}
@@ -427,6 +497,9 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
 		if value := ac.Params[name]; value != "" {
 			relevant[name] = value
 		}
+	}
+	if baseURL != "" && authConfigUsesRelativeOAuthEndpoint(ac) {
+		relevant["base_url"] = baseURL
 	}
 	var keys []string
 	for key := range relevant {
@@ -442,6 +515,31 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
 	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return "auth_profile:" + ref + ":" + hex.EncodeToString(sum[:8])
+}
+
+func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) string {
+	if !authConfigUsesRelativeOAuthEndpoint(ac) || baseURL == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(baseURL))
+	return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+}
+
+func authConfigUsesRelativeOAuthEndpoint(ac *config.AuthConfig) bool {
+	if ac == nil {
+		return false
+	}
+	for _, name := range []string{"authorize_url", "device_authorization_url", "token_url"} {
+		if value := ac.Params[name]; value != "" && isRelativeOAuthEndpointValue(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRelativeOAuthEndpointValue(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && !u.IsAbs() && u.Host == ""
 }
 
 type limitedWriter struct {

@@ -51,6 +51,32 @@ func TestClientCredentials_FetchesToken(t *testing.T) {
 	}
 }
 
+func TestClientCredentialsResolvesRelativeTokenURL(t *testing.T) {
+	var gotTokenURL string
+	h := &ClientCredentials{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			gotTokenURL = r.URL.String()
+			return testResponse(200, "application/json", `{"access_token":"relative-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":     "id1",
+		"client_secret": "sec1",
+		"token_url":     "oauth2/token",
+		"_base_url":     "https://api.example.com/v1",
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if gotTokenURL != "https://api.example.com/v1/oauth2/token" {
+		t.Fatalf("token URL = %q", gotTokenURL)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer relative-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+}
+
 func TestClientCredentialsRejectsInvalidDirectTokenEndpoint(t *testing.T) {
 	h := &ClientCredentials{}
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)

@@ -255,6 +255,14 @@ development flows. Public `http://`, custom schemes, embedded credentials,
 fragments, and preexisting query strings are rejected before any token or
 authorization request is sent.
 
+Manually configured OAuth endpoints may be path-relative when the selected API
+has a `base_url`. `oauth2/token` resolves under the effective API/profile base
+path, while `/oauth2/token` resolves at the same host root. Scheme-relative
+values are rejected, and the resolved endpoint still goes through the same
+HTTPS/loopback, credential, query, and fragment validation as absolute
+endpoints. `issuer_url` remains absolute-only because it defines the OIDC
+issuer identity.
+
 Discovery and token requests inherit the CLI HTTP client's timeout and TLS
 configuration. This keeps `--rsh-timeout`, CA roots, TLS minimum version, and
 `--rsh-insecure` consistent across ordinary requests and auth setup. OAuth
@@ -292,11 +300,11 @@ discovery advertises a device endpoint. Flow choice affects provider client
 registration, redirect URI policy, consent UX, token semantics, and debugging;
 the operator should choose it in config.
 
-Local HTTPS callbacks are a post-release extension, not a v2 release blocker.
-If added, the callback listener should be explicit and operator-controlled:
-configurable scheme/host/port/path plus either user-supplied certificate/key
-files or documented `mkcert` setup. Restish should not silently generate or
-trust local certificates on the user's behalf.
+Local HTTPS callbacks are supported for providers that reject HTTP redirect
+URIs. The callback listener stays on `localhost`; `redirect_scheme` selects
+`http` or `https`, and HTTPS requires operator-supplied `redirect_cert` and
+`redirect_key` files. Restish does not generate certificates, install trust
+roots, or broaden OAuth endpoint scheme validation on the user's behalf.
 
 ### Client Credentials Flow
 
