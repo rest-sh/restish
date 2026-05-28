@@ -417,10 +417,11 @@ func TestPluginOperationsFromSpecPreservesParameterContentSchema(t *testing.T) {
 		Method: "GET",
 		Path:   "/items",
 		Parameters: []spec.Param{{
-			Name:             "filter",
-			In:               "query",
-			Type:             "object",
-			ContentMediaType: "application/json",
+			Name:              "filter",
+			In:                "query",
+			Type:              "object",
+			ContentMediaType:  "application/json",
+			JSONSchemaDialect: "https://json-schema.org/draft/2020-12/schema",
 			JSONSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -445,6 +446,44 @@ func TestPluginOperationsFromSpecPreservesParameterContentSchema(t *testing.T) {
 	}
 	if _, ok := props["active"]; !ok {
 		t.Fatalf("Schema properties = %#v, want active", props)
+	}
+	if got, want := param.SchemaDialect, "https://json-schema.org/draft/2020-12/schema"; got != want {
+		t.Fatalf("SchemaDialect = %q, want %q", got, want)
+	}
+}
+
+func TestPluginOperationsFromSpecPreservesRequestBodySchema(t *testing.T) {
+	ops := pluginOperationsFromSpec([]spec.Operation{{
+		Method:           "POST",
+		Path:             "/items",
+		HasBody:          true,
+		BodyRequired:     true,
+		RequestMediaType: "application/json",
+		Help: spec.OperationHelp{
+			Request: &spec.OperationBodyHelp{
+				MediaType:         "application/json",
+				JSONSchemaDialect: "https://json-schema.org/draft/2020-12/schema",
+				JSONSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	}})
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	props, ok := ops[0].RequestSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("RequestSchema properties = %#v, want map", ops[0].RequestSchema["properties"])
+	}
+	if _, ok := props["name"]; !ok {
+		t.Fatalf("RequestSchema properties = %#v, want name", props)
+	}
+	if got, want := ops[0].RequestSchemaDialect, "https://json-schema.org/draft/2020-12/schema"; got != want {
+		t.Fatalf("RequestSchemaDialect = %q, want %q", got, want)
 	}
 }
 

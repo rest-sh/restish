@@ -108,17 +108,19 @@ type APISpecResponseMsg struct {
 // OpenAPI HTTP operation. It mirrors the generated-command model so command
 // plugins do not need to re-parse raw OpenAPI specs.
 type APIOperation struct {
-	ID               string     `cbor:"id"`
-	Method           string     `cbor:"method"`
-	Path             string     `cbor:"path"`
-	Summary          string     `cbor:"summary,omitempty"`
-	Description      string     `cbor:"description,omitempty"`
-	Deprecated       bool       `cbor:"deprecated,omitempty"`
-	Parameters       []APIParam `cbor:"parameters,omitempty"`
-	HasBody          bool       `cbor:"has_body,omitempty"`
-	BodyRequired     bool       `cbor:"body_required,omitempty"`
-	RequestMediaType string     `cbor:"request_media_type,omitempty"`
-	MCPIgnore        bool       `cbor:"mcp_ignore,omitempty"`
+	ID                   string         `cbor:"id"`
+	Method               string         `cbor:"method"`
+	Path                 string         `cbor:"path"`
+	Summary              string         `cbor:"summary,omitempty"`
+	Description          string         `cbor:"description,omitempty"`
+	Deprecated           bool           `cbor:"deprecated,omitempty"`
+	Parameters           []APIParam     `cbor:"parameters,omitempty"`
+	HasBody              bool           `cbor:"has_body,omitempty"`
+	BodyRequired         bool           `cbor:"body_required,omitempty"`
+	RequestMediaType     string         `cbor:"request_media_type,omitempty"`
+	RequestSchema        map[string]any `cbor:"request_schema,omitempty"`
+	RequestSchemaDialect string         `cbor:"request_schema_dialect,omitempty"`
+	MCPIgnore            bool           `cbor:"mcp_ignore,omitempty"`
 }
 
 // APIParam is a resolved operation parameter for APIOperation.
@@ -134,6 +136,7 @@ type APIParam struct {
 	AllowReserved    bool           `cbor:"allow_reserved,omitempty"`
 	ContentMediaType string         `cbor:"content_media_type,omitempty"`
 	Schema           map[string]any `cbor:"schema,omitempty"`
+	SchemaDialect    string         `cbor:"schema_dialect,omitempty"`
 	Enum             []string       `cbor:"enum,omitempty"`
 }
 

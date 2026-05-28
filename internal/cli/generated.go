@@ -1477,6 +1477,7 @@ func (c *CLI) runGeneratedOp(
 	gf := globalFlagsFromContext(requestContext(cmd))
 	var validationSchema map[string]any
 	var validationMediaType string
+	var validationSchemaDialect string
 	validateBody, _ := cmd.Flags().GetBool("rsh-validate")
 	if validateBody {
 		validationRequest, err := c.generatedBodyExampleRequest(help, gf.ContentType)
@@ -1486,6 +1487,7 @@ func (c *CLI) runGeneratedOp(
 		if validationRequest != nil {
 			validationSchema = validationRequest.JSONSchema
 			validationMediaType = validationRequest.MediaType
+			validationSchemaDialect = validationRequest.JSONSchemaDialect
 		}
 	}
 	return c.runHTTPWithOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
@@ -1493,6 +1495,7 @@ func (c *CLI) runGeneratedOp(
 		acceptOverride:            responseMediaType,
 		validationSchema:          validationSchema,
 		validationMediaType:       validationMediaType,
+		validationSchemaDialect:   validationSchemaDialect,
 		validationRequested:       validateBody,
 		bodyRequired:              bodyRequired,
 		rawBinaryBody:             rawBinaryBody,

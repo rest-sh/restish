@@ -36,14 +36,14 @@ type schemaHelpRenderer struct {
 	inheritedType string
 }
 
-func buildOperationHelp(op *v3.Operation, requestMediaType string) OperationHelp {
+func buildOperationHelp(op *v3.Operation, requestMediaType, schemaDialect string) OperationHelp {
 	if op == nil {
 		return OperationHelp{}
 	}
 
 	help := OperationHelp{
-		Request:  buildRequestHelp(op, requestMediaType),
-		Requests: buildRequestHelps(op),
+		Request:  buildRequestHelp(op, requestMediaType, schemaDialect),
+		Requests: buildRequestHelps(op, schemaDialect),
 		Examples: buildCommandExamples(op, requestMediaType),
 	}
 	help.Responses = buildResponseHelp(op)
@@ -57,7 +57,7 @@ func buildParameterSchemaHelp(schema *base.Schema) string {
 	return schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
 }
 
-func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyHelp {
+func buildRequestHelp(op *v3.Operation, requestMediaType, schemaDialect string) *OperationBodyHelp {
 	if op.RequestBody == nil || op.RequestBody.Content == nil || requestMediaType == "" {
 		return nil
 	}
@@ -75,15 +75,16 @@ func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyH
 		example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
 	}
 	return &OperationBodyHelp{
-		MediaType:  requestMediaType,
-		Schema:     schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
-		JSONSchema: schemaJSONMap(schema),
-		Example:    example,
-		RawBinary:  rawBinary,
+		MediaType:         requestMediaType,
+		Schema:            schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
+		JSONSchema:        schemaJSONMap(schema),
+		JSONSchemaDialect: schemaJSONDialect(schema, schemaDialect),
+		Example:           example,
+		RawBinary:         rawBinary,
 	}
 }
 
-func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
+func buildRequestHelps(op *v3.Operation, schemaDialect string) []OperationBodyHelp {
 	if op == nil || op.RequestBody == nil || op.RequestBody.Content == nil {
 		return nil
 	}
@@ -98,6 +99,7 @@ func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
 			help.RawBinary = isRawBinaryRequestBody(mediaType, schema)
 			help.Schema = schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
 			help.JSONSchema = schemaJSONMap(schema)
+			help.JSONSchemaDialect = schemaJSONDialect(schema, schemaDialect)
 			if !help.RawBinary {
 				help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
 			}

@@ -34,24 +34,25 @@ type ParamXCLI struct {
 
 // Param is a single request parameter (path, query, header, or cookie).
 type Param struct {
-	Name             string
-	In               string // "path", "query", "header", "cookie"
-	Desc             string
-	Schema           string
-	JSONSchema       map[string]any
-	Required         bool
-	Type             string
-	ItemType         string
-	Default          string
-	DefaultValues    []string
-	HasDefault       bool
-	Style            string
-	Explode          *bool
-	AllowReserved    bool
-	ContentMediaType string
-	Enum             []string
-	ObjectProperties []ParamObjectProperty
-	XCLI             ParamXCLI
+	Name              string
+	In                string // "path", "query", "header", "cookie"
+	Desc              string
+	Schema            string
+	JSONSchema        map[string]any
+	JSONSchemaDialect string
+	Required          bool
+	Type              string
+	ItemType          string
+	Default           string
+	DefaultValues     []string
+	HasDefault        bool
+	Style             string
+	Explode           *bool
+	AllowReserved     bool
+	ContentMediaType  string
+	Enum              []string
+	ObjectProperties  []ParamObjectProperty
+	XCLI              ParamXCLI
 }
 
 // ParamObjectProperty is a simple scalar property from an object-capable
@@ -66,11 +67,12 @@ type ParamObjectProperty struct {
 // OperationBodyHelp is a compact request/response body example extracted from
 // OpenAPI schemas for generated command help.
 type OperationBodyHelp struct {
-	MediaType  string
-	Schema     string
-	JSONSchema map[string]any
-	Example    string
-	RawBinary  bool
+	MediaType         string
+	Schema            string
+	JSONSchema        map[string]any
+	JSONSchemaDialect string
+	Example           string
+	RawBinary         bool
 }
 
 // OperationResponseHelp is a compact response shape for generated command help.
@@ -271,7 +273,7 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, []string,
 				}
 			}
 			fullPath := joinOperationPath(basePath, rawPath)
-			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components))
+			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components), openAPIJSONSchemaDialect(model.Model))
 			op.OperationServer = operationServer
 			if op.XCLI.Ignore {
 				continue
@@ -295,7 +297,7 @@ func emitOperationWarnings(warnf func(format string, args ...any), warnings []st
 }
 
 // extractOperation converts a single libopenapi operation to the neutral form.
-func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation, docSecurity []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme) Operation {
+func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation, docSecurity []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme, schemaDialect string) Operation {
 	effectiveSecurity := docSecurity
 	if op.Security != nil {
 		effectiveSecurity = op.Security
@@ -323,7 +325,7 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			Aliases:     OpExtStrings(op, "x-cli-aliases"),
 		},
 	}
-	o.Help = buildOperationHelp(op, o.RequestMediaType)
+	o.Help = buildOperationHelp(op, o.RequestMediaType, schemaDialect)
 	o.RequestMultipartContentTypes = buildRequestMultipartContentTypes(op, o.RequestMediaType)
 	o.OptionalAuth, o.CredentialAlternatives = credentialAlternatives(effectiveSecurity, schemes)
 
@@ -338,33 +340,34 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 		var enum, defaultValues []string
 		var objectProperties []ParamObjectProperty
 		var jsonSchema map[string]any
-		var paramType, itemType, defaultValue, schemaHelp string
+		var paramType, itemType, defaultValue, schemaHelp, jsonSchemaDialect string
 		var hasDefault bool
 		if p.Schema != nil {
 			if schema := p.Schema.Schema(); schema != nil {
-				schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema = parameterSchemaDetails(schema)
+				schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema, jsonSchemaDialect = parameterSchemaDetails(schema, schemaDialect)
 			}
 		} else if schema := preferredParameterContentSchema(p); schema != nil {
-			schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema = parameterSchemaDetails(schema)
+			schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema, jsonSchemaDialect = parameterSchemaDetails(schema, schemaDialect)
 		}
 		o.Parameters = append(o.Parameters, Param{
-			Name:             p.Name,
-			In:               p.In,
-			Desc:             p.Description,
-			Schema:           schemaHelp,
-			JSONSchema:       jsonSchema,
-			Required:         p.Required != nil && *p.Required,
-			Type:             paramType,
-			ItemType:         itemType,
-			Default:          defaultValue,
-			DefaultValues:    defaultValues,
-			HasDefault:       hasDefault,
-			Style:            p.Style,
-			Explode:          p.Explode,
-			AllowReserved:    p.AllowReserved,
-			ContentMediaType: preferredParameterContentMediaType(p),
-			Enum:             enum,
-			ObjectProperties: objectProperties,
+			Name:              p.Name,
+			In:                p.In,
+			Desc:              p.Description,
+			Schema:            schemaHelp,
+			JSONSchema:        jsonSchema,
+			JSONSchemaDialect: jsonSchemaDialect,
+			Required:          p.Required != nil && *p.Required,
+			Type:              paramType,
+			ItemType:          itemType,
+			Default:           defaultValue,
+			DefaultValues:     defaultValues,
+			HasDefault:        hasDefault,
+			Style:             p.Style,
+			Explode:           p.Explode,
+			AllowReserved:     p.AllowReserved,
+			ContentMediaType:  preferredParameterContentMediaType(p),
+			Enum:              enum,
+			ObjectProperties:  objectProperties,
 			XCLI: ParamXCLI{
 				Ignore:      ParamExtBool(p, "x-cli-ignore"),
 				Hidden:      ParamExtBool(p, "x-cli-hidden"),
@@ -767,9 +770,9 @@ func schemaType(types []string) string {
 	return "string"
 }
 
-func parameterSchemaDetails(schema *base.Schema) (schemaHelp, paramType, itemType, defaultValue string, defaultValues []string, hasDefault bool, enum []string, objectProperties []ParamObjectProperty, jsonSchema map[string]any) {
+func parameterSchemaDetails(schema *base.Schema, defaultDialect string) (schemaHelp, paramType, itemType, defaultValue string, defaultValues []string, hasDefault bool, enum []string, objectProperties []ParamObjectProperty, jsonSchema map[string]any, jsonSchemaDialect string) {
 	if schema == nil {
-		return "", "", "", "", nil, false, nil, nil, nil
+		return "", "", "", "", nil, false, nil, nil, nil, ""
 	}
 	schemaHelp = buildParameterSchemaHelp(schema)
 	paramType = schemaType(schema.Type)
@@ -802,7 +805,8 @@ func parameterSchemaDetails(schema *base.Schema) (schemaHelp, paramType, itemTyp
 		schemaHelp = buildParameterSchemaHelpWithType(schema, paramType)
 	}
 	jsonSchema = schemaJSONMap(schema)
-	return schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema
+	jsonSchemaDialect = schemaJSONDialect(schema, defaultDialect)
+	return schemaHelp, paramType, itemType, defaultValue, defaultValues, hasDefault, enum, objectProperties, jsonSchema, jsonSchemaDialect
 }
 
 func buildParameterSchemaHelpWithType(schema *base.Schema, typ string) string {
@@ -827,6 +831,28 @@ func schemaJSONMap(schema *base.Schema) map[string]any {
 		return nil
 	}
 	return out
+}
+
+func schemaJSONDialect(schema *base.Schema, defaultDialect string) string {
+	if schema != nil && strings.TrimSpace(schema.SchemaTypeRef) != "" {
+		return strings.TrimSpace(schema.SchemaTypeRef)
+	}
+	return strings.TrimSpace(defaultDialect)
+}
+
+func openAPIJSONSchemaDialect(doc v3.Document) string {
+	if strings.TrimSpace(doc.JsonSchemaDialect) != "" {
+		return strings.TrimSpace(doc.JsonSchemaDialect)
+	}
+	version := strings.TrimSpace(doc.Version)
+	switch {
+	case strings.HasPrefix(version, "3.2."):
+		return "https://spec.openapis.org/oas/3.2/dialect/2025-09-17"
+	case strings.HasPrefix(version, "3.1."):
+		return "https://spec.openapis.org/oas/3.1/dialect/base"
+	default:
+		return ""
+	}
 }
 
 func scalarObjectProperties(schema *base.Schema) []ParamObjectProperty {

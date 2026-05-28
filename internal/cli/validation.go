@@ -13,7 +13,7 @@ import (
 
 const generatedRequestSchemaURL = "restish-request-body.schema.json"
 
-func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, schema map[string]any) error {
+func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, schema map[string]any, schemaDialect string) error {
 	mediaType := strings.TrimSpace(contentType)
 	if mediaType != "" && !strings.Contains(mediaType, "/") && schemaMediaType != "" {
 		mediaType = schemaMediaType
@@ -34,9 +34,23 @@ func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, sc
 	if err != nil {
 		return fmt.Errorf("compile request body schema: %w", err)
 	}
+	rootSchemaDialect, _ := normalizedSchema["$schema"].(string)
+	if shouldNormalizeOpenAPISchema(schemaDialect, rootSchemaDialect) {
+		normalizeOpenAPIJSONSchema(normalizedSchema)
+	}
+	if isOpenAPIJSONSchemaDialect(rootSchemaDialect) {
+		normalizedSchema["$schema"] = jsonschema.Draft2020.String()
+	}
+	defaultDraft, err := jsonSchemaDraftForDialect(schemaDialect)
+	if err != nil && strings.TrimSpace(rootSchemaDialect) == "" {
+		return fmt.Errorf("compile request body schema: %w", err)
+	}
+	if defaultDraft == nil {
+		defaultDraft = jsonschema.Draft2020
+	}
 
 	compiler := jsonschema.NewCompiler()
-	compiler.DefaultDraft(jsonschema.Draft2020)
+	compiler.DefaultDraft(defaultDraft)
 	if err := compiler.AddResource(generatedRequestSchemaURL, normalizedSchema); err != nil {
 		return fmt.Errorf("compile request body schema: %w", err)
 	}
@@ -50,6 +64,53 @@ func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, sc
 	return nil
 }
 
+func shouldNormalizeOpenAPISchema(defaultDialect, rootDialect string) bool {
+	if isOpenAPIJSONSchemaDialect(defaultDialect) || isOpenAPIJSONSchemaDialect(rootDialect) {
+		return true
+	}
+	return strings.TrimSpace(defaultDialect) == "" && strings.TrimSpace(rootDialect) == ""
+}
+
+func jsonSchemaDraftForDialect(dialect string) (*jsonschema.Draft, error) {
+	switch normalizedJSONSchemaDialect(dialect) {
+	case "":
+		return jsonschema.Draft2020, nil
+	case "https://json-schema.org/draft/2020-12/schema", "http://json-schema.org/draft/2020-12/schema":
+		return jsonschema.Draft2020, nil
+	case "https://json-schema.org/draft/2019-09/schema", "http://json-schema.org/draft/2019-09/schema":
+		return jsonschema.Draft2019, nil
+	case "https://json-schema.org/draft-07/schema", "http://json-schema.org/draft-07/schema":
+		return jsonschema.Draft7, nil
+	case "https://json-schema.org/draft-06/schema", "http://json-schema.org/draft-06/schema":
+		return jsonschema.Draft6, nil
+	case "https://json-schema.org/draft-04/schema", "http://json-schema.org/draft-04/schema":
+		return jsonschema.Draft4, nil
+	case "https://spec.openapis.org/oas/3.1/dialect/base",
+		"https://spec.openapis.org/oas/3.2/dialect/2025-09-17":
+		return jsonschema.Draft2020, nil
+	default:
+		return nil, fmt.Errorf("unsupported JSON Schema dialect %q", dialect)
+	}
+}
+
+func normalizedJSONSchemaDialect(dialect string) string {
+	dialect = strings.TrimSpace(dialect)
+	if strings.HasSuffix(dialect, "#") {
+		dialect = strings.TrimSuffix(dialect, "#")
+	}
+	return dialect
+}
+
+func isOpenAPIJSONSchemaDialect(dialect string) bool {
+	switch normalizedJSONSchemaDialect(dialect) {
+	case "https://spec.openapis.org/oas/3.1/dialect/base",
+		"https://spec.openapis.org/oas/3.2/dialect/2025-09-17":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeJSONSchemaValue(schema map[string]any) (map[string]any, error) {
 	normalized, err := normalizeJSONCompatible(schema)
 	if err != nil {
@@ -59,7 +120,6 @@ func normalizeJSONSchemaValue(schema map[string]any) (map[string]any, error) {
 	if !ok {
 		return nil, fmt.Errorf("schema root is %T, want object", normalized)
 	}
-	normalizeOpenAPIJSONSchema(out)
 	return out, nil
 }
 

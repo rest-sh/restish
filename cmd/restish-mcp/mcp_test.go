@@ -292,6 +292,47 @@ func TestToolsFromHostOperationsPreserveContentQueryParameters(t *testing.T) {
 	}
 }
 
+func TestToolsFromHostOperationsPreserveRequestBodySchema(t *testing.T) {
+	s := &APISpec{
+		Name: "demo",
+		Operations: []plugin.APIOperation{{
+			ID:                   "createItem",
+			Method:               "POST",
+			Path:                 "/items",
+			HasBody:              true,
+			BodyRequired:         true,
+			RequestMediaType:     "application/json",
+			RequestSchemaDialect: "https://json-schema.org/draft/2020-12/schema",
+			RequestSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string"},
+				},
+			},
+		}},
+	}
+
+	tools, err := toolsFromSpec("demo", false, s, Options{AllowWriteTools: true})
+	if err != nil {
+		t.Fatalf("toolsFromSpec: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one tool", tools)
+	}
+	props := tools[0].InputSchema["properties"].(map[string]any)
+	body := props["body"].(map[string]any)
+	if got := body["type"]; got != "object" {
+		t.Fatalf("body type = %#v, want object", got)
+	}
+	bodyProps, ok := body["properties"].(map[string]any)
+	if !ok || bodyProps["name"] == nil {
+		t.Fatalf("body properties = %#v, want name property", body["properties"])
+	}
+	if got, want := tools[0].BodySchemaDialect, "https://json-schema.org/draft/2020-12/schema"; got != want {
+		t.Fatalf("BodySchemaDialect = %q, want %q", got, want)
+	}
+}
+
 func TestToolsFromRawSpecPreserveContentQueryParameters(t *testing.T) {
 	s := loadTestSpec(t, "demo", `{
 	  "openapi": "3.1.0",
