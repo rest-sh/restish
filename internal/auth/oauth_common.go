@@ -460,7 +460,11 @@ func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 		// TODO(openapi-3.2): use oauth2_metadata_url for RFC 8414 metadata
 		// discovery in place of, or alongside, issuer_url.
 		"oauth2_metadata_url": true,
+		"redirect_cert":       true,
+		"redirect_key":        true,
+		"redirect_path":       true,
 		"redirect_port":       true,
+		"redirect_scheme":     true,
 		"token_url":           true,
 	}) {
 		if form.Get(key) == "" {

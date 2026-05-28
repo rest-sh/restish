@@ -292,11 +292,11 @@ discovery advertises a device endpoint. Flow choice affects provider client
 registration, redirect URI policy, consent UX, token semantics, and debugging;
 the operator should choose it in config.
 
-Local HTTPS callbacks are a post-release extension, not a v2 release blocker.
-If added, the callback listener should be explicit and operator-controlled:
-configurable scheme/host/port/path plus either user-supplied certificate/key
-files or documented `mkcert` setup. Restish should not silently generate or
-trust local certificates on the user's behalf.
+Local HTTPS callbacks are supported for providers that reject HTTP redirect
+URIs. The callback listener stays on `localhost`; `redirect_scheme` selects
+`http` or `https`, and HTTPS requires operator-supplied `redirect_cert` and
+`redirect_key` files. Restish does not generate certificates, install trust
+roots, or broaden OAuth endpoint scheme validation on the user's behalf.
 
 ### Client Credentials Flow
 
