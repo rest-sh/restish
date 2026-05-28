@@ -230,7 +230,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}
 	}
 	if bodyOpts.validationRequested && bodyVal != nil {
-		if err := validateGeneratedJSONBody(bodyVal, opts.ContentType, bodyOpts.validationMediaType, bodyOpts.validationSchema, bodyOpts.validationSchemaDialect); err != nil {
+		if err := validateGeneratedJSONBody(bodyVal, opts.ContentType, bodyOpts.validationMediaType, bodyOpts.validationSchema, bodyOpts.validationSchemaDialect, output.ColorEnabled(c.Stderr)); err != nil {
 			return err
 		}
 	}

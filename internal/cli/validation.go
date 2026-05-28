@@ -8,12 +8,13 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 const generatedRequestSchemaURL = "restish-request-body.schema.json"
 
-func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, schema map[string]any, schemaDialect string) error {
+func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, schema map[string]any, schemaDialect string, color bool) error {
 	mediaType := strings.TrimSpace(contentType)
 	if mediaType != "" && !strings.Contains(mediaType, "/") && schemaMediaType != "" {
 		mediaType = schemaMediaType
@@ -59,7 +60,15 @@ func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, sc
 		return fmt.Errorf("compile request body schema: %w", err)
 	}
 	if err := compiled.Validate(body); err != nil {
-		return fmt.Errorf("request body failed OpenAPI schema validation: %s", formatJSONSchemaValidationError(err))
+		prefix := "request body failed OpenAPI schema validation"
+		if color {
+			prefix = output.StyleText("diagnostic_error", prefix)
+		}
+		details := formatJSONSchemaValidationError(err, color)
+		if strings.Contains(details, "\n") {
+			return fmt.Errorf("%s:\n%s", prefix, details)
+		}
+		return fmt.Errorf("%s: %s", prefix, details)
 	}
 	return nil
 }
@@ -258,7 +267,7 @@ func normalizeOpenAPIExclusiveBound(schema map[string]any, limitKey, exclusiveKe
 	}
 }
 
-func formatJSONSchemaValidationError(err error) string {
+func formatJSONSchemaValidationError(err error, color bool) string {
 	var validationErr *jsonschema.ValidationError
 	if !errors.As(err, &validationErr) {
 		return err.Error()
@@ -267,23 +276,56 @@ func formatJSONSchemaValidationError(err error) string {
 	if len(units) == 0 {
 		return validationErr.Error()
 	}
-	const maxErrors = 5
-	var parts []string
-	for i, unit := range units {
-		if i >= maxErrors {
-			parts = append(parts, fmt.Sprintf("and %d more", len(units)-maxErrors))
-			break
-		}
+	parts := validationOutputParts(units, color)
+	if len(parts) == 0 {
+		return validationErr.Error()
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return "  " + strings.Join(parts, "\n  ")
+}
+
+func validationOutputParts(units []jsonschema.OutputUnit, color bool) []string {
+	type validationOutputPart struct {
+		text    string
+		generic bool
+	}
+	var parts []validationOutputPart
+	for _, unit := range units {
 		msg := validationOutputMessage(unit.Error)
 		if msg == "" {
 			continue
 		}
-		parts = append(parts, jsonPointerDisplayPath(unit.InstanceLocation)+": "+msg)
+		generic := msg == "validation failed"
+		path := jsonPointerDisplayPath(unit.InstanceLocation)
+		if color {
+			path = output.StyleText("key", path)
+			msg = output.StyleText("diagnostic_error", msg)
+		}
+		parts = append(parts, validationOutputPart{
+			text:    path + ": " + msg,
+			generic: generic,
+		})
 	}
 	if len(parts) == 0 {
-		return validationErr.Error()
+		return nil
 	}
-	return strings.Join(parts, "; ")
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.generic {
+			continue
+		}
+		filtered = append(filtered, part.text)
+	}
+	if len(filtered) > 0 {
+		return filtered
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, part.text)
+	}
+	return out
 }
 
 func validationOutputLeaves(unit *jsonschema.OutputUnit) []jsonschema.OutputUnit {
