@@ -303,9 +303,9 @@ func parseProjectConfigFile(path string) (*config.Config, error) {
 	if err := decodeProjectConfigJSON(path, stripped, &raw); err != nil {
 		return nil, err
 	}
-	for key := range raw {
+	for _, key := range sortedProjectConfigKeys(raw) {
 		if key != "apis" && key != "theme" {
-			return nil, fmt.Errorf("project config: only apis and theme are supported in %s for now", projectConfigFileName)
+			return nil, fmt.Errorf("project config %s: unsupported top-level key %q; only apis and theme are supported for now", path, key)
 		}
 	}
 	var cfg config.Config
@@ -313,6 +313,15 @@ func parseProjectConfigFile(path string) (*config.Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func sortedProjectConfigKeys(raw map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(raw))
+	for key := range raw {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (c *CLI) validateProjectConfigNoInlineSecrets(project *projectConfigState, cfg *config.Config) error {

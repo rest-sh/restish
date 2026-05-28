@@ -525,6 +525,61 @@ func TestCacheInfoShowsAndClearsUnregisteredNamespace(t *testing.T) {
 	}
 }
 
+func TestCacheInfoShowsProjectAPINamespaceAsRegistered(t *testing.T) {
+	var hits atomic.Int32
+	srv := newCacheableServer(t, &hits)
+	_, _, projectDir := setupProjectConfigTest(t)
+	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
+  "apis": {
+    "svc": {"base_url": "`+srv.URL+`"}
+  }
+}`)
+	t.Chdir(projectDir)
+
+	trust, _, _ := newProjectConfigTestCLI(t)
+	if err := trust.Run([]string{"restish", "config", "trust"}); err != nil {
+		t.Fatalf("config trust: %v", err)
+	}
+
+	prime, _, _ := newProjectConfigTestCLI(t)
+	if err := prime.Run([]string{"restish", "get", "svc"}); err != nil {
+		t.Fatalf("get svc: %v", err)
+	}
+
+	info, out, _ := newProjectConfigTestCLI(t)
+	if err := info.Run([]string{"restish", "cache", "info"}); err != nil {
+		t.Fatalf("cache info: %v", err)
+	}
+	got := out.String()
+	requireContains(t, got, "Largest APIs/profiles:", "svc (default)", "100.0%")
+	if strings.Contains(got, "unregistered") || strings.Contains(got, "project-") {
+		t.Fatalf("cache info output = %q, want project API shown as registered logical API", got)
+	}
+
+	jsonInfo, jsonOut, _ := newProjectConfigTestCLI(t)
+	if err := jsonInfo.Run([]string{"restish", "cache", "info", "-o", "json"}); err != nil {
+		t.Fatalf("cache info json: %v", err)
+	}
+	var decoded struct {
+		TopAPIProfiles []struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			API       string `json:"api"`
+			Profile   string `json:"profile"`
+		} `json:"top_api_profiles"`
+	}
+	if err := json.Unmarshal(jsonOut.Bytes(), &decoded); err != nil {
+		t.Fatalf("parse cache info JSON: %v\n%s", err, jsonOut.String())
+	}
+	if len(decoded.TopAPIProfiles) == 0 {
+		t.Fatalf("cache info JSON top_api_profiles empty: %s", jsonOut.String())
+	}
+	top := decoded.TopAPIProfiles[0]
+	if top.Name != "svc (default)" || top.API != "svc" || top.Profile != "default" || !strings.HasPrefix(top.Namespace, "project-") {
+		t.Fatalf("top API profile = %#v, want logical project API with project namespace", top)
+	}
+}
+
 func TestCacheInfoTTYShowsTreemap(t *testing.T) {
 	cacheDir := t.TempDir()
 	demoCache, err := cachepkg.New(cacheDir, cachepkg.DefaultMaxBytes, "demo:default")

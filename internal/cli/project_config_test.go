@@ -168,7 +168,8 @@ func TestProjectConfigShowOmitsEmptyAPIList(t *testing.T) {
 
 func TestProjectConfigRejectsEmptyUnsupportedTopLevelKeys(t *testing.T) {
 	_, _, projectDir := setupProjectConfigTest(t)
-	writeProjectConfigTestFile(t, filepath.Join(projectDir, ".restish.json"), `{
+	projectPath := filepath.Join(projectDir, ".restish.json")
+	writeProjectConfigTestFile(t, projectPath, `{
   "apis": {},
   "auth_profiles": {}
 }`)
@@ -176,8 +177,14 @@ func TestProjectConfigRejectsEmptyUnsupportedTopLevelKeys(t *testing.T) {
 
 	c, _, _ := newProjectConfigTestCLI(t)
 	err := c.Run([]string{"restish", "config", "trust"})
-	if err == nil || !strings.Contains(err.Error(), "only apis and theme are supported") {
-		t.Fatalf("config trust err = %v, want unsupported top-level key error", err)
+	if err == nil {
+		t.Fatal("config trust err = nil, want unsupported top-level key error")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "unsupported top-level key \"auth_profiles\"") ||
+		!strings.Contains(got, projectPath) ||
+		!strings.Contains(got, "only apis and theme are supported") {
+		t.Fatalf("config trust err = %v, want path and unsupported top-level key", err)
 	}
 }
 
