@@ -97,6 +97,19 @@ func TestAPIKeyAuthenticateDoesNotOverwriteExistingValues(t *testing.T) {
 			},
 		},
 		{
+			name:     "preserved-case header",
+			location: "header",
+			setup:    func(req *http.Request) { req.Header["X-SourceSystem"] = []string{"manual"} },
+			want: func(t *testing.T, req *http.Request) {
+				if got := req.Header["X-SourceSystem"]; len(got) != 1 || got[0] != "manual" {
+					t.Fatalf("X-SourceSystem = %#v, want manual", got)
+				}
+				if got := req.Header["X-Sourcesystem"]; len(got) != 0 {
+					t.Fatalf("canonicalized header was added: %#v", req.Header)
+				}
+			},
+		},
+		{
 			name:     "query",
 			location: "query",
 			setup: func(req *http.Request) {

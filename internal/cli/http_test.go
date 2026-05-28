@@ -372,6 +372,131 @@ func TestHTTPHeader(t *testing.T) {
 	}
 }
 
+func TestHTTPPreserveHeaderCaseForProfileAndFlagHeaders(t *testing.T) {
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"preserve_header_case": true,
+				"profiles": {
+					"default": {
+						"headers": ["X-SourceSystem: profile"]
+					}
+				}
+			}
+		}
+	}`
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-H", "X-RequestID: flag", "myapi/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	header := rr.Last().Header
+	if got := header["X-SourceSystem"]; len(got) != 1 || got[0] != "profile" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved profile header", got)
+	}
+	if got := header["X-RequestID"]; len(got) != 1 || got[0] != "flag" {
+		t.Fatalf("X-RequestID = %#v, want preserved flag header", got)
+	}
+	if _, ok := header["X-Sourcesystem"]; ok {
+		t.Fatalf("profile header was canonicalized: %#v", header)
+	}
+	if _, ok := header["X-Requestid"]; ok {
+		t.Fatalf("flag header was canonicalized: %#v", header)
+	}
+}
+
+func TestHTTPPreserveHeaderCaseForAPIKeyAuth(t *testing.T) {
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"preserve_header_case": true,
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "api-key",
+							"params": {
+								"in": "header",
+								"name": "X-SourceSystem",
+								"value": "secret"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	header := rr.Last().Header
+	if got := header["X-SourceSystem"]; len(got) != 1 || got[0] != "secret" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved api-key header", got)
+	}
+	if _, ok := header["X-Sourcesystem"]; ok {
+		t.Fatalf("api-key header was canonicalized: %#v", header)
+	}
+}
+
+func TestHTTPPreserveHeaderCaseDoesNotRewriteManualAPIKeyHeader(t *testing.T) {
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com",
+				"preserve_header_case": true,
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "api-key",
+							"params": {
+								"in": "header",
+								"name": "X-SourceSystem",
+								"value": "secret"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "-H", "x-sourcesystem: manual", "myapi/items"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	header := rr.Last().Header
+	if got := header["x-sourcesystem"]; len(got) != 1 || got[0] != "manual" {
+		t.Fatalf("x-sourcesystem = %#v, want manual header with user casing", got)
+	}
+	if got := header["X-SourceSystem"]; len(got) != 0 {
+		t.Fatalf("manual API-key header was rewritten: %#v", header)
+	}
+	if got := header["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("auth added canonicalized duplicate: %#v", header)
+	}
+}
+
 func TestHTTPHostHeader(t *testing.T) {
 	var rr requestRecorder
 	c, _, _ := newTestCLI(t)

@@ -686,6 +686,44 @@ func TestGeneratedCommandVerboseRedactsUncommonAPIKeyHeader(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandPreservesOperationAPIKeyHeaderCase(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return openAPIGetSpec(baseURL, "Auth API", "/protected", "getProtected",
+			openAPISecurity(`{"SourceSystem":[]}`),
+			openAPISecuritySchemes(`"SourceSystem":{"type":"apiKey","in":"header","name":"X-SourceSystem"}`))
+	})
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:            env.baseURL(t),
+		PreserveHeaderCase: true,
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {
+				Credentials: map[string]*config.CredentialConfig{
+					"SourceSystem": testCredential(apiKeyAuth("header", "X-SourceSystem", "secret")),
+				},
+			},
+		},
+	})
+
+	c := env.newCLI()
+	var gotHeader http.Header
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		gotHeader = r.Header.Clone()
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "tapi", "get-protected"}); err != nil {
+		t.Fatalf("get-protected failed: %v", err)
+	}
+	if got := gotHeader["X-SourceSystem"]; len(got) != 1 || got[0] != "secret" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved generated API-key header", got)
+	}
+	if got := gotHeader["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("canonicalized generated API-key header was left behind: %#v", gotHeader)
+	}
+}
+
 func TestGeneratedCommandVerboseRedactsUncommonAPIKeyQuery(t *testing.T) {
 	var gotQuery url.Values
 	mux := http.NewServeMux()
@@ -4901,6 +4939,81 @@ func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
 	}
 	if gotInferencePath != "/v1/models" {
 		t.Fatalf("inference path = %q, want /v1/models", gotInferencePath)
+	}
+}
+
+func TestGeneratedCommandCrossOriginOperationServerPreservesHeaderCase(t *testing.T) {
+	operationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(operationServer.Close)
+
+	controlMux := http.NewServeMux()
+	control := httptest.NewServer(controlMux)
+	t.Cleanup(control.Close)
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Control API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "servers": [{"url": %q}],
+        "parameters": [
+          {"name": "X-SourceSystem", "in": "header", "schema": {"type": "string"}}
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, control.URL, operationServer.URL)
+	controlMux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	controlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	cacheDir := t.TempDir()
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL:                 control.URL,
+			AllowedOperationOrigins: []string{operationServer.URL},
+			PreserveHeaderCase:      true,
+		},
+	}})
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		return c
+	}
+
+	if err := newCLI().Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	var gotHeader http.Header
+	c := newCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		gotHeader = r.Header.Clone()
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "tapi", "list-models", "--x-source-system", "demo"}); err != nil {
+		t.Fatalf("list-models with allowed origin: %v", err)
+	}
+	if got := gotHeader["X-SourceSystem"]; len(got) != 1 || got[0] != "demo" {
+		t.Fatalf("X-SourceSystem = %#v, want preserved operation server header param; headers=%#v", got, gotHeader)
+	}
+	if got := gotHeader["X-Sourcesystem"]; len(got) != 0 {
+		t.Fatalf("operation server header param was canonicalized: %#v", gotHeader)
 	}
 }
 

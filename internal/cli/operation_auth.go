@@ -415,8 +415,12 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 	if err := c.ensureOAuthAuthorizationCodeReady(s.authType, s.cacheKey, s.apiName, s.profileName); err != nil {
 		return err
 	}
+	preserveInsertedHeader := c.apiPreservesHeaderCase(s.apiName) && !authHeaderPresent(req.Header, s.authType, params)
 	if err := s.handler.Authenticate(req.Context(), req, c.authContext(req.Context(), s.apiName, s.profileName, params, s.cacheKey, force)); err != nil {
 		return err
+	}
+	if preserveInsertedHeader {
+		preserveAuthHeaderCase(req, s.authType, params)
 	}
 	markAuthCredentialTargets(req, s.authType, params)
 	return nil
