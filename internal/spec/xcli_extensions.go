@@ -106,6 +106,7 @@ func (b *xcliExtensionReportBuilder) addOperationDetails(method, rawPath string,
 	name := op.OperationId
 	if OpExtBool(op, "x-cli-ignore") {
 		b.add("operation_ignored", "x-cli-ignore", location, name, "true", "removes this operation from generated commands")
+		return
 	}
 	if OpExtBool(op, "x-cli-hidden") {
 		b.add("operation_hidden", "x-cli-hidden", location, name, "true", "hides this operation from generated help")
@@ -124,6 +125,7 @@ func (b *xcliExtensionReportBuilder) addOperationDetails(method, rawPath string,
 		paramName := param.In + " " + param.Name
 		if ParamExtBool(param, "x-cli-ignore") {
 			b.add("parameter_ignored", "x-cli-ignore", paramLocation, paramName, "true", "removes this parameter from the generated command")
+			continue
 		}
 		if ParamExtBool(param, "x-cli-hidden") {
 			b.add("parameter_hidden", "x-cli-hidden", paramLocation, paramName, "true", "hides this parameter from generated help")

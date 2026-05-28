@@ -31,6 +31,9 @@ paths:
     get:
       operationId: ignoredOp
       x-cli-ignore: true
+      x-cli-hidden: true
+      x-cli-name: renamed-ignored
+      x-cli-aliases: [ig]
       responses:
         "200": {}
   /items/{id}:
@@ -56,6 +59,8 @@ paths:
           schema:
             type: string
           x-cli-ignore: true
+          x-cli-hidden: true
+          x-cli-name: ignored-internal
       responses:
         "200": {}`)
 	loaded, err := (OpenAPILoader{}).Load(raw)
