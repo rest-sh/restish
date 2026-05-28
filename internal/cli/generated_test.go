@@ -3633,6 +3633,42 @@ func TestGeneratedCommandTraceOperation(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandNoContentWithEncodingHeader(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Delete API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items/{id}": {
+      "delete": {
+        "operationId": "deleteItem",
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {"204": {"description": "Deleted"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "delete-item", "123"}); err != nil {
+		t.Fatalf("delete-item failed: %v", err)
+	}
+	if got := out.String(); got != "" {
+		t.Fatalf("generated no-content output = %q, want empty", got)
+	}
+}
+
 func TestGeneratedCommandIgnoresReservedHeaderParameters(t *testing.T) {
 	var gotAuth string
 	mux := http.NewServeMux()

@@ -1004,6 +1004,86 @@ func TestExplicitPrintBodyNoContentNonTTYWritesNothing(t *testing.T) {
 	}
 }
 
+func TestExplicitPrintBodyBodylessEncodedResponsesWriteNothing(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		status   int
+		encoding string
+	}{
+		{
+			name:     "204 gzip",
+			args:     []string{"restish", "get", "--rsh-print", "b", "https://api.example.com/empty"},
+			status:   http.StatusNoContent,
+			encoding: "gzip",
+		},
+		{
+			name:     "205 br",
+			args:     []string{"restish", "get", "--rsh-print", "b", "https://api.example.com/reset"},
+			status:   http.StatusResetContent,
+			encoding: "br",
+		},
+		{
+			name:     "304 gzip",
+			args:     []string{"restish", "get", "--rsh-ignore-status-code", "--rsh-print", "b", "https://api.example.com/not-modified"},
+			status:   http.StatusNotModified,
+			encoding: "gzip",
+		},
+		{
+			name:     "HEAD gzip",
+			args:     []string{"restish", "head", "--rsh-print", "b", "https://api.example.com/head"},
+			status:   http.StatusOK,
+			encoding: "gzip",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: tt.status,
+					Proto:      "HTTP/1.1",
+					Header: http.Header{
+						"Content-Type":     []string{"application/json"},
+						"Content-Encoding": []string{tt.encoding},
+					},
+					Body:    io.NopCloser(strings.NewReader("not a compressed body")),
+					Request: r,
+				}, nil
+			})
+			if err := c.Run(tt.args); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if got := out.String(); got != "" {
+				t.Fatalf("body output = %q, want empty", got)
+			}
+		})
+	}
+}
+
+func TestExplicitPrintBodyEncodedEmptyOKStillFails(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header: http.Header{
+				"Content-Type":     []string{"application/json"},
+				"Content-Encoding": []string{"gzip"},
+			},
+			Body:    http.NoBody,
+			Request: r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "get", "--rsh-print", "b", "https://api.example.com/empty"})
+	if err == nil {
+		t.Fatal("expected empty gzip body on 200 OK to fail")
+	}
+	if !strings.Contains(err.Error(), "decompressing response") {
+		t.Fatalf("error = %v, want decompression error", err)
+	}
+}
+
 func TestExplicitPrintBodyJSONNullNonTTYWritesNull(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	useJSONResponse(c, 200, "null")
