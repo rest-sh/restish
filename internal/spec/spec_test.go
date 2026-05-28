@@ -1,6 +1,9 @@
 package spec
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -213,6 +216,240 @@ func TestOpenAPILoader_Load_BadPathsShape(t *testing.T) {
 	body := []byte(`{"openapi":"3.1.0","info":{"title":"T","version":"1"},"paths":"not-an-object"}`)
 	// libopenapi may or may not error; the important thing is it doesn't panic.
 	_, _ = l.Load(body)
+}
+
+func TestOpenAPILoader_Load_IgnoresDescriptionRefObjects(t *testing.T) {
+	raw := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+  description:
+    $ref: markdown/info.md
+tags:
+  - name: widgets
+    description:
+      $ref: markdown/widgets.md
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: q
+          in: query
+          description:
+            $ref: markdown/query.md
+          schema:
+            type: string
+      responses:
+        "200":
+          description:
+            $ref: markdown/ok.md`)
+	l := OpenAPILoader{}
+	s, err := l.Load(raw)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	info, err := s.Info()
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	if info.Description != "" {
+		t.Fatalf("description = %q, want ignored", info.Description)
+	}
+	ops, err := s.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "listItems" {
+		t.Fatalf("operations = %#v", ops)
+	}
+	if len(ops[0].Parameters) != 1 || ops[0].Parameters[0].Desc != "" {
+		t.Fatalf("parameter description = %#v, want ignored", ops[0].Parameters)
+	}
+}
+
+func TestOpenAPILoader_Load_DescriptionRefObjectDoesNotFetchExternalDoc(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "openapi.yaml")
+	raw := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+tags:
+  - name: widgets
+    description:
+      $ref: missing.md
+paths: {}`)
+	if err := os.WriteFile(specPath, raw, 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	l := OpenAPILoader{}
+	if _, err := l.LoadWithOptions(raw, LoadOptions{LocalPath: specPath}); err != nil {
+		t.Fatalf("load should not fetch description ref: %v", err)
+	}
+}
+
+func TestOpenAPILoader_Load_ExternalDocDescriptionRefObjectDoesNotFetchMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	componentsPath := filepath.Join(dir, "components.yaml")
+	root := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: components.yaml#/components/schemas/Item`)
+	components := []byte(`components:
+  schemas:
+    Item:
+      type: object
+      description:
+        $ref: missing.md
+      properties:
+        id:
+          type: string`)
+	if err := os.WriteFile(rootPath, root, 0o600); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(componentsPath, components, 0o600); err != nil {
+		t.Fatalf("write components: %v", err)
+	}
+	l := OpenAPILoader{}
+	s, err := l.LoadWithOptions(root, LoadOptions{LocalPath: rootPath})
+	if err != nil {
+		t.Fatalf("load should not fetch external doc description ref: %v", err)
+	}
+	ops, err := s.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("Operations: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "listItems" {
+		t.Fatalf("operation response help = %#v", ops)
+	}
+}
+
+func TestOpenAPILoader_Load_ExternalDocRootDescriptionEntryPreservesRealRef(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "openapi.yaml")
+	schemasPath := filepath.Join(dir, "schemas.yaml")
+	commonPath := filepath.Join(dir, "common.yaml")
+	root := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: schemas.yaml#/description`)
+	schemas := []byte(`description:
+  $ref: common.yaml#/Description`)
+	common := []byte(`Description:
+  type: string`)
+	if err := os.WriteFile(rootPath, root, 0o600); err != nil {
+		t.Fatalf("write root: %v", err)
+	}
+	if err := os.WriteFile(schemasPath, schemas, 0o600); err != nil {
+		t.Fatalf("write schemas: %v", err)
+	}
+	if err := os.WriteFile(commonPath, common, 0o600); err != nil {
+		t.Fatalf("write common: %v", err)
+	}
+	resolved, err := resolveOpenAPIExternalRefs(root, LoadOptions{LocalPath: rootPath})
+	if err != nil {
+		t.Fatalf("resolve refs: %v", err)
+	}
+	if !strings.Contains(string(resolved), "type: string") {
+		t.Fatalf("external root entry named description was not resolved:\n%s", resolved)
+	}
+}
+
+func TestSanitizeOpenAPIDescriptionRefsPreservesSchemaProperties(t *testing.T) {
+	raw := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  schemas:
+    StringValue:
+      type: string
+    Item:
+      type: object
+      properties:
+        description:
+          $ref: "#/components/schemas/StringValue"`)
+	sanitized, err := sanitizeOpenAPIDescriptionRefs(raw)
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if string(sanitized) != string(raw) {
+		t.Fatalf("schema property named description should be preserved:\n%s", sanitized)
+	}
+}
+
+func TestSanitizeOpenAPIDescriptionRefsIgnoresRootSchemaDescriptionRef(t *testing.T) {
+	raw := []byte(`type: object
+description:
+  $ref: markdown/schema.md
+properties:
+  id:
+    type: string`)
+	sanitized, err := sanitizeOpenAPIDescriptionRefs(raw)
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if strings.Contains(string(sanitized), "markdown/schema.md") {
+		t.Fatalf("root schema description ref should be ignored:\n%s", sanitized)
+	}
+}
+
+func TestSanitizeOpenAPIDescriptionRefsPreservesArbitraryNamedMaps(t *testing.T) {
+	raw := []byte(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+webhooks:
+  description:
+    $ref: "#/components/pathItems/Hook"
+components:
+  pathItems:
+    Hook:
+      post:
+        responses:
+          "200":
+            description: OK
+  schemas:
+    Item:
+      type: object
+      dependentSchemas:
+        description:
+          $ref: "#/components/schemas/StringValue"
+    StringValue:
+      type: string`)
+	sanitized, err := sanitizeOpenAPIDescriptionRefs(raw)
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if string(sanitized) != string(raw) {
+		t.Fatalf("arbitrary named map entries should be preserved:\n%s", sanitized)
+	}
 }
 
 // ---- V3Model memoization ---------------------------------------------------
