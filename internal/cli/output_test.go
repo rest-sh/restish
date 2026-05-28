@@ -1015,6 +1015,26 @@ func TestExplicitPrintBodyJSONNullNonTTYWritesNull(t *testing.T) {
 	}
 }
 
+func TestMsgpackMalformedResponseReturnsDecodeError(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/msgpack"}},
+			Body:       io.NopCloser(bytes.NewReader([]byte{0xd6, 0xff})),
+			Request:    r,
+		}, nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "json", "https://api.example.com/bad-msgpack"})
+	if err == nil {
+		t.Fatal("expected malformed msgpack response to fail")
+	}
+	if !strings.Contains(err.Error(), "decoding response body as application/msgpack") {
+		t.Fatalf("error = %v, want msgpack decode error", err)
+	}
+}
+
 func TestStructuredJSONResponseDefaultNonTTYPreservesOriginalBytes(t *testing.T) {
 	raw := "{\n  \"ok\": true\n}\n"
 	c, out, _ := newTestCLI(t)
