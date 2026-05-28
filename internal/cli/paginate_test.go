@@ -797,6 +797,291 @@ func TestPaginationItemsPath(t *testing.T) {
 	}
 }
 
+func TestPaginationPageParamGenericRequestStopsOnEmptyPage(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url": "https://api.example.com",
+				"pagination": map[string]any{
+					"page_param": "page",
+				},
+			},
+		},
+	})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	var pages []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		page := r.URL.Query().Get("page")
+		pages = append(pages, page)
+		body := `[{"id":1}]`
+		switch page {
+		case "2":
+			body = `[{"id":2}]`
+		case "3":
+			body = `[]`
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var values []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 2 || values[0]["id"] != 1 || values[1]["id"] != 2 {
+		t.Fatalf("values = %#v, want ids 1 and 2", values)
+	}
+	if got, want := strings.Join(pages, ","), ",2,3"; got != want {
+		t.Fatalf("page params = %q, want %q", got, want)
+	}
+}
+
+func TestPaginationPageParamPreservesFlagQuery(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"page_param": "page"},
+				"profiles": map[string]any{
+					"default": map[string]any{
+						"query": []string{"profile=prod"},
+					},
+				},
+			},
+		},
+	})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	var queries []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		queries = append(queries, r.URL.RawQuery)
+		page := r.URL.Query().Get("page")
+		body := `[{"id":3}]`
+		switch page {
+		case "4":
+			body = `[{"id":4}]`
+		case "5":
+			body = `[]`
+		}
+		if got := r.URL.Query().Get("limit"); got != "2" {
+			t.Fatalf("limit query = %q, want 2", got)
+		}
+		if got := r.URL.Query().Get("profile"); got != "prod" {
+			t.Fatalf("profile query = %q, want prod", got)
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-q", "page=3", "-q", "limit=2", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var values []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 2 || values[0]["id"] != 3 || values[1]["id"] != 4 {
+		t.Fatalf("values = %#v, want ids 3 and 4", values)
+	}
+	for _, want := range []string{"page=3", "page=4", "page=5"} {
+		if !strings.Contains(strings.Join(queries, "\n"), want) {
+			t.Fatalf("queries %#v missing %q", queries, want)
+		}
+	}
+}
+
+func TestPaginationPageParamUsesExplicitNextFromLaterPage(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"page_param": "page"},
+			},
+		},
+	})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	var queries []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		queries = append(queries, r.URL.RawQuery)
+		headers := http.Header{"Content-Type": []string{"application/json"}}
+		body := `[{"id":1}]`
+		switch {
+		case r.URL.Query().Get("page") == "2":
+			body = `[]`
+			headers.Set("Link", `<https://api.example.com/items?cursor=abc>; rel="next"`)
+		case r.URL.Query().Get("cursor") == "abc":
+			body = `[{"id":3}]`
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     headers,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var values []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 2 || values[0]["id"] != 1 || values[1]["id"] != 3 {
+		t.Fatalf("values = %#v, want ids 1 and 3", values)
+	}
+	if got, want := strings.Join(queries, ","), ",page=2,cursor=abc"; got != want {
+		t.Fatalf("queries = %q, want %q", got, want)
+	}
+}
+
+func TestPaginationPageParamItemsPathPreservesWrapper(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url": "https://api.example.com",
+				"pagination": map[string]any{
+					"items_path": "data",
+					"page_param": "page",
+				},
+			},
+		},
+	})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		body := `{"data":[{"id":1}],"meta":{"page":1}}`
+		switch r.URL.Query().Get("page") {
+		case "2":
+			body = `{"data":[{"id":2}],"meta":{"page":2}}`
+		case "3":
+			body = `{"data":[],"meta":{"page":3}}`
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	var doc struct {
+		Data []map[string]int `json:"data"`
+		Meta map[string]int   `json:"meta"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("expected wrapped JSON output, got %q: %v", out.String(), err)
+	}
+	if len(doc.Data) != 2 || doc.Data[0]["id"] != 1 || doc.Data[1]["id"] != 2 {
+		t.Fatalf("data = %#v, want ids 1 and 2", doc.Data)
+	}
+	if doc.Meta["page"] != 1 {
+		t.Fatalf("meta = %#v, want first page wrapper metadata", doc.Meta)
+	}
+}
+
+func TestPaginationPageParamLaterHTTPErrorStopsSuccessfully(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"page_param": "page"},
+			},
+		},
+	})
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Query().Get("page") == "2" {
+			return &http.Response{
+				StatusCode: 404,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
+				Request:    r,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	var values []map[string]int
+	if err := json.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", out.String(), err)
+	}
+	if len(values) != 1 || values[0]["id"] != 1 {
+		t.Fatalf("values = %#v, want only first page", values)
+	}
+	if !strings.Contains(errOut.String(), "pagination page 2 returned HTTP 404; stopping") {
+		t.Fatalf("expected stopping warning, got %q", errOut.String())
+	}
+}
+
+func TestPaginationPageParamFirstHTTPErrorStillFails(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url":   "https://api.example.com",
+				"pagination": map[string]any{"page_param": "page"},
+			},
+		},
+	})
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 500,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`[{"id":1}]`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"})
+	if exitCode(err) != 5 {
+		t.Fatalf("exit code = %d, want 5 (err=%v)", exitCode(err), err)
+	}
+}
+
 // TestPaginationProgressOnStderr verifies that progress output goes to stderr
 // not stdout when paginating.
 func TestPaginationProgressOnStderr(t *testing.T) {

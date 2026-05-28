@@ -406,7 +406,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
 		}
-		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg, prepared)
+		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg, prepared, bodyOpts.explicitAPIName != "")
 		if err != nil {
 			return err
 		}

@@ -268,6 +268,7 @@ func (e *generatedEnv) newCLI() *cli.CLI {
 	c.Stderr = io.Discard
 	c.Hooks().ConfigPath = e.cfgFile
 	c.Hooks().SpecCachePath = e.cacheDir
+	c.Hooks().CachePath = filepath.Join(e.cacheDir, "http-cache")
 	c.Hooks().RetryBaseDelay = 0
 	return c
 }
@@ -605,6 +606,84 @@ func TestGeneratedCommandKebabCase(t *testing.T) {
 	c := env.newCLI()
 	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
 		t.Fatalf("list-items failed: %v", err)
+	}
+}
+
+func TestGeneratedCommandPageParamPaginationRequiresPresentParam(t *testing.T) {
+	var pages []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		pages = append(pages, page)
+		w.Header().Set("Content-Type", "application/json")
+		body := `[{"id":1}]`
+		switch page {
+		case "2":
+			body = `[{"id":2}]`
+		case "3":
+			body = `[]`
+		}
+		fmt.Fprint(w, body)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:    env.baseURL(t),
+		Pagination: &config.PaginationConfig{PageParam: "page"},
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-o", "json"}); err != nil {
+		t.Fatalf("list-items without page failed: %v", err)
+	}
+	var firstOnly []map[string]int
+	if err := json.Unmarshal([]byte(out.String()), &firstOnly); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(firstOnly) != 1 || firstOnly[0]["id"] != 1 {
+		t.Fatalf("without --page output = %#v, want first page only", firstOnly)
+	}
+	if got, want := strings.Join(pages, ","), ""; got != want {
+		t.Fatalf("without --page saw page params %q, want %q", got, want)
+	}
+
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "--page", "1", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with page failed: %v", err)
+	}
+	var allPages []map[string]int
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with --page output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with --page saw page params %q, want %q", got, want)
 	}
 }
 

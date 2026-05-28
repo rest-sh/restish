@@ -56,6 +56,31 @@ Configured `pagination.items_path` and `pagination.next_path` are strict: a
 typo, missing configured field, wrong body type, or non-string `next_path`
 result returns an error instead of silently truncating the collection.
 
+## APIs Without Next Links
+
+Some APIs paginate with a numeric query parameter but do not return a `next`
+link. Configure the API with `pagination.page_param` to let Restish increment
+that parameter when the first response is a collection:
+
+```json
+{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "pagination": { "page_param": "page" }
+    }
+  }
+}
+```
+
+Generic requests start at the URL you pass and request the next page by
+incrementing the configured parameter. Generated operations use this mode only
+when the operation request already includes that parameter, for example
+`restish example list-items --page 1`.
+Pagination stops when a synthesized page returns an empty collection. If a
+later synthesized page returns an HTTP error, Restish treats that as the end of
+the sequence and prints a warning, while first-page HTTP errors still fail.
+
 ## Collect Before Filtering
 
 Without `--rsh-collect`, filters run once for each paginated item. Each item is

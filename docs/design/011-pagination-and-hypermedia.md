@@ -117,9 +117,15 @@ Per-API pagination config can refine how page data is interpreted:
 
 - `items_path` extracts the collection from a nested body field
 - `next_path` can extract a next-page URL from the body
+- `page_param` names a query parameter to increment when an API has no `next`
+  link or configured `next_path`
 
 This lets Restish handle both standard hypermedia and APIs whose collection
-wrappers need one extra hint.
+wrappers need one extra hint. `page_param` is explicit API config rather than
+autodetection. For generic requests, it applies only when the body, or the
+configured `items_path`, is an array. For generated operations, it applies only
+when the generated request URL already contains that query parameter, such as
+from a user-provided generated command flag.
 Configured pagination paths are treated as user-authored config, not as
 best-effort guesses. Invalid `items_path` or `next_path` expressions, missing
 configured fields, non-object bodies where an object is required, and
@@ -128,6 +134,9 @@ partial collection. A scalar `items_path` result is still rendered as a single
 item with a warning so users can correct the shape without losing the response.
 If a later page returns an HTTP error, Restish stops pagination and returns that
 status instead of discarding the error and formatting a partial collection.
+Synthesized `page_param` pagination is the exception: a later-page HTTP error
+stops successfully with a warning, because some APIs signal the end of an
+unsupported or out-of-range page sequence with an error status.
 
 Filters that select response metadata rather than body records normally disable
 automatic pagination. For example, `-f headers`, `-f headers.Date`, and
@@ -196,9 +205,13 @@ The conceptual paginator algorithm is:
 4. emit or collect items from the current page according to the output plan
 5. resolve the next target from:
    - normalized `next` relation, or
-   - configured `next_path`
+   - configured `next_path`, or
+   - configured `page_param` when no explicit next target exists and the
+     response shape is a collection
 6. stop when:
    - there is no next target
+   - a synthesized `page_param` request returns an empty collection
+   - a synthesized `page_param` request returns an HTTP error
    - a safety bound is reached
    - the context is canceled
    - the planner no longer permits more pages

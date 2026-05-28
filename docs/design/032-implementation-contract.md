@@ -101,6 +101,7 @@ API fields:
 | `retry_max_wait` | string duration | API-local cap for `Retry-After`/`X-Retry-In` when no flag/env override is set. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
+| `pagination.page_param` | string | Query parameter to increment for APIs without next links. |
 | `profiles` | map | Profile configs keyed by name. |
 
 Profile fields are `base_url`, `headers`, `query`, `tls_signer`,
