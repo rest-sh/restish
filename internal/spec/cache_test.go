@@ -183,6 +183,34 @@ func TestLoadStaleFromCacheAllowsExpiredRemoteSpec(t *testing.T) {
 	}
 }
 
+func TestRawSpecCacheStatusReportsExpiredRemoteSpec(t *testing.T) {
+	dir := t.TempDir()
+	fetchedAt := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	expiresAt := time.Now().Add(-24 * time.Hour).Truncate(time.Second)
+	entry := &cacheEntry{
+		Version:     "v2",
+		FetchedAt:   fetchedAt,
+		ExpiresAt:   expiresAt,
+		ContentType: "application/json",
+		Raw:         []byte(testSpecRaw),
+	}
+	writeCache(dir, "testapi", entry)
+
+	status, ok := RawSpecCacheStatus(dir, "testapi", "v2", nil)
+	if !ok {
+		t.Fatal("expected raw spec cache status")
+	}
+	if !status.Stale {
+		t.Fatal("expected expired raw spec to report stale")
+	}
+	if !status.FetchedAt.Equal(fetchedAt) {
+		t.Fatalf("fetched_at = %v, want %v", status.FetchedAt, fetchedAt)
+	}
+	if !status.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("expires_at = %v, want %v", status.ExpiresAt, expiresAt)
+	}
+}
+
 func TestLoadFromCache_Miss(t *testing.T) {
 	spec, err := LoadFromCache(t.TempDir(), "nonexistent", "v2", nil, DefaultLoaders())
 	if err != nil {

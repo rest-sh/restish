@@ -551,6 +551,53 @@ func TestGeneratedCommandRefreshesStaleOperationCacheOnUse(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandRefreshesStaleRawSpecWhenOperationCacheMissing(t *testing.T) {
+	var specHits atomic.Int32
+	mux := http.NewServeMux()
+	var serverURL string
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		specHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specWithOperations(serverURL))
+	})
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	serverURL = srv.URL
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	env := &generatedEnv{cfgFile: cfgFile, cacheDir: t.TempDir()}
+	syncCLI := env.newCLI()
+	if err := syncCLI.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	hitsAfterSync := specHits.Load()
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	removeGeneratedOperationCache(t, env.cacheDir, "tapi")
+
+	c := env.newCLI()
+	var out strings.Builder
+	c.Stdout = &out
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("generated command from stale raw spec: %v", err)
+	}
+	if got := specHits.Load(); got <= hitsAfterSync {
+		t.Fatalf("expected stale raw spec command to refresh spec metadata; spec hits before=%d after=%d", hitsAfterSync, got)
+	}
+}
+
 func TestGeneratedCommandUsesOperationCacheForExternalRefsOffline(t *testing.T) {
 	var paramsAvailable atomic.Bool
 	paramsAvailable.Store(true)

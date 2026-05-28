@@ -267,6 +267,27 @@ func LoadOperationSetFromCacheStatus(cacheDir, apiName, version string, specFile
 	return OperationSet{}, status, false
 }
 
+// RawSpecCacheStatus reports the freshness of the cached raw spec. Expired
+// remote specs can still report status; local spec file changes invalidate the
+// cache because the local source is authoritative.
+func RawSpecCacheStatus(cacheDir, apiName, version string, specFiles []string) (OperationCacheStatus, bool) {
+	entry, ok := readCacheEntry(cacheDir, apiName, version, true)
+	if !ok {
+		return OperationCacheStatus{}, false
+	}
+	if !cacheSpecFilesMatch(specFiles, entry) {
+		return OperationCacheStatus{}, false
+	}
+	if specFilesChangedSince(specFiles, entry.FetchedAt) {
+		return OperationCacheStatus{}, false
+	}
+	return OperationCacheStatus{
+		FetchedAt: entry.FetchedAt,
+		ExpiresAt: entry.ExpiresAt,
+		Stale:     !entry.ExpiresAt.IsZero() && time.Now().After(entry.ExpiresAt),
+	}, true
+}
+
 // StoreOperationSetInCache updates an existing raw cache entry with extracted
 // operations and API metadata. It is best-effort for callers; failed upgrades
 // should not make startup fail when the raw cache can still be parsed. Expired
