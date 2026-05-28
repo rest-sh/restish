@@ -2209,6 +2209,7 @@
   }
 
   function setOutput(node, output, isError, highlight = true, language = "language-readable") {
+    highlight = highlight && !isError;
     node.replaceChildren();
     if (output && typeof output === "object" && output.kind === "image") {
       node.textContent = output.text || "";
