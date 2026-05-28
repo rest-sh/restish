@@ -4627,6 +4627,60 @@ func TestGeneratedCommandsResolveProfileOperationBaseAtExecutionTime(t *testing.
 	}
 }
 
+func TestGeneratedFallbackCommandNameUsesProfileOperationBase(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/api/rest/foo": {
+      "get": {
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+	cfg, err := config.Load(env.cfgFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	baseURL := cfg.APIs["tapi"].BaseURL
+	cfg.APIs["tapi"].Profiles = map[string]*config.ProfileConfig{
+		"default": {},
+		"staging": {
+			BaseURL:       baseURL,
+			OperationBase: "/api/rest",
+		},
+	}
+	if err := config.Save(env.cfgFile, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	c := env.newCLI()
+	var out strings.Builder
+	c.Stdout = &out
+	if err := c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "get-foo", "--help"}); err != nil {
+		t.Fatalf("profile fallback command help failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "Usage:") {
+		t.Fatalf("expected generated command help, got:\n%s", out.String())
+	}
+
+	c = env.newCLI()
+	err = c.Run([]string{"restish", "--rsh-profile", "staging", "tapi", "get-api-rest-foo", "--help"})
+	if err == nil {
+		t.Fatal("expected unstripped fallback command name to be unavailable")
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("unexpected unavailable command error: %v", err)
+	}
+}
+
 func TestGeneratedCommandsReloadLocalSpecFilesWhenChanged(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/widgets", func(w http.ResponseWriter, r *http.Request) {

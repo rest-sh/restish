@@ -589,7 +589,7 @@ func (c *CLI) emitGeneratedCommandWarnings(apiName string, apiCfg *config.APICon
 	defer func() {
 		c.quietGeneratedWarnings = quiet
 	}()
-	_ = c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
+	_ = c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opOpts.OperationBase, err)
 }
 
 func preserveExistingProfiles(apiCfg, existingAPI *config.APIConfig) error {

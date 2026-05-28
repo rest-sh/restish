@@ -62,6 +62,11 @@ Operation-level `x-cli-name` replaces the generated command name.
 `x-cli-aliases` adds command aliases. `x-cli-description` replaces the help
 summary/description shown for the generated command.
 
+When an operation has no `operationId`, Restish falls back to the HTTP method
+and path. If the API config has `operation_base`, that base path is removed from
+fallback names. For example, `operation_base: /api/rest` turns
+`GET /api/rest/foo` into `get-foo`.
+
 Parameters support their own command-shaping extensions:
 
 ```yaml
