@@ -16,7 +16,7 @@ import (
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/fxamacker/cbor/v2"
-	"github.com/shamaton/msgpack/v2"
+	"github.com/shamaton/msgpack/v3"
 	"go.yaml.in/yaml/v3"
 )
 

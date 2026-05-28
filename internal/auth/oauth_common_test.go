@@ -322,6 +322,75 @@ func TestValidateDirectOAuthEndpoint(t *testing.T) {
 	}
 }
 
+func TestResolveOAuthEndpoint(t *testing.T) {
+	cases := []struct {
+		name      string
+		rawURL    string
+		baseURL   string
+		want      string
+		wantError string
+	}{
+		{
+			name:    "absolute https",
+			rawURL:  "https://auth.example.com/token",
+			baseURL: "https://api.example.com/v1",
+			want:    "https://auth.example.com/token",
+		},
+		{
+			name:    "path relative resolves under base path",
+			rawURL:  "oauth2/token",
+			baseURL: "https://api.example.com/v1",
+			want:    "https://api.example.com/v1/oauth2/token",
+		},
+		{
+			name:    "root relative resolves at host root",
+			rawURL:  "/oauth2/token",
+			baseURL: "https://api.example.com/v1",
+			want:    "https://api.example.com/oauth2/token",
+		},
+		{
+			name:      "scheme relative rejected",
+			rawURL:    "//auth.example.com/token",
+			baseURL:   "https://api.example.com/v1",
+			wantError: "scheme-relative",
+		},
+		{
+			name:      "relative without base rejected",
+			rawURL:    "oauth2/token",
+			wantError: "requires API base_url",
+		},
+		{
+			name:      "relative query rejected after resolution",
+			rawURL:    "oauth2/token?audience=api",
+			baseURL:   "https://api.example.com/v1",
+			wantError: "query string",
+		},
+		{
+			name:      "relative public http still rejected",
+			rawURL:    "oauth2/token",
+			baseURL:   "http://api.example.com/v1",
+			wantError: "must use https",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolveOAuthEndpoint("token_url", tc.rawURL, tc.baseURL)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("error = %v, want containing %q", err, tc.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("resolved = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestValidateOAuthIssuerURL(t *testing.T) {
 	cases := []struct {
 		name      string

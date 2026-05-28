@@ -27,6 +27,10 @@ Cross-origin discovery still rejects private, loopback, link-local, multicast,
 and unspecified follow targets unless the original API is already private or
 local. Use `--spec` when you need to name a private spec URL directly.
 
+If the spec contains behavior-changing `x-cli-*` extensions, `api connect`
+prints a compact summary. Run `restish doctor api <name>` after connecting when
+you want to see the exact operations or parameters affected.
+
 ## Configure With An Explicit Spec
 
 ```bash
@@ -93,6 +97,8 @@ OpenAPI extensions that shape the CLI. Sync can also save spec-derived API
 metadata that changed after registration, such as a Link-discovered `spec_url`
 or newly discovered operation-server origins. It does not overwrite profiles or
 apply new `x-cli-config` profile defaults, so local credentials remain intact.
+When the refreshed spec contains behavior-changing `x-cli-*` extensions, sync
+prints the same compact summary as connect.
 
 Use `--yes` when an automated sync should accept safe metadata prompts such as
 allowing a newly discovered cross-origin operation server:

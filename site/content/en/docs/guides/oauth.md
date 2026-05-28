@@ -101,8 +101,14 @@ If your provider does not publish discovery, configure direct endpoint URLs:
 ```
 
 OAuth endpoints must use HTTPS except for localhost or loopback development
-URLs. Endpoint URLs must be absolute and must not include credentials,
-fragments, or query strings.
+URLs. Endpoint URLs must not include credentials, fragments, or query strings.
+
+When OAuth authorize, device authorization, or token endpoints live on the same
+host as the API, you may use relative paths in manual config. `oauth2/token`
+resolves under the active API/profile `base_url` path, while `/oauth2/token`
+resolves at that host root. For example, with
+`base_url: https://api.vendor.test/v1`, `oauth2/token` becomes
+`https://api.vendor.test/v1/oauth2/token`.
 
 ## Browser Sign-In
 
@@ -137,6 +143,29 @@ http://localhost:8484/callback
 Some providers distinguish `localhost` from `127.0.0.1`. Restish sends
 `localhost` in the authorization request, so exact-match providers must allow
 the `localhost` URL.
+
+If your provider requires an HTTPS redirect URL, provide your own local
+callback certificate and key:
+
+```jsonc
+{
+  "type": "oauth-authorization-code",
+  "params": {
+    "authorize_url": "https://issuer.test/authorize",
+    "token_url": "https://issuer.test/oauth/token",
+    "client_id": "env:CLIENT_ID",
+    "redirect_scheme": "https",
+    "redirect_port": "8484",
+    "redirect_path": "/callback",
+    "redirect_cert": "./localhost.pem",
+    "redirect_key": "./localhost.key"
+  }
+}
+```
+
+Allow `https://localhost:8484/callback` in the OAuth app. Restish does not
+generate certificates or install local trust roots; use a certificate that your
+browser accepts for `localhost`.
 
 The browser callback page uses the active Restish theme. To brand that local
 page, set `callback_success_html` and/or `callback_error_html` on the

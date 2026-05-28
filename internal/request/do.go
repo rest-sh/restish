@@ -141,6 +141,10 @@ type Options struct {
 	// If empty and a body is present, the caller is responsible for setting
 	// the header via Headers.
 	ContentType string
+	// PreserveHeaderCase keeps caller-supplied header names in Headers as-is
+	// instead of using net/http's canonical MIME casing. This is only useful
+	// for broken HTTP/1.x servers; HTTP/2 lowercases header names by protocol.
+	PreserveHeaderCase bool
 	// UserAgent, if non-empty, is sent when the caller has not supplied a
 	// User-Agent header.
 	UserAgent string
@@ -244,14 +248,14 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			return nil, err
 		}
 		if strings.EqualFold(name, "Accept") || strings.EqualFold(name, "Accept-Encoding") {
-			req.Header.Set(name, value)
+			setRequestHeader(req.Header, name, value, opts.PreserveHeaderCase)
 			continue
 		}
 		if strings.EqualFold(name, "Host") {
 			req.Host = value
 			continue
 		}
-		req.Header.Add(name, value)
+		addRequestHeader(req.Header, name, value, opts.PreserveHeaderCase)
 	}
 
 	// Append extra query parameters.
@@ -271,7 +275,7 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 			return nil, fmt.Errorf("auth: %w", err)
 		}
 	}
-	if opts.UserAgent != "" && req.Header.Get("User-Agent") == "" {
+	if opts.UserAgent != "" && getRequestHeader(req.Header, "User-Agent") == "" {
 		req.Header.Set("User-Agent", opts.UserAgent)
 	}
 	if opts.OnBeforeRequest != nil {
@@ -355,6 +359,43 @@ func Do(ctx context.Context, method, rawURL string, body io.Reader, opts Options
 	return resp, nil
 }
 
+func setRequestHeader(header http.Header, name, value string, preserveCase bool) {
+	if !preserveCase {
+		header.Set(name, value)
+		return
+	}
+	deleteHeaderCaseInsensitive(header, name)
+	header[name] = []string{value}
+}
+
+func addRequestHeader(header http.Header, name, value string, preserveCase bool) {
+	if !preserveCase {
+		header.Add(name, value)
+		return
+	}
+	header[name] = append(header[name], value)
+}
+
+func deleteHeaderCaseInsensitive(header http.Header, name string) {
+	for existing := range header {
+		if strings.EqualFold(existing, name) {
+			delete(header, existing)
+		}
+	}
+}
+
+func getRequestHeader(header http.Header, name string) string {
+	if value := header.Get(name); value != "" {
+		return value
+	}
+	for existing, values := range header {
+		if strings.EqualFold(existing, name) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
+}
+
 type doResult struct {
 	resp *http.Response
 	err  error
@@ -418,8 +459,8 @@ func credentialStrippingRedirectPolicy(req *http.Request, via []*http.Request) e
 		return nil
 	}
 	for name := range req.Header {
-		if IsCredentialHeader(name) {
-			req.Header.Del(name)
+		if IsCredentialHeader(name) || IsMarkedCredentialHeader(req, name) {
+			delete(req.Header, name)
 		}
 	}
 	return nil

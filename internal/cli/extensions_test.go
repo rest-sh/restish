@@ -390,3 +390,50 @@ func TestExtensionXCLIParamHiddenHidesFlagButAllowsUse(t *testing.T) {
 		t.Fatalf("query = %q, want debug=true", gotQuery)
 	}
 }
+
+func TestDoctorAPIReportsXCLIExtensionDetails(t *testing.T) {
+	env := setupExtEnv(t)
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "doctor", "api", "tapi"}); err != nil {
+		t.Fatalf("doctor api: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"OpenAPI x-cli extensions:",
+		"1 ignored operation",
+		"1 hidden operation",
+		"1 renamed operation",
+		"1 operation with aliases",
+		"2 renamed parameters",
+		"x-cli-name: GET /things",
+		"x-cli-hidden: GET /hidden",
+		"x-cli-ignore: GET /ignored",
+		"x-cli-name: GET /items/{id} parameter path id",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("doctor api output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "x-cli-description") {
+		t.Fatalf("doctor api should not report x-cli-description:\n%s", got)
+	}
+
+	cJSON, jsonOut := env.newCaptureCLI()
+	if err := cJSON.Run([]string{"restish", "doctor", "api", "tapi", "-o", "json"}); err != nil {
+		t.Fatalf("doctor api json: %v", err)
+	}
+	var report struct {
+		OpenAPIXCLI struct {
+			Details []struct {
+				Kind string `json:"kind"`
+			} `json:"details"`
+		} `json:"openapi_x_cli_extensions"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut.String()), &report); err != nil {
+		t.Fatalf("doctor api json should be JSON: %v\n%s", err, jsonOut.String())
+	}
+	if len(report.OpenAPIXCLI.Details) == 0 {
+		t.Fatalf("expected x-cli extension details in doctor JSON:\n%s", jsonOut.String())
+	}
+}

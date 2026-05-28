@@ -164,9 +164,10 @@ type Operation struct {
 // OperationSet is the extracted operation list plus API-level metadata needed
 // to present the generated command group without reparsing the raw spec.
 type OperationSet struct {
-	Info       APIInfo
-	Operations []Operation
-	Warnings   []string
+	Info           APIInfo
+	Operations     []Operation
+	Warnings       []string
+	XCLIExtensions XCLIExtensionReport
 }
 
 // OperationSet returns all operations with top-level API metadata. The result
@@ -181,7 +182,11 @@ func (s *APISpec) OperationSet(opts OperationOptions) (OperationSet, error) {
 	if err != nil {
 		return OperationSet{}, err
 	}
-	return OperationSet{Info: info, Operations: ops, Warnings: warnings}, nil
+	xcliExtensions, err := s.XCLIExtensionReport()
+	if err != nil {
+		return OperationSet{}, err
+	}
+	return OperationSet{Info: info, Operations: ops, Warnings: warnings, XCLIExtensions: xcliExtensions}, nil
 }
 
 // Operations returns all HTTP operations extracted from the spec's V3 model,

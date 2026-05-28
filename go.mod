@@ -19,7 +19,7 @@ require (
 	github.com/pb33f/libopenapi v0.35.0
 	github.com/sandrolain/httpcache v1.4.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
-	github.com/shamaton/msgpack/v2 v2.4.0
+	github.com/shamaton/msgpack/v3 v3.1.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd

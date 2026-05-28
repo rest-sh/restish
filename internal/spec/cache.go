@@ -49,13 +49,14 @@ type cachedRaw struct {
 }
 
 type opsBlob struct {
-	Schema             int         `cbor:"schema"`
-	BaseURL            string      `cbor:"base_url"`
-	OperationBase      string      `cbor:"operation_base,omitempty"`
-	ServerVariablesKey string      `cbor:"server_variables,omitempty"`
-	RawSHA256          string      `cbor:"raw_sha256"`
-	Info               APIInfo     `cbor:"info,omitempty"`
-	Operations         []Operation `cbor:"operations"`
+	Schema             int                 `cbor:"schema"`
+	BaseURL            string              `cbor:"base_url"`
+	OperationBase      string              `cbor:"operation_base,omitempty"`
+	ServerVariablesKey string              `cbor:"server_variables,omitempty"`
+	RawSHA256          string              `cbor:"raw_sha256"`
+	Info               APIInfo             `cbor:"info,omitempty"`
+	Operations         []Operation         `cbor:"operations"`
+	XCLIExtensions     XCLIExtensionReport `cbor:"x_cli_extensions,omitempty"`
 }
 
 const currentCacheSchema = 2
@@ -242,8 +243,9 @@ func LoadOperationSetFromCacheStatus(cacheDir, apiName, version string, specFile
 			blob.ServerVariablesKey == ServerVariablesCacheKey(opts.ServerVariables) &&
 			blob.RawSHA256 == rawHash {
 			set := OperationSet{
-				Info:       blob.Info,
-				Operations: append([]Operation(nil), blob.Operations...),
+				Info:           blob.Info,
+				Operations:     append([]Operation(nil), blob.Operations...),
+				XCLIExtensions: blob.XCLIExtensions,
 			}
 			if blob.Operations == nil {
 				set.Operations = []Operation{}
@@ -310,6 +312,7 @@ func (e *cacheEntry) upsertOperationSet(opts OperationOptions, set OperationSet)
 		RawSHA256:          rawHash,
 		Info:               set.Info,
 		Operations:         append([]Operation(nil), set.Operations...),
+		XCLIExtensions:     set.XCLIExtensions,
 	}
 	for i := range e.Operations {
 		if e.Operations[i].BaseURL == opts.BaseURL &&

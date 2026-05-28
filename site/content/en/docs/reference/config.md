@@ -93,7 +93,8 @@ restish config show -o json
       "retry_max_wait": "30s",
       "pagination": {
         "items_path": "data",
-        "next_path": "links.next"
+        "next_path": "links.next",
+        "page_param": "page"
       },
       "profiles": {
         "default": {},
@@ -146,6 +147,7 @@ APIConfig holds per-API configuration.
 | `profiles` | `Profiles` | `map[string]*ProfileConfig` | no | Profiles is a map of profile name to profile configuration. |
 | `pagination` | `Pagination` | `*PaginationConfig` | no | Pagination holds optional per-API pagination configuration. |
 | `retry_max_wait` | `RetryMaxWait` | `string` | no | RetryMaxWait caps Retry-After/X-Retry-In delays for this API when no command-line or environment override is supplied. |
+| `preserve_header_case` | `PreserveHeaderCase` | `bool` | no | PreserveHeaderCase sends user/API-supplied header names with their configured casing for broken HTTP/1.x servers that treat names as case-sensitive. It cannot affect HTTP/2, where header names are lowercase by protocol. |
 
 ### `PaginationConfig`
 
@@ -155,6 +157,7 @@ PaginationConfig holds per-API pagination settings.
 | --- | --- | --- | --- | --- |
 | `items_path` | `ItemsPath` | `string` | no | ItemsPath is a filter expression that extracts the items array from the response body (e.g. "data" for JSON:API, "results" for some REST APIs). When empty, the body itself is used (if it is an array). |
 | `next_path` | `NextPath` | `string` | no | NextPath is a filter expression that extracts the next-page URL from the response body (alternative to Link header rel="next"). |
+| `page_param` | `PageParam` | `string` | no | PageParam is the URL query parameter that increments between pages when an API has no next links or next_path metadata. |
 
 ### `CacheConfig`
 

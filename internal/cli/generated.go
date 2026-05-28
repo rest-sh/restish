@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime"
 	"net/url"
+	urlpath "path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -36,15 +37,16 @@ const (
 // populates it with one subcommand per OpenAPI operation found in s.
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
+	operationBase := effectiveOperationBase(apiCfg, "default")
 	set, err := s.OperationSet(spec.OperationOptions{
 		BaseURL:         effectiveProfileBaseURL(apiCfg, "default"),
-		OperationBase:   effectiveOperationBase(apiCfg, "default"),
+		OperationBase:   operationBase,
 		ServerVariables: effectiveServerVariables(apiCfg, "default"),
 	})
-	return c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
+	return c.buildAPICommandFromOperationResult(apiName, apiCfg, set, operationBase, err)
 }
 
-func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.APIConfig, set spec.OperationSet, err error) *cobra.Command {
+func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.APIConfig, set spec.OperationSet, operationBase string, err error) *cobra.Command {
 	if err != nil {
 		source := apiCfg.SpecURL
 		if source == "" && len(apiCfg.SpecFiles) > 0 {
@@ -56,10 +58,10 @@ func (c *CLI) buildAPICommandFromOperationResult(apiName string, apiCfg *config.
 		c.warnf("skipping generated commands for API %q from %s: %v", apiName, source, err)
 		return nil
 	}
-	return c.buildAPICommandFromOperationSet(apiName, apiCfg, set)
+	return c.buildAPICommandFromOperationSet(apiName, apiCfg, set, operationBase)
 }
 
-func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.APIConfig, set spec.OperationSet) *cobra.Command {
+func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.APIConfig, set spec.OperationSet, operationBase string) *cobra.Command {
 	ops := set.Operations
 	// ops == nil means no V3 model or no paths section — nothing to generate.
 	if ops == nil {
@@ -119,7 +121,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 			tagCommandName = generatedTagCommandName(op.Tags[0], tagCommandNameByTag, tagCommands)
 			examplePrefix = apiName + " " + tagCommandName
 		}
-		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op)
+		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op, operationBase)
 		if err != nil {
 			c.generatedWarnf("skipping %s %s for API %q: %v", op.Method, op.Path, apiName, err)
 			continue
@@ -325,17 +327,10 @@ type paramInfo struct {
 
 // buildOperationCommand creates a Cobra command for one OpenAPI operation.
 // Returns nil when the operation is excluded via x-cli-ignore.
-// operationBase, when non-empty, is resolved against baseURL and replaces the
-// apiName short-name prefix in generated URLs.
-func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation) (*cobra.Command, error) {
-	// Derive command name from operationId, with x-cli-name override.
-	cmdName := toKebabCase(op.ID)
-	if cmdName == "" {
-		cmdName = fallbackOperationName(op.Method, op.Path)
-	}
-	if op.XCLI.Name != "" {
-		cmdName = op.XCLI.Name
-	}
+// operationBase, when non-empty, is removed from fallback command names derived
+// from paths. It does not affect explicit operationId or x-cli-name values.
+func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Operation, operationBase string) (*cobra.Command, error) {
+	cmdName := operationCommandName(op, operationBase)
 
 	// Build param lists, honouring per-parameter x-cli-name / x-cli-description.
 	pathParamOrder := extractPathParamNames(op.Path)
@@ -1983,6 +1978,37 @@ func normalizeKnownIdentifierAcronyms(s string) string {
 
 func fallbackOperationName(method, path string) string {
 	return slugify(strings.ToLower(method) + "-" + strings.Trim(path, "/"))
+}
+
+func operationNamePath(path, operationBase string) string {
+	path = normalizeOperationNamePath(path)
+	base := normalizeOperationNamePath(operationBase)
+	base = strings.TrimRight(base, "/")
+	if base == "" {
+		return path
+	}
+	if path == base {
+		return "/"
+	}
+	if strings.HasPrefix(path, base+"/") {
+		return strings.TrimPrefix(path, base)
+	}
+	return path
+}
+
+func normalizeOperationNamePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	path = urlpath.Clean(path)
+	if path == "." {
+		return "/"
+	}
+	return path
 }
 
 func slugify(s string) string {

@@ -103,10 +103,11 @@ func (h *DeviceCode) doRefresh(ctx context.Context, params map[string]string, to
 
 func (h *DeviceCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
 	if tokenURL := params["token_url"]; tokenURL != "" {
-		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+		resolved, err := resolveOAuthEndpoint("token_url", tokenURL, params["_base_url"])
+		if err != nil {
 			return "", err
 		}
-		return tokenURL, nil
+		return resolved, nil
 	}
 	issuer := params["issuer_url"]
 	if issuer == "" {
@@ -129,14 +130,18 @@ func (h *DeviceCode) resolveEndpoints(ctx context.Context, params map[string]str
 	deviceURL := params["device_authorization_url"]
 	tokenURL := params["token_url"]
 	if deviceURL != "" {
-		if err := validateDirectOAuthEndpoint("device_authorization_url", deviceURL); err != nil {
+		resolved, err := resolveOAuthEndpoint("device_authorization_url", deviceURL, params["_base_url"])
+		if err != nil {
 			return "", "", err
 		}
+		deviceURL = resolved
 	}
 	if tokenURL != "" {
-		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+		resolved, err := resolveOAuthEndpoint("token_url", tokenURL, params["_base_url"])
+		if err != nil {
 			return "", "", err
 		}
+		tokenURL = resolved
 	}
 	if deviceURL != "" && tokenURL != "" {
 		return deviceURL, tokenURL, nil
@@ -246,13 +251,18 @@ func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[
 	}
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":               true,
+		"_base_url":                true,
 		"authorize_url":            true,
 		"cache_key":                true,
 		callbackErrorHTMLParam:     true,
 		callbackSuccessHTMLParam:   true,
 		"device_authorization_url": true,
 		"issuer_url":               true,
+		"redirect_cert":            true,
+		"redirect_key":             true,
+		"redirect_path":            true,
 		"redirect_port":            true,
+		"redirect_scheme":          true,
 		"token_url":                true,
 	}) {
 		if form.Get(key) == "" {

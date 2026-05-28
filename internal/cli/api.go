@@ -267,6 +267,9 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
 		}
 		style := humanTextStyleFor(c.Stdout)
+		if report, err := apiSpec.XCLIExtensionReport(); err == nil {
+			c.printXCLIExtensionSummary(report)
+		}
 		fmt.Fprintf(c.Stdout, "%s spec for %q.\n", style.ok("Synced"), apiName)
 	} else {
 		style := humanTextStyleFor(c.Stdout)
@@ -426,6 +429,11 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	}
 	c.printConfigWrittenPath()
 	style := humanTextStyleFor(c.Stdout)
+	if apiSpec != nil {
+		if report, err := apiSpec.XCLIExtensionReport(); err == nil {
+			c.printXCLIExtensionSummary(report)
+		}
+	}
 	if len(preservedProfiles) > 0 {
 		fmt.Fprintf(c.Stdout, "%s existing profile(s): %s (%s)\n", style.info("Preserved"), strings.Join(preservedProfiles, ", "), style.hint("use --replace to recreate from discovered defaults"))
 	}
@@ -589,7 +597,7 @@ func (c *CLI) emitGeneratedCommandWarnings(apiName string, apiCfg *config.APICon
 	defer func() {
 		c.quietGeneratedWarnings = quiet
 	}()
-	_ = c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
+	_ = c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opOpts.OperationBase, err)
 }
 
 func preserveExistingProfiles(apiCfg, existingAPI *config.APIConfig) error {

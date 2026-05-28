@@ -346,11 +346,11 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 		Profile:     profileName,
 		ContentType: s.ContentType,
 		Raw:         s.Raw,
-		Operations:  pluginOperationsFromSpec(opSet.Operations),
+		Operations:  pluginOperationsFromSpec(opSet.Operations, effectiveOperationBase(apiCfg, profileName)),
 	})
 }
 
-func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
+func pluginOperationsFromSpec(ops []spec.Operation, operationBase string) []pluginwire.APIOperation {
 	if ops == nil {
 		return nil
 	}
@@ -379,7 +379,7 @@ func pluginOperationsFromSpec(ops []spec.Operation) []pluginwire.APIOperation {
 		}
 		requestSchema, requestSchemaDialect := operationRequestSchema(op)
 		out = append(out, pluginwire.APIOperation{
-			ID:                   operationCommandName(op),
+			ID:                   operationCommandName(op, operationBase),
 			Method:               op.Method,
 			Path:                 op.Path,
 			Summary:              op.Summary,

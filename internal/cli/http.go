@@ -190,6 +190,9 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	if err != nil {
 		return err
 	}
+	if bodyOpts.explicitAPIName != "" && c.apiPreservesHeaderCase(bodyOpts.explicitAPIName) {
+		opts.PreserveHeaderCase = true
+	}
 	if opts.ContentType == "" && contentTypeOverride != "" {
 		opts.ContentType = contentTypeOverride
 	}
@@ -415,7 +418,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 		if apiName != "" && c.cfg != nil && c.cfg.APIs[apiName] != nil {
 			pagCfg = c.cfg.APIs[apiName].Pagination
 		}
-		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg, prepared)
+		did, err := c.tryPaginate(cmd, resp, rawURL, opts, pagCfg, prepared, bodyOpts.explicitAPIName != "")
 		if err != nil {
 			return err
 		}
@@ -670,6 +673,9 @@ func (c *CLI) rawResponseBodyBytes(resp *http.Response, maxBytes int64) ([]byte,
 	if resp == nil || resp.Body == nil {
 		return nil, nil
 	}
+	if output.ResponseHasNoBody(resp) {
+		return nil, nil
+	}
 	if maxBytes <= 0 {
 		maxBytes = output.DefaultMaxBodyBytes
 	}
@@ -695,6 +701,12 @@ func (c *CLI) decompressedResponseBody(resp *http.Response) (io.ReadCloser, erro
 		return io.NopCloser(strings.NewReader("")), nil
 	}
 	original := resp.Body
+	if output.ResponseHasNoBody(resp) {
+		return &readCloser{
+			Reader: strings.NewReader(""),
+			Closer: original,
+		}, nil
+	}
 	reader, err := c.content.Decompress(resp.Header.Get("Content-Encoding"), original)
 	if err != nil {
 		return nil, err
@@ -1822,6 +1834,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 			return rawURL, match.apiName, opts, fmt.Errorf("invalid retry_max_wait for API %q: %w", match.apiName, parseErr)
 		}
 		opts.RetryMaxWait = retryMaxWait
+	}
+	if match.api.PreserveHeaderCase {
+		opts.PreserveHeaderCase = true
 	}
 
 	if match.profile == nil {

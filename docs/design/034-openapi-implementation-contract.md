@@ -73,6 +73,13 @@ External references are valid anywhere the parser accepts references that affect
 command generation, including Path Items, parameters, request schemas, response
 schemas, and shared component schemas.
 
+Some real-world specs place documentation-tool objects such as
+`description: {"$ref": "markdown/usecases.md"}` where OpenAPI requires a
+string. Restish treats those docs-only description refs as an empty description
+before reference resolution, and it does not fetch the referenced markdown. This
+compatibility cleanup must not rewrite schema properties or component entries
+that happen to be named `description`.
+
 Webhooks-only documents, documents with no paths, and empty Path Items generate
 no request commands and must not panic. Response links and callbacks are not
 generated as commands in v2.
