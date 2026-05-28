@@ -38,6 +38,7 @@ type Logger interface {
 type AuthContext struct {
 	APIName     string
 	ProfileName string
+	BaseURL     string
 	CacheKey    string
 	Params      map[string]string // user-supplied only
 	TokenStore  TokenStore
@@ -80,6 +81,9 @@ func authParams(ac AuthContext) map[string]string {
 		params["_cache_key"] = ac.CacheKey
 	case ac.APIName != "" || ac.ProfileName != "":
 		params["_cache_key"] = ac.APIName + ":" + ac.ProfileName
+	}
+	if ac.BaseURL != "" {
+		params["_base_url"] = ac.BaseURL
 	}
 	return params
 }

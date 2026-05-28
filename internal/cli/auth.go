@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -286,7 +287,11 @@ func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.Profi
 		return resolvedAuthConfig{}, fmt.Errorf("profile %q of API %q has both auth and auth_ref", profileName, apiName)
 	}
 	if prof.AuthRef == "" {
-		return resolvedAuthConfig{Config: prof.Auth}, nil
+		cacheKey := ""
+		if prof.Auth != nil {
+			cacheKey = inlineAuthCacheKey(apiName+":"+profileName, prof.Auth, c.authBaseURL(apiName, profileName))
+		}
+		return resolvedAuthConfig{Config: prof.Auth, CacheKey: cacheKey}, nil
 	}
 	if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[prof.AuthRef] == nil {
 		return resolvedAuthConfig{}, fmt.Errorf("profile %q of API %q references unknown auth profile %q", profileName, apiName, prof.AuthRef)
@@ -295,7 +300,7 @@ func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.Profi
 	return resolvedAuthConfig{
 		Config:   ac,
 		Ref:      prof.AuthRef,
-		CacheKey: sharedAuthCacheKey(prof.AuthRef, ac),
+		CacheKey: sharedAuthCacheKey(prof.AuthRef, ac, c.authBaseURL(apiName, profileName)),
 	}, nil
 }
 
@@ -401,6 +406,7 @@ func (c *CLI) authContext(ctx context.Context, apiName, profileName string, para
 	return auth.AuthContext{
 		APIName:     apiName,
 		ProfileName: profileName,
+		BaseURL:     c.authBaseURL(apiName, profileName),
 		CacheKey:    cacheKey,
 		Params:      params,
 		TokenStore:  auth.NewTokenCache(c.tokenCachePath()),
@@ -412,7 +418,18 @@ func (c *CLI) authContext(ctx context.Context, apiName, profileName string, para
 	}
 }
 
-func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
+func (c *CLI) authBaseURL(apiName, profileName string) string {
+	if c.cfg == nil || c.cfg.APIs == nil {
+		return ""
+	}
+	api := c.cfg.APIs[apiName]
+	if api == nil {
+		return ""
+	}
+	return effectiveProfileBaseURL(api, profileName)
+}
+
+func sharedAuthCacheKey(ref string, ac *config.AuthConfig, baseURL string) string {
 	if ac == nil {
 		return ""
 	}
@@ -424,6 +441,9 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
 		if value := ac.Params[name]; value != "" {
 			relevant[name] = value
 		}
+	}
+	if baseURL != "" && authConfigUsesRelativeOAuthEndpoint(ac) {
+		relevant["base_url"] = baseURL
 	}
 	var keys []string
 	for key := range relevant {
@@ -439,6 +459,31 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig) string {
 	}
 	sum := sha256.Sum256([]byte(b.String()))
 	return "auth_profile:" + ref + ":" + hex.EncodeToString(sum[:8])
+}
+
+func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) string {
+	if !authConfigUsesRelativeOAuthEndpoint(ac) || baseURL == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(baseURL))
+	return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+}
+
+func authConfigUsesRelativeOAuthEndpoint(ac *config.AuthConfig) bool {
+	if ac == nil {
+		return false
+	}
+	for _, name := range []string{"authorize_url", "device_authorization_url", "token_url"} {
+		if value := ac.Params[name]; value != "" && isRelativeOAuthEndpointValue(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRelativeOAuthEndpointValue(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && !u.IsAbs() && u.Host == ""
 }
 
 type limitedWriter struct {

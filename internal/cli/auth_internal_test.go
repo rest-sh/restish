@@ -100,6 +100,65 @@ func TestConfiguredCredentialsCountsAuthRef(t *testing.T) {
 	}
 }
 
+func TestSharedAuthCacheKeyIncludesBaseURLForRelativeEndpoints(t *testing.T) {
+	ac := &config.AuthConfig{
+		Type: "oauth-client-credentials",
+		Params: map[string]string{
+			"client_id": "myid",
+			"token_url": "oauth2/token",
+		},
+	}
+	one := sharedAuthCacheKey("shared", ac, "https://one.example.com/api")
+	two := sharedAuthCacheKey("shared", ac, "https://two.example.com/api")
+	if one == two {
+		t.Fatalf("relative endpoint cache keys should differ by base URL: %q", one)
+	}
+}
+
+func TestSharedAuthCacheKeyIgnoresBaseURLForAbsoluteEndpoints(t *testing.T) {
+	ac := &config.AuthConfig{
+		Type: "oauth-client-credentials",
+		Params: map[string]string{
+			"client_id": "myid",
+			"token_url": "https://auth.example.com/oauth2/token",
+		},
+	}
+	one := sharedAuthCacheKey("shared", ac, "https://one.example.com/api")
+	two := sharedAuthCacheKey("shared", ac, "https://two.example.com/api")
+	if one != two {
+		t.Fatalf("absolute endpoint cache keys should ignore API base URL: %q != %q", one, two)
+	}
+}
+
+func TestInlineAuthCacheKeyIncludesBaseURLForRelativeEndpoints(t *testing.T) {
+	ac := &config.AuthConfig{
+		Type: "oauth-device-code",
+		Params: map[string]string{
+			"client_id":                "myid",
+			"device_authorization_url": "oauth2/device",
+			"token_url":                "oauth2/token",
+		},
+	}
+	one := inlineAuthCacheKey("api:default", ac, "https://one.example.com/api")
+	two := inlineAuthCacheKey("api:default", ac, "https://two.example.com/api")
+	if one == "" || two == "" || one == two {
+		t.Fatalf("inline relative endpoint cache keys = %q and %q, want non-empty and different", one, two)
+	}
+}
+
+func TestInlineAuthCacheKeyFallsBackForAbsoluteEndpoints(t *testing.T) {
+	ac := &config.AuthConfig{
+		Type: "oauth-client-credentials",
+		Params: map[string]string{
+			"client_id": "myid",
+			"token_url": "https://auth.example.com/oauth2/token",
+		},
+	}
+	if got := inlineAuthCacheKey("api:default", ac, "https://one.example.com/api"); got != "" {
+		t.Fatalf("inline absolute endpoint cache key = %q, want fallback", got)
+	}
+}
+
 func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
 	if err := output.SetTheme(output.ThemeEntries{
 		"status_2xx":   "bold #00ff00",

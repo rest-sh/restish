@@ -255,6 +255,14 @@ development flows. Public `http://`, custom schemes, embedded credentials,
 fragments, and preexisting query strings are rejected before any token or
 authorization request is sent.
 
+Manually configured OAuth endpoints may be path-relative when the selected API
+has a `base_url`. `oauth2/token` resolves under the effective API/profile base
+path, while `/oauth2/token` resolves at the same host root. Scheme-relative
+values are rejected, and the resolved endpoint still goes through the same
+HTTPS/loopback, credential, query, and fragment validation as absolute
+endpoints. `issuer_url` remains absolute-only because it defines the OIDC
+issuer identity.
+
 Discovery and token requests inherit the CLI HTTP client's timeout and TLS
 configuration. This keeps `--rsh-timeout`, CA roots, TLS minimum version, and
 `--rsh-insecure` consistent across ordinary requests and auth setup. OAuth

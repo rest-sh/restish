@@ -80,6 +80,57 @@ func TestOAuthClientCredentials_BearerHeader(t *testing.T) {
 	}
 }
 
+func TestOAuthClientCredentials_RelativeTokenURLUsesProfileBase(t *testing.T) {
+	var rr requestRecorder
+	var tokenURL string
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://staging.example.com/api/oauth2/token":
+			tokenURL = r.URL.String()
+			return oauthTokenResponse(r, "relative-token"), nil
+		case "https://staging.example.com/api/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{"error":"not found"}`), nil
+		}
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com/v1",
+				"profiles": {
+					"default": {
+						"base_url": "https://staging.example.com/api",
+						"auth": {
+							"type": "oauth-client-credentials",
+							"params": {
+								"client_id": "myid",
+								"client_secret": "mysecret",
+								"token_url": "oauth2/token"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tokenURL != "https://staging.example.com/api/oauth2/token" {
+		t.Fatalf("token URL = %q", tokenURL)
+	}
+	if got := rr.Last().Header.Get("Authorization"); got != "Bearer relative-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+}
+
 func TestOAuthClientCredentials_EnvSecretSource(t *testing.T) {
 	t.Setenv("RESTISH_TEST_CLIENT_SECRET", "resolved-secret")
 	var gotSecret string
@@ -593,6 +644,63 @@ func TestOAuthAuthorizationCode_NoBrowserManualCodeFallback(t *testing.T) {
 	}
 }
 
+func TestOAuthAuthorizationCode_RelativeEndpointsUseBaseURL(t *testing.T) {
+	var rr requestRecorder
+	var tokenRedirectURI string
+	c, _, errBuf := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/v1/oauth2/token":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			tokenRedirectURI = r.FormValue("redirect_uri")
+			return oauthTokenResponse(r, "relative-auth-code-token"), nil
+		case "https://api.example.com/v1/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{"error":"not found"}`), nil
+		}
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com/v1",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "oauth-authorization-code",
+							"params": {
+								"client_id": "myid",
+								"authorize_url": "oauth2/authorize",
+								"token_url": "oauth2/token"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+	c.Hooks().PassReader = strings.NewReader("manual-code\n")
+
+	if err := c.Run([]string{"restish", "--rsh-no-browser", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(errBuf.String(), "https://api.example.com/v1/oauth2/authorize?") {
+		t.Fatalf("expected resolved authorize URL, got %q", errBuf.String())
+	}
+	if tokenRedirectURI != "http://localhost:8484/" {
+		t.Fatalf("redirect_uri = %q", tokenRedirectURI)
+	}
+	if got := rr.Last().Header.Get("Authorization"); got != "Bearer relative-auth-code-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+}
+
 func TestOAuthDeviceCodeFlow(t *testing.T) {
 	var rr requestRecorder
 	c, _, errBuf := newTestCLI(t)
@@ -649,6 +757,78 @@ func TestOAuthDeviceCodeFlow(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := rr.Last().Header.Get("Authorization"); got != "Bearer device-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+	if !strings.Contains(errBuf.String(), "verify.example.com") {
+		t.Fatalf("expected verification instructions on stderr, got %q", errBuf.String())
+	}
+}
+
+func TestOAuthDeviceCode_RelativeEndpointsUseBaseURL(t *testing.T) {
+	var rr requestRecorder
+	var deviceURL string
+	var tokenURL string
+	c, _, errBuf := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.String() {
+		case "https://api.example.com/v1/oauth2/device":
+			deviceURL = r.URL.String()
+			return &http.Response{
+				StatusCode: 200,
+				Proto:      "HTTP/1.1",
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{
+					"device_code":"device-123",
+					"user_code":"ABCD-EFGH",
+					"verification_uri":"https://verify.example.com",
+					"interval":1,
+					"expires_in":60
+				}`)),
+				Request: r,
+			}, nil
+		case "https://api.example.com/v1/oauth2/token":
+			tokenURL = r.URL.String()
+			return oauthTokenResponse(r, "relative-device-token"), nil
+		case "https://api.example.com/v1/items":
+			rr.capture(r)
+			return jsonResponse(200, `{}`), nil
+		default:
+			return jsonResponse(404, `{"error":"not found"}`), nil
+		}
+	})
+
+	cfg := `{
+		"apis": {
+			"myapi": {
+				"base_url": "https://api.example.com/v1",
+				"profiles": {
+					"default": {
+						"auth": {
+							"type": "oauth-device-code",
+							"params": {
+								"client_id": "myid",
+								"device_authorization_url": "oauth2/device",
+								"token_url": "oauth2/token"
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	c.Hooks().ConfigPath = writeAPIConfig(t, cfg)
+	c.Hooks().TokenCachePath = filepath.Join(t.TempDir(), "tokens.json")
+
+	if err := c.Run([]string{"restish", "get", "myapi/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deviceURL != "https://api.example.com/v1/oauth2/device" {
+		t.Fatalf("device URL = %q", deviceURL)
+	}
+	if tokenURL != "https://api.example.com/v1/oauth2/token" {
+		t.Fatalf("token URL = %q", tokenURL)
+	}
+	if got := rr.Last().Header.Get("Authorization"); got != "Bearer relative-device-token" {
 		t.Fatalf("Authorization = %q", got)
 	}
 	if !strings.Contains(errBuf.String(), "verify.example.com") {
