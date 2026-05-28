@@ -1008,6 +1008,84 @@ func TestPaginationPageParamItemsPathPreservesWrapper(t *testing.T) {
 	}
 }
 
+func TestPaginationPageParamItemsPathMissingFails(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url": "https://api.example.com",
+				"pagination": map[string]any{
+					"items_path": "data",
+					"page_param": "page",
+				},
+			},
+		},
+	})
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"meta":{"page":1}}`)),
+			Request:    r,
+		}, nil
+	})
+
+	err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"})
+	if err == nil || !strings.Contains(err.Error(), "items_path") {
+		t.Fatalf("expected items_path error, got %v", err)
+	}
+}
+
+func TestPaginationPageParamItemsPathScalarWarnsAndSkipsPagination(t *testing.T) {
+	cfgData, _ := json.Marshal(map[string]any{
+		"apis": map[string]any{
+			"myapi": map[string]any{
+				"base_url": "https://api.example.com",
+				"pagination": map[string]any{
+					"items_path": "data",
+					"page_param": "page",
+				},
+			},
+		},
+	})
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = writeAPIConfig(t, string(cfgData))
+	var pages []string
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		pages = append(pages, r.URL.Query().Get("page"))
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"id":1},"meta":{"page":1}}`)),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "get", "myapi/items", "-o", "json"}); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	var doc struct {
+		Data map[string]int `json:"data"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("expected first page JSON, got %q: %v", out.String(), err)
+	}
+	if doc.Data["id"] != 1 {
+		t.Fatalf("data = %#v, want id 1", doc.Data)
+	}
+	if got := strings.Join(pages, ","); got != "" {
+		t.Fatalf("pages = %q, want only first request", got)
+	}
+	if !strings.Contains(errOut.String(), "items_path") {
+		t.Fatalf("expected items_path warning, got %q", errOut.String())
+	}
+}
+
 func TestPaginationPageParamLaterHTTPErrorStopsSuccessfully(t *testing.T) {
 	cfgData, _ := json.Marshal(map[string]any{
 		"apis": map[string]any{

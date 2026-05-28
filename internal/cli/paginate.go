@@ -49,6 +49,10 @@ func (c *CLI) tryPaginate(
 		}
 		items, ok, err := pageParamPaginationItems(firstResp.Body, pagCfg)
 		if err != nil {
+			if !isFatalPaginationItemsPathError(err) {
+				c.warnf("pagination items_path: %v", err)
+				return false, nil
+			}
 			return false, err
 		}
 		if !ok || len(items) == 0 {
@@ -289,16 +293,11 @@ func effectiveFirstURL(prepared *preparedRequest, fallback string) string {
 
 func pageParamPaginationItems(body any, pagCfg *config.PaginationConfig) ([]any, bool, error) {
 	if pagCfg != nil && pagCfg.ItemsPath != "" {
-		m, ok := body.(map[string]any)
-		if !ok {
-			return nil, false, paginationItemsPathError{err: fmt.Errorf("pagination: items_path %q requires an object response body", pagCfg.ItemsPath), fatal: true}
-		}
-		result, err := filter.Apply(pagCfg.ItemsPath, m, filter.LangAuto)
+		items, err := pageItems(body, pagCfg)
 		if err != nil {
-			return nil, false, paginationItemsPathError{err: fmt.Errorf("pagination: items_path filter %q: %w", pagCfg.ItemsPath, err), fatal: true}
+			return items, false, err
 		}
-		items, ok := result.([]any)
-		return items, ok, nil
+		return items, true, nil
 	}
 	items, ok := body.([]any)
 	return items, ok, nil
