@@ -131,10 +131,13 @@ with a setup error instead of creating relative config state in the current
 working directory. Cache-only state can use a temporary fallback, but persistent
 configuration cannot.
 
-V2 also does not discover project config by walking the current directory or
-parent directories. Users who want project-local config should pass
-`--rsh-config ./restish.json` or set `RSH_CONFIG`; implicit repository config
-discovery can be considered after v2 if the workflow proves valuable.
+V1-to-v2 migration does not use project config discovery. Migration reads and
+writes only the selected/global user config root so a checked-out repository
+cannot affect one-time migration behavior. Normal v2 config loading may discover
+trusted `.restish.json` project overlays after migration, as described in the
+config and security design records. Users who want a project file to be the
+complete config source of truth can still pass `--rsh-config .restish.json` or
+set `RSH_CONFIG`.
 
 ### API Registrations
 

@@ -225,10 +225,11 @@ func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg 
 		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
-	if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {
+	stateName := c.apiStateName(apiName)
+	if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 		return set, true
 	}
-	s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	s, err := spec.LoadFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil {
 		return spec.OperationSet{}, false
 	}
@@ -242,7 +243,7 @@ func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg 
 	if err != nil {
 		return spec.OperationSet{}, false
 	}
-	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opOpts, set)
+	_ = spec.StoreOperationSetInCache(c.specCacheDir(), stateName, Version, opOpts, set)
 	return set, true
 }
 

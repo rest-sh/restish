@@ -321,7 +321,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	}
 	profileName := c.profileFromCmd(cmd)
 	opInfo := c.doctorOperationSetStatus(requestContext(cmd), name, api, profileName)
-	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
+	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), c.apiStateName(name)+".cbor")); ok {
 		if opInfo.Cached && opInfo.CacheStatus.Stale {
 			fmt.Fprintf(out, "Spec cache: %s (last synced %s, expired %s)\n", style.warn("stale"), formatCacheTime(opInfo.CacheStatus.FetchedAt), formatCacheTime(opInfo.CacheStatus.ExpiresAt))
 		} else if opInfo.Cached {
@@ -753,7 +753,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	report.SpecFiles = append([]string(nil), api.SpecFiles...)
 	profileName := c.profileFromCmd(cmd)
 	opInfo := c.doctorOperationSetStatus(requestContext(cmd), name, api, profileName)
-	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), name+".cbor")); ok {
+	if _, ok := configFileExists(filepath.Join(c.specCacheDir(), c.apiStateName(name)+".cbor")); ok {
 		report.SpecCache = doctorStatusReport{Status: "present"}
 		if opInfo.Cached {
 			report.SpecCache.FetchedAt = opInfo.CacheStatus.FetchedAt.Format(time.RFC3339)

@@ -87,8 +87,9 @@ export RSH_CONFIG_DIR="$HOME/.config/restish"
 export RSH_CACHE_DIR="$HOME/.cache/restish"
 ```
 
-For project-local config, use `RSH_CONFIG=/absolute/path/restish.json` or
-`--rsh-config /absolute/path/restish.json`.
+For project-local config, use `.restish.json` plus `restish config trust`, or
+select a complete config explicitly with `RSH_CONFIG=/absolute/path/.restish.json`
+or `--rsh-config /absolute/path/.restish.json`.
 
 **Related docs:** [Config](/docs/reference/config/), [Environment Variables](/docs/reference/environment-variables/).
 

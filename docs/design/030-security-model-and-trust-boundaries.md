@@ -117,21 +117,33 @@ validated. Examples:
 - response middleware can request specific follow-up actions, not arbitrary host
   behavior
 
-### Explicit Config Roots
+### Project Config Trust
 
-Restish does not implicitly discover project config files from the current
-working directory in v2. Project config is selected with `--rsh-config` or
-`RSH_CONFIG`, and that selected file is the entire config source of truth rather
-than an overlay on top of the operator's global config.
+Restish discovers `.restish.json` from the current working directory or a parent
+only when the user has not selected an explicit config with `--rsh-config` or
+`RSH_CONFIG`. Discovered project config is not executed or layered until trust is
+established. Interactive users can accept the first-run prompt; non-interactive
+scripts must run `restish config trust` first or choose the file explicitly.
 
-This avoids surprise trust transfer from a checked-out repository into normal
-requests. It also makes command review easier: the config trust root is visible
-in the command line or environment, and missing explicit files fail instead of
-falling back to the platform default.
+Trust is stored in user Restish state outside the repository and records the
+canonical config path plus content hash. If the file changes, Restish ignores it
+again until the user reviews and trusts the new content. This avoids surprise
+trust transfer from a checked-out repository into normal requests.
 
-This is a deliberate v2 boundary, not a claim that project config discovery is
-never useful. A future design may add an explicit opt-in mode for repository
-config, but v2 should not infer it from the local directory.
+The initial layered project-config surface is intentionally narrow: `apis` and
+`theme` only. Global config remains the source for shared auth profiles,
+plugins, cache settings, and writes. Project APIs are read-only through normal
+mutation commands, and API-scoped caches/tokens use a project namespace outside
+the repository. Explicit config selection still means the selected file is the
+entire config source of truth.
+
+Project config is allowed to be a normal committed repository file, so Unix
+mode bits are not used as the safety boundary for `.restish.json`. The safety
+boundary is content validation plus explicit trust: project config must not
+contain inline secret values or executable secret sources. Secret-bearing auth
+params must be omitted or written as `env:NAME` references, while non-secret
+OAuth params such as `client_id`, `audience`, issuer URLs, token URLs, and
+scopes remain valid shared project setup.
 
 ### Least Necessary Exposure
 

@@ -62,7 +62,7 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 					SizeBytes:      info.SizeBytes,
 					Size:           formatBytes(info.SizeBytes),
 					Entries:        info.EntryCount,
-					TopAPIProfiles: cacheAPIProfileOutputs(info.Namespaces, info.SizeBytes, c.cfg, 10),
+					TopAPIProfiles: cacheAPIProfileOutputs(info.Namespaces, info.SizeBytes, c.cfg, c.projectConfig, 10),
 					TopHosts:       cacheBreakdownOutputs(info.Hosts, info.SizeBytes, 10),
 				}
 				if !info.OldestEntry.IsZero() {
@@ -79,9 +79,9 @@ func (c *CLI) newCacheInfoCmd() *cobra.Command {
 			}
 			if c.stdoutIsTerminal() {
 				width, height := cacheTreemapSize(c.Stdout)
-				printCacheTreemap(c.Stdout, style, "Usage map by API/profile:", info.Namespaces, c.cfg, width, height, 10)
+				printCacheTreemap(c.Stdout, style, "Usage map by API/profile:", info.Namespaces, c.cfg, c.projectConfig, width, height, 10)
 			}
-			printCacheAPIBreakdown(c.Stdout, style, "Largest APIs/profiles:", info.Namespaces, info.SizeBytes, c.cfg, 10)
+			printCacheAPIBreakdown(c.Stdout, style, "Largest APIs/profiles:", info.Namespaces, info.SizeBytes, c.cfg, c.projectConfig, 10)
 			printCacheBreakdown(c.Stdout, style, "Largest hosts:", info.Hosts, info.SizeBytes, 10)
 			return nil
 		},
@@ -139,13 +139,13 @@ func cacheBreakdownOutputs(items []cache.Breakdown, totalBytes int64, limit int)
 	return out
 }
 
-func cacheAPIProfileOutputs(items []cache.Breakdown, totalBytes int64, cfg *config.Config, limit int) []cacheAPIProfileOutput {
+func cacheAPIProfileOutputs(items []cache.Breakdown, totalBytes int64, cfg *config.Config, project *projectConfigState, limit int) []cacheAPIProfileOutput {
 	if limit > 0 && len(items) > limit {
 		items = items[:limit]
 	}
 	out := make([]cacheAPIProfileOutput, 0, len(items))
 	for _, item := range items {
-		details := cacheNamespaceInfo(item.Name, cfg)
+		details := cacheNamespaceInfo(item.Name, cfg, project)
 		entry := cacheAPIProfileOutput{
 			Name:      details.name,
 			Namespace: details.namespace,
@@ -186,7 +186,7 @@ func printCacheBreakdown(w io.Writer, style humanTextStyle, title string, items 
 	}
 }
 
-func printCacheAPIBreakdown(w io.Writer, style humanTextStyle, title string, items []cache.Breakdown, totalBytes int64, cfg *config.Config, limit int) {
+func printCacheAPIBreakdown(w io.Writer, style humanTextStyle, title string, items []cache.Breakdown, totalBytes int64, cfg *config.Config, project *projectConfigState, limit int) {
 	if len(items) == 0 {
 		return
 	}
@@ -197,7 +197,7 @@ func printCacheAPIBreakdown(w io.Writer, style humanTextStyle, title string, ite
 	}
 	fmt.Fprintf(w, "  %s\n", style.hint(fmt.Sprintf("%-32s %*s  %6s  %s", "Name", cacheSizeColumnWidth, "Size", "%", "Entries")))
 	for _, item := range items[:shown] {
-		details := cacheNamespaceInfo(item.Name, cfg)
+		details := cacheNamespaceInfo(item.Name, cfg, project)
 		entryWord := "entries"
 		if item.EntryCount == 1 {
 			entryWord = "entry"
@@ -209,7 +209,7 @@ func printCacheAPIBreakdown(w io.Writer, style humanTextStyle, title string, ite
 	}
 }
 
-func cacheNamespaceInfo(namespace string, cfg *config.Config) cacheNamespaceDetails {
+func cacheNamespaceInfo(namespace string, cfg *config.Config, project *projectConfigState) cacheNamespaceDetails {
 	details := cacheNamespaceDetails{
 		name:      namespace,
 		namespace: namespace,
@@ -222,6 +222,9 @@ func cacheNamespaceInfo(namespace string, cfg *config.Config) cacheNamespaceDeta
 	if !ok || apiName == "" || profileName == "" {
 		return details
 	}
+	if logicalAPIName, ok := projectCacheNamespaceAPI(apiName, project); ok {
+		apiName = logicalAPIName
+	}
 	details.api = apiName
 	details.profile = profileName
 	if cfg != nil && cfg.APIs != nil && cfg.APIs[apiName] != nil {
@@ -230,6 +233,18 @@ func cacheNamespaceInfo(namespace string, cfg *config.Config) cacheNamespaceDeta
 		details.name = fmt.Sprintf("%s (%s, unregistered)", apiName, profileName)
 	}
 	return details
+}
+
+func projectCacheNamespaceAPI(stateName string, project *projectConfigState) (string, bool) {
+	if project == nil || !project.Trusted || project.Namespace == "" {
+		return "", false
+	}
+	prefix := "project-" + project.Namespace + "-"
+	apiName, ok := strings.CutPrefix(stateName, prefix)
+	if !ok || apiName == "" || !project.APIs[apiName] {
+		return "", false
+	}
+	return apiName, true
 }
 
 func formatCachePercent(sizeBytes, totalBytes int64) string {
@@ -273,7 +288,11 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 			if len(args) == 1 {
 				apiName := args[0]
 				registered := c.cfg != nil && c.cfg.APIs != nil && c.cfg.APIs[apiName] != nil
-				cleared, err := dc.ClearNamespacePrefix(apiName + ":")
+				namespace := apiName
+				if registered {
+					namespace = c.apiStateName(apiName)
+				}
+				cleared, err := dc.ClearNamespacePrefix(namespace + ":")
 				if err != nil {
 					return err
 				}

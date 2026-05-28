@@ -1875,7 +1875,7 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 		}
 	}
 	if match.apiName != "" {
-		opts.CacheNamespace = match.apiName + ":" + profileName
+		opts.CacheNamespace = c.apiCacheNamespace(match.apiName, profileName)
 	}
 
 	return rawURL, match.apiName, opts, nil

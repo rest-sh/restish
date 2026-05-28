@@ -165,7 +165,7 @@ func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 	allProfiles, _ := cmd.Flags().GetBool("all-profiles")
 
 	if allProfiles {
-		if err := tc.DeletePrefix(apiName + ":"); err != nil {
+		if err := tc.DeletePrefix(c.apiStateName(apiName) + ":"); err != nil {
 			return fmt.Errorf("auth logout: %w", err)
 		}
 		for _, prof := range apiCfg.Profiles {
@@ -182,7 +182,7 @@ func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(c.Stdout, "Cleared auth cache for %q (all profiles)\n", apiName)
 		return nil
 	}
-	key := apiName + ":" + profileName
+	key := c.apiCacheNamespace(apiName, profileName)
 	if err := tc.Delete(key); err != nil {
 		return fmt.Errorf("auth logout: %w", err)
 	}
@@ -221,7 +221,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		defer closer.Close()
 	}
 	discCfg := spec.DiscoverConfig{
-		APIName:          apiName,
+		APIName:          c.apiStateName(apiName),
 		BaseURL:          effectiveProfileBaseURL(apiCfg, profileName),
 		SpecURL:          apiCfg.SpecURL,
 		SpecFiles:        apiCfg.SpecFiles,
@@ -250,7 +250,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		if err := c.configureAllowedOperationOrigins(cmd, apiName, syncedCfg, apiSpec, profileName, yes); err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(apiCfg, syncedCfg) {
+		if !reflect.DeepEqual(apiCfg, syncedCfg) && !c.projectAPI(apiName) {
 			if err := c.saveAPIConfig("api sync", apiName, c.cfg, syncedCfg); err != nil {
 				return err
 			}
@@ -263,7 +263,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 			OperationBase:   effectiveOperationBase(apiCfg, profileName),
 			ServerVariables: effectiveServerVariables(apiCfg, profileName),
 		}
-		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
+		if err := spec.StoreSpecInCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
 			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
 		}
 		style := humanTextStyleFor(c.Stdout)
@@ -423,7 +423,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			OperationBase:   effectiveOperationBase(apiCfg, "default"),
 			ServerVariables: effectiveServerVariables(apiCfg, "default"),
 		}
-		if err := spec.StoreSpecInCache(c.specCacheDir(), apiName, Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
+		if err := spec.StoreSpecInCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
 			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
 		}
 	}
@@ -480,6 +480,10 @@ func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName strin
 	}
 	suggestions := suggestedAllowedOperationOrigins(origins, apiCfg.AllowedOperationOrigins)
 	if len(suggestions) == 0 {
+		return nil
+	}
+	if c.projectAPI(apiName) {
+		c.warnf("cross-origin operation servers ignored for read-only project API %q: %s; edit %s and add allowed_operation_origins[]: %s, or run with --rsh-config %s to make it the selected config", apiName, strings.Join(origins, ", "), c.projectConfig.Path, suggestions[0], c.projectConfig.Path)
 		return nil
 	}
 	if yes {
@@ -1459,6 +1463,9 @@ func (c *CLI) apiListOperationCount(apiName string, apiCfg *config.APIConfig) in
 // runAPIRemove removes a configured API and saves the updated config.
 func (c *CLI) runAPIRemove(cmd *cobra.Command, args []string) error {
 	apiName := args[0]
+	if err := c.ensureMutableAPI(apiName); err != nil {
+		return err
+	}
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {
 		return err
@@ -1486,12 +1493,13 @@ func (c *CLI) removeAPILocalState(apiName string, sharedAuthRefs []string) error
 	if err != nil {
 		return fmt.Errorf("api remove: clear HTTP cache: %w", err)
 	}
-	if _, err := dc.ClearNamespacePrefix(apiName + ":"); err != nil {
+	namespace := c.apiStateName(apiName)
+	if _, err := dc.ClearNamespacePrefix(namespace + ":"); err != nil {
 		return fmt.Errorf("api remove: clear HTTP cache for %q: %w", apiName, err)
 	}
 
 	tc := auth.NewTokenCache(c.tokenCachePath())
-	if err := tc.DeletePrefix(apiName + ":"); err != nil {
+	if err := tc.DeletePrefix(namespace + ":"); err != nil {
 		return fmt.Errorf("api remove: clear auth cache for %q: %w", apiName, err)
 	}
 	for _, ref := range sharedAuthRefs {

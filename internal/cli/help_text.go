@@ -67,6 +67,9 @@ const configLong = "Manage local Restish configuration.\n\n" +
 const configPathLong = "Print the active Restish config file path.\n\n" +
 	"This honors `--rsh-config` and `RSH_CONFIG`, so it is the safest way to confirm which config a command will read or write."
 
+const configTrustLong = "Trust the `.restish.json` project config discovered from the current directory or a parent.\n\n" +
+	"Trusted project config is layered over the global config for this working tree. Trust is stored outside the repository and includes the file's content hash, so Restish asks again if the file changes. Project config is meant for shared, secret-free setup; secret auth params should be omitted or use env:NAME references. In non-interactive scripts, run this command once before relying on discovered project config, or select a config explicitly with `--rsh-config`."
+
 const configShowLong = "Print the active config summary, or redacted JSON with `-o json`.\n\n" +
 	"Human output shows the selected file, cache/theme settings, shared auth profiles, plugin config, and registered API details without printing credential values. JSON output is intended for inspection and support; sensitive auth values, credential-like headers, and credential-like query parameters are redacted where Restish recognizes them."
 

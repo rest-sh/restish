@@ -76,14 +76,26 @@ Keep it path-only. Use `base_url` for scheme and host.
 ## Project Config Files
 
 ```bash
-restish --rsh-config ./restish.json api connect example api.rest.sh
-restish --rsh-config ./restish.json api list
+restish config trust
+restish api list
 ```
 
-An explicit config file is not merged with the global config. Missing explicit
-files fail clearly instead of silently falling back. Restish does not
-automatically discover project config from the current directory; pass
-`--rsh-config` or set `RSH_CONFIG` when a repository should use its own config.
+If a repository has `.restish.json`, Restish discovers it from the current
+directory or a parent but does not use it until you trust it. Trust is stored in
+your user config state and includes the file's content hash, so changed project
+config has to be trusted again.
+
+Trusted project config layers project `apis` and `theme` over your global
+config. Project APIs override global APIs with the same name, but unrelated
+global APIs remain available. Normal config-writing commands still write your
+global config and refuse to mutate project APIs; edit `.restish.json` directly
+or pass `--rsh-config .restish.json` when you intentionally want that file to be
+the complete config source for the command.
+
+Committed `.restish.json` files should contain shared setup, not inline secrets.
+Use non-secret values such as OAuth `client_id`, `audience`, scopes, and endpoint
+URLs directly; use `env:NAME` references or omit values for API key values,
+bearer tokens, passwords, and OAuth client secrets.
 
 ## Sync After Spec Changes
 

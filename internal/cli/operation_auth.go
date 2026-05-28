@@ -295,7 +295,7 @@ func (c *CLI) resolveCredentialAuth(apiName, profileName, credentialID string, c
 		return resolvedAuthConfig{}, fmt.Errorf("credential %q in profile %q of API %q has both auth and auth_ref", credentialID, profileName, apiName)
 	}
 	if credential.AuthRef == "" {
-		cacheKey := apiName + ":" + profileName + ":credential:" + credentialID
+		cacheKey := c.apiCacheNamespace(apiName, profileName) + ":credential:" + credentialID
 		if relativeKey := inlineAuthCacheKey(cacheKey, credential.Auth, c.authBaseURL(apiName, profileName)); relativeKey != "" {
 			cacheKey = relativeKey
 		}

@@ -60,8 +60,32 @@ and `%APPDATA%\restish\restish.json` on Windows.
 merge them with the default config. Token and external-tool approval sidecars
 live next to the selected explicit config. HTTP response and spec caches stay
 under the cache root, with a namespace derived from the explicit config path.
-Restish v2 does not search the current directory or ancestors for project
-config files; project-local config is explicit only.
+When no explicit config file is selected, Restish may discover `.restish.json`
+from the current directory or an ancestor. A discovered project config is used
+only after trust is recorded with `restish config trust` or an interactive TTY
+prompt. Trust is stored outside the repository in user Restish state and is
+keyed by canonical project config path plus content hash, so a changed project
+config must be trusted again.
+
+Trusted project config is layered over the selected/global config for reads. The
+first project layer honors only `apis` and `theme`: project APIs shadow global
+APIs by name without deep-merging individual API definitions, and project theme
+entries override global theme entries by key. Other top-level keys such as
+`auth_profiles`, `plugins`, `cache`, and `theme_source` are invalid in
+auto-discovered project config and produce a clear diagnostic when the project
+config is otherwise trusted. Project config may use normal repository file
+permissions, but it must not contain inline secret values; secret-bearing auth
+params must be omitted or use `env:NAME` references. Non-interactive runs do not
+prompt for trust; when they discover an untrusted project config, they continue
+with the selected/global config and print a concise stderr warning naming the
+file and `restish config trust`. Auto-discovered project config is read-only for
+normal mutation commands; writes continue to target the selected/global config
+unless `--rsh-config` or `RSH_CONFIG` explicitly selects the project file.
+
+Project-local machine state is not written into the repository. OAuth/token
+caches, HTTP response caches, and spec/generated-command caches for trusted
+project APIs live in user Restish state/cache roots under a namespace derived
+from the trusted project config path and content hash.
 
 Windows ACL inspection is not implemented for the first v2 release. Existing
 config and token-cache files on Windows therefore report permission diagnostics

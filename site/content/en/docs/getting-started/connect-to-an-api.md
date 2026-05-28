@@ -87,17 +87,23 @@ prefix.
 
 ## Project Config
 
-Use an explicit config file when a project should carry its own Restish setup:
+Use `.restish.json` when a project should carry shared Restish API setup:
 
 ```bash
-restish --rsh-config ./restish.json api connect example api.rest.sh
-restish --rsh-config ./restish.json example list-images
+restish config trust
+restish example list-images
 ```
 
-An explicit config file is the source of truth for that invocation. It is not
-merged with the global config. Restish does not automatically discover
-`./restish.json`; keep passing `--rsh-config` or set `RSH_CONFIG` when a project
-should use that file.
+Restish discovers `.restish.json` in the current directory or a parent, but only
+uses it after you trust the file. Trusted project config layers project APIs and
+theme over your global config. If you want one command to use a project file as
+the complete config source, pass `--rsh-config .restish.json` or set
+`RSH_CONFIG`.
+
+Keep committed project config secret-free. Shared OAuth values such as
+`client_id`, `audience`, scopes, and endpoint URLs can live there; API key
+values, bearer tokens, passwords, and OAuth client secrets should be omitted or
+referenced as `env:NAME`.
 
 ## Next Step
 

@@ -24,8 +24,8 @@ type cacheTreemapRect struct {
 	x, y, w, h int
 }
 
-func printCacheTreemap(w io.Writer, style humanTextStyle, title string, items []cache.Breakdown, cfg *config.Config, width, height, limit int) {
-	treemapItems := cacheTreemapItems(items, cfg, limit)
+func printCacheTreemap(w io.Writer, style humanTextStyle, title string, items []cache.Breakdown, cfg *config.Config, project *projectConfigState, width, height, limit int) {
+	treemapItems := cacheTreemapItems(items, cfg, project, limit)
 	if len(treemapItems) == 0 {
 		return
 	}
@@ -72,7 +72,7 @@ func printCacheTreemap(w io.Writer, style humanTextStyle, title string, items []
 	fmt.Fprintf(w, "  %s%s%s\n", style.hint("╰"), style.hint(strings.Repeat("─", innerWidth)), style.hint("╯"))
 }
 
-func cacheTreemapItems(items []cache.Breakdown, cfg *config.Config, limit int) []cacheTreemapItem {
+func cacheTreemapItems(items []cache.Breakdown, cfg *config.Config, project *projectConfigState, limit int) []cacheTreemapItem {
 	if limit > 0 && len(items) > limit {
 		items = items[:limit]
 	}
@@ -83,7 +83,7 @@ func cacheTreemapItems(items []cache.Breakdown, cfg *config.Config, limit int) [
 		if item.SizeBytes <= 0 {
 			continue
 		}
-		details := cacheNamespaceInfo(item.Name, cfg)
+		details := cacheNamespaceInfo(item.Name, cfg, project)
 		out = append(out, cacheTreemapItem{
 			label: details.name,
 			size:  item.SizeBytes,

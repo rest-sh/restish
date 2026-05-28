@@ -81,17 +81,43 @@ explicit config file is an error so operators do not accidentally run with the
 global default after mistyping a project path. The ordinary platform-default
 config path keeps the v1 migration and auto-create behavior described below.
 
-Restish v2 does not search the current working directory or parent directories
-for project config. Project-local configuration is selected explicitly with
-`--rsh-config` or `RSH_CONFIG`. That keeps repository checkout state from
-silently changing request behavior; an implicit project-discovery mode can be
-designed later if a real workflow needs it.
+When neither explicit config selector is present, Restish also walks from the
+current directory toward the filesystem root looking for `.restish.json`.
+Discovered project config is ignored until the user trusts that exact file
+content with `restish config trust` or an interactive first-run prompt. Trust is
+stored outside the repository in the user's Restish config directory and is keyed
+by canonical project config path plus SHA-256 content hash, so a repository
+cannot trust itself and changed project config requires renewed trust.
+
+Trusted project config is layered over the global config, not written back into
+it. Global APIs and auth profiles remain available. Project APIs override global
+APIs with the same name at the API-entry boundary; individual API entries are
+not deep-merged. The first version accepts only project `apis` and `theme`.
+Project theme entries overlay the global theme so teams can make environment
+context visible, while `auth_profiles`, `plugins`, `cache`, and `theme_source`
+remain global-only. Normal config mutation commands still write the global
+config and refuse to mutate APIs that came from trusted project config. Passing
+`--rsh-config .restish.json` keeps explicit-config semantics: the selected file
+is the complete config source of truth and sidecar state follows that explicit
+config root.
+
+Auto-discovered project config is intended to be a committed, shareable project
+manifest. It may use normal repository file permissions, but it must not contain
+inline secret material. Secret-bearing auth params such as API key values,
+bearer tokens, HTTP Basic passwords, and OAuth client secrets must be omitted or
+use `env:NAME` references. Non-secret OAuth parameters such as `client_id`,
+`audience`, `resource`, `organization`, issuer URLs, token URLs, and scopes are
+valid project config.
 
 Sidecar state that belongs to the selected config trust root, such as OAuth
 token caches and external-tool approval records, lives next to the explicit
 config file. Response and spec caches remain under the cache root, but explicit
 configs get a cache namespace derived from the config path so two project
 configs do not reuse each other's cached HTTP responses or discovered specs.
+In discovered layered mode, response cache, spec cache, and API-scoped OAuth
+tokens for project APIs use a project namespace derived from the canonical
+project config path and content hash. Tokens and caches stay in the user's
+Restish state/cache roots, never in the repository.
 
 Cache directory selection mirrors config selection with `RSH_CACHE_DIR`,
 `XDG_CACHE_HOME/restish`, `~/.cache/restish` on Unix-like systems, and the
