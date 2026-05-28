@@ -59,7 +59,7 @@ type opsBlob struct {
 }
 
 const currentCacheSchema = 2
-const currentOperationCacheSchema = 10
+const currentOperationCacheSchema = 11
 
 // OperationCacheStatus describes the freshness of cached operation metadata.
 type OperationCacheStatus struct {

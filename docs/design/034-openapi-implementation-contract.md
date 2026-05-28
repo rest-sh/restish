@@ -271,6 +271,12 @@ reject unknown body fields by default, does not perform full validation before
 requests, and does not silently coerce generated-command request-body values
 based on schema metadata.
 
+`--rsh-validate` is the explicit generated-command escape hatch for local JSON
+request-body validation. It validates the assembled body against the selected
+operation request schema before execution, reports user-facing field paths, and
+does not rewrite input. Generic HTTP commands and default generated-command
+execution stay schema-agnostic because servers remain the source of truth.
+
 Schema support should cover OpenAPI 3.0 and 3.1 shapes including:
 
 - `type` as a string or an array;

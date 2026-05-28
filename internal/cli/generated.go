@@ -488,7 +488,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			}
 			acceptOverride := c.generatedOperationAcceptHeader(op.ResponseMediaTypes, op.ResponseMediaType)
 			rawBinaryBody := op.Help.Request != nil && op.Help.Request.RawBinary
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.Help, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -514,6 +514,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 	} else {
 		cmd.Args = generatedOperationArgs(required, true)
 		cmd.Flags().Bool("rsh-generate-body", false, "Print an example request body and exit")
+		cmd.Flags().Bool("rsh-validate", false, "Validate the JSON request body against the OpenAPI schema before sending")
 	}
 
 	for _, p := range optional {
@@ -1368,6 +1369,7 @@ func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
 	apiName, opPath, operationServer, method, requestMediaType, responseMediaType string,
 	requestMultipartContentTypes map[string]string,
+	help spec.OperationHelp,
 	bodyRequired bool,
 	rawBinaryBody bool,
 	noAuth bool,
@@ -1473,9 +1475,25 @@ func (c *CLI) runGeneratedOp(
 
 	bodyArgs := args[bodyArgStart:]
 	gf := globalFlagsFromContext(requestContext(cmd))
+	var validationSchema map[string]any
+	var validationMediaType string
+	validateBody, _ := cmd.Flags().GetBool("rsh-validate")
+	if validateBody {
+		validationRequest, err := c.generatedBodyExampleRequest(help, gf.ContentType)
+		if err != nil {
+			return err
+		}
+		if validationRequest != nil {
+			validationSchema = validationRequest.JSONSchema
+			validationMediaType = validationRequest.MediaType
+		}
+	}
 	return c.runHTTPWithOptions(cmd, method, append([]string{rawURL}, bodyArgs...), false, extraHeaders, noAuth, "", requestMediaType, requestBodyOptions{
 		multipartPartContentTypes: requestMultipartContentTypes,
 		acceptOverride:            responseMediaType,
+		validationSchema:          validationSchema,
+		validationMediaType:       validationMediaType,
+		validationRequested:       validateBody,
 		bodyRequired:              bodyRequired,
 		rawBinaryBody:             rawBinaryBody,
 		explicitAPIName:           apiName,

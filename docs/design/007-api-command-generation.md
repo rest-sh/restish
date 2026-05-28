@@ -251,12 +251,18 @@ generic HTTP command must interpret the same body shorthand the same way:
 `id: 123` is a number, while `id: "123"` is a string. OpenAPI schema metadata
 can describe the expected shape in help and examples, but it must not silently
 rewrite request-body values before they are sent. Unknown fields are still
-accepted unless a future explicit validation mode is enabled.
+accepted unless the user explicitly opts in to local validation.
 
 OpenAPI schema constructs such as `oneOf`, `anyOf`, `allOf`, nullable/type
 arrays, enum, const, defaults, examples, read-only/write-only, additional
 properties, and recursive references are used for help and bounded example
 generation. They are not full request validators by default.
+
+Generated operations may expose optional request-body validation through
+`--rsh-validate`. Validation runs after body assembly, applies only to JSON
+request bodies, reports field paths and schema expectations, and never coerces
+input. The server remains the source of truth, so validation is not enabled by
+default and generic HTTP commands remain schema-agnostic.
 
 Generated operation commands also expose `--rsh-generate-body` for request-body
 operations. The flag prints an example body derived from OpenAPI examples,

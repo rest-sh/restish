@@ -75,10 +75,11 @@ func buildRequestHelp(op *v3.Operation, requestMediaType string) *OperationBodyH
 		example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
 	}
 	return &OperationBodyHelp{
-		MediaType: requestMediaType,
-		Schema:    schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
-		Example:   example,
-		RawBinary: rawBinary,
+		MediaType:  requestMediaType,
+		Schema:     schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, ""),
+		JSONSchema: schemaJSONMap(schema),
+		Example:    example,
+		RawBinary:  rawBinary,
 	}
 }
 
@@ -96,6 +97,7 @@ func buildRequestHelps(op *v3.Operation) []OperationBodyHelp {
 		if schema != nil {
 			help.RawBinary = isRawBinaryRequestBody(mediaType, schema)
 			help.Schema = schemaHelpRenderer{mode: schemaHelpWrite, seen: map[uint64]bool{}}.render(schema, "")
+			help.JSONSchema = schemaJSONMap(schema)
 			if !help.RawBinary {
 				help.Example = renderExampleJSON(firstMediaTypeExample(mt, schema, schemaHelpWrite))
 			}

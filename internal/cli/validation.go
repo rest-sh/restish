@@ -1,0 +1,303 @@
+package cli
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"unicode"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+)
+
+const generatedRequestSchemaURL = "restish-request-body.schema.json"
+
+func validateGeneratedJSONBody(body any, contentType, schemaMediaType string, schema map[string]any) error {
+	mediaType := strings.TrimSpace(contentType)
+	if mediaType != "" && !strings.Contains(mediaType, "/") && schemaMediaType != "" {
+		mediaType = schemaMediaType
+	}
+	if mediaType == "" {
+		mediaType = schemaMediaType
+	}
+	if mediaType == "" {
+		mediaType = "application/json"
+	}
+	if !isJSONMediaType(mediaType) {
+		return fmt.Errorf("--rsh-validate only supports generated JSON request bodies; selected request content type is %s", mediaType)
+	}
+	if len(schema) == 0 {
+		return fmt.Errorf("--rsh-validate requires a generated JSON request body schema for this operation")
+	}
+	normalizedSchema, err := normalizeJSONSchemaValue(schema)
+	if err != nil {
+		return fmt.Errorf("compile request body schema: %w", err)
+	}
+
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(generatedRequestSchemaURL, normalizedSchema); err != nil {
+		return fmt.Errorf("compile request body schema: %w", err)
+	}
+	compiled, err := compiler.Compile(generatedRequestSchemaURL)
+	if err != nil {
+		return fmt.Errorf("compile request body schema: %w", err)
+	}
+	if err := compiled.Validate(body); err != nil {
+		return fmt.Errorf("request body failed OpenAPI schema validation: %s", formatJSONSchemaValidationError(err))
+	}
+	return nil
+}
+
+func normalizeJSONSchemaValue(schema map[string]any) (map[string]any, error) {
+	normalized, err := normalizeJSONCompatible(schema)
+	if err != nil {
+		return nil, err
+	}
+	out, ok := normalized.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("schema root is %T, want object", normalized)
+	}
+	normalizeOpenAPIJSONSchema(out)
+	return out, nil
+}
+
+func normalizeJSONCompatible(value any) (any, error) {
+	switch v := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, child := range v {
+			normalized, err := normalizeJSONCompatible(child)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = normalized
+		}
+		return out, nil
+	case map[interface{}]interface{}:
+		out := make(map[string]any, len(v))
+		for key, child := range v {
+			keyString, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("schema object key is %T, want string", key)
+			}
+			normalized, err := normalizeJSONCompatible(child)
+			if err != nil {
+				return nil, err
+			}
+			out[keyString] = normalized
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(v))
+		for i, child := range v {
+			normalized, err := normalizeJSONCompatible(child)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalized
+		}
+		return out, nil
+	default:
+		return v, nil
+	}
+}
+
+func normalizeOpenAPIJSONSchema(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		normalizeOpenAPIReadOnlyRequired(v)
+		normalizeOpenAPIJSONSchemaMap(v)
+		normalizeOpenAPIExclusiveBound(v, "minimum", "exclusiveMinimum")
+		normalizeOpenAPIExclusiveBound(v, "maximum", "exclusiveMaximum")
+		for _, child := range v {
+			normalizeOpenAPIJSONSchema(child)
+		}
+	case []any:
+		for _, child := range v {
+			normalizeOpenAPIJSONSchema(child)
+		}
+	}
+}
+
+func normalizeOpenAPIJSONSchemaMap(schema map[string]any) {
+	nullable, ok := schema["nullable"].(bool)
+	if !ok || !nullable {
+		return
+	}
+	switch typ := schema["type"].(type) {
+	case string:
+		if typ != "null" {
+			schema["type"] = []any{typ, "null"}
+		}
+	case []any:
+		for _, item := range typ {
+			if item == "null" {
+				return
+			}
+		}
+		schema["type"] = append(typ, "null")
+	case nil:
+		withoutNullable := make(map[string]any, len(schema))
+		for key, value := range schema {
+			if key != "nullable" {
+				withoutNullable[key] = value
+			}
+		}
+		for key := range schema {
+			delete(schema, key)
+		}
+		schema["anyOf"] = []any{withoutNullable, map[string]any{"type": "null"}}
+	}
+}
+
+func normalizeOpenAPIReadOnlyRequired(schema map[string]any) {
+	required, ok := schema["required"].([]any)
+	if !ok || len(required) == 0 {
+		return
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok || len(properties) == 0 {
+		return
+	}
+	out := required[:0]
+	for _, item := range required {
+		name, ok := item.(string)
+		if !ok || !openAPIPropertyReadOnly(properties[name]) {
+			out = append(out, item)
+		}
+	}
+	if len(out) == 0 {
+		delete(schema, "required")
+		return
+	}
+	schema["required"] = out
+}
+
+func openAPIPropertyReadOnly(property any) bool {
+	prop, ok := property.(map[string]any)
+	if !ok {
+		return false
+	}
+	readOnly, _ := prop["readOnly"].(bool)
+	return readOnly
+}
+
+func normalizeOpenAPIExclusiveBound(schema map[string]any, limitKey, exclusiveKey string) {
+	exclusive, ok := schema[exclusiveKey].(bool)
+	if !ok {
+		return
+	}
+	if !exclusive {
+		delete(schema, exclusiveKey)
+		return
+	}
+	if limit, ok := schema[limitKey]; ok {
+		schema[exclusiveKey] = limit
+	}
+}
+
+func formatJSONSchemaValidationError(err error) string {
+	var validationErr *jsonschema.ValidationError
+	if !errors.As(err, &validationErr) {
+		return err.Error()
+	}
+	units := validationOutputLeaves(validationErr.BasicOutput())
+	if len(units) == 0 {
+		return validationErr.Error()
+	}
+	const maxErrors = 5
+	var parts []string
+	for i, unit := range units {
+		if i >= maxErrors {
+			parts = append(parts, fmt.Sprintf("and %d more", len(units)-maxErrors))
+			break
+		}
+		msg := validationOutputMessage(unit.Error)
+		if msg == "" {
+			continue
+		}
+		parts = append(parts, jsonPointerDisplayPath(unit.InstanceLocation)+": "+msg)
+	}
+	if len(parts) == 0 {
+		return validationErr.Error()
+	}
+	return strings.Join(parts, "; ")
+}
+
+func validationOutputLeaves(unit *jsonschema.OutputUnit) []jsonschema.OutputUnit {
+	if unit == nil {
+		return nil
+	}
+	if len(unit.Errors) == 0 {
+		return []jsonschema.OutputUnit{*unit}
+	}
+	var out []jsonschema.OutputUnit
+	for _, child := range unit.Errors {
+		out = append(out, validationOutputLeaves(&child)...)
+	}
+	return out
+}
+
+func validationOutputMessage(err *jsonschema.OutputError) string {
+	if err == nil {
+		return ""
+	}
+	data, marshalErr := json.Marshal(err)
+	if marshalErr != nil {
+		return ""
+	}
+	var msg string
+	if unmarshalErr := json.Unmarshal(data, &msg); unmarshalErr != nil {
+		return strings.Trim(string(data), `"`)
+	}
+	return msg
+}
+
+func jsonPointerDisplayPath(ptr string) string {
+	if ptr == "" {
+		return "$"
+	}
+	parts := strings.Split(strings.TrimPrefix(ptr, "/"), "/")
+	var b strings.Builder
+	b.WriteByte('$')
+	for _, part := range parts {
+		part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+		if part == "" {
+			b.WriteString(`[""]`)
+			continue
+		}
+		if _, err := strconv.Atoi(part); err == nil {
+			b.WriteByte('[')
+			b.WriteString(part)
+			b.WriteByte(']')
+			continue
+		}
+		if isIdentifierPathSegment(part) {
+			b.WriteByte('.')
+			b.WriteString(part)
+			continue
+		}
+		encoded, _ := json.Marshal(part)
+		b.WriteByte('[')
+		b.Write(encoded)
+		b.WriteByte(']')
+	}
+	return b.String()
+}
+
+func isIdentifierPathSegment(value string) bool {
+	for i, r := range value {
+		if i == 0 {
+			if r != '_' && !unicode.IsLetter(r) {
+				return false
+			}
+			continue
+		}
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return value != ""
+}

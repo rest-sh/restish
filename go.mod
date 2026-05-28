@@ -18,6 +18,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/pb33f/libopenapi v0.35.0
 	github.com/sandrolain/httpcache v1.4.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/shamaton/msgpack/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

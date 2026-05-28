@@ -66,10 +66,11 @@ type ParamObjectProperty struct {
 // OperationBodyHelp is a compact request/response body example extracted from
 // OpenAPI schemas for generated command help.
 type OperationBodyHelp struct {
-	MediaType string
-	Schema    string
-	Example   string
-	RawBinary bool
+	MediaType  string
+	Schema     string
+	JSONSchema map[string]any
+	Example    string
+	RawBinary  bool
 }
 
 // OperationResponseHelp is a compact response shape for generated command help.
