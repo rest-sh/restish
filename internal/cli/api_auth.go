@@ -787,7 +787,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	var s *spec.APISpec
 	var err error
 	if forceRefresh {
-		s, err = c.discoverSpec(ctx, apiName)
+		s, err = c.discoverSpecForProfile(ctx, apiName, profileName, true, 0)
 	} else {
 		s, err = spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
 	}
@@ -797,10 +797,10 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 		}
 		s, err = spec.Discover(ctx, spec.DiscoverConfig{
 			APIName:         apiName,
-			BaseURL:         apiCfg.BaseURL,
+			BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 			SpecFiles:       apiCfg.SpecFiles,
 			CacheDir:        c.specCacheDir(),
-			OperationBase:   apiCfg.OperationBase,
+			OperationBase:   effectiveOperationBase(apiCfg, profileName),
 			ServerVariables: effectiveServerVariables(apiCfg, profileName),
 			Version:         Version,
 			ForceRefresh:    true,

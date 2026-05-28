@@ -798,6 +798,44 @@ func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
 	}
 }
 
+func TestGenericURLMatchesOperationAuthBeforeURLOverride(t *testing.T) {
+	var gotAuth, gotPath string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	}))
+	t.Cleanup(target.Close)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Test API",
+			openAPISecuritySchemes(`"BasicAuth":{"type":"http","scheme":"basic"}`),
+			openAPIPaths(openAPIGet("/auth/basic", "getAuthBasic", `"security":[{"BasicAuth":[]}]`)))
+	})
+	baseURL := env.baseURL(t)
+	apiCfg := testAPIConfig(baseURL, profileCredentials(map[string]*config.CredentialConfig{
+		"BasicAuth": testCredential(basicAuth("alice", "secret")),
+	}))
+	apiCfg.URLOverrides = map[string]string{
+		baseURL + "/": target.URL + "/local/",
+	}
+	env.writeAPIConfig(t, apiCfg)
+
+	c := env.newCLI()
+	if err := c.Run([]string{"restish", "tapi/auth/basic"}); err != nil {
+		t.Fatalf("short URL request failed: %v", err)
+	}
+	if gotPath != "/local/auth/basic" {
+		t.Fatalf("request path = %q, want /local/auth/basic", gotPath)
+	}
+	if !strings.HasPrefix(gotAuth, "Basic ") {
+		t.Fatalf("Authorization = %q, want Basic auth", gotAuth)
+	}
+}
+
 func TestGenericURLMatchedSecurityEmptySuppressesProfileAuth(t *testing.T) {
 	var gotAuth string
 	mux := http.NewServeMux()
@@ -4341,6 +4379,71 @@ func TestGeneratedCommandsResolveRootRelativeServerURLEscapingAPIBase(t *testing
 	}
 }
 
+func TestGeneratedCommandsUseBaseOriginForDocumentServerPath(t *testing.T) {
+	var lastHost, lastPath string
+	mux := http.NewServeMux()
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "servers": [{"url": "https://prod.example.com/v1"}],
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	mux.HandleFunc("/v1/items", func(w http.ResponseWriter, r *http.Request) {
+		lastHost = r.Host
+		lastPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL, SpecURL: srv.URL + "/openapi.json"},
+		},
+	})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	c = cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("list-items failed: %v", err)
+	}
+	if wantHost := strings.TrimPrefix(srv.URL, "http://"); lastHost != wantHost || lastPath != "/v1/items" {
+		t.Fatalf("request = %s %s, want %s /v1/items", lastHost, lastPath, wantHost)
+	}
+}
+
 func TestGeneratedCommandsResolveOperationBasePathAgainstBaseURL(t *testing.T) {
 	var lastPath string
 	mux := http.NewServeMux()
@@ -4798,6 +4901,71 @@ func TestGeneratedCommandCrossOriginOperationServerRequiresAllow(t *testing.T) {
 	}
 	if gotInferencePath != "/v1/models" {
 		t.Fatalf("inference path = %q, want /v1/models", gotInferencePath)
+	}
+}
+
+func TestGeneratedCommandCrossOriginOperationServerCanUseURLOverride(t *testing.T) {
+	var gotUploadPath string
+	upload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUploadPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	t.Cleanup(upload.Close)
+
+	controlMux := http.NewServeMux()
+	control := httptest.NewServer(controlMux)
+	t.Cleanup(control.Close)
+	specBody := fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Control API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/files": {
+      "post": {
+        "operationId": "uploadFile",
+        "servers": [{"url": "https://upload.example.com/v2"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, control.URL)
+	controlMux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specBody)
+	})
+	controlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {
+			BaseURL: control.URL,
+			URLOverrides: map[string]string{
+				"https://upload.example.com/v2": upload.URL + "/local",
+			},
+		},
+	}})
+	cfgFile := filepath.Join(t.TempDir(), "restish.json")
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cacheDir := t.TempDir()
+	newCLI := func() *cli.CLI {
+		c := cli.New()
+		c.Stdin = strings.NewReader("")
+		c.Stdout = io.Discard
+		c.Stderr = io.Discard
+		c.Hooks().ConfigPath = cfgFile
+		c.Hooks().SpecCachePath = cacheDir
+		return c
+	}
+	if err := newCLI().Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if err := newCLI().Run([]string{"restish", "tapi", "upload-file"}); err != nil {
+		t.Fatalf("upload-file with url override: %v", err)
+	}
+	if gotUploadPath != "/local/files" {
+		t.Fatalf("upload path = %q, want /local/files", gotUploadPath)
 	}
 }
 

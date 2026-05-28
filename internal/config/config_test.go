@@ -910,6 +910,79 @@ func TestAllowedOperationOriginsValidationAndMatching(t *testing.T) {
 	}
 }
 
+func TestURLOverridesValidationAndRewrite(t *testing.T) {
+	path := writeConfig(t, `{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "url_overrides": {
+        "https://api.example.com/v1": "http://localhost:8080/root",
+        "https://api.example.com/": "https://fallback.example.com/"
+      },
+      "profiles": {
+        "local": {
+          "url_overrides": {
+            "https://upload.example.com/": "http://localhost:9090/"
+          }
+        }
+      }
+    }
+  }
+}`)
+	if _, err := config.Load(path); err != nil {
+		t.Fatalf("expected url_overrides to load: %v", err)
+	}
+
+	overrides := map[string]string{
+		"https://api.example.com/v1": "http://localhost:8080/root",
+		"https://api.example.com/":   "https://fallback.example.com/",
+	}
+	got, matched, err := config.ApplyURLOverrides("https://api.example.com/v1/items?limit=1", overrides)
+	if err != nil {
+		t.Fatalf("ApplyURLOverrides: %v", err)
+	}
+	if !matched || got != "http://localhost:8080/root/items?limit=1" {
+		t.Fatalf("rewrite = %q, %v; want localhost v1 rewrite", got, matched)
+	}
+	got, matched, err = config.ApplyURLOverrides("https://api.example.com/v10/items", overrides)
+	if err != nil {
+		t.Fatalf("ApplyURLOverrides v10: %v", err)
+	}
+	if !matched || got != "https://fallback.example.com/v10/items" {
+		t.Fatalf("rewrite = %q, %v; want fallback root rewrite", got, matched)
+	}
+	got, matched, err = config.ApplyURLOverrides("https://api.example.com/v1/items/a%2Fb?ref=x%2Fy", overrides)
+	if err != nil {
+		t.Fatalf("ApplyURLOverrides escaped path: %v", err)
+	}
+	if !matched || got != "http://localhost:8080/root/items/a%2Fb?ref=x%2Fy" {
+		t.Fatalf("rewrite = %q, %v; want escaped path preserved", got, matched)
+	}
+	got, matched, err = config.ApplyURLOverrides("https://api.example.com/v1/a%2Fb", map[string]string{
+		"https://api.example.com/v1": "http://localhost:8080/root%2Fprefix",
+	})
+	if err != nil {
+		t.Fatalf("ApplyURLOverrides escaped destination: %v", err)
+	}
+	if !matched || got != "http://localhost:8080/root%2Fprefix/a%2Fb" {
+		t.Fatalf("rewrite = %q, %v; want escaped destination path preserved", got, matched)
+	}
+
+	for _, raw := range []string{`"api.example.com/"`, `"ftp://api.example.com/"`, `"https://api.example.com/?x=1"`} {
+		path := writeConfig(t, fmt.Sprintf(`{
+  "apis": {
+    "example": {
+      "base_url": "https://api.example.com",
+      "url_overrides": {%s: "https://override.example.com/"}
+    }
+  }
+}`, raw))
+		if _, err := config.Load(path); err == nil {
+			t.Fatalf("expected invalid url_overrides entry %s", raw)
+		}
+	}
+}
+
 func TestLoadValidatesCommandLayout(t *testing.T) {
 	for _, layout := range []string{"", "flat", "tags"} {
 		t.Run("valid_"+layout, func(t *testing.T) {

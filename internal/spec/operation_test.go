@@ -778,7 +778,7 @@ func requireCredential(t *testing.T, op Operation, want [][]CredentialRequiremen
 	}
 }
 
-func TestOperationsAbsoluteNonMatchingServerRecordsOperationServer(t *testing.T) {
+func TestOperationsDocumentServerUsesBaseOriginAndServerPath(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
   title: Test
@@ -789,6 +789,42 @@ paths:
   /items:
     get:
       operationId: listItems
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com/root"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got := ops[0].Path; got != "/../v2/items" {
+		t.Fatalf("operation path = %q, want /../v2/items", got)
+	}
+	if got := ops[0].OperationServer; got != "" {
+		t.Fatalf("operation server = %q, want none for document-level server", got)
+	}
+}
+
+func TestOperationsOperationLevelAbsoluteNonMatchingServerRecordsOperationServer(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com
+paths:
+  /items:
+    get:
+      operationId: listItems
+      servers:
+        - url: https://other.example.com/v2
       responses:
         "200":
           description: OK`

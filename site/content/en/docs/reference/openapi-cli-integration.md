@@ -243,9 +243,11 @@ document.
 ## Server URLs
 
 Restish honors OpenAPI `servers` at document, path, and operation level.
-Operation-level servers win over path-level servers, which win over
-document-level servers. Server variables use local `server_variables` config
-values when provided, then OpenAPI defaults:
+Document-level servers define the generated operation path shape, while the
+configured `base_url` provides the request origin. Operation-level servers win
+over path-level servers, and both are treated as explicit operation routing.
+Server variables use local `server_variables` config values when provided, then
+OpenAPI defaults:
 
 ```jsonc
 {
@@ -264,18 +266,23 @@ Relative server URLs resolve against `base_url`. A server such as `v2` with the
 base URL above sends generated operation requests under
 `https://api.vendor.test/root/v2`.
 
+If a document-level server is absolute and points at another origin, Restish
+keeps its path prefix but uses the configured `base_url` origin. For example,
+`base_url: https://staging.vendor.test` with a document server
+`https://api.vendor.test/v1` sends generated requests under
+`https://staging.vendor.test/v1`.
+
 If a configured server variable value is outside the OpenAPI `enum`, Restish
 warns and uses the configured value. Local config represents operator intent,
 and specs are sometimes stale. If a configured variable is not declared by any
 applicable OpenAPI server and the spec does declare server variables, Restish
 fails because the value cannot affect URL expansion.
 
-Absolute server URLs on another origin are blocked unless the API config lists
-the origin in `allowed_operation_origins`. `restish api connect --yes` and
-`restish api sync --yes` can add detected safe entries, and interactive connect
-or sync asks before saving them. Without that opt-in, generated commands fail
-with an `allowed_operation_origins` hint instead of silently routing the request
-to `base_url`.
+Path- or operation-level absolute server URLs on another origin are blocked
+unless the API config lists the origin in `allowed_operation_origins`, or a
+matching `url_overrides` entry rewrites that URL before the request is sent.
+Without that opt-in, generated commands fail with an `allowed_operation_origins`
+hint instead of silently sending profile credentials to another host.
 
 Same-origin absolute server URLs are used when scheme, hostname, and effective
 port all match.
@@ -283,6 +290,29 @@ If a same-origin server points outside the configured base path, Restish keeps
 the selected API profile and resolves the generated operation to that path. If
 no OpenAPI server matches the configured origin, Restish falls back to
 `base_url` instead of sending configured credentials to another host.
+
+Use `url_overrides` when a resolved URL should be rewritten for a profile, such
+as sending an upload operation to a local test service. Source and destination
+entries must be absolute `http` or `https` URL prefixes without userinfo, query,
+or fragment parts. The longest matching source prefix wins, and profile-level
+entries override or extend API-level entries:
+
+```jsonc
+{
+  "apis": {
+    "myapi": {
+      "base_url": "https://api.vendor.test",
+      "url_overrides": {
+        "https://upload.vendor.test/": "http://localhost:8080/"
+      }
+    }
+  }
+}
+```
+
+The rewrite runs after Restish has selected the generated operation URL, so it
+also covers path- or operation-level OpenAPI servers. It also runs for generic
+API-aware requests such as `restish myapi/items`.
 
 Use `operation_base` when the API registration needs an explicit request-path
 override independent of the OpenAPI document:

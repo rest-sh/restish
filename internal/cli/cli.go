@@ -450,11 +450,11 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 	}
 	cfg := spec.DiscoverConfig{
 		APIName:          apiName,
-		BaseURL:          api.BaseURL,
+		BaseURL:          effectiveProfileBaseURL(api, profileName),
 		SpecURL:          api.SpecURL,
 		SpecFiles:        api.SpecFiles,
 		CacheDir:         c.specCacheDir(),
-		OperationBase:    api.OperationBase,
+		OperationBase:    effectiveOperationBase(api, profileName),
 		ServerVariables:  effectiveServerVariables(api, profileName),
 		Version:          Version,
 		Transport:        transport,
@@ -604,8 +604,8 @@ func (c *CLI) Run(args []string) error {
 	for _, apiName := range c.generatedAPINamesForScan(argScan, cfg) {
 		apiCfg := cfg.APIs[apiName]
 		opOpts := spec.OperationOptions{
-			BaseURL:         apiCfg.BaseURL,
-			OperationBase:   apiCfg.OperationBase,
+			BaseURL:         effectiveProfileBaseURL(apiCfg, startupProfile),
+			OperationBase:   effectiveOperationBase(apiCfg, startupProfile),
 			ServerVariables: effectiveServerVariables(apiCfg, startupProfile),
 		}
 		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {
@@ -855,8 +855,8 @@ func (c *CLI) refreshStaleGeneratedMetadataForCommand(ctx context.Context, scan 
 		return
 	}
 	opts := spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
+		BaseURL:         effectiveProfileBaseURL(apiCfg, scan.ProfileName),
+		OperationBase:   effectiveOperationBase(apiCfg, scan.ProfileName),
 		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
 	}
 	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), scan.FirstCommand, Version, apiCfg.SpecFiles, opts, true)
@@ -930,6 +930,31 @@ func effectiveServerVariables(apiCfg *config.APIConfig, profileName string) map[
 				out = map[string]string{}
 			}
 			out[key] = value
+		}
+	}
+	return out
+}
+
+func effectiveURLOverrides(apiCfg *config.APIConfig, profileName string) map[string]string {
+	if apiCfg == nil {
+		return nil
+	}
+	var out map[string]string
+	for source, destination := range apiCfg.URLOverrides {
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[source] = destination
+	}
+	if profileName == "" {
+		profileName = "default"
+	}
+	if prof := apiCfg.Profiles[profileName]; prof != nil {
+		for source, destination := range prof.URLOverrides {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[source] = destination
 		}
 	}
 	return out

@@ -86,6 +86,9 @@ restish config show -o json
       "operation_base": "/",
       "command_layout": "flat",
       "server_variables": {},
+      "url_overrides": {
+        "https://api.vendor.test/": "https://staging.vendor.test/"
+      },
       "allowed_operation_origins": [],
       "retry_max_wait": "30s",
       "pagination": {
@@ -138,6 +141,7 @@ APIConfig holds per-API configuration.
 | `operation_base` | `OperationBase` | `string` | no | OperationBase, when set, is an absolute path resolved against base_url for paths generated from OpenAPI operations. Useful when operation paths should escape or replace a sub-path in base_url. |
 | `command_layout` | `CommandLayout` | `string` | no | CommandLayout controls how generated operations are arranged under the API command. Empty or "flat" keeps one flat command namespace; "tags" groups operations under first-tag subcommands. |
 | `server_variables` | `ServerVariables` | `map[string]string` | no | ServerVariables supplies explicit values for OpenAPI server URL variables. Values are used for generated operation path resolution; enum values from remote specs are never expanded eagerly. |
+| `url_overrides` | `URLOverrides` | `map[string]string` | no | URLOverrides rewrites resolved request URL prefixes before execution. It is useful when an OpenAPI document names canonical servers but this profile should route requests to staging, local, or test endpoints. |
 | `allowed_operation_origins` | `AllowedOperationOrigins` | `[]string` | no | AllowedOperationOrigins permits generated commands to use operation- or path-level OpenAPI servers on origins outside base_url. |
 | `profiles` | `Profiles` | `map[string]*ProfileConfig` | no | Profiles is a map of profile name to profile configuration. |
 | `pagination` | `Pagination` | `*PaginationConfig` | no | Pagination holds optional per-API pagination configuration. |

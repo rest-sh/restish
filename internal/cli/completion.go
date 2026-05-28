@@ -221,8 +221,8 @@ func (c *CLI) completeOperationURLs(cmd *cobra.Command, method string, _ []strin
 
 func (c *CLI) completionOperationSet(cmd *cobra.Command, apiName string, apiCfg *config.APIConfig, profileName string) (spec.OperationSet, bool) {
 	opOpts := spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
 	if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {

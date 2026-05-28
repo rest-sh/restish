@@ -37,8 +37,8 @@ const (
 // Returns nil when the spec cannot be built into a v3 model.
 func (c *CLI) buildAPICommand(apiName string, apiCfg *config.APIConfig, s *spec.APISpec) *cobra.Command {
 	set, err := s.OperationSet(spec.OperationOptions{
-		BaseURL:         apiCfg.BaseURL,
-		OperationBase:   apiCfg.OperationBase,
+		BaseURL:         effectiveProfileBaseURL(apiCfg, "default"),
+		OperationBase:   effectiveOperationBase(apiCfg, "default"),
 		ServerVariables: effectiveServerVariables(apiCfg, "default"),
 	})
 	return c.buildAPICommandFromOperationResult(apiName, apiCfg, set, err)
@@ -1450,10 +1450,14 @@ func (c *CLI) runGeneratedOp(
 		if err != nil {
 			return err
 		}
-		if !config.OperationOriginAllowed(operationServer, apiCfg.AllowedOperationOrigins) {
+		rawURL = strings.TrimRight(operationServer, "/") + path
+		_, rewritten, err := config.ApplyURLOverrides(rawURL, effectiveURLOverrides(apiCfg, c.profileFromCmd(cmd)))
+		if err != nil {
+			return fmt.Errorf("url_overrides: %w", err)
+		}
+		if !rewritten && !config.OperationOriginAllowed(operationServer, apiCfg.AllowedOperationOrigins) {
 			return fmt.Errorf("operation server %s is outside API base_url and is not allowed; add allowed_operation_origins[]: %s", operationServerOrigin(operationServer), suggestedOperationOrigin(operationServer))
 		}
-		rawURL = strings.TrimRight(operationServer, "/") + path
 	} else if operationBase != "" {
 		resolvedBase, err := config.ResolveOperationBaseURL(baseURL, operationBase)
 		if err != nil {
