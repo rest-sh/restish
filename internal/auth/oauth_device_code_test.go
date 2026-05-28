@@ -41,6 +41,11 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 				if got := r.FormValue("device_code"); got != "device-123" {
 					t.Fatalf("device_code = %q", got)
 				}
+				for _, key := range []string{"redirect_scheme", "redirect_port", "redirect_path", "redirect_cert", "redirect_key"} {
+					if got := r.Form.Get(key); got != "" {
+						t.Fatalf("%s leaked into device token request: %#v", key, r.Form)
+					}
+				}
 				return testResponse(200, "application/json", `{"access_token":"device-token","token_type":"bearer","expires_in":3600}`), nil
 			default:
 				t.Fatalf("unexpected URL %q", r.URL.String())
@@ -57,6 +62,11 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 		"audience":                 "https://api.example.com/",
 		"_base_url":                "https://api.example.com/v1",
 		"cache_key":                "local-cache-key",
+		"redirect_scheme":          "https",
+		"redirect_port":            "8484",
+		"redirect_path":            "/callback",
+		"redirect_cert":            "./localhost.pem",
+		"redirect_key":             "./localhost.key",
 	}
 	if err := h.OnRequest(req, params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,6 +82,11 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 	}
 	if gotStart.Get("_base_url") != "" {
 		t.Fatalf("_base_url leaked into device auth request: %#v", gotStart)
+	}
+	for _, key := range []string{"redirect_scheme", "redirect_port", "redirect_path", "redirect_cert", "redirect_key"} {
+		if got := gotStart.Get(key); got != "" {
+			t.Fatalf("%s leaked into device auth request: %#v", key, gotStart)
+		}
 	}
 }
 

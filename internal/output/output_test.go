@@ -74,6 +74,49 @@ func TestNormalize_EmptyBody(t *testing.T) {
 	}
 }
 
+func TestNormalize_BodylessResponsesSkipContentEncoding(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		method   string
+		encoding string
+	}{
+		{name: "informational gzip", status: 103, encoding: "gzip"},
+		{name: "no content gzip", status: http.StatusNoContent, encoding: "gzip"},
+		{name: "reset content br", status: http.StatusResetContent, encoding: "br"},
+		{name: "not modified gzip", status: http.StatusNotModified, encoding: "gzip"},
+		{name: "head success gzip", status: http.StatusOK, method: http.MethodHead, encoding: "gzip"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := makeResp(tt.status, "application/json", "not a compressed body")
+			resp.Header.Set("Content-Encoding", tt.encoding)
+			if tt.method != "" {
+				resp.Request = &http.Request{Method: tt.method}
+			}
+			r, err := output.Normalize(resp, testRegistry, 0)
+			if err != nil {
+				t.Fatalf("Normalize: %v", err)
+			}
+			if r.Body != nil || len(r.Raw) != 0 {
+				t.Fatalf("body = %#v raw = %q, want no body", r.Body, r.Raw)
+			}
+		})
+	}
+}
+
+func TestNormalize_EncodedEmptyOKStillErrors(t *testing.T) {
+	resp := makeResp(http.StatusOK, "application/json", "")
+	resp.Header.Set("Content-Encoding", "gzip")
+	_, err := output.Normalize(resp, testRegistry, 0)
+	if err == nil {
+		t.Fatal("expected empty gzip body on 200 OK to fail")
+	}
+	if !strings.Contains(err.Error(), "decompressing response") {
+		t.Fatalf("error = %v, want decompression error", err)
+	}
+}
+
 func TestNormalize_Status(t *testing.T) {
 	resp := makeResp(404, "application/json", `{}`)
 	r, err := output.Normalize(resp, testRegistry, 0)

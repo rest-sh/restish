@@ -661,6 +661,9 @@ func (c *CLI) rawResponseBodyBytes(resp *http.Response, maxBytes int64) ([]byte,
 	if resp == nil || resp.Body == nil {
 		return nil, nil
 	}
+	if output.ResponseHasNoBody(resp) {
+		return nil, nil
+	}
 	if maxBytes <= 0 {
 		maxBytes = output.DefaultMaxBodyBytes
 	}
@@ -686,6 +689,12 @@ func (c *CLI) decompressedResponseBody(resp *http.Response) (io.ReadCloser, erro
 		return io.NopCloser(strings.NewReader("")), nil
 	}
 	original := resp.Body
+	if output.ResponseHasNoBody(resp) {
+		return &readCloser{
+			Reader: strings.NewReader(""),
+			Closer: original,
+		}, nil
+	}
 	reader, err := c.content.Decompress(resp.Header.Get("Content-Encoding"), original)
 	if err != nil {
 		return nil, err

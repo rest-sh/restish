@@ -144,6 +144,29 @@ Some providers distinguish `localhost` from `127.0.0.1`. Restish sends
 `localhost` in the authorization request, so exact-match providers must allow
 the `localhost` URL.
 
+If your provider requires an HTTPS redirect URL, provide your own local
+callback certificate and key:
+
+```jsonc
+{
+  "type": "oauth-authorization-code",
+  "params": {
+    "authorize_url": "https://issuer.test/authorize",
+    "token_url": "https://issuer.test/oauth/token",
+    "client_id": "env:CLIENT_ID",
+    "redirect_scheme": "https",
+    "redirect_port": "8484",
+    "redirect_path": "/callback",
+    "redirect_cert": "./localhost.pem",
+    "redirect_key": "./localhost.key"
+  }
+}
+```
+
+Allow `https://localhost:8484/callback` in the OAuth app. Restish does not
+generate certificates or install local trust roots; use a certificate that your
+browser accepts for `localhost`.
+
 The browser callback page uses the active Restish theme. To brand that local
 page, set `callback_success_html` and/or `callback_error_html` on the
 authorization-code profile:

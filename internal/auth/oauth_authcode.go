@@ -27,6 +27,7 @@ const defaultCallbackSuccessColor = "#5fafd7"
 const defaultCallbackFailureColor = "#E94F37"
 const callbackSuccessHTMLParam = "callback_success_html"
 const callbackErrorHTMLParam = "callback_error_html"
+const defaultRedirectScheme = "http"
 
 // AuthorizationCode implements the OAuth2 authorization code flow with PKCE
 // (RFC 7636). On first use it opens a browser and waits for the redirect
@@ -75,8 +76,11 @@ func (h *AuthorizationCode) Parameters() []Param {
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when authorize_url/token_url are absent)", Required: false},
 		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request; some providers require offline_access for refresh tokens", Required: false},
+		{Name: "redirect_scheme", Description: "Local callback URL scheme: http (default) or https", Required: false},
 		{Name: "redirect_port", Description: fmt.Sprintf("Local port for the redirect callback (default %s)", defaultRedirectPort), Required: false},
 		{Name: "redirect_path", Description: "Local path for the redirect callback (default /)", Required: false},
+		{Name: "redirect_cert", Description: "Path to the PEM certificate for an HTTPS local callback", Required: false},
+		{Name: "redirect_key", Description: "Path to the PEM private key for an HTTPS local callback", Required: false, Secret: true},
 		{Name: callbackSuccessHTMLParam, Description: "Custom HTML for the successful browser callback page", Required: false},
 		{Name: callbackErrorHTMLParam, Description: "Custom HTML for the failed browser callback page; supports $ERROR, $TITLE, and $DETAILS placeholders", Required: false},
 	})
@@ -245,23 +249,20 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	}
 	state := base64.RawURLEncoding.EncodeToString(stateBytes)
 
-	// Determine redirect port and URL.
-	port := params["redirect_port"]
-	if port == "" {
-		port = defaultRedirectPort
-	}
-	redirectPath, err := oauthRedirectPath(params["redirect_path"])
+	manualOnly := h.CanPrompt && h.NoBrowser && h.Prompt != nil
+
+	// Determine redirect URL.
+	redirect, err := oauthRedirectConfigFromParams(params, !manualOnly)
 	if err != nil {
 		return CachedToken{}, err
 	}
-	redirectURI := "http://localhost:" + port + redirectPath
 	callbackPages := h.oauthCallbackPages(params)
 
 	// Build authorization URL.
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {params["client_id"]},
-		"redirect_uri":          {redirectURI},
+		"redirect_uri":          {redirect.uri},
 		"state":                 {state},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
@@ -279,6 +280,9 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		callbackSuccessHTMLParam: true,
 		"redirect_path":          true,
 		"redirect_port":          true,
+		"redirect_scheme":        true,
+		"redirect_cert":          true,
+		"redirect_key":           true,
 		"token_url":              true,
 	}) {
 		if q.Get(key) == "" {
@@ -296,18 +300,17 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		doneCh chan error
 		srv    *http.Server
 	)
-	manualOnly := h.CanPrompt && h.NoBrowser && h.Prompt != nil
 	if !manualOnly {
 		codeCh = make(chan string, 1)
 		errCh = make(chan error, 1)
 		doneCh = make(chan error, 1)
 		var receivedCode atomic.Bool
-		ln, err := net.Listen("tcp", "localhost:"+port)
+		ln, err := net.Listen("tcp", "localhost:"+redirect.port)
 		if err != nil {
-			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", port, err)
+			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", redirect.port, err)
 		}
 		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != redirectPath {
+			if r.URL.Path != redirect.path {
 				http.NotFound(w, r)
 				return
 			}
@@ -358,7 +361,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 			}
 		})}
 		go func() {
-			if e := srv.Serve(ln); e != nil && e != http.ErrServerClosed {
+			if e := serveOAuthCallback(srv, ln, redirect); e != nil && e != http.ErrServerClosed {
 				trySendErr(errCh, e)
 			}
 		}()
@@ -418,7 +421,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
-		"redirect_uri":  {redirectURI},
+		"redirect_uri":  {redirect.uri},
 		"client_id":     {params["client_id"]},
 		"code_verifier": {verifier},
 	}
@@ -430,6 +433,53 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		return CachedToken{}, err
 	}
 	return ct, nil
+}
+
+type oauthRedirectConfig struct {
+	scheme string
+	port   string
+	path   string
+	uri    string
+	cert   string
+	key    string
+}
+
+func oauthRedirectConfigFromParams(params map[string]string, requireTLSFiles bool) (oauthRedirectConfig, error) {
+	scheme := strings.ToLower(strings.TrimSpace(params["redirect_scheme"]))
+	if scheme == "" {
+		scheme = defaultRedirectScheme
+	}
+	if scheme != "http" && scheme != "https" {
+		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_scheme must be http or https")
+	}
+	cert := params["redirect_cert"]
+	key := params["redirect_key"]
+	if scheme == "https" && requireTLSFiles && (cert == "" || key == "") {
+		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_cert and redirect_key are required when redirect_scheme is https")
+	}
+	port := params["redirect_port"]
+	if port == "" {
+		port = defaultRedirectPort
+	}
+	path, err := oauthRedirectPath(params["redirect_path"])
+	if err != nil {
+		return oauthRedirectConfig{}, err
+	}
+	return oauthRedirectConfig{
+		scheme: scheme,
+		port:   port,
+		path:   path,
+		uri:    scheme + "://localhost:" + port + path,
+		cert:   cert,
+		key:    key,
+	}, nil
+}
+
+func serveOAuthCallback(srv *http.Server, ln net.Listener, redirect oauthRedirectConfig) error {
+	if redirect.scheme == "https" {
+		return srv.ServeTLS(ln, redirect.cert, redirect.key)
+	}
+	return srv.Serve(ln)
 }
 
 func (h *AuthorizationCode) oauthCallbackSuccessPage(title, detail string) string {

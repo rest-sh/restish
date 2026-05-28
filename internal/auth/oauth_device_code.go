@@ -258,7 +258,11 @@ func (h *DeviceCode) requestDeviceAuthorization(ctx context.Context, params map[
 		callbackSuccessHTMLParam:   true,
 		"device_authorization_url": true,
 		"issuer_url":               true,
+		"redirect_cert":            true,
+		"redirect_key":             true,
+		"redirect_path":            true,
 		"redirect_port":            true,
+		"redirect_scheme":          true,
 		"token_url":                true,
 	}) {
 		if form.Get(key) == "" {
