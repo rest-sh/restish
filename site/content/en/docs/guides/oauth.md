@@ -101,8 +101,14 @@ If your provider does not publish discovery, configure direct endpoint URLs:
 ```
 
 OAuth endpoints must use HTTPS except for localhost or loopback development
-URLs. Endpoint URLs must be absolute and must not include credentials,
-fragments, or query strings.
+URLs. Endpoint URLs must not include credentials, fragments, or query strings.
+
+When OAuth authorize, device authorization, or token endpoints live on the same
+host as the API, you may use relative paths in manual config. `oauth2/token`
+resolves under the active API/profile `base_url` path, while `/oauth2/token`
+resolves at that host root. For example, with
+`base_url: https://api.vendor.test/v1`, `oauth2/token` becomes
+`https://api.vendor.test/v1/oauth2/token`.
 
 ## Browser Sign-In
 

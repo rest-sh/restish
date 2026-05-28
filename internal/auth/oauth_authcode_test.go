@@ -294,6 +294,24 @@ func TestAuthCodeRejectsInvalidDirectEndpoints(t *testing.T) {
 	}
 }
 
+func TestAuthCodeResolvesRelativeEndpoints(t *testing.T) {
+	h := &AuthorizationCode{}
+	authorizeURL, tokenURL, err := h.resolveEndpoints(context.Background(), map[string]string{
+		"authorize_url": "oauth2/authorize",
+		"token_url":     "/oauth2/token",
+		"_base_url":     "https://api.example.com/v1",
+	})
+	if err != nil {
+		t.Fatalf("resolveEndpoints: %v", err)
+	}
+	if authorizeURL != "https://api.example.com/v1/oauth2/authorize" {
+		t.Fatalf("authorizeURL = %q", authorizeURL)
+	}
+	if tokenURL != "https://api.example.com/oauth2/token" {
+		t.Fatalf("tokenURL = %q", tokenURL)
+	}
+}
+
 func TestAuthCode_BrowserFlow_FaviconRequestDoesNotAbort(t *testing.T) {
 	var stderr bytes.Buffer
 	h := &AuthorizationCode{

@@ -28,6 +28,13 @@ endpoint URLs are absent. Unknown non-reserved OAuth params are forwarded to
 token requests, which is how provider-specific values such as `audience` are
 sent.
 
+Manual `authorize_url`, `token_url`, and `device_authorization_url` values may
+be absolute URLs or relative paths resolved against the active API/profile
+`base_url`. Path-relative values such as `oauth2/token` resolve under the
+`base_url` path; root-relative values such as `/oauth2/token` resolve at the
+same host root. Scheme-relative values such as `//auth.example.com/token` are
+rejected.
+
 OAuth flow selection is explicit. Restish does not automatically switch an
 `oauth-authorization-code` profile to `oauth-device-code` because issuer
 discovery advertises a device endpoint. Use `oauth-device-code` when the OAuth

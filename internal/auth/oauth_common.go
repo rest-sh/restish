@@ -275,6 +275,37 @@ func validateDirectOAuthEndpoint(paramName, rawURL string) error {
 	}
 }
 
+func resolveOAuthEndpoint(paramName, rawURL, baseURL string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("%s: invalid OAuth endpoint URL %q: %w", paramName, rawURL, err)
+	}
+	if u.IsAbs() {
+		if err := validateDirectOAuthEndpoint(paramName, rawURL); err != nil {
+			return "", err
+		}
+		return rawURL, nil
+	}
+	if u.Host != "" {
+		return "", fmt.Errorf("%s: OAuth endpoint URL %q must not be scheme-relative", paramName, rawURL)
+	}
+	if baseURL == "" {
+		return "", fmt.Errorf("%s: relative OAuth endpoint URL %q requires API base_url", paramName, rawURL)
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || !base.IsAbs() || base.Host == "" {
+		return "", fmt.Errorf("%s: relative OAuth endpoint URL %q cannot resolve against invalid API base_url %q", paramName, rawURL, baseURL)
+	}
+	if !strings.HasSuffix(base.Path, "/") {
+		base.Path += "/"
+	}
+	resolved := base.ResolveReference(u).String()
+	if err := validateDirectOAuthEndpoint(paramName, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
 func isLoopbackOAuthHost(host string) bool {
 	host = strings.TrimSuffix(host, ".")
 	if strings.EqualFold(host, "localhost") {
@@ -452,6 +483,7 @@ func applyTokenAuthHeader(req *http.Request, params map[string]string) {
 func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":             true,
+		"_base_url":              true,
 		"authorize_url":          true,
 		"cache_key":              true,
 		callbackErrorHTMLParam:   true,

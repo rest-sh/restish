@@ -181,10 +181,11 @@ func (h *AuthorizationCode) SupportsForce() {}
 
 func (h *AuthorizationCode) resolveTokenURL(ctx context.Context, params map[string]string) (string, error) {
 	if u := params["token_url"]; u != "" {
-		if err := validateDirectOAuthEndpoint("token_url", u); err != nil {
+		resolved, err := resolveOAuthEndpoint("token_url", u, params["_base_url"])
+		if err != nil {
 			return "", err
 		}
-		return u, nil
+		return resolved, nil
 	}
 	_, tokenURL, err := h.resolveEndpoints(ctx, params)
 	return tokenURL, err
@@ -194,14 +195,18 @@ func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[str
 	authorizeURL = params["authorize_url"]
 	tokenURL = params["token_url"]
 	if authorizeURL != "" {
-		if err := validateDirectOAuthEndpoint("authorize_url", authorizeURL); err != nil {
+		resolved, err := resolveOAuthEndpoint("authorize_url", authorizeURL, params["_base_url"])
+		if err != nil {
 			return "", "", err
 		}
+		authorizeURL = resolved
 	}
 	if tokenURL != "" {
-		if err := validateDirectOAuthEndpoint("token_url", tokenURL); err != nil {
+		resolved, err := resolveOAuthEndpoint("token_url", tokenURL, params["_base_url"])
+		if err != nil {
 			return "", "", err
 		}
+		tokenURL = resolved
 	}
 	if authorizeURL == "" || tokenURL == "" {
 		issuer := params["issuer_url"]
@@ -267,6 +272,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	}
 	for key, value := range extraOAuthParams(params, map[string]bool{
 		"_cache_key":             true,
+		"_base_url":              true,
 		"authorize_url":          true,
 		"cache_key":              true,
 		"issuer_url":             true,
