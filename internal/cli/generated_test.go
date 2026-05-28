@@ -685,6 +685,45 @@ func TestGeneratedCommandPageParamPaginationRequiresPresentParam(t *testing.T) {
 	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
 		t.Fatalf("with --page saw page params %q, want %q", got, want)
 	}
+
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-q", "page=1", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with -q page failed: %v", err)
+	}
+	allPages = nil
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with -q page output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with -q page saw page params %q, want %q", got, want)
+	}
+
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:    env.baseURL(t),
+		Pagination: &config.PaginationConfig{PageParam: "page"},
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {Query: []string{"page=1"}},
+		},
+	})
+	pages = nil
+	c, out = env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "tapi", "list-items", "-o", "json"}); err != nil {
+		t.Fatalf("list-items with profile page query failed: %v", err)
+	}
+	allPages = nil
+	if err := json.Unmarshal([]byte(out.String()), &allPages); err != nil {
+		t.Fatalf("expected JSON output, got %q: %v", out.String(), err)
+	}
+	if len(allPages) != 2 || allPages[0]["id"] != 1 || allPages[1]["id"] != 2 {
+		t.Fatalf("with profile page query output = %#v, want ids 1 and 2", allPages)
+	}
+	if got, want := strings.Join(pages, ","), "1,2,3"; got != want {
+		t.Fatalf("with profile page query saw page params %q, want %q", got, want)
+	}
 }
 
 func TestGeneratedCommandSecurityEmptySuppressesAuth(t *testing.T) {

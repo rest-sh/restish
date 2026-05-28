@@ -44,7 +44,8 @@ func (c *CLI) tryPaginate(
 		if pagCfg == nil || pagCfg.PageParam == "" {
 			return false, nil
 		}
-		if generated && !paginationURLHasParam(firstURL, pagCfg.PageParam) {
+		pageParamBaseURL := effectiveFirstURL(prepared, firstURL)
+		if generated && !paginationURLHasParam(pageParamBaseURL, pagCfg.PageParam) {
 			return false, nil
 		}
 		items, ok, err := pageParamPaginationItems(firstResp.Body, pagCfg)
@@ -58,7 +59,7 @@ func (c *CLI) tryPaginate(
 		if !ok || len(items) == 0 {
 			return false, nil
 		}
-		nextURL, err = nextPageParamURL(effectiveFirstURL(prepared, firstURL), pagCfg.PageParam)
+		nextURL, err = nextPageParamURL(pageParamBaseURL, pagCfg.PageParam)
 		if err != nil {
 			return false, err
 		}
