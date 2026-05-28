@@ -99,6 +99,7 @@ API fields:
 | `command_layout` | string | `flat` or `tags`; empty means `flat`. |
 | `server_variables` | map | Explicit OpenAPI server URL variable values used for generated operation paths. |
 | `retry_max_wait` | string duration | API-local cap for `Retry-After`/`X-Retry-In` when no flag/env override is set. |
+| `preserve_header_case` | bool | Opt-in HTTP/1.x compatibility mode for broken servers that treat request header names as case-sensitive. |
 | `pagination.items_path` | string | Item extraction path. |
 | `pagination.next_path` | string | Next URL extraction path. |
 | `profiles` | map | Profile configs keyed by name. |

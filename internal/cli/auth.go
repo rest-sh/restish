@@ -144,8 +144,12 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
 				return err
 			}
+			preserveInsertedHeader := c.apiPreservesHeaderCase(apiName) && !authHeaderPresent(req.Header, resolvedAuth.Config.Type, params)
 			if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, false)); err != nil {
 				return err
+			}
+			if preserveInsertedHeader {
+				preserveAuthHeaderCase(req, resolvedAuth.Config.Type, params)
 			}
 			markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
@@ -167,8 +171,12 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 				if err := c.ensureOAuthAuthorizationCodeReady(resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName); err != nil {
 					return err
 				}
+				preserveInsertedHeader := c.apiPreservesHeaderCase(apiName) && !authHeaderPresent(req.Header, resolvedAuth.Config.Type, params)
 				if err := handler.Authenticate(req.Context(), req, c.authContext(req.Context(), apiName, profileName, params, resolvedAuth.CacheKey, true)); err != nil {
 					return err
+				}
+				if preserveInsertedHeader {
+					preserveAuthHeaderCase(req, resolvedAuth.Config.Type, params)
 				}
 				markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 				return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
@@ -189,6 +197,49 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 		return c.runAuthHookPlugins(apiName, profileName, nil, nil, req)
 	}
 	return callbacks
+}
+
+func (c *CLI) apiPreservesHeaderCase(apiName string) bool {
+	return c != nil && c.cfg != nil && c.cfg.APIs != nil && c.cfg.APIs[apiName] != nil && c.cfg.APIs[apiName].PreserveHeaderCase
+}
+
+func preserveAuthHeaderCase(req *http.Request, authType string, params map[string]string) {
+	if req == nil || authType != "api-key" || strings.ToLower(strings.TrimSpace(params["in"])) != "header" {
+		return
+	}
+	name := strings.TrimSpace(params["name"])
+	if name == "" {
+		return
+	}
+	var values []string
+	for existing, existingValues := range req.Header {
+		if strings.EqualFold(existing, name) {
+			values = append(values, existingValues...)
+			delete(req.Header, existing)
+		}
+	}
+	if len(values) > 0 {
+		req.Header[name] = values
+	}
+}
+
+func authHeaderPresent(header http.Header, authType string, params map[string]string) bool {
+	if authType != "api-key" || strings.ToLower(strings.TrimSpace(params["in"])) != "header" {
+		return false
+	}
+	return preservedHeaderValue(header, strings.TrimSpace(params["name"])) != ""
+}
+
+func preservedHeaderValue(header http.Header, name string) string {
+	if value := header.Get(name); value != "" {
+		return value
+	}
+	for existing, values := range header {
+		if strings.EqualFold(existing, name) && len(values) > 0 {
+			return values[0]
+		}
+	}
+	return ""
 }
 
 func markAuthCredentialTargets(req *http.Request, authType string, params map[string]string) {
@@ -215,7 +266,7 @@ func (c *CLI) applyCachedOAuthClientCredentials(req *http.Request, authType stri
 	if token == "" {
 		return false
 	}
-	if req.Header.Get("Authorization") == "" {
+	if preservedHeaderValue(req.Header, "Authorization") == "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	return true

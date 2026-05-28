@@ -146,6 +146,7 @@ APIConfig holds per-API configuration.
 | `profiles` | `Profiles` | `map[string]*ProfileConfig` | no | Profiles is a map of profile name to profile configuration. |
 | `pagination` | `Pagination` | `*PaginationConfig` | no | Pagination holds optional per-API pagination configuration. |
 | `retry_max_wait` | `RetryMaxWait` | `string` | no | RetryMaxWait caps Retry-After/X-Retry-In delays for this API when no command-line or environment override is supplied. |
+| `preserve_header_case` | `PreserveHeaderCase` | `bool` | no | PreserveHeaderCase sends user/API-supplied header names with their configured casing for broken HTTP/1.x servers that treat names as case-sensitive. It cannot affect HTTP/2, where header names are lowercase by protocol. |
 
 ### `PaginationConfig`
 

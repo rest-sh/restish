@@ -186,6 +186,9 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	if err != nil {
 		return err
 	}
+	if bodyOpts.explicitAPIName != "" && c.apiPreservesHeaderCase(bodyOpts.explicitAPIName) {
+		opts.PreserveHeaderCase = true
+	}
 	if opts.ContentType == "" && contentTypeOverride != "" {
 		opts.ContentType = contentTypeOverride
 	}
@@ -1822,6 +1825,9 @@ func (c *CLI) applyAPIProfile(rawURL, profileName string, opts request.Options, 
 			return rawURL, match.apiName, opts, fmt.Errorf("invalid retry_max_wait for API %q: %w", match.apiName, parseErr)
 		}
 		opts.RetryMaxWait = retryMaxWait
+	}
+	if match.api.PreserveHeaderCase {
+		opts.PreserveHeaderCase = true
 	}
 
 	if match.profile == nil {

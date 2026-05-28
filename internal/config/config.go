@@ -98,6 +98,11 @@ type APIConfig struct {
 	// RetryMaxWait caps Retry-After/X-Retry-In delays for this API when no
 	// command-line or environment override is supplied.
 	RetryMaxWait string `json:"retry_max_wait,omitempty"`
+	// PreserveHeaderCase sends user/API-supplied header names with their
+	// configured casing for broken HTTP/1.x servers that treat names as
+	// case-sensitive. It cannot affect HTTP/2, where header names are lowercase
+	// by protocol.
+	PreserveHeaderCase bool `json:"preserve_header_case,omitempty"`
 }
 
 // PaginationConfig holds per-API pagination settings.
