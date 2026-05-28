@@ -234,7 +234,7 @@ func (r *Registry) Decode(mimeType string, data []byte) (any, error) {
 
 // makeJSONSafe recursively converts all map keys to strings so that the
 // result can always be marshalled by encoding/json. Some decoders (e.g.
-// CBOR, msgpack) produce map[interface{}]interface{} with non-string keys.
+// CBOR, msgpack) produce map[any]any with non-string keys.
 func makeJSONSafe(v any) any {
 	val := reflect.ValueOf(v)
 	for val.Kind() == reflect.Ptr {
