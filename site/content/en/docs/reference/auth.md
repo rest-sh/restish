@@ -17,7 +17,7 @@ need different security schemes or alternatives.
 | `http-basic` | `username` | `password` | Sets HTTP Basic auth. If `password` is omitted and prompting is available, Restish prompts. |
 | `api-key` | `in`, `name`, `value` | | Sends an API key in a `header`, `query`, or `cookie`. |
 | `oauth-client-credentials` | `client_id`, `client_secret`, plus `token_url` or `issuer_url` | `auth_method`, `scopes`, provider-specific token params such as `audience` | Fetches and caches a bearer token with the OAuth client credentials flow. |
-| `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_port`, `redirect_path`, `callback_success_html`, `callback_error_html`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
+| `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_scheme`, `redirect_port`, `redirect_path`, `redirect_cert`, `redirect_key`, `callback_success_html`, `callback_error_html`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
 | `oauth-device-code` | `client_id`, plus `device_authorization_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, provider-specific token params | Runs the OAuth device-code flow and caches the token. |
 | `external-tool` | `commandline` | `omitbody`, `output` | Runs a local helper that can mutate request headers or URI. |
 
@@ -42,6 +42,11 @@ Some providers distinguish `localhost` from `127.0.0.1` or require loopback IP
 redirects. Restish currently sends `localhost` in the authorization request, so
 providers that perform exact redirect URI matching must allow the `localhost`
 callback URL.
+
+Set `redirect_scheme` to `https` when the OAuth app requires an HTTPS localhost
+callback. HTTPS callbacks require `redirect_cert` and `redirect_key`, both PEM
+paths used by the local callback server. Restish does not generate certificates
+or install browser trust roots.
 
 The browser callback page uses the active Restish theme by default.
 `callback_success_html` and `callback_error_html` replace the full success or

@@ -3,12 +3,20 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -640,6 +648,187 @@ func TestAuthCode_RedirectPath(t *testing.T) {
 	}
 }
 
+func TestAuthCode_HTTPSCallback(t *testing.T) {
+	certPath, keyPath := writeOAuthCallbackCert(t)
+	tlsClient := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	var authorizeURL string
+	var gotForm url.Values
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			gotForm = r.Form
+			return testResponse(200, "application/json", `{"access_token":"https-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			authorizeURL = raw
+			go func() {
+				callbackURL, state := mustCallbackURL(t, raw)
+				if !strings.HasPrefix(callbackURL, "https://localhost:") {
+					t.Errorf("callback URL = %q, want https localhost", callbackURL)
+					return
+				}
+				resp, err := tlsClient.Get(fmt.Sprintf("%s?state=%s&code=secure-code", callbackURL, url.QueryEscape(state)))
+				if err != nil {
+					t.Errorf("https callback request failed: %v", err)
+					return
+				}
+				resp.Body.Close()
+			}()
+			return nil
+		},
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":       "id1",
+		"authorize_url":   "https://auth.example.com/authorize",
+		"token_url":       "https://auth.example.com/token",
+		"redirect_scheme": "https",
+		"redirect_port":   availablePort(t),
+		"redirect_path":   "/callback",
+		"redirect_cert":   certPath,
+		"redirect_key":    keyPath,
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer https-token" {
+		t.Fatalf("Authorization = %q, want HTTPS callback token", got)
+	}
+	parsedAuthorize, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	redirectURI := parsedAuthorize.Query().Get("redirect_uri")
+	if !strings.HasPrefix(redirectURI, "https://localhost:") || !strings.HasSuffix(redirectURI, "/callback") {
+		t.Fatalf("authorize redirect_uri = %q, want HTTPS callback URI", redirectURI)
+	}
+	if got := gotForm.Get("redirect_uri"); got != redirectURI {
+		t.Fatalf("token redirect_uri = %q, want %q", got, redirectURI)
+	}
+	for _, key := range []string{"redirect_scheme", "redirect_port", "redirect_path", "redirect_cert", "redirect_key"} {
+		if got := parsedAuthorize.Query().Get(key); got != "" {
+			t.Fatalf("%s forwarded to authorize endpoint: %q", key, got)
+		}
+		if got := gotForm.Get(key); got != "" {
+			t.Fatalf("%s forwarded to token endpoint: %q", key, got)
+		}
+	}
+}
+
+func TestOAuthRedirectConfig(t *testing.T) {
+	cases := []struct {
+		name            string
+		params          map[string]string
+		requireTLSFiles bool
+		wantURI         string
+		wantError       string
+	}{
+		{
+			name:    "default",
+			params:  map[string]string{},
+			wantURI: "http://localhost:8484/",
+		},
+		{
+			name: "https",
+			params: map[string]string{
+				"redirect_scheme": "https",
+				"redirect_port":   "9443",
+				"redirect_path":   "/callback",
+				"redirect_cert":   "cert.pem",
+				"redirect_key":    "key.pem",
+			},
+			wantURI: "https://localhost:9443/callback",
+		},
+		{
+			name:      "invalid scheme",
+			params:    map[string]string{"redirect_scheme": "ftp"},
+			wantError: "redirect_scheme must be http or https",
+		},
+		{
+			name:            "https requires cert and key for callback listener",
+			params:          map[string]string{"redirect_scheme": "https", "redirect_cert": "cert.pem"},
+			requireTLSFiles: true,
+			wantError:       "redirect_cert and redirect_key are required",
+		},
+		{
+			name: "https manual URL does not require cert and key",
+			params: map[string]string{
+				"redirect_scheme": "https",
+				"redirect_port":   "9443",
+			},
+			wantURI: "https://localhost:9443/",
+		},
+		{
+			name:      "invalid path",
+			params:    map[string]string{"redirect_path": "callback"},
+			wantError: "redirect_path",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := oauthRedirectConfigFromParams(tc.params, tc.requireTLSFiles)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("error = %v, want containing %q", err, tc.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got.uri != tc.wantURI {
+				t.Fatalf("uri = %q, want %q", got.uri, tc.wantURI)
+			}
+		})
+	}
+}
+
+func TestAuthCode_NoBrowserHTTPSDoesNotRequireCallbackCert(t *testing.T) {
+	var authorizeURL string
+	var gotForm url.Values
+	h := &AuthorizationCode{
+		NoBrowser: true,
+		CanPrompt: true,
+		Prompt: func(prompt string) (string, error) {
+			return "manual-code", nil
+		},
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			gotForm = r.Form
+			return testResponse(200, "application/json", `{"access_token":"manual-https-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			authorizeURL = raw
+			t.Fatalf("OpenBrowser should not be called in no-browser mode")
+			return nil
+		},
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":       "id1",
+		"authorize_url":   "https://auth.example.com/authorize",
+		"token_url":       "https://auth.example.com/token",
+		"redirect_scheme": "https",
+		"redirect_port":   availablePort(t),
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if authorizeURL != "" {
+		t.Fatalf("OpenBrowser captured URL %q", authorizeURL)
+	}
+	if got := gotForm.Get("redirect_uri"); !strings.HasPrefix(got, "https://localhost:") {
+		t.Fatalf("token redirect_uri = %q, want HTTPS localhost", got)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer manual-https-token" {
+		t.Fatalf("Authorization = %q, want manual HTTPS token", got)
+	}
+}
+
 func TestOAuthRedirectPathValidation(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -1026,4 +1215,40 @@ func availablePort(t *testing.T) string {
 	}
 	defer ln.Close()
 	return fmt.Sprintf("%d", ln.Addr().(*net.TCPAddr).Port)
+}
+
+func writeOAuthCallbackCert(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore:   time.Now().Add(-time.Minute),
+		NotAfter:    time.Now().Add(time.Hour),
+		DNSNames:    []string{"localhost"},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "callback.pem")
+	keyPath := filepath.Join(dir, "callback.key")
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	return certPath, keyPath
 }
