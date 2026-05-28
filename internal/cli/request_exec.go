@@ -61,7 +61,7 @@ func (c *CLI) prepareRequest(
 		}
 		apiName = explicitAPIName
 		if opts.CacheNamespace == "" {
-			opts.CacheNamespace = apiName + ":" + profileName
+			opts.CacheNamespace = c.apiCacheNamespace(apiName, profileName)
 		}
 	}
 	if !noAuth && operationAuth == nil && apiName != "" && !explicitCredentialContext {

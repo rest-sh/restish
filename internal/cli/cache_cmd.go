@@ -273,7 +273,11 @@ func (c *CLI) newCacheClearCmd() *cobra.Command {
 			if len(args) == 1 {
 				apiName := args[0]
 				registered := c.cfg != nil && c.cfg.APIs != nil && c.cfg.APIs[apiName] != nil
-				cleared, err := dc.ClearNamespacePrefix(apiName + ":")
+				namespace := apiName
+				if registered {
+					namespace = c.apiStateName(apiName)
+				}
+				cleared, err := dc.ClearNamespacePrefix(namespace + ":")
 				if err != nil {
 					return err
 				}

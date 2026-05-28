@@ -297,7 +297,7 @@ func (c *CLI) resolveCredentialAuth(apiName, profileName, credentialID string, c
 	if credential.AuthRef == "" {
 		return resolvedAuthConfig{
 			Config:   credential.Auth,
-			CacheKey: apiName + ":" + profileName + ":credential:" + credentialID,
+			CacheKey: c.apiCacheNamespace(apiName, profileName) + ":credential:" + credentialID,
 		}, nil
 	}
 	if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[credential.AuthRef] == nil {

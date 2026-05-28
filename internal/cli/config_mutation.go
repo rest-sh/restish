@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/request"
@@ -21,6 +22,9 @@ func (c *CLI) unknownAPIError(apiName string) error {
 }
 
 func (c *CLI) saveConfigValues(label string, ops []config.ConfigPatchOperation) error {
+	if err := c.ensureMutableConfigPatch(ops); err != nil {
+		return err
+	}
 	oldCfg := c.cfg
 	if err := config.SaveConfigValues(c.configFilePath(), ops); err != nil {
 		return err
@@ -29,6 +33,9 @@ func (c *CLI) saveConfigValues(label string, ops []config.ConfigPatchOperation) 
 }
 
 func (c *CLI) saveConfigShorthand(label string, rootPath []string, exprs []string) error {
+	if err := c.ensureMutableConfigShorthand(rootPath, exprs); err != nil {
+		return err
+	}
 	oldCfg := c.cfg
 	if err := config.SaveConfigShorthand(c.configFilePath(), rootPath, exprs, c.validateConfigRuntime); err != nil {
 		return err
@@ -95,6 +102,9 @@ func (c *CLI) validateAuthConfig(authCfg *config.AuthConfig) error {
 }
 
 func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *config.APIConfig) error {
+	if err := c.ensureMutableAPI(apiName); err != nil {
+		return err
+	}
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
 	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
@@ -112,13 +122,28 @@ func (c *CLI) saveConfigMutation(label string, mutate func(*config.Config) error
 }
 
 func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg *config.Config) error {
+	if err := c.ensureMutableAPI(apiName); err != nil {
+		return err
+	}
 	cfgPath := c.configFilePath()
 	if config.NeedsPatchToPreserveFormatting(cfgPath) {
 		if err := config.DeleteAPIConfig(cfgPath, apiName); err != nil {
 			return err
 		}
-	} else if err := config.Save(cfgPath, cfg); err != nil {
-		return err
+	} else {
+		fileCfg, err := c.loadBaseConfig()
+		if err != nil {
+			return err
+		}
+		if fileCfg.APIs != nil {
+			delete(fileCfg.APIs, apiName)
+			if len(fileCfg.APIs) == 0 {
+				fileCfg.APIs = nil
+			}
+		}
+		if err := config.Save(cfgPath, fileCfg); err != nil {
+			return err
+		}
 	}
 	return c.reloadConfigAfterMutation(label, oldCfg)
 }
@@ -162,7 +187,7 @@ func (c *CLI) reloadConfigAfterMutation(label string, oldCfg *config.Config) err
 		return err
 	}
 	for _, apiName := range apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg) {
-		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
+		if err := spec.InvalidateCache(c.specCacheDir(), c.apiStateName(apiName)); err != nil {
 			return fmt.Errorf("%s: invalidate spec cache for %q: %w", label, apiName, err)
 		}
 	}
@@ -176,12 +201,66 @@ func (c *CLI) reloadConfigAfterAPIMutation(label string, oldCfg *config.Config, 
 		return err
 	}
 	if apiSpecCacheRelevantFieldsChanged(apiConfigByName(oldCfg, apiName), apiConfigByName(newCfg, apiName)) {
-		if err := spec.InvalidateCache(c.specCacheDir(), apiName); err != nil {
+		if err := spec.InvalidateCache(c.specCacheDir(), c.apiStateName(apiName)); err != nil {
 			return fmt.Errorf("%s: invalidate spec cache for %q: %w", label, apiName, err)
 		}
 	}
 	c.cfg = newCfg
 	return nil
+}
+
+func (c *CLI) ensureMutableConfigPatch(ops []config.ConfigPatchOperation) error {
+	for _, op := range ops {
+		if err := c.ensureMutableConfigPath(op.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CLI) ensureMutableConfigShorthand(rootPath []string, exprs []string) error {
+	if err := c.ensureMutableConfigPath(rootPath); err != nil {
+		return err
+	}
+	for _, expr := range exprs {
+		key, _, _, err := parseShorthandAssignment(expr)
+		if err != nil {
+			if !strings.Contains(expr, "^") {
+				return err
+			}
+			left, right, ok := strings.Cut(expr, "^")
+			if !ok {
+				return err
+			}
+			for _, key := range []string{strings.TrimSpace(left), strings.TrimSpace(right)} {
+				if key == "" {
+					continue
+				}
+				path := append([]string{}, rootPath...)
+				path = append(path, strings.Split(key, ".")...)
+				if err := c.ensureMutableConfigPath(path); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		path := append([]string{}, rootPath...)
+		path = append(path, strings.Split(key, ".")...)
+		if err := c.ensureMutableConfigPath(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CLI) ensureMutableConfigPath(path []string) error {
+	if !c.hasProjectAPIs() || len(path) == 0 || path[0] != "apis" {
+		return nil
+	}
+	if len(path) == 1 {
+		return fmt.Errorf("config write targets all APIs while trusted project config %s is active; edit the global config directly or pass --rsh-config to choose a single file", c.projectConfig.Path)
+	}
+	return c.ensureMutableAPI(path[1])
 }
 
 func apiConfigByName(cfg *config.Config, apiName string) *config.APIConfig {

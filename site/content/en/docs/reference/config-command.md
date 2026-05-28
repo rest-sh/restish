@@ -19,6 +19,7 @@ For field-level config structure and precedence, see [Config](../config/).
 restish config path
 restish config show
 restish config show -o json
+restish config trust
 restish config set 'cache.max_size: 500MB'
 restish config theme list
 restish config theme set one-dark-pro
@@ -67,6 +68,8 @@ Subcommands:
 **`restish config show`**: Print the active config summary or redacted JSON
 
 **`restish config theme`**: Manage terminal output highlighting theme
+
+**`restish config trust`**: Trust the project config discovered from this directory
 
 
 ### `restish config path`

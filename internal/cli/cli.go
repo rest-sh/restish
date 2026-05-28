@@ -127,6 +127,7 @@ type CLI struct {
 	requestExecutionStarted bool
 	bodyPrefixHinted        bool
 	runCtx                  context.Context
+	projectConfig           *projectConfigState
 }
 
 // New returns a CLI wired to the real OS stdin/stdout/stderr.
@@ -361,6 +362,25 @@ func (c *CLI) configScopedCacheDir(base string) string {
 }
 
 func (c *CLI) loadConfig() (*config.Config, error) {
+	cfg, err := c.loadBaseConfig()
+	if err != nil {
+		return nil, err
+	}
+	merged := mergeDefaultConfigForEmbedding(c.defaultConfig, cfg)
+	if c.projectConfig != nil && c.projectConfig.Trusted {
+		projectCfg, err := c.loadTrustedProjectConfig()
+		if err != nil {
+			return nil, err
+		}
+		merged = mergeProjectConfig(merged, projectCfg)
+		if err := config.Validate(merged); err != nil {
+			return nil, fmt.Errorf("project config %s: %w", c.projectConfig.Path, err)
+		}
+	}
+	return merged, nil
+}
+
+func (c *CLI) loadBaseConfig() (*config.Config, error) {
 	var cfg *config.Config
 	var err error
 	if c.explicitConfigFile && c.createExplicitConfig {
@@ -373,7 +393,7 @@ func (c *CLI) loadConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mergeDefaultConfigForEmbedding(c.defaultConfig, cfg), nil
+	return cfg, nil
 }
 
 func cloneConfigForEmbedding(src *config.Config) *config.Config {
@@ -449,7 +469,7 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 		defer closer.Close()
 	}
 	cfg := spec.DiscoverConfig{
-		APIName:          apiName,
+		APIName:          c.apiStateName(apiName),
 		BaseURL:          effectiveProfileBaseURL(api, profileName),
 		SpecURL:          api.SpecURL,
 		SpecFiles:        api.SpecFiles,
@@ -489,11 +509,13 @@ func (c *CLI) Run(args []string) error {
 	c.requestExecutionStarted = false
 	c.bodyPrefixHinted = false
 	c.createExplicitConfig = false
+	c.projectConfig = nil
 	defer func() {
 		c.silentMode = false
 		c.requestExecutionStarted = false
 		c.bodyPrefixHinted = false
 		c.createExplicitConfig = false
+		c.projectConfig = nil
 	}()
 
 	if c.hooks.ConfigPath == "" {
@@ -504,6 +526,9 @@ func (c *CLI) Run(args []string) error {
 		} else if os.Getenv("RSH_CONFIG") != "" {
 			c.explicitConfigFile = true
 		}
+	}
+	if err := c.prepareProjectConfig(ctx, argScan); err != nil {
+		return err
 	}
 	if pathErr := c.paths().ConfigError(); pathErr != nil && c.hooks.ConfigPath == "" && !c.explicitConfigFile && !argScan.Bootstrap {
 		return pathErr
@@ -608,13 +633,14 @@ func (c *CLI) Run(args []string) error {
 			OperationBase:   effectiveOperationBase(apiCfg, startupProfile),
 			ServerVariables: effectiveServerVariables(apiCfg, startupProfile),
 		}
-		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opOpts, true); ok {
+		stateName := c.apiStateName(apiName)
+		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set); apiCmd != nil {
 				root.AddCommand(apiCmd)
 			}
 			continue
 		}
-		s, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+		s, err := spec.LoadFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
 		if err != nil {
 			continue
 		}
@@ -626,7 +652,7 @@ func (c *CLI) Run(args []string) error {
 		}
 		set, opsErr := s.OperationSet(opOpts)
 		if opsErr == nil {
-			_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opOpts, set)
+			_ = spec.StoreOperationSetInCache(c.specCacheDir(), stateName, Version, opOpts, set)
 		}
 		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opsErr); apiCmd != nil {
 			root.AddCommand(apiCmd)
@@ -859,7 +885,7 @@ func (c *CLI) refreshStaleGeneratedMetadataForCommand(ctx context.Context, scan 
 		OperationBase:   effectiveOperationBase(apiCfg, scan.ProfileName),
 		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
 	}
-	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), scan.FirstCommand, Version, apiCfg.SpecFiles, opts, true)
+	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), c.apiStateName(scan.FirstCommand), Version, apiCfg.SpecFiles, opts, true)
 	if !ok || !status.Stale {
 		return
 	}

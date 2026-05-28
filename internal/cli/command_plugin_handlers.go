@@ -293,7 +293,7 @@ func (c *CLI) handlePluginAPISpec(ctx context.Context, cmd *cobra.Command, write
 	}
 	apiCfg := c.cfg.APIs[msg.Name]
 
-	s, err := spec.LoadFromCache(c.specCacheDir(), msg.Name, Version, apiCfg.SpecFiles, c.loaders)
+	s, err := spec.LoadFromCache(c.specCacheDir(), c.apiStateName(msg.Name), Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil {
 		return writer.WriteMessage(pluginwire.APISpecResponseMsg{
 			Type:      pluginwire.MsgTypeAPISpecResponse,

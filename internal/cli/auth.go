@@ -242,7 +242,7 @@ func (c *CLI) cachedOAuthTokenEntry(authType string, cacheKey, apiName, profileN
 		return nil
 	}
 	if cacheKey == "" {
-		cacheKey = apiName + ":" + profileName
+		cacheKey = c.apiCacheNamespace(apiName, profileName)
 	}
 	if cacheKey == ":" || cacheKey == "" {
 		return nil
@@ -286,7 +286,10 @@ func (c *CLI) resolveProfileAuth(apiName, profileName string, prof *config.Profi
 		return resolvedAuthConfig{}, fmt.Errorf("profile %q of API %q has both auth and auth_ref", profileName, apiName)
 	}
 	if prof.AuthRef == "" {
-		return resolvedAuthConfig{Config: prof.Auth}, nil
+		return resolvedAuthConfig{
+			Config:   prof.Auth,
+			CacheKey: c.apiCacheNamespace(apiName, profileName),
+		}, nil
 	}
 	if c.cfg == nil || c.cfg.AuthProfiles == nil || c.cfg.AuthProfiles[prof.AuthRef] == nil {
 		return resolvedAuthConfig{}, fmt.Errorf("profile %q of API %q references unknown auth profile %q", profileName, apiName, prof.AuthRef)

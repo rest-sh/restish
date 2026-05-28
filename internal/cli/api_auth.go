@@ -760,12 +760,13 @@ func (c *CLI) cachedOperationSetStatusForAPI(apiName string, apiCfg *config.APIC
 		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 		Warnf:           c.warnf,
 	}
-	if set, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
+	stateName := c.apiStateName(apiName)
+	if set, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, true); ok {
 		return set, status, true
 	}
 	opts.BaseURL = apiCfg.BaseURL
 	opts.OperationBase = apiCfg.OperationBase
-	return spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true)
+	return spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, true)
 }
 
 func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string, forceRefresh bool) (spec.OperationSet, bool, error) {
@@ -779,7 +780,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 		Warnf:           c.warnf,
 	}
 	if !forceRefresh {
-		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, opts, true); ok {
+		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), c.apiStateName(apiName), Version, apiCfg.SpecFiles, opts, true); ok {
 			c.warnOperationSetWarnings(set)
 			return set, true, nil
 		}
@@ -789,14 +790,14 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	if forceRefresh {
 		s, err = c.discoverSpecForProfile(ctx, apiName, profileName, true, 0)
 	} else {
-		s, err = spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+		s, err = spec.LoadFromCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiCfg.SpecFiles, c.loaders)
 	}
 	if err != nil || s == nil {
 		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
 			return spec.OperationSet{}, false, err
 		}
 		s, err = spec.Discover(ctx, spec.DiscoverConfig{
-			APIName:         apiName,
+			APIName:         c.apiStateName(apiName),
 			BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
 			SpecFiles:       apiCfg.SpecFiles,
 			CacheDir:        c.specCacheDir(),
@@ -813,7 +814,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	if err != nil {
 		return spec.OperationSet{}, false, err
 	}
-	_ = spec.StoreOperationSetInCache(c.specCacheDir(), apiName, Version, opts, set)
+	_ = spec.StoreOperationSetInCache(c.specCacheDir(), c.apiStateName(apiName), Version, opts, set)
 	return set, true, nil
 }
 
@@ -1017,7 +1018,7 @@ func (c *CLI) cachedAuthConfigForCredential(apiName string, apiCfg *config.APICo
 	if apiCfg == nil {
 		return nil, false, nil
 	}
-	apiSpec, err := spec.LoadFromCache(c.specCacheDir(), apiName, Version, apiCfg.SpecFiles, c.loaders)
+	apiSpec, err := spec.LoadFromCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiCfg.SpecFiles, c.loaders)
 	if err != nil || apiSpec == nil {
 		return nil, false, err
 	}
@@ -1039,6 +1040,9 @@ func (c *CLI) cachedAuthConfigForCredential(apiName string, apiCfg *config.APICo
 }
 
 func (c *CLI) saveAPIAuthCredentialConfig(apiName, profileName, credentialID string, credential *config.CredentialConfig) error {
+	if err := c.ensureMutableAPI(apiName); err != nil {
+		return err
+	}
 	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
 		apiCfg := cfg.APIs[apiName]
 		if apiCfg == nil {
@@ -1064,6 +1068,9 @@ func (c *CLI) saveAPIAuthCredentialConfig(apiName, profileName, credentialID str
 }
 
 func (c *CLI) removeAPIAuthCredentialConfig(apiName, profileName, credentialID string) error {
+	if err := c.ensureMutableAPI(apiName); err != nil {
+		return err
+	}
 	return c.saveConfigMutation("api auth", func(cfg *config.Config) error {
 		apiCfg := cfg.APIs[apiName]
 		if apiCfg == nil {

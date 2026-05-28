@@ -35,6 +35,14 @@ func (c *CLI) addConfigCommand(root *cobra.Command) {
 		Args:    usageNoArgs,
 		RunE:    c.runConfigPath,
 	})
+	configCmd.AddCommand(&cobra.Command{
+		Use:     "trust",
+		Short:   "Trust the project config discovered from this directory",
+		Long:    configTrustLong,
+		Example: fmt.Sprintf("  %s config trust", c.commandNameOrDefault()),
+		Args:    usageNoArgs,
+		RunE:    c.runConfigTrust,
+	})
 	showCmd := &cobra.Command{
 		Use:   "show",
 		Short: "Print the active config summary or redacted JSON",
@@ -101,12 +109,44 @@ func (c *CLI) runConfigShow(cmd *cobra.Command, args []string) error {
 		cfg = &config.Config{}
 	}
 	style := humanTextStyleFor(c.Stdout)
-	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Config file:"), c.configFilePath())
+	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Config file:"), c.configSourceSummary())
+	if c.projectConfig != nil && c.projectConfig.Trusted {
+		names := sortedProjectAPINames(c.projectConfig.APIs)
+		fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("Project config:"), c.projectConfig.Path, strings.Join(names, ", "))
+	}
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Cache max size:"), configShowCacheMaxSize(cfg))
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Theme:"), configShowTheme(cfg))
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Auth profiles:"), configShowNamedMapSummary(cfg.AuthProfiles))
 	fmt.Fprintf(c.Stdout, "%s %s\n", style.key("Configured plugins:"), configShowRawMessageMapSummary(cfg.Plugins))
 	c.printConfigShowAPIs(style, cfg)
+	return nil
+}
+
+func (c *CLI) runConfigTrust(cmd *cobra.Command, args []string) error {
+	if err := rejectResponseTransformFlags(cmd); err != nil {
+		return err
+	}
+	project := c.projectConfig
+	if project == nil {
+		discovered, err := discoverProjectConfig()
+		if err != nil {
+			return err
+		}
+		project = discovered
+	}
+	if project == nil {
+		return fmt.Errorf("no %s found in this directory or its parents", projectConfigFileName)
+	}
+	summary, err := c.projectConfigTrustSummary(project)
+	if err != nil {
+		return err
+	}
+	if err := c.trustProjectConfig(project); err != nil {
+		return err
+	}
+	project.Trusted = true
+	style := humanTextStyleFor(c.Stdout)
+	fmt.Fprintf(c.Stdout, "%s project config: %s%s\n", style.ok("Trusted"), project.Path, summary)
 	return nil
 }
 
