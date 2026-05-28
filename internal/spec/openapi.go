@@ -74,6 +74,74 @@ func (OpenAPILoader) LoadWithOptions(body []byte, opts LoadOptions) (*APISpec, e
 	return &APISpec{Raw: body, Document: doc}, nil
 }
 
+func sanitizeOpenAPIDescriptionRefs(body []byte) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(body, &doc); err != nil {
+		return body, nil
+	}
+	changed := sanitizeDescriptionRefNode(&doc, nil)
+	if !changed {
+		return body, nil
+	}
+	return yaml.Marshal(&doc)
+}
+
+func sanitizeDescriptionRefNode(n *yaml.Node, path []string) bool {
+	if n == nil {
+		return false
+	}
+	changed := false
+	switch n.Kind {
+	case yaml.DocumentNode:
+		for _, child := range n.Content {
+			changed = sanitizeDescriptionRefNode(child, path) || changed
+		}
+	case yaml.SequenceNode:
+		for _, child := range n.Content {
+			changed = sanitizeDescriptionRefNode(child, appendPathKey(path, "[]")) || changed
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			key := n.Content[i].Value
+			value := n.Content[i+1]
+			if shouldIgnoreDescriptionRefPath(appendPathKey(path, key)) && mappingRefValue(value) != "" {
+				n.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ""}
+				changed = true
+				continue
+			}
+			changed = sanitizeDescriptionRefNode(value, appendPathKey(path, key)) || changed
+		}
+	}
+	return changed
+}
+
+func appendPathKey(path []string, key string) []string {
+	next := make([]string, len(path), len(path)+1)
+	copy(next, path)
+	return append(next, key)
+}
+
+func isArbitraryNamedOpenAPIMap(path []string) bool {
+	if len(path) == 0 {
+		return false
+	}
+	switch path[len(path)-1] {
+	case "$defs", "callbacks", "dependentSchemas", "examples", "headers", "links",
+		"parameters", "pathItems", "paths", "patternProperties", "properties",
+		"requestBodies", "responses", "schemas", "securitySchemes", "webhooks":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldIgnoreDescriptionRefPath(path []string) bool {
+	if len(path) == 0 || path[len(path)-1] != "description" {
+		return false
+	}
+	return !isArbitraryNamedOpenAPIMap(path[:len(path)-1])
+}
+
 func isSwagger2Document(body []byte) bool {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(body, &doc); err != nil {
@@ -221,6 +289,10 @@ type openAPIRefResolver struct {
 const openAPIExternalRefConcurrency = 8
 
 func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
+	body, err := sanitizeOpenAPIDescriptionRefs(body)
+	if err != nil {
+		return nil, err
+	}
 	if opts.SourceURL == "" && opts.LocalPath == "" {
 		return body, nil
 	}
@@ -242,7 +314,7 @@ func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 	if err := resolver.prefetchExternalDocs(root, source); err != nil {
 		return nil, err
 	}
-	changed, err := resolver.resolveNode(root, source)
+	changed, err := resolver.resolveNode(root, source, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -252,12 +324,16 @@ func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 	return yaml.Marshal(&doc)
 }
 
-func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource) (bool, error) {
+func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource, path []string) (bool, error) {
 	if n == nil {
 		return false, nil
 	}
 	if r.depth > 100 {
 		return false, fmt.Errorf("OpenAPI external ref resolution exceeded maximum depth")
+	}
+	if shouldIgnoreDescriptionRefPath(path) && mappingRefValue(n) != "" {
+		*n = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ""}
+		return true, nil
 	}
 	if ref := mappingRefValue(n); ref != "" {
 		if strings.HasPrefix(ref, "#") {
@@ -284,7 +360,7 @@ func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource) 
 			defer delete(r.resolving, refKey)
 			r.depth++
 			defer func() { r.depth-- }()
-			if _, err := r.resolveNode(n, source); err != nil {
+			if _, err := r.resolveNode(n, source, path); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -298,19 +374,38 @@ func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource) 
 		mergeRefSiblings(n, originalSiblings)
 		r.depth++
 		defer func() { r.depth-- }()
-		if _, err := r.resolveNode(n, targetSource); err != nil {
+		if _, err := r.resolveNode(n, targetSource, path); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
 
 	changed := false
-	for _, child := range n.Content {
-		childChanged, err := r.resolveNode(child, source)
-		if err != nil {
-			return false, err
+	switch n.Kind {
+	case yaml.SequenceNode:
+		for _, child := range n.Content {
+			childChanged, err := r.resolveNode(child, source, appendPathKey(path, "[]"))
+			if err != nil {
+				return false, err
+			}
+			changed = changed || childChanged
 		}
-		changed = changed || childChanged
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			childChanged, err := r.resolveNode(n.Content[i+1], source, appendPathKey(path, n.Content[i].Value))
+			if err != nil {
+				return false, err
+			}
+			changed = changed || childChanged
+		}
+	default:
+		for _, child := range n.Content {
+			childChanged, err := r.resolveNode(child, source, path)
+			if err != nil {
+				return false, err
+			}
+			changed = changed || childChanged
+		}
 	}
 	return changed, nil
 }
@@ -382,9 +477,12 @@ func (r *openAPIRefResolver) prefetchExternalDocs(root *yaml.Node, source openAP
 
 func (r *openAPIRefResolver) collectExternalDocRequests(n *yaml.Node, source openAPIRefSource, seen map[string]bool) ([]openAPIExternalDocRequest, error) {
 	var requests []openAPIExternalDocRequest
-	var walk func(*yaml.Node, openAPIRefSource) error
-	walk = func(n *yaml.Node, source openAPIRefSource) error {
+	var walk func(*yaml.Node, openAPIRefSource, []string) error
+	walk = func(n *yaml.Node, source openAPIRefSource, path []string) error {
 		if n == nil {
+			return nil
+		}
+		if shouldIgnoreDescriptionRefPath(path) {
 			return nil
 		}
 		if ref := mappingRefValue(n); ref != "" && !strings.HasPrefix(ref, "#") {
@@ -401,14 +499,29 @@ func (r *openAPIRefResolver) collectExternalDocRequests(n *yaml.Node, source ope
 				requests = append(requests, openAPIExternalDocRequest{key: key, source: targetSource})
 			}
 		}
-		for _, child := range n.Content {
-			if err := walk(child, source); err != nil {
-				return err
+		switch n.Kind {
+		case yaml.SequenceNode:
+			for _, child := range n.Content {
+				if err := walk(child, source, appendPathKey(path, "[]")); err != nil {
+					return err
+				}
+			}
+		case yaml.MappingNode:
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				if err := walk(n.Content[i+1], source, appendPathKey(path, n.Content[i].Value)); err != nil {
+					return err
+				}
+			}
+		default:
+			for _, child := range n.Content {
+				if err := walk(child, source, path); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	}
-	if err := walk(n, source); err != nil {
+	if err := walk(n, source, nil); err != nil {
 		return nil, err
 	}
 	return requests, nil
