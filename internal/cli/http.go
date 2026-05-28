@@ -154,6 +154,10 @@ type requestBodyOptions struct {
 	acceptOverride            string
 	operationAuth             *operationAuthPolicy
 	explicitAPIName           string
+	validationSchema          map[string]any
+	validationMediaType       string
+	validationSchemaDialect   string
+	validationRequested       bool
 	bodyRequired              bool
 	rawBinaryBody             bool
 	bodyOverrideSet           bool
@@ -224,6 +228,11 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	}
 	if len(bodyOpts.multipartPartContentTypes) > 0 && strings.HasPrefix(strings.ToLower(opts.ContentType), "multipart/form-data") {
 		bodyVal = content.MultipartBody{Value: bodyVal, ContentTypes: bodyOpts.multipartPartContentTypes}
+	}
+	if bodyOpts.validationRequested && bodyVal != nil {
+		if err := validateGeneratedJSONBody(bodyVal, opts.ContentType, bodyOpts.validationMediaType, bodyOpts.validationSchema, bodyOpts.validationSchemaDialect, output.ColorEnabled(c.Stderr)); err != nil {
+			return err
+		}
 	}
 	inputSource := traceInputSource(bodyInfo, bodyVal != nil)
 	if bodyVal != nil {

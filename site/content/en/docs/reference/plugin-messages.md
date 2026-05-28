@@ -267,6 +267,14 @@ CBOR: `body_required`; type: `bool`; required: no
 
 CBOR: `request_media_type`; type: `string`; required: no
 
+**`RequestSchema`**
+
+CBOR: `request_schema`; type: `map[string]any`; required: no
+
+**`RequestSchemaDialect`**
+
+CBOR: `request_schema_dialect`; type: `string`; required: no
+
 **`MCPIgnore`**
 
 CBOR: `mcp_ignore`; type: `bool`; required: no
@@ -319,6 +327,10 @@ CBOR: `content_media_type`; type: `string`; required: no
 **`Schema`**
 
 CBOR: `schema`; type: `map[string]any`; required: no
+
+**`SchemaDialect`**
+
+CBOR: `schema_dialect`; type: `string`; required: no
 
 **`Enum`**
 

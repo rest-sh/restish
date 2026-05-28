@@ -274,6 +274,10 @@ Generated operation commands may also expose `--rsh-generate-body` when the
 OpenAPI operation has a request body schema. That flag prints an example body
 for the generated operation instead of sending the request.
 
+`--rsh-validate` is opt-in and applies to generated JSON request bodies. It
+checks the assembled body against the operation's OpenAPI schema before sending
+and leaves generic HTTP commands unchanged.
+
 ## Output And Filtering
 
 | Flag | Type | Default | Notes |

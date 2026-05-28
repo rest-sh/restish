@@ -373,24 +373,40 @@ func pluginOperationsFromSpec(ops []spec.Operation, operationBase string) []plug
 				AllowReserved:    p.AllowReserved,
 				ContentMediaType: p.ContentMediaType,
 				Schema:           cloneCommandPluginSchema(p.JSONSchema),
+				SchemaDialect:    p.JSONSchemaDialect,
 				Enum:             append([]string(nil), p.Enum...),
 			})
 		}
+		requestSchema, requestSchemaDialect := operationRequestSchema(op)
 		out = append(out, pluginwire.APIOperation{
-			ID:               operationCommandName(op, operationBase),
-			Method:           op.Method,
-			Path:             op.Path,
-			Summary:          op.Summary,
-			Description:      op.Description,
-			Deprecated:       op.Deprecated,
-			Parameters:       params,
-			HasBody:          op.HasBody,
-			BodyRequired:     op.BodyRequired,
-			RequestMediaType: op.RequestMediaType,
-			MCPIgnore:        op.MCPIgnore,
+			ID:                   operationCommandName(op, operationBase),
+			Method:               op.Method,
+			Path:                 op.Path,
+			Summary:              op.Summary,
+			Description:          op.Description,
+			Deprecated:           op.Deprecated,
+			Parameters:           params,
+			HasBody:              op.HasBody,
+			BodyRequired:         op.BodyRequired,
+			RequestMediaType:     op.RequestMediaType,
+			RequestSchema:        requestSchema,
+			RequestSchemaDialect: requestSchemaDialect,
+			MCPIgnore:            op.MCPIgnore,
 		})
 	}
 	return out
+}
+
+func operationRequestSchema(op spec.Operation) (map[string]any, string) {
+	if op.Help.Request != nil {
+		return cloneCommandPluginSchema(op.Help.Request.JSONSchema), op.Help.Request.JSONSchemaDialect
+	}
+	for _, request := range op.Help.Requests {
+		if mediaTypesMatch(request.MediaType, op.RequestMediaType) {
+			return cloneCommandPluginSchema(request.JSONSchema), request.JSONSchemaDialect
+		}
+	}
+	return nil, ""
 }
 
 func cloneCommandPluginSchema(in map[string]any) map[string]any {

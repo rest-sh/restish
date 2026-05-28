@@ -111,6 +111,10 @@ selection, and bounded coercion. They do not reject explicit body fields just
 because the schema says a value has a different type, enum, or shape. Restish
 sends what you ask for and lets the server validate API-specific semantics.
 
+Use `--rsh-validate` on a generated command when you want an optional local
+JSON Schema check before sending a JSON request body. Validation happens after
+Restish builds the body, and it does not rewrite or coerce values.
+
 Restish still fails locally when the CLI cannot build a request, such as a
 missing required path argument, unreadable `@file`, or invalid Restish flag.
 

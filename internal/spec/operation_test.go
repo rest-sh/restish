@@ -83,6 +83,57 @@ paths:
 	}
 }
 
+func TestOperationsCarriesRequestJSONSchemaDialect(t *testing.T) {
+	raw := `openapi: "3.1.0"
+jsonSchemaDialect: "http://json-schema.org/draft-07/schema#"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /items:
+    post:
+      operationId: createItem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+          application/merge-patch+json:
+            schema:
+              "$schema": "https://json-schema.org/draft/2019-09/schema"
+              type: object
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	if got, want := ops[0].Help.Request.JSONSchemaDialect, "http://json-schema.org/draft-07/schema#"; got != want {
+		t.Fatalf("preferred request dialect = %q, want %q", got, want)
+	}
+	var override OperationBodyHelp
+	for _, request := range ops[0].Help.Requests {
+		if request.MediaType == "application/merge-patch+json" {
+			override = request
+			break
+		}
+	}
+	if got, want := override.JSONSchemaDialect, "https://json-schema.org/draft/2019-09/schema"; got != want {
+		t.Fatalf("schema $schema dialect = %q, want %q", got, want)
+	}
+}
+
 func TestOperationsIncludesContentParameterSchemaHelp(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:

@@ -240,11 +240,12 @@ string, even when the OpenAPI schema says the field is a string.
 Schemas are not full request validators by default. Restish trusts explicit
 input and lets the server validate API semantics. Unknown body fields are
 allowed, enum mismatches are not rejected locally, and schema constraints are
-not enforced unless Restish grows an explicit validation mode. Schema constructs
-such as `oneOf`, `anyOf`, `allOf`, `nullable`, `enum`, `const`, defaults,
-examples, numeric constraints, read-only/write-only fields, additional
-properties, and recursive references are used for help and bounded example
-bodies.
+not enforced unless you opt in with `--rsh-validate` on a generated command.
+That validation runs after body assembly, only for JSON request bodies, and
+does not rewrite or coerce values. Schema constructs such as `oneOf`, `anyOf`,
+`allOf`, `nullable`, `enum`, `const`, defaults, examples, numeric constraints,
+read-only/write-only fields, additional properties, and recursive references
+are used for help, bounded example bodies, and optional local validation.
 
 Restish still fails locally when it cannot build a coherent request, such as a
 missing required path argument, an unreadable `@file`, or an invalid Restish

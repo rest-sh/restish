@@ -2117,6 +2117,151 @@ func TestGeneratedCommandGenerateBodyRejectsUndeclaredContentType(t *testing.T) 
 	}
 }
 
+func TestGeneratedCommandOptionalJSONSchemaValidation(t *testing.T) {
+	var hits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/validate", func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, func(baseURL string) string {
+		return fmt.Sprintf(`{
+  "openapi": "3.1.0",
+  "info": {"title": "Validation API", "version": "1.0"},
+  "servers": [{"url": %q}],
+  "paths": {
+    "/validate": {
+      "post": {
+        "operationId": "validateBody",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "server_id"],
+            "properties": {
+              "server_id": {"type": "string", "readOnly": true},
+              "name": {"type": "string"},
+              "count": {"type": "integer"},
+              "note": {"type": "string", "nullable": true},
+              "details": {
+                "nullable": true,
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {"label": {"type": "string"}}
+                  }
+                ]
+              },
+              "meta": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {"code": {"type": "string"}}
+              },
+              "tags": {"type": "array", "items": {"type": "string"}}
+            }
+          }}}
+        },
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`, baseURL)
+	})
+
+	c := env.newCLI()
+	c.Stdin = strings.NewReader(`{"name":"Ada","extra":true}`)
+	if err := c.Run([]string{"restish", "tapi", "validate-body"}); err != nil {
+		t.Fatalf("validation should be disabled by default: %v", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("request hits = %d, want 1", got)
+	}
+
+	c = env.newCLI()
+	c.Stdin = strings.NewReader(`{"name":"Ada","count":5,"note":null,"details":null,"meta":{"code":"ok"},"tags":["one"]}`)
+	if err := c.Run([]string{"restish", "tapi", "validate-body", "--rsh-content-type", "json", "--rsh-validate"}); err != nil {
+		t.Fatalf("valid body with content type alias: %v", err)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("request hits = %d, want 2", got)
+	}
+
+	tests := []struct {
+		name     string
+		body     string
+		wantPath string
+		wantText string
+	}{
+		{
+			name:     "unknown field",
+			body:     `{"name":"Ada","extra":true}`,
+			wantPath: "$",
+			wantText: "additional properties",
+		},
+		{
+			name:     "wrong scalar type",
+			body:     `{"name":"Ada","count":"five"}`,
+			wantPath: "$.count",
+			wantText: "want integer",
+		},
+		{
+			name:     "nested object",
+			body:     `{"name":"Ada","meta":{"code":123}}`,
+			wantPath: "$.meta.code",
+			wantText: "want string",
+		},
+		{
+			name:     "array item",
+			body:     `{"name":"Ada","tags":["ok",123]}`,
+			wantPath: "$.tags[1]",
+			wantText: "want string",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := env.newCLI()
+			c.Stdin = strings.NewReader(tc.body)
+			err := c.Run([]string{"restish", "tapi", "validate-body", "--rsh-validate"})
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "request body failed OpenAPI schema validation") ||
+				!strings.Contains(msg, tc.wantPath) ||
+				!strings.Contains(msg, tc.wantText) {
+				t.Fatalf("unexpected validation error:\n%s", msg)
+			}
+			if got := hits.Load(); got != 2 {
+				t.Fatalf("validation error should not send request; hits = %d, want 2", got)
+			}
+		})
+	}
+}
+
+func TestGeneratedCommandValidationRequiresJSONBody(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/multi-body", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("invalid validation mode should not send a request")
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnvForSpec(t, mux, specWithMultiBodyOperation)
+	c := env.newCLI()
+	err := c.Run([]string{"restish", "tapi", "multi-body", "--rsh-content-type", "text/plain", "--rsh-validate", "hello"})
+	if err == nil {
+		t.Fatal("expected non-JSON validation error")
+	}
+	if !strings.Contains(err.Error(), "--rsh-validate only supports generated JSON request bodies") ||
+		!strings.Contains(err.Error(), "text/plain") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestGeneratedCommandAcceptHeaderIncludesDeclaredSupportedResponseTypes(t *testing.T) {
 	var gotAccept string
 	mux := http.NewServeMux()

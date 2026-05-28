@@ -25,15 +25,16 @@ type HTTPExecutor func(*HTTPRequest) (*HTTPResponse, error)
 type SpecFetcher func(name string) (*APISpec, error)
 
 type Tool struct {
-	APIName         string
-	Name            string
-	Description     string
-	Method          string
-	Path            string
-	InputSchema     map[string]any
-	Params          []Param
-	BodyContentType string
-	BodyRequired    bool
+	APIName           string
+	Name              string
+	Description       string
+	Method            string
+	Path              string
+	InputSchema       map[string]any
+	Params            []Param
+	BodyContentType   string
+	BodySchemaDialect string
+	BodyRequired      bool
 }
 
 type Param struct {
@@ -48,6 +49,7 @@ type Param struct {
 	AllowReserved    bool
 	ContentMediaType string
 	Schema           map[string]any
+	SchemaDialect    string
 }
 
 type Options struct {
@@ -208,6 +210,7 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 			AllowReserved:    p.AllowReserved,
 			ContentMediaType: p.ContentMediaType,
 			Schema:           paramSchema,
+			SchemaDialect:    p.SchemaDialect,
 		})
 		prop := schemaFromOperationParam(p)
 		properties[p.Name] = prop
@@ -217,7 +220,7 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 	}
 
 	if op.HasBody {
-		properties["body"] = map[string]any{"type": "object"}
+		properties["body"] = operationBodySchema(op.RequestSchema)
 		if op.BodyRequired {
 			required = append(required, "body")
 		}
@@ -231,16 +234,24 @@ func buildToolFromOperation(apiName string, multiAPI bool, op plugin.APIOperatio
 		inputSchema["required"] = required
 	}
 	return &Tool{
-		APIName:         apiName,
-		Name:            name,
-		Description:     description,
-		Method:          op.Method,
-		Path:            op.Path,
-		InputSchema:     inputSchema,
-		Params:          params,
-		BodyContentType: op.RequestMediaType,
-		BodyRequired:    op.BodyRequired,
+		APIName:           apiName,
+		Name:              name,
+		Description:       description,
+		Method:            op.Method,
+		Path:              op.Path,
+		InputSchema:       inputSchema,
+		Params:            params,
+		BodyContentType:   op.RequestMediaType,
+		BodySchemaDialect: op.RequestSchemaDialect,
+		BodyRequired:      op.BodyRequired,
 	}
+}
+
+func operationBodySchema(schema map[string]any) map[string]any {
+	if len(schema) == 0 {
+		return map[string]any{"type": "object"}
+	}
+	return schemaMap(schema)
 }
 
 func schemaFromOperationParam(p plugin.APIParam) map[string]any {
