@@ -91,7 +91,6 @@ restish config show -o json
       },
       "allowed_operation_origins": [],
       "retry_max_wait": "30s",
-      "preserve_header_case": false,
       "pagination": {
         "items_path": "data",
         "next_path": "links.next"
