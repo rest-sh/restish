@@ -56,6 +56,12 @@ APIs override global APIs with the same name, while unrelated global APIs remain
 available. Normal config-writing commands still write the global config and
 refuse to mutate APIs that came from trusted project config.
 
+Project config is safe to commit when it contains only shared, non-secret setup.
+Secret auth params such as API key values, bearer tokens, passwords, and OAuth
+client secrets must be omitted or written as `env:NAME` references. Non-secret
+values such as OAuth `client_id`, `audience`, issuer URLs, token URLs, and scopes
+can live in `.restish.json`.
+
 Use `--rsh-config ./.restish.json` or `RSH_CONFIG=./.restish.json` when a
 command should use one complete project config file instead of layering trusted
 project config over the global config. Explicit config selection can point to

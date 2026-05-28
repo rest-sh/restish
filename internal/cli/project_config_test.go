@@ -43,10 +43,15 @@ func setupProjectConfigTest(t *testing.T) (configDir, cacheDir, projectDir strin
 
 func writeProjectConfigTestFile(t *testing.T, path, body string) {
 	t.Helper()
+	writeProjectConfigTestFileMode(t, path, body, 0o600)
+}
+
+func writeProjectConfigTestFileMode(t *testing.T, path, body string, mode os.FileMode) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(body), mode); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
@@ -173,6 +178,118 @@ func TestProjectConfigRejectsEmptyUnsupportedTopLevelKeys(t *testing.T) {
 	err := c.Run([]string{"restish", "config", "trust"})
 	if err == nil || !strings.Contains(err.Error(), "only apis and theme are supported") {
 		t.Fatalf("config trust err = %v, want unsupported top-level key error", err)
+	}
+}
+
+func TestProjectConfigAllowsCommittedFileWithEnvSecretReferences(t *testing.T) {
+	_, _, projectDir := setupProjectConfigTest(t)
+	writeProjectConfigTestFileMode(t, filepath.Join(projectDir, ".restish.json"), `{
+  "apis": {
+    "svc": {
+      "base_url": "https://project.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "oauth-client-credentials",
+            "params": {
+              "client_id": "public-client",
+              "client_secret": "env:PROJECT_CLIENT_SECRET",
+              "token_url": "https://auth.example.com/token",
+              "audience": "https://api.example.com"
+            }
+          }
+        }
+      }
+    }
+  }
+}`, 0o644)
+	t.Chdir(projectDir)
+
+	c, out, _ := newProjectConfigTestCLI(t)
+	if err := c.Run([]string{"restish", "config", "trust"}); err != nil {
+		t.Fatalf("config trust: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "Trusted project config") || !strings.Contains(got, "svc") {
+		t.Fatalf("config trust output = %q", got)
+	}
+}
+
+func TestProjectConfigRejectsInlineSecrets(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "auth secret param",
+			body: `{
+  "apis": {
+    "svc": {
+      "base_url": "https://project.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "oauth-client-credentials",
+            "params": {
+              "client_id": "public-client",
+              "client_secret": "inline-secret",
+              "token_url": "https://auth.example.com/token",
+              "audience": "https://api.example.com"
+            }
+          }
+        }
+      }
+    }
+  }
+}`,
+			want: "params.client_secret",
+		},
+		{
+			name: "credential-bearing header",
+			body: `{
+  "apis": {
+    "svc": {
+      "base_url": "https://project.example.com",
+      "profiles": {
+        "default": {
+          "headers": ["Authorization: Bearer inline-secret"]
+        }
+      }
+    }
+  }
+}`,
+			want: "credential-bearing header",
+		},
+		{
+			name: "credential-bearing query param",
+			body: `{
+  "apis": {
+    "svc": {
+      "base_url": "https://project.example.com",
+      "profiles": {
+        "default": {
+          "query": ["api_key=inline-secret"]
+        }
+      }
+    }
+  }
+}`,
+			want: "credential-bearing query parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, projectDir := setupProjectConfigTest(t)
+			writeProjectConfigTestFileMode(t, filepath.Join(projectDir, ".restish.json"), tt.body, 0o644)
+			t.Chdir(projectDir)
+
+			c, _, _ := newProjectConfigTestCLI(t)
+			err := c.Run([]string{"restish", "config", "trust"})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("config trust err = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

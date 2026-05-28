@@ -88,6 +88,11 @@ global config and refuse to mutate project APIs; edit `.restish.json` directly
 or pass `--rsh-config .restish.json` when you intentionally want that file to be
 the complete config source for the command.
 
+Committed `.restish.json` files should contain shared setup, not inline secrets.
+Use non-secret values such as OAuth `client_id`, `audience`, scopes, and endpoint
+URLs directly; use `env:NAME` references or omit values for API key values,
+bearer tokens, passwords, and OAuth client secrets.
+
 ## Sync After Spec Changes
 
 ```bash

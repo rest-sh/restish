@@ -100,6 +100,11 @@ theme over your global config. If you want one command to use a project file as
 the complete config source, pass `--rsh-config .restish.json` or set
 `RSH_CONFIG`.
 
+Keep committed project config secret-free. Shared OAuth values such as
+`client_id`, `audience`, scopes, and endpoint URLs can live there; API key
+values, bearer tokens, passwords, and OAuth client secrets should be omitted or
+referenced as `env:NAME`.
+
 ## Next Step
 
 [Set Up Profiles](../set-up-profiles/) when repeated headers, auth, environment

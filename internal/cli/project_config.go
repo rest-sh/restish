@@ -18,6 +18,8 @@ import (
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/tidwall/jsonc"
 )
 
@@ -260,11 +262,11 @@ func (c *CLI) projectConfigRuntimeSubset(project *projectConfigState) (*config.C
 	if project == nil {
 		return nil, nil, nil
 	}
-	if insecure, permErr := config.ConfigFileHasInsecurePermissions(project.Path); permErr == nil && insecure {
-		return nil, nil, fmt.Errorf("%s is group/world-readable; project config can contain credentials (chmod 600)", project.Path)
-	}
 	cfg, err := parseProjectConfigFile(project.Path)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.validateProjectConfigNoInlineSecrets(project, cfg); err != nil {
 		return nil, nil, err
 	}
 	subset := &config.Config{}
@@ -311,6 +313,87 @@ func parseProjectConfigFile(path string) (*config.Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func (c *CLI) validateProjectConfigNoInlineSecrets(project *projectConfigState, cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for apiName, apiCfg := range cfg.APIs {
+		if apiCfg == nil {
+			continue
+		}
+		for profileName, prof := range apiCfg.Profiles {
+			if prof == nil {
+				continue
+			}
+			path := fmt.Sprintf("apis.%s.profiles.%s", apiName, profileName)
+			if err := c.validateProjectProfileNoInlineSecrets(path, prof); err != nil {
+				return fmt.Errorf("project config %s: %w", project.Path, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CLI) validateProjectProfileNoInlineSecrets(path string, prof *config.ProfileConfig) error {
+	if err := c.validateProjectAuthNoInlineSecrets(path+".auth", prof.Auth); err != nil {
+		return err
+	}
+	for i, header := range prof.Headers {
+		name, value, err := request.ParseHeaderOption(header)
+		if err != nil {
+			return fmt.Errorf("%s.headers[%d]: %w", path, i, err)
+		}
+		if secrets.IsHeaderName(name) || secrets.IsHeaderValue(name, value) {
+			return fmt.Errorf("%s.headers[%d]: project config cannot contain credential-bearing header %q; use auth with env:NAME secret references instead", path, i, name)
+		}
+	}
+	for i, query := range prof.Query {
+		name, value, err := request.ParseQueryOption(query)
+		if err != nil {
+			return fmt.Errorf("%s.query[%d]: %w", path, i, err)
+		}
+		if secrets.IsQueryParamValue(name, value) {
+			return fmt.Errorf("%s.query[%d]: project config cannot contain credential-bearing query parameter %q; use auth with env:NAME secret references instead", path, i, name)
+		}
+	}
+	for credentialID, credential := range prof.Credentials {
+		if credential == nil {
+			continue
+		}
+		if err := c.validateProjectAuthNoInlineSecrets(path+".credentials."+credentialID+".auth", credential.Auth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CLI) validateProjectAuthNoInlineSecrets(path string, authCfg *config.AuthConfig) error {
+	if authCfg == nil || authCfg.Type == "" {
+		return nil
+	}
+	handler, err := c.authHandlerFor(authCfg, authHandlerOptions{})
+	if err != nil {
+		return nil
+	}
+	for _, param := range handler.Parameters() {
+		if !param.Secret {
+			continue
+		}
+		value := authCfg.Params[param.Name]
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "env:") {
+			if strings.TrimPrefix(value, "env:") == "" {
+				return fmt.Errorf("%s.params.%s: env secret source is missing a variable name", path, param.Name)
+			}
+			continue
+		}
+		return fmt.Errorf("%s.params.%s: project config cannot contain inline secret values; use env:NAME or omit the value", path, param.Name)
+	}
+	return nil
 }
 
 func decodeProjectConfigJSON(path string, data []byte, v any) error {

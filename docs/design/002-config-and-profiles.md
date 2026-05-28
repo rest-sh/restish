@@ -101,6 +101,14 @@ config and refuse to mutate APIs that came from trusted project config. Passing
 is the complete config source of truth and sidecar state follows that explicit
 config root.
 
+Auto-discovered project config is intended to be a committed, shareable project
+manifest. It may use normal repository file permissions, but it must not contain
+inline secret material. Secret-bearing auth params such as API key values,
+bearer tokens, HTTP Basic passwords, and OAuth client secrets must be omitted or
+use `env:NAME` references. Non-secret OAuth parameters such as `client_id`,
+`audience`, `resource`, `organization`, issuer URLs, token URLs, and scopes are
+valid project config.
+
 Sidecar state that belongs to the selected config trust root, such as OAuth
 token caches and external-tool approval records, lives next to the explicit
 config file. Response and spec caches remain under the cache root, but explicit
@@ -108,7 +116,7 @@ configs get a cache namespace derived from the config path so two project
 configs do not reuse each other's cached HTTP responses or discovered specs.
 In discovered layered mode, response cache, spec cache, and API-scoped OAuth
 tokens for project APIs use a project namespace derived from the canonical
-project config path and content hash. Credentials and caches stay in the user's
+project config path and content hash. Tokens and caches stay in the user's
 Restish state/cache roots, never in the repository.
 
 Cache directory selection mirrors config selection with `RSH_CACHE_DIR`,

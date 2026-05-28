@@ -137,6 +137,14 @@ mutation commands, and API-scoped caches/tokens use a project namespace outside
 the repository. Explicit config selection still means the selected file is the
 entire config source of truth.
 
+Project config is allowed to be a normal committed repository file, so Unix
+mode bits are not used as the safety boundary for `.restish.json`. The safety
+boundary is content validation plus explicit trust: project config must not
+contain inline secret values or executable secret sources. Secret-bearing auth
+params must be omitted or written as `env:NAME` references, while non-secret
+OAuth params such as `client_id`, `audience`, issuer URLs, token URLs, and
+scopes remain valid shared project setup.
+
 ### Least Necessary Exposure
 
 Restish should only expose sensitive data where it is required:
