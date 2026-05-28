@@ -498,6 +498,31 @@ func TestAPIAuthInspectOperationLabelsProfileFallbackSource(t *testing.T) {
 	)
 }
 
+func TestAPIAuthInspectFallbackOperationNameUsesOperationBase(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(openAPIGet("/api/rest/widgets", "", `"security":[{"PartnerKey":[]}]`)))
+	})
+	env.writeAPIConfig(t, &config.APIConfig{
+		BaseURL:       env.baseURL(t),
+		OperationBase: "/api/rest",
+		Profiles: map[string]*config.ProfileConfig{
+			"default": profileAuth(apiKeyAuth("header", "X-Partner-Key", "sekret")),
+		},
+	})
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "inspect", "tapi", "--operation", "get-widgets"}); err != nil {
+		t.Fatalf("api auth inspect operation: %v", err)
+	}
+	requireContains(t, out.String(),
+		"X-Partner-Key: sekret",
+	)
+}
+
 func TestAPIAuthInspectUsesImplicitDefaultProfile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })

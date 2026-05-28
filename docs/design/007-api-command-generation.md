@@ -126,6 +126,11 @@ name from the method and path, for example:
 - `GET /users/{id}` -> `get-users-id`
 - `POST /v1/invoices` -> `post-v1-invoices`
 
+If `operation_base` is configured, fallback names are derived from the operation
+path relative to that base. For example, with `operation_base: /api/rest`,
+`GET /api/rest/foo` becomes `get-foo` rather than `get-api-rest-foo`.
+Explicit `x-cli-name` and `operationId` values are not changed.
+
 The exact normalization may evolve, but it must be deterministic and collision
 aware.
 
