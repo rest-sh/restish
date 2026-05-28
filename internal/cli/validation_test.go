@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/rest-sh/restish/v2/internal/output"
 )
 
 func TestValidateGeneratedJSONBodyUsesSchemaDialectDefault(t *testing.T) {
@@ -101,6 +103,16 @@ func TestValidateGeneratedJSONBodyFormatsAllLeafErrors(t *testing.T) {
 func TestValidateGeneratedJSONBodyColorizesValidationOutput(t *testing.T) {
 	err := validateGeneratedJSONBody(map[string]any{
 		"name": 123,
+		"age":  "seventeen",
+		"profile": map[string]any{
+			"displayName": "Ada",
+			"settings": map[string]any{
+				"newsletter": "yes",
+				"theme":      "blue",
+			},
+		},
+		"tags":      []any{"ok", 42},
+		"addresses": []any{map[string]any{"city": "Portland", "zip": "abc"}},
 	}, "application/json", "application/json", validationFormatterSchema(), "https://spec.openapis.org/oas/3.1/dialect/base", true)
 	if err == nil {
 		t.Fatal("expected validation error")
@@ -111,6 +123,25 @@ func TestValidateGeneratedJSONBodyColorizesValidationOutput(t *testing.T) {
 	}
 	if plain := stripValidationANSI(msg); !strings.Contains(plain, "$.name: got number, want string") {
 		t.Fatalf("colored validation output should preserve plain text after stripping ANSI:\n%s", plain)
+	}
+	if !strings.Contains(msg, output.StyleText("diagnostic_error", "request body failed OpenAPI schema validation")) {
+		t.Fatalf("expected validation prefix to be red:\n%q", msg)
+	}
+	if strings.Contains(msg, output.StyleText("diagnostic_error", "got number, want string")) {
+		t.Fatalf("error messages should not be colored as diagnostic errors:\n%q", msg)
+	}
+	for _, want := range []string{
+		output.StyleText("key", ".tags"),
+		output.StyleText("number", "1"),
+		output.StyleText("type", "number"),
+		output.StyleText("type", "integer"),
+		output.StyleText("type", "boolean"),
+		output.StyleText("string", "'light'"),
+		output.StyleText("string", "'abc'"),
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("colored validation output missing styled fragment %q:\n%q", want, msg)
+		}
 	}
 }
 

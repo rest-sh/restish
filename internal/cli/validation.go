@@ -300,8 +300,8 @@ func validationOutputParts(units []jsonschema.OutputUnit, color bool) []string {
 		generic := msg == "validation failed"
 		path := jsonPointerDisplayPath(unit.InstanceLocation)
 		if color {
-			path = output.StyleText("key", path)
-			msg = output.StyleText("diagnostic_error", msg)
+			path = colorJSONPointerDisplayPath(unit.InstanceLocation)
+			msg = colorValidationMessage(msg)
 		}
 		parts = append(parts, validationOutputPart{
 			text:    path + ": " + msg,
@@ -355,6 +355,87 @@ func validationOutputMessage(err *jsonschema.OutputError) string {
 		return strings.Trim(string(data), `"`)
 	}
 	return msg
+}
+
+func colorValidationMessage(msg string) string {
+	var b strings.Builder
+	for i := 0; i < len(msg); {
+		if msg[i] == '\'' {
+			end := i + 1
+			for end < len(msg) {
+				if msg[end] == '\'' && msg[end-1] != '\\' {
+					end++
+					break
+				}
+				end++
+			}
+			b.WriteString(output.StyleText("string", msg[i:end]))
+			i = end
+			continue
+		}
+		if isASCIIWordByte(msg[i]) {
+			start := i
+			for i < len(msg) && isASCIIWordByte(msg[i]) {
+				i++
+			}
+			word := msg[start:i]
+			if isSchemaTypeWord(word) {
+				b.WriteString(output.StyleText("type", word))
+			} else {
+				b.WriteString(word)
+			}
+			continue
+		}
+		b.WriteByte(msg[i])
+		i++
+	}
+	return b.String()
+}
+
+func isASCIIWordByte(ch byte) bool {
+	return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+func isSchemaTypeWord(word string) bool {
+	switch word {
+	case "array", "boolean", "integer", "null", "number", "object", "string":
+		return true
+	default:
+		return false
+	}
+}
+
+func colorJSONPointerDisplayPath(ptr string) string {
+	if ptr == "" {
+		return output.StyleText("key", "$")
+	}
+	parts := strings.Split(strings.TrimPrefix(ptr, "/"), "/")
+	var b strings.Builder
+	b.WriteString(output.StyleText("key", "$"))
+	for _, part := range parts {
+		part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+		if part == "" {
+			b.WriteString(output.StyleText("punctuation", "["))
+			b.WriteString(output.StyleText("string", `""`))
+			b.WriteString(output.StyleText("punctuation", "]"))
+			continue
+		}
+		if _, err := strconv.Atoi(part); err == nil {
+			b.WriteString(output.StyleText("punctuation", "["))
+			b.WriteString(output.StyleText("number", part))
+			b.WriteString(output.StyleText("punctuation", "]"))
+			continue
+		}
+		if isIdentifierPathSegment(part) {
+			b.WriteString(output.StyleText("key", "."+part))
+			continue
+		}
+		encoded, _ := json.Marshal(part)
+		b.WriteString(output.StyleText("punctuation", "["))
+		b.WriteString(output.StyleText("string", string(encoded)))
+		b.WriteString(output.StyleText("punctuation", "]"))
+	}
+	return b.String()
 }
 
 func jsonPointerDisplayPath(ptr string) string {
