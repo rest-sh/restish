@@ -183,7 +183,18 @@ func (e *cacheEntry) loadOptions() LoadOptions {
 // LoadFromCache reads the cached spec for apiName, re-parses it using loaders,
 // and returns the result. Returns nil, nil when the cache is empty or expired.
 func LoadFromCache(cacheDir, apiName, version string, specFiles []string, loaders []Loader) (*APISpec, error) {
-	entry, ok := readCache(cacheDir, apiName, version)
+	return loadFromCache(cacheDir, apiName, version, specFiles, loaders, false)
+}
+
+// LoadStaleFromCache reads the cached spec for apiName even when the remote
+// cache entry has expired. Local spec files still invalidate stale cache data
+// when they changed after the cache was written.
+func LoadStaleFromCache(cacheDir, apiName, version string, specFiles []string, loaders []Loader) (*APISpec, error) {
+	return loadFromCache(cacheDir, apiName, version, specFiles, loaders, true)
+}
+
+func loadFromCache(cacheDir, apiName, version string, specFiles []string, loaders []Loader, allowExpired bool) (*APISpec, error) {
+	entry, ok := readCacheEntry(cacheDir, apiName, version, allowExpired)
 	if !ok {
 		return nil, nil
 	}
@@ -258,11 +269,12 @@ func LoadOperationSetFromCacheStatus(cacheDir, apiName, version string, specFile
 
 // StoreOperationSetInCache updates an existing raw cache entry with extracted
 // operations and API metadata. It is best-effort for callers; failed upgrades
-// should not make startup fail when the raw cache can still be parsed. The
-// cache entry is keyed by base URL, operation base, and server variable values
-// (via opts).
+// should not make startup fail when the raw cache can still be parsed. Expired
+// entries can be upgraded so rebuilt operation metadata is durable, but the
+// original cache TTL is preserved. The cache entry is keyed by base URL,
+// operation base, and server variable values (via opts).
 func StoreOperationSetInCache(cacheDir, apiName, version string, opts OperationOptions, set OperationSet) error {
-	entry, ok := readCache(cacheDir, apiName, version)
+	entry, ok := readCacheEntry(cacheDir, apiName, version, true)
 	if !ok {
 		return nil
 	}

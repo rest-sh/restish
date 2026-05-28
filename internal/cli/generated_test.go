@@ -332,6 +332,27 @@ func expireGeneratedSpecCache(t *testing.T, cacheDir, apiName string) {
 	}
 }
 
+func removeGeneratedOperationCache(t *testing.T, cacheDir, apiName string) {
+	t.Helper()
+	path := filepath.Join(cacheDir, apiName+".cbor")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read spec cache: %v", err)
+	}
+	var entry map[string]any
+	if err := cbor.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("decode spec cache: %v", err)
+	}
+	delete(entry, "operations")
+	data, err = cbor.Marshal(entry)
+	if err != nil {
+		t.Fatalf("encode spec cache: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write spec cache: %v", err)
+	}
+}
+
 type countingLoader struct {
 	detects atomic.Int32
 }
@@ -453,6 +474,34 @@ func TestGeneratedAPIHelpUsesStaleOperationCache(t *testing.T) {
 	}
 	if got := loader.detects.Load(); got != 0 {
 		t.Fatalf("loader Detect called %d times, want 0 when API help loads from stale cached operations", got)
+	}
+}
+
+func TestGeneratedAPIHelpRebuildsMissingOperationCacheFromStaleRawSpec(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	removeGeneratedOperationCache(t, env.cacheDir, "tapi")
+	c, out := env.newCaptureCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("generated help should use the stale raw spec cache")
+	})
+
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "list-items") {
+		t.Fatalf("expected generated operations rebuilt from stale raw spec, got:\n%s", got)
+	}
+	if strings.Contains(got, "Generic requests using") {
+		t.Fatalf("expected generated API help, got generic short-name help:\n%s", got)
 	}
 }
 

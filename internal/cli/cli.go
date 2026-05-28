@@ -640,7 +640,7 @@ func (c *CLI) Run(args []string) error {
 			}
 			continue
 		}
-		s, err := spec.LoadFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
+		s, err := spec.LoadStaleFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
 		if err != nil {
 			continue
 		}
