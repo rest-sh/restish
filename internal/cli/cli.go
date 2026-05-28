@@ -640,7 +640,7 @@ func (c *CLI) Run(args []string) error {
 			}
 			continue
 		}
-		s, err := spec.LoadFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
+		s, err := spec.LoadStaleFromCache(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, c.loaders)
 		if err != nil {
 			continue
 		}
@@ -885,7 +885,11 @@ func (c *CLI) refreshStaleGeneratedMetadataForCommand(ctx context.Context, scan 
 		OperationBase:   effectiveOperationBase(apiCfg, scan.ProfileName),
 		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
 	}
-	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), c.apiStateName(scan.FirstCommand), Version, apiCfg.SpecFiles, opts, true)
+	stateName := c.apiStateName(scan.FirstCommand)
+	_, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, true)
+	if !ok {
+		status, ok = spec.RawSpecCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles)
+	}
 	if !ok || !status.Stale {
 		return
 	}

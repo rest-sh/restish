@@ -332,6 +332,27 @@ func expireGeneratedSpecCache(t *testing.T, cacheDir, apiName string) {
 	}
 }
 
+func removeGeneratedOperationCache(t *testing.T, cacheDir, apiName string) {
+	t.Helper()
+	path := filepath.Join(cacheDir, apiName+".cbor")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read spec cache: %v", err)
+	}
+	var entry map[string]any
+	if err := cbor.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("decode spec cache: %v", err)
+	}
+	delete(entry, "operations")
+	data, err = cbor.Marshal(entry)
+	if err != nil {
+		t.Fatalf("encode spec cache: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write spec cache: %v", err)
+	}
+}
+
 type countingLoader struct {
 	detects atomic.Int32
 }
@@ -456,6 +477,34 @@ func TestGeneratedAPIHelpUsesStaleOperationCache(t *testing.T) {
 	}
 }
 
+func TestGeneratedAPIHelpRebuildsMissingOperationCacheFromStaleRawSpec(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupGeneratedEnv(t, mux)
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	removeGeneratedOperationCache(t, env.cacheDir, "tapi")
+	c, out := env.newCaptureCLI()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("generated help should use the stale raw spec cache")
+	})
+
+	if err := c.Run([]string{"restish", "tapi", "--help"}); err != nil {
+		t.Fatalf("tapi --help: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "list-items") {
+		t.Fatalf("expected generated operations rebuilt from stale raw spec, got:\n%s", got)
+	}
+	if strings.Contains(got, "Generic requests using") {
+		t.Fatalf("expected generated API help, got generic short-name help:\n%s", got)
+	}
+}
+
 func TestGeneratedCommandRefreshesStaleOperationCacheOnUse(t *testing.T) {
 	var specHits atomic.Int32
 	mux := http.NewServeMux()
@@ -499,6 +548,53 @@ func TestGeneratedCommandRefreshesStaleOperationCacheOnUse(t *testing.T) {
 	}
 	if got := specHits.Load(); got <= hitsAfterSync {
 		t.Fatalf("expected stale generated command to refresh spec metadata; spec hits before=%d after=%d", hitsAfterSync, got)
+	}
+}
+
+func TestGeneratedCommandRefreshesStaleRawSpecWhenOperationCacheMissing(t *testing.T) {
+	var specHits atomic.Int32
+	mux := http.NewServeMux()
+	var serverURL string
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		specHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specWithOperations(serverURL))
+	})
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[]`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	serverURL = srv.URL
+
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"tapi": {BaseURL: srv.URL},
+		},
+	})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	env := &generatedEnv{cfgFile: cfgFile, cacheDir: t.TempDir()}
+	syncCLI := env.newCLI()
+	if err := syncCLI.Run([]string{"restish", "api", "sync", "tapi"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	hitsAfterSync := specHits.Load()
+	expireGeneratedSpecCache(t, env.cacheDir, "tapi")
+	removeGeneratedOperationCache(t, env.cacheDir, "tapi")
+
+	c := env.newCLI()
+	var out strings.Builder
+	c.Stdout = &out
+	if err := c.Run([]string{"restish", "tapi", "list-items"}); err != nil {
+		t.Fatalf("generated command from stale raw spec: %v", err)
+	}
+	if got := specHits.Load(); got <= hitsAfterSync {
+		t.Fatalf("expected stale raw spec command to refresh spec metadata; spec hits before=%d after=%d", hitsAfterSync, got)
 	}
 }
 

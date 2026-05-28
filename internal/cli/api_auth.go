@@ -790,7 +790,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	if forceRefresh {
 		s, err = c.discoverSpecForProfile(ctx, apiName, profileName, true, 0)
 	} else {
-		s, err = spec.LoadFromCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiCfg.SpecFiles, c.loaders)
+		s, err = spec.LoadStaleFromCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiCfg.SpecFiles, c.loaders)
 	}
 	if err != nil || s == nil {
 		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
