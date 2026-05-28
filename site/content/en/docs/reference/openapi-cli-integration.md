@@ -99,6 +99,24 @@ Hidden operations remain callable by exact name when supported. Ignored
 operations are left out of the generated command surface. `x-mcp-ignore`
 excludes an operation from MCP tool exposure.
 
+## Inspect Extension Effects
+
+When `api connect` or `api sync` sees behavior-changing `x-cli-*` extensions,
+Restish prints a compact summary such as renamed operations, aliases,
+hidden/ignored operations, hidden/ignored parameters, and `x-cli-config`.
+This is informational only; Restish does not block connection or prompt for
+extension approval.
+
+For a detailed view after connecting, run:
+
+```bash
+restish doctor api myapi
+```
+
+The doctor report lists where behavior-changing `x-cli-*` extensions appear
+and what each one changes. Plain `x-cli-description` help text overrides are
+not reported because they do not change which commands or inputs are available.
+
 ## Query Parameter Serialization
 
 Restish maps required parameters to positional arguments and optional
