@@ -119,19 +119,44 @@ validated. Examples:
 
 ### Explicit Config Roots
 
-Restish does not implicitly discover project config files from the current
-working directory in v2. Project config is selected with `--rsh-config` or
-`RSH_CONFIG`, and that selected file is the entire config source of truth rather
-than an overlay on top of the operator's global config.
+`--rsh-config` and `RSH_CONFIG` remain explicit config-root selectors. When
+either is present, the selected file is the entire config source of truth rather
+than an overlay on top of the operator's global config, and missing explicit
+files fail instead of falling back to the platform default.
 
-This avoids surprise trust transfer from a checked-out repository into normal
-requests. It also makes command review easier: the config trust root is visible
-in the command line or environment, and missing explicit files fail instead of
-falling back to the platform default.
+Project config discovery is a separate trust flow. When no explicit config file
+is selected, Restish may discover `.restish.json` in the current directory or an
+ancestor, but it must not use that file until the user trusts the canonical file
+path and current content hash. Trust records live in the user's Restish state
+outside the repository so a checked-out project cannot grant trust to itself.
+When the project config content changes, Restish asks for trust again before
+using the new content.
 
-This is a deliberate v2 boundary, not a claim that project config discovery is
-never useful. A future design may add an explicit opt-in mode for repository
-config, but v2 should not infer it from the local directory.
+Interactive prompts are allowed only for human TTY use and must show the
+absolute project config path plus a short summary. Non-interactive runs do not
+prompt; users must run `restish config trust`, pass `--rsh-config`, or set
+`RSH_CONFIG` before scripts can rely on project-local config. When a
+non-interactive run discovers an untrusted project config, it continues with the
+selected/global config but prints a concise stderr warning naming the untrusted
+file and the trust command, so the fallback is visible rather than silent.
+
+The auto-discovered project overlay is deliberately narrow. It can contribute
+API registrations and terminal theme entries, with project APIs shadowing global
+APIs by name and project theme entries overriding global theme entries by key.
+It must not execute project-specified plugins, load project top-level
+`auth_profiles`, apply project cache settings, or store sidecar state in the
+repository in the first version. Trusted project configs that include those
+unsupported top-level keys fail with a clear diagnostic instead of silently
+dropping them. OAuth tokens, response caches, and
+spec/generated-command caches for trusted project APIs stay in user-owned
+Restish state under a namespace derived from the project config path and hash.
+That keeps secrets and machine-local state out of source control and prevents a
+project API from sharing state with a same-named global API.
+
+Auto-discovered project config is read-only for ordinary config mutation
+commands. Users who want to edit a project config through Restish must select it
+explicitly with `--rsh-config` or `RSH_CONFIG`, making the write target visible
+in the command or environment.
 
 ### Least Necessary Exposure
 

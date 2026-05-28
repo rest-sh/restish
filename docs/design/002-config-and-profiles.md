@@ -81,17 +81,54 @@ explicit config file is an error so operators do not accidentally run with the
 global default after mistyping a project path. The ordinary platform-default
 config path keeps the v1 migration and auto-create behavior described below.
 
-Restish v2 does not search the current working directory or parent directories
-for project config. Project-local configuration is selected explicitly with
-`--rsh-config` or `RSH_CONFIG`. That keeps repository checkout state from
-silently changing request behavior; an implicit project-discovery mode can be
-designed later if a real workflow needs it.
+When no explicit config file is selected, Restish may discover project config
+by walking from the current working directory toward the filesystem root and
+looking for `.restish.json`. Discovery alone does not grant trust. A discovered
+project config is used only when the user has trusted that exact canonical file
+path and content hash, either through the interactive first-use prompt or
+`restish config trust`. If the file content changes, the hash changes and the
+user must trust it again before Restish uses it.
+
+Interactive first-use prompts show the absolute project config path and a short
+summary of what would be applied. Non-interactive invocations do not prompt. If
+they discover an untrusted project config, they continue with the selected/global
+config and print a concise stderr warning that names the project config path and
+`restish config trust` recovery command. Users can avoid that warning by
+trusting the file ahead of time, explicitly selecting it with `--rsh-config` /
+`RSH_CONFIG`, or removing the project config.
+
+Trusted project config is a layered overlay, not a replacement for the global
+config. The first version honors only project `apis` and `theme`. Global APIs
+remain available, and project APIs shadow global APIs by API name for commands
+run under that working tree. Individual API definitions are not deep-merged:
+when a project API and global API share a name, the project API wins as a whole.
+Project `theme` overlays the global theme by token/style key so projects can
+provide a visible context signal such as a development or dangerous environment
+theme. Other top-level project keys, including `auth_profiles`, `plugins`,
+`cache`, and `theme_source`, are invalid in an auto-discovered project overlay.
+If a trusted project config contains those keys, Restish errors with a clear
+diagnostic instead of silently ignoring request-affecting or executable config.
+A later design may broaden the overlay shape with explicit merge and trust
+semantics.
+
+Auto-discovered project config is read-only for normal mutation commands.
+Commands such as `api connect`, `api set`, `config edit`, and `config set`
+continue to write the user's selected/global config unless the user explicitly
+selects the project file with `--rsh-config` or `RSH_CONFIG`. Explicit selection
+preserves the existing source-of-truth behavior: `restish --rsh-config
+.restish.json ...` reads and writes only that file and does not merge it with
+the platform default config.
 
 Sidecar state that belongs to the selected config trust root, such as OAuth
 token caches and external-tool approval records, lives next to the explicit
 config file. Response and spec caches remain under the cache root, but explicit
 configs get a cache namespace derived from the config path so two project
 configs do not reuse each other's cached HTTP responses or discovered specs.
+Auto-discovered project config keeps private machine state out of the repository:
+OAuth/token caches, response caches, and spec/generated-command caches live in
+the user's Restish state/cache roots under a namespace derived from the trusted
+project config's canonical path and content hash. That prevents a project API
+from sharing credentials or cached responses with a same-named global API.
 
 Cache directory selection mirrors config selection with `RSH_CACHE_DIR`,
 `XDG_CACHE_HOME/restish`, `~/.cache/restish` on Unix-like systems, and the
