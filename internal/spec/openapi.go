@@ -247,6 +247,9 @@ func openAPIRemoteURLHandler(opts LoadOptions) func(string) (*http.Response, err
 		if err != nil {
 			return nil, cleanErrorForDisplay(err, rawURL, displayURL)
 		}
+		if resp == nil {
+			return nil, fmt.Errorf("OpenAPI external ref %q: no response", displayURL)
+		}
 		if resp.Body == nil {
 			return resp, nil
 		}
@@ -743,9 +746,6 @@ func openAPIRefDisplayURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return cleanPossiblyInvalidURL(raw)
-	}
-	if u.IsAbs() {
-		return cleanSourceURL(raw)
 	}
 	u.User = nil
 	u.RawQuery = cleanSourceURLQuery(u.Query()).Encode()

@@ -1029,6 +1029,24 @@ func TestDiscoverRedactsCredentialQueryInInvalidSpecURL(t *testing.T) {
 	}
 }
 
+func TestDiscoverNilFetchResponseReturnsError(t *testing.T) {
+	cfg := DiscoverConfig{
+		APIName: "nil-response",
+		BaseURL: "https://api.example.com",
+		SpecURL: "https://api.example.com/openapi.json",
+		Fetch: func(context.Context, string, http.RoundTripper) (*http.Response, error) {
+			return nil, nil
+		},
+	}
+	_, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected nil fetch response failure")
+	}
+	if got := err.Error(); !strings.Contains(got, "GET https://api.example.com/openapi.json: no response") {
+		t.Fatalf("expected no response error, got: %v", err)
+	}
+}
+
 func TestDiscoverResolvesSameOriginRemoteExternalRefs(t *testing.T) {
 	root := `openapi: "3.1.0"
 info:
@@ -1525,10 +1543,12 @@ func TestDiscoverRedactsCredentialQueryInExternalRefFailures(t *testing.T) {
 		ref     string
 		want    string
 		itemErr bool
+		itemNil bool
 		status  int
 	}{
 		{name: "status", ref: "./item.yaml?api_key=ref-secret&version=1", want: "https://specs.example.com/item.yaml?version=1", status: http.StatusInternalServerError},
 		{name: "transport", ref: "./item.yaml?api_key=ref-secret&version=1", want: "https://specs.example.com/item.yaml?version=1", itemErr: true},
+		{name: "nil response", ref: "./item.yaml?api_key=ref-secret&version=1", want: "https://specs.example.com/item.yaml?version=1", itemNil: true},
 		{name: "unsupported scheme", ref: "ftp://files.example.com/item.yaml?api_key=ref-secret&version=1", want: "ftp://files.example.com/item.yaml?version=1"},
 		{name: "malformed", ref: "./item.yaml?api_key=ref-secret%zz&version=1", want: "https://specs.example.com/item.yaml?version=1"},
 	}
@@ -1547,6 +1567,9 @@ paths:
 				case "/item.yaml":
 					if tt.itemErr {
 						return nil, fmt.Errorf("dial failed for %s", r.URL.String())
+					}
+					if tt.itemNil {
+						return nil, nil
 					}
 					return httpResponse(tt.status, "text/plain", "server error", nil), nil
 				default:
@@ -1575,6 +1598,14 @@ paths:
 				t.Fatalf("expected clean external ref URL %q, got:\n%s", tt.want, combined)
 			}
 		})
+	}
+}
+
+func TestOpenAPIRefDisplayURLPreservesAbsoluteFragmentAndRedactsQuery(t *testing.T) {
+	got := openAPIRefDisplayURL("https://user:pass@example.com/schema.yaml?api_key=secret&version=1#/components/schemas/Foo")
+	want := "https://example.com/schema.yaml?version=1#/components/schemas/Foo"
+	if got != want {
+		t.Fatalf("display URL = %q, want %q", got, want)
 	}
 }
 

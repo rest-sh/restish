@@ -502,6 +502,9 @@ func fetchWithLinks(ctx context.Context, rawURL string, tr http.RoundTripper, fe
 	if err != nil {
 		return "", nil, 0, displayURL, nil, fmt.Errorf("GET %s: %w", displayURL, cleanErrorForDisplay(err, rawURL, displayURL))
 	}
+	if resp == nil {
+		return "", nil, 0, displayURL, nil, fmt.Errorf("GET %s: no response", displayURL)
+	}
 	if resp.Body != nil {
 		defer resp.Body.Close()
 	}
