@@ -593,6 +593,56 @@ func TestAPISyncDiscoveryUsesProfileCACert(t *testing.T) {
 	}
 }
 
+// TestAPISyncDiscoverySendsAuthCredentials verifies that spec discovery requests
+// carry auth headers when the profile has auth configured. This is a regression
+// test for the bug where discoveryTransport only set up TLS and never applied
+// auth, causing servers that require a Bearer token to return 307/401 on sync.
+func TestAPISyncDiscoverySendsAuthCredentials(t *testing.T) {
+	var authHeader string
+	var specHits int
+
+	c, _, _ := newTestCLI(t)
+	cfgData, _ := json.Marshal(&config.Config{
+		APIs: map[string]*config.APIConfig{
+			"protected": {
+				BaseURL: "https://api.example.com",
+				Profiles: map[string]*config.ProfileConfig{
+					"default": {Auth: bearerAuth("test-token")},
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(c.Hooks().ConfigPath, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/openapi.json" {
+			authHeader = r.Header.Get("Authorization")
+			specHits++
+			return jsonResponse(200, minimalOpenAPI), nil
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Proto:      "HTTP/1.1",
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    r,
+		}, nil
+	})
+
+	if err := c.Run([]string{"restish", "api", "sync", "protected"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if specHits == 0 {
+		t.Fatal("spec endpoint was never hit")
+	}
+	if authHeader != "Bearer test-token" {
+		t.Fatalf("Authorization = %q, want %q", authHeader, "Bearer test-token")
+	}
+}
+
 func TestAPIConnectAllowCrossOriginSpec(t *testing.T) {
 	cfgFile := t.TempDir() + "/restish.json"
 
