@@ -302,6 +302,27 @@ func TestFilteredStructuredOutputPrettyByDefault(t *testing.T) {
 	}
 }
 
+func TestFilteredTTYOutputColorsPrettyJSONByDefault(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("NOCOLOR", "")
+	t.Setenv("COLOR", "1")
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	useJSONResponse(c, 200, `{"object":{"url":"https://api.example.com","z":1}}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.object", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected filtered TTY output to include ANSI color, got:\n%s", got)
+	}
+	if stripped, want := stripANSI(got), "{\n  \"url\": \"https://api.example.com\",\n  \"z\": 1\n}\n"; stripped != want {
+		t.Fatalf("filtered TTY output stripped ANSI = %q, want pretty JSON %q", stripped, want)
+	}
+}
+
 func TestExplicitPrintBodyKeepsAutoOutputCompact(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	useJSONResponse(c, 200, `{"object":{"z":1}}`)

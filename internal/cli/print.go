@@ -61,7 +61,11 @@ func (c *CLI) resolvePrintSpec(gf GlobalFlags, tty bool, kind printResponseKind)
 
 func (c *CLI) autoPrintSpec(gf GlobalFlags, tty bool, kind printResponseKind) printSpec {
 	if explicitOutputFilter(gf) {
-		return printSpec{order: []rune{printRenderedBody}, pretty: true}
+		return printSpec{
+			order:  []rune{printRenderedBody},
+			pretty: true,
+			color:  tty && output.ColorEnabled(c.Stdout),
+		}
 	}
 	if tty {
 		return printSpec{
