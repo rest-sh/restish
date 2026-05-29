@@ -736,6 +736,47 @@ func TestLoad_MigratesLegacyMacOSConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_MigratesLegacyFileCert(t *testing.T) {
+	home := t.TempDir()
+	setLegacyConfigEnv(t, home)
+	legacyDir := filepath.Join(home, ".config", "restish")
+	writeFile(t, filepath.Join(legacyDir, "apis.json"), `{
+  "$schema": "https://rest.sh/schemas/apis.json",
+  "myapi": {
+    "base": "https://api.example.com",
+    "tls": {
+      "cert": "/home/user/.pki/cert.pem",
+      "key": "/home/user/.pki/key.pem"
+    }
+  }
+}`)
+
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	path := config.DefaultPath()
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Migration == nil {
+		t.Fatal("expected migration info")
+	}
+
+	api := cfg.APIs["myapi"]
+	if api == nil {
+		t.Fatal("expected migrated API config")
+	}
+	prof := api.Profiles["default"]
+	if prof == nil {
+		t.Fatal("expected default profile")
+	}
+	if prof.ClientCertPath != "/home/user/.pki/cert.pem" {
+		t.Fatalf("ClientCertPath = %q, want %q", prof.ClientCertPath, "/home/user/.pki/cert.pem")
+	}
+	if prof.ClientKeyPath != "/home/user/.pki/key.pem" {
+		t.Fatalf("ClientKeyPath = %q, want %q", prof.ClientKeyPath, "/home/user/.pki/key.pem")
+	}
+}
+
 func TestLoad_MigrationReusesMatchingExistingBackupDir(t *testing.T) {
 	home := t.TempDir()
 	setLegacyConfigEnv(t, home)
