@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/cache"
@@ -1142,6 +1144,10 @@ func (c *CLI) runAPIInspect(cmd *cobra.Command, args []string) error {
 func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	cfgPath := c.configFilePath()
 	oldCfg := c.cfg
+	before, err := statConfigEditFile(cfgPath)
+	if err != nil {
+		return err
+	}
 	editorCmd, err := c.editorCommand(cfgPath)
 	if err != nil {
 		return err
@@ -1155,8 +1161,45 @@ func (c *CLI) runConfigEdit(cmd *cobra.Command, args []string) error {
 	if err := c.reloadConfigAfterMutation("config edit", oldCfg); err != nil {
 		return err
 	}
-	c.printConfigWrittenPath()
+	after, err := statConfigEditFile(cfgPath)
+	if err != nil {
+		return err
+	}
+	if after.changedFrom(before) {
+		c.printConfigWrittenPath()
+	}
 	return nil
+}
+
+type configEditFileState struct {
+	exists  bool
+	modTime time.Time
+	size    int64
+}
+
+func statConfigEditFile(path string) (configEditFileState, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return configEditFileState{}, nil
+	}
+	if err != nil {
+		return configEditFileState{}, err
+	}
+	return configEditFileState{
+		exists:  true,
+		modTime: info.ModTime(),
+		size:    info.Size(),
+	}, nil
+}
+
+func (s configEditFileState) changedFrom(old configEditFileState) bool {
+	if s.exists != old.exists {
+		return true
+	}
+	if !s.exists {
+		return false
+	}
+	return !s.modTime.Equal(old.modTime) || s.size != old.size
 }
 
 func apiNamesWithSpecCacheRelevantChanges(oldCfg, newCfg *config.Config) []string {
