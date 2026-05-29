@@ -16,6 +16,8 @@ import (
 	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/internal/config"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
@@ -363,7 +365,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(out, "Auth details: restish api auth inspect %s\n", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		c.printAPIReachability(out, style, c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
+		c.printAPIReachability(out, style, c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName))
 	} else {
 		fmt.Fprintf(out, "Reachability: %s (%s)\n", style.warn("skipped"), style.hint("use --check-network"))
 	}
@@ -784,7 +786,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	report.Auth.Hint = fmt.Sprintf("run `restish api auth inspect %s` for credential coverage and auth material", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
+		report.Reachability = c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName)
 	}
 	return report
 }
@@ -937,15 +939,15 @@ func (c *CLI) printShellSetupDiagnostic(out io.Writer, style humanTextStyle) {
 	fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble\n", style.hint("run `restish shell setup "+shell+"`"))
 }
 
-func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
+func (c *CLI) checkAPIReachability(ctx context.Context, apiName, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
 	if baseURL == "" {
 		return doctorReachabilityReport{Status: "skipped", Checked: false, Note: "no base URL"}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, baseURL, nil)
+	normalizedBaseURL, err := request.Normalize(baseURL, "")
 	if err != nil {
-		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: err.Error()}
+		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: secrets.RedactDiagnosticURLText(err.Error())}
 	}
 	transport, closer, err := c.discoveryTransport(ctx, apiCfg, profileName)
 	if err != nil {
@@ -954,11 +956,19 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *
 	if closer != nil {
 		defer closer.Close()
 	}
-	resp, err := (&http.Client{Transport: transport}).Do(req)
-	if err != nil {
-		return doctorReachabilityReport{Status: "failed", Checked: true, Method: http.MethodHead, Error: err.Error()}
+	baseOpts, authOpts := c.discoveryRequestOptions(ctx, apiName, apiCfg, profileName, transport)
+	authOrigins := discoveryAuthOrigins(apiCfg, profileName)
+	opts := baseOpts
+	if discoveryAuthAllowed(authOrigins, normalizedBaseURL) {
+		opts = authOpts
 	}
-	_ = resp.Body.Close()
+	resp, err := c.doDiscoveryRequest(ctx, http.MethodHead, normalizedBaseURL, opts)
+	if err != nil {
+		return doctorReachabilityReport{Status: "failed", Checked: true, Method: http.MethodHead, Error: secrets.RedactDiagnosticURLText(err.Error())}
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	report := doctorReachabilityReport{
 		Status:     "ok",
 		Checked:    true,

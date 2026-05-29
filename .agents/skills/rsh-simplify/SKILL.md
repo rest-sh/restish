@@ -27,6 +27,19 @@ Identify and eliminate unnecessary complexity in the Restish codebase. Fewer lin
 
 User experience comes first. Developer experience comes second. Simplifications that improve both are highest value. Simplifications that improve only developer experience at some user cost are not acceptable.
 
+## Post-Review Shrink Pass
+
+After a PR has gone through review/fix loops, do a focused simplification pass before final handoff when the diff has grown substantially. Compare `git diff --stat` or `git diff --shortstat` before and after. Target duplicated test setup, repeated assertions, over-large inline fixtures, and helper code that obscures the behavior under test. Prefer deleting ceremony over deleting coverage.
+
+Good shrink-pass moves:
+
+- Table-drive cases that share setup and assertion shape.
+- Add small helpers for repeated config/cache/server setup when they make tests read more directly.
+- Share behavioral assertions that are repeated verbatim.
+- Keep edge-case tests for auth, redaction, redirects, cache metadata, migrations, and subprocess behavior when those edge cases are the point of the PR.
+
+Avoid code golf. A shorter diff that is harder to audit, especially around security/auth/cache behavior, is not a simplification.
+
 ## Process
 
 ### 1. Analyze

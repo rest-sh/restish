@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -17,6 +18,40 @@ import (
 
 	"github.com/rest-sh/restish/v2/internal/cli"
 )
+
+type doctorReachabilityJSON struct {
+	Reachability struct {
+		Status     string `json:"status"`
+		Checked    bool   `json:"checked"`
+		Reachable  bool   `json:"reachable"`
+		StatusCode int    `json:"status_code"`
+		Error      string `json:"error"`
+	} `json:"reachability"`
+}
+
+func newDoctorAPIJSONCLI(t *testing.T, cfg string) (*cli.CLI, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	c, out, errOut := newTestCLI(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return c, out, errOut
+}
+
+func runDoctorReachabilityJSON(t *testing.T, c *cli.CLI, out, errOut *bytes.Buffer) doctorReachabilityJSON {
+	t.Helper()
+	if err := c.Run([]string{"restish", "doctor", "-o", "json", "api", "demo", "--check-network"}); err != nil {
+		t.Fatalf("doctor api -o json returned error: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("doctor api -o json should keep stderr quiet, got:\n%s", errOut.String())
+	}
+	var report doctorReachabilityJSON
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("doctor api -o json output is not JSON: %v\n%s", err, out.String())
+	}
+	return report
+}
 
 func TestDoctorReportsInsecureTokenCachePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -461,6 +496,92 @@ func TestDoctorAPIJSONTreats405AsReachable(t *testing.T) {
 		report.Reachability.StatusCode != http.StatusMethodNotAllowed ||
 		report.Reachability.Note == "" {
 		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}
+
+func TestDoctorAPIReachabilityNormalizesShorthandAndSendsAuth(t *testing.T) {
+	c, out, errOut := newDoctorAPIJSONCLI(t, `{
+  "apis": {
+    "demo": {
+      "base_url": "api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "api-key",
+            "params": {"in": "query", "name": "api_key", "value": "secret-token"}
+          }
+        }
+      }
+    }
+  }
+}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodHead {
+			t.Fatalf("doctor reachability used %s, want HEAD", r.Method)
+		}
+		if got := r.URL.String(); got != "https://api.example.com?api_key=secret-token" {
+			t.Fatalf("doctor reachability URL = %q, want normalized authenticated URL", got)
+		}
+		return textResponse(http.StatusNoContent, "text/plain", "", r), nil
+	})
+	report := runDoctorReachabilityJSON(t, c, out, errOut)
+	if report.Reachability.Status != "ok" || !report.Reachability.Reachable || report.Reachability.StatusCode != http.StatusNoContent {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}
+
+func TestDoctorAPIReachabilityReportsInvalidURL(t *testing.T) {
+	c, out, errOut := newDoctorAPIJSONCLI(t, `{"apis":{"demo":{"base_url":":/bad"}}}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("transport should not be called for invalid URL")
+		return nil, nil
+	})
+	report := runDoctorReachabilityJSON(t, c, out, errOut)
+	if report.Reachability.Status != "invalid_url" || report.Reachability.Checked || report.Reachability.Error == "" {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+}
+
+func TestDoctorAPIReachabilityRedactsInvalidURLCredentialQuery(t *testing.T) {
+	c, out, errOut := newDoctorAPIJSONCLI(t, `{"apis":{"demo":{"base_url":"https://api.example.com/%zz?key=secret-token%zz&version=1"}}}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("transport should not be called for invalid URL")
+		return nil, nil
+	})
+	report := runDoctorReachabilityJSON(t, c, out, errOut)
+	if report.Reachability.Status != "invalid_url" || report.Reachability.Error == "" {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+	if strings.Contains(report.Reachability.Error, "secret-token") {
+		t.Fatalf("credential query leaked in doctor error: %q", report.Reachability.Error)
+	}
+}
+
+func TestDoctorAPIReachabilityRedactsFailedRequestCredentialQuery(t *testing.T) {
+	c, out, errOut := newDoctorAPIJSONCLI(t, `{
+  "apis": {
+    "demo": {
+      "base_url": "api.example.com",
+      "profiles": {
+        "default": {
+          "auth": {
+            "type": "api-key",
+            "params": {"in": "query", "name": "key", "value": "secret-token"}
+          }
+        }
+      }
+    }
+  }
+}`)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("dial failed for %s", r.URL.String())
+	})
+	report := runDoctorReachabilityJSON(t, c, out, errOut)
+	if report.Reachability.Status != "failed" || report.Reachability.Error == "" {
+		t.Fatalf("unexpected reachability report: %#v", report.Reachability)
+	}
+	if strings.Contains(report.Reachability.Error, "secret-token") {
+		t.Fatalf("credential query leaked in doctor error: %q", report.Reachability.Error)
 	}
 }
 

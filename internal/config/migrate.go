@@ -40,6 +40,8 @@ type legacyPKCS11Config struct {
 
 type legacyTLSConfig struct {
 	PKCS11 *legacyPKCS11Config `json:"pkcs11,omitempty"`
+	Cert   string              `json:"cert,omitempty"`
+	Key    string              `json:"key,omitempty"`
 }
 
 type legacyAPIProfile struct {
@@ -246,6 +248,23 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 		}
 		if legacy.TLS.PKCS11.Label != "" && prof.TLSSignerParams["label"] == "" {
 			prof.TLSSignerParams["label"] = legacy.TLS.PKCS11.Label
+		}
+	}
+
+	if legacy.TLS != nil && (legacy.TLS.Cert != "" || legacy.TLS.Key != "") {
+		if api.Profiles == nil {
+			api.Profiles = map[string]*ProfileConfig{}
+		}
+		prof := api.Profiles["default"]
+		if prof == nil {
+			prof = &ProfileConfig{}
+			api.Profiles["default"] = prof
+		}
+		if prof.ClientCertPath == "" && legacy.TLS.Cert != "" {
+			prof.ClientCertPath = legacy.TLS.Cert
+		}
+		if prof.ClientKeyPath == "" && legacy.TLS.Key != "" {
+			prof.ClientKeyPath = legacy.TLS.Key
 		}
 	}
 

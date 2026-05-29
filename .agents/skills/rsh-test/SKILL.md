@@ -59,6 +59,9 @@ Prefer plain Go tests with a small Restish-specific helper vocabulary over Gherk
 
 - One test should usually cover one behavior from input through observable result.
 - Combine cases when they differ only by inputs and expected outputs. Split cases when setup or failure meaning differs.
+- For review-driven edge cases, first preserve the behavioral boundary, then reduce scaffolding. Table-drive repeated redirect, redaction, cache, migration, or auth-origin cases only when the setup and assertion shape truly match.
+- Use focused helpers for repeated config/cache/server setup, but keep the request, persisted state, error, or output assertion visible in the test.
+- When covering credential handling, assert both where credentials are applied and where they are not applied, plus what gets persisted and what appears in diagnostics.
 - Avoid asserting private call sequences unless ordering is the contract.
 - Avoid mocks for HTTP, files, and CLI I/O when standard library fakes or temp resources are clearer.
 - Keep fixtures tiny but believable: real OpenAPI fragments, real response headers, real shorthand, real config snippets.

@@ -36,7 +36,8 @@ Review code changes with a bug-finding mindset. Prioritize correctness, regressi
 4. Challenge assumptions around error paths, cancellation, timeouts, cleanup, concurrency, config precedence, and backward compatibility.
 5. Check whether tests cover intended behavior and important failure modes.
 6. Check whether `site/` docs or `docs/design/` should change.
-7. Report findings first, ordered by severity. Keep summaries brief.
+7. Keep the review scoped to the current PR unless the user asks for a broader audit. Distinguish required fixes from optional hardening or follow-on cleanup.
+8. Report findings first, ordered by severity. Keep summaries brief.
 
 ## Output Expectations
 
@@ -47,6 +48,7 @@ Review code changes with a bug-finding mindset. Prioritize correctness, regressi
 - If no findings are present, say so explicitly and call out any residual risk or untested areas.
 - Do not pad the review with praise or low-value nits unless the user asks for them.
 - Do not report speculative issues unless there is a plausible failure mode in the changed code.
+- Do not turn a scoped PR review into general codebase cleanup. If you notice unrelated risks, list them as out-of-scope follow-ups only when they are important.
 - Treat missing coverage as a test gap unless the diff shows a confirmed bug.
 
 ## Severity Guide
@@ -104,6 +106,8 @@ Intentional formatter changes should usually come with targeted regression cover
 ### Auth, pagination, filtering, and caching flows
 
 Changes in these areas often regress behavior only in realistic end-to-end paths. Review interactions, not just isolated helpers.
+
+For auth, redaction, and cache metadata changes, check both positive behavior and negative leakage boundaries: where credentials are applied, where they must not be applied, what gets persisted, and what appears in errors or traces. Keep findings tied to the PR's changed paths.
 
 ### Test buffer races
 

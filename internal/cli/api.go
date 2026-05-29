@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"sort"
@@ -222,6 +224,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	if closer != nil {
 		defer closer.Close()
 	}
+	fetch := c.discoveryFetcher(requestContext(cmd), apiName, apiCfg, profileName)
 	discCfg := spec.DiscoverConfig{
 		APIName:          c.apiStateName(apiName),
 		BaseURL:          effectiveProfileBaseURL(apiCfg, profileName),
@@ -232,6 +235,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 		ServerVariables:  effectiveServerVariables(apiCfg, profileName),
 		Version:          Version,
 		Transport:        transport,
+		Fetch:            fetch,
 		AllowCrossOrigin: apiCfg.AllowCrossOriginSpec || allowCrossOrigin,
 		ForceRefresh:     true,
 		Trace:            c.discoveryTrace(cmd),
@@ -336,6 +340,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		if closer != nil {
 			defer closer.Close()
 		}
+		fetch := c.discoveryFetcher(requestContext(cmd), apiName, apiCfg, "default")
 		discCfg := spec.DiscoverConfig{
 			APIName:          apiName,
 			BaseURL:          baseURL,
@@ -345,6 +350,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			ServerVariables:  nil,
 			Version:          Version,
 			Transport:        transport,
+			Fetch:            fetch,
 			AllowCrossOrigin: allowCrossOrigin,
 			ForceRefresh:     true,
 			Trace:            c.discoveryTrace(cmd),
@@ -1112,6 +1118,127 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	transport := request.BuildTransport(opts)
 	closer, _ := transport.(interface{ Close() error })
 	return transport, closer, nil
+}
+
+func (c *CLI) discoveryFetcher(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) spec.HTTPFetcher {
+	authOrigins := discoveryAuthOrigins(apiCfg, profileName)
+	return func(ctx context.Context, rawURL string, transport http.RoundTripper) (*http.Response, error) {
+		baseOpts, authOpts := c.discoveryRequestOptions(ctx, apiName, apiCfg, profileName, transport)
+		opts := baseOpts
+		if discoveryAuthAllowed(authOrigins, rawURL) {
+			opts = authOpts
+		}
+		return c.doDiscoveryRequest(ctx, http.MethodGet, rawURL, opts)
+	}
+}
+
+func (c *CLI) discoveryRequestOptions(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string, transport http.RoundTripper) (request.Options, request.Options) {
+	if profileName == "" {
+		profileName = "default"
+	}
+	baseOpts := request.Options{
+		Transport: transport,
+		UserAgent: "restish/" + Version,
+	}
+	authOpts := baseOpts
+	if apiCfg != nil {
+		if apiCfg.PreserveHeaderCase {
+			authOpts.PreserveHeaderCase = true
+		}
+		prof := profileForName(apiCfg, profileName)
+		if prof != nil {
+			authOpts.Headers = append([]string(nil), prof.Headers...)
+			authOpts.Query = append([]string(nil), prof.Query...)
+		}
+		callbacks := c.authOnRequest(apiName, profileName, prof, authHandlerOptionsFromContext(ctx))
+		authOpts.OnRequest = callbacks.OnRequest
+		authOpts.OnUnauthorized = callbacks.OnUnauthorized
+	}
+	if authOpts.OnRequest != nil || len(c.pluginsByHook["request-middleware"]) > 0 {
+		origOnRequest := authOpts.OnRequest
+		authOpts.OnRequest = func(req *http.Request) error {
+			if origOnRequest != nil {
+				if err := origOnRequest(req); err != nil {
+					return err
+				}
+			}
+			return c.runRequestMiddlewarePlugins(req)
+		}
+	}
+	return baseOpts, authOpts
+}
+
+func (c *CLI) doDiscoveryRequest(ctx context.Context, method, rawURL string, opts request.Options) (*http.Response, error) {
+	resp, err := request.Do(ctx, method, rawURL, nil, opts)
+	if err != nil || resp == nil || resp.StatusCode != http.StatusUnauthorized || opts.OnUnauthorized == nil {
+		return resp, err
+	}
+	if resp.Body != nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}
+	retryOpts := opts
+	onUnauthorized := retryOpts.OnUnauthorized
+	retryOpts.OnRequest = func(req *http.Request) error {
+		if err := onUnauthorized(req); err != nil {
+			return err
+		}
+		return c.runRequestMiddlewarePlugins(req)
+	}
+	retryOpts.OnUnauthorized = nil
+	return request.Do(ctx, method, rawURL, nil, retryOpts)
+}
+
+func authHandlerOptionsFromContext(ctx context.Context) authHandlerOptions {
+	gf := globalFlagsFromContext(ctx)
+	return authHandlerOptions{NoBrowser: gf.NoBrowser, Verbose: gf.Verbose > 0}
+}
+
+func discoveryAuthOrigins(apiCfg *config.APIConfig, profileName string) []*url.URL {
+	if apiCfg == nil {
+		return nil
+	}
+	var origins []*url.URL
+	addNormalized := func(raw string) {
+		if raw == "" {
+			return
+		}
+		if normalized, err := request.Normalize(raw, ""); err == nil {
+			raw = normalized
+		}
+		u, err := url.Parse(raw)
+		if err == nil && u.IsAbs() && (u.Scheme == "http" || u.Scheme == "https") {
+			origins = append(origins, u)
+		}
+	}
+	addExplicitURL := func(raw string) {
+		u, err := url.Parse(raw)
+		if err == nil && u.IsAbs() && (u.Scheme == "http" || u.Scheme == "https") {
+			origins = append(origins, u)
+		}
+	}
+	addNormalized(effectiveProfileBaseURL(apiCfg, profileName))
+	addNormalized(apiCfg.SpecURL)
+	for _, src := range apiCfg.SpecFiles {
+		addExplicitURL(src)
+	}
+	return origins
+}
+
+func discoveryAuthAllowed(origins []*url.URL, rawURL string) bool {
+	if normalized, err := request.Normalize(rawURL, ""); err == nil {
+		rawURL = normalized
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || !u.IsAbs() {
+		return false
+	}
+	for _, origin := range origins {
+		if request.SameOrigin(origin, u) {
+			return true
+		}
+	}
+	return false
 }
 
 // runAPIInspect prints the config for a named API as indented JSON,
