@@ -947,7 +947,7 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *
 	if err != nil {
 		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: err.Error()}
 	}
-	transport, closer, err := c.discoveryTransport(ctx, apiCfg, profileName)
+	transport, closer, err := c.discoveryTransport(ctx, "", apiCfg, profileName)
 	if err != nil {
 		return doctorReachabilityReport{Status: "tls_config_error", Checked: false, Method: http.MethodHead, Error: err.Error(), Note: "profile TLS settings could not be resolved"}
 	}

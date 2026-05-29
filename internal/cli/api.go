@@ -215,7 +215,7 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	yes, _ := cmd.Flags().GetBool("yes")
 	profileName := c.profileFromCmd(cmd)
-	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
+	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiName, apiCfg, profileName)
 	if err != nil {
 		return err
 	}
@@ -329,7 +329,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 
 	var apiSpec *spec.APISpec
 	if !noDiscover {
-		transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, "default")
+		transport, closer, err := c.discoveryTransport(requestContext(cmd), apiName, apiCfg, "default")
 		if err != nil {
 			return err
 		}
@@ -1060,7 +1060,7 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 	}
 }
 
-func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {
+func (c *CLI) discoveryTransport(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {
 	gf := globalFlagsFromContext(ctx)
 	if gf.Insecure {
 		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
@@ -1111,7 +1111,32 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	}
 	transport := request.BuildTransport(opts)
 	closer, _ := transport.(interface{ Close() error })
+	if apiName != "" && apiCfg != nil {
+		pn := profileName
+		if pn == "" {
+			pn = "default"
+		}
+		callbacks := c.authOnRequest(apiName, pn, profileForName(apiCfg, pn), authHandlerOptions{})
+		if callbacks.OnRequest != nil {
+			transport = discoveryAuthTransport{inner: transport, onRequest: callbacks.OnRequest}
+		}
+	}
 	return transport, closer, nil
+}
+
+// discoveryAuthTransport wraps a transport and applies auth headers to each request.
+// Used so that spec discovery fetches are authenticated when the API requires it.
+type discoveryAuthTransport struct {
+	inner     http.RoundTripper
+	onRequest func(*http.Request) error
+}
+
+func (t discoveryAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	if err := t.onRequest(req); err != nil {
+		return nil, fmt.Errorf("discovery auth: %w", err)
+	}
+	return t.inner.RoundTrip(req)
 }
 
 // runAPIInspect prints the config for a named API as indented JSON,

@@ -785,7 +785,7 @@ func defaultOpenBrowserCommand(rawURL string) *exec.Cmd {
 		// cmd /c start flags.
 		return exec.Command("cmd", "/c", "start", "", "--", rawURL)
 	default:
-		return exec.Command("xdg-open", "--", rawURL)
+		return exec.Command("xdg-open", rawURL)
 	}
 }
 

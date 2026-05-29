@@ -461,7 +461,7 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 	if err != nil {
 		return nil, nil
 	}
-	transport, closer, err := c.discoveryTransport(ctx, api, profileName)
+	transport, closer, err := c.discoveryTransport(ctx, apiName, api, profileName)
 	if err != nil {
 		return nil, err
 	}
