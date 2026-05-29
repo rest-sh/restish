@@ -363,7 +363,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(out, "Auth details: restish api auth inspect %s\n", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		c.printAPIReachability(out, style, c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName))
+		c.printAPIReachability(out, style, c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName))
 	} else {
 		fmt.Fprintf(out, "Reachability: %s (%s)\n", style.warn("skipped"), style.hint("use --check-network"))
 	}
@@ -784,7 +784,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 	report.Auth.Hint = fmt.Sprintf("run `restish api auth inspect %s` for credential coverage and auth material", name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
-		report.Reachability = c.checkAPIReachability(requestContext(cmd), effectiveProfileBaseURL(api, profileName), api, profileName)
+		report.Reachability = c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName)
 	}
 	return report
 }
@@ -937,7 +937,7 @@ func (c *CLI) printShellSetupDiagnostic(out io.Writer, style humanTextStyle) {
 	fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble\n", style.hint("run `restish shell setup "+shell+"`"))
 }
 
-func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
+func (c *CLI) checkAPIReachability(ctx context.Context, apiName, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {
 	if baseURL == "" {
 		return doctorReachabilityReport{Status: "skipped", Checked: false, Note: "no base URL"}
 	}
@@ -947,7 +947,7 @@ func (c *CLI) checkAPIReachability(ctx context.Context, baseURL string, apiCfg *
 	if err != nil {
 		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: err.Error()}
 	}
-	transport, closer, err := c.discoveryTransport(ctx, "", apiCfg, profileName)
+	transport, closer, err := c.discoveryTransport(ctx, apiName, apiCfg, profileName)
 	if err != nil {
 		return doctorReachabilityReport{Status: "tls_config_error", Checked: false, Method: http.MethodHead, Error: err.Error(), Note: "profile TLS settings could not be resolved"}
 	}
