@@ -222,10 +222,10 @@ func TestFlagHeaderTakesPrecedenceOverProfile(t *testing.T) {
 	}
 }
 
-// TestAPIEditUsesCliStdout verifies that runAPIEdit wires the editor subprocess
-// to c.Stdout rather than os.Stdout, so embedders that redirect c.Stdout capture
-// any output the editor produces.
-func TestAPIEditUsesCliStdout(t *testing.T) {
+// TestConfigEditUsesCliStdout verifies that runConfigEdit wires the editor
+// subprocess to c.Stdout rather than os.Stdout, so embedders that redirect
+// c.Stdout capture any output the editor produces.
+func TestConfigEditUsesCliStdout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("editor test uses a POSIX shell script")
 	}
@@ -252,6 +252,35 @@ func TestAPIEditUsesCliStdout(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "editor-stdout") {
 		t.Errorf("expected editor stdout in c.Stdout, got: %q", out.String())
+	}
+	if strings.Contains(out.String(), "Wrote config:") {
+		t.Errorf("expected unchanged config edit not to print written path, got: %q", out.String())
+	}
+}
+
+func TestConfigEditPrintsWrittenPathWhenFileChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("editor test uses a POSIX shell script")
+	}
+
+	dir := t.TempDir()
+
+	scriptPath := filepath.Join(dir, "editor.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\nprintf '{\"theme\":{\"ok\":\"green\"}}\\n' > \"$1\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISUAL", scriptPath)
+	t.Setenv("EDITOR", "")
+
+	c, out, _ := newTestCLI(t)
+	cfgPath := filepath.Join(dir, "restish.json")
+	if err := os.WriteFile(cfgPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.Hooks().ConfigPath = cfgPath
+
+	if err := c.Run([]string{"restish", "config", "edit"}); err != nil {
+		t.Fatalf("config edit: %v", err)
 	}
 	if !strings.Contains(out.String(), "Wrote config: "+cfgPath) {
 		t.Errorf("expected written config path in c.Stdout, got: %q", out.String())
