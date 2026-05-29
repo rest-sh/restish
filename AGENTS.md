@@ -48,6 +48,10 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state â
 
 `TODO.md` and `review.md` are local working files for planning, code reviews, and in-progress implementation notes only. They must never be committed to git history. Keep them ignored/untracked, and if they are accidentally staged, unstage them before committing.
 
+## PR Review and Cleanup Discipline
+
+Keep review and fix loops scoped to the current PR's behavioral surface unless the user explicitly asks for broader cleanup. After substantial review loops, do a simplification pass before final handoff: reduce repeated scaffolding, table-drive genuinely similar cases, and consolidate helpers where that preserves readability. Do not shrink a PR by deleting important coverage or making security/auth/cache behavior harder to audit.
+
 ## Commit Messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) for all commits:

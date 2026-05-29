@@ -16,6 +16,8 @@ import (
 	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/internal/config"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/request"
+	"github.com/rest-sh/restish/v2/internal/secrets"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
 )
@@ -943,22 +945,30 @@ func (c *CLI) checkAPIReachability(ctx context.Context, apiName, baseURL string,
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, baseURL, nil)
+	normalizedBaseURL, err := request.Normalize(baseURL, "")
 	if err != nil {
-		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: err.Error()}
+		return doctorReachabilityReport{Status: "invalid_url", Checked: false, Method: http.MethodHead, Error: secrets.RedactDiagnosticURLText(err.Error())}
 	}
-	transport, closer, err := c.discoveryTransport(ctx, apiName, apiCfg, profileName)
+	transport, closer, err := c.discoveryTransport(ctx, apiCfg, profileName)
 	if err != nil {
 		return doctorReachabilityReport{Status: "tls_config_error", Checked: false, Method: http.MethodHead, Error: err.Error(), Note: "profile TLS settings could not be resolved"}
 	}
 	if closer != nil {
 		defer closer.Close()
 	}
-	resp, err := (&http.Client{Transport: transport}).Do(req)
-	if err != nil {
-		return doctorReachabilityReport{Status: "failed", Checked: true, Method: http.MethodHead, Error: err.Error()}
+	baseOpts, authOpts := c.discoveryRequestOptions(ctx, apiName, apiCfg, profileName, transport)
+	authOrigins := discoveryAuthOrigins(apiCfg, profileName)
+	opts := baseOpts
+	if discoveryAuthAllowed(authOrigins, normalizedBaseURL) {
+		opts = authOpts
 	}
-	_ = resp.Body.Close()
+	resp, err := c.doDiscoveryRequest(ctx, http.MethodHead, normalizedBaseURL, opts)
+	if err != nil {
+		return doctorReachabilityReport{Status: "failed", Checked: true, Method: http.MethodHead, Error: secrets.RedactDiagnosticURLText(err.Error())}
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	report := doctorReachabilityReport{
 		Status:     "ok",
 		Checked:    true,

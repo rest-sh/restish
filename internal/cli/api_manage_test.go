@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -593,6 +594,55 @@ func TestAPISyncDiscoveryUsesProfileCACert(t *testing.T) {
 	}
 }
 
+func newAPISyncCLI(t *testing.T, api *config.APIConfig) (*restishcli.CLI, string, string) {
+	t.Helper()
+	cfgFile := writeAPIConfigObject(t, "protected", api)
+	cacheDir := t.TempDir()
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	return c, cfgFile, cacheDir
+}
+
+func protectedAPI(baseURL, specURL string, authCfg *config.AuthConfig) *config.APIConfig {
+	api := &config.APIConfig{BaseURL: baseURL, SpecURL: specURL}
+	if authCfg != nil {
+		api.Profiles = map[string]*config.ProfileConfig{
+			"default": {Auth: authCfg},
+		}
+	}
+	return api
+}
+
+func runProtectedAPISync(t *testing.T, c *restishcli.CLI, args ...string) error {
+	t.Helper()
+	cmdArgs := append([]string{"restish"}, args...)
+	cmdArgs = append(cmdArgs, "api", "sync", "protected")
+	return c.Run(cmdArgs)
+}
+
+func assertSyncedSpecURL(t *testing.T, cfgFile, cacheDir, want string) {
+	t.Helper()
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["protected"].SpecURL; got != want {
+		t.Fatalf("spec_url = %q, want %q", got, want)
+	}
+
+	cached, err := spec.LoadStaleFromCache(cacheDir, "protected", restishcli.Version, nil, []spec.Loader{spec.OpenAPILoader{}})
+	if err != nil {
+		t.Fatalf("load cache: %v", err)
+	}
+	if cached == nil {
+		t.Fatal("expected cached spec")
+	}
+	if got := cached.SourceURL; got != want {
+		t.Fatalf("cached SourceURL = %q, want %q", got, want)
+	}
+}
+
 // TestAPISyncDiscoverySendsAuthCredentials verifies that spec discovery requests
 // carry auth headers when the profile has auth configured. This is a regression
 // test for the bug where discoveryTransport only set up TLS and never applied
@@ -601,22 +651,7 @@ func TestAPISyncDiscoverySendsAuthCredentials(t *testing.T) {
 	var authHeader string
 	var specHits int
 
-	c, _, _ := newTestCLI(t)
-	cfgData, _ := json.Marshal(&config.Config{
-		APIs: map[string]*config.APIConfig{
-			"protected": {
-				BaseURL: "https://api.example.com",
-				Profiles: map[string]*config.ProfileConfig{
-					"default": {Auth: bearerAuth("test-token")},
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(c.Hooks().ConfigPath, cfgData, 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	c.Hooks().SpecCachePath = t.TempDir()
-
+	c, _, _ := newAPISyncCLI(t, protectedAPI("https://api.example.com", "", bearerAuth("test-token")))
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path == "/openapi.json" {
 			authHeader = r.Header.Get("Authorization")
@@ -632,7 +667,7 @@ func TestAPISyncDiscoverySendsAuthCredentials(t *testing.T) {
 		}, nil
 	})
 
-	if err := c.Run([]string{"restish", "api", "sync", "protected"}); err != nil {
+	if err := runProtectedAPISync(t, c); err != nil {
 		t.Fatalf("api sync: %v", err)
 	}
 	if specHits == 0 {
@@ -640,6 +675,321 @@ func TestAPISyncDiscoverySendsAuthCredentials(t *testing.T) {
 	}
 	if authHeader != "Bearer test-token" {
 		t.Fatalf("Authorization = %q, want %q", authHeader, "Bearer test-token")
+	}
+}
+
+func TestAPISyncDiscoverySendsAuthForShorthandBaseURL(t *testing.T) {
+	var authHeader string
+
+	c, _, _ := newAPISyncCLI(t, protectedAPI("api.example.com", "", bearerAuth("test-token")))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" {
+			authHeader = r.Header.Get("Authorization")
+			return jsonResponse(200, minimalOpenAPI), nil
+		}
+		return textResponse(404, "text/plain", "not found", r), nil
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if authHeader != "Bearer test-token" {
+		t.Fatalf("Authorization = %q, want %q", authHeader, "Bearer test-token")
+	}
+}
+
+func TestAPISyncDiscoveryFollowsLinkWithShorthandBaseURL(t *testing.T) {
+	var linkedSpecAuth string
+
+	c, _, _ := newAPISyncCLI(t, protectedAPI("api.example.com", "", bearerAuth("test-token")))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "api.example.com" && (r.URL.Path == "" || r.URL.Path == "/"):
+			resp := textResponse(200, "text/html", "<html></html>", r)
+			resp.Header.Set("Link", `</openapi.yaml>; rel="service-desc"`)
+			return resp, nil
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.yaml":
+			linkedSpecAuth = r.Header.Get("Authorization")
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return textResponse(404, "text/plain", "not found", r), nil
+		}
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if linkedSpecAuth != "Bearer test-token" {
+		t.Fatalf("linked spec Authorization = %q, want %q", linkedSpecAuth, "Bearer test-token")
+	}
+}
+
+func TestAPISyncDiscoveryResolvesExternalRefsWithShorthandSpecURL(t *testing.T) {
+	var specAuth string
+	var paramsAuth string
+	var requests []string
+	specBody := `{
+  "openapi": "3.1.0",
+  "info": {"title": "Protected", "version": "1.0"},
+  "servers": [{"url": "https://api.example.com"}],
+  "paths": {
+    "/items/{id}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [{"$ref": "./params.yaml#/components/parameters/ID"}],
+        "responses": {"200": {"description": "OK"}}
+      }
+    }
+  }
+}`
+	paramsBody := `{
+  "components": {
+    "parameters": {
+      "ID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string"}
+      }
+    }
+  }
+}`
+
+	c, _, _ := newAPISyncCLI(t, protectedAPI("api.example.com", "api.example.com/openapi.json", bearerAuth("test-token")))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.URL.String())
+		switch {
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json":
+			specAuth = r.Header.Get("Authorization")
+			return textResponse(200, "application/json", specBody, r), nil
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/params.yaml":
+			paramsAuth = r.Header.Get("Authorization")
+			return textResponse(200, "application/json", paramsBody, r), nil
+		default:
+			return textResponse(404, "text/plain", "not found", r), nil
+		}
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v\nrequests: %v", err, requests)
+	}
+	if specAuth != "Bearer test-token" {
+		t.Fatalf("spec Authorization = %q, want %q", specAuth, "Bearer test-token")
+	}
+	if paramsAuth != "Bearer test-token" {
+		t.Fatalf("external ref Authorization = %q, want %q", paramsAuth, "Bearer test-token")
+	}
+}
+
+func TestAPISyncDiscoveryDoesNotPersistQueryAuthInSourceURL(t *testing.T) {
+	c, cfgFile, cacheDir := newAPISyncCLI(t, protectedAPI("api.example.com", "", apiKeyAuth("query", "api_key", "secret-token")))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" && r.URL.Query().Get("api_key") == "secret-token" {
+			return textResponse(200, "application/json", minimalOpenAPI, r), nil
+		}
+		return textResponse(404, "text/plain", "not found", r), nil
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	assertSyncedSpecURL(t, cfgFile, cacheDir, "https://api.example.com/openapi.json")
+}
+
+func TestAPISyncDiscoveryDoesNotPersistDiscoveredCredentialQuerySourceURL(t *testing.T) {
+	c, cfgFile, cacheDir := newAPISyncCLI(t, protectedAPI("https://api.example.com", "", nil))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "api.example.com" && (r.URL.Path == "" || r.URL.Path == "/"):
+			resp := textResponse(200, "text/html", "<html></html>", r)
+			resp.Header.Set("Link", `<https://api.example.com/openapi.json?api_key=secret-token&version=1>; rel="service-desc"`)
+			return resp, nil
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" && r.URL.Query().Get("api_key") == "secret-token":
+			return textResponse(200, "application/json", minimalOpenAPI, r), nil
+		default:
+			return textResponse(404, "text/plain", "not found", r), nil
+		}
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	assertSyncedSpecURL(t, cfgFile, cacheDir, "https://api.example.com/openapi.json?version=1")
+}
+
+func TestAPISyncDiscoveryRedactsCredentialQueryInErrorAndTrace(t *testing.T) {
+	var hitSpec bool
+	cfgFile := writeAPIConfigObject(t, "protected", protectedAPI("https://api.example.com", "https://api.example.com/openapi.json?api_key=secret-token&version=1", nil))
+	c, _, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" && r.URL.Query().Get("api_key") == "secret-token" {
+			hitSpec = true
+			return textResponse(500, "text/plain", "server error", r), nil
+		}
+		return textResponse(404, "text/plain", "not found", r), nil
+	})
+
+	err := runProtectedAPISync(t, c, "-v")
+	if err == nil {
+		t.Fatal("expected api sync failure")
+	}
+	if !hitSpec {
+		t.Fatal("expected request to include configured credential query")
+	}
+	combined := err.Error() + "\n" + errOut.String()
+	if strings.Contains(combined, "secret-token") {
+		t.Fatalf("credential query leaked in error/trace:\n%s", combined)
+	}
+	if !strings.Contains(combined, "https://api.example.com/openapi.json?version=1") {
+		t.Fatalf("expected clean URL in error/trace, got:\n%s", combined)
+	}
+}
+
+func TestAPISyncDiscoveryPersistsCleanRedirectSourceURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		location   string
+		finalPath  string
+		finalClean string
+	}{
+		{name: "path and query", location: "/specs/openapi.json?version=1&api_key=secret-token", finalPath: "/specs/openapi.json", finalClean: "https://api.example.com/specs/openapi.json?version=1"},
+		{name: "query only", location: "/openapi.json?version=1&api_key=secret-token", finalPath: "/openapi.json", finalClean: "https://api.example.com/openapi.json?version=1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, cfgFile, cacheDir := newAPISyncCLI(t, protectedAPI("https://api.example.com", "", nil))
+			useTransport(c, func(r *http.Request) (*http.Response, error) {
+				switch {
+				case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" && r.URL.RawQuery == "":
+					resp := textResponse(302, "text/plain", "", r)
+					resp.Header.Set("Location", tt.location)
+					return resp, nil
+				case r.URL.Host == "api.example.com" && r.URL.Path == tt.finalPath &&
+					r.URL.Query().Get("version") == "1" && r.URL.Query().Get("api_key") == "secret-token":
+					return textResponse(200, "application/json", minimalOpenAPI, r), nil
+				default:
+					return textResponse(404, "text/plain", "not found", r), nil
+				}
+			})
+
+			if err := runProtectedAPISync(t, c); err != nil {
+				t.Fatalf("api sync: %v", err)
+			}
+			assertSyncedSpecURL(t, cfgFile, cacheDir, tt.finalClean)
+		})
+	}
+}
+
+func TestAPISyncExplicitRedirectedSpecURLRemainsCacheable(t *testing.T) {
+	c, _, cacheDir := newAPISyncCLI(t, protectedAPI("https://api.example.com", "https://api.example.com/openapi.json", nil))
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" && r.URL.RawQuery == "":
+			resp := textResponse(302, "text/plain", "", r)
+			resp.Header.Set("Location", "/openapi.json?version=1&api_key=secret-token")
+			return resp, nil
+		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.json" &&
+			r.URL.Query().Get("version") == "1" && r.URL.Query().Get("api_key") == "secret-token":
+			return textResponse(200, "application/json", minimalOpenAPI, r), nil
+		default:
+			return textResponse(404, "text/plain", "not found", r), nil
+		}
+	})
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+
+	cached, err := spec.Discover(context.Background(), spec.DiscoverConfig{
+		APIName:  "protected",
+		BaseURL:  "https://api.example.com",
+		SpecURL:  "https://api.example.com/openapi.json",
+		CacheDir: cacheDir,
+		Version:  restishcli.Version,
+		Fetch: func(context.Context, string, http.RoundTripper) (*http.Response, error) {
+			return nil, errors.New("network should not be used")
+		},
+	}, spec.DefaultLoaders())
+	if err != nil {
+		t.Fatalf("cache-only Discover: %v", err)
+	}
+	if cached == nil || cached.SourceURL != "https://api.example.com/openapi.json?version=1" {
+		t.Fatalf("cached SourceURL = %#v, want clean redirect target", cached)
+	}
+}
+
+func TestAPISyncDiscoveryDoesNotSendAuthToCrossOriginLinkSpec(t *testing.T) {
+	var linkedSpecAuth string
+
+	api := protectedAPI("https://api.example.com", "", bearerAuth("test-token"))
+	api.AllowCrossOriginSpec = true
+	c, _, _ := newAPISyncCLI(t, api)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "api.example.com" && (r.URL.Path == "" || r.URL.Path == "/"):
+			resp := textResponse(200, "text/html", "<html></html>", r)
+			resp.Header.Set("Link", `<https://example.com/openapi.json>; rel="service-desc"`)
+			return resp, nil
+		case r.URL.Host == "api.example.com":
+			return textResponse(404, "text/plain", "not found", r), nil
+		case r.URL.Host == "example.com" && r.URL.Path == "/openapi.json":
+			linkedSpecAuth = r.Header.Get("Authorization")
+			return jsonResponse(200, minimalOpenAPI), nil
+		default:
+			return textResponse(404, "text/plain", "not found", r), nil
+		}
+	})
+
+	if err := runProtectedAPISync(t, c); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if linkedSpecAuth != "" {
+		t.Fatalf("cross-origin spec Authorization = %q, want empty", linkedSpecAuth)
+	}
+}
+
+func TestAPISyncDiscoveryUsesCachedOAuthForSpecURL(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if gotAuth != "Bearer cached-token" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"openapi":"3.1.0","info":{"title":"Protected","version":"1.0"},"servers":[{"url":%q}],"paths":{}}`, "http://"+r.Host)
+	}))
+	t.Cleanup(srv.Close)
+
+	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
+	if err := auth.NewTokenCache(tokenPath).Set("protected:default", auth.CachedToken{AccessToken: "cached-token"}); err != nil {
+		t.Fatalf("set token: %v", err)
+	}
+	cfgFile := writeAPIConfigObject(t, "protected", &config.APIConfig{
+		BaseURL: srv.URL,
+		SpecURL: srv.URL,
+		Profiles: map[string]*config.ProfileConfig{
+			"default": {
+				Auth: &config.AuthConfig{Type: "oauth-authorization-code", Params: map[string]string{
+					"client_id":     "client",
+					"authorize_url": "https://auth.example.com/authorize",
+					"token_url":     "https://auth.example.com/token",
+				}},
+			},
+		},
+	})
+
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().TokenCachePath = tokenPath
+	if err := c.Run([]string{"restish", "api", "sync", "protected"}); err != nil {
+		t.Fatalf("api sync: %v", err)
+	}
+	if gotAuth != "Bearer cached-token" {
+		t.Fatalf("Authorization = %q, want cached OAuth token", gotAuth)
 	}
 }
 

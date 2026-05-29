@@ -884,6 +884,105 @@ func TestDiscover_ExplicitSpecURL(t *testing.T) {
 	}
 }
 
+func TestDiscoverCleansCredentialURLMetadataInCache(t *testing.T) {
+	raw := `{"openapi":"3.1.0","info":{"title":"Direct","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`
+	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() == "https://api.example.com/spec.json?api_key=spec-secret&version=1" {
+			resp := httpResponse(200, "application/json", raw, nil)
+			resp.Request = r
+			return resp, nil
+		}
+		return httpResponse(404, "text/plain", "not found", nil), nil
+	})
+	cacheDir := t.TempDir()
+
+	cfg := DiscoverConfig{
+		APIName:       "testapi",
+		BaseURL:       "https://api.example.com?api_key=base-secret&region=us",
+		OperationBase: "https://ops.example.com/root?api_key=op-secret&page=1",
+		SpecURL:       "https://api.example.com/spec.json?api_key=spec-secret&version=1",
+		CacheDir:      cacheDir,
+		Version:       "v2",
+		Transport:     tr,
+	}
+	if _, err := Discover(context.Background(), cfg, DefaultLoaders()); err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	entry, ok := readCache(cacheDir, "testapi", "v2")
+	if !ok {
+		t.Fatal("expected cache entry")
+	}
+	if got := entry.Spec.DiscoveryBaseURL; got != "https://api.example.com?region=us" {
+		t.Fatalf("DiscoveryBaseURL = %q, want clean URL", got)
+	}
+	if got := entry.Spec.SourceURL; got != "https://api.example.com/spec.json?version=1" {
+		t.Fatalf("SourceURL = %q, want clean URL", got)
+	}
+	if len(entry.Operations) != 1 {
+		t.Fatalf("Operations = %d, want one cached operation blob", len(entry.Operations))
+	}
+	if got := entry.Operations[0].BaseURL; got != "https://api.example.com?region=us" {
+		t.Fatalf("operation BaseURL = %q, want clean URL", got)
+	}
+	if got := entry.Operations[0].OperationBase; got != "https://ops.example.com/root?page=1" {
+		t.Fatalf("operation OperationBase = %q, want clean URL", got)
+	}
+}
+
+func TestDiscoverExplicitRedirectMatchesFreshCache(t *testing.T) {
+	raw := `{"openapi":"3.1.0","info":{"title":"Direct","version":"1.0.0"},"paths":{}}`
+	var fetches int
+	fetch := func(ctx context.Context, rawURL string, tr http.RoundTripper) (*http.Response, error) {
+		fetches++
+		if fetches > 1 {
+			return nil, errors.New("unexpected network fetch")
+		}
+		if rawURL != "https://api.example.com/openapi.json" {
+			return nil, fmt.Errorf("unexpected URL %s", rawURL)
+		}
+		finalReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.example.com/openapi.json?version=1&api_key=secret-token", nil)
+		if err != nil {
+			return nil, err
+		}
+		finalReq.Response = &http.Response{StatusCode: http.StatusFound}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(raw)),
+			Request:    finalReq,
+		}, nil
+	}
+	cacheDir := t.TempDir()
+	cfg := DiscoverConfig{
+		APIName:  "redirected",
+		BaseURL:  "https://api.example.com",
+		SpecURL:  "https://api.example.com/openapi.json",
+		CacheDir: cacheDir,
+		Version:  "v2",
+		Fetch:    fetch,
+	}
+	first, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	if first.SourceURL != "https://api.example.com/openapi.json?version=1" {
+		t.Fatalf("first SourceURL = %q, want clean redirect target", first.SourceURL)
+	}
+
+	cfg.Fetch = func(context.Context, string, http.RoundTripper) (*http.Response, error) {
+		return nil, errors.New("network should not be used")
+	}
+	second, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("second Discover from cache: %v", err)
+	}
+	if second == nil || second.SourceURL != "https://api.example.com/openapi.json?version=1" {
+		t.Fatalf("cached SourceURL = %#v, want clean redirect target", second)
+	}
+}
+
 func TestDiscoverExplicitSpecURLRejectsNonOpenAPIJSON(t *testing.T) {
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.URL.String() == "https://api.example.com/spec.json" {
@@ -904,6 +1003,29 @@ func TestDiscoverExplicitSpecURLRejectsNonOpenAPIJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported API spec") || !strings.Contains(err.Error(), "https://api.example.com/spec.json") {
 		t.Fatalf("expected unsupported explicit spec URL error, got: %v", err)
+	}
+}
+
+func TestDiscoverRedactsCredentialQueryInInvalidSpecURL(t *testing.T) {
+	var traces []string
+	cfg := DiscoverConfig{
+		APIName: "invalid-spec-url",
+		BaseURL: "https://api.example.com",
+		SpecURL: "https://api.example.com/openapi.json?api_key=spec-secret%zz&version=1",
+		Trace: func(format string, args ...any) {
+			traces = append(traces, fmt.Sprintf(format, args...))
+		},
+	}
+	_, err := Discover(context.Background(), cfg, DefaultLoaders())
+	if err == nil {
+		t.Fatal("expected invalid spec URL failure")
+	}
+	combined := err.Error() + "\n" + strings.Join(traces, "\n")
+	if strings.Contains(combined, "spec-secret") {
+		t.Fatalf("spec URL credential query leaked:\n%s", combined)
+	}
+	if !strings.Contains(combined, "https://api.example.com/openapi.json?version=1") {
+		t.Fatalf("expected clean spec URL, got:\n%s", combined)
 	}
 }
 
@@ -1394,6 +1516,65 @@ paths:
 		if !strings.Contains(got, want) {
 			t.Fatalf("trace missing %q, got:\n%s", want, got)
 		}
+	}
+}
+
+func TestDiscoverRedactsCredentialQueryInExternalRefFailures(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     string
+		want    string
+		itemErr bool
+		status  int
+	}{
+		{name: "status", ref: "./item.yaml?api_key=ref-secret&version=1", want: "https://specs.example.com/item.yaml?version=1", status: http.StatusInternalServerError},
+		{name: "transport", ref: "./item.yaml?api_key=ref-secret&version=1", want: "https://specs.example.com/item.yaml?version=1", itemErr: true},
+		{name: "unsupported scheme", ref: "ftp://files.example.com/item.yaml?api_key=ref-secret&version=1", want: "ftp://files.example.com/item.yaml?version=1"},
+		{name: "malformed", ref: "./item.yaml?api_key=ref-secret%zz&version=1", want: "https://specs.example.com/item.yaml?version=1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				switch r.URL.Path {
+				case "/openapi.yaml":
+					return httpResponse(200, "application/yaml", fmt.Sprintf(`openapi: "3.1.0"
+info: {title: Test, version: "1.0"}
+paths:
+  /items:
+    $ref: %q
+`, tt.ref), nil), nil
+				case "/item.yaml":
+					if tt.itemErr {
+						return nil, fmt.Errorf("dial failed for %s", r.URL.String())
+					}
+					return httpResponse(tt.status, "text/plain", "server error", nil), nil
+				default:
+					return httpResponse(404, "text/plain", "not found", nil), nil
+				}
+			})
+			var traces []string
+			cfg := DiscoverConfig{
+				APIName:   "redact-ref-" + tt.name,
+				BaseURL:   "https://specs.example.com",
+				SpecURL:   "https://specs.example.com/openapi.yaml",
+				Transport: tr,
+				Trace: func(format string, args ...any) {
+					traces = append(traces, fmt.Sprintf(format, args...))
+				},
+			}
+			_, err := Discover(context.Background(), cfg, DefaultLoaders())
+			if err == nil {
+				t.Fatal("expected external ref failure")
+			}
+			combined := err.Error() + "\n" + strings.Join(traces, "\n")
+			if strings.Contains(combined, "ref-secret") {
+				t.Fatalf("external ref credential query leaked:\n%s", combined)
+			}
+			if !strings.Contains(combined, tt.want) {
+				t.Fatalf("expected clean external ref URL %q, got:\n%s", tt.want, combined)
+			}
+		})
 	}
 }
 

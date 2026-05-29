@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -1208,6 +1209,14 @@ func TestDefaultOpenBrowserCommandUsesArgumentSeparator(t *testing.T) {
 	args := strings.Join(cmd.Args, "\x00")
 	if !strings.Contains(args, "\x00--\x00-https://example.com") {
 		t.Fatalf("browser command should pass -- before URL, got %#v", cmd.Args)
+	}
+}
+
+func TestDefaultOpenBrowserCommandLinuxUsesXDGOpenWithoutSeparator(t *testing.T) {
+	cmd := defaultOpenBrowserCommandForGOOS("linux", "https://example.com/callback?code=abc")
+	want := []string{"xdg-open", "https://example.com/callback?code=abc"}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("linux browser command args = %#v, want %#v", cmd.Args, want)
 	}
 }
 

@@ -43,6 +43,7 @@ type cachedRaw struct {
 	ContentType      string `cbor:"content_type,omitempty"`
 	Raw              []byte `cbor:"raw,omitempty"`
 	DiscoveryBaseURL string `cbor:"discovery_base_url,omitempty"`
+	RequestedURL     string `cbor:"requested_url,omitempty"`
 	SourceURL        string `cbor:"source_url,omitempty"`
 	LocalPath        string `cbor:"local_path,omitempty"`
 	AllowCrossOrigin bool   `cbor:"allow_cross_origin,omitempty"`
@@ -119,6 +120,7 @@ func writeCache(cacheDir, apiName string, entry *cacheEntry) error {
 		return fmt.Errorf("spec cache: invalid API name %q", apiName)
 	}
 	entry.normalize()
+	sanitizeCacheEntryForWrite(entry)
 	if entry.Schema == 0 {
 		entry.Schema = currentCacheSchema
 	}
@@ -175,6 +177,7 @@ func (e *cacheEntry) loadOptions() LoadOptions {
 	e.normalize()
 	return LoadOptions{
 		SourceURL:        e.Spec.SourceURL,
+		RequestedURL:     e.Spec.RequestedURL,
 		LocalPath:        e.Spec.LocalPath,
 		AllowCrossOrigin: e.Spec.AllowCrossOrigin,
 	}
@@ -245,13 +248,14 @@ func LoadOperationSetFromCacheStatus(cacheDir, apiName, version string, specFile
 		return OperationSet{}, status, false
 	}
 	rawHash := cacheRawHash(entry.raw())
+	cacheOpts := cacheOperationOptions(opts)
 	for _, blob := range entry.Operations {
 		if blob.Schema != currentOperationCacheSchema {
 			continue
 		}
-		if blob.BaseURL == opts.BaseURL &&
-			blob.OperationBase == opts.OperationBase &&
-			blob.ServerVariablesKey == ServerVariablesCacheKey(opts.ServerVariables) &&
+		if blob.BaseURL == cacheOpts.BaseURL &&
+			blob.OperationBase == cacheOpts.OperationBase &&
+			blob.ServerVariablesKey == ServerVariablesCacheKey(cacheOpts.ServerVariables) &&
 			blob.RawSHA256 == rawHash {
 			set := OperationSet{
 				Info:           blob.Info,
@@ -299,7 +303,7 @@ func StoreOperationSetInCache(cacheDir, apiName, version string, opts OperationO
 	if !ok {
 		return nil
 	}
-	entry.upsertOperationSet(opts, set)
+	entry.upsertOperationSet(cacheOperationOptions(opts), set)
 	return writeCache(cacheDir, apiName, entry)
 }
 
@@ -322,17 +326,59 @@ func StoreSpecInCache(cacheDir, apiName, version string, apiSpec *APISpec, specF
 		Spec: cachedRaw{
 			ContentType:      apiSpec.ContentType,
 			Raw:              apiSpec.Raw,
-			DiscoveryBaseURL: opts.BaseURL,
-			SourceURL:        apiSpec.SourceURL,
+			DiscoveryBaseURL: cleanSourceURL(opts.BaseURL),
+			RequestedURL:     cleanSourceURL(apiSpec.RequestedURL),
+			SourceURL:        cleanSourceURL(apiSpec.SourceURL),
 			LocalPath:        apiSpec.LocalPath,
 			AllowCrossOrigin: apiSpec.AllowCrossOrigin,
 		},
 	}
 	entry.SpecFiles = cacheSpecFileMetadata(specFiles)
 	if set.Operations != nil {
-		entry.upsertOperationSet(opts, set)
+		entry.upsertOperationSet(cacheOperationOptions(opts), set)
 	}
 	return writeCache(cacheDir, apiName, entry)
+}
+
+func cacheOperationOptions(opts OperationOptions) OperationOptions {
+	opts.BaseURL = cleanSourceURL(opts.BaseURL)
+	opts.OperationBase = cleanSourceURL(opts.OperationBase)
+	return opts
+}
+
+func sanitizeCacheEntryForWrite(entry *cacheEntry) {
+	if entry == nil {
+		return
+	}
+	entry.Spec.DiscoveryBaseURL = cleanSourceURL(entry.Spec.DiscoveryBaseURL)
+	entry.Spec.RequestedURL = cleanSourceURL(entry.Spec.RequestedURL)
+	entry.Spec.SourceURL = cleanSourceURL(entry.Spec.SourceURL)
+	for i := range entry.SpecFiles {
+		if !entry.SpecFiles[i].Local {
+			entry.SpecFiles[i].Source = cleanSourceURL(entry.SpecFiles[i].Source)
+		}
+	}
+	entry.Operations = sanitizeOpsBlobs(entry.Operations)
+}
+
+func sanitizeOpsBlobs(blobs []opsBlob) []opsBlob {
+	if len(blobs) == 0 {
+		return blobs
+	}
+	out := make([]opsBlob, 0, len(blobs))
+	index := map[string]int{}
+	for _, blob := range blobs {
+		blob.BaseURL = cleanSourceURL(blob.BaseURL)
+		blob.OperationBase = cleanSourceURL(blob.OperationBase)
+		key := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%s", blob.Schema, blob.BaseURL, blob.OperationBase, blob.ServerVariablesKey, blob.RawSHA256)
+		if i, ok := index[key]; ok {
+			out[i] = blob
+			continue
+		}
+		index[key] = len(out)
+		out = append(out, blob)
+	}
+	return out
 }
 
 func (e *cacheEntry) upsertOperationSet(opts OperationOptions, set OperationSet) {

@@ -4,6 +4,7 @@ package secrets
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -130,6 +131,8 @@ func RedactDiagnosticText(value string) string {
 		"refresh_token",
 		"id_token",
 		"client_secret",
+		"api_key",
+		"apikey",
 		"password",
 		"authorization",
 		"proxy-authorization",
@@ -142,6 +145,73 @@ func RedactDiagnosticText(value string) string {
 		value = redactDiagnosticAssignment(value, marker)
 	}
 	return value
+}
+
+// RedactDiagnosticURLText removes credential-looking query parameters from
+// URL-shaped diagnostic text, including malformed URLs that net/url cannot
+// parse. It then applies the generic assignment redactor.
+func RedactDiagnosticURLText(value string) string {
+	value = strings.TrimSpace(value)
+	searchFrom := 0
+	for {
+		qRel := strings.IndexByte(value[searchFrom:], '?')
+		if qRel < 0 {
+			return RedactDiagnosticText(value)
+		}
+		qStart := searchFrom + qRel
+		qEnd := diagnosticQueryEnd(value, qStart+1)
+		if qEnd <= qStart+1 {
+			return RedactDiagnosticText(value)
+		}
+		query := value[qStart+1 : qEnd]
+		parts := strings.Split(query, "&")
+		changed := false
+		kept := parts[:0]
+		for _, part := range parts {
+			name, rawValue, _ := strings.Cut(part, "=")
+			if decoded, err := url.QueryUnescape(name); err == nil {
+				name = decoded
+			}
+			valueForCheck := rawValue
+			if decoded, err := url.QueryUnescape(rawValue); err == nil {
+				valueForCheck = decoded
+			}
+			if IsQueryParamValue(name, valueForCheck) || invalidEscapeLooksSensitive(name, rawValue) {
+				changed = true
+				continue
+			}
+			kept = append(kept, part)
+		}
+		if !changed {
+			searchFrom = qEnd
+			continue
+		}
+		if len(kept) == 0 {
+			value = value[:qStart] + value[qEnd:]
+		} else {
+			value = value[:qStart+1] + strings.Join(kept, "&") + value[qEnd:]
+		}
+		searchFrom = qStart
+	}
+}
+
+func diagnosticQueryEnd(value string, start int) int {
+	end := len(value)
+	for i := start; i < len(value); i++ {
+		switch value[i] {
+		case '#', ' ', '\t', '\r', '\n', '"', '\'', '<', '>':
+			return i
+		}
+	}
+	return end
+}
+
+func invalidEscapeLooksSensitive(name, value string) bool {
+	if _, err := url.QueryUnescape(value); err == nil {
+		return false
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	return ambiguousQueryParamNames[name] && len(value) >= 7
 }
 
 func redactDiagnosticAssignment(value, marker string) string {

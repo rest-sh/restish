@@ -6,9 +6,12 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 const testSpecRaw = `{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{}}`
+const testSpecRawWithOperation = `{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`
 
 func TestWriteAndReadCache(t *testing.T) {
 	dir := t.TempDir()
@@ -57,6 +60,105 @@ func TestWriteCacheUsesAtomicReplacement(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Fatalf("cache mode = %v, want 0600", got)
+	}
+}
+
+func credentialURLTestOperationOptions() OperationOptions {
+	return OperationOptions{
+		BaseURL:       "https://api.example.com?api_key=base-secret&region=us",
+		OperationBase: "https://ops.example.com/root?api_key=op-secret&page=1",
+	}
+}
+
+func assertCacheEntryHasCleanCredentialURLMetadata(t *testing.T, entry *cacheEntry, opCount int) {
+	t.Helper()
+	if got := entry.Spec.DiscoveryBaseURL; got != "https://api.example.com?region=us" {
+		t.Fatalf("DiscoveryBaseURL = %q, want clean URL", got)
+	}
+	if got := entry.Spec.SourceURL; got != "https://api.example.com/openapi.json?version=1" {
+		t.Fatalf("SourceURL = %q, want clean URL", got)
+	}
+	if len(entry.SpecFiles) != 1 || entry.SpecFiles[0].Source != "https://files.example.com/openapi.json?version=1" {
+		t.Fatalf("SpecFiles = %#v, want clean remote source", entry.SpecFiles)
+	}
+	if len(entry.Operations) != opCount {
+		t.Fatalf("Operations = %d, want %d cached operation blob(s)", len(entry.Operations), opCount)
+	}
+	if got := entry.Operations[0].BaseURL; got != "https://api.example.com?region=us" {
+		t.Fatalf("operation BaseURL = %q, want clean URL", got)
+	}
+	if got := entry.Operations[0].OperationBase; got != "https://ops.example.com/root?page=1" {
+		t.Fatalf("operation OperationBase = %q, want clean URL", got)
+	}
+}
+
+func TestStoreSpecInCacheCleansCredentialURLMetadata(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(testSpecRawWithOperation)
+	apiSpec, err := OpenAPILoader{}.LoadWithOptions(raw, LoadOptions{
+		SourceURL: "https://api.example.com/openapi.json?api_key=spec-secret&version=1",
+	})
+	if err != nil {
+		t.Fatalf("load spec: %v", err)
+	}
+	apiSpec.SourceURL = "https://api.example.com/openapi.json?api_key=spec-secret&version=1"
+
+	specFiles := []string{"https://files.example.com/openapi.json?access_token=file-secret&version=1"}
+	if err := StoreSpecInCache(dir, "testapi", "v2", apiSpec, specFiles, credentialURLTestOperationOptions(), time.Hour); err != nil {
+		t.Fatalf("StoreSpecInCache: %v", err)
+	}
+
+	entry, ok := readCache(dir, "testapi", "v2")
+	if !ok {
+		t.Fatal("expected cache entry")
+	}
+	assertCacheEntryHasCleanCredentialURLMetadata(t, entry, 1)
+}
+
+func TestStoreOperationSetInCacheCleansLegacyCredentialURLMetadata(t *testing.T) {
+	dir := t.TempDir()
+	raw := []byte(testSpecRawWithOperation)
+	legacy := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Schema:    currentCacheSchema,
+		Spec: cachedRaw{
+			ContentType:      "application/json",
+			Raw:              raw,
+			DiscoveryBaseURL: "https://api.example.com?api_key=base-secret&region=us",
+			SourceURL:        "https://api.example.com/openapi.json?api_key=spec-secret&version=1",
+		},
+		SpecFiles: []cachedSpecFile{{
+			Source: "https://files.example.com/openapi.json?access_token=file-secret&version=1",
+		}},
+		Operations: []opsBlob{{
+			Schema:        currentOperationCacheSchema,
+			BaseURL:       "https://api.example.com?api_key=base-secret&region=us",
+			OperationBase: "https://ops.example.com/root?api_key=op-secret&page=1",
+			RawSHA256:     cacheRawHash(raw),
+			Operations:    []Operation{{ID: "old"}},
+		}},
+	}
+	data, err := cbor.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy cache: %v", err)
+	}
+	if err := atomicWriteCacheFile(cacheFile(dir, "testapi"), data); err != nil {
+		t.Fatalf("write legacy cache: %v", err)
+	}
+
+	if err := StoreOperationSetInCache(dir, "testapi", "v2", credentialURLTestOperationOptions(), OperationSet{Operations: []Operation{{ID: "new"}}}); err != nil {
+		t.Fatalf("StoreOperationSetInCache: %v", err)
+	}
+
+	entry, ok := readCache(dir, "testapi", "v2")
+	if !ok {
+		t.Fatal("expected cache entry")
+	}
+	assertCacheEntryHasCleanCredentialURLMetadata(t, entry, 1)
+	if got := entry.Operations[0].Operations[0].ID; got != "new" {
+		t.Fatalf("operation blob ID = %q, want updated blob to win", got)
 	}
 }
 

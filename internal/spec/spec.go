@@ -24,15 +24,22 @@ type Loader interface {
 	Priority() int
 }
 
+// HTTPFetcher fetches a remote spec resource and returns a response whose body
+// the caller must close. Callers should use transport unless they intentionally
+// need to replace the network stack.
+type HTTPFetcher func(ctx context.Context, rawURL string, transport http.RoundTripper) (*http.Response, error)
+
 // LoadOptions carries source metadata needed by loaders that resolve external
 // references. Plain loaders may ignore it.
 type LoadOptions struct {
 	Context          context.Context
 	ContentType      string
 	SourceURL        string
+	RequestedURL     string
 	LocalPath        string
 	AllowCrossOrigin bool
 	Transport        http.RoundTripper
+	Fetch            HTTPFetcher
 	Trace            func(format string, args ...any)
 }
 
@@ -46,6 +53,7 @@ type APISpec struct {
 	Document libopenapi.Document
 	// SourceURL/LocalPath capture where the spec came from so external refs can
 	// be resolved consistently when the raw spec is cached and reparsed.
+	RequestedURL     string
 	SourceURL        string
 	LocalPath        string
 	AllowCrossOrigin bool
@@ -174,6 +182,9 @@ func loadWithOptions(contentType string, body []byte, loaders []Loader, opts Loa
 	}
 	if spec.SourceURL == "" {
 		spec.SourceURL = opts.SourceURL
+	}
+	if spec.RequestedURL == "" {
+		spec.RequestedURL = opts.RequestedURL
 	}
 	if spec.LocalPath == "" {
 		spec.LocalPath = opts.LocalPath

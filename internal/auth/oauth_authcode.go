@@ -776,7 +776,11 @@ func DefaultOpenBrowser(rawURL string) error {
 var openBrowserCommand = defaultOpenBrowserCommand
 
 func defaultOpenBrowserCommand(rawURL string) *exec.Cmd {
-	switch runtime.GOOS {
+	return defaultOpenBrowserCommandForGOOS(runtime.GOOS, rawURL)
+}
+
+func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
+	switch goos {
 	case "darwin":
 		return exec.Command("open", "--", rawURL)
 	case "windows":

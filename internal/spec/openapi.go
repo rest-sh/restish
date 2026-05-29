@@ -218,27 +218,34 @@ func openAPIRemoteURLHandler(opts LoadOptions) func(string) (*http.Response, err
 	source, _ := url.Parse(opts.SourceURL)
 
 	return func(rawURL string) (*http.Response, error) {
+		displayURL := openAPIRefDisplayURL(rawURL)
+		displaySourceURL := openAPIRefDisplayURL(opts.SourceURL)
 		u, err := url.Parse(rawURL)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("OpenAPI external ref %q: %w", displayURL, cleanErrorForDisplay(err, rawURL, displayURL))
 		}
 		if u.Scheme != "http" && u.Scheme != "https" {
-			return nil, fmt.Errorf("OpenAPI external ref %q uses unsupported scheme %q", rawURL, u.Scheme)
+			return nil, fmt.Errorf("OpenAPI external ref %q uses unsupported scheme %q", displayURL, u.Scheme)
 		}
 		if source != nil && !opts.AllowCrossOrigin && !sameOrigin(source, u) {
-			return nil, fmt.Errorf("OpenAPI external ref %q is not same-origin with %q", rawURL, opts.SourceURL)
+			return nil, fmt.Errorf("OpenAPI external ref %q is not same-origin with %q", displayURL, displaySourceURL)
 		}
 		if source != nil && opts.AllowCrossOrigin && isDisallowedCrossOriginHost(source.Hostname(), u.Hostname()) {
-			return nil, fmt.Errorf("OpenAPI external ref %q targets a non-public host from public origin %q", rawURL, opts.SourceURL)
+			return nil, fmt.Errorf("OpenAPI external ref %q targets a non-public host from public origin %q", displayURL, displaySourceURL)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-		if err != nil {
-			return nil, err
+		var resp *http.Response
+		if opts.Fetch != nil {
+			resp, err = opts.Fetch(ctx, rawURL, tr)
+		} else {
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+			if reqErr != nil {
+				return nil, fmt.Errorf("OpenAPI external ref %q: %w", displayURL, cleanErrorForDisplay(reqErr, rawURL, displayURL))
+			}
+			resp, err = tr.RoundTrip(req)
 		}
-		resp, err := tr.RoundTrip(req)
 		if err != nil {
-			return nil, err
+			return nil, cleanErrorForDisplay(err, rawURL, displayURL)
 		}
 		if resp.Body == nil {
 			return resp, nil
@@ -249,7 +256,7 @@ func openAPIRemoteURLHandler(opts LoadOptions) func(string) (*http.Response, err
 			return nil, err
 		}
 		if int64(len(data)) > maxSpecBytes {
-			return nil, fmt.Errorf("OpenAPI external ref %q exceeds limit of %d bytes", rawURL, maxSpecBytes)
+			return nil, fmt.Errorf("OpenAPI external ref %q exceeds limit of %d bytes", displayURL, maxSpecBytes)
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(data))
 		resp.ContentLength = int64(len(data))
@@ -297,7 +304,7 @@ func resolveOpenAPIExternalRefs(body []byte, opts LoadOptions) ([]byte, error) {
 		return body, nil
 	}
 	if opts.SourceURL != "" {
-		tracef(opts.Trace, "Resolving OpenAPI external refs from %s", opts.SourceURL)
+		tracef(opts.Trace, "Resolving OpenAPI external refs from %s", openAPIRefDisplayURL(opts.SourceURL))
 	} else {
 		tracef(opts.Trace, "Resolving OpenAPI external refs from %s", opts.LocalPath)
 	}
@@ -413,11 +420,11 @@ func (r *openAPIRefResolver) resolveNode(n *yaml.Node, source openAPIRefSource, 
 func (r *openAPIRefResolver) resolveLocalRef(ref string, source openAPIRefSource) (*yaml.Node, error) {
 	doc := r.docForSource(source)
 	if doc == nil {
-		return nil, fmt.Errorf("OpenAPI external ref %q has no loaded source document", ref)
+		return nil, fmt.Errorf("OpenAPI external ref %q has no loaded source document", openAPIRefDisplayURL(ref))
 	}
 	target, err := yamlPointer(doc, strings.TrimPrefix(ref, "#"))
 	if err != nil {
-		return nil, fmt.Errorf("OpenAPI external ref %q: %w", ref, err)
+		return nil, fmt.Errorf("OpenAPI external ref %q: %w", openAPIRefDisplayURL(ref), err)
 	}
 	return target, nil
 }
@@ -488,7 +495,7 @@ func (r *openAPIRefResolver) collectExternalDocRequests(n *yaml.Node, source ope
 		if ref := mappingRefValue(n); ref != "" && !strings.HasPrefix(ref, "#") {
 			root, _, _ := strings.Cut(ref, "#")
 			if root == "" {
-				return fmt.Errorf("OpenAPI external ref %q has no external document", ref)
+				return fmt.Errorf("OpenAPI external ref %q has no external document", openAPIRefDisplayURL(ref))
 			}
 			key, targetSource, err := r.resolveRefRoot(root, source)
 			if err != nil {
@@ -598,7 +605,7 @@ func removeMappingKey(content []*yaml.Node, key string) []*yaml.Node {
 func (r *openAPIRefResolver) resolveRef(ref string, source openAPIRefSource) (*yaml.Node, openAPIRefSource, error) {
 	root, fragment, _ := strings.Cut(ref, "#")
 	if root == "" {
-		return nil, source, fmt.Errorf("OpenAPI external ref %q has no external document", ref)
+		return nil, source, fmt.Errorf("OpenAPI external ref %q has no external document", openAPIRefDisplayURL(ref))
 	}
 	key, targetSource, err := r.resolveRefRoot(root, source)
 	if err != nil {
@@ -610,29 +617,32 @@ func (r *openAPIRefResolver) resolveRef(ref string, source openAPIRefSource) (*y
 	}
 	target, err := yamlPointer(doc, fragment)
 	if err != nil {
-		return nil, source, fmt.Errorf("OpenAPI external ref %q: %w", ref, err)
+		return nil, source, fmt.Errorf("OpenAPI external ref %q: %w", openAPIRefDisplayURL(ref), err)
 	}
 	return target, targetSource, nil
 }
 
 func (r *openAPIRefResolver) resolveRefRoot(root string, source openAPIRefSource) (string, openAPIRefSource, error) {
+	displayRoot := openAPIRefDisplayURL(root)
 	if u, err := url.Parse(root); err == nil && u.Scheme != "" {
 		switch u.Scheme {
 		case "file":
 			if source.localPath == "" {
-				return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q uses local file access from remote source %q", root, source.url)
+				return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q uses local file access from remote source %q", displayRoot, openAPIRefDisplayURL(source.url))
 			}
 			path, err := localPathFromSource(u.String())
 			if err != nil {
-				return "", openAPIRefSource{}, err
+				return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q: %w", displayRoot, cleanErrorForDisplay(err, root, displayRoot))
 			}
 			path = filepath.Clean(path)
 			return "file:" + path, openAPIRefSource{localPath: path}, nil
 		case "http", "https":
 			return u.String(), openAPIRefSource{url: u.String()}, nil
 		default:
-			return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q uses unsupported scheme %q", root, u.Scheme)
+			return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q uses unsupported scheme %q", displayRoot, u.Scheme)
 		}
+	} else if err != nil {
+		return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q: %w", displayRoot, cleanErrorForDisplay(err, root, displayRoot))
 	}
 
 	if source.localPath != "" {
@@ -647,13 +657,13 @@ func (r *openAPIRefResolver) resolveRefRoot(root string, source openAPIRefSource
 		}
 		rel, err := url.Parse(root)
 		if err != nil {
-			return "", openAPIRefSource{}, err
+			return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q: %w", displayRoot, cleanErrorForDisplay(err, root, displayRoot))
 		}
 		resolved := base.ResolveReference(rel).String()
 		return resolved, openAPIRefSource{url: resolved}, nil
 	}
 
-	return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q has no source to resolve against", root)
+	return "", openAPIRefSource{}, fmt.Errorf("OpenAPI external ref %q has no source to resolve against", displayRoot)
 }
 
 func (r *openAPIRefResolver) loadExternalDoc(key string, source openAPIRefSource) (*yaml.Node, error) {
@@ -678,7 +688,7 @@ func (r *openAPIRefResolver) loadExternalDocData(source openAPIRefSource) ([]byt
 	case source.localPath != "":
 		return os.ReadFile(source.localPath)
 	case source.url != "":
-		tracef(r.opts.Trace, "GET OpenAPI external ref %s", source.url)
+		tracef(r.opts.Trace, "GET OpenAPI external ref %s", openAPIRefDisplayURL(source.url))
 		return r.fetchRemoteDoc(source.url)
 	default:
 		return nil, fmt.Errorf("OpenAPI external ref has no resolved source")
@@ -698,6 +708,7 @@ func parseExternalOpenAPIDoc(data []byte) (*yaml.Node, error) {
 }
 
 func (r *openAPIRefResolver) fetchRemoteDoc(rawURL string) ([]byte, error) {
+	displayURL := openAPIRefDisplayURL(rawURL)
 	opts := r.opts
 	opts.SourceURL = r.opts.SourceURL
 	if opts.SourceURL == "" {
@@ -706,23 +717,39 @@ func (r *openAPIRefResolver) fetchRemoteDoc(rawURL string) ([]byte, error) {
 	handler := openAPIRemoteURLHandler(opts)
 	resp, err := handler(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("GET %s: %w", rawURL, err)
+		return nil, fmt.Errorf("GET %s: %w", displayURL, err)
 	}
 	if resp == nil {
-		return nil, fmt.Errorf("GET %s: no response", rawURL)
+		return nil, fmt.Errorf("GET %s: no response", displayURL)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("GET %s: %s", rawURL, resp.Status)
+		return nil, fmt.Errorf("GET %s: %s", displayURL, resp.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSpecBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("GET %s: %w", rawURL, err)
+		return nil, fmt.Errorf("GET %s: %w", displayURL, err)
 	}
 	if int64(len(data)) > maxSpecBytes {
-		return nil, fmt.Errorf("OpenAPI external ref %q exceeds limit of %d bytes", rawURL, maxSpecBytes)
+		return nil, fmt.Errorf("OpenAPI external ref %q exceeds limit of %d bytes", displayURL, maxSpecBytes)
 	}
 	return data, nil
+}
+
+func openAPIRefDisplayURL(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return cleanPossiblyInvalidURL(raw)
+	}
+	if u.IsAbs() {
+		return cleanSourceURL(raw)
+	}
+	u.User = nil
+	u.RawQuery = cleanSourceURLQuery(u.Query()).Encode()
+	return u.String()
 }
 
 func yamlPointer(root *yaml.Node, fragment string) (*yaml.Node, error) {

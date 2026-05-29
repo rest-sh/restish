@@ -461,13 +461,14 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 	if err != nil {
 		return nil, nil
 	}
-	transport, closer, err := c.discoveryTransport(ctx, apiName, api, profileName)
+	transport, closer, err := c.discoveryTransport(ctx, api, profileName)
 	if err != nil {
 		return nil, err
 	}
 	if closer != nil {
 		defer closer.Close()
 	}
+	fetch := c.discoveryFetcher(ctx, apiName, api, profileName)
 	cfg := spec.DiscoverConfig{
 		APIName:          c.apiStateName(apiName),
 		BaseURL:          effectiveProfileBaseURL(api, profileName),
@@ -478,6 +479,7 @@ func (c *CLI) discoverSpecForProfile(ctx context.Context, apiName, profileName s
 		ServerVariables:  effectiveServerVariables(api, profileName),
 		Version:          Version,
 		Transport:        transport,
+		Fetch:            fetch,
 		AllowCrossOrigin: api.AllowCrossOriginSpec,
 		ForceRefresh:     forceRefresh,
 		Timeout:          timeout,
