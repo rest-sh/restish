@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -964,7 +966,10 @@ func TestAPISyncDiscoveryUsesCachedOAuthForSpecURL(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	tokenPath := filepath.Join(t.TempDir(), "tokens.cbor")
-	if err := auth.NewTokenCache(tokenPath).Set("protected:default", auth.CachedToken{AccessToken: "cached-token"}); err != nil {
+	// inlineAuthCacheKey maps absolute token_url+client_id to a shared key.
+	cacheKeySum := sha256.Sum256([]byte("https://auth.example.com/token\x00client"))
+	cacheKey := "oauth:" + hex.EncodeToString(cacheKeySum[:8])
+	if err := auth.NewTokenCache(tokenPath).Set(cacheKey, auth.CachedToken{AccessToken: "cached-token"}); err != nil {
 		t.Fatalf("set token: %v", err)
 	}
 	cfgFile := writeAPIConfigObject(t, "protected", &config.APIConfig{

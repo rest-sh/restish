@@ -128,7 +128,7 @@ By default, sync follows the same-origin spec source already recorded for the AP
 Usage:
 
 ```text
-restish api sync <name> [flags]
+restish api sync <name> [name...] [flags]
 ```
 
 Examples:
@@ -137,6 +137,7 @@ Examples:
   restish api sync demo
   restish api sync demo --yes
   restish api sync demo --allow-cross-origin-spec
+  restish api sync api-one api-two api-three
 ```
 
 Flags:

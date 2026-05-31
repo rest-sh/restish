@@ -159,6 +159,40 @@ func TestInlineAuthCacheKeyFallsBackForAbsoluteEndpoints(t *testing.T) {
 	}
 }
 
+func TestInlineAuthCacheKeyDeduplicatesAbsoluteAuthCodeEndpoints(t *testing.T) {
+	// Two APIs pointing at the same dex instance should produce the same cache
+	// key so only one browser login is needed.
+	ac := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":     "restish",
+			"authorize_url": "https://dex.example.com/auth",
+			"token_url":     "https://dex.example.com/token",
+		},
+	}
+	k1 := inlineAuthCacheKey("api-one:default", ac, "https://api-one.example.com")
+	k2 := inlineAuthCacheKey("api-two:default", ac, "https://api-two.example.com")
+	if k1 == "" || k2 == "" {
+		t.Fatalf("expected non-empty cache keys, got %q and %q", k1, k2)
+	}
+	if k1 != k2 {
+		t.Fatalf("expected same cache key for same dex, got %q and %q", k1, k2)
+	}
+
+	// Different token_url should give a different key.
+	ac2 := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://other-dex.example.com/token",
+		},
+	}
+	k3 := inlineAuthCacheKey("api-one:default", ac2, "https://api-one.example.com")
+	if k3 == k1 {
+		t.Fatalf("different token_url should produce different cache key, got %q", k3)
+	}
+}
+
 func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
 	if err := output.SetTheme(output.ThemeEntries{
 		"status_2xx":   "bold #00ff00",

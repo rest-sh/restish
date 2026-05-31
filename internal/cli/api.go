@@ -59,13 +59,14 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:    c.runAPIRemove,
 	})
 	syncCmd := &cobra.Command{
-		Use:   "sync <name>",
+		Use:   "sync <name> [name...]",
 		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
 		Long:  apiSyncLong,
 		Example: fmt.Sprintf(`  %s api sync demo
   %s api sync demo --yes
-  %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: usageExactArgs(1),
+  %s api sync demo --allow-cross-origin-spec
+  %s api sync api-one api-two api-three`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: usageMinimumNArgs(1),
 		RunE: c.runAPISync,
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host for this sync run")
@@ -205,10 +206,97 @@ func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runAPISync force-invalidates the cached spec for an API, fetches a fresh one,
-// and persists non-profile metadata that can be discovered safely from it.
+// runAPISync force-invalidates the cached spec for one or more APIs, fetches a
+// fresh one for each, and persists non-profile metadata that can be discovered
+// safely from it. Accepting multiple names in a single invocation allows the
+// process (and any shared PKCS#11 session) to be reused across all of them,
+// which means a hardware-token PIN is only requested once.
 func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
+	// When all APIs share the same TLS signer (e.g. all yubikey APIs), build
+	// one transport up front so the plugin subprocess — and the PKCS#11 session
+	// it holds — is shared across every sync. This means the user is prompted
+	// for the hardware-token PIN exactly once instead of once per API.
+	var shared http.RoundTripper
+	if len(args) > 1 {
+		tr, closer, err := c.sharedDiscoveryTransport(cmd, args)
+		if err != nil {
+			return err
+		}
+		if tr != nil {
+			shared = tr
+			if closer != nil {
+				defer closer.Close()
+			}
+		}
+	}
+
+	var errs []error
+	for _, apiName := range args {
+		if err := c.syncOneAPI(cmd, apiName, shared); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// sharedDiscoveryTransport returns a single transport to reuse across all
+// named APIs if every API in the list resolves to the same TLS signer name.
+// Returns (nil, nil, nil) when the APIs have heterogeneous signer configs;
+// in that case each syncOneAPI call will build its own transport.
+func (c *CLI) sharedDiscoveryTransport(cmd *cobra.Command, apiNames []string) (http.RoundTripper, interface{ Close() error }, error) {
+	ctx := requestContext(cmd)
+	gf := globalFlagsFromContext(ctx)
+	globalSignerParams, err := parseKVStrings(gf.TLSSignerParams)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid tls signer param: %w", err)
+	}
+	profileName := c.profileFromCmd(cmd)
+	if profileName == "" {
+		profileName = "default"
+	}
+
+	var commonSignerPath string
+	var representativeCfg *config.APIConfig
+	for _, apiName := range apiNames {
+		apiCfg, err := c.requireAPI(apiName)
+		if err != nil {
+			return nil, nil, err
+		}
+		signerName := gf.TLSSigner
+		if prof := profileForName(apiCfg, profileName); prof != nil {
+			if signerName == "" {
+				signerName = prof.TLSSigner
+			}
+		}
+		if signerName == "" {
+			return nil, nil, nil // this API uses no signer; can't share
+		}
+		opts := request.Options{TLSSignerName: signerName, TLSSignerParams: globalSignerParams}
+		if prof := profileForName(apiCfg, profileName); prof != nil {
+			opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
+		}
+		opts, err = c.resolveTLSSigner(opts)
+		if err != nil {
+			return nil, nil, err
+		}
+		if representativeCfg == nil {
+			commonSignerPath = opts.TLSSignerPath
+			representativeCfg = apiCfg
+		} else if opts.TLSSignerPath != commonSignerPath {
+			return nil, nil, nil // different signer executables; can't share
+		}
+	}
+	if representativeCfg == nil {
+		return nil, nil, nil
+	}
+	tr, closer, err := c.discoveryTransport(ctx, representativeCfg, profileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tr, closer, nil
+}
+
+func (c *CLI) syncOneAPI(cmd *cobra.Command, apiName string, sharedTransport http.RoundTripper) error {
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {
 		return err
@@ -217,12 +305,18 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	yes, _ := cmd.Flags().GetBool("yes")
 	profileName := c.profileFromCmd(cmd)
-	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
-	if err != nil {
-		return err
-	}
-	if closer != nil {
-		defer closer.Close()
+	var transport http.RoundTripper
+	if sharedTransport != nil {
+		transport = sharedTransport
+	} else {
+		tr, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
+		if err != nil {
+			return err
+		}
+		if closer != nil {
+			defer closer.Close()
+		}
+		transport = tr
 	}
 	fetch := c.discoveryFetcher(requestContext(cmd), apiName, apiCfg, profileName)
 	discCfg := spec.DiscoverConfig{

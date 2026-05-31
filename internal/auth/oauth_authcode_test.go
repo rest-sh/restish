@@ -313,6 +313,98 @@ func TestAuthCodeResolvesRelativeEndpoints(t *testing.T) {
 	}
 }
 
+// TestAuthCodeResolvesEndpointsViaOIDCDiscovery verifies that when only
+// issuer_url is set (typical Keycloak/Dex configuration), resolveEndpoints
+// fetches /.well-known/openid-configuration and populates the authorization and
+// token endpoints from the discovery document.
+func TestAuthCodeResolvesEndpointsViaOIDCDiscovery(t *testing.T) {
+	const issuerURL = "https://keycloak.example.com/realms/myrealm"
+	const wantDiscoveryPath = "/realms/myrealm/.well-known/openid-configuration"
+	const wantAuthURL = "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/auth"
+	const wantTokenURL = "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token"
+
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path != wantDiscoveryPath {
+				t.Fatalf("discovery path = %q, want %q", r.URL.Path, wantDiscoveryPath)
+			}
+			body := `{
+				"issuer": "` + issuerURL + `",
+				"authorization_endpoint": "` + wantAuthURL + `",
+				"token_endpoint": "` + wantTokenURL + `"
+			}`
+			return testResponse(http.StatusOK, "application/json", body), nil
+		}),
+	}
+	authorizeURL, tokenURL, err := h.resolveEndpoints(context.Background(), map[string]string{
+		"issuer_url": issuerURL,
+	})
+	if err != nil {
+		t.Fatalf("resolveEndpoints: %v", err)
+	}
+	if authorizeURL != wantAuthURL {
+		t.Fatalf("authorizeURL = %q, want %q", authorizeURL, wantAuthURL)
+	}
+	if tokenURL != wantTokenURL {
+		t.Fatalf("tokenURL = %q, want %q", tokenURL, wantTokenURL)
+	}
+}
+
+// TestAuthCode_BrowserFlow_KeycloakIssuerURL verifies that a complete browser
+// flow succeeds when the API is configured with only issuer_url (no explicit
+// authorize_url / token_url), as is typical for Keycloak realms.
+func TestAuthCode_BrowserFlow_KeycloakIssuerURL(t *testing.T) {
+	const issuerURL = "https://keycloak.example.com/realms/myrealm"
+	const wantAuthURL = "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/auth"
+	const wantTokenURL = "https://keycloak.example.com/realms/myrealm/protocol/openid-connect/token"
+
+	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
+	h := &AuthorizationCode{
+		Cache: NewTokenCache(cacheFile),
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if strings.HasSuffix(r.URL.Path, "/.well-known/openid-configuration") {
+				body := `{
+					"issuer": "` + issuerURL + `",
+					"authorization_endpoint": "` + wantAuthURL + `",
+					"token_endpoint": "` + wantTokenURL + `"
+				}`
+				return testResponse(http.StatusOK, "application/json", body), nil
+			}
+			// Token exchange.
+			if err := r.ParseForm(); err != nil {
+				return testResponse(http.StatusBadRequest, "text/plain", "bad form"), nil
+			}
+			if got := r.FormValue("code"); got != "kc-code" {
+				t.Fatalf("token exchange code = %q, want kc-code", got)
+			}
+			return testResponse(http.StatusOK, "application/json", `{"access_token":"kc-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			callbackURL, state := mustCallbackURL(t, raw)
+			resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=kc-code", callbackURL, url.QueryEscape(state)))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			return nil
+		},
+	}
+
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"issuer_url":    issuerURL,
+		"client_id":     "restish",
+		"redirect_port": availablePort(t),
+		"_cache_key":    "myapi:default",
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer kc-token" {
+		t.Fatalf("Authorization = %q, want Bearer kc-token", got)
+	}
+}
+
 func TestAuthCode_BrowserFlow_FaviconRequestDoesNotAbort(t *testing.T) {
 	var stderr bytes.Buffer
 	h := &AuthorizationCode{
@@ -1217,6 +1309,131 @@ func TestDefaultOpenBrowserCommandLinuxUsesXDGOpenWithoutSeparator(t *testing.T)
 	want := []string{"xdg-open", "https://example.com/callback?code=abc"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Fatalf("linux browser command args = %#v, want %#v", cmd.Args, want)
+	}
+}
+
+func TestDefaultOpenBrowserCommandRespectsBROWSEREnvVar(t *testing.T) {
+	t.Setenv("BROWSER", "my-browser")
+	cmd := defaultOpenBrowserCommandForGOOS("linux", "https://example.com")
+	if cmd.Args[0] != "my-browser" {
+		t.Fatalf("browser command = %q, want %q", cmd.Args[0], "my-browser")
+	}
+	if cmd.Args[1] != "https://example.com" {
+		t.Fatalf("browser command URL = %q, want %q", cmd.Args[1], "https://example.com")
+	}
+}
+
+func TestDefaultOpenBrowserCommandRespectsBROWSEREnvVarOnNonLinux(t *testing.T) {
+	t.Setenv("BROWSER", "my-browser")
+	cmd := defaultOpenBrowserCommandForGOOS("darwin", "https://example.com")
+	if cmd.Args[0] != "my-browser" {
+		t.Fatalf("browser command = %q, want %q", cmd.Args[0], "my-browser")
+	}
+}
+
+func TestBrowserEnvStripsXDGVars(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/sandboxed/.config")
+	t.Setenv("XDG_CACHE_HOME", "/tmp/sandboxed/.cache")
+	t.Setenv("XDG_DATA_HOME", "/tmp/sandboxed/.local/share")
+	t.Setenv("HOME", "/home/user")
+
+	env := browserEnv()
+
+	for _, e := range env {
+		key := strings.SplitN(e, "=", 2)[0]
+		switch key {
+		case "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME":
+			t.Errorf("browserEnv should not include %s", key)
+		}
+	}
+	found := false
+	for _, e := range env {
+		if e == "HOME=/home/user" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("browserEnv should preserve HOME")
+	}
+}
+
+func TestDefaultOpenBrowserCommandEnvStripsXDGVars(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/sandboxed/.config")
+	cmd := defaultOpenBrowserCommandForGOOS("linux", "https://example.com")
+	for _, e := range cmd.Env {
+		if strings.HasPrefix(e, "XDG_CONFIG_HOME=") {
+			t.Fatalf("browser command env should not include XDG_CONFIG_HOME, got %q", e)
+		}
+	}
+}
+
+func TestAuthCode_BrowserFlow_ConcurrentProbesOpenOneBrowserWindow(t *testing.T) {
+	// Three goroutines miss the token cache simultaneously; only one browser
+	// window should open and the token endpoint should be called once.
+	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
+	cache := NewTokenCache(cacheFile)
+	cacheKey := "myapi:default"
+
+	var browserOpens atomic.Int32
+	var tokenRequests atomic.Int32
+
+	port := availablePort(t)
+
+	newHandler := func() *AuthorizationCode {
+		return &AuthorizationCode{
+			Cache: NewTokenCache(cacheFile),
+			HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+				tokenRequests.Add(1)
+				return testResponse(200, "application/json", `{"access_token":"shared-token","token_type":"bearer","expires_in":3600}`), nil
+			}),
+			OpenBrowser: func(raw string) error {
+				if browserOpens.Add(1) == 1 {
+					callbackURL, state := mustCallbackURL(t, raw)
+					resp, err := http.Get(fmt.Sprintf("%s/?state=%s&code=code1", callbackURL, url.QueryEscape(state)))
+					if err != nil {
+						return err
+					}
+					defer resp.Body.Close()
+				}
+				return nil
+			},
+		}
+	}
+
+	params := map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_port": port,
+		"_cache_key":    cacheKey,
+	}
+
+	_ = cache
+	const concurrency = 3
+	errs := make(chan error, concurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+			errs <- newHandler().OnRequest(req, params)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("OnRequest: %v", err)
+		}
+	}
+	if got := browserOpens.Load(); got != 1 {
+		t.Errorf("browser opened %d time(s), want 1", got)
+	}
+	if got := tokenRequests.Load(); got != 1 {
+		t.Errorf("token endpoint called %d time(s), want 1", got)
 	}
 }
 

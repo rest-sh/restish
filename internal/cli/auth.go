@@ -518,11 +518,30 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig, baseURL string) strin
 }
 
 func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) string {
-	if !authConfigUsesRelativeOAuthEndpoint(ac) || baseURL == "" {
+	if ac == nil {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(baseURL))
-	return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+	// Relative endpoints: key on the resolved base URL so all APIs served by
+	// the same host share one token cache entry.
+	if authConfigUsesRelativeOAuthEndpoint(ac) && baseURL != "" {
+		sum := sha256.Sum256([]byte(baseURL))
+		return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+	}
+	// Absolute endpoints: for oauth-authorization-code, key on token_url +
+	// client_id so APIs pointing at the same identity provider share one token
+	// cache entry and avoid redundant browser flows.
+	if ac.Type == "oauth-authorization-code" {
+		tokenURL := ac.Params["token_url"]
+		clientID := ac.Params["client_id"]
+		if tokenURL != "" && clientID != "" {
+			u, err := url.Parse(tokenURL)
+			if err == nil && u.IsAbs() {
+				sum := sha256.Sum256([]byte(tokenURL + "\x00" + clientID))
+				return "oauth:" + hex.EncodeToString(sum[:8])
+			}
+		}
+	}
+	return ""
 }
 
 func authConfigUsesRelativeOAuthEndpoint(ac *config.AuthConfig) bool {
