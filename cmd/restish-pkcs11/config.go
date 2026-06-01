@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ThalesIgnite/crypto11"
+	"github.com/miekg/pkcs11"
 )
 
 var defaultPKCS11Paths = func() []string {
@@ -26,6 +27,43 @@ var defaultPKCS11Paths = func() []string {
 			"/usr/lib64/pkcs11/opensc-pkcs11.so",
 		}
 	}
+}
+
+// detectSingleTokenSlot enumerates the tokens present in modulePath.
+// If exactly one is found, it returns its slot number.
+// If zero or more than one are found, it returns a descriptive error.
+func detectSingleTokenSlot(modulePath string) (int, error) {
+	p := pkcs11.New(modulePath)
+	if p == nil {
+		return 0, fmt.Errorf("could not load pkcs11 module %q", modulePath)
+	}
+	if err := p.Initialize(); err != nil {
+		return 0, fmt.Errorf("pkcs11 initialize: %w", err)
+	}
+	defer func() {
+		_ = p.Finalize()
+		p.Destroy()
+	}()
+	slots, err := p.GetSlotList(true)
+	if err != nil {
+		return 0, fmt.Errorf("pkcs11 get slot list: %w", err)
+	}
+	if len(slots) == 0 {
+		return 0, fmt.Errorf("no pkcs11 tokens found; plug in your device or set token_label/serial/slot")
+	}
+	if len(slots) == 1 {
+		return int(slots[0]), nil
+	}
+	var labels []string
+	for _, s := range slots {
+		info, err := p.GetTokenInfo(s)
+		if err != nil {
+			labels = append(labels, fmt.Sprintf("slot %d", s))
+			continue
+		}
+		labels = append(labels, fmt.Sprintf("%q", info.Label))
+	}
+	return 0, fmt.Errorf("found %d pkcs11 tokens (%s); set token_label, token_serial, or slot to pick one", len(slots), strings.Join(labels, ", "))
 }
 
 type pkcs11Config struct {
@@ -56,8 +94,16 @@ func parsePKCS11Config(params map[string]string, env map[string]string, promptPI
 	if err != nil {
 		return nil, fmt.Errorf("invalid slot %q: %w", slotValue, err)
 	}
-	if countNonEmpty(label, serial)+boolCount(slot != nil) != 1 {
-		return nil, fmt.Errorf("exactly one of token_label/label, token_serial/serial, or slot must be set")
+	selectors := countNonEmpty(label, serial) + boolCount(slot != nil)
+	if selectors > 1 {
+		return nil, fmt.Errorf("at most one of token_label/label, token_serial/serial, or slot may be set")
+	}
+	if selectors == 0 {
+		slotNum, err := detectSingleTokenSlot(modulePath)
+		if err != nil {
+			return nil, err
+		}
+		slot = &slotNum
 	}
 
 	pin := firstString(params, "pin")
