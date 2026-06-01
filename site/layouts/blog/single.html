@@ -1,0 +1,46 @@
+{{ define "main" -}}
+<article class="restish-blog-article">
+  <header class="restish-blog-hero restish-blog-hero--article">
+    <div class="restish-blog-hero__inner">
+      <p class="restish-blog-hero__eyebrow">
+        {{ with index .Params.categories 0 }}{{ . }}{{ else }}Restish Blog{{ end }}
+      </p>
+      <h1>{{ .Title }}</h1>
+      {{ with .Description -}}
+        <p class="restish-blog-hero__dek">{{ . }}</p>
+      {{ end -}}
+      <div class="restish-blog-hero__meta">
+        {{ with .Params.author -}}<span>By {{ . | markdownify }}</span>{{ end -}}
+        <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format (.Site.Params.time_format_blog | default "Jan 2, 2006") }}</time>
+        {{ with .ReadingTime -}}<span>{{ . }} min read</span>{{ end -}}
+      </div>
+      {{ with .Params.tags -}}
+        <div class="restish-blog-hero__tags" aria-label="Article tags">
+          {{ range . -}}<span>{{ . }}</span>{{ end -}}
+        </div>
+      {{ end -}}
+    </div>
+  </header>
+
+  <div class="restish-blog-article__shell">
+    <div class="restish-blog-article__content td-content">
+      {{ .Content }}
+      {{ partial "blog-footer-cta.html" . }}
+    </div>
+    <aside class="restish-blog-article__rail" aria-label="Article links">
+      {{ with .CurrentSection.OutputFormats.Get "rss" -}}
+        <a class="restish-blog-rail-card" href="{{ .RelPermalink | safeURL }}" target="_blank" rel="noopener">
+          <i class="fa-solid fa-rss" aria-hidden="true"></i>
+          Blog RSS
+        </a>
+      {{ end -}}
+      {{ with .TableOfContents -}}
+        <div class="restish-blog-rail-card restish-blog-rail-card--toc">
+          <strong>On this page</strong>
+          {{ . }}
+        </div>
+      {{ end -}}
+    </aside>
+  </div>
+</article>
+{{ end -}}

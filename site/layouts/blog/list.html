@@ -1,0 +1,46 @@
+{{ define "main" -}}
+<section class="restish-blog-hero restish-blog-hero--index">
+  <div class="restish-blog-hero__inner">
+    <p class="restish-blog-hero__eyebrow">Restish Blog</p>
+    <h1>{{ .Title }}</h1>
+    {{ with .Description -}}
+      <p class="restish-blog-hero__dek">{{ . }}</p>
+    {{ end -}}
+    {{ with .Content -}}
+      <div class="restish-blog-hero__intro">{{ . }}</div>
+    {{ end -}}
+  </div>
+</section>
+
+{{ $pages := where .Site.RegularPages "Section" .Section -}}
+<section class="restish-blog-index">
+  <div class="restish-blog-index__inner">
+    {{ if $pages -}}
+      <div class="restish-blog-index__grid">
+        {{ range $pages -}}
+          <article class="restish-blog-card">
+            <div class="restish-blog-card__meta">
+              <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format (.Site.Params.time_format_blog | default "Jan 2, 2006") }}</time>
+              {{ with index .Params.categories 0 -}}
+                <span>{{ . }}</span>
+              {{ end -}}
+            </div>
+            <h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+            {{ with .Description -}}
+              <p>{{ . }}</p>
+            {{ end -}}
+            <div class="restish-blog-card__footer">
+              <a href="{{ .RelPermalink }}">Read article</a>
+              {{ with .Params.tags -}}
+                <span>{{ delimit (first 3 .) " / " }}</span>
+              {{ end -}}
+            </div>
+          </article>
+        {{ end -}}
+      </div>
+    {{ else -}}
+      <p>No posts yet.</p>
+    {{ end -}}
+  </div>
+</section>
+{{ end -}}

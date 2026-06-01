@@ -1,0 +1,24 @@
+<!doctype html>
+<html itemscope itemtype="http://schema.org/WebPage"
+    {{- with .Site.Language.LanguageDirection }} dir="{{ . }}" {{- end -}}
+    {{ with .Site.Language.Lang }} lang="{{ . }}" {{- end }} class="no-js"
+    {{- $darkMode := partialCached "dark-mode-config.html" "dark-mode-global" -}}
+    {{- if $darkMode.enable }} data-theme-init{{ end }}>
+  <head>
+    {{ partial "head.html" . }}
+  </head>
+  <body class="td-{{ .Kind }} td-blog restish-blog {{- with .Page.Params.body_class }} {{ . }}{{ end }}">
+    <header>
+      {{ partial "navbar.html" . }}
+    </header>
+    <div class="td-main">
+      <main role="main">
+        {{ block "main" . }}{{ end }}
+      </main>
+    </div>
+    <div class="container-fluid">
+      {{ partial "footer.html" . }}
+    </div>
+    {{ partial "scripts.html" . }}
+  </body>
+</html>

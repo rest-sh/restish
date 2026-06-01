@@ -241,7 +241,7 @@ const renderGithubOverview = () =>
       description:
         "Explore REST-ish APIs with generic HTTP verbs, generated OpenAPI commands, shorthand input, auth, response filtering & projection, pagination, and plugins.",
       section: "Always Free. Always Open Source.",
-      command: "$ brew install rest-sh/tap/restish",
+      command: "$ brew install restish",
       descMaxLines: 5,
     }),
   );

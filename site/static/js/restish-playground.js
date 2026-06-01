@@ -645,6 +645,7 @@
     const parts = [];
     let current = "";
     let quote = "";
+    let depth = 0;
     for (const ch of text) {
       if (quote) {
         if (ch === quote) {
@@ -658,7 +659,17 @@
         current += ch;
         continue;
       }
-      if (ch === ",") {
+      if (ch === "[" || ch === "{" || ch === "(") {
+        depth += 1;
+        current += ch;
+        continue;
+      }
+      if ((ch === "]" || ch === "}" || ch === ")") && depth > 0) {
+        depth -= 1;
+        current += ch;
+        continue;
+      }
+      if (ch === "," && depth === 0) {
         parts.push(current);
         current = "";
         continue;
@@ -674,6 +685,10 @@
   function parseScalar(value) {
     if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
       return value.slice(1, -1);
+    }
+    if (value.startsWith("[") && value.endsWith("]")) {
+      const inner = value.slice(1, -1).trim();
+      return inner ? splitCommas(inner).map((item) => parseScalar(item.trim())) : [];
     }
     if (value === "true") return true;
     if (value === "false") return false;
@@ -1970,26 +1985,32 @@
   }
 
   function tableOutput(value, columns, sortBy) {
-    if (!Array.isArray(value)) {
+    const rows = tableRows(value);
+    if (!rows) {
       return readableOutput(value);
     }
-    const rows = value.slice();
+    if (!rows.length) {
+      return "(empty)\n";
+    }
     if (sortBy) {
-      rows.sort((a, b) => String(a && a[sortBy] || "").localeCompare(String(b && b[sortBy] || "")));
+      rows.sort((a, b) => compareTableCells(a && a[sortBy], b && b[sortBy]));
     }
     const cols = columns ? columns.split(",").map((item) => item.trim()).filter(Boolean) : inferColumns(rows);
-    if (!cols.length) {
-      return "";
-    }
-    const tableRows = [cols].concat(rows.map((row) => cols.map((col) => tableScalar(row && row[col]))));
-    const widths = cols.map((_, index) => Math.max(...tableRows.map((row) => row[index].length)));
-    return tableRows.map((row, rowIndex) => {
-      const line = row.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd();
-      if (rowIndex === 0) {
-        return line + "\n" + widths.map((width) => "-".repeat(width)).join("  ");
-      }
-      return line;
-    }).join("\n") + "\n";
+    const body = rows.map((row) => cols.map((col) => truncateTableCell(tableScalar(row && row[col]), 40)));
+    const widths = cols.map((col, index) => Math.max(
+      displayWidth(col),
+      ...body.map((row) => displayWidth(row[index]))
+    ));
+
+    const sep = (left, mid, right) => left + widths.map((width) => "─".repeat(width + 2)).join(mid) + right;
+    const renderRow = (row) => "│" + row.map((cell, index) => ` ${padTableCell(cell, widths[index])} `).join("│") + "│";
+    return [
+      sep("┌", "┬", "┐"),
+      renderRow(cols),
+      sep("├", "┼", "┤"),
+      ...body.map(renderRow),
+      sep("└", "┴", "┘")
+    ].join("\n") + "\n";
   }
 
   function ndjsonOutput(value) {
@@ -2058,6 +2079,57 @@
       return JSON.stringify(value);
     }
     return String(value);
+  }
+
+  function tableRows(value) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return [value];
+    }
+    if (!Array.isArray(value)) {
+      return null;
+    }
+    const rows = [];
+    for (const item of value) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+      rows.push(item);
+    }
+    return rows;
+  }
+
+  function compareTableCells(a, b) {
+    const an = tableNumber(a);
+    const bn = tableNumber(b);
+    if (an !== null && bn !== null) {
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    }
+    const as = tableScalar(a);
+    const bs = tableScalar(b);
+    return as < bs ? -1 : as > bs ? 1 : 0;
+  }
+
+  function tableNumber(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    return null;
+  }
+
+  function truncateTableCell(value, maxChars) {
+    const chars = Array.from(value);
+    if (chars.length <= maxChars) {
+      return value;
+    }
+    return chars.slice(0, Math.max(0, maxChars - 1)).join("") + "…";
+  }
+
+  function displayWidth(value) {
+    return Array.from(value).length;
+  }
+
+  function padTableCell(value, width) {
+    return value + " ".repeat(Math.max(0, width - displayWidth(value)));
   }
 
   function yamlOutput(value, depth) {
@@ -2204,8 +2276,22 @@
   }
 
   function inferColumns(rows) {
-    const first = rows.find((row) => row && typeof row === "object" && !Array.isArray(row));
-    return first ? Object.keys(first).slice(0, 4) : [];
+    if (!rows.length) {
+      return [];
+    }
+    const seen = new Set();
+    const cols = Object.keys(rows[0]).sort();
+    cols.forEach((col) => seen.add(col));
+    const extra = [];
+    rows.slice(1).forEach((row) => {
+      Object.keys(row).forEach((col) => {
+        if (!seen.has(col)) {
+          seen.add(col);
+          extra.push(col);
+        }
+      });
+    });
+    return cols.concat(extra.sort());
   }
 
   function setOutput(node, output, isError, highlight = true, language = "language-readable") {
@@ -2231,6 +2317,7 @@
     const pane = node.parentElement;
     pane.hidden = false;
     pane.classList.toggle("restish-playground__output--error", Boolean(isError));
+    pane.classList.toggle("restish-playground__output--table", typeof output === "string" && output.startsWith("┌"));
     pane.scrollTop = pane.scrollHeight;
     if (highlight && window.Prism && typeof output === "string") {
       node.className = language;
@@ -2243,6 +2330,7 @@
     const pane = node.parentElement;
     pane.hidden = true;
     pane.classList.remove("restish-playground__output--error");
+    pane.classList.remove("restish-playground__output--table");
   }
 
   function setState(node, text, mode) {

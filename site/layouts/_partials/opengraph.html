@@ -1,5 +1,5 @@
 {{- $imageAlt := cond .IsHome .Site.Title (printf "%s | %s" .Title .Site.Title) -}}
-<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:url" content="{{ partial "canonical-url.html" . }}">
 <meta property="og:site_name" content="{{ .Site.Title }}">
 <meta property="og:title" content="{{ cond .IsHome .Site.Title .Title }}">
 <meta property="og:description" content="{{ partial "page-description.html" . }}">

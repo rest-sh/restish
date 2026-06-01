@@ -70,6 +70,10 @@ enableGitInfo = true
     url = "/docs/reference/"
     weight = 45
   [[menu.main]]
+    name = "Blog"
+    url = "/blog/"
+    weight = 48
+  [[menu.main]]
     name = "GitHub"
     url = "https://github.com/rest-sh/restish"
     weight = 50

@@ -25,7 +25,7 @@ The main upgrade differences are:
 - the first v2 run auto-migrates legacy v1 config files when no v2 config
   exists yet
 - generated commands are stricter and more explicit in a few places
-- the plugin protocol changed, so v1 plugins do not load in v2
+- v2 adds a general plugin system; v1 only had the external auth command hook
 
 If Restish migrates your config, it prints a one-time notice like:
 
@@ -107,7 +107,6 @@ These changes are intentional in v2 and are not treated as regressions:
 - automatic pagination follows `next` links only on the same origin. Cross-host
   pagination stops with a warning unless a command has an explicit opt-in for
   that discovery path.
-- plugin executables must speak the v2 plugin protocol
 
 ## Command And Flag Mapping
 
@@ -128,18 +127,23 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | profile `base`                        | profile `base_url`                                          | API/profile base field renamed                        |
 | API `base`                            | API `base_url`                                              | API base field renamed                                |
 | `-p`, `--rsh-profile`                 | `-p`, `--rsh-profile`                                       | Same flag, but invalid profile names now error        |
-| v1 plugin binaries                    | Rebuild or install v2-compatible plugin binaries            | v1 plugin binaries do not load unchanged              |
+| external auth command hook            | `external-tool` auth                                        | Same local-helper idea; v2 plugin system is separate  |
 
-## Plugin Changes
+## Extension Changes
 
-Restish v2 still supports plugins, but the wire protocol and manifest model are
-different enough that v1 plugins will not load unchanged.
+Restish v1 did not have general plugin binaries. It had an external auth
+command hook for local helpers that could provide or mutate auth material. V2
+keeps that local-helper path as `external-tool` auth, and adds a separate plugin
+system for broader extensions.
 
-Plan on one of these paths:
+Use the v2 plugin system when you want to install or build extensions for:
 
-- install an updated v2-compatible plugin binary
-- rebuild your own plugin against the v2 protocol
-- replace old plugin behavior with built-in v2 features where possible
+- command workflows
+- output formatters
+- API loaders
+- request or response middleware
+- auth hooks
+- TLS signing
 
 For current plugin setup and authoring docs, start with:
 
