@@ -35,9 +35,15 @@ older version such as `0.21.2`.
 GoReleaser injects the tag version into
 `github.com/rest-sh/restish/v2/internal/cli.Version`.
 
-## Homebrew Tap
+## Homebrew
 
-The public tap is:
+The primary Homebrew install path for the current v2 CLI is Homebrew core:
+
+```bash
+brew install restish
+```
+
+The public tap still exists for legacy and plugin formulae:
 
 ```text
 rest-sh/tap
@@ -49,15 +55,18 @@ The GitHub repository backing that tap must be named:
 rest-sh/homebrew-tap
 ```
 
-Stable v2 releases update the main formula:
+Stable v2 releases should update the Homebrew core `restish` formula. After
+publishing, verify the core formula installs the current v2 binary:
 
 ```bash
-brew install rest-sh/tap/restish
+brew install restish
+restish --version
+restish api.rest.sh/
 ```
 
-The tap also keeps a separate `restish@1` formula for the last v1 release. That
-formula is intentionally keg-only so it can coexist with the current `restish`
-formula without fighting for the same linked executable.
+The tap keeps a separate `restish@1` formula for the last v1 release. That
+formula is intentionally keg-only so it can coexist with the current core
+`restish` formula without fighting for the same linked executable.
 
 ```bash
 brew install rest-sh/tap/restish@1
@@ -65,12 +74,10 @@ brew install rest-sh/tap/restish@1
 
 The release workflow uses the existing Restish Releaser GitHub App secrets
 (`RELEASER_APP_ID` and `RELEASER_APP_PRIVATE_KEY`) to mint a short-lived token
-with access to `rest-sh/homebrew-tap`. GoReleaser uses it to update v2 formulae,
-and the workflow seeds the v1 formula from `packaging/homebrew/restish@1.rb`.
-
-Do not use unqualified `brew install restish` for v2 verification until the
-tap/core state is checked. The documented user path is the official tap:
-`brew install rest-sh/tap/restish`.
+with access to `rest-sh/homebrew-tap`. The workflow seeds the v1 formula from
+`packaging/homebrew/restish@1.rb` and updates first-party plugin formulae in the
+tap. Do not advertise `rest-sh/tap/restish` as the normal v2 install path while
+Homebrew core is current.
 
 ## mise
 

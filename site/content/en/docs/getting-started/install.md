@@ -20,12 +20,13 @@ restish --version
 Use Homebrew for the easiest managed install on macOS:
 
 ```bash
-brew install rest-sh/tap/restish
+brew install restish
 restish --version
 ```
 
-The tap also keeps a legacy `restish@1` formula available for users who
-intentionally stay on v1 during migration.
+The `rest-sh/tap` tap keeps a legacy `restish@1` formula available for users
+who intentionally stay on v1 during migration. It also carries first-party
+plugin formulae.
 
 ## Build From Source
 
