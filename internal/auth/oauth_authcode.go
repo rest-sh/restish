@@ -142,7 +142,7 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 	browserFlowMu.Lock()
 	defer browserFlowMu.Unlock()
 
-	if token2, ok2, _ := cachedOAuthAccessToken(h.Cache, cacheKey, false, nil); ok2 {
+	if token2, ok2, _ := cachedOAuthAccessToken(h.Cache, cacheKey, force, nil); ok2 {
 		return token2, nil
 	}
 

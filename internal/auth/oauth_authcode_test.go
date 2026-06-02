@@ -1372,7 +1372,6 @@ func TestAuthCode_BrowserFlow_ConcurrentProbesOpenOneBrowserWindow(t *testing.T)
 	// Three goroutines miss the token cache simultaneously; only one browser
 	// window should open and the token endpoint should be called once.
 	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
-	cache := NewTokenCache(cacheFile)
 	cacheKey := "myapi:default"
 
 	var browserOpens atomic.Int32
@@ -1409,7 +1408,6 @@ func TestAuthCode_BrowserFlow_ConcurrentProbesOpenOneBrowserWindow(t *testing.T)
 		"_cache_key":    cacheKey,
 	}
 
-	_ = cache
 	const concurrency = 3
 	errs := make(chan error, concurrency)
 	var wg sync.WaitGroup
