@@ -38,6 +38,7 @@ func detectSingleTokenSlot(modulePath string) (int, error) {
 		return 0, fmt.Errorf("could not load pkcs11 module %q", modulePath)
 	}
 	if err := p.Initialize(); err != nil {
+		p.Destroy()
 		return 0, fmt.Errorf("pkcs11 initialize: %w", err)
 	}
 	defer func() {
@@ -49,7 +50,7 @@ func detectSingleTokenSlot(modulePath string) (int, error) {
 		return 0, fmt.Errorf("pkcs11 get slot list: %w", err)
 	}
 	if len(slots) == 0 {
-		return 0, fmt.Errorf("no pkcs11 tokens found; plug in your device or set token_label/serial/slot")
+		return 0, fmt.Errorf("no pkcs11 tokens found; plug in your device")
 	}
 	if len(slots) == 1 {
 		return int(slots[0]), nil
@@ -61,9 +62,9 @@ func detectSingleTokenSlot(modulePath string) (int, error) {
 			labels = append(labels, fmt.Sprintf("slot %d", s))
 			continue
 		}
-		labels = append(labels, fmt.Sprintf("%q", info.Label))
+		labels = append(labels, fmt.Sprintf("%q (slot %d)", strings.TrimSpace(info.Label), s))
 	}
-	return 0, fmt.Errorf("found %d pkcs11 tokens (%s); set token_label, token_serial, or slot to pick one", len(slots), strings.Join(labels, ", "))
+	return 0, fmt.Errorf("found %d pkcs11 tokens (%s); set token_label/token_serial/slot to pick one (label, serial, and slot aliases are supported)", len(slots), strings.Join(labels, ", "))
 }
 
 type pkcs11Config struct {
