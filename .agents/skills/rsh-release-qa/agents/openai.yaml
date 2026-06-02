@@ -1,0 +1,4 @@
+interface:
+  display_name: "Restish Release QA"
+  short_description: "Run evidence-first Restish release checks"
+  default_prompt: "Use $rsh-release-qa to assess Restish release readiness from main with full tests, docs validation, historical-risk probes, and reproducible findings."
