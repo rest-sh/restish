@@ -803,7 +803,10 @@ func defaultOpenBrowserCommand(rawURL string) *exec.Cmd {
 }
 
 // browserEnv returns os.Environ() with XDG_CONFIG_HOME, XDG_CACHE_HOME, and
-// XDG_DATA_HOME stripped so the browser always uses the user's real profile.
+// XDG_DATA_HOME stripped. When Restish runs inside a tool that overrides these
+// vars to sandbox its own config, the browser would otherwise inherit a
+// temporary XDG environment and open a blank profile where saved SSO sessions
+// are invisible.
 func browserEnv() []string {
 	strip := map[string]bool{
 		"XDG_CONFIG_HOME": true,
