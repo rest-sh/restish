@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -190,6 +192,65 @@ func TestInlineAuthCacheKeyDeduplicatesAbsoluteAuthCodeEndpoints(t *testing.T) {
 	k3 := inlineAuthCacheKey("api-one:default", ac2, "https://api-one.example.com")
 	if k3 == k1 {
 		t.Fatalf("different token_url should produce different cache key, got %q", k3)
+	}
+}
+
+func TestInlineAuthCacheKeySeparatesTokenShapingAuthCodeParams(t *testing.T) {
+	read := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://dex.example.com/token",
+			"scopes":    "read",
+		},
+	}
+	write := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://dex.example.com/token",
+			"scopes":    "write",
+		},
+	}
+	k1 := inlineAuthCacheKey("api-one:default", read, "https://api-one.example.com")
+	k2 := inlineAuthCacheKey("api-two:default", write, "https://api-two.example.com")
+	if k1 == "" || k2 == "" {
+		t.Fatalf("expected non-empty cache keys, got %q and %q", k1, k2)
+	}
+	if k1 == k2 {
+		t.Fatalf("different scopes should produce different cache keys, got %q", k1)
+	}
+}
+
+func TestSharedDiscoveryTransportDoesNotShareDifferentTLSSignerParams(t *testing.T) {
+	signerPath := filepath.Join(t.TempDir(), "restish-test-tls-signer")
+	if err := os.WriteFile(signerPath, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatalf("write signer: %v", err)
+	}
+	c := New()
+	c.cfg = &config.Config{APIs: map[string]*config.APIConfig{
+		"one": {
+			BaseURL: "https://one.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "1"},
+			}},
+		},
+		"two": {
+			BaseURL: "https://two.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "2"},
+			}},
+		},
+	}}
+
+	tr, closer, err := c.sharedDiscoveryTransport(nil, []string{"one", "two"})
+	if err != nil {
+		t.Fatalf("shared discovery transport: %v", err)
+	}
+	if tr != nil || closer != nil {
+		t.Fatalf("shared discovery transport = %T, %T; want no shared transport", tr, closer)
 	}
 }
 

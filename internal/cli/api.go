@@ -245,54 +245,38 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 // in that case each syncOneAPI call will build its own transport.
 func (c *CLI) sharedDiscoveryTransport(cmd *cobra.Command, apiNames []string) (http.RoundTripper, interface{ Close() error }, error) {
 	ctx := requestContext(cmd)
-	gf := globalFlagsFromContext(ctx)
-	globalSignerParams, err := parseKVStrings(gf.TLSSignerParams)
-	if err != nil {
-		return nil, nil, fmt.Errorf("invalid tls signer param: %w", err)
-	}
 	profileName := c.profileFromCmd(cmd)
 	if profileName == "" {
 		profileName = "default"
 	}
 
-	var commonSignerPath string
-	var representativeCfg *config.APIConfig
+	var commonKey *discoveryTransportShareKey
+	var representativeOpts request.Options
 	for _, apiName := range apiNames {
 		apiCfg, err := c.requireAPI(apiName)
 		if err != nil {
 			return nil, nil, err
 		}
-		signerName := gf.TLSSigner
-		if prof := profileForName(apiCfg, profileName); prof != nil {
-			if signerName == "" {
-				signerName = prof.TLSSigner
-			}
-		}
-		if signerName == "" {
-			return nil, nil, nil // this API uses no signer; can't share
-		}
-		opts := request.Options{TLSSignerName: signerName, TLSSignerParams: globalSignerParams}
-		if prof := profileForName(apiCfg, profileName); prof != nil {
-			opts.TLSSignerParams = mergeTLSSignerParams(opts.TLSSignerParams, prof.TLSSignerParams)
-		}
-		opts, err = c.resolveTLSSigner(opts)
+		opts, err := c.discoveryTransportOptions(ctx, apiCfg, profileName)
 		if err != nil {
 			return nil, nil, err
 		}
-		if representativeCfg == nil {
-			commonSignerPath = opts.TLSSignerPath
-			representativeCfg = apiCfg
-		} else if opts.TLSSignerPath != commonSignerPath {
-			return nil, nil, nil // different signer executables; can't share
+		if opts.TLSSignerPath == "" {
+			return nil, nil, nil // this API uses no signer; can't share
+		}
+		key := discoveryTransportShareKeyFromOptions(opts)
+		if commonKey == nil {
+			commonKey = &key
+			representativeOpts = opts
+		} else if key != *commonKey {
+			return nil, nil, nil // different TLS inputs; can't share
 		}
 	}
-	if representativeCfg == nil {
+	if commonKey == nil {
 		return nil, nil, nil
 	}
-	tr, closer, err := c.discoveryTransport(ctx, representativeCfg, profileName)
-	if err != nil {
-		return nil, nil, err
-	}
+	tr := request.BuildTransport(representativeOpts)
+	closer, _ := tr.(interface{ Close() error })
 	return tr, closer, nil
 }
 
@@ -1165,13 +1149,24 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	if gf.Insecure {
 		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
 	}
-	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
+	opts, err := c.discoveryTransportOptions(ctx, apiCfg, profileName)
 	if err != nil {
 		return nil, nil, err
 	}
+	transport := request.BuildTransport(opts)
+	closer, _ := transport.(interface{ Close() error })
+	return transport, closer, nil
+}
+
+func (c *CLI) discoveryTransportOptions(ctx context.Context, apiCfg *config.APIConfig, profileName string) (request.Options, error) {
+	gf := globalFlagsFromContext(ctx)
+	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
+	if err != nil {
+		return request.Options{}, err
+	}
 	tlsSignerParams, err := parseKVStrings(gf.TLSSignerParams)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid tls signer param: %w", err)
+		return request.Options{}, fmt.Errorf("invalid tls signer param: %w", err)
 	}
 	opts := request.Options{
 		Transport:       c.baseHTTPTransport(),
@@ -1207,11 +1202,50 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	}
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {
-		return nil, nil, err
+		return request.Options{}, err
 	}
-	transport := request.BuildTransport(opts)
-	closer, _ := transport.(interface{ Close() error })
-	return transport, closer, nil
+	return opts, nil
+}
+
+type discoveryTransportShareKey struct {
+	Insecure        bool
+	ClientCertPath  string
+	ClientKeyPath   string
+	TLSSignerPath   string
+	TLSSignerParams string
+	CACertPath      string
+	TLSMinVersion   uint16
+}
+
+func discoveryTransportShareKeyFromOptions(opts request.Options) discoveryTransportShareKey {
+	return discoveryTransportShareKey{
+		Insecure:        opts.Insecure,
+		ClientCertPath:  opts.ClientCertPath,
+		ClientKeyPath:   opts.ClientKeyPath,
+		TLSSignerPath:   opts.TLSSignerPath,
+		TLSSignerParams: tlsSignerParamsKey(opts.TLSSignerParams),
+		CACertPath:      opts.CACertPath,
+		TLSMinVersion:   opts.TLSMinVersion,
+	}
+}
+
+func tlsSignerParamsKey(params map[string]string) string {
+	if len(params) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(params[key])
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func (c *CLI) discoveryFetcher(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) spec.HTTPFetcher {

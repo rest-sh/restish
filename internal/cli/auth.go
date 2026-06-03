@@ -528,20 +528,59 @@ func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) s
 		return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
 	}
 	// Absolute endpoints: for oauth-authorization-code, key on token_url +
-	// client_id so APIs pointing at the same identity provider share one token
-	// cache entry and avoid redundant browser flows.
+	// token request parameters so APIs pointing at the same identity provider
+	// share a token only when the issued token shape is the same.
 	if ac.Type == "oauth-authorization-code" {
-		tokenURL := ac.Params["token_url"]
-		clientID := ac.Params["client_id"]
-		if tokenURL != "" && clientID != "" {
-			u, err := url.Parse(tokenURL)
-			if err == nil && u.IsAbs() {
-				sum := sha256.Sum256([]byte(tokenURL + "\x00" + clientID))
-				return "oauth:" + hex.EncodeToString(sum[:8])
-			}
+		material, ok := inlineAuthCodeCacheKeyMaterial(ac)
+		if ok {
+			sum := sha256.Sum256([]byte(material))
+			return "oauth:" + hex.EncodeToString(sum[:8])
 		}
 	}
 	return ""
+}
+
+func inlineAuthCodeCacheKeyMaterial(ac *config.AuthConfig) (string, bool) {
+	tokenURL := ac.Params["token_url"]
+	clientID := ac.Params["client_id"]
+	if tokenURL == "" || clientID == "" {
+		return "", false
+	}
+	u, err := url.Parse(tokenURL)
+	if err != nil || !u.IsAbs() {
+		return "", false
+	}
+	relevant := map[string]string{"type": ac.Type}
+	for key, value := range ac.Params {
+		if value == "" || inlineAuthCodeCacheKeyIgnoresParam(key) {
+			continue
+		}
+		relevant[key] = value
+	}
+	var keys []string
+	for key := range relevant {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(relevant[key])
+		b.WriteByte('\n')
+	}
+	return b.String(), true
+}
+
+func inlineAuthCodeCacheKeyIgnoresParam(key string) bool {
+	switch key {
+	case "_base_url", "_cache_key", "auth_method", "cache_key", "client_secret",
+		"callback_error_html", "callback_success_html",
+		"redirect_cert", "redirect_key", "redirect_path", "redirect_port", "redirect_scheme":
+		return true
+	default:
+		return false
+	}
 }
 
 func authConfigUsesRelativeOAuthEndpoint(ac *config.AuthConfig) bool {

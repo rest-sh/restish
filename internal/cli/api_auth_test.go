@@ -1,8 +1,6 @@
 package cli_test
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -458,10 +456,14 @@ func TestAPIAuthInspectOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t
 		"OAuth: configured (OAuth access token not cached), needs read:profile read:recovery, satisfies read:profile",
 	)
 
-	// The cache key for oauth-authorization-code is derived from token_url+client_id
-	// so APIs sharing the same identity provider reuse one token cache entry.
-	sum := sha256.Sum256([]byte("https://auth.example.com/token" + "\x00" + "client"))
-	oauthCacheKey := "oauth:" + hex.EncodeToString(sum[:8])
+	// The cache key includes token-shaping OAuth params so only compatible
+	// auth-code tokens are shared across APIs.
+	oauthCacheKey := oauthAuthCodeCacheKeyForTest(map[string]string{
+		"client_id":     "client",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"scopes":        "read:profile",
+	})
 	if err := auth.NewTokenCache(tokenPath).Set(oauthCacheKey, auth.CachedToken{
 		AccessToken: "cached-token",
 		Expiry:      time.Now().Add(time.Hour),
