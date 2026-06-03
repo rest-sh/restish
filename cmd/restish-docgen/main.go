@@ -831,7 +831,7 @@ var envDocs = []envDoc{
 	{Name: "RSH_PRINT", Group: "Editor And Terminal", Description: "Default `--rsh-print` output parts, such as `b` for compact rendered output in scripts.", Source: "global flags"},
 	{Name: "VISUAL", Group: "Editor And Terminal", Description: "Preferred editor for `config edit` and `edit`.", Source: "editor"},
 	{Name: "EDITOR", Group: "Editor And Terminal", Description: "Fallback editor for `config edit` and `edit`.", Source: "editor"},
-	{Name: "BROWSER", Group: "Editor And Terminal", Description: "Browser binary used for OAuth authorization-code flows. When set, Restish invokes it directly instead of `xdg-open` (Linux), `open` (macOS), or `cmd /c start` (Windows).", Source: "oauth browser"},
+	{Name: "BROWSER", Group: "Editor And Terminal", Description: "Browser command used for OAuth authorization-code flows (may include arguments). When set, Restish invokes it directly instead of `xdg-open` (Linux), `open` (macOS), or `cmd /c start` (Windows).", Source: "oauth browser"},
 	{Name: "GLAMOUR_STYLE", Group: "Editor And Terminal", Description: "Markdown rendering style for markdown-formatted terminal output.", Source: "output"},
 	{Name: "RSH_IMAGE_PROTOCOL", Group: "Editor And Terminal", Description: "Force terminal image rendering protocol: `kitty`, `iterm2`, or `halfblock`.", Source: "output"},
 	{Name: "KITTY_WINDOW_ID", Group: "Editor And Terminal", Description: "Used to auto-detect Kitty image support.", Source: "output"},

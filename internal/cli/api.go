@@ -60,7 +60,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	})
 	syncCmd := &cobra.Command{
 		Use:   "sync <name> [name...]",
-		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
+		Short: "Force re-fetch of the cached OpenAPI spec for one or more named APIs",
 		Long:  apiSyncLong,
 		Example: fmt.Sprintf(`  %s api sync demo
   %s api sync demo --yes
