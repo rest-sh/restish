@@ -110,7 +110,8 @@
 {{- $graph = $graph | append $page -}}
 
 {{- if and .IsPage (eq .Section "blog") -}}
-  {{- $author := .Params.author | default .Site.Title -}}
+  {{- $rawAuthor := .Params.author | default .Site.Title -}}
+  {{- $author := $rawAuthor | markdownify | plainify -}}
   {{- $article := dict
     "@type" "BlogPosting"
     "@id" (printf "%s#blogposting" $canonical)

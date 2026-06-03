@@ -1996,6 +1996,9 @@
       rows.sort((a, b) => compareTableCells(a && a[sortBy], b && b[sortBy]));
     }
     const cols = columns ? columns.split(",").map((item) => item.trim()).filter(Boolean) : inferColumns(rows);
+    if (!cols.length) {
+      return "";
+    }
     const body = rows.map((row) => cols.map((col) => truncateTableCell(tableScalar(row && row[col]), 40)));
     const widths = cols.map((col, index) => Math.max(
       displayWidth(col),
