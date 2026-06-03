@@ -1331,6 +1331,23 @@ func TestDefaultOpenBrowserCommandRespectsBROWSEREnvVarOnNonLinux(t *testing.T) 
 	}
 }
 
+func TestDefaultOpenBrowserCommandSplitsBROWSERArgs(t *testing.T) {
+	t.Setenv("BROWSER", "firefox -P sso-profile")
+	cmd := defaultOpenBrowserCommandForGOOS("linux", "https://example.com")
+	if cmd.Args[0] != "firefox" {
+		t.Fatalf("browser binary = %q, want %q", cmd.Args[0], "firefox")
+	}
+	if cmd.Args[1] != "-P" {
+		t.Fatalf("browser arg[1] = %q, want %q", cmd.Args[1], "-P")
+	}
+	if cmd.Args[2] != "sso-profile" {
+		t.Fatalf("browser arg[2] = %q, want %q", cmd.Args[2], "sso-profile")
+	}
+	if cmd.Args[3] != "https://example.com" {
+		t.Fatalf("browser URL = %q, want %q", cmd.Args[3], "https://example.com")
+	}
+}
+
 func TestBrowserEnvStripsXDGVars(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/sandboxed/.config")
 	t.Setenv("XDG_CACHE_HOME", "/tmp/sandboxed/.cache")

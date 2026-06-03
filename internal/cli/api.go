@@ -240,9 +240,10 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 }
 
 // sharedDiscoveryTransport returns a single transport to reuse across all
-// named APIs if every API in the list resolves to the same TLS signer name.
-// Returns (nil, nil, nil) when the APIs have heterogeneous signer configs;
-// in that case each syncOneAPI call will build its own transport.
+// named APIs when every API in the list has identical TLS transport settings
+// (signer path, signer params, client cert/key, CA cert, insecure flag, and
+// TLS min version). Returns (nil, nil, nil) when configs differ or no signer
+// is configured; each syncOneAPI call then builds its own transport.
 func (c *CLI) sharedDiscoveryTransport(cmd *cobra.Command, apiNames []string) (http.RoundTripper, interface{ Close() error }, error) {
 	ctx := requestContext(cmd)
 	profileName := c.profileFromCmd(cmd)

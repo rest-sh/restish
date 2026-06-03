@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/google/shlex"
 	"sync/atomic"
 	"time"
 )
@@ -821,7 +823,11 @@ func browserEnv() []string {
 func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
 	var cmd *exec.Cmd
 	if b := os.Getenv("BROWSER"); b != "" {
-		cmd = exec.Command(b, rawURL)
+		parts, _ := shlex.Split(b)
+		if len(parts) == 0 {
+			parts = []string{b}
+		}
+		cmd = exec.Command(parts[0], append(parts[1:], rawURL)...)
 	} else {
 		switch goos {
 		case "darwin":
