@@ -699,6 +699,7 @@ func TestAPISyncDiscoverySendsAuthForShorthandBaseURL(t *testing.T) {
 }
 
 func TestAPISyncDiscoveryFollowsLinkWithShorthandBaseURL(t *testing.T) {
+	var mu sync.Mutex
 	var linkedSpecAuth string
 
 	c, _, _ := newAPISyncCLI(t, protectedAPI("api.example.com", "", bearerAuth("test-token")))
@@ -709,7 +710,9 @@ func TestAPISyncDiscoveryFollowsLinkWithShorthandBaseURL(t *testing.T) {
 			resp.Header.Set("Link", `</openapi.yaml>; rel="service-desc"`)
 			return resp, nil
 		case r.URL.Host == "api.example.com" && r.URL.Path == "/openapi.yaml":
+			mu.Lock()
 			linkedSpecAuth = r.Header.Get("Authorization")
+			mu.Unlock()
 			return jsonResponse(200, minimalOpenAPI), nil
 		default:
 			return textResponse(404, "text/plain", "not found", r), nil
@@ -719,6 +722,8 @@ func TestAPISyncDiscoveryFollowsLinkWithShorthandBaseURL(t *testing.T) {
 	if err := runProtectedAPISync(t, c); err != nil {
 		t.Fatalf("api sync: %v", err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if linkedSpecAuth != "Bearer test-token" {
 		t.Fatalf("linked spec Authorization = %q, want %q", linkedSpecAuth, "Bearer test-token")
 	}
