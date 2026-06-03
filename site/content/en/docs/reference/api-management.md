@@ -48,7 +48,7 @@ Subcommands:
 
 **`restish api set`**: Patch API config using shorthand syntax
 
-**`restish api sync`**: Force re-fetch of the cached OpenAPI spec for a named API
+**`restish api sync`**: Force re-fetch of the cached OpenAPI spec for one or more named APIs
 
 
 ### `restish api connect`
@@ -117,7 +117,7 @@ Accept safe api connect prompts without asking
 
 ### `restish api sync`
 
-Force re-fetch of the cached OpenAPI spec for a named API
+Force re-fetch of the cached OpenAPI spec for one or more named APIs
 
 Force re-fetch of the cached OpenAPI spec for a named API.
 
@@ -128,7 +128,7 @@ By default, sync follows the same-origin spec source already recorded for the AP
 Usage:
 
 ```text
-restish api sync <name> [flags]
+restish api sync <name> [name...] [flags]
 ```
 
 Examples:
@@ -137,6 +137,7 @@ Examples:
   restish api sync demo
   restish api sync demo --yes
   restish api sync demo --allow-cross-origin-spec
+  restish api sync api-one api-two api-three
 ```
 
 Flags:

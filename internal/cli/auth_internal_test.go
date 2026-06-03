@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/spec"
+	"github.com/spf13/cobra"
 )
 
 func TestRedactDiagnosticAssignmentMultipleSensitiveValues(t *testing.T) {
@@ -156,6 +160,177 @@ func TestInlineAuthCacheKeyFallsBackForAbsoluteEndpoints(t *testing.T) {
 	}
 	if got := inlineAuthCacheKey("api:default", ac, "https://one.example.com/api"); got != "" {
 		t.Fatalf("inline absolute endpoint cache key = %q, want fallback", got)
+	}
+}
+
+func TestInlineAuthCacheKeyDeduplicatesAbsoluteAuthCodeEndpoints(t *testing.T) {
+	// Two APIs pointing at the same dex instance should produce the same cache
+	// key so only one browser login is needed.
+	ac := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":     "restish",
+			"authorize_url": "https://dex.example.com/auth",
+			"token_url":     "https://dex.example.com/token",
+		},
+	}
+	k1 := inlineAuthCacheKey("api-one:default", ac, "https://api-one.example.com")
+	k2 := inlineAuthCacheKey("api-two:default", ac, "https://api-two.example.com")
+	if k1 == "" || k2 == "" {
+		t.Fatalf("expected non-empty cache keys, got %q and %q", k1, k2)
+	}
+	if k1 != k2 {
+		t.Fatalf("expected same cache key for same dex, got %q and %q", k1, k2)
+	}
+
+	// Different token_url should give a different key.
+	ac2 := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://other-dex.example.com/token",
+		},
+	}
+	k3 := inlineAuthCacheKey("api-one:default", ac2, "https://api-one.example.com")
+	if k3 == k1 {
+		t.Fatalf("different token_url should produce different cache key, got %q", k3)
+	}
+}
+
+func TestInlineAuthCacheKeyDeduplicatesIssuerAuthCodeEndpoints(t *testing.T) {
+	ac := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":  "restish",
+			"issuer_url": "https://dex.example.com",
+		},
+	}
+	k1 := inlineAuthCacheKey("api-one:default", ac, "https://api-one.example.com")
+	k2 := inlineAuthCacheKey("api-two:default", ac, "https://api-two.example.com")
+	if k1 == "" || k2 == "" {
+		t.Fatalf("expected non-empty cache keys, got %q and %q", k1, k2)
+	}
+	if k1 != k2 {
+		t.Fatalf("expected same cache key for same issuer, got %q and %q", k1, k2)
+	}
+
+	ac2 := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":  "restish",
+			"issuer_url": "https://other-dex.example.com",
+		},
+	}
+	k3 := inlineAuthCacheKey("api-one:default", ac2, "https://api-one.example.com")
+	if k3 == k1 {
+		t.Fatalf("different issuer_url should produce different cache key, got %q", k3)
+	}
+
+	ac3 := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":  "restish",
+			"issuer_url": "https://dex.example.com",
+			"scopes":     "admin",
+		},
+	}
+	k4 := inlineAuthCacheKey("api-one:default", ac3, "https://api-one.example.com")
+	if k4 == k1 {
+		t.Fatalf("different issuer_url scopes should produce different cache key, got %q", k4)
+	}
+}
+
+func TestInlineAuthCacheKeySeparatesTokenShapingAuthCodeParams(t *testing.T) {
+	read := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://dex.example.com/token",
+			"scopes":    "read",
+		},
+	}
+	write := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id": "restish",
+			"token_url": "https://dex.example.com/token",
+			"scopes":    "write",
+		},
+	}
+	k1 := inlineAuthCacheKey("api-one:default", read, "https://api-one.example.com")
+	k2 := inlineAuthCacheKey("api-two:default", write, "https://api-two.example.com")
+	if k1 == "" || k2 == "" {
+		t.Fatalf("expected non-empty cache keys, got %q and %q", k1, k2)
+	}
+	if k1 == k2 {
+		t.Fatalf("different scopes should produce different cache keys, got %q", k1)
+	}
+}
+
+func TestSharedDiscoveryTransportDoesNotShareDifferentTLSSignerParams(t *testing.T) {
+	signerPath := filepath.Join(t.TempDir(), "restish-test-tls-signer")
+	if err := os.WriteFile(signerPath, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatalf("write signer: %v", err)
+	}
+	c := New()
+	c.cfg = &config.Config{APIs: map[string]*config.APIConfig{
+		"one": {
+			BaseURL: "https://one.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "1"},
+			}},
+		},
+		"two": {
+			BaseURL: "https://two.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "2"},
+			}},
+		},
+	}}
+
+	tr, closer, err := c.sharedDiscoveryTransport(nil, []string{"one", "two"})
+	if err != nil {
+		t.Fatalf("shared discovery transport: %v", err)
+	}
+	if tr != nil || closer != nil {
+		t.Fatalf("shared discovery transport = %T, %T; want no shared transport", tr, closer)
+	}
+}
+
+func TestSharedDiscoveryTransportWarnsWhenInsecure(t *testing.T) {
+	signerPath := filepath.Join(t.TempDir(), "restish-test-tls-signer")
+	if err := os.WriteFile(signerPath, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatalf("write signer: %v", err)
+	}
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.cfg = &config.Config{APIs: map[string]*config.APIConfig{
+		"one": {
+			BaseURL: "https://one.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "1"},
+			}},
+		},
+		"two": {
+			BaseURL: "https://two.example.com",
+			Profiles: map[string]*config.ProfileConfig{"default": {
+				TLSSigner:       signerPath,
+				TLSSignerParams: map[string]string{"slot": "1"},
+			}},
+		},
+	}}
+	cmd := &cobra.Command{}
+	cmd.SetContext(withGlobalFlags(context.Background(), GlobalFlags{Insecure: true, Retry: -1, MaxPages: 25}))
+
+	if _, _, err := c.sharedDiscoveryTransport(cmd, []string{"one", "two"}); err != nil {
+		t.Fatalf("shared discovery transport: %v", err)
+	}
+	if got := stderr.String(); !strings.Contains(got, "TLS certificate verification is disabled (--rsh-insecure)") {
+		t.Fatalf("stderr = %q, want insecure warning", got)
 	}
 }
 

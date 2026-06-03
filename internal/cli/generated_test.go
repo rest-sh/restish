@@ -1475,7 +1475,14 @@ func TestGeneratedCommandOAuthAuthorizationCodeRequiresCachedTokenBeforeSending(
 		t.Fatalf("request hits = %d, want 0 before OAuth token is available", got)
 	}
 
-	if err := auth.NewTokenCache(tokenPath).Set("tapi:default:credential:OAuth", auth.CachedToken{
+	// inlineAuthCacheKey maps compatible auth-code configs to a shared key.
+	cacheKey := oauthAuthCodeCacheKeyForTest(map[string]string{
+		"client_id":     "client",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"scopes":        "read:profile",
+	})
+	if err := auth.NewTokenCache(tokenPath).Set(cacheKey, auth.CachedToken{
 		AccessToken: "cached-token",
 		Expiry:      time.Now().Add(time.Hour),
 	}); err != nil {

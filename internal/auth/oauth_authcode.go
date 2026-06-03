@@ -12,16 +12,27 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/google/shlex"
 	"sync/atomic"
 	"time"
 )
 
 const defaultRedirectPort = "8484"
 const authTimeout = 5 * time.Minute
+
+// browserFlowMu ensures only one browser-based OAuth flow runs at a time.
+// Parallel spec-discovery probes can all miss the token cache simultaneously;
+// waiters re-check the cache after acquiring the lock and skip the flow if a
+// token was already stored.
+var browserFlowMu sync.Mutex
+
 const callbackPageResultWait = 200 * time.Millisecond
 const defaultCallbackSuccessColor = "#5fafd7"
 const defaultCallbackFailureColor = "#E94F37"
@@ -128,7 +139,17 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 		// Refresh token rejected — fall through to interactive auth.
 	}
 
-	// Full browser flow.
+	// Serialize browser flows; re-check the cache in case a concurrent flow
+	// already completed while we were waiting.
+	browserFlowMu.Lock()
+	defer browserFlowMu.Unlock()
+
+	if !force {
+		if token2, ok2, _ := cachedUsableOAuthAccessToken(h.Cache, cacheKey); ok2 {
+			return token2, nil
+		}
+	}
+
 	authorizeURL, tokenURL, err := h.resolveEndpoints(ctx, params)
 	if err != nil {
 		return "", err
@@ -360,6 +381,8 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 				fmt.Fprint(w, callbackPages.errorPage("Authentication timed out", "Return to the terminal to try again.", "timed_out"))
 			}
 		})}
+		// No keep-alives: lets the socket close promptly after Shutdown.
+		srv.SetKeepAlivesEnabled(false)
 		go func() {
 			if e := serveOAuthCallback(srv, ln, redirect); e != nil && e != http.ErrServerClosed {
 				trySendErr(errCh, e)
@@ -779,18 +802,50 @@ func defaultOpenBrowserCommand(rawURL string) *exec.Cmd {
 	return defaultOpenBrowserCommandForGOOS(runtime.GOOS, rawURL)
 }
 
-func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
-	switch goos {
-	case "darwin":
-		return exec.Command("open", "--", rawURL)
-	case "windows":
-		// Pass an explicit empty title ("") before the URL so that special
-		// characters in the URL are not misinterpreted as window title or
-		// cmd /c start flags.
-		return exec.Command("cmd", "/c", "start", "", "--", rawURL)
-	default:
-		return exec.Command("xdg-open", rawURL)
+// browserEnv returns os.Environ() with XDG_CONFIG_HOME, XDG_CACHE_HOME, and
+// XDG_DATA_HOME stripped. When Restish runs inside a tool that overrides these
+// vars to sandbox its own config, the browser would otherwise inherit a
+// temporary XDG environment and open a blank profile where saved SSO sessions
+// are invisible.
+func browserEnv() []string {
+	strip := map[string]bool{
+		"XDG_CONFIG_HOME": true,
+		"XDG_CACHE_HOME":  true,
+		"XDG_DATA_HOME":   true,
 	}
+	var env []string
+	for _, e := range os.Environ() {
+		key := strings.SplitN(e, "=", 2)[0]
+		if !strip[key] {
+			env = append(env, e)
+		}
+	}
+	return env
+}
+
+func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
+	var cmd *exec.Cmd
+	if b := os.Getenv("BROWSER"); b != "" {
+		parts, _ := shlex.Split(b)
+		if len(parts) == 0 {
+			parts = []string{b}
+		}
+		cmd = exec.Command(parts[0], append(parts[1:], rawURL)...)
+	} else {
+		switch goos {
+		case "darwin":
+			cmd = exec.Command("open", "--", rawURL)
+		case "windows":
+			// Pass an explicit empty title ("") before the URL so that special
+			// characters in the URL are not misinterpreted as window title or
+			// cmd /c start flags.
+			cmd = exec.Command("cmd", "/c", "start", "", "--", rawURL)
+		default:
+			cmd = exec.Command("xdg-open", rawURL)
+		}
+	}
+	cmd.Env = browserEnv()
+	return cmd
 }
 
 // FreePort returns an available local TCP port as a string.

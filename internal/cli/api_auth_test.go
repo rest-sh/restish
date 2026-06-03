@@ -456,7 +456,15 @@ func TestAPIAuthInspectOAuthAuthorizationCodeRequiresCachedTokenAndExactScopes(t
 		"OAuth: configured (OAuth access token not cached), needs read:profile read:recovery, satisfies read:profile",
 	)
 
-	if err := auth.NewTokenCache(tokenPath).Set("tapi:default:credential:OAuth", auth.CachedToken{
+	// The cache key includes token-shaping OAuth params so only compatible
+	// auth-code tokens are shared across APIs.
+	oauthCacheKey := oauthAuthCodeCacheKeyForTest(map[string]string{
+		"client_id":     "client",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"scopes":        "read:profile",
+	})
+	if err := auth.NewTokenCache(tokenPath).Set(oauthCacheKey, auth.CachedToken{
 		AccessToken: "cached-token",
 		Expiry:      time.Now().Add(time.Hour),
 	}); err != nil {

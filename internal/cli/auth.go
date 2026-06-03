@@ -518,11 +518,78 @@ func sharedAuthCacheKey(ref string, ac *config.AuthConfig, baseURL string) strin
 }
 
 func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) string {
-	if !authConfigUsesRelativeOAuthEndpoint(ac) || baseURL == "" {
+	if ac == nil {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(baseURL))
-	return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+	// Relative endpoints: key on the resolved base URL so all APIs served by
+	// the same host share one token cache entry.
+	if authConfigUsesRelativeOAuthEndpoint(ac) && baseURL != "" {
+		sum := sha256.Sum256([]byte(baseURL))
+		return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
+	}
+	// Absolute endpoints: for oauth-authorization-code, key on token_url or
+	// issuer_url plus token request parameters so APIs pointing at the same
+	// identity provider share a token only when the issued token shape is the
+	// same.
+	if ac.Type == "oauth-authorization-code" {
+		material, ok := inlineAuthCodeCacheKeyMaterial(ac)
+		if ok {
+			sum := sha256.Sum256([]byte(material))
+			return "oauth:" + hex.EncodeToString(sum[:8])
+		}
+	}
+	return ""
+}
+
+func inlineAuthCodeCacheKeyMaterial(ac *config.AuthConfig) (string, bool) {
+	tokenURL := ac.Params["token_url"]
+	issuerURL := ac.Params["issuer_url"]
+	clientID := ac.Params["client_id"]
+	if clientID == "" {
+		return "", false
+	}
+	if !absoluteOAuthCacheKeyAnchor(tokenURL) && !absoluteOAuthCacheKeyAnchor(issuerURL) {
+		return "", false
+	}
+	relevant := map[string]string{"type": ac.Type}
+	for key, value := range ac.Params {
+		if value == "" || inlineAuthCodeCacheKeyIgnoresParam(key) {
+			continue
+		}
+		relevant[key] = value
+	}
+	var keys []string
+	for key := range relevant {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(relevant[key])
+		b.WriteByte('\n')
+	}
+	return b.String(), true
+}
+
+func absoluteOAuthCacheKeyAnchor(value string) bool {
+	if value == "" {
+		return false
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.IsAbs()
+}
+
+func inlineAuthCodeCacheKeyIgnoresParam(key string) bool {
+	switch key {
+	case "_base_url", "_cache_key", "auth_method", "cache_key", "client_secret",
+		"callback_error_html", "callback_success_html",
+		"redirect_cert", "redirect_key", "redirect_path", "redirect_port", "redirect_scheme":
+		return true
+	default:
+		return false
+	}
 }
 
 func authConfigUsesRelativeOAuthEndpoint(ac *config.AuthConfig) bool {

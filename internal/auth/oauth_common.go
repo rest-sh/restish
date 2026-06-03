@@ -580,6 +580,20 @@ func cachedOAuthAccessToken(cache TokenStore, cacheKey string, force bool, refre
 	return "", false, nil
 }
 
+func cachedUsableOAuthAccessToken(cache TokenStore, cacheKey string) (string, bool, error) {
+	if cache == nil || cacheKey == "" {
+		return "", false, nil
+	}
+	cached, err := cache.Get(cacheKey)
+	if err != nil || cached == nil {
+		return "", false, err
+	}
+	if cached.IsExpired() {
+		return "", false, nil
+	}
+	return cached.AccessToken, true, nil
+}
+
 func extraOAuthParams(params map[string]string, reserved map[string]bool) map[string]string {
 	extra := map[string]string{}
 	for key, value := range params {

@@ -45,6 +45,7 @@ Generated from production source environment-variable usage plus Go's standard p
 | `RSH_PRINT` | Default `--rsh-print` output parts, such as `b` for compact rendered output in scripts. | global flags |
 | `VISUAL` | Preferred editor for `config edit` and `edit`. | editor |
 | `EDITOR` | Fallback editor for `config edit` and `edit`. | editor |
+| `BROWSER` | Browser command used for OAuth authorization-code flows (may include arguments). When set, Restish invokes it directly instead of `xdg-open` (Linux), `open` (macOS), or `cmd /c start` (Windows). | oauth browser |
 | `GLAMOUR_STYLE` | Markdown rendering style for markdown-formatted terminal output. | output |
 | `RSH_IMAGE_PROTOCOL` | Force terminal image rendering protocol: `kitty`, `iterm2`, or `halfblock`. | output |
 | `KITTY_WINDOW_ID` | Used to auto-detect Kitty image support. | output |

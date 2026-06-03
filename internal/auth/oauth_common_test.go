@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
@@ -31,6 +32,25 @@ func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
 		if !ok || !strings.Contains(scopes.Description, "offline_access") {
 			t.Fatalf("%s scopes help should mention offline_access, got %#v", name, scopes)
 		}
+	}
+}
+
+func TestCachedUsableOAuthAccessTokenDoesNotRefreshExpiredToken(t *testing.T) {
+	cache := NewTokenCache(t.TempDir() + "/tokens.cbor")
+	if err := cache.Set("svc:default", CachedToken{
+		AccessToken:  "old-token",
+		RefreshToken: "refresh-token",
+		Expiry:       time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	token, ok, err := cachedUsableOAuthAccessToken(cache, "svc:default")
+	if err != nil {
+		t.Fatalf("cached usable token: %v", err)
+	}
+	if ok || token != "" {
+		t.Fatalf("cached usable token = %q, %v; want no token", token, ok)
 	}
 }
 

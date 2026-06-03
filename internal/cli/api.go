@@ -59,13 +59,14 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 		RunE:    c.runAPIRemove,
 	})
 	syncCmd := &cobra.Command{
-		Use:   "sync <name>",
-		Short: "Force re-fetch of the cached OpenAPI spec for a named API",
+		Use:   "sync <name> [name...]",
+		Short: "Force re-fetch of the cached OpenAPI spec for one or more named APIs",
 		Long:  apiSyncLong,
 		Example: fmt.Sprintf(`  %s api sync demo
   %s api sync demo --yes
-  %s api sync demo --allow-cross-origin-spec`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
-		Args: usageExactArgs(1),
+  %s api sync demo --allow-cross-origin-spec
+  %s api sync api-one api-two api-three`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Args: usageMinimumNArgs(1),
 		RunE: c.runAPISync,
 	}
 	syncCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host for this sync run")
@@ -205,10 +206,83 @@ func (c *CLI) runAPIAuthLogout(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runAPISync force-invalidates the cached spec for an API, fetches a fresh one,
-// and persists non-profile metadata that can be discovered safely from it.
+// runAPISync force-invalidates the cached spec for one or more APIs, fetches a
+// fresh one for each, and persists non-profile metadata that can be discovered
+// safely from it. Accepting multiple names in a single invocation allows the
+// process (and any shared PKCS#11 session) to be reused across all of them,
+// which means a hardware-token PIN is only requested once.
 func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
-	apiName := args[0]
+	// When all APIs share the same TLS signer (e.g. all yubikey APIs), build
+	// one transport up front so the plugin subprocess — and the PKCS#11 session
+	// it holds — is shared across every sync. This means the user is prompted
+	// for the hardware-token PIN exactly once instead of once per API.
+	var shared http.RoundTripper
+	if len(args) > 1 {
+		tr, closer, err := c.sharedDiscoveryTransport(cmd, args)
+		if err != nil {
+			return err
+		}
+		if tr != nil {
+			shared = tr
+			if closer != nil {
+				defer closer.Close()
+			}
+		}
+	}
+
+	var errs []error
+	for _, apiName := range args {
+		if err := c.syncOneAPI(cmd, apiName, shared); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// sharedDiscoveryTransport returns a single transport to reuse across all
+// named APIs when every API in the list has identical TLS transport settings
+// (signer path, signer params, client cert/key, CA cert, insecure flag, and
+// TLS min version). Returns (nil, nil, nil) when configs differ or no signer
+// is configured; each syncOneAPI call then builds its own transport.
+func (c *CLI) sharedDiscoveryTransport(cmd *cobra.Command, apiNames []string) (http.RoundTripper, interface{ Close() error }, error) {
+	ctx := requestContext(cmd)
+	profileName := c.profileFromCmd(cmd)
+	if profileName == "" {
+		profileName = "default"
+	}
+
+	var commonKey *discoveryTransportShareKey
+	var representativeOpts request.Options
+	for _, apiName := range apiNames {
+		apiCfg, err := c.requireAPI(apiName)
+		if err != nil {
+			return nil, nil, err
+		}
+		opts, err := c.discoveryTransportOptions(ctx, apiCfg, profileName)
+		if err != nil {
+			return nil, nil, err
+		}
+		if opts.TLSSignerPath == "" {
+			return nil, nil, nil // this API uses no signer; can't share
+		}
+		key := discoveryTransportShareKeyFromOptions(opts)
+		if commonKey == nil {
+			commonKey = &key
+			representativeOpts = opts
+		} else if key != *commonKey {
+			return nil, nil, nil // different TLS inputs; can't share
+		}
+	}
+	if commonKey == nil {
+		return nil, nil, nil
+	}
+	c.warnInsecureDiscoveryTransport(ctx)
+	tr := request.BuildTransport(representativeOpts)
+	closer, _ := tr.(interface{ Close() error })
+	return tr, closer, nil
+}
+
+func (c *CLI) syncOneAPI(cmd *cobra.Command, apiName string, sharedTransport http.RoundTripper) error {
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {
 		return err
@@ -217,12 +291,18 @@ func (c *CLI) runAPISync(cmd *cobra.Command, args []string) error {
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	yes, _ := cmd.Flags().GetBool("yes")
 	profileName := c.profileFromCmd(cmd)
-	transport, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
-	if err != nil {
-		return err
-	}
-	if closer != nil {
-		defer closer.Close()
+	var transport http.RoundTripper
+	if sharedTransport != nil {
+		transport = sharedTransport
+	} else {
+		tr, closer, err := c.discoveryTransport(requestContext(cmd), apiCfg, profileName)
+		if err != nil {
+			return err
+		}
+		if closer != nil {
+			defer closer.Close()
+		}
+		transport = tr
 	}
 	fetch := c.discoveryFetcher(requestContext(cmd), apiName, apiCfg, profileName)
 	discCfg := spec.DiscoverConfig{
@@ -1067,17 +1147,31 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 }
 
 func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {
-	gf := globalFlagsFromContext(ctx)
-	if gf.Insecure {
-		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
-	}
-	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
+	c.warnInsecureDiscoveryTransport(ctx)
+	opts, err := c.discoveryTransportOptions(ctx, apiCfg, profileName)
 	if err != nil {
 		return nil, nil, err
 	}
+	transport := request.BuildTransport(opts)
+	closer, _ := transport.(interface{ Close() error })
+	return transport, closer, nil
+}
+
+func (c *CLI) warnInsecureDiscoveryTransport(ctx context.Context) {
+	if globalFlagsFromContext(ctx).Insecure {
+		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
+	}
+}
+
+func (c *CLI) discoveryTransportOptions(ctx context.Context, apiCfg *config.APIConfig, profileName string) (request.Options, error) {
+	gf := globalFlagsFromContext(ctx)
+	tlsMinVersion, err := request.TLSVersionFromString(gf.TLSMinVersion)
+	if err != nil {
+		return request.Options{}, err
+	}
 	tlsSignerParams, err := parseKVStrings(gf.TLSSignerParams)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid tls signer param: %w", err)
+		return request.Options{}, fmt.Errorf("invalid tls signer param: %w", err)
 	}
 	opts := request.Options{
 		Transport:       c.baseHTTPTransport(),
@@ -1113,11 +1207,50 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	}
 	opts, err = c.resolveTLSSigner(opts)
 	if err != nil {
-		return nil, nil, err
+		return request.Options{}, err
 	}
-	transport := request.BuildTransport(opts)
-	closer, _ := transport.(interface{ Close() error })
-	return transport, closer, nil
+	return opts, nil
+}
+
+type discoveryTransportShareKey struct {
+	Insecure        bool
+	ClientCertPath  string
+	ClientKeyPath   string
+	TLSSignerPath   string
+	TLSSignerParams string
+	CACertPath      string
+	TLSMinVersion   uint16
+}
+
+func discoveryTransportShareKeyFromOptions(opts request.Options) discoveryTransportShareKey {
+	return discoveryTransportShareKey{
+		Insecure:        opts.Insecure,
+		ClientCertPath:  opts.ClientCertPath,
+		ClientKeyPath:   opts.ClientKeyPath,
+		TLSSignerPath:   opts.TLSSignerPath,
+		TLSSignerParams: tlsSignerParamsKey(opts.TLSSignerParams),
+		CACertPath:      opts.CACertPath,
+		TLSMinVersion:   opts.TLSMinVersion,
+	}
+}
+
+func tlsSignerParamsKey(params map[string]string) string {
+	if len(params) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(params[key])
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func (c *CLI) discoveryFetcher(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName string) spec.HTTPFetcher {
