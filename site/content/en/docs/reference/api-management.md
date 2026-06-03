@@ -48,7 +48,7 @@ Subcommands:
 
 **`restish api set`**: Patch API config using shorthand syntax
 
-**`restish api sync`**: Force re-fetch of the cached OpenAPI spec for a named API
+**`restish api sync`**: Force re-fetch of the cached OpenAPI spec for one or more named APIs
 
 
 ### `restish api connect`
@@ -117,7 +117,7 @@ Accept safe api connect prompts without asking
 
 ### `restish api sync`
 
-Force re-fetch of the cached OpenAPI spec for a named API
+Force re-fetch of the cached OpenAPI spec for one or more named APIs
 
 Force re-fetch of the cached OpenAPI spec for a named API.
 
