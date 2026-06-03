@@ -884,6 +884,60 @@ func TestDiscover_ExplicitSpecURL(t *testing.T) {
 	}
 }
 
+func TestDiscoverWaitsForCanceledNetworkProbes(t *testing.T) {
+	specBody := `{"openapi":"3.1.0","info":{"title":"Direct","version":"1.0.0"},"paths":{}}`
+	slowEntered := make(chan struct{})
+	cancelSeen := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	done := make(chan error, 1)
+
+	cfg := DiscoverConfig{
+		APIName: "testapi",
+		BaseURL: "https://api.example.com",
+		Fetch: func(ctx context.Context, rawURL string, tr http.RoundTripper) (*http.Response, error) {
+			switch rawURL {
+			case "https://api.example.com":
+				close(slowEntered)
+				<-ctx.Done()
+				close(cancelSeen)
+				<-releaseSlow
+				return nil, ctx.Err()
+			case "https://api.example.com/openapi.json":
+				<-slowEntered
+				return httpResponse(200, "application/json", specBody, nil), nil
+			default:
+				return httpResponse(404, "text/plain", "not found", nil), nil
+			}
+		},
+	}
+
+	go func() {
+		_, err := Discover(context.Background(), cfg, DefaultLoaders())
+		done <- err
+	}()
+
+	select {
+	case <-cancelSeen:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Discover did not cancel the slower probe")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("Discover returned before canceled probes exited: %v", err)
+	default:
+	}
+
+	close(releaseSlow)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Discover: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Discover did not return after canceled probe exited")
+	}
+}
+
 func TestDiscoverCleansCredentialURLMetadataInCache(t *testing.T) {
 	raw := `{"openapi":"3.1.0","info":{"title":"Direct","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`
 	tr := roundTripperFunc(func(r *http.Request) (*http.Response, error) {

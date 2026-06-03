@@ -413,7 +413,10 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 			wg.Wait()
 			close(ch)
 		}()
-		return collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
+		spec, ttl, err := collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
+		cancel()
+		wg.Wait()
+		return spec, ttl, err
 	}
 
 	// Probe base URL: extract Link headers and try the body itself.
@@ -450,7 +453,10 @@ func discoverFromNetwork(ctx context.Context, cfg DiscoverConfig, loaders []Load
 		close(ch)
 	}()
 
-	return collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
+	spec, ttl, err := collectDiscoveryResults(ctx, cancel, ch, cfg.BaseURL)
+	cancel()
+	wg.Wait()
+	return spec, ttl, err
 }
 
 var wellKnownSpecPaths = []string{"/openapi.json", "/openapi.yaml"}
