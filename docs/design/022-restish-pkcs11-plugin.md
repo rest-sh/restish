@@ -85,17 +85,18 @@ goal is a stable signer plugin, not a complete PKCS#11 management tool.
 
 ## Token Selection
 
-Exactly one token selector must be provided:
+At most one token selector may be provided:
 
 - token label
 - token serial
 - slot number
 
-That constraint is intentional. The plugin refuses ambiguous selection so it
-does not accidentally choose the wrong certificate when multiple tokens or
-slots are available.
+If no selector is provided, the plugin enumerates present tokens and
+auto-selects the slot only when exactly one token is available. Otherwise, the
+plugin refuses ambiguous selection so it does not accidentally choose the wrong
+certificate when multiple tokens or slots are available.
 
-If more than one selector is supplied and they disagree, startup should fail.
+If more than one selector is supplied, startup should fail.
 
 ## Module Path Resolution
 
