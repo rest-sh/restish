@@ -1,0 +1,139 @@
+{{- $canonical := partial "canonical-url.html" . -}}
+{{- $description := partial "page-description.html" . | plainify -}}
+{{- $siteDescription := $description -}}
+{{- with .Site.Home -}}
+  {{- $siteDescription = partial "page-description.html" . | plainify -}}
+{{- end -}}
+{{- $siteURL := .Site.BaseURL -}}
+{{- $orgID := printf "%s#organization" $siteURL -}}
+{{- $websiteID := printf "%s#website" $siteURL -}}
+{{- $softwareID := printf "%s#software" $siteURL -}}
+{{- $sourceID := printf "%s#source" $siteURL -}}
+{{- $pageID := printf "%s#webpage" $canonical -}}
+{{- $logo := "images/restish-logo.png" | absURL -}}
+{{- $github := .Site.Params.github_repo | default "https://github.com/rest-sh/restish" -}}
+{{- $installURL := printf "%sdocs/getting-started/install/" $siteURL -}}
+{{- $releaseNotesURL := printf "%s/releases" $github -}}
+{{- $graph := slice -}}
+{{- $org := dict
+  "@type" "Organization"
+  "@id" $orgID
+  "name" .Site.Title
+  "url" $siteURL
+  "logo" $logo
+  "sameAs" (slice $github)
+-}}
+{{- $website := dict
+  "@type" "WebSite"
+  "@id" $websiteID
+  "name" .Site.Title
+  "url" $siteURL
+  "description" $siteDescription
+  "publisher" (dict "@id" $orgID)
+-}}
+{{- $graph = $graph | append $org $website -}}
+
+{{- if .IsHome -}}
+  {{- $software := dict
+    "@type" "SoftwareApplication"
+    "@id" $softwareID
+    "name" .Site.Title
+    "url" $siteURL
+    "description" $siteDescription
+    "applicationCategory" "DeveloperApplication"
+    "operatingSystem" "Linux, macOS, Windows"
+    "isAccessibleForFree" true
+    "offers" (dict "@type" "Offer" "price" "0" "priceCurrency" "USD")
+    "downloadUrl" (printf "%s/releases" $github)
+    "installUrl" $installURL
+    "releaseNotes" $releaseNotesURL
+    "softwareHelp" (printf "%sdocs/" $siteURL)
+    "publisher" (dict "@id" $orgID)
+  -}}
+  {{- $source := dict
+    "@type" "SoftwareSourceCode"
+    "@id" $sourceID
+    "name" .Site.Title
+    "url" $github
+    "codeRepository" $github
+    "programmingLanguage" "Go"
+    "license" "https://opensource.org/license/mit"
+    "runtimePlatform" "Go"
+    "isPartOf" (dict "@id" $softwareID)
+  -}}
+  {{- $graph = $graph | append $software $source -}}
+{{- end -}}
+
+{{- if not .IsHome -}}
+  {{- $items := slice (dict
+    "@type" "ListItem"
+    "position" 1
+    "name" .Site.Title
+    "item" $siteURL
+  ) -}}
+  {{- $position := 2 -}}
+  {{- range .Ancestors.Reverse -}}
+    {{- if not .IsHome -}}
+      {{- $items = $items | append (dict
+        "@type" "ListItem"
+        "position" $position
+        "name" (.LinkTitle | default .Title)
+        "item" .Permalink
+      ) -}}
+      {{- $position = add $position 1 -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $items = $items | append (dict
+    "@type" "ListItem"
+    "position" $position
+    "name" (.LinkTitle | default .Title)
+    "item" $canonical
+  ) -}}
+  {{- $graph = $graph | append (dict
+    "@type" "BreadcrumbList"
+    "@id" (printf "%s#breadcrumb" $canonical)
+    "itemListElement" $items
+  ) -}}
+{{- end -}}
+
+{{- $page := dict
+  "@type" "WebPage"
+  "@id" $pageID
+  "url" $canonical
+  "name" (cond .IsHome .Site.Title .Title)
+  "description" $description
+  "isPartOf" (dict "@id" $websiteID)
+-}}
+{{- if not .IsHome -}}
+  {{- $page = merge $page (dict "breadcrumb" (dict "@id" (printf "%s#breadcrumb" $canonical))) -}}
+{{- end -}}
+{{- $graph = $graph | append $page -}}
+
+{{- if and .IsPage (eq .Section "blog") -}}
+  {{- $rawAuthor := .Params.author | default .Site.Title -}}
+  {{- $author := $rawAuthor | markdownify | plainify -}}
+  {{- $article := dict
+    "@type" "BlogPosting"
+    "@id" (printf "%s#blogposting" $canonical)
+    "mainEntityOfPage" (dict "@id" $pageID)
+    "headline" .Title
+    "description" $description
+    "url" $canonical
+    "datePublished" (.Date.Format "2006-01-02T15:04:05Z07:00")
+    "dateModified" (.Lastmod.Format "2006-01-02T15:04:05Z07:00")
+    "author" (dict "@type" "Person" "name" $author)
+    "publisher" (dict "@id" $orgID)
+    "wordCount" .WordCount
+  -}}
+  {{- with partial "social-image.html" . -}}
+    {{- $article = merge $article (dict "image" .) -}}
+  {{- end -}}
+  {{- with .Params.tags -}}
+    {{- $article = merge $article (dict "keywords" .) -}}
+  {{- end -}}
+  {{- $graph = $graph | append $article -}}
+{{- end -}}
+
+{{- with $graph }}
+<script type="application/ld+json">{{ dict "@context" "https://schema.org" "@graph" . | jsonify | safeJS }}</script>
+{{- end -}}

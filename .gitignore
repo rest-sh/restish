@@ -1,4 +1,4 @@
-/.DS_Store
+.DS_Store
 
 # Local build outputs from `go build ./cmd/...`.
 /restish
@@ -15,6 +15,7 @@
 /refactor.md
 /testing.md
 /test-findings.md
+/blog.md
 
 # Local Codex skill installs.
 /skills-lock.json

@@ -44,7 +44,7 @@ Andy Warhol mural in Miami gif     /images/gif
 Use Homebrew for the easiest managed install on macOS:
 
 ```bash
-brew install rest-sh/tap/restish
+brew install restish
 restish --version
 ```
 

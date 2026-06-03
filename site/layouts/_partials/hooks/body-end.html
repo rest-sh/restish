@@ -1,5 +1,7 @@
 <script src='{{ "js/prism-restish.js" | relURL }}'></script>
-<script src='{{ "js/restish-playground.js" | relURL }}'></script>
+{{/* Automatically cache-bust the playground script when its file contents change. */}}
+{{ $playgroundVersion := readFile "static/js/restish-playground.js" | md5 }}
+<script src='{{ "js/restish-playground.js" | relURL }}?v={{ $playgroundVersion }}'></script>
 <script>
   (function () {
     if (window.location.pathname === "/" && window.location.hash.indexOf("#/") === 0) {

@@ -50,20 +50,27 @@ restish-X.Y.Z-windows-amd64.zip
 
 ## Homebrew
 
-The Homebrew tap should install the current v2 `restish` binary as `restish`.
-The legacy v1 formula stays keg-only as `restish@1` for users who need the old
-binary while migrating.
+The primary Homebrew install path for the current v2 CLI is Homebrew core. The
+`rest-sh/tap` tap stays available for the legacy v1 formula and first-party
+plugin formulae.
 
-After updating the formula, verify:
+After publishing, verify the core formula installs the current v2 binary:
 
 ```bash
-brew install rest-sh/tap/restish
+brew install restish
 restish --version
 restish api.rest.sh/
 ```
 
-Check the tap formula directly and do not rely on an unqualified
-`brew install restish` for the v2 release verification.
+The legacy v1 formula remains keg-only as `restish@1` for users who need the
+old binary while migrating:
+
+```bash
+brew install rest-sh/tap/restish@1
+```
+
+Do not advertise `rest-sh/tap/restish` as the normal v2 install path while
+Homebrew core is current.
 
 ## mise
 

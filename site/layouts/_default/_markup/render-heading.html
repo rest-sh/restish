@@ -1,0 +1,6 @@
+<h{{ .Level }} id="{{ .Anchor | safeURL }}"{{ range $key, $value := .Attributes }}{{ if ne $key "id" }} {{ $key | safeHTMLAttr }}="{{ $value }}"{{ end }}{{ end }}>
+  {{ .Text | safeHTML }}
+  <a class="restish-heading-anchor" href="#{{ .Anchor | safeURL }}" aria-label="Link to this section" title="Link to this section">
+    <span aria-hidden="true">#</span>
+  </a>
+</h{{ .Level }}>

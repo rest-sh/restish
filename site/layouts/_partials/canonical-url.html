@@ -1,0 +1,10 @@
+{{- $url := .Permalink -}}
+{{- with .Params.canonical_url -}}
+  {{- $candidate := . -}}
+  {{- if or (strings.HasPrefix $candidate "http://") (strings.HasPrefix $candidate "https://") -}}
+    {{- $url = $candidate -}}
+  {{- else -}}
+    {{- $url = $candidate | absURL -}}
+  {{- end -}}
+{{- end -}}
+{{- return $url -}}
