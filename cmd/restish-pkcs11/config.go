@@ -29,11 +29,27 @@ var defaultPKCS11Paths = func() []string {
 	}
 }
 
+type pkcs11TokenEnumerator interface {
+	Initialize() error
+	Finalize() error
+	Destroy()
+	GetSlotList(tokenPresent bool) ([]uint, error)
+	GetTokenInfo(slotID uint) (pkcs11.TokenInfo, error)
+}
+
+var newPKCS11Ctx = func(modulePath string) pkcs11TokenEnumerator {
+	p := pkcs11.New(modulePath)
+	if p == nil {
+		return nil
+	}
+	return p
+}
+
 // detectSingleTokenSlot enumerates the tokens present in modulePath.
 // If exactly one is found, it returns its slot number.
 // If zero or more than one are found, it returns a descriptive error.
 func detectSingleTokenSlot(modulePath string) (int, error) {
-	p := pkcs11.New(modulePath)
+	p := newPKCS11Ctx(modulePath)
 	if p == nil {
 		return 0, fmt.Errorf("could not load pkcs11 module %q", modulePath)
 	}
@@ -64,7 +80,7 @@ func detectSingleTokenSlot(modulePath string) (int, error) {
 		}
 		labels = append(labels, fmt.Sprintf("%q (slot %d)", strings.TrimSpace(info.Label), s))
 	}
-	return 0, fmt.Errorf("found %d pkcs11 tokens (%s); set token_label/token_serial/slot to pick one (label, serial, and slot aliases are supported)", len(slots), strings.Join(labels, ", "))
+	return 0, fmt.Errorf("found %d pkcs11 tokens (%s); set token_label/label, token_serial/serial, or slot to pick one", len(slots), strings.Join(labels, ", "))
 }
 
 type pkcs11Config struct {

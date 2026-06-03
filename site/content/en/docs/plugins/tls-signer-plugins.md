@@ -51,9 +51,11 @@ rejects configs that combine both client-certificate files and a TLS signer.
 CLI flags such as `--rsh-client-cert`, `--rsh-client-key`, `--rsh-ca-cert`, and
 `--rsh-tls-signer` override both config layers for the current command.
 
-For the bundled PKCS#11 signer, set `module` or `path`, exactly one of
-`token_label`/`label`, `token_serial`/`serial`, or `slot`, and either `pin`,
-`pin_env`, `PKCS11_PIN`, or `login_not_supported: true`.
+For the bundled PKCS#11 signer, set `module` or `path`, at most one token
+selector (`token_label`/`label`, `token_serial`/`serial`, or `slot`), and
+either `pin`, `pin_env`, `PKCS11_PIN`, or `login_not_supported: true`. If you
+omit the token selector, the plugin auto-selects the token only when exactly one
+token is present.
 
 ## Troubleshooting
 
