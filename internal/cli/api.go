@@ -275,6 +275,7 @@ func (c *CLI) sharedDiscoveryTransport(cmd *cobra.Command, apiNames []string) (h
 	if commonKey == nil {
 		return nil, nil, nil
 	}
+	c.warnInsecureDiscoveryTransport(ctx)
 	tr := request.BuildTransport(representativeOpts)
 	closer, _ := tr.(interface{ Close() error })
 	return tr, closer, nil
@@ -1145,10 +1146,7 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 }
 
 func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {
-	gf := globalFlagsFromContext(ctx)
-	if gf.Insecure {
-		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
-	}
+	c.warnInsecureDiscoveryTransport(ctx)
 	opts, err := c.discoveryTransportOptions(ctx, apiCfg, profileName)
 	if err != nil {
 		return nil, nil, err
@@ -1156,6 +1154,12 @@ func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, 
 	transport := request.BuildTransport(opts)
 	closer, _ := transport.(interface{ Close() error })
 	return transport, closer, nil
+}
+
+func (c *CLI) warnInsecureDiscoveryTransport(ctx context.Context) {
+	if globalFlagsFromContext(ctx).Insecure {
+		c.warnf("TLS certificate verification is disabled (--rsh-insecure); connections are not secure")
+	}
 }
 
 func (c *CLI) discoveryTransportOptions(ctx context.Context, apiCfg *config.APIConfig, profileName string) (request.Options, error) {

@@ -527,9 +527,10 @@ func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) s
 		sum := sha256.Sum256([]byte(baseURL))
 		return baseKey + ":base_url:" + hex.EncodeToString(sum[:8])
 	}
-	// Absolute endpoints: for oauth-authorization-code, key on token_url +
-	// token request parameters so APIs pointing at the same identity provider
-	// share a token only when the issued token shape is the same.
+	// Absolute endpoints: for oauth-authorization-code, key on token_url or
+	// issuer_url plus token request parameters so APIs pointing at the same
+	// identity provider share a token only when the issued token shape is the
+	// same.
 	if ac.Type == "oauth-authorization-code" {
 		material, ok := inlineAuthCodeCacheKeyMaterial(ac)
 		if ok {
@@ -542,12 +543,12 @@ func inlineAuthCacheKey(baseKey string, ac *config.AuthConfig, baseURL string) s
 
 func inlineAuthCodeCacheKeyMaterial(ac *config.AuthConfig) (string, bool) {
 	tokenURL := ac.Params["token_url"]
+	issuerURL := ac.Params["issuer_url"]
 	clientID := ac.Params["client_id"]
-	if tokenURL == "" || clientID == "" {
+	if clientID == "" {
 		return "", false
 	}
-	u, err := url.Parse(tokenURL)
-	if err != nil || !u.IsAbs() {
+	if !absoluteOAuthCacheKeyAnchor(tokenURL) && !absoluteOAuthCacheKeyAnchor(issuerURL) {
 		return "", false
 	}
 	relevant := map[string]string{"type": ac.Type}
@@ -570,6 +571,14 @@ func inlineAuthCodeCacheKeyMaterial(ac *config.AuthConfig) (string, bool) {
 		b.WriteByte('\n')
 	}
 	return b.String(), true
+}
+
+func absoluteOAuthCacheKeyAnchor(value string) bool {
+	if value == "" {
+		return false
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.IsAbs()
 }
 
 func inlineAuthCodeCacheKeyIgnoresParam(key string) bool {
