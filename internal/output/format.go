@@ -58,6 +58,7 @@ func DefaultFormatters() map[string]Formatter {
 		"ndjson": &NDJSONFormatter{},
 		"table":  &TableFormatter{},
 		"gron":   &GronFormatter{},
+		"toon":   &TOONFormatter{},
 		"cbor":   &CBORFormatter{},
 		"image":  &ImageFormatter{},
 		"yaml":   &YAMLFormatter{},

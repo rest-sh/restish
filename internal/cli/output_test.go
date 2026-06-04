@@ -459,6 +459,27 @@ func TestUnknownOutputFormatSuggestsNearestFormat(t *testing.T) {
 	}
 }
 
+// TestUnknownOutputFormatAmbiguousOmitsSuggestion verifies that a typo equally
+// near two formats (here "tron" is one edit from both "gron" and "toon") lists
+// the available formats without an ambiguous "did you mean" guess.
+func TestUnknownOutputFormatAmbiguousOmitsSuggestion(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with unknown output format")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "tron", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected error for unknown output format")
+	}
+	if !strings.Contains(err.Error(), `unknown output format "tron"`) {
+		t.Fatalf("expected unknown-format error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Fatalf("expected no suggestion for ambiguous typo, got: %v", err)
+	}
+}
+
 // TestPrintResponseHeadersOnly verifies that --rsh-print h writes only
 // response headers and no body.
 func TestPrintResponseHeadersOnly(t *testing.T) {

@@ -1381,17 +1381,27 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 	return formatter, nil
 }
 
+// outputFormatSuggestion returns the format name closest to a mistyped name, or
+// "" when nothing is within edit distance 2 or the nearest distance is shared by
+// more than one format (an ambiguous guess is worse than none). Picking the
+// strictly nearest match keeps suggestions stable as more formats are added.
 func outputFormatSuggestion(name string, fmts map[string]output.Formatter) string {
-	var matches []string
+	best := ""
+	bestDist := 3 // only distances <= 2 are considered
+	tie := false
 	for candidate := range fmts {
-		if levenshteinDistance(name, candidate) <= 2 {
-			matches = append(matches, candidate)
+		switch d := levenshteinDistance(name, candidate); {
+		case d > 2:
+		case d < bestDist:
+			best, bestDist, tie = candidate, d, false
+		case d == bestDist:
+			tie = true
 		}
 	}
-	if len(matches) == 1 {
-		return matches[0]
+	if tie {
+		return ""
 	}
-	return ""
+	return best
 }
 
 func explicitAutoOutputFormat(gf GlobalFlags) bool {
