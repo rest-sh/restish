@@ -188,6 +188,20 @@ response. Redirect the response to save the image instead.
 restish api.rest.sh/example -o gron | grep -i github
 ```
 
+## Token-Dense Output For Agents
+
+`toon` encodes the response as [TOON](https://github.com/toon-format/spec), a
+compact format that cuts token count when feeding API responses to LLM agents.
+Pair it with a filter that projects to a uniform list of records for the
+largest savings:
+
+```bash
+restish api.rest.sh/images -f '.[] | {name, format}' -o toon
+```
+
+See [Output Formats](/docs/reference/output-formats/#toon-for-agents) for the
+tradeoffs.
+
 ## Related Pages
 
 - [Query Syntax](/docs/reference/query-syntax/)
