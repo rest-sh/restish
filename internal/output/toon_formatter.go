@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -262,26 +263,10 @@ func encodeTOONScalar(v any) string {
 		return encodeTOONFloat(x)
 	case float32:
 		return encodeTOONFloat(float64(x))
-	case int:
-		return strconv.FormatInt(int64(x), 10)
-	case int8:
-		return strconv.FormatInt(int64(x), 10)
-	case int16:
-		return strconv.FormatInt(int64(x), 10)
-	case int32:
-		return strconv.FormatInt(int64(x), 10)
-	case int64:
-		return strconv.FormatInt(x, 10)
-	case uint:
-		return strconv.FormatUint(uint64(x), 10)
-	case uint8:
-		return strconv.FormatUint(uint64(x), 10)
-	case uint16:
-		return strconv.FormatUint(uint64(x), 10)
-	case uint32:
-		return strconv.FormatUint(uint64(x), 10)
-	case uint64:
-		return strconv.FormatUint(x, 10)
+	case int, int8, int16, int32, int64:
+		return strconv.FormatInt(reflect.ValueOf(v).Int(), 10)
+	case uint, uint8, uint16, uint32, uint64:
+		return strconv.FormatUint(reflect.ValueOf(v).Uint(), 10)
 	case []byte:
 		// Mirror JSON, which base64-encodes byte slices as strings.
 		return encodeTOONString(base64.StdEncoding.EncodeToString(x))
