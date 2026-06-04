@@ -1058,6 +1058,7 @@ body.td-home .td-navbar__search .td-search-input {
   font-weight: 700;
   line-height: 0.96;
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .restish-blog-hero--index h1 {
@@ -1314,6 +1315,7 @@ body.td-home .td-navbar__search .td-search-input {
   color: var(--restish-card-title);
   font-size: clamp(1.55rem, 3vw, 2rem);
   line-height: 1.12;
+  text-wrap: balance;
 }
 
 .td-content .restish-blog-cta h2::after {
@@ -1662,6 +1664,13 @@ body.td-home .td-default main > section.restish-hero:first-of-type {
   align-items: center;
   gap: 1rem;
   margin-top: 1.85rem;
+}
+
+.restish-hero__actions .restish-install-copy,
+.restish-blog-cta__actions .restish-install-copy {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 18rem;
 }
 
 .restish-button {
@@ -2298,6 +2307,11 @@ body.td-home .td-default main > section.restish-hero:first-of-type {
   .restish-install-copy {
     grid-template-columns: minmax(0, 1fr) 2.5rem;
     max-width: 100%;
+  }
+
+  .restish-hero__actions .restish-install-copy,
+  .restish-blog-cta__actions .restish-install-copy {
+    width: 100%;
   }
 
   .restish-install-copy code {
