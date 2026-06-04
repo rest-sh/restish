@@ -228,6 +228,7 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 		}
 	}
 
+	var migratedPKCS11 bool
 	if legacy.TLS != nil && legacy.TLS.PKCS11 != nil {
 		if api.Profiles == nil {
 			api.Profiles = map[string]*ProfileConfig{}
@@ -249,6 +250,7 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 		if legacy.TLS.PKCS11.Label != "" && prof.TLSSignerParams["label"] == "" {
 			prof.TLSSignerParams["label"] = legacy.TLS.PKCS11.Label
 		}
+		migratedPKCS11 = true
 	}
 
 	if legacy.TLS != nil && (legacy.TLS.Cert != "" || legacy.TLS.Key != "") {
@@ -271,6 +273,9 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 	var warnings []string
 	if warning != "" {
 		warnings = append(warnings, warning)
+	}
+	if migratedPKCS11 {
+		warnings = append(warnings, fmt.Sprintf("api %q: migrated PKCS#11 TLS config; install the restish-pkcs11 plugin to continue using it (see https://github.com/rest-sh/restish)", name))
 	}
 	return api, warnings
 }
