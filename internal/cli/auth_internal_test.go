@@ -363,3 +363,50 @@ func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
 		t.Fatalf("failure color = %q, want #ff0000", oauthHandler.CallbackFailureColor)
 	}
 }
+
+func TestOperationSetForAPIHintsAPISync_WhenCacheEmpty(t *testing.T) {
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir() // empty cache dir
+
+	apiCfg := &config.APIConfig{BaseURL: "https://api.example.com"}
+	set, ok, err := c.operationSetForAPI(context.Background(), "example", apiCfg, "default", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok || len(set.Operations) > 0 {
+		t.Fatal("expected empty operation set from cold cache")
+	}
+	if !strings.Contains(stderr.String(), "api sync example") {
+		t.Fatalf("expected api sync hint on stderr, got: %q", stderr.String())
+	}
+}
+
+func TestOperationSetForAPINoHintWhenForceRefresh(t *testing.T) {
+	// forceRefresh=true means an explicit sync is already in progress; no hint.
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	apiCfg := &config.APIConfig{BaseURL: "https://203.0.113.1"} // unroutable, discovery will fail
+	_, _, _ = c.operationSetForAPI(context.Background(), "example", apiCfg, "default", true)
+	if strings.Contains(stderr.String(), "api sync") {
+		t.Fatalf("expected no api sync hint during forceRefresh, got: %q", stderr.String())
+	}
+}
+
+func TestOperationSetForAPINoHintWhenNoSpecSource(t *testing.T) {
+	// An API with no BaseURL, no SpecURL, no SpecFiles configured has nothing to sync.
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	apiCfg := &config.APIConfig{}
+	_, _, _ = c.operationSetForAPI(context.Background(), "bare", apiCfg, "default", false)
+	if strings.Contains(stderr.String(), "api sync") {
+		t.Fatalf("expected no api sync hint for API with no spec source, got: %q", stderr.String())
+	}
+}
