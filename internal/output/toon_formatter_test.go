@@ -87,6 +87,19 @@ func TestTOONExpandedListMixed(t *testing.T) {
 	}
 }
 
+// TestTOONExpandedListEmptyObject verifies that an empty object inside a
+// non-uniform array renders as a bare dash list item.
+func TestTOONExpandedListEmptyObject(t *testing.T) {
+	body := []any{
+		map[string]any{},
+		map[string]any{"a": float64(1)},
+	}
+	want := "[2]:\n  -\n  - a: 1\n"
+	if got := renderTOON(t, body); got != want {
+		t.Errorf("empty-object list item mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+
 // TestTOONEmptyContainers verifies empty arrays/objects at root and field
 // positions.
 func TestTOONEmptyContainers(t *testing.T) {
@@ -124,7 +137,18 @@ func TestTOONScalars(t *testing.T) {
 		{"whole float is integer", 1.0, "1\n"},
 		{"no exponent in range", 1000000.0, "1000000\n"},
 		{"negative zero normalized", math.Copysign(0, -1), "0\n"},
+		{"int64", int64(42), "42\n"},
+		{"uint64", uint64(7), "7\n"},
+		{"float32", float32(1.5), "1.5\n"},
+		{"byte slice as base64", []byte("hi"), "aGk=\n"},
+		{"NaN encodes as null", math.NaN(), "null\n"},
+		{"positive infinity as null", math.Inf(1), "null\n"},
+		{"negative infinity as null", math.Inf(-1), "null\n"},
+		{"large magnitude uses exponent", 1e21, "1e+21\n"},
+		{"tiny magnitude uses exponent", 1e-7, "1e-07\n"},
+		{"control char escaped", "a\x01b", "\"a\\u0001b\"\n"},
 		{"json.Number int", json.Number("42"), "42\n"},
+		{"json.Number big int beyond float64", json.Number("123456789012345678901"), "123456789012345678901\n"},
 		{"json.Number trailing zeros", json.Number("1.500"), "1.5\n"},
 		{"quote on delimiter", "a,b", "\"a,b\"\n"},
 		{"quote keyword lookalike", "true", "\"true\"\n"},
