@@ -19,13 +19,15 @@ import (
 //
 // This is an output-only encoder pinned to TOON spec v3.3
 // (https://github.com/toon-format/spec). It uses the default comma delimiter
-// and two-space indentation. Object keys and tabular field names are emitted in
-// sorted order so output is deterministic.
+// and two-space indentation. Map-backed object keys, including tabular field
+// names derived from maps, are emitted in sorted order so normal Restish output
+// is deterministic.
 //
-// TOON's largest savings come from uniform arrays of objects, which collapse
-// into a tabular form that declares field names once and then streams rows.
-// Non-uniform arrays fall back to an expanded dash-marked list, and deeply
-// nested or irregular data saves little versus JSON.
+// TOON's largest savings come from uniform arrays of flat, primitive-valued
+// objects, which collapse into a tabular form that declares field names once and
+// then streams rows. Non-uniform or nested arrays fall back to an expanded
+// dash-marked list, and deeply nested or irregular data saves little versus
+// JSON.
 type TOONFormatter struct{}
 
 // toonIndentUnit is the per-level indentation. The spec mandates spaces (tabs
@@ -127,9 +129,9 @@ func encodeTOONField(buf *bytes.Buffer, depth int, key string, val any) {
 }
 
 // encodeTOONArray writes an array using the most compact applicable form:
-// inline for all-primitive arrays, tabular for uniform object arrays, and an
-// expanded dash list otherwise. keyTok is the already-encoded key, or "" for a
-// root array.
+// inline for all-primitive arrays, tabular for flat primitive-valued object
+// arrays with a uniform key set, and an expanded dash list otherwise. keyTok is
+// the already-encoded key, or "" for a root array.
 func encodeTOONArray(buf *bytes.Buffer, depth int, keyTok string, arr []any, ctx toonArrayContext) {
 	writeTOONIndent(buf, depth)
 	if len(arr) == 0 {

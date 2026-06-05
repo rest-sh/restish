@@ -79,9 +79,10 @@ feeding API responses to LLM agents — for example when Restish is the tool
 surface an agent calls instead of an MCP server — where every response token
 has a cost.
 
-TOON's savings come from uniform arrays of objects. Such an array collapses
-into a table that declares its field names once and then streams one row per
-record, instead of repeating every key on every element:
+TOON's largest savings come from uniform arrays of flat objects whose values are
+primitives. Such an array collapses into a table that declares its field names
+once and then streams one row per record, instead of repeating every key on
+every element:
 
 ```bash
 restish api.rest.sh/images -o toon
@@ -137,10 +138,11 @@ collection of nested, irregular objects.
 | ndjson | 3,000 | 2,800 |
 | gron | 6,403 | 6,783 |
 
-On these uniform record collections, TOON is the most token-efficient built-in
-lossless text format, and the lead grows with row count. On nested or irregular
-data, compact JSON and NDJSON edge it out — TOON's per-line indentation
-outweighs the savings — so project to a uniform list first, or stay on JSON.
+On these uniform, primitive-valued record collections, TOON is the most
+token-efficient built-in lossless text format, and the lead grows with row
+count. On nested or irregular data, compact JSON and NDJSON edge it out —
+TOON's per-line indentation outweighs the savings — so project to a flat,
+primitive-valued list first, or stay on JSON.
 
 Not shown: `table` is human-only and truncates long values (lossy), `lines`
 only handles scalar arrays, and `cbor` is binary rather than text.

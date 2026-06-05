@@ -11,9 +11,9 @@ models.
 The motivating workflow is using Restish as the tool surface for an LLM agent
 (in place of, or alongside, an MCP server — see design 023). In that setup every
 response the agent reads, and every list it pages through, costs input tokens.
-TOON's tabular encoding of uniform object arrays declares field names once and
-streams rows, which materially cuts token count for the list/collection
-responses that dominate REST APIs.
+TOON's tabular encoding of uniform arrays of flat, primitive-valued objects
+declares field names once and streams rows, which materially cuts token count
+for the list/collection responses that dominate REST APIs.
 
 This is an **output-only, opt-in, additive** change: a new value for
 `-o/--rsh-output-format`. It introduces no new default behavior and no
@@ -30,8 +30,9 @@ representation of the same data.
 **Goals:**
 
 - Provide `-o toon` to render response bodies as TOON.
-- Make the largest savings reachable where they exist: uniform arrays of objects
-  (list endpoints, or `-f` projections that produce such lists).
+- Make the largest savings reachable where they exist: uniform arrays of flat,
+  primitive-valued objects (list endpoints, or `-f` projections that produce
+  such lists).
 - Compose with existing filtering, pagination, and streaming, since the agent
   use case almost always projects before encoding.
 - Track a pinned TOON spec version with official encode fixtures and focused
@@ -77,11 +78,11 @@ representation of the same data.
 **Validation:**
 
 - Tests: formatter tests plus official TOON encode fixtures under
-  `internal/output/testdata` covering objects, uniform object arrays (tabular
-  form), non-uniform arrays (expanded list form), nested structures, primitive
-  arrays, empty arrays/objects, null, booleans, numeric normalization, and
-  strings requiring quoting. Behavior tests verify that `-o toon` is selectable
-  and composes with `-f`.
+  `internal/output/testdata` covering objects, flat primitive-valued object
+  arrays (tabular form), non-uniform arrays (expanded list form), nested
+  structures, primitive arrays, empty arrays/objects, null, booleans, numeric
+  normalization, and strings requiring quoting. Behavior tests verify that
+  `-o toon` is selectable and composes with `-f`.
 - Docs/help: `site/` output docs gain a TOON section; flag help updates
   automatically.
 - Manual checks: confirm token reduction on a representative list response vs
@@ -121,9 +122,9 @@ Rationale:
   precedent (`github.com/fxamacker/cbor`, mature and widely used) and a
   realistic merge blocker for a security-sensitive CLI's output surface.
 - The encoder is output-only and bounded: objects, inline primitive arrays,
-  tabular uniform-object arrays, expanded-list fallback, plus the quoting and
-  number-canonicalization rules. The spec is precise enough to implement
-  directly.
+  tabular flat primitive-valued object arrays, expanded-list fallback, plus the
+  quoting and number-canonicalization rules. The spec is precise enough to
+  implement directly.
 - Owning the code keeps the dependency footprint flat and makes the output
   contract fully auditable in-repo.
 
@@ -204,10 +205,11 @@ type fidelity (`null` vs `"null"`, `3` vs `"3"` render identically).
 
 ## Tradeoffs / Honest Limitations
 
-- **Savings are shape-dependent.** TOON wins big on uniform arrays of objects,
-  scaling with row count. For deeply nested or irregular JSON, compact JSON can
-  be *smaller* than TOON (its indentation overhead exceeds the brace/quote
-  savings). Docs state this and steer users to `-f` projection first.
+- **Savings are shape-dependent.** TOON wins big on uniform arrays of flat,
+  primitive-valued objects, scaling with row count. For deeply nested or
+  irregular JSON, compact JSON can be *smaller* than TOON (its indentation
+  overhead exceeds the brace/quote savings). Docs state this and steer users to
+  `-f` projection first.
 - **Filtering is the bigger lever.** `-f` (jq/shorthand) drops unneeded fields
   entirely and usually saves more tokens than re-encoding. TOON is complementary,
   not a replacement; the docs lead with `-f ... -o toon`.
