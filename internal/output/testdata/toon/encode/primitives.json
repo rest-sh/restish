@@ -1,0 +1,257 @@
+{
+  "version": "3.1",
+  "category": "encode",
+  "description": "Primitive value encoding - strings, numbers, booleans, null",
+  "tests": [
+    {
+      "name": "encodes safe strings without quotes",
+      "input": "hello",
+      "expected": "hello",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes safe string with underscore and numbers",
+      "input": "Ada_99",
+      "expected": "Ada_99",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes empty string",
+      "input": "",
+      "expected": "\"\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string that looks like true",
+      "input": "true",
+      "expected": "\"true\"",
+      "specSection": "7.2",
+      "note": "String representation of boolean must be quoted"
+    },
+    {
+      "name": "quotes string that looks like false",
+      "input": "false",
+      "expected": "\"false\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string that looks like null",
+      "input": "null",
+      "expected": "\"null\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string that looks like integer",
+      "input": "42",
+      "expected": "\"42\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string that looks like negative decimal",
+      "input": "-3.14",
+      "expected": "\"-3.14\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string that looks like scientific notation",
+      "input": "1e-6",
+      "expected": "\"1e-6\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string with leading zero",
+      "input": "05",
+      "expected": "\"05\"",
+      "specSection": "7.2",
+      "note": "Leading zeros make it non-numeric"
+    },
+    {
+      "name": "escapes newline in string",
+      "input": "line1\nline2",
+      "expected": "\"line1\\nline2\"",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes tab in string",
+      "input": "tab\there",
+      "expected": "\"tab\\there\"",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes carriage return in string",
+      "input": "return\rcarriage",
+      "expected": "\"return\\rcarriage\"",
+      "specSection": "7.1"
+    },
+    {
+      "name": "encodes string with U+0004 control character via \\uXXXX",
+      "input": { "val": "a\u0004b" },
+      "expected": "val: \"a\\u0004b\"",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes backslash in string",
+      "input": "C:\\Users\\path",
+      "expected": "\"C:\\\\Users\\\\path\"",
+      "specSection": "7.1"
+    },
+    {
+      "name": "quotes string with array-like syntax",
+      "input": "[3]: x,y",
+      "expected": "\"[3]: x,y\"",
+      "specSection": "7.2",
+      "note": "Looks like array header"
+    },
+    {
+      "name": "quotes string starting with hyphen-space",
+      "input": "- item",
+      "expected": "\"- item\"",
+      "specSection": "7.2",
+      "note": "Looks like list item marker"
+    },
+    {
+      "name": "quotes single hyphen as object value",
+      "input": { "marker": "-" },
+      "expected": "marker: \"-\"",
+      "specSection": "7.2",
+      "note": "Single hyphen must be quoted to avoid list item ambiguity"
+    },
+    {
+      "name": "quotes string starting with hyphen as object value",
+      "input": { "note": "- item" },
+      "expected": "note: \"- item\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes single hyphen in array",
+      "input": { "items": ["-"] },
+      "expected": "items[1]: \"-\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes leading-hyphen string in array",
+      "input": { "tags": ["a", "- item", "b"] },
+      "expected": "tags[3]: a,\"- item\",b",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string with bracket notation",
+      "input": "[test]",
+      "expected": "\"[test]\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string with brace notation",
+      "input": "{key}",
+      "expected": "\"{key}\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes Unicode string without quotes",
+      "input": "café",
+      "expected": "café",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes Chinese characters without quotes",
+      "input": "你好",
+      "expected": "你好",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes emoji without quotes",
+      "input": "🚀",
+      "expected": "🚀",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes string with emoji and spaces",
+      "input": "hello 👋 world",
+      "expected": "hello 👋 world",
+      "specSection": "7.2"
+    },
+    {
+      "name": "encodes positive integer",
+      "input": 42,
+      "expected": "42",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes decimal number",
+      "input": 3.14,
+      "expected": "3.14",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes negative integer",
+      "input": -7,
+      "expected": "-7",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes zero",
+      "input": 0,
+      "expected": "0",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes negative zero as zero",
+      "input": -0,
+      "expected": "0",
+      "specSection": "2",
+      "note": "Negative zero normalizes to zero"
+    },
+    {
+      "name": "encodes scientific notation as decimal",
+      "input": 1000000,
+      "expected": "1000000",
+      "specSection": "2",
+      "note": "1e6 input, but represented as decimal"
+    },
+    {
+      "name": "encodes small decimal from scientific notation",
+      "input": 0.000001,
+      "expected": "0.000001",
+      "specSection": "2",
+      "note": "1e-6 input"
+    },
+    {
+      "name": "encodes large number",
+      "input": 100000000000000000000,
+      "expected": "100000000000000000000",
+      "specSection": "2",
+      "note": "1e20"
+    },
+    {
+      "name": "encodes MAX_SAFE_INTEGER",
+      "input": 9007199254740991,
+      "expected": "9007199254740991",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes repeating decimal with full precision",
+      "input": 0.3333333333333333,
+      "expected": "0.3333333333333333",
+      "specSection": "2",
+      "note": "Result of 1/3 in JavaScript"
+    },
+    {
+      "name": "encodes true",
+      "input": true,
+      "expected": "true",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes false",
+      "input": false,
+      "expected": "false",
+      "specSection": "2"
+    },
+    {
+      "name": "encodes null",
+      "input": null,
+      "expected": "null",
+      "specSection": "2"
+    }
+  ]
+}

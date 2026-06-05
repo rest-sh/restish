@@ -1,0 +1,238 @@
+{
+  "version": "1.4",
+  "category": "encode",
+  "description": "Object encoding - simple objects, nested objects, key encoding",
+  "tests": [
+    {
+      "name": "preserves key order in objects",
+      "input": {
+        "id": 123,
+        "name": "Ada",
+        "active": true
+      },
+      "expected": "id: 123\nname: Ada\nactive: true",
+      "specSection": "8"
+    },
+    {
+      "name": "encodes null values in objects",
+      "input": {
+        "id": 123,
+        "value": null
+      },
+      "expected": "id: 123\nvalue: null",
+      "specSection": "8"
+    },
+    {
+      "name": "encodes empty objects as empty string",
+      "input": {},
+      "expected": "",
+      "specSection": "8"
+    },
+    {
+      "name": "quotes string value with colon",
+      "input": {
+        "note": "a:b"
+      },
+      "expected": "note: \"a:b\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value with comma",
+      "input": {
+        "note": "a,b"
+      },
+      "expected": "note: \"a,b\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value with newline",
+      "input": {
+        "text": "line1\nline2"
+      },
+      "expected": "text: \"line1\\nline2\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value with embedded quotes",
+      "input": {
+        "text": "say \"hello\""
+      },
+      "expected": "text: \"say \\\"hello\\\"\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value with leading space",
+      "input": {
+        "text": " padded "
+      },
+      "expected": "text: \" padded \"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value with only spaces",
+      "input": {
+        "text": "  "
+      },
+      "expected": "text: \"  \"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value that looks like true",
+      "input": {
+        "v": "true"
+      },
+      "expected": "v: \"true\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value that looks like number",
+      "input": {
+        "v": "42"
+      },
+      "expected": "v: \"42\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes string value that looks like negative decimal",
+      "input": {
+        "v": "-7.5"
+      },
+      "expected": "v: \"-7.5\"",
+      "specSection": "7.2"
+    },
+    {
+      "name": "quotes key with colon",
+      "input": {
+        "order:id": 7
+      },
+      "expected": "\"order:id\": 7",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with brackets",
+      "input": {
+        "[index]": 5
+      },
+      "expected": "\"[index]\": 5",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with braces",
+      "input": {
+        "{key}": 5
+      },
+      "expected": "\"{key}\": 5",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with comma",
+      "input": {
+        "a,b": 1
+      },
+      "expected": "\"a,b\": 1",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with spaces",
+      "input": {
+        "full name": "Ada"
+      },
+      "expected": "\"full name\": Ada",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with leading hyphen",
+      "input": {
+        "-lead": 1
+      },
+      "expected": "\"-lead\": 1",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes key with leading and trailing spaces",
+      "input": {
+        " a ": 1
+      },
+      "expected": "\" a \": 1",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes numeric key",
+      "input": {
+        "123": "x"
+      },
+      "expected": "\"123\": x",
+      "specSection": "7.3"
+    },
+    {
+      "name": "quotes empty string key",
+      "input": {
+        "": 1
+      },
+      "expected": "\"\": 1",
+      "specSection": "7.3"
+    },
+    {
+      "name": "escapes newline in key",
+      "input": {
+        "line\nbreak": 1
+      },
+      "expected": "\"line\\nbreak\": 1",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes tab in key",
+      "input": {
+        "tab\there": 2
+      },
+      "expected": "\"tab\\there\": 2",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes quotes in key",
+      "input": {
+        "he said \"hi\"": 1
+      },
+      "expected": "\"he said \\\"hi\\\"\": 1",
+      "specSection": "7.1"
+    },
+    {
+      "name": "escapes U+0004 control character in key via \\uXXXX",
+      "input": {
+        "a\u0004b": 1
+      },
+      "expected": "\"a\\u0004b\": 1",
+      "specSection": "7.1",
+      "minSpecVersion": "3.1"
+    },
+    {
+      "name": "escapes U+001F control character in key via \\uXXXX",
+      "input": {
+        "x\u001fy": 2
+      },
+      "expected": "\"x\\u001fy\": 2",
+      "specSection": "7.1",
+      "minSpecVersion": "3.1"
+    },
+    {
+      "name": "encodes deeply nested objects",
+      "input": {
+        "a": {
+          "b": {
+            "c": "deep"
+          }
+        }
+      },
+      "expected": "a:\n  b:\n    c: deep",
+      "specSection": "8"
+    },
+    {
+      "name": "encodes empty nested object",
+      "input": {
+        "user": {}
+      },
+      "expected": "user:",
+      "specSection": "8"
+    }
+  ]
+}

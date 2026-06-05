@@ -170,6 +170,7 @@ were a recurring source of remediation work.
 - [038-doctor-and-health-checks.md](./038-doctor-and-health-checks.md) - Operator diagnostics, health checks, stderr behavior, bounded network probing, and v1 migration recovery.
 - [039-http-cache-spike.md](./039-http-cache-spike.md) - Spike comparing the current HTTP cache transport with a maintained fork and defining acceptance tests for a safer cache swap.
 - [040-generated-docs-and-drift-checks.md](./040-generated-docs-and-drift-checks.md) - Maintainer docs generation, inline generated regions, plugin-binary command references, and CI drift checks.
+- [041-toon-output-format.md](./041-toon-output-format.md) - Token-dense TOON output formatter for feeding responses to LLM agents, including the hand-rolled encoder decision and shape-dependent savings.
 
 **Extensibility**
 

@@ -1,0 +1,253 @@
+{
+  "version": "1.4",
+  "category": "encode",
+  "description": "Delimiter options - tab and pipe delimiters, delimiter-aware quoting",
+  "tests": [
+    {
+      "name": "encodes primitive arrays with tab delimiter",
+      "input": {
+        "tags": ["reading", "gaming", "coding"]
+      },
+      "expected": "tags[3\t]: reading\tgaming\tcoding",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes primitive arrays with pipe delimiter",
+      "input": {
+        "tags": ["reading", "gaming", "coding"]
+      },
+      "expected": "tags[3|]: reading|gaming|coding",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes primitive arrays with comma delimiter",
+      "input": {
+        "tags": ["reading", "gaming", "coding"]
+      },
+      "expected": "tags[3]: reading,gaming,coding",
+      "options": {
+        "delimiter": ","
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes tabular arrays with tab delimiter",
+      "input": {
+        "items": [
+          { "sku": "A1", "qty": 2, "price": 9.99 },
+          { "sku": "B2", "qty": 1, "price": 14.5 }
+        ]
+      },
+      "expected": "items[2\t]{sku\tqty\tprice}:\n  A1\t2\t9.99\n  B2\t1\t14.5",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes tabular arrays with pipe delimiter",
+      "input": {
+        "items": [
+          { "sku": "A1", "qty": 2, "price": 9.99 },
+          { "sku": "B2", "qty": 1, "price": 14.5 }
+        ]
+      },
+      "expected": "items[2|]{sku|qty|price}:\n  A1|2|9.99\n  B2|1|14.5",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes nested arrays with tab delimiter",
+      "input": {
+        "pairs": [["a", "b"], ["c", "d"]]
+      },
+      "expected": "pairs[2\t]:\n  - [2\t]: a\tb\n  - [2\t]: c\td",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes nested arrays with pipe delimiter",
+      "input": {
+        "pairs": [["a", "b"], ["c", "d"]]
+      },
+      "expected": "pairs[2|]:\n  - [2|]: a|b\n  - [2|]: c|d",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes root-level array with tab delimiter",
+      "input": ["x", "y", "z"],
+      "expected": "[3\t]: x\ty\tz",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes root-level array with pipe delimiter",
+      "input": ["x", "y", "z"],
+      "expected": "[3|]: x|y|z",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes root-level array of objects with tab delimiter",
+      "input": [{ "id": 1 }, { "id": 2 }],
+      "expected": "[2\t]{id}:\n  1\n  2",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "encodes root-level array of objects with pipe delimiter",
+      "input": [{ "id": 1 }, { "id": 2 }],
+      "expected": "[2|]{id}:\n  1\n  2",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "quotes strings containing tab delimiter",
+      "input": {
+        "items": ["a", "b\tc", "d"]
+      },
+      "expected": "items[3\t]: a\t\"b\\tc\"\td",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "quotes strings containing pipe delimiter",
+      "input": {
+        "items": ["a", "b|c", "d"]
+      },
+      "expected": "items[3|]: a|\"b|c\"|d",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "does not quote commas with tab delimiter",
+      "input": {
+        "items": ["a,b", "c,d"]
+      },
+      "expected": "items[2\t]: a,b\tc,d",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "does not quote commas with pipe delimiter",
+      "input": {
+        "items": ["a,b", "c,d"]
+      },
+      "expected": "items[2|]: a,b|c,d",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "quotes tabular values containing comma delimiter",
+      "input": {
+        "items": [
+          { "id": 1, "note": "a,b" },
+          { "id": 2, "note": "c,d" }
+        ]
+      },
+      "expected": "items[2]{id,note}:\n  1,\"a,b\"\n  2,\"c,d\"",
+      "options": {
+        "delimiter": ","
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "does not quote commas in tabular values with tab delimiter",
+      "input": {
+        "items": [
+          { "id": 1, "note": "a,b" },
+          { "id": 2, "note": "c,d" }
+        ]
+      },
+      "expected": "items[2\t]{id\tnote}:\n  1\ta,b\n  2\tc,d",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "does not quote commas in object values with pipe delimiter",
+      "input": {
+        "note": "a,b"
+      },
+      "expected": "note: a,b",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "does not quote commas in object values with tab delimiter",
+      "input": {
+        "note": "a,b"
+      },
+      "expected": "note: a,b",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "quotes nested array values containing pipe delimiter",
+      "input": {
+        "pairs": [["a", "b|c"]]
+      },
+      "expected": "pairs[1|]:\n  - [2|]: a|\"b|c\"",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "quotes nested array values containing tab delimiter",
+      "input": {
+        "pairs": [["a", "b\tc"]]
+      },
+      "expected": "pairs[1\t]:\n  - [2\t]: a\t\"b\\tc\"",
+      "options": {
+        "delimiter": "\t"
+      },
+      "specSection": "11"
+    },
+    {
+      "name": "preserves ambiguity quoting regardless of delimiter",
+      "input": {
+        "items": ["true", "42", "-3.14"]
+      },
+      "expected": "items[3|]: \"true\"|\"42\"|\"-3.14\"",
+      "options": {
+        "delimiter": "|"
+      },
+      "specSection": "11"
+    }
+  ]
+}

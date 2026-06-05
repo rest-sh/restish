@@ -1,0 +1,103 @@
+{
+  "version": "3.1",
+  "category": "encode",
+  "description": "Primitive array encoding - inline arrays of strings, numbers, booleans",
+  "tests": [
+    {
+      "name": "encodes string arrays inline",
+      "input": {
+        "tags": ["reading", "gaming"]
+      },
+      "expected": "tags[2]: reading,gaming",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes number arrays inline",
+      "input": {
+        "nums": [1, 2, 3]
+      },
+      "expected": "nums[3]: 1,2,3",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes mixed primitive arrays inline",
+      "input": {
+        "data": ["x", "y", true, 10]
+      },
+      "expected": "data[4]: x,y,true,10",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes empty arrays",
+      "input": {
+        "items": []
+      },
+      "expected": "items: []",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes empty string keys for inline arrays",
+      "input": {
+        "": [1, 2, 3]
+      },
+      "expected": "\"\"[3]: 1,2,3",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes empty string keys for empty arrays",
+      "input": {
+        "": []
+      },
+      "expected": "\"\": []",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes empty string in single-item array",
+      "input": {
+        "items": [""]
+      },
+      "expected": "items[1]: \"\"",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes empty string in multi-item array",
+      "input": {
+        "items": ["a", "", "b"]
+      },
+      "expected": "items[3]: a,\"\",b",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes whitespace-only strings in arrays",
+      "input": {
+        "items": [" ", "  "]
+      },
+      "expected": "items[2]: \" \",\"  \"",
+      "specSection": "9.1"
+    },
+    {
+      "name": "quotes array strings with comma",
+      "input": {
+        "items": ["a", "b,c", "d:e"]
+      },
+      "expected": "items[3]: a,\"b,c\",\"d:e\"",
+      "specSection": "9.1"
+    },
+    {
+      "name": "quotes strings that look like booleans in arrays",
+      "input": {
+        "items": ["x", "true", "42", "-3.14"]
+      },
+      "expected": "items[4]: x,\"true\",\"42\",\"-3.14\"",
+      "specSection": "9.1"
+    },
+    {
+      "name": "quotes strings with structural meanings in arrays",
+      "input": {
+        "items": ["[5]", "- item", "{key}"]
+      },
+      "expected": "items[3]: \"[5]\",\"- item\",\"{key}\"",
+      "specSection": "9.1"
+    }
+  ]
+}

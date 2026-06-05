@@ -1,0 +1,168 @@
+{
+  "version": "3.1",
+  "category": "encode",
+  "description": "Arrays of objects encoding - list format for non-uniform objects and complex structures",
+  "tests": [
+    {
+      "name": "uses list format for objects with different fields",
+      "input": {
+        "items": [
+          { "id": 1, "name": "First" },
+          { "id": 2, "name": "Second", "extra": true }
+        ]
+      },
+      "expected": "items[2]:\n  - id: 1\n    name: First\n  - id: 2\n    name: Second\n    extra: true",
+      "specSection": "9.4"
+    },
+    {
+      "name": "uses list format for objects with nested values",
+      "input": {
+        "items": [
+          { "id": 1, "nested": { "x": 1 } }
+        ]
+      },
+      "expected": "items[1]:\n  - id: 1\n    nested:\n      x: 1",
+      "specSection": "9.4"
+    },
+    {
+      "name": "preserves field order in list items - array first",
+      "input": {
+        "items": [{ "nums": [1, 2, 3], "name": "Ada" }]
+      },
+      "expected": "items[1]:\n  - nums[3]: 1,2,3\n    name: Ada",
+      "specSection": "10"
+    },
+    {
+      "name": "preserves field order in list items - primitive first",
+      "input": {
+        "items": [{ "name": "Ada", "nums": [1, 2, 3] }]
+      },
+      "expected": "items[1]:\n  - name: Ada\n    nums[3]: 1,2,3",
+      "specSection": "10"
+    },
+    {
+      "name": "uses list format for objects containing arrays of arrays",
+      "input": {
+        "items": [
+          { "matrix": [[1, 2], [3, 4]], "name": "grid" }
+        ]
+      },
+      "expected": "items[1]:\n  - matrix[2]:\n      - [2]: 1,2\n      - [2]: 3,4\n    name: grid",
+      "specSection": "10"
+    },
+    {
+      "name": "uses tabular format for nested uniform object arrays",
+      "input": {
+        "items": [
+          { "users": [{ "id": 1, "name": "Ada" }, { "id": 2, "name": "Bob" }], "status": "active" }
+        ]
+      },
+      "expected": "items[1]:\n  - users[2]{id,name}:\n      1,Ada\n      2,Bob\n    status: active",
+      "specSection": "10",
+      "note": "YAML-style encoding for list-item objects with tabular array as first field"
+    },
+    {
+      "name": "uses list format for nested object arrays with mismatched keys",
+      "input": {
+        "items": [
+          { "users": [{ "id": 1, "name": "Ada" }, { "id": 2 }], "status": "active" }
+        ]
+      },
+      "expected": "items[1]:\n  - users[2]:\n      - id: 1\n        name: Ada\n      - id: 2\n    status: active",
+      "specSection": "10"
+    },
+    {
+      "name": "uses list format for objects with multiple array fields",
+      "input": {
+        "items": [{ "nums": [1, 2], "tags": ["a", "b"], "name": "test" }]
+      },
+      "expected": "items[1]:\n  - nums[2]: 1,2\n    tags[2]: a,b\n    name: test",
+      "specSection": "10"
+    },
+    {
+      "name": "uses list format for objects with only array fields",
+      "input": {
+        "items": [{ "nums": [1, 2, 3], "tags": ["a", "b"] }]
+      },
+      "expected": "items[1]:\n  - nums[3]: 1,2,3\n    tags[2]: a,b",
+      "specSection": "10"
+    },
+    {
+      "name": "encodes objects with empty arrays in list format",
+      "input": {
+        "items": [
+          { "name": "Ada", "data": [] }
+        ]
+      },
+      "expected": "items[1]:\n  - name: Ada\n    data: []",
+      "specSection": "10"
+    },
+    {
+      "name": "uses canonical encoding for multi-field list-item objects with tabular arrays",
+      "input": {
+        "items": [{ "users": [{ "id": 1 }, { "id": 2 }], "note": "x" }]
+      },
+      "expected": "items[1]:\n  - users[2]{id}:\n      1\n      2\n    note: x",
+      "specSection": "10",
+      "note": "Tabular header on hyphen line with rows at depth +2 and sibling fields at depth +1"
+    },
+    {
+      "name": "uses canonical encoding for single-field list-item tabular arrays",
+      "input": {
+        "items": [{ "users": [{ "id": 1, "name": "Ada" }, { "id": 2, "name": "Bob" }] }]
+      },
+      "expected": "items[1]:\n  - users[2]{id,name}:\n      1,Ada\n      2,Bob",
+      "specSection": "10",
+      "note": "Tabular header on hyphen line with rows at depth +2"
+    },
+    {
+      "name": "places empty arrays on hyphen line when first",
+      "input": {
+        "items": [{ "data": [], "name": "x" }]
+      },
+      "expected": "items[1]:\n  - data: []\n    name: x",
+      "specSection": "10"
+    },
+    {
+      "name": "encodes empty object list items as bare hyphen",
+      "input": {
+        "items": ["first", "second", {}]
+      },
+      "expected": "items[3]:\n  - first\n  - second\n  -",
+      "specSection": "10",
+      "note": "Empty object list items encode as a single \"-\" line at the list-item depth"
+    },
+    {
+      "name": "uses field order from first object for tabular headers",
+      "input": {
+        "items": [
+          { "a": 1, "b": 2, "c": 3 },
+          { "c": 30, "b": 20, "a": 10 }
+        ]
+      },
+      "expected": "items[2]{a,b,c}:\n  1,2,3\n  10,20,30",
+      "specSection": "9.3"
+    },
+    {
+      "name": "uses list format when one object has nested field",
+      "input": {
+        "items": [
+          { "id": 1, "data": "string" },
+          { "id": 2, "data": { "nested": true } }
+        ]
+      },
+      "expected": "items[2]:\n  - id: 1\n    data: string\n  - id: 2\n    data:\n      nested: true",
+      "specSection": "9.4"
+    },
+    {
+      "name": "uses expanded list for arrays containing empty objects",
+      "input": {
+        "items": [{}, {}]
+      },
+      "expected": "items[2]:\n  -\n  -",
+      "specSection": "9.4",
+      "minSpecVersion": "3.2",
+      "note": "Empty objects {} MUST NOT use tabular form per §9.3; encoded via §9.4 expanded list with bare hyphen markers per §10"
+    }
+  ]
+}

@@ -209,7 +209,7 @@ Filter/project the response using shorthand or jq (auto-detected)
 
 Type: `string`; default: `auto`
 
-Output format for rendered response bodies: auto, cbor, gron, image, json, lines, ndjson, table, yaml (use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)
+Output format for rendered response bodies: auto, cbor, gron, image, json, lines, ndjson, table, toon, yaml (use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)
 
 **`-p`, `--rsh-profile`**
 
@@ -284,7 +284,7 @@ and leaves generic HTTP commands unchanged.
 | --- | --- | --- | --- |
 | `-f`, `--rsh-filter` | expression | none | Filter with shorthand or jq. |
 | `--rsh-filter-lang` | `shorthand` or `jq` | auto | Force one parser. |
-| `-o`, `--rsh-output-format` | format | `auto` | `auto`, `json`, `yaml`, `cbor`, `table`, `ndjson`, `lines`, `gron`, `image`, or plugin formats. |
+| `-o`, `--rsh-output-format` | format | `auto` | `auto`, `json`, `yaml`, `cbor`, `table`, `ndjson`, `lines`, `gron`, `toon`, `image`, or plugin formats. |
 | `--rsh-print` | `auto` or letters | `auto` | Print parts: `H` request headers, `B` request body, `h` response status and headers, `b` rendered body, `p` pretty, `c` color. |
 | `--rsh-columns` | comma list | formatter default | Columns for `-o table`. |
 | `--rsh-sort-by` | column name | none | Sort table rows by a column. |

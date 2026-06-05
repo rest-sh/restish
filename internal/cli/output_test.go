@@ -302,6 +302,28 @@ func TestFilteredStructuredOutputPrettyByDefault(t *testing.T) {
 	}
 }
 
+func TestTOONOutputRendersResponseBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `[{"name":"Ada","format":"json"},{"name":"Bob","format":"xml"}]`)
+	if err := c.Run([]string{"restish", "get", "-o", "toon", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "[2]{format,name}:\n  json,Ada\n  xml,Bob\n"; got != want {
+		t.Fatalf("toon output = %q, want %q", got, want)
+	}
+}
+
+func TestTOONOutputRendersFilteredValue(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"items":[{"id":1,"name":"Ada"},{"id":2,"name":"Bob"}],"ignored":true}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.items", "-o", "toon", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "[2]{id,name}:\n  1,Ada\n  2,Bob\n"; got != want {
+		t.Fatalf("filtered toon output = %q, want %q", got, want)
+	}
+}
+
 func TestFilteredTTYOutputColorsPrettyJSONByDefault(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("NOCOLOR", "")
@@ -456,6 +478,27 @@ func TestUnknownOutputFormatSuggestsNearestFormat(t *testing.T) {
 	if !strings.Contains(err.Error(), `unknown output format "jsoon"`) ||
 		!strings.Contains(err.Error(), `did you mean "json"?`) {
 		t.Fatalf("unexpected unknown output format error: %v", err)
+	}
+}
+
+// TestUnknownOutputFormatAmbiguousOmitsSuggestion verifies that a typo equally
+// near two formats (here "tron" is one edit from both "gron" and "toon") lists
+// the available formats without an ambiguous "did you mean" guess.
+func TestUnknownOutputFormatAmbiguousOmitsSuggestion(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent with unknown output format")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "tron", "https://api.example.com/items"})
+	if err == nil {
+		t.Fatal("expected error for unknown output format")
+	}
+	if !strings.Contains(err.Error(), `unknown output format "tron"`) {
+		t.Fatalf("expected unknown-format error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Fatalf("expected no suggestion for ambiguous typo, got: %v", err)
 	}
 }
 
