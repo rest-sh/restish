@@ -778,6 +778,7 @@ type cliArgScan struct {
 	ProfileName             string
 	ConfigPath              string
 	ExplicitConfigPath      bool
+	VersionFlag             bool
 	Silent                  bool
 	Bootstrap               bool
 	GeneratedAPICommandTree bool
@@ -793,11 +794,16 @@ func scanCLIArgs(args []string) cliArgScan {
 		return scan
 	}
 
+	hasHelpFlag := false
 	hasBootstrapFlag := false
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
-		case "--help", "-h", "--version":
+		case "--help", "-h":
+			hasHelpFlag = true
+			hasBootstrapFlag = true
+		case "--version":
+			scan.VersionFlag = true
 			hasBootstrapFlag = true
 		case "--rsh-silent", "-S":
 			scan.Silent = true
@@ -865,6 +871,8 @@ func scanCLIArgs(args []string) cliArgScan {
 	}
 	if hasBootstrapFlag {
 		scan.Bootstrap = true
+	}
+	if hasHelpFlag {
 		scan.GeneratedAPICommandTree = true
 	}
 	return scan
@@ -1137,6 +1145,9 @@ func quietGeneratedWarningsForScan(scan cliArgScan, cfg *config.Config) bool {
 }
 
 func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
+	if scan.VersionFlag {
+		return nil
+	}
 	if scan.GeneratedAPICommandTree {
 		if scan.FirstCommand != "" && !isBuiltinCommandName(scan.FirstCommand) {
 			if _, ok := cfg.APIs[scan.FirstCommand]; ok {

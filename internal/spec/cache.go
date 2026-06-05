@@ -31,12 +31,13 @@ type cacheEntry struct {
 }
 
 type cachedSpecFile struct {
-	Source  string    `cbor:"source"`
-	Local   bool      `cbor:"local,omitempty"`
-	Path    string    `cbor:"path,omitempty"`
-	ModTime time.Time `cbor:"mod_time,omitempty"`
-	Size    int64     `cbor:"size,omitempty"`
-	SHA256  string    `cbor:"sha256,omitempty"`
+	Source          string    `cbor:"source"`
+	Local           bool      `cbor:"local,omitempty"`
+	Path            string    `cbor:"path,omitempty"`
+	ModTime         time.Time `cbor:"mod_time,omitempty"`
+	ModTimeUnixNano int64     `cbor:"mod_time_unix_nano,omitempty"`
+	Size            int64     `cbor:"size,omitempty"`
+	SHA256          string    `cbor:"sha256,omitempty"`
 }
 
 type cachedRaw struct {

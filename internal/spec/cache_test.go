@@ -389,6 +389,100 @@ func TestLoadOperationsFromCache(t *testing.T) {
 	}
 }
 
+func TestLoadOperationSetFromCacheAcceptsLegacyLocalSpecFileSecondPrecisionModTime(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "spec.yaml")
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	if err := os.WriteFile(specPath, raw, 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	mtime := time.Unix(1700000000, 987654321)
+	if err := os.Chtimes(specPath, mtime, mtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	info, err := os.Stat(specPath)
+	if err != nil {
+		t.Fatalf("stat spec: %v", err)
+	}
+	if info.ModTime().Nanosecond() == 0 {
+		t.Skip("filesystem does not preserve subsecond mtimes")
+	}
+	loaded, err := load("application/json", raw, DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	set, err := loaded.OperationSet(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operation set: %v", err)
+	}
+
+	entry := &cacheEntry{
+		Version:   "v2",
+		FetchedAt: info.ModTime().Add(time.Minute),
+		ExpiresAt: time.Now().Add(time.Hour),
+		Spec: cachedRaw{
+			ContentType: "application/json",
+			Raw:         raw,
+			LocalPath:   specPath,
+		},
+		SpecFiles: []cachedSpecFile{{
+			Source:  specPath,
+			Local:   true,
+			Path:    specPath,
+			ModTime: info.ModTime().Truncate(time.Second),
+			Size:    info.Size(),
+		}},
+	}
+	entry.upsertOperationSet(OperationOptions{}, set)
+	if err := writeCache(dir, "testapi", entry); err != nil {
+		t.Fatalf("writeCache: %v", err)
+	}
+
+	got, _, ok := LoadOperationSetFromCacheStatus(dir, "testapi", "v2", []string{specPath}, OperationOptions{}, true)
+	if !ok {
+		t.Fatal("expected operations cache hit")
+	}
+	if len(got.Operations) != 1 || got.Operations[0].ID != "listItems" {
+		t.Fatalf("unexpected operations: %#v", got.Operations)
+	}
+}
+
+func TestStoreSpecInCachePreservesLocalSpecFileNanosecondModTime(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "spec.yaml")
+	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+	if err := os.WriteFile(specPath, raw, 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	mtime := time.Unix(1700000000, 456789123)
+	if err := os.Chtimes(specPath, mtime, mtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	info, err := os.Stat(specPath)
+	if err != nil {
+		t.Fatalf("stat spec: %v", err)
+	}
+	if info.ModTime().Nanosecond() == 0 {
+		t.Skip("filesystem does not preserve subsecond mtimes")
+	}
+	apiSpec, err := OpenAPILoader{}.Load(raw)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if err := StoreSpecInCache(dir, "testapi", "v2", apiSpec, []string{specPath}, OperationOptions{}, time.Hour); err != nil {
+		t.Fatalf("StoreSpecInCache: %v", err)
+	}
+
+	got, _, ok := LoadOperationSetFromCacheStatus(dir, "testapi", "v2", []string{specPath}, OperationOptions{}, true)
+	if !ok {
+		t.Fatal("expected operations cache hit")
+	}
+	if len(got.Operations) != 1 || got.Operations[0].ID != "listItems" {
+		t.Fatalf("unexpected operations: %#v", got.Operations)
+	}
+}
+
 func TestLoadOperationSetFromCacheStatusAllowsStaleRemoteMetadata(t *testing.T) {
 	dir := t.TempDir()
 	raw := []byte(`{"openapi":"3.1.0","info":{"title":"Test","version":"1.0.0"},"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
