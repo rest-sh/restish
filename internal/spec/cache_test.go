@@ -474,6 +474,17 @@ func TestStoreSpecInCachePreservesLocalSpecFileNanosecondModTime(t *testing.T) {
 		t.Fatalf("StoreSpecInCache: %v", err)
 	}
 
+	entry, ok := readCacheEntry(dir, "testapi", "v2", true)
+	if !ok {
+		t.Fatal("expected cache entry")
+	}
+	if len(entry.SpecFiles) != 1 {
+		t.Fatalf("SpecFiles len = %d, want 1", len(entry.SpecFiles))
+	}
+	if got, want := entry.SpecFiles[0].ModTimeUnixNano, info.ModTime().UnixNano(); got != want {
+		t.Fatalf("cached ModTimeUnixNano = %d, want %d", got, want)
+	}
+
 	got, _, ok := LoadOperationSetFromCacheStatus(dir, "testapi", "v2", []string{specPath}, OperationOptions{}, true)
 	if !ok {
 		t.Fatal("expected operations cache hit")
