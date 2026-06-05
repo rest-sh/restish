@@ -794,7 +794,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	}
 	if err != nil || s == nil {
 		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
-			if !forceRefresh && (apiCfg.BaseURL != "" || apiCfg.SpecURL != "" || len(apiCfg.SpecFiles) > 0) {
+			if err == nil && !forceRefresh && (apiCfg.BaseURL != "" || apiCfg.SpecURL != "" || len(apiCfg.SpecFiles) > 0) {
 				c.hintf("spec cache for API %q is empty; run \"restish api sync %s\" to populate it", apiName, apiName)
 			}
 			return spec.OperationSet{}, false, err
