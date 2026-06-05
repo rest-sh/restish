@@ -34,8 +34,8 @@ representation of the same data.
   (list endpoints, or `-f` projections that produce such lists).
 - Compose with existing filtering, pagination, and streaming, since the agent
   use case almost always projects before encoding.
-- Track a pinned TOON spec version with golden-file tests so output is a stable,
-  auditable contract.
+- Track a pinned TOON spec version with official encode fixtures and focused
+  formatter tests so output is a stable, auditable contract.
 
 **Non-goals:**
 
@@ -76,11 +76,12 @@ representation of the same data.
 
 **Validation:**
 
-- Tests: golden-file tests in `internal/output/testdata` covering objects,
-  uniform object arrays (tabular form), non-uniform arrays (expanded list form),
-  nested structures, primitive arrays, empty arrays/objects, null, booleans,
-  numeric normalization, and strings requiring quoting. Behavior tests that
-  `-o toon` is selectable and composes with `-f`.
+- Tests: formatter tests plus official TOON encode fixtures under
+  `internal/output/testdata` covering objects, uniform object arrays (tabular
+  form), non-uniform arrays (expanded list form), nested structures, primitive
+  arrays, empty arrays/objects, null, booleans, numeric normalization, and
+  strings requiring quoting. Behavior tests verify that `-o toon` is selectable
+  and composes with `-f`.
 - Docs/help: `site/` output docs gain a TOON section; flag help updates
   automatically.
 - Manual checks: confirm token reduction on a representative list response vs
@@ -109,7 +110,8 @@ rather than silently degraded.
 ## Key Decision: Hand-Roll the Encoder (No New Dependency)
 
 **Decision: implement a self-contained, output-only TOON encoder in
-`internal/output`, pinned to spec v3.3, locked with golden tests.**
+`internal/output`, pinned to spec v3.3, locked with official encode fixtures
+and focused formatter tests.**
 
 Rationale:
 
@@ -129,7 +131,8 @@ Cost and mitigation:
 
 - We own spec-conformance and any future spec drift. Mitigation: pin to spec
   v3.3 explicitly in code comments and the design doc, and lock observable
-  output with golden tests so behavior changes are deliberate and reviewable.
+  output with official encode fixtures and focused formatter tests so behavior
+  changes are deliberate and reviewable.
 
 Alternative considered — vendor `toon-format/toon-go`: less code to own and
 tracks the spec, but the dependency's immaturity outweighs that for an upstream

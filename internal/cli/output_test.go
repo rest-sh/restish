@@ -302,6 +302,28 @@ func TestFilteredStructuredOutputPrettyByDefault(t *testing.T) {
 	}
 }
 
+func TestTOONOutputRendersResponseBody(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `[{"name":"Ada","format":"json"},{"name":"Bob","format":"xml"}]`)
+	if err := c.Run([]string{"restish", "get", "-o", "toon", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "[2]{format,name}:\n  json,Ada\n  xml,Bob\n"; got != want {
+		t.Fatalf("toon output = %q, want %q", got, want)
+	}
+}
+
+func TestTOONOutputRendersFilteredValue(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"items":[{"id":1,"name":"Ada"},{"id":2,"name":"Bob"}],"ignored":true}`)
+	if err := c.Run([]string{"restish", "get", "-f", "body.items", "-o", "toon", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "[2]{id,name}:\n  1,Ada\n  2,Bob\n"; got != want {
+		t.Fatalf("filtered toon output = %q, want %q", got, want)
+	}
+}
+
 func TestFilteredTTYOutputColorsPrettyJSONByDefault(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("NOCOLOR", "")

@@ -1,0 +1,105 @@
+{
+  "version": "3.1",
+  "category": "encode",
+  "description": "Nested and mixed array encoding - arrays of arrays, mixed type arrays, root arrays",
+  "tests": [
+    {
+      "name": "encodes nested arrays of primitives",
+      "input": {
+        "pairs": [["a", "b"], ["c", "d"]]
+      },
+      "expected": "pairs[2]:\n  - [2]: a,b\n  - [2]: c,d",
+      "specSection": "9.2"
+    },
+    {
+      "name": "quotes strings containing delimiters in nested arrays",
+      "input": {
+        "pairs": [["a", "b"], ["c,d", "e:f", "true"]]
+      },
+      "expected": "pairs[2]:\n  - [2]: a,b\n  - [3]: \"c,d\",\"e:f\",\"true\"",
+      "specSection": "9.2"
+    },
+    {
+      "name": "encodes empty inner arrays",
+      "input": {
+        "pairs": [[], []]
+      },
+      "expected": "pairs[2]:\n  - [0]:\n  - [0]:",
+      "specSection": "9.2"
+    },
+    {
+      "name": "encodes mixed-length inner arrays",
+      "input": {
+        "pairs": [[1], [2, 3]]
+      },
+      "expected": "pairs[2]:\n  - [1]: 1\n  - [2]: 2,3",
+      "specSection": "9.2"
+    },
+    {
+      "name": "encodes root-level primitive array",
+      "input": ["x", "y", "true", true, 10],
+      "expected": "[5]: x,y,\"true\",true,10",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes root-level array of uniform objects in tabular format",
+      "input": [{ "id": 1 }, { "id": 2 }],
+      "expected": "[2]{id}:\n  1\n  2",
+      "specSection": "9.3"
+    },
+    {
+      "name": "encodes root-level array of non-uniform objects in list format",
+      "input": [{ "id": 1 }, { "id": 2, "name": "Ada" }],
+      "expected": "[2]:\n  - id: 1\n  - id: 2\n    name: Ada",
+      "specSection": "9.4"
+    },
+    {
+      "name": "encodes root-level array mixing primitive, object, and array of objects in list format",
+      "input": ["summary", { "id": 1, "name": "Ada" }, [{ "id": 2 }, { "status": "draft" }]],
+      "expected": "[3]:\n  - summary\n  - id: 1\n    name: Ada\n  - [2]:\n    - id: 2\n    - status: draft",
+      "specSection": "9.4"
+    },
+    {
+      "name": "encodes root-level arrays of arrays",
+      "input": [[1, 2], []],
+      "expected": "[2]:\n  - [2]: 1,2\n  - [0]:",
+      "specSection": "9.2"
+    },
+    {
+      "name": "encodes empty root-level array",
+      "input": [],
+      "expected": "[]",
+      "specSection": "9.1"
+    },
+    {
+      "name": "encodes complex nested structure",
+      "input": {
+        "user": {
+          "id": 123,
+          "name": "Ada",
+          "tags": ["reading", "gaming"],
+          "active": true,
+          "prefs": []
+        }
+      },
+      "expected": "user:\n  id: 123\n  name: Ada\n  tags[2]: reading,gaming\n  active: true\n  prefs: []",
+      "specSection": "8"
+    },
+    {
+      "name": "uses list format for arrays mixing primitives and objects",
+      "input": {
+        "items": [1, { "a": 1 }, "text"]
+      },
+      "expected": "items[3]:\n  - 1\n  - a: 1\n  - text",
+      "specSection": "9.4"
+    },
+    {
+      "name": "uses list format for arrays mixing objects and arrays",
+      "input": {
+        "items": [{ "a": 1 }, [1, 2]]
+      },
+      "expected": "items[2]:\n  - a: 1\n  - [2]: 1,2",
+      "specSection": "9.4"
+    }
+  ]
+}

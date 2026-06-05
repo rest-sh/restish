@@ -87,6 +87,22 @@ func TestTOONExpandedListMixed(t *testing.T) {
 	}
 }
 
+// TestTOONExpandedListArrayItemDisablesTabularForm verifies TOON §9.4: when an
+// array itself is an expanded-list item, tabular form is unavailable because
+// there is no key position for the field list.
+func TestTOONExpandedListArrayItemDisablesTabularForm(t *testing.T) {
+	body := []any{
+		[]any{
+			map[string]any{"a": float64(1)},
+			map[string]any{"a": float64(2)},
+		},
+	}
+	want := "[1]:\n  - [2]:\n    - a: 1\n    - a: 2\n"
+	if got := renderTOON(t, body); got != want {
+		t.Errorf("nested array-list item mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+
 // TestTOONExpandedListEmptyObject verifies that an empty object inside a
 // non-uniform array renders as a bare dash list item.
 func TestTOONExpandedListEmptyObject(t *testing.T) {

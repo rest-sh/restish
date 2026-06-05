@@ -1,0 +1,73 @@
+{
+  "version": "1.4",
+  "category": "encode",
+  "description": "Tabular array encoding - arrays of uniform objects with primitive values",
+  "tests": [
+    {
+      "name": "encodes arrays of uniform objects in tabular format",
+      "input": {
+        "items": [
+          { "sku": "A1", "qty": 2, "price": 9.99 },
+          { "sku": "B2", "qty": 1, "price": 14.5 }
+        ]
+      },
+      "expected": "items[2]{sku,qty,price}:\n  A1,2,9.99\n  B2,1,14.5",
+      "specSection": "9.3"
+    },
+    {
+      "name": "encodes null values in tabular format",
+      "input": {
+        "items": [
+          { "id": 1, "value": null },
+          { "id": 2, "value": "test" }
+        ]
+      },
+      "expected": "items[2]{id,value}:\n  1,null\n  2,test",
+      "specSection": "9.3"
+    },
+    {
+      "name": "quotes strings containing delimiters in tabular rows",
+      "input": {
+        "items": [
+          { "sku": "A,1", "desc": "cool", "qty": 2 },
+          { "sku": "B2", "desc": "wip: test", "qty": 1 }
+        ]
+      },
+      "expected": "items[2]{sku,desc,qty}:\n  \"A,1\",cool,2\n  B2,\"wip: test\",1",
+      "specSection": "9.3"
+    },
+    {
+      "name": "quotes ambiguous strings in tabular rows",
+      "input": {
+        "items": [
+          { "id": 1, "status": "true" },
+          { "id": 2, "status": "false" }
+        ]
+      },
+      "expected": "items[2]{id,status}:\n  1,\"true\"\n  2,\"false\"",
+      "specSection": "9.3"
+    },
+    {
+      "name": "encodes tabular arrays with keys needing quotes",
+      "input": {
+        "items": [
+          { "order:id": 1, "full name": "Ada" },
+          { "order:id": 2, "full name": "Bob" }
+        ]
+      },
+      "expected": "items[2]{\"order:id\",\"full name\"}:\n  1,Ada\n  2,Bob",
+      "specSection": "9.3"
+    },
+    {
+      "name": "encodes tabular arrays with empty string keys",
+      "input": {
+        "": [
+          { "id": 1, "name": "Ada" },
+          { "id": 2, "name": "Bob" }
+        ]
+      },
+      "expected": "\"\"[2]{id,name}:\n  1,Ada\n  2,Bob",
+      "specSection": "9.3"
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "version": "1.5",
+  "category": "encode",
+  "description": "Key folding with safe mode, depth control, collision avoidance",
+  "tests": [
+    {
+      "name": "encodes folded chain to primitive (safe mode)",
+      "input": {
+        "a": {
+          "b": {
+            "c": 1
+          }
+        }
+      },
+      "expected": "a.b.c: 1",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes folded chain with inline array",
+      "input": {
+        "data": {
+          "meta": {
+            "items": ["x", "y"]
+          }
+        }
+      },
+      "expected": "data.meta.items[2]: x,y",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes folded chain with tabular array",
+      "input": {
+        "a": {
+          "b": {
+            "items": [
+              { "id": 1, "name": "A" },
+              { "id": 2, "name": "B" }
+            ]
+          }
+        }
+      },
+      "expected": "a.b.items[2]{id,name}:\n  1,A\n  2,B",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "skips folding when segment requires quotes (safe mode)",
+      "input": {
+        "data": {
+          "full-name": {
+            "x": 1
+          }
+        }
+      },
+      "expected": "data:\n  \"full-name\":\n    x: 1",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "skips folding on sibling literal-key collision (safe mode)",
+      "input": {
+        "data": {
+          "meta": {
+            "items": [1, 2]
+          }
+        },
+        "data.meta.items": "literal"
+      },
+      "expected": "data:\n  meta:\n    items[2]: 1,2\ndata.meta.items: literal",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4",
+      "note": "Collision avoidance: folding would create duplicate key"
+    },
+    {
+      "name": "encodes partial folding with flattenDepth=2",
+      "input": {
+        "a": {
+          "b": {
+            "c": {
+              "d": 1
+            }
+          }
+        }
+      },
+      "expected": "a.b:\n  c:\n    d: 1",
+      "options": {
+        "keyFolding": "safe",
+        "flattenDepth": 2
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes full chain with flattenDepth=Infinity (default)",
+      "input": {
+        "a": {
+          "b": {
+            "c": {
+              "d": 1
+            }
+          }
+        }
+      },
+      "expected": "a.b.c.d: 1",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes standard nesting with flattenDepth=0 (no folding)",
+      "input": {
+        "a": {
+          "b": {
+            "c": 1
+          }
+        }
+      },
+      "expected": "a:\n  b:\n    c: 1",
+      "options": {
+        "keyFolding": "safe",
+        "flattenDepth": 0
+      },
+      "specSection": "13.4",
+      "note": "flattenDepth=0 disables all folding"
+    },
+    {
+      "name": "encodes standard nesting with keyFolding=off (baseline)",
+      "input": {
+        "a": {
+          "b": {
+            "c": 1
+          }
+        }
+      },
+      "expected": "a:\n  b:\n    c: 1",
+      "options": {
+        "keyFolding": "off"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes folded chain ending with empty object",
+      "input": {
+        "a": {
+          "b": {
+            "c": {}
+          }
+        }
+      },
+      "expected": "a.b.c:",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "stops folding at array boundary (not single-key object)",
+      "input": {
+        "a": {
+          "b": [1, 2]
+        }
+      },
+      "expected": "a.b[2]: 1,2",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    },
+    {
+      "name": "encodes folded chains preserving sibling field order",
+      "input": {
+        "first": {
+          "second": {
+            "third": 1
+          }
+        },
+        "simple": 2,
+        "short": {
+          "path": 3
+        }
+      },
+      "expected": "first.second.third: 1\nsimple: 2\nshort.path: 3",
+      "options": {
+        "keyFolding": "safe"
+      },
+      "specSection": "13.4"
+    }
+  ]
+}

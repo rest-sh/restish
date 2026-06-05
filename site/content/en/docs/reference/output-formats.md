@@ -137,10 +137,10 @@ collection of nested, irregular objects.
 | ndjson | 3,000 | 2,800 |
 | gron | 6,403 | 6,783 |
 
-On uniform record collections TOON is the most token-efficient text format, and
-the lead grows with row count. On nested or irregular data, compact JSON and
-NDJSON edge it out — TOON's per-line indentation outweighs the savings — so
-project to a uniform list first, or stay on JSON.
+On these uniform record collections, TOON is the most token-efficient built-in
+lossless text format, and the lead grows with row count. On nested or irregular
+data, compact JSON and NDJSON edge it out — TOON's per-line indentation
+outweighs the savings — so project to a uniform list first, or stay on JSON.
 
 Not shown: `table` is human-only and truncates long values (lossy), `lines`
 only handles scalar arrays, and `cbor` is binary rather than text.

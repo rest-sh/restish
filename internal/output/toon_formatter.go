@@ -32,6 +32,18 @@ type TOONFormatter struct{}
 // are prohibited for indentation) and defaults to two.
 const toonIndentUnit = "  "
 
+type toonArrayContext struct {
+	allowTabular     bool
+	emptyArrayHeader bool
+}
+
+type toonField struct {
+	key   string
+	value any
+}
+
+type toonObject []toonField
+
 var (
 	// toonUnquotedKey matches keys/field names that may be emitted without
 	// quotes per spec §9.1.
@@ -52,19 +64,25 @@ func (f *TOONFormatter) Format(w io.Writer, resp *Response, color bool) error {
 // ValueFormatter lets filtered (-f) and paginated item values render as TOON,
 // which is where the tabular form is most valuable.
 func (f *TOONFormatter) FormatValue(w io.Writer, value any, color bool) error {
-	var buf bytes.Buffer
-	encodeTOONRoot(&buf, value)
+	out := []byte(encodeTOONDocument(value))
 	// The TOON document itself ends without a trailing newline; append one for
 	// terminal/pipe consistency with the json and gron formatters.
-	out := append(bytes.TrimRight(buf.Bytes(), "\n"), '\n')
+	out = append(out, '\n')
 	_, err := w.Write(out)
 	return err
+}
+
+// encodeTOONDocument returns a TOON document without a trailing newline.
+func encodeTOONDocument(value any) string {
+	var buf bytes.Buffer
+	encodeTOONRoot(&buf, value)
+	return strings.TrimRight(buf.String(), "\n")
 }
 
 // encodeTOONRoot writes the top-level value, which has no enclosing key.
 func encodeTOONRoot(buf *bytes.Buffer, value any) {
 	switch v := value.(type) {
-	case map[string]any:
+	case map[string]any, toonObject:
 		// An empty object is an empty document, which decodes back to {}.
 		encodeTOONObject(buf, 0, v)
 	case []any:
@@ -72,18 +90,17 @@ func encodeTOONRoot(buf *bytes.Buffer, value any) {
 			buf.WriteString("[]\n")
 			return
 		}
-		encodeTOONArray(buf, 0, "", v)
+		encodeTOONArray(buf, 0, "", v, toonArrayContext{allowTabular: true})
 	default:
 		buf.WriteString(encodeTOONScalar(value))
 		buf.WriteByte('\n')
 	}
 }
 
-// encodeTOONObject writes each field of m at the given depth, sorted by key for
-// deterministic output.
-func encodeTOONObject(buf *bytes.Buffer, depth int, m map[string]any) {
-	for _, k := range sortedKeys(m) {
-		encodeTOONField(buf, depth, k, m[k])
+// encodeTOONObject writes each field of obj at the given depth.
+func encodeTOONObject(buf *bytes.Buffer, depth int, obj any) {
+	for _, field := range toonObjectFields(obj) {
+		encodeTOONField(buf, depth, field.key, field.value)
 	}
 }
 
@@ -91,7 +108,7 @@ func encodeTOONObject(buf *bytes.Buffer, depth int, m map[string]any) {
 func encodeTOONField(buf *bytes.Buffer, depth int, key string, val any) {
 	keyTok := encodeTOONKey(key)
 	switch v := val.(type) {
-	case map[string]any:
+	case map[string]any, toonObject:
 		// Both empty and non-empty objects emit "key:"; a non-empty object adds
 		// indented fields below.
 		writeTOONIndent(buf, depth)
@@ -99,7 +116,7 @@ func encodeTOONField(buf *bytes.Buffer, depth int, key string, val any) {
 		buf.WriteString(":\n")
 		encodeTOONObject(buf, depth+1, v)
 	case []any:
-		encodeTOONArray(buf, depth, keyTok, v)
+		encodeTOONArray(buf, depth, keyTok, v, toonArrayContext{allowTabular: true})
 	default:
 		writeTOONIndent(buf, depth)
 		buf.WriteString(keyTok)
@@ -113,14 +130,20 @@ func encodeTOONField(buf *bytes.Buffer, depth int, key string, val any) {
 // inline for all-primitive arrays, tabular for uniform object arrays, and an
 // expanded dash list otherwise. keyTok is the already-encoded key, or "" for a
 // root array.
-func encodeTOONArray(buf *bytes.Buffer, depth int, keyTok string, arr []any) {
+func encodeTOONArray(buf *bytes.Buffer, depth int, keyTok string, arr []any, ctx toonArrayContext) {
 	writeTOONIndent(buf, depth)
 	if len(arr) == 0 {
 		if keyTok != "" {
 			buf.WriteString(keyTok)
 			buf.WriteString(": ")
+			buf.WriteString("[]\n")
+			return
 		}
-		buf.WriteString("[]\n")
+		if ctx.emptyArrayHeader {
+			buf.WriteString("[0]:\n")
+		} else {
+			buf.WriteString("[]\n")
+		}
 		return
 	}
 
@@ -136,24 +159,27 @@ func encodeTOONArray(buf *bytes.Buffer, depth int, keyTok string, arr []any) {
 		return
 	}
 
-	if fields, ok := toonTabularFields(arr); ok {
-		cols := make([]string, len(fields))
-		for i, f := range fields {
-			cols[i] = encodeTOONKey(f)
-		}
-		fmt.Fprintf(buf, "%s[%d]{%s}:\n", keyTok, len(arr), strings.Join(cols, ","))
-		for _, item := range arr {
-			obj := item.(map[string]any)
-			writeTOONIndent(buf, depth+1)
+	if ctx.allowTabular {
+		if fields, ok := toonTabularFields(arr); ok {
+			cols := make([]string, len(fields))
 			for i, f := range fields {
-				if i > 0 {
-					buf.WriteByte(',')
-				}
-				buf.WriteString(encodeTOONScalar(obj[f]))
+				cols[i] = encodeTOONKey(f)
 			}
-			buf.WriteByte('\n')
+			fmt.Fprintf(buf, "%s[%d]{%s}:\n", keyTok, len(arr), strings.Join(cols, ","))
+			for _, item := range arr {
+				objFields, _ := toonObjectFieldsIfObject(item)
+				obj := toonObject(objFields)
+				writeTOONIndent(buf, depth+1)
+				for i, f := range fields {
+					if i > 0 {
+						buf.WriteByte(',')
+					}
+					buf.WriteString(encodeTOONScalar(toonObjectValue(obj, f)))
+				}
+				buf.WriteByte('\n')
+			}
+			return
 		}
-		return
 	}
 
 	// Expanded list: header followed by one dash-marked item per element.
@@ -166,11 +192,12 @@ func encodeTOONArray(buf *bytes.Buffer, depth int, keyTok string, arr []any) {
 // encodeTOONListItem writes one element of an expanded list at the list-item
 // depth. Composite items reuse the field/array encoders one level deeper and
 // then have their first line's leading indent replaced by the "- " marker, per
-// spec §9.4 (first field on the hyphen line).
+// spec §9.4 and §10.
 func encodeTOONListItem(buf *bytes.Buffer, depth int, item any) {
 	switch v := item.(type) {
-	case map[string]any:
-		if len(v) == 0 {
+	case map[string]any, toonObject:
+		fields := toonObjectFields(v)
+		if len(fields) == 0 {
 			writeTOONIndent(buf, depth)
 			buf.WriteString("-\n")
 			return
@@ -180,14 +207,106 @@ func encodeTOONListItem(buf *bytes.Buffer, depth int, item any) {
 		writeTOONDashItem(buf, depth, tmp.Bytes())
 	case []any:
 		var tmp bytes.Buffer
-		encodeTOONArray(&tmp, depth+1, "", v)
-		writeTOONDashItem(buf, depth, tmp.Bytes())
+		// TOON §9.4 does not allow tabular form when the nested array itself is a
+		// list item; there is no key position for the field list.
+		encodeTOONArray(&tmp, depth+1, "", v, toonArrayContext{
+			allowTabular:     false,
+			emptyArrayHeader: true,
+		})
+		writeTOONDashArrayItem(buf, depth, tmp.Bytes())
 	default:
 		writeTOONIndent(buf, depth)
 		buf.WriteString("- ")
 		buf.WriteString(encodeTOONScalar(item))
 		buf.WriteByte('\n')
 	}
+}
+
+// allTOONPrimitive reports whether every element is a primitive (not an object
+// or array), making the array eligible for the compact inline form.
+func allTOONPrimitive(arr []any) bool {
+	for _, item := range arr {
+		switch item.(type) {
+		case map[string]any, toonObject, []any:
+			return false
+		}
+	}
+	return true
+}
+
+// toonTabularFields reports whether arr qualifies for tabular form and, if so,
+// returns the shared field names. Qualification (spec §9.3): every element is a
+// non-empty object, all share the same key set, and every value is a primitive.
+func toonTabularFields(arr []any) ([]string, bool) {
+	var fields []string
+	for i, item := range arr {
+		objFields, ok := toonObjectFieldsIfObject(item)
+		if !ok || len(objFields) == 0 {
+			return nil, false
+		}
+		for _, field := range objFields {
+			switch field.value.(type) {
+			case map[string]any, toonObject, []any:
+				return nil, false
+			}
+		}
+		if i == 0 {
+			fields = make([]string, len(objFields))
+			for j, field := range objFields {
+				fields[j] = field.key
+			}
+			continue
+		}
+		if len(objFields) != len(fields) {
+			return nil, false
+		}
+		obj := toonObject(objFields)
+		for _, f := range fields {
+			if _, ok := toonObjectValueOK(obj, f); !ok {
+				return nil, false
+			}
+		}
+	}
+	return fields, true
+}
+
+func toonObjectFieldsIfObject(obj any) ([]toonField, bool) {
+	switch v := obj.(type) {
+	case map[string]any:
+		return toonMapFields(v), true
+	case toonObject:
+		return []toonField(v), true
+	default:
+		return nil, false
+	}
+}
+
+func toonObjectFields(obj any) []toonField {
+	fields, _ := toonObjectFieldsIfObject(obj)
+	return fields
+}
+
+func toonMapFields(m map[string]any) []toonField {
+	keys := sortedKeys(m)
+	fields := make([]toonField, len(keys))
+	for i, key := range keys {
+		fields[i] = toonField{key: key, value: m[key]}
+	}
+	return fields
+}
+
+func toonObjectValue(obj toonObject, key string) any {
+	value, _ := toonObjectValueOK(obj, key)
+	return value
+}
+
+func toonObjectValueOK(obj toonObject, key string) (any, bool) {
+	for _, field := range obj {
+		if field.key == key {
+			return field.value, true
+		}
+	}
+	return nil, false
 }
 
 // writeTOONDashItem emits content (rendered at depth+1) as a dash list item by
@@ -201,49 +320,25 @@ func writeTOONDashItem(buf *bytes.Buffer, depth int, content []byte) {
 	buf.Write(content[strip:])
 }
 
-// allTOONPrimitive reports whether every element is a primitive (not an object
-// or array), making the array eligible for the compact inline form.
-func allTOONPrimitive(arr []any) bool {
-	for _, item := range arr {
-		switch item.(type) {
-		case map[string]any, []any:
-			return false
-		}
-	}
-	return true
-}
-
-// toonTabularFields reports whether arr qualifies for tabular form and, if so,
-// returns the shared field names in sorted order. Qualification (spec §9.3):
-// every element is a non-empty object, all share the same key set, and every
-// value is a primitive.
-func toonTabularFields(arr []any) ([]string, bool) {
-	var fields []string
-	for i, item := range arr {
-		obj, ok := item.(map[string]any)
-		if !ok || len(obj) == 0 {
-			return nil, false
-		}
-		for _, v := range obj {
-			switch v.(type) {
-			case map[string]any, []any:
-				return nil, false
-			}
-		}
-		if i == 0 {
-			fields = sortedKeys(obj)
+// writeTOONDashArrayItem emits an array as a dash list item. The array header
+// moves onto the hyphen line, so child items move up by one indentation level
+// under that moved header.
+func writeTOONDashArrayItem(buf *bytes.Buffer, depth int, content []byte) {
+	firstLineStrip := len(toonIndentUnit) * (depth + 1)
+	childStrip := []byte(toonIndentUnit)
+	writeTOONIndent(buf, depth)
+	buf.WriteString("- ")
+	for i, line := range bytes.SplitAfter(content, []byte("\n")) {
+		if len(line) == 0 {
 			continue
 		}
-		if len(obj) != len(fields) {
-			return nil, false
+		if i == 0 {
+			line = line[firstLineStrip:]
+		} else if bytes.HasPrefix(line, childStrip) {
+			line = line[len(childStrip):]
 		}
-		for _, f := range fields {
-			if _, ok := obj[f]; !ok {
-				return nil, false
-			}
-		}
+		buf.Write(line)
 	}
-	return fields, true
 }
 
 // encodeTOONScalar encodes a primitive leaf value as a TOON token, quoting and
@@ -302,6 +397,9 @@ func encodeTOONFloat(f float64) string {
 // json.Number). Integer literals pass through unchanged; anything with a
 // fraction or exponent is re-canonicalized as a float.
 func encodeTOONNumberString(s string) string {
+	if s == "-0" {
+		return "0"
+	}
 	if strings.ContainsAny(s, ".eE") {
 		if f, err := strconv.ParseFloat(s, 64); err == nil {
 			return encodeTOONFloat(f)
