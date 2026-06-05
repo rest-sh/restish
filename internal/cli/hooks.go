@@ -82,6 +82,9 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 			return opts, nil
 		}
 	}
+	if opts.TLSSignerName == "pkcs11" {
+		return opts, fmt.Errorf("tls signer plugin %q not found; install the restish-pkcs11 binary and make sure it is on your PATH (see https://github.com/rest-sh/restish)", opts.TLSSignerName)
+	}
 	return opts, fmt.Errorf("tls signer plugin %q not found", opts.TLSSignerName)
 }
 

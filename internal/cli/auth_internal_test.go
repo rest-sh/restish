@@ -197,6 +197,49 @@ func TestInlineAuthCacheKeyDeduplicatesAbsoluteAuthCodeEndpoints(t *testing.T) {
 	}
 }
 
+func TestCachedOAuthTokenEntryMigratesLegacyInlineAuthCodeCacheKey(t *testing.T) {
+	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
+	c := New()
+	c.Hooks().TokenCachePath = cacheFile
+
+	ac := &config.AuthConfig{
+		Type: "oauth-authorization-code",
+		Params: map[string]string{
+			"client_id":     "restish",
+			"authorize_url": "https://dex.example.com/auth",
+			"token_url":     "https://dex.example.com/token",
+		},
+	}
+	cacheKey := inlineAuthCacheKey("demo:default", ac, "https://api.example.com")
+	if cacheKey == "" || cacheKey == "demo:default" {
+		t.Fatalf("inline auth code cache key = %q, want hashed oauth key", cacheKey)
+	}
+
+	tc := auth.NewTokenCache(cacheFile)
+	if err := tc.Set("demo:default", auth.CachedToken{AccessToken: "legacy-token"}); err != nil {
+		t.Fatalf("seed legacy token: %v", err)
+	}
+
+	got := c.cachedOAuthTokenEntry("oauth-authorization-code", cacheKey, "demo", "default")
+	if got == nil || got.AccessToken != "legacy-token" {
+		t.Fatalf("migrated token = %+v, want legacy-token", got)
+	}
+	migrated, err := tc.Get(cacheKey)
+	if err != nil {
+		t.Fatalf("read migrated token: %v", err)
+	}
+	if migrated == nil || migrated.AccessToken != "legacy-token" {
+		t.Fatalf("migrated cache entry = %+v, want legacy-token", migrated)
+	}
+	legacy, err := tc.Get("demo:default")
+	if err != nil {
+		t.Fatalf("read legacy token: %v", err)
+	}
+	if legacy != nil {
+		t.Fatalf("legacy cache entry still present: %+v", legacy)
+	}
+}
+
 func TestInlineAuthCacheKeyDeduplicatesIssuerAuthCodeEndpoints(t *testing.T) {
 	ac := &config.AuthConfig{
 		Type: "oauth-authorization-code",
@@ -361,5 +404,52 @@ func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
 	}
 	if oauthHandler.CallbackFailureColor != "#ff0000" {
 		t.Fatalf("failure color = %q, want #ff0000", oauthHandler.CallbackFailureColor)
+	}
+}
+
+func TestOperationSetForAPIHintsAPISync_WhenCacheEmpty(t *testing.T) {
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir() // empty cache dir
+
+	apiCfg := &config.APIConfig{BaseURL: "https://api.example.com"}
+	set, ok, err := c.operationSetForAPI(context.Background(), "example", apiCfg, "default", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok || len(set.Operations) > 0 {
+		t.Fatal("expected empty operation set from cold cache")
+	}
+	if !strings.Contains(stderr.String(), "api sync example") {
+		t.Fatalf("expected api sync hint on stderr, got: %q", stderr.String())
+	}
+}
+
+func TestOperationSetForAPINoHintWhenForceRefresh(t *testing.T) {
+	// forceRefresh=true means an explicit sync is already in progress; no hint.
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	apiCfg := &config.APIConfig{BaseURL: "https://203.0.113.1"}
+	_, _, _ = c.operationSetForAPI(context.Background(), "example", apiCfg, "default", true)
+	if strings.Contains(stderr.String(), "api sync") {
+		t.Fatalf("expected no api sync hint during forceRefresh, got: %q", stderr.String())
+	}
+}
+
+func TestOperationSetForAPINoHintWhenNoSpecSource(t *testing.T) {
+	// An API with no BaseURL, no SpecURL, no SpecFiles configured has nothing to sync.
+	var stderr bytes.Buffer
+	c := New()
+	c.Stderr = &stderr
+	c.Hooks().SpecCachePath = t.TempDir()
+
+	apiCfg := &config.APIConfig{}
+	_, _, _ = c.operationSetForAPI(context.Background(), "bare", apiCfg, "default", false)
+	if strings.Contains(stderr.String(), "api sync") {
+		t.Fatalf("expected no api sync hint for API with no spec source, got: %q", stderr.String())
 	}
 }

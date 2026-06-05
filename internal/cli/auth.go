@@ -299,11 +299,29 @@ func (c *CLI) cachedOAuthTokenEntry(authType string, cacheKey, apiName, profileN
 	if cacheKey == ":" || cacheKey == "" {
 		return nil
 	}
-	cached, err := auth.NewTokenCache(c.tokenCachePath()).Get(cacheKey)
+	tc := auth.NewTokenCache(c.tokenCachePath())
+	cached, err := tc.Get(cacheKey)
 	if err != nil {
 		return nil
 	}
-	return cached
+	if cached != nil {
+		return cached
+	}
+	// The cache key format changed from "apiName:profileName" to "oauth:HASH" at
+	// some point, silently invalidating existing tokens on upgrade. Fall back to
+	// the legacy key here; if found, migrate it to the new key and drop the old one.
+	legacyKey := c.apiCacheNamespace(apiName, profileName)
+	if legacyKey == cacheKey || legacyKey == ":" || legacyKey == "" {
+		return nil
+	}
+	legacy, err := tc.Get(legacyKey)
+	if err != nil || legacy == nil {
+		return nil
+	}
+	if setErr := tc.Set(cacheKey, *legacy); setErr == nil {
+		_ = tc.Delete(legacyKey)
+	}
+	return legacy
 }
 
 func (c *CLI) cachedOAuthAuthCodeUsable(authType, cacheKey, apiName, profileName string) bool {
