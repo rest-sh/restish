@@ -433,7 +433,7 @@ func TestOperationSetForAPINoHintWhenForceRefresh(t *testing.T) {
 	c.Stderr = &stderr
 	c.Hooks().SpecCachePath = t.TempDir()
 
-	apiCfg := &config.APIConfig{BaseURL: "https://203.0.113.1"} // unroutable, discovery will fail
+	apiCfg := &config.APIConfig{BaseURL: "https://203.0.113.1"}
 	_, _, _ = c.operationSetForAPI(context.Background(), "example", apiCfg, "default", true)
 	if strings.Contains(stderr.String(), "api sync") {
 		t.Fatalf("expected no api sync hint during forceRefresh, got: %q", stderr.String())
