@@ -399,7 +399,7 @@ func TestCacheSpecFileMetadataAvoidsContentHash(t *testing.T) {
 	if len(meta) != 1 {
 		t.Fatalf("metadata len = %d, want 1", len(meta))
 	}
-	if meta[0].Size == 0 || meta[0].ModTime.IsZero() {
+	if meta[0].Size == 0 || meta[0].ModTime.IsZero() || meta[0].ModTimeUnixNano == 0 {
 		t.Fatalf("expected size and mtime metadata, got %+v", meta[0])
 	}
 	if meta[0].SHA256 != "" {
@@ -407,6 +407,36 @@ func TestCacheSpecFileMetadataAvoidsContentHash(t *testing.T) {
 	}
 	if !cacheSpecFileMetadataMatches([]string{specPath}, meta) {
 		t.Fatal("metadata should match unchanged file")
+	}
+}
+
+func TestCacheSpecFileMetadataMatchesLegacySecondPrecisionModTime(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "spec.yaml")
+	if err := os.WriteFile(specPath, []byte("openapi: 3.1.0\ninfo: {title: Demo, version: v1}\npaths: {}\n"), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	mtime := time.Unix(1700000000, 123456789)
+	if err := os.Chtimes(specPath, mtime, mtime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	info, err := os.Stat(specPath)
+	if err != nil {
+		t.Fatalf("stat spec: %v", err)
+	}
+	if info.ModTime().Nanosecond() == 0 {
+		t.Skip("filesystem does not preserve subsecond mtimes")
+	}
+
+	legacy := []cachedSpecFile{{
+		Source:  specPath,
+		Local:   true,
+		Path:    specPath,
+		ModTime: info.ModTime().Truncate(time.Second),
+		Size:    info.Size(),
+	}}
+	if !cacheSpecFileMetadataMatches([]string{specPath}, legacy) {
+		t.Fatal("legacy whole-second mtime metadata should match unchanged file")
 	}
 }
 

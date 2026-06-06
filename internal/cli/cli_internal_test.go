@@ -321,3 +321,29 @@ func TestQuietGeneratedWarningsForScan(t *testing.T) {
 		})
 	}
 }
+
+func TestScanVersionDoesNotRequestGeneratedAPICommandTree(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"myapi": {BaseURL: "https://api.example.com"},
+		},
+	}
+	scan := scanCLIArgs([]string{"restish", "--version"})
+	if !scan.Bootstrap {
+		t.Fatal("--version should remain a bootstrap command")
+	}
+	if scan.GeneratedAPICommandTree {
+		t.Fatal("--version should not load generated API command metadata")
+	}
+	if got := (&CLI{}).generatedAPINamesForScan(scan, cfg); len(got) != 0 {
+		t.Fatalf("--version generated APIs = %v, want none", got)
+	}
+
+	helpScan := scanCLIArgs([]string{"restish", "--help"})
+	if !helpScan.GeneratedAPICommandTree {
+		t.Fatal("--help should still include generated API commands")
+	}
+	if got := (&CLI{}).generatedAPINamesForScan(helpScan, cfg); !reflect.DeepEqual(got, []string{"myapi"}) {
+		t.Fatalf("--help generated APIs = %v, want [myapi]", got)
+	}
+}

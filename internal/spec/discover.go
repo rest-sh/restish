@@ -282,6 +282,7 @@ func cacheSpecFileMetadata(specFiles []string) []cachedSpecFile {
 				meta.Path = path
 				if info, statErr := os.Stat(path); statErr == nil {
 					meta.ModTime = info.ModTime()
+					meta.ModTimeUnixNano = info.ModTime().UnixNano()
 					meta.Size = info.Size()
 				}
 			}
@@ -305,11 +306,25 @@ func cacheSpecFileMetadataMatches(specFiles []string, cached []cachedSpecFile) b
 			current[i].Size != cached[i].Size {
 			return false
 		}
-		if current[i].Local && !current[i].ModTime.Equal(cached[i].ModTime) {
+		if current[i].Local && !cachedSpecFileModTimeMatches(current[i], cached[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+func cachedSpecFileModTimeMatches(current, cached cachedSpecFile) bool {
+	if current.ModTimeUnixNano != 0 && cached.ModTimeUnixNano != 0 {
+		return current.ModTimeUnixNano == cached.ModTimeUnixNano
+	}
+	if current.ModTime.Equal(cached.ModTime) {
+		return true
+	}
+	// Legacy cache entries stored time.Time values that could round-trip
+	// through CBOR at whole-second precision. Keep those caches usable when the
+	// path, size, and second-level mtime still match; specFilesChangedSince
+	// separately rejects local files modified after the cache was written.
+	return current.ModTime.Truncate(time.Second).Equal(cached.ModTime.Truncate(time.Second))
 }
 
 func specFilesChangedSince(specFiles []string, fetchedAt time.Time) bool {
