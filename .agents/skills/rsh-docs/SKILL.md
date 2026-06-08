@@ -168,6 +168,19 @@ Avoid making blog posts the only source for exact commands, migration steps, or
 security-sensitive behavior; link to durable docs and update those docs when the
 post reveals a gap.
 
+### Blog Improvement
+
+Whenever you write a new blog post or modify an existing one, spin off a sub-agent to do a review of the changes and suggest improvements, which you should then apply. The review should check for:
+
+1. Clarity: Is the post easy to understand? Are there any ambiguous statements or jargon that could be clarified?
+2. Engagement: Does the post have a compelling hook? Does it maintain the reader's interest throughout?
+3. Accuracy: Are all technical details correct? Are there any factual errors or misleading statements?
+   1. Commands should prefer shorthand in examples over jq or plain JSON when possible.
+   2. Do not use `get` or `post` in examples when the auto mode is clear (e.g., `restish api.rest.sh/example` instead of `restish get api.rest.sh/example`).
+   3. Do not add options for no reason. E.g. `--rsh-no-paginate` when not talking explicitly about pagination, or `--rsh-columns` when the default output is fine. This complicates commands and makes it harder for readers. Another good example is `-o lines` unless it significantly improves readability of the output.
+4. Structure: Is the post well-organized? Does it have a logical flow from introduction to conclusion? Do the headings make sense (and are they short enough to not wrap for common screen widths)?
+5. Do all the command examples actually make sense? Are they good examples, or could they be improved to better illustrate the point? Are the examples in the right place in the post or should they be moved?
+
 ## Plugin Docs
 
 Always separate operator docs from author docs. Operators need install/configure/run/verify/debug. Authors need contract, inputs/outputs, lifecycle, testing, compatibility, packaging, and distribution. Do not make operators read authoring internals to use a plugin.
