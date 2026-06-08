@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "social-images": "node scripts/generate-social-images.mjs",
+    "test": "node scripts/test-restish-playground.mjs",
     "dev": "npm run social-images && hugo server",
     "build": "npm run social-images && hugo"
   },
