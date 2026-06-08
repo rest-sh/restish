@@ -50,6 +50,76 @@ vm.runInContext(source, sandbox, { filename: "restish-playground.js" });
 const api = sandbox.window.__restishPlaygroundTest;
 assert.ok(api, "playground test API should be exposed");
 
+function complete(input) {
+  return JSON.parse(JSON.stringify(api.completeCommand(input, input.length)));
+}
+
+assert.deepEqual(
+  complete("restish ex"),
+  {
+    value: "restish example ",
+    cursor: "restish example ".length,
+    matches: ["example"],
+    applied: true
+  },
+  "root command completion"
+);
+
+assert.deepEqual(
+  complete("restish example li"),
+  {
+    value: "restish example list-",
+    cursor: "restish example list-".length,
+    matches: ["list-books", "list-images", "list-items"],
+    applied: true
+  },
+  "shared prefix completion for generated operations"
+);
+
+assert.deepEqual(
+  complete("restish example list-im"),
+  {
+    value: "restish example list-images ",
+    cursor: "restish example list-images ".length,
+    matches: ["list-images"],
+    applied: true
+  },
+  "single generated operation completion"
+);
+
+assert.deepEqual(
+  complete("restish example get-image "),
+  {
+    value: "restish example get-image ",
+    cursor: "restish example get-image ".length,
+    matches: ["gif", "heic", "jpeg", "png", "webp"],
+    applied: false
+  },
+  "generated path parameter suggestions"
+);
+
+assert.deepEqual(
+  complete("restish api.rest.sh/images -o j"),
+  {
+    value: "restish api.rest.sh/images -o json ",
+    cursor: "restish api.rest.sh/images -o json ".length,
+    matches: ["json"],
+    applied: true
+  },
+  "output format value completion"
+);
+
+assert.deepEqual(
+  complete("restish api.rest.sh/im"),
+  {
+    value: "restish api.rest.sh/images",
+    cursor: "restish api.rest.sh/images".length,
+    matches: ["api.rest.sh/images", "api.rest.sh/images/jpeg"],
+    applied: true
+  },
+  "URL-ish docs path completion"
+);
+
 const toonPlan = api.parseCommand("restish get https://api.rest.sh/items -o toon");
 assert.equal(toonPlan.flags.outputFormat, "toon");
 assert.equal(

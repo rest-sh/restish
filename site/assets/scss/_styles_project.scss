@@ -707,6 +707,52 @@ body.td-home .td-navbar__search .td-search-input {
   outline: 0;
 }
 
+.restish-playground__completions {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  align-items: start;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+  background: #030712;
+  color: #cbd5e1;
+  font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.restish-playground__completions[hidden] {
+  display: none;
+}
+
+.restish-playground__completion-prompt {
+  color: var(--restish-amber);
+  font-weight: 800;
+  text-align: center;
+}
+
+.restish-playground__completion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  min-width: 0;
+  padding-right: 0.875rem;
+}
+
+.restish-playground__completion-item,
+.restish-playground__completion-more {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.restish-playground__completion-item {
+  color: #f8fafc;
+}
+
+.restish-playground__completion-more {
+  color: #94a3b8;
+}
+
 .restish-playground__output {
   min-height: 5.25rem;
   max-height: 28rem;
@@ -1287,15 +1333,17 @@ body.td-home .td-navbar__search .td-search-input {
 }
 
 .restish-anatomy {
-  --anatomy-bin-color: #2563eb;
+  --anatomy-bin-color: #334155;
   --anatomy-api-color: #0f766e;
   --anatomy-op-color: #b45309;
-  --anatomy-option-color: #7c3aed;
-  --anatomy-arg-color: #be123c;
-  --anatomy-body-color: #15803d;
+  --anatomy-option-color: #8b5cf6;
+  --anatomy-arg-color: #d9369e;
+  --anatomy-body-color: #0284c7;
+  --anatomy-active-color: var(--anatomy-bin-color);
   --anatomy-command-bg: #f8fafc;
   --anatomy-command-border: rgba(15, 23, 42, 0.12);
 
+  position: relative;
   margin: 1.5rem 0;
   overflow: hidden;
   border: 1px solid rgba(99, 102, 241, 0.28);
@@ -1303,7 +1351,35 @@ body.td-home .td-navbar__search .td-search-input {
   background: var(--restish-card-bg-top);
 }
 
+.restish-anatomy__connector {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  overflow: visible;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.restish-anatomy__connector path {
+  fill: none;
+  stroke: var(--anatomy-active-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 8 10;
+  filter: drop-shadow(0 5px 8px rgba(15, 23, 42, 0.2));
+}
+
+.restish-anatomy[data-connector-active="true"] .restish-anatomy__connector {
+  opacity: 0.86;
+}
+
 .restish-anatomy__command {
+  position: relative;
+  z-index: 2;
   margin: 0;
   padding: 1rem;
   overflow-x: auto;
@@ -1320,6 +1396,8 @@ body.td-home .td-navbar__search .td-search-input {
 }
 
 .restish-anatomy__grid {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 0.75rem;
@@ -1330,6 +1408,11 @@ body.td-home .td-navbar__search .td-search-input {
   min-width: 0;
   padding: 0.15rem 0 0.15rem 0.75rem;
   border-left: 0.3rem solid var(--anatomy-color);
+  border-radius: 0 8px 8px 0;
+  transition:
+    background 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .restish-anatomy__label {
@@ -1364,6 +1447,35 @@ body.td-home .td-navbar__search .td-search-input {
   margin-top: 0.1rem;
 }
 
+[data-anatomy-part] {
+  transition:
+    opacity 160ms ease,
+    outline-color 160ms ease,
+    text-shadow 160ms ease;
+}
+
+[data-anatomy-part]:focus {
+  outline: 2px solid var(--anatomy-color);
+  outline-offset: 0.18rem;
+}
+
+.restish-anatomy[data-active-anatomy] [data-anatomy-part] {
+  opacity: 0.42;
+}
+
+.restish-anatomy[data-active-anatomy] [data-anatomy-active] {
+  opacity: 1;
+}
+
+.restish-anatomy__command [data-anatomy-active] {
+  text-shadow: 0 0 0.55rem color-mix(in srgb, var(--anatomy-color) 50%, transparent);
+}
+
+.restish-anatomy__item[data-anatomy-active] {
+  background: color-mix(in srgb, var(--anatomy-color) 11%, transparent);
+  transform: translateX(0.18rem);
+}
+
 .anatomy-bin {
   --anatomy-color: var(--anatomy-bin-color);
 }
@@ -1395,6 +1507,11 @@ body.td-home .td-navbar__search .td-search-input {
 .restish-anatomy__command .anatomy-arg,
 .restish-anatomy__command .anatomy-body {
   color: var(--anatomy-color);
+}
+
+.restish-anatomy__command [data-anatomy-part],
+.restish-anatomy__item[data-anatomy-part] {
+  cursor: pointer;
 }
 
 .restish-blog-cta {
@@ -1568,14 +1685,25 @@ a.restish-blog-rail-card {
 }
 
 [data-bs-theme="dark"] .restish-anatomy {
-  --anatomy-bin-color: #93c5fd;
+  --anatomy-bin-color: #cbd5e1;
   --anatomy-api-color: #5eead4;
   --anatomy-op-color: #fbbf24;
   --anatomy-option-color: #c4b5fd;
-  --anatomy-arg-color: #fda4af;
-  --anatomy-body-color: #86efac;
+  --anatomy-arg-color: #ff9adb;
+  --anatomy-body-color: #38bdf8;
   --anatomy-command-bg: #111827;
   --anatomy-command-border: rgba(148, 163, 184, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restish-anatomy__connector {
+    display: none;
+  }
+
+  .restish-anatomy__item,
+  [data-anatomy-part] {
+    transition: none;
+  }
 }
 
 [data-bs-theme="dark"] .restish-blog-rail-card {
