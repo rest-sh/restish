@@ -22,7 +22,7 @@
     ["--rsh-retry", "retry"],
     ["--rsh-retry-max-wait", "retryMaxWait"]
   ]);
-  const supportedOutputFormats = new Set(["auto", "json", "yaml", "ndjson", "lines", "table", "image", "gron", "csv"]);
+  const supportedOutputFormats = new Set(["auto", "json", "yaml", "ndjson", "lines", "table", "image", "gron", "csv", "toon"]);
   const boolFlags = new Map([
     ["-v", "verbose"],
     ["-vv", "verbose"],
@@ -1626,6 +1626,9 @@
     if (flags.outputFormat === "csv") {
       return csvOutput(value, flags.columns);
     }
+    if (flags.outputFormat === "toon") {
+      return toonOutput(value);
+    }
     if (explicitFilter) {
       return renderValue(value, flags);
     }
@@ -1927,6 +1930,9 @@
     if (flags.outputFormat === "csv") {
       return csvOutput(value, flags.columns);
     }
+    if (flags.outputFormat === "toon") {
+      return toonOutput(value);
+    }
     return readableFilteredOutput(value);
   }
 
@@ -2046,6 +2052,241 @@
     }
     return text;
   }
+
+  function toonOutput(value) {
+    return encodeTOONDocument(value) + "\n";
+  }
+
+  function encodeTOONDocument(value) {
+    return encodeTOONRoot(value).replace(/\n+$/, "");
+  }
+
+  function encodeTOONRoot(value) {
+    if (isTOONObject(value)) {
+      return encodeTOONObject(0, value);
+    }
+    if (Array.isArray(value)) {
+      if (!value.length) {
+        return "[]\n";
+      }
+      return encodeTOONArray(0, "", value, { allowTabular: true });
+    }
+    return encodeTOONScalar(value) + "\n";
+  }
+
+  function encodeTOONObject(depth, obj) {
+    return toonObjectFields(obj).map((field) => encodeTOONField(depth, field.key, field.value)).join("");
+  }
+
+  function encodeTOONField(depth, key, value) {
+    const keyToken = encodeTOONKey(key);
+    if (isTOONObject(value)) {
+      return `${toonIndent(depth)}${keyToken}:\n${encodeTOONObject(depth + 1, value)}`;
+    }
+    if (Array.isArray(value)) {
+      return encodeTOONArray(depth, keyToken, value, { allowTabular: true });
+    }
+    return `${toonIndent(depth)}${keyToken}: ${encodeTOONScalar(value)}\n`;
+  }
+
+  function encodeTOONArray(depth, keyToken, arr, context) {
+    const indent = toonIndent(depth);
+    if (!arr.length) {
+      if (keyToken) {
+        return `${indent}${keyToken}: []\n`;
+      }
+      return context.emptyArrayHeader ? `${indent}[0]:\n` : `${indent}[]\n`;
+    }
+
+    if (arr.every(isTOONPrimitive)) {
+      return `${indent}${keyToken}[${arr.length}]: ${arr.map(encodeTOONScalar).join(",")}\n`;
+    }
+
+    if (context.allowTabular) {
+      const fields = toonTabularFields(arr);
+      if (fields) {
+        let out = `${indent}${keyToken}[${arr.length}]{${fields.map(encodeTOONKey).join(",")}}:\n`;
+        for (const item of arr) {
+          out += `${toonIndent(depth + 1)}${fields.map((field) => encodeTOONScalar(item[field])).join(",")}\n`;
+        }
+        return out;
+      }
+    }
+
+    let out = `${indent}${keyToken}[${arr.length}]:\n`;
+    for (const item of arr) {
+      out += encodeTOONListItem(depth + 1, item);
+    }
+    return out;
+  }
+
+  function encodeTOONListItem(depth, item) {
+    if (isTOONObject(item)) {
+      const fields = toonObjectFields(item);
+      if (!fields.length) {
+        return `${toonIndent(depth)}-\n`;
+      }
+      return toonDashItem(depth, encodeTOONObject(depth + 1, item));
+    }
+    if (Array.isArray(item)) {
+      return toonDashArrayItem(depth, encodeTOONArray(depth + 1, "", item, {
+        allowTabular: false,
+        emptyArrayHeader: true
+      }));
+    }
+    return `${toonIndent(depth)}- ${encodeTOONScalar(item)}\n`;
+  }
+
+  function toonTabularFields(arr) {
+    let fields = null;
+    for (const item of arr) {
+      if (!isTOONObject(item)) {
+        return null;
+      }
+      const itemFields = toonObjectFields(item);
+      if (!itemFields.length || itemFields.some((field) => !isTOONPrimitive(field.value))) {
+        return null;
+      }
+      if (!fields) {
+        fields = itemFields.map((field) => field.key);
+        continue;
+      }
+      if (itemFields.length !== fields.length || fields.some((field) => !Object.prototype.hasOwnProperty.call(item, field))) {
+        return null;
+      }
+    }
+    return fields;
+  }
+
+  function isTOONObject(value) {
+    return value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isTOONPrimitive(value) {
+    return !isTOONObject(value) && !Array.isArray(value);
+  }
+
+  function toonObjectFields(obj) {
+    return Object.keys(obj).map((key) => ({ key, value: obj[key] }));
+  }
+
+  function encodeTOONScalar(value) {
+    if (value === null || value === undefined) {
+      return "null";
+    }
+    if (typeof value === "boolean") {
+      return value ? "true" : "false";
+    }
+    if (typeof value === "number") {
+      return encodeTOONNumber(value);
+    }
+    return encodeTOONString(String(value));
+  }
+
+  function encodeTOONNumber(value) {
+    if (!Number.isFinite(value)) {
+      return "null";
+    }
+    if (Object.is(value, -0)) {
+      return "0";
+    }
+    return String(value);
+  }
+
+  function encodeTOONString(value) {
+    return toonStringNeedsQuote(value) ? quoteTOONString(value) : value;
+  }
+
+  function encodeTOONKey(key) {
+    return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(key) ? key : quoteTOONString(key);
+  }
+
+  function toonStringNeedsQuote(value) {
+    if (value === "" || value === "true" || value === "false" || value === "null") {
+      return true;
+    }
+    if (value[0] === "-") {
+      return true;
+    }
+    if (value.trim() !== value) {
+      return true;
+    }
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value)) {
+      return true;
+    }
+    if (/[:"\\[\]{},]/.test(value)) {
+      return true;
+    }
+    for (const ch of value) {
+      if (ch.codePointAt(0) <= 0x1f) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function quoteTOONString(value) {
+    let out = "\"";
+    for (const ch of value) {
+      const code = ch.codePointAt(0);
+      if (ch === "\\") {
+        out += "\\\\";
+      } else if (ch === "\"") {
+        out += "\\\"";
+      } else if (ch === "\n") {
+        out += "\\n";
+      } else if (ch === "\r") {
+        out += "\\r";
+      } else if (ch === "\t") {
+        out += "\\t";
+      } else if (code <= 0x1f) {
+        out += `\\u${code.toString(16).padStart(4, "0")}`;
+      } else {
+        out += ch;
+      }
+    }
+    return out + "\"";
+  }
+
+  function toonDashItem(depth, content) {
+    const strip = toonIndentUnit.length * (depth + 1);
+    return `${toonIndent(depth)}- ${content.slice(strip)}`;
+  }
+
+  function toonDashArrayItem(depth, content) {
+    const firstLineStrip = toonIndentUnit.length * (depth + 1);
+    const lines = toonLines(content);
+    let out = `${toonIndent(depth)}- `;
+    lines.forEach((line, index) => {
+      if (index === 0) {
+        out += line.slice(firstLineStrip);
+      } else if (line.startsWith(toonIndentUnit)) {
+        out += line.slice(toonIndentUnit.length);
+      } else {
+        out += line;
+      }
+    });
+    return out;
+  }
+
+  function toonLines(content) {
+    const lines = content.split("\n");
+    const out = [];
+    lines.forEach((line, index) => {
+      if (index < lines.length - 1) {
+        out.push(line + "\n");
+      } else if (line) {
+        out.push(line);
+      }
+    });
+    return out;
+  }
+
+  function toonIndent(depth) {
+    return toonIndentUnit.repeat(depth);
+  }
+
+  const toonIndentUnit = "  ";
 
   function gronOutput(value) {
     const lines = [];
@@ -2569,6 +2810,15 @@
 
   function initAllPlaygrounds() {
     document.querySelectorAll("[data-restish-playground]").forEach(initPlayground);
+  }
+
+  if (window.__RESTISH_PLAYGROUND_TEST__) {
+    window.__restishPlaygroundTest = {
+      encodeTOONDocument,
+      parseCommand,
+      render,
+      toonOutput
+    };
   }
 
   if (document.readyState === "loading") {

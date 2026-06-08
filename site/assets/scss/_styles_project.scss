@@ -1286,6 +1286,117 @@ body.td-home .td-navbar__search .td-search-input {
   color: var(--restish-card-title);
 }
 
+.restish-anatomy {
+  --anatomy-bin-color: #2563eb;
+  --anatomy-api-color: #0f766e;
+  --anatomy-op-color: #b45309;
+  --anatomy-option-color: #7c3aed;
+  --anatomy-arg-color: #be123c;
+  --anatomy-body-color: #15803d;
+  --anatomy-command-bg: #f8fafc;
+  --anatomy-command-border: rgba(15, 23, 42, 0.12);
+
+  margin: 1.5rem 0;
+  overflow: hidden;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 8px;
+  background: var(--restish-card-bg-top);
+}
+
+.restish-anatomy__command {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--anatomy-command-border);
+  background: var(--anatomy-command-bg);
+  color: var(--restish-card-title);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.restish-anatomy__command code {
+  color: inherit;
+}
+
+.restish-anatomy__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.restish-anatomy__item {
+  min-width: 0;
+  padding: 0.15rem 0 0.15rem 0.75rem;
+  border-left: 0.3rem solid var(--anatomy-color);
+}
+
+.restish-anatomy__label {
+  display: block;
+  color: var(--anatomy-color);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.restish-anatomy__item code {
+  overflow-wrap: anywhere;
+}
+
+.restish-anatomy__item > code {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--anatomy-color);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.restish-anatomy__from {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--restish-card-title);
+  font-weight: 700;
+}
+
+.restish-anatomy__note {
+  display: block;
+  margin-top: 0.1rem;
+}
+
+.anatomy-bin {
+  --anatomy-color: var(--anatomy-bin-color);
+}
+
+.anatomy-api {
+  --anatomy-color: var(--anatomy-api-color);
+}
+
+.anatomy-op {
+  --anatomy-color: var(--anatomy-op-color);
+}
+
+.anatomy-option {
+  --anatomy-color: var(--anatomy-option-color);
+}
+
+.anatomy-arg {
+  --anatomy-color: var(--anatomy-arg-color);
+}
+
+.anatomy-body {
+  --anatomy-color: var(--anatomy-body-color);
+}
+
+.restish-anatomy__command .anatomy-bin,
+.restish-anatomy__command .anatomy-api,
+.restish-anatomy__command .anatomy-op,
+.restish-anatomy__command .anatomy-option,
+.restish-anatomy__command .anatomy-arg,
+.restish-anatomy__command .anatomy-body {
+  color: var(--anatomy-color);
+}
+
 .restish-blog-cta {
   display: grid;
   gap: 1.2rem;
@@ -1400,6 +1511,49 @@ a.restish-blog-rail-card {
   color: var(--restish-link-color);
 }
 
+.restish-blog-post-nav {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.restish-blog-post-nav__link {
+  display: block;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--restish-card-border);
+  color: var(--restish-card-text);
+  text-decoration: none;
+}
+
+.restish-blog-post-nav__link:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.restish-blog-post-nav__link span,
+.restish-blog-post-nav__link time {
+  display: block;
+  color: var(--restish-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.restish-blog-post-nav__link b {
+  display: block;
+  margin: 0.18rem 0;
+  color: var(--restish-link-color);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.restish-blog-post-nav__link:hover b,
+.restish-blog-post-nav__link:focus b {
+  color: var(--restish-nav-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
 [data-bs-theme="dark"] .restish-blog,
 [data-bs-theme="dark"] .restish-blog .td-main {
   background: var(--bs-body-bg);
@@ -1411,6 +1565,17 @@ a.restish-blog-rail-card {
 
 [data-bs-theme="dark"] .restish-blog-callout {
   background: rgba(45, 212, 191, 0.1);
+}
+
+[data-bs-theme="dark"] .restish-anatomy {
+  --anatomy-bin-color: #93c5fd;
+  --anatomy-api-color: #5eead4;
+  --anatomy-op-color: #fbbf24;
+  --anatomy-option-color: #c4b5fd;
+  --anatomy-arg-color: #fda4af;
+  --anatomy-body-color: #86efac;
+  --anatomy-command-bg: #111827;
+  --anatomy-command-border: rgba(148, 163, 184, 0.18);
 }
 
 [data-bs-theme="dark"] .restish-blog-rail-card {
