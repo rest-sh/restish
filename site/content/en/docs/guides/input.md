@@ -6,11 +6,15 @@ description: Build structured request bodies with shorthand, stdin, forms, multi
 aliases:
   - /docs/recipes/patch-piped-json-with-shorthand/
   - /docs/recipes/send-a-form-login-request/
+extra_js:
+  - js/restish-docs-interactions.js
 ---
 
 Restish shorthand lets you create structured request bodies directly on the
 command line. JSON is the default request encoding, but the same body model can
 be encoded as YAML, form data, multipart, CBOR, and other registered types.
+
+{{< restish-shorthand-body >}}
 
 ## Object Input
 
@@ -23,7 +27,7 @@ The `/post` endpoint echoes the parsed body so you can confirm the result.
 ## Nested Objects And Arrays
 
 {{< restish-example >}}
-restish post api.rest.sh/post 'user.name: Alice, user.roles[]: admin, user.roles[]: editor, active: true'
+restish post api.rest.sh/post 'user.name: Alice, user.roles: [admin, editor], active: true'
 {{< /restish-example >}}
 
 Use quotes when your shell would otherwise treat brackets or spaces specially:

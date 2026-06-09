@@ -5,6 +5,8 @@ date: 2026-06-08
 author: "Daniel Taylor"
 description: OpenAPI can be more than SDK input or Swagger UI data. Restish loads API descriptions at runtime and turns them into shell-native commands with profiles, auth, output, pagination, and MCP-ready extension points.
 canonical_url: "https://rest.sh/blog/turn-an-openapi-spec-into-a-cli-without-generating-code/"
+extra_js:
+  - js/restish-anatomy.js
 categories:
   - OpenAPI
 tags:
@@ -109,42 +111,47 @@ describe request bodies and parameter types. Servers influence where operations
 are sent. Security requirements tell Restish which credentials an operation can
 use.
 
+### Anatomy of Generated Commands
+
 Here is the anatomy of a generated command:
 
-<div class="restish-anatomy">
-  <pre class="restish-anatomy__command"><code><span class="anatomy-bin">restish</span> <span class="anatomy-api">inventory</span> <span class="anatomy-op">update-item</span> <span class="anatomy-option">--dry-run</span> <span class="anatomy-arg">item-123</span> <span class="anatomy-body">'name: Travel mug, enabled: true'</span></code></pre>
+<div class="restish-anatomy" data-restish-anatomy>
+  <svg class="restish-anatomy__connector" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+    <path data-restish-anatomy-string d="" />
+  </svg>
+  <pre class="restish-anatomy__command"><code><span class="anatomy-bin" data-anatomy-part="bin" tabindex="0">restish</span> <span class="anatomy-api" data-anatomy-part="api" tabindex="0">inventory</span> <span class="anatomy-op" data-anatomy-part="op" tabindex="0">update-item</span> <span class="anatomy-option" data-anatomy-part="option" tabindex="0">--dry-run</span> <span class="anatomy-arg" data-anatomy-part="arg" tabindex="0">item-123</span> <span class="anatomy-body" data-anatomy-part="body" tabindex="0">'name: Travel mug, enabled: true'</span></code></pre>
   <div class="restish-anatomy__grid">
-    <div class="restish-anatomy__item anatomy-bin">
+    <div class="restish-anatomy__item anatomy-bin" data-anatomy-part="bin" tabindex="0">
       <span class="restish-anatomy__label">Binary</span>
       <code>restish</code>
       <span class="restish-anatomy__from">Restish itself</span>
       <span class="restish-anatomy__note">The universal entry point.</span>
     </div>
-    <div class="restish-anatomy__item anatomy-api">
+    <div class="restish-anatomy__item anatomy-api" data-anatomy-part="api" tabindex="0">
       <span class="restish-anatomy__label">API</span>
       <code>inventory</code>
       <span class="restish-anatomy__from">Chosen during <code>api connect</code></span>
       <span class="restish-anatomy__note">Local operator vocabulary, not an OpenAPI field.</span>
     </div>
-    <div class="restish-anatomy__item anatomy-op">
+    <div class="restish-anatomy__item anatomy-op" data-anatomy-part="op" tabindex="0">
       <span class="restish-anatomy__label">Operation</span>
       <code>update-item</code>
       <span class="restish-anatomy__from"><code>operationId: updateItem</code></span>
       <span class="restish-anatomy__note">The operation ID becomes the command name.</span>
     </div>
-    <div class="restish-anatomy__item anatomy-option">
+    <div class="restish-anatomy__item anatomy-option" data-anatomy-part="option" tabindex="0">
       <span class="restish-anatomy__label">Option</span>
       <code>--dry-run</code>
       <span class="restish-anatomy__from">Optional query parameter <code>dry_run</code></span>
       <span class="restish-anatomy__note">Optional parameters become flags.</span>
     </div>
-    <div class="restish-anatomy__item anatomy-arg">
+    <div class="restish-anatomy__item anatomy-arg" data-anatomy-part="arg" tabindex="0">
       <span class="restish-anatomy__label">Argument</span>
       <code>item-123</code>
       <span class="restish-anatomy__from">Required path parameter <code>item-id</code></span>
       <span class="restish-anatomy__note">Required path parameters become positional arguments.</span>
     </div>
-    <div class="restish-anatomy__item anatomy-body">
+    <div class="restish-anatomy__item anatomy-body" data-anatomy-part="body" tabindex="0">
       <span class="restish-anatomy__label">Body</span>
       <code>'name: Travel mug, enabled: true'</code>
       <span class="restish-anatomy__from">JSON request body schema</span>
