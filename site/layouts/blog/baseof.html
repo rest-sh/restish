@@ -20,10 +20,5 @@
       {{ partial "footer.html" . }}
     </div>
     {{ partial "scripts.html" . }}
-    {{ range .Params.extra_js -}}
-      {{ $scriptPath := . }}
-      {{ $scriptVersion := readFile (printf "static/%s" $scriptPath) | md5 }}
-      <script src='{{ $scriptPath | relURL }}?v={{ $scriptVersion }}'></script>
-    {{ end -}}
   </body>
 </html>
