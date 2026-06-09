@@ -171,6 +171,28 @@ assert.deepEqual(
   "query selection maps projection across array items"
 );
 
+{
+  const trace = api.buildFilterTrace(api.querySample, 'body.items[format == "jpeg"].{name, owner: owner.name, size_bytes}');
+  assert.deepEqual(
+    normalize(trace.steps.map((step) => step.token)),
+    ["body", ".items", "[format == jpeg]", "{name, owner: owner.name, size_bytes}"],
+    "filter trace exposes path, selection, and projection tokens"
+  );
+  assert.equal(trace.steps[1].title, "Select items", "filter trace names ordinary field selection");
+  assert.equal(trace.steps[2].title, "Filter 3 items", "filter trace counts selected array items");
+  assert.deepEqual(
+    normalize(trace.value),
+    [
+      {
+        name: "Dragonfly JPEG",
+        owner: "Ada",
+        size_bytes: 184523
+      }
+    ],
+    "filter trace final value matches filter result"
+  );
+}
+
 assert.deepEqual(
   normalize(api.applyShorthandFilter(api.querySample, "body.items[public == true].name")),
   ["Dragonfly JPEG", "CLI Screenshot"],
@@ -191,6 +213,18 @@ assert.deepEqual(
   "query nested arrays after selection"
 );
 
+{
+  const trace = api.buildFilterTrace(api.querySample, "body.events[type == deploy].changes.name");
+  assert.equal(trace.steps.at(-1).title, "Map name over each item", "filter trace explains array mapping");
+  assert.deepEqual(
+    normalize(trace.value),
+    [
+      ["output guide", "TOON renderer"]
+    ],
+    "filter trace handles nested arrays after selection"
+  );
+}
+
 assert.deepEqual(
   normalize(api.applyShorthandFilter(api.querySample, "body..download")),
   [
@@ -206,6 +240,21 @@ assert.deepEqual(
   ["https://api.rest.sh/images/jpeg?download=1"],
   "recursive shorthand query can filter current values"
 );
+
+{
+  const trace = api.buildFilterTrace(api.querySample, "body..download|[@ contains jpeg]");
+  assert.deepEqual(
+    normalize(trace.steps.map((step) => step.token)),
+    ["body", "..download", "|", "[@ contains jpeg]"],
+    "filter trace shows pipe as a collection boundary"
+  );
+  assert.equal(trace.steps[2].title, "Pipe the current result", "filter trace explains pipe boundary");
+  assert.deepEqual(
+    normalize(trace.value),
+    ["https://api.rest.sh/images/jpeg?download=1"],
+    "filter trace final value matches piped filter result"
+  );
+}
 
 assert.equal(
   api.applyShorthandFilter(api.querySample, 'headers."Content-Type"'),

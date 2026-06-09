@@ -247,10 +247,23 @@
     const source = root.querySelector("[data-query-source]");
     const output = root.querySelector("[data-query-output]");
     const status = root.querySelector("[data-query-status]");
+    const traceRoot = root.querySelector("[data-filter-trace]");
+    const traceToggle = root.querySelector("[data-toggle-trace]");
+    const traceSummary = root.querySelector("[data-trace-summary]");
+    const traceTokens = root.querySelector("[data-trace-tokens]");
+    const traceBefore = root.querySelector("[data-trace-before]");
+    const traceAfter = root.querySelector("[data-trace-after]");
+    const traceDetail = root.querySelector("[data-trace-detail]");
+    const tracePrev = root.querySelector("[data-trace-prev]");
+    const traceNext = root.querySelector("[data-trace-next]");
+    const tracePlay = root.querySelector("[data-trace-play]");
     const refreshHighlights = setupHighlightEditors(root);
     if (!input || !output) {
       return;
     }
+    let traceSteps = [];
+    let traceIndex = 0;
+    let traceTimer = 0;
 
     const shared = readSharedValue("shorthand-filter");
     if (shared) {
@@ -272,9 +285,74 @@
         const value = applyShorthandFilter(sourceValue, input.value);
         setHighlightedCode(output, JSON.stringify(value, null, 2), "json");
         setStatus(status, "Filter matched", "ok");
+        updateTrace(sourceValue);
       } catch (error) {
         setHighlightedCode(output, error.message, "");
         setStatus(status, "No match", "error");
+        updateTrace(null, error);
+      }
+    }
+
+    function updateTrace(sourceValue, error) {
+      stopTracePlayback();
+      if (!traceRoot || traceRoot.hidden) {
+        return;
+      }
+      if (error || !sourceValue) {
+        traceSteps = [];
+        renderTraceError(error ? error.message : "Fix the response JSON before tracing.");
+        return;
+      }
+      try {
+        const trace = buildFilterTrace(sourceValue, input.value);
+        traceSteps = trace.steps;
+        traceIndex = Math.min(traceIndex, Math.max(0, traceSteps.length - 1));
+        renderTraceStep();
+      } catch (traceError) {
+        traceSteps = [];
+        renderTraceError(traceError.message);
+      }
+    }
+
+    function renderTraceError(message) {
+      if (traceSummary) {
+        traceSummary.textContent = message;
+      }
+      if (traceTokens) {
+        traceTokens.textContent = "";
+      }
+      setHighlightedCode(traceBefore, "", "");
+      setHighlightedCode(traceAfter, "", "");
+      if (traceDetail) {
+        traceDetail.textContent = "";
+      }
+    }
+
+    function renderTraceStep() {
+      if (!traceSteps.length) {
+        renderTraceError("This filter has no traceable steps yet.");
+        return;
+      }
+      const step = traceSteps[traceIndex];
+      if (traceSummary) {
+        traceSummary.textContent = `Step ${traceIndex + 1} of ${traceSteps.length}: ${step.title}`;
+      }
+      if (traceTokens) {
+        traceTokens.innerHTML = traceSteps.map(function (item, index) {
+          const active = index === traceIndex ? " data-active" : "";
+          return `<button type="button" data-trace-step="${index}"${active}>${escapeHTML(item.token)}</button>`;
+        }).join("");
+      }
+      setHighlightedCode(traceBefore, JSON.stringify(step.before, null, 2), "json");
+      setHighlightedCode(traceAfter, JSON.stringify(step.after, null, 2), "json");
+      if (traceDetail) {
+        traceDetail.textContent = step.detail;
+      }
+      if (tracePrev) {
+        tracePrev.disabled = traceIndex === 0;
+      }
+      if (traceNext) {
+        traceNext.disabled = traceIndex === traceSteps.length - 1;
       }
     }
 
@@ -298,11 +376,79 @@
         }
       });
     }
+    if (traceToggle && traceRoot) {
+      traceToggle.addEventListener("click", function () {
+        traceRoot.hidden = !traceRoot.hidden;
+        traceToggle.setAttribute("aria-expanded", String(!traceRoot.hidden));
+        traceToggle.textContent = traceRoot.hidden ? "Trace filter" : "Hide trace";
+        traceIndex = 0;
+        try {
+          updateTrace(parseQuerySource(source ? source.value : ""));
+        } catch (error) {
+          updateTrace(null, error);
+        }
+      });
+    }
+    if (traceTokens) {
+      traceTokens.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-trace-step]");
+        if (!button) {
+          return;
+        }
+        stopTracePlayback();
+        traceIndex = Number(button.dataset.traceStep || "0");
+        renderTraceStep();
+      });
+    }
+    if (tracePrev) {
+      tracePrev.addEventListener("click", function () {
+        stopTracePlayback();
+        traceIndex = Math.max(0, traceIndex - 1);
+        renderTraceStep();
+      });
+    }
+    if (traceNext) {
+      traceNext.addEventListener("click", function () {
+        stopTracePlayback();
+        traceIndex = Math.min(traceSteps.length - 1, traceIndex + 1);
+        renderTraceStep();
+      });
+    }
+    if (tracePlay) {
+      tracePlay.addEventListener("click", function () {
+        if (traceTimer) {
+          stopTracePlayback();
+          return;
+        }
+        if (!traceSteps.length) {
+          return;
+        }
+        tracePlay.textContent = "Pause";
+        traceTimer = window.setInterval(function () {
+          if (traceIndex >= traceSteps.length - 1) {
+            stopTracePlayback();
+            return;
+          }
+          traceIndex += 1;
+          renderTraceStep();
+        }, 950);
+      });
+    }
     input.addEventListener("input", render);
     if (source) {
       source.addEventListener("input", render);
     }
     render();
+
+    function stopTracePlayback() {
+      if (traceTimer) {
+        window.clearInterval(traceTimer);
+        traceTimer = 0;
+      }
+      if (tracePlay) {
+        tracePlay.textContent = "Play";
+      }
+    }
   }
 
   function setupHighlightEditors(root) {
@@ -978,6 +1124,160 @@
     }
   }
 
+  function buildFilterTrace(doc, filter) {
+    const parts = splitTopLevel(filter, "|").map((item) => item.trim()).filter(Boolean);
+    const steps = [];
+    let current = doc;
+    if (!parts.length) {
+      steps.push({
+        token: "input",
+        title: "Use the input value",
+        detail: "An empty filter returns the normalized response unchanged.",
+        before: doc,
+        after: doc
+      });
+      return { steps, value: doc };
+    }
+    parts.forEach(function (part, index) {
+      if (index > 0) {
+        steps.push({
+          token: "|",
+          title: "Pipe the current result",
+          detail: "A pipe stops path mapping, collects the current result, and runs the next expression against that value.",
+          before: current,
+          after: current
+        });
+      }
+      const traced = traceExpression(current, part);
+      steps.push(...traced.steps);
+      current = traced.value;
+    });
+    return { steps, value: current };
+  }
+
+  function traceExpression(value, expr) {
+    if (expr.startsWith("{") && expr.endsWith("}")) {
+      const after = project(value, expr.slice(1, -1));
+      return {
+        value: after,
+        steps: [traceStep(`{${expr.slice(1, -1)}}`, "Project selected fields", "Projection builds a new object from the current value.", value, after)]
+      };
+    }
+    if (expr.startsWith("..")) {
+      const field = expr.slice(2);
+      const after = recursiveFind(value, field);
+      return {
+        value: after,
+        steps: [traceStep(`..${field}`, `Find every ${field}`, "Recursive search walks below the current value and collects every matching field.", value, after)]
+      };
+    }
+
+    const projection = expr.match(/^(.*)\.\{(.+)\}$/);
+    if (projection) {
+      const traced = tracePath(value, projection[1]);
+      const before = traced.value;
+      const after = project(before, projection[2]);
+      traced.steps.push(traceStep(`{${projection[2]}}`, "Project selected fields", "Projection runs against the current value. If it is an array, each item gets the same projection.", before, after));
+      traced.value = after;
+      return traced;
+    }
+
+    const recursive = expr.match(/^(.*)\.\.([A-Za-z0-9_-]+)$/);
+    if (recursive) {
+      const traced = tracePath(value, recursive[1]);
+      const before = traced.value;
+      const after = recursiveFind(before, recursive[2]);
+      traced.steps.push(traceStep(`..${recursive[2]}`, `Find every ${recursive[2]}`, "Recursive search walks below the current value and collects every matching field.", before, after));
+      traced.value = after;
+      return traced;
+    }
+
+    return tracePath(value, expr);
+  }
+
+  function tracePath(value, path) {
+    if (!path) {
+      return { steps: [], value };
+    }
+    const tokens = pathTokens(path);
+    const steps = [];
+    let current = value;
+    tokens.forEach(function (token, index) {
+      const before = current;
+      const after = applyPathToken(before, token);
+      steps.push(tracePathStep(token, index, before, after));
+      current = after;
+      if (current === undefined) {
+        throw new Error(`No value matched \`${path}\`.`);
+      }
+    });
+    return { steps, value: current };
+  }
+
+  function applyPathToken(value, token) {
+    if (token.type === "field") {
+      return readField(value, token.value);
+    }
+    if (token.type === "index") {
+      return readIndex(value, token.value);
+    }
+    if (token.type === "slice") {
+      return readSlice(value, token.start, token.end);
+    }
+    if (token.type === "select") {
+      return selectItems(value, token.field, token.operator, token.value);
+    }
+    return value;
+  }
+
+  function tracePathStep(token, index, before, after) {
+    if (token.type === "field") {
+      const title = Array.isArray(before) ? `Map ${token.value} over each item` : `Select ${token.value}`;
+      const detail = Array.isArray(before)
+        ? `The current value is an array, so Restish applies .${token.value} to each item and keeps the matched values.`
+        : `Restish reads the ${token.value} field from the current value.`;
+      return traceStep(pathTokenLabel(token, index), title, detail, before, after);
+    }
+    if (token.type === "select") {
+      const kept = Array.isArray(after) ? after.length : 0;
+      const total = Array.isArray(before) ? before.length : 0;
+      return traceStep(pathTokenLabel(token, index), `Filter ${total} items`, `Selection keeps ${kept} of ${total} items where ${token.field} ${selectionOperatorLabel(token.operator)} ${formatTraceScalar(token.value)}.`, before, after);
+    }
+    if (token.type === "index") {
+      return traceStep(pathTokenLabel(token, index), `Pick index ${token.value}`, "Bracket indexes select one item from the current array.", before, after);
+    }
+    return traceStep(pathTokenLabel(token, index), "Take a slice", "Slice brackets select a range from the current array.", before, after);
+  }
+
+  function traceStep(token, title, detail, before, after) {
+    return { token, title, detail, before, after };
+  }
+
+  function pathTokenLabel(token, index) {
+    if (token.type === "field") {
+      return `${index === 0 ? "" : "."}${formatPathField(token.value)}`;
+    }
+    if (token.type === "index") {
+      return `[${token.value}]`;
+    }
+    if (token.type === "slice") {
+      return `[${token.start}:${token.end === undefined ? "" : token.end}]`;
+    }
+    return `[${token.field} ${selectionOperatorLabel(token.operator)} ${formatTraceScalar(token.value)}]`;
+  }
+
+  function selectionOperatorLabel(operator) {
+    return operator === "contains" ? "contains" : "==";
+  }
+
+  function formatPathField(field) {
+    return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(field) ? field : JSON.stringify(field);
+  }
+
+  function formatTraceScalar(value) {
+    return typeof value === "string" && /\s/.test(value) ? JSON.stringify(value) : String(value);
+  }
+
   function applyShorthandFilter(doc, filter) {
     const parts = splitTopLevel(filter, "|").map((item) => item.trim()).filter(Boolean);
     if (!parts.length) {
@@ -1367,6 +1667,7 @@
   if (window.__RESTISH_DOCS_INTERACTIONS_TEST__) {
     window.__restishDocsInteractionsTest = {
       applyShorthandFilter,
+      buildFilterTrace,
       outputActions,
       encodeShorthand,
       highlightValue,

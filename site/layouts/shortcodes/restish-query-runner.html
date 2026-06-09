@@ -37,6 +37,34 @@
   </div>
   <div class="restish-docs-tool__toolbar">
     <span data-query-status>Ready</span>
-    <button type="button" data-share-example>Copy share link</button>
+    <div class="restish-docs-tool__toolbar-actions">
+      <button type="button" data-toggle-trace aria-expanded="false">Trace filter</button>
+      <button type="button" data-share-example>Copy share link</button>
+    </div>
+  </div>
+  <div class="restish-filter-trace" data-filter-trace hidden>
+    <div class="restish-filter-trace__top">
+      <div>
+        <h4>Filter Trace</h4>
+        <p data-trace-summary>Step through how Restish satisfies this shorthand filter.</p>
+      </div>
+      <div class="restish-filter-trace__controls">
+        <button type="button" data-trace-prev aria-label="Previous trace step">Prev</button>
+        <button type="button" data-trace-play>Play</button>
+        <button type="button" data-trace-next aria-label="Next trace step">Next</button>
+      </div>
+    </div>
+    <div class="restish-filter-trace__tokens" data-trace-tokens aria-label="Filter trace tokens"></div>
+    <div class="restish-filter-trace__stage" data-trace-stage>
+      <section>
+        <h5>Before</h5>
+        <pre><code data-trace-before></code></pre>
+      </section>
+      <section>
+        <h5>After</h5>
+        <pre><code data-trace-after></code></pre>
+      </section>
+    </div>
+    <p class="restish-filter-trace__detail" data-trace-detail></p>
   </div>
 </div>
