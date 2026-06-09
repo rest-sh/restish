@@ -109,6 +109,14 @@ assert.deepEqual(
   "output format value completion"
 );
 
+const printCompletion = complete("restish api.rest.sh/images --rsh-print H");
+assert.ok(printCompletion.matches.includes("HBhbp"), "print transcript completion should include HBhbp");
+assert.equal(
+  printCompletion.matches.includes("Hhbp"),
+  false,
+  "print transcript completion should not include the invalid Hhbp spec"
+);
+
 assert.deepEqual(
   complete("restish api.rest.sh/im"),
   {
@@ -118,6 +126,17 @@ assert.deepEqual(
     applied: true
   },
   "URL-ish docs path completion"
+);
+
+assert.equal(
+  api.shouldApplyCompletionKey({ key: "Tab", shiftKey: false }),
+  true,
+  "plain Tab should apply completions"
+);
+assert.equal(
+  api.shouldApplyCompletionKey({ key: "Tab", shiftKey: true }),
+  false,
+  "Shift+Tab should keep the browser focus traversal behavior"
 );
 
 const toonPlan = api.parseCommand("restish get https://api.rest.sh/items -o toon");

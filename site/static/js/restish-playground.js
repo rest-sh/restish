@@ -156,7 +156,7 @@
   const cacheCompletions = ["clear", "dir", "list"];
   const pluginCompletions = ["debug", "install", "list", "remove"];
   const contentTypeCompletions = ["json", "form"];
-  const printCompletions = ["hbp", "hbpc", "h", "b", "Hhbp"];
+  const printCompletions = ["hbp", "hbpc", "h", "b", "HBhbp"];
   const filterLangCompletions = ["restish", "jq"];
   const imageFormatCompletions = ["jpeg", "png", "webp", "gif", "heic"];
   const documentFormatCompletions = ["json", "yaml", "xml", "html", "text", "csv"];
@@ -435,6 +435,10 @@
       return ["true", "false"];
     }
     return null;
+  }
+
+  function shouldApplyCompletionKey(event) {
+    return event.key === "Tab" && !event.shiftKey;
   }
 
   function flagCompletions(completedWords) {
@@ -3187,7 +3191,7 @@
     }
 
     command.addEventListener("keydown", function (event) {
-      if (event.key === "Tab") {
+      if (shouldApplyCompletionKey(event)) {
         event.preventDefault();
         applyCompletion();
         resetCommandScroll();
@@ -3233,6 +3237,7 @@
       encodeTOONDocument,
       parseCommand,
       render,
+      shouldApplyCompletionKey,
       toonOutput
     };
   }
