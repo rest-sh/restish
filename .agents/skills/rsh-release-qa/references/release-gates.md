@@ -91,7 +91,13 @@ chmod 600 "$RUN_DIR/empty.json"
 
 ```bash
 env GOCACHE="$RUN_DIR/go-cache" GOPATH="$RUN_DIR/go-path" go run ./cmd/restish-docgen --check
+scripts/check-doc-links.rb
+scripts/check-doc-examples.rb
 ```
+
+The example check's `--mode live` variant executes every docs `restish-example`
+against `api.rest.sh`; include it when the release touches command surface or
+docs examples and the network allows it.
 
 For the docs site, use a disposable npm cache if the user cache is not writable
 or contains permission problems. These commands must run against `site/`, which
