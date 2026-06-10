@@ -18,8 +18,12 @@ go build ./cmd/restish-pkcs11
 go run ./cmd/restish-docgen --write
 go run ./cmd/restish-docgen --check
 
-# Validate the docs site after changes under site/
+# Validate the docs site after changes under site/ (quick check)
 hugo --source site --quiet
+
+# Full CI parity for the docs job: social preview images + Hugo
+# (npm ci needed once; social-images parses content front matter and can fail independently)
+npm --prefix site ci && npm --prefix site run build
 
 # Validate docs examples and links (CI runs both)
 scripts/check-doc-examples.rb
@@ -40,7 +44,7 @@ go test -race ./...              # when touching concurrency, streaming,
                                  # subprocess lifecycle, or shared buffers
 ```
 
-CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the Hugo/npm docs-site build. A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
+CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the docs-site build (`npm --prefix site ci`, `npm --prefix site run social-images`, then Hugo). A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
 
 ### Manual Smoke Test
 
