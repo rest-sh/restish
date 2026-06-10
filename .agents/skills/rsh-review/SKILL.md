@@ -60,13 +60,13 @@ Review code changes with a bug-finding mindset. Prioritize correctness, regressi
 
 ## Restish-Specific Watchlist
 
-These are high-value repo-specific checks, not an exhaustive checklist. Use them when relevant; do not force them into unrelated reviews.
+These are high-value repo-specific checks, not an exhaustive checklist. Use them when relevant; do not force them into unrelated reviews. For the full catalog of historical bug classes found in past releases, see `../rsh-release-qa/references/findings-mining.md`. When a changed subsystem has a design doc (`docs/design/README.md`), check the diff against its stated invariants.
 
 ### Path-specific cues
 
 - `internal/cli/`: flags, exit codes, stdin/stdout/stderr, config precedence, generated commands
 - `internal/request/`: content negotiation, auth headers, redirects, pagination, retries, streaming, cancellation
-- `internal/output/`: formatter drift, golden tests, terminal width behavior, stable ordering
+- `internal/output/`: formatter drift, regression fixtures, terminal width behavior, stable ordering
 - `internal/config/`: defaults, file permissions, migrations, backward compatibility
 - `internal/plugin/` and `cmd/restish-*`: plugin protocol, subprocess lifecycle, wire compatibility
 - `cmd/restish` and `site/`: user-facing CLI behavior, examples, docs impact
@@ -99,9 +99,25 @@ Config fields should not be added unless their behavior is implemented. Otherwis
 
 Spec-loading or command-generation changes can break existing workflows indirectly. Check for backward compatibility in generated command shape, naming, argument expectations, and operation discovery.
 
-### Output formatting and golden tests
+### Spec and operation cache invalidation
 
-Intentional formatter changes should usually come with targeted regression coverage or golden updates. Unintentional output drift is a common source of user-visible regressions.
+A recurring source of fixes: stale generated commands after config or spec changes. Caches are keyed by base URL, operation base, server variables, and raw spec hash. Changes to `api edit`/`api connect`, profiles, base URLs, or spec loading must invalidate or refresh the relevant caches, and concurrent `api connect` runs must not clobber each other's entries.
+
+### OAuth and auth concurrency
+
+Token refreshes must stay serialized; discovery transports and OAuth state are shared across generated commands. Changes to `internal/auth` should be checked for refresh races, cache-key reuse across profiles/issuers, and browser-launch behavior (`$BROWSER` handling, Linux flows).
+
+### v1 → v2 migration of persisted state
+
+Changing config schema, cache key formats, or credential storage breaks existing user state unless migrated. Past fixes migrated legacy token cache keys, legacy `tls.cert`/`tls.key` fields, and added migration warnings. New formats need a mapping from the old one or an explicit, tested migration error.
+
+### Command surface and help contracts
+
+`internal/cli/command_surface_test.go` locks the built-in command tree, help grouping, error-message UX, and removed pre-release names. Adding, renaming, or regrouping commands should update it deliberately — treat unexplained churn there as a regression signal.
+
+### Output formatting
+
+Intentional formatter changes should usually come with targeted regression coverage. Unintentional output drift is a common source of user-visible regressions.
 
 ### Auth, pagination, filtering, and caching flows
 
@@ -109,17 +125,16 @@ Changes in these areas often regress behavior only in realistic end-to-end paths
 
 For auth, redaction, and cache metadata changes, check both positive behavior and negative leakage boundaries: where credentials are applied, where they must not be applied, what gets persisted, and what appears in errors or traces. Keep findings tied to the PR's changed paths.
 
+`internal/secrets` holds the central allow-lists for recognizing credential-like fields; new secret-ish field names belong there, not in ad-hoc checks. Past fixes covered suffixed fields (`confirm_password`), URL userinfo and query credentials in network errors, and avoiding false positives on ordinary fields like `max_tokens`.
+
 ### Test buffer races
 
 Tests that share a `bytes.Buffer` across concurrent writers can hide data races, especially when subprocess stderr/stdout is wired into test buffers.
 
 ## Verification Hints
 
-- Prefer the narrowest meaningful test first: `go test ./internal/cli/...`, `go test ./internal/request/...`, `go test ./internal/output/...`, or another touched package.
-- Run `go test ./...` for broad or shared changes.
-- Run `go test -tags=integration ./...` before approving CLI or plugin behavior changes with integration risk.
-- Update golden files only when behavior intentionally changed.
-- Consider `go test -race ./...` when concurrency, subprocess handling, or shared buffers are touched.
+- Run the AGENTS.md verification ladder: narrowest touched package first, then `go test ./...`, then `-tags=integration` for CLI/plugin behavior changes, and `-race` when concurrency, subprocess handling, or shared buffers are touched.
+- Run `go run ./cmd/restish-docgen --check` when CLI surface or help text changed; CI fails on stale generated docs regions.
 
 ## Example Findings
 

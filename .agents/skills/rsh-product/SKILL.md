@@ -37,28 +37,13 @@ For source-backed rationale and examples from product/UX references and popular 
 
 ### 1. Frame The Opportunity
 
-Write the smallest useful product frame before designing commands:
+Before designing commands, write the smallest useful product frame: who the user is (first-time user, daily CLI user, API integrator, plugin operator, plugin author, or maintainer), the job they are doing outside Restish, their current workaround, the pain, the intended outcome, and the evidence (issue text, failing example, repeated support question, code/test signal). If evidence is thin, propose the lightest validation instead of inventing a large feature.
 
-- **User**: Who is this for? First-time user, daily CLI user, API integrator, plugin operator, plugin author, or maintainer?
-- **Job**: What is the user trying to get done outside Restish?
-- **Current workaround**: What command sequence, script, config edit, docs lookup, or mental model do they use today?
-- **Pain**: Is the problem failure, slowness, repeated typing, poor discoverability, unsafe behavior, bad output, weak automation, or missing capability?
-- **Outcome**: What should be easier, safer, faster, or more understandable after the change?
-- **Evidence**: Point to issue text, user report, failing example, design-doc gap, docs search, repeated support question, or code/test signal.
-
-If evidence is thin, propose the lightest validation instead of inventing a large feature.
+Concrete evidence sources for Restish: the v1 issue tracker (`rest-sh/restish` on GitHub — dozens of open issues and PRs represent real user demand), `docs/design/000-restish-v1-baseline.md` for v1 behavior, `docs/design/031-compatibility-and-migration.md` for compatibility promises, and `docs/design/037-v2-command-surface-review.md` for prior command-surface decisions.
 
 ### 2. Classify The Investment
 
-Classify the work so scope and validation match risk:
-
-- **Reliability**: Makes existing behavior more correct, predictable, secure, or recoverable.
-- **Usability**: Makes existing behavior easier to discover, understand, compose, or debug.
-- **Feature**: Adds a new user-visible capability.
-- **Compatibility**: Preserves or improves v1, plugin, OpenAPI, shell, or documented behavior.
-- **Platform**: Improves internal architecture only when it unlocks user-facing reliability, velocity, or simplicity.
-
-Favor reliability and usability improvements when a new feature would deepen existing confusion.
+Classify the work — reliability, usability, feature, compatibility, or platform — so scope and validation match risk. Favor reliability and usability improvements when a new feature would deepen existing confusion. Platform work counts only when it unlocks user-facing reliability, velocity, or simplicity.
 
 ### 3. Shape The Product Bet
 
@@ -141,7 +126,7 @@ Use validation proportional to risk:
 - **Product validation**: Compare against user jobs, known feedback, current docs, and one or two realistic command transcripts.
 - **Usability review**: Run a heuristic pass for status visibility, vocabulary, control/escape, consistency, error prevention, recognition over recall, efficiency, minimal output, error recovery, and help.
 - **CLI contract tests**: Cover TTY vs non-TTY when behavior differs, `stdout`/`stderr`, exit codes, help text, output formats, malformed input, cancellation, auth/config precedence, and shell composition.
-- **Golden output tests**: Use for intentional formatter/help changes; do not accept drift casually.
+- **Output regression tests**: Use for intentional formatter/help changes; do not accept drift casually.
 - **Docs checks**: Update `site/` for user behavior and `docs/design/` for significant subsystem behavior; link guides and reference pages both ways.
 - **Compatibility checks**: Test v1-style workflows, generated OpenAPI command shape, plugin boundaries, and scripting behavior when touched.
 
