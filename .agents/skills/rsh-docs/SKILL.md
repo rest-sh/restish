@@ -251,4 +251,8 @@ A plain `hugo --source site --quiet` is a fine quick check while iterating.
 independently of Hugo, so run it for blog and front-matter changes even when
 the quick Hugo check passes.
 
+When touching site JavaScript or interactive examples (playground, query
+runner, docs interactions), also run `npm --prefix site test`; CI does not
+run it in the docs job.
+
 Also verify new links, check examples against current CLI behavior, grep touched docs for stale `api.example.com` placeholders and leftover `Source material:` sections, and prefer examples that can later be validated against `api.rest.sh` or promoted into tests.

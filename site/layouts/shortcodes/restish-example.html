@@ -27,9 +27,10 @@
     <span class="restish-playground__prompt" aria-hidden="true">$</span>
     <div class="restish-playground__command-wrap">
       <div class="restish-playground__command-highlight" aria-hidden="true"><code class="language-bash" data-restish-command-highlight>{{ $command }}</code></div>
-      <input id="{{ $id }}-command" class="restish-playground__command" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" value="{{ $command }}" data-restish-command>
+      <input id="{{ $id }}-command" class="restish-playground__command" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" value="{{ $command }}" aria-controls="{{ $id }}-completions" data-restish-command>
     </div>
   </div>
+  <div id="{{ $id }}-completions" class="restish-playground__completions" data-restish-completions aria-live="polite" hidden></div>
   <pre id="{{ $id }}-output" class="restish-playground__output" aria-live="polite" hidden><code class="language-readable" data-restish-output></code></pre>
   <noscript>
     <p class="restish-playground__noscript">Enable JavaScript to run this example in the browser.</p>

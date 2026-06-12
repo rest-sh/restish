@@ -1,0 +1,31 @@
+<div class="restish-docs-tool restish-output-pipeline" data-restish-output-pipeline>
+  <div class="restish-docs-tool__header">
+    <div>
+      <p class="restish-docs-tool__eyebrow">Interactive model</p>
+      <h3>Trace How Output Is Built</h3>
+    </div>
+    <p>Pick a command shape to see which parts of the response pipeline become active.</p>
+  </div>
+  <div class="restish-output-pipeline__actions" role="list" aria-label="Output command examples">
+    <button type="button" data-output-action="auto">Terminal view</button>
+    <button type="button" data-output-action="headers">Headers only</button>
+    <button type="button" data-output-action="jsonfile">Filtered JSON file</button>
+    <button type="button" data-output-action="pages">Paginated table</button>
+    <button type="button" data-output-action="stream">Event stream</button>
+    <button type="button" data-output-action="redirect">Raw download</button>
+  </div>
+  <div class="restish-output-pipeline__command" aria-live="polite">
+    <span aria-hidden="true">$</span>
+    <code data-output-command>restish api.rest.sh/types</code>
+  </div>
+  <div class="restish-output-pipeline__steps" aria-label="Response processing pipeline">
+    <button type="button" data-output-step="response"><span>HTTP response</span><small>Status, headers, compressed or raw body bytes</small></button>
+    <button type="button" data-output-step="decompress"><span>Decompress</span><small>Content-Encoding: deflate, gzip, brotli &rarr; uncompressed body bytes</small></button>
+    <button type="button" data-output-step="decode"><span>Unmarshal body</span><small>JSON, YAML, CBOR, text &rarr; Go structs, maps, slices, or strings</small></button>
+    <button type="button" data-output-step="normalize"><span>Normalize</span><small>Status, headers, processed hypermedia links, body</small></button>
+    <button type="button" data-output-step="paginate"><span>Paginate or stream</span><small>Follow Link headers or emit event records as they arrive</small></button>
+    <button type="button" data-output-step="filter"><span>Filter</span><small>-f selectors and shortcuts &rarr; the fields or records you asked for</small></button>
+    <button type="button" data-output-step="format"><span>Format output</span><small>auto, table, JSON, TOON, lines, or raw bytes for the next tool</small></button>
+  </div>
+  <div class="restish-output-pipeline__detail" data-output-detail aria-live="polite"></div>
+</div>
