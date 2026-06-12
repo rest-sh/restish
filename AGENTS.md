@@ -46,7 +46,7 @@ go test -race ./...              # when touching concurrency, streaming,
                                  # subprocess lifecycle, or shared buffers
 ```
 
-CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the docs-site build (`npm --prefix site ci`, `npm --prefix site run social-images`, then Hugo). A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
+CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `go run ./cmd/restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the docs-site build (`npm --prefix site ci`, `npm --prefix site run social-images`, then Hugo). A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
 
 ### Manual Smoke Test
 
