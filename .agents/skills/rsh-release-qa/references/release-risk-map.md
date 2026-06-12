@@ -15,7 +15,7 @@ checks after reading recent commits.
 - Pagination and hypermedia: page params, Link headers, item extraction,
   limits, metadata filters, and streaming output.
 - Output formatting: terminal color, JSON/table stability, scalar utility
-  output, plugin formatter behavior, and golden/reference drift.
+  output, plugin formatter behavior, and fixture/reference drift.
 - Plugin lifecycle: command plugins, formatter plugins, hook plugins,
   `restish-mcp`, subprocess cleanup, and protocol compatibility.
 - User-facing docs and generated command reference.

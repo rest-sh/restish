@@ -1,0 +1,4 @@
+interface:
+  display_name: "Restish Docs"
+  short_description: "Write and maintain Restish documentation"
+  default_prompt: "Use $rsh-docs to write or update Restish documentation, blog posts, or design docs for a feature or change."

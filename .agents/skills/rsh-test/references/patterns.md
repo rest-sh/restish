@@ -137,10 +137,12 @@ if got, want := out.String(), "data: {\"n\":1}\n\n"; got != want {
 }
 ```
 
-Use golden files for large stable formatter/help output:
+Use `testdata/` fixture files for large stable formatter/help output. There is
+no automatic `-update` flag; regenerate fixtures deliberately when output
+changes intentionally:
 
 ```go
-want := readFile(t, "testdata/list-items.golden")
+want := readFile(t, "testdata/list-items.txt")
 if got := out.String(); got != want {
 	t.Fatalf("output mismatch\nwant:\n%s\n\ngot:\n%s", want, got)
 }

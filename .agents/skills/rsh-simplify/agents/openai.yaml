@@ -1,0 +1,4 @@
+interface:
+  display_name: "Restish Simplify"
+  short_description: "Remove unnecessary Restish complexity safely"
+  default_prompt: "Use $rsh-simplify to find simplification opportunities in the Restish codebase, report them, and implement approved changes."

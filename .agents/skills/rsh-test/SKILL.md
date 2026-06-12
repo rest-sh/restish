@@ -10,7 +10,7 @@ Write tests that prove user-visible behavior and preserve important contracts wi
 ## Use This Skill For
 
 - Adding or improving Go tests in Restish
-- Choosing between unit, package-level, CLI behavior, integration, golden, or fuzz tests
+- Choosing between unit, package-level, CLI behavior, integration, fixture-based, or fuzz tests
 - Covering regressions, CLI flows, OpenAPI-generated commands, auth, config, plugins, output formatting, pagination, streaming, caching, filtering, and request construction
 - Reviewing whether a proposed test is worth its maintenance cost
 
@@ -20,7 +20,7 @@ Write tests that prove user-visible behavior and preserve important contracts wi
 2. Prefer a behavioral CLI test when the change affects users: build a small OpenAPI spec or config, serve responses with `httptest.Server` or a fake transport, run `CLI.Run`, then assert stdout, stderr, request shape, exit/error behavior, and persisted files.
 3. Use package unit tests for pure logic, parsers, serializers, and edge cases where a CLI test would be noisy.
 4. Use table-driven subtests only when cases share the same setup and assertion shape. Name cases by behavior or bug, not by implementation detail.
-5. Use golden files only for stable, reviewable output that is too large or visually structured for inline expectations. Keep fixtures in `testdata/`, and update only when output changes intentionally.
+5. Use `testdata/` fixture files only for stable, reviewable output that is too large or visually structured for inline expectations. There is no automatic `-update` flag; regenerate fixtures deliberately and only when output changes intentionally.
 6. Use integration tests or `-tags=integration` when the real binary, plugin subprocesses, shell behavior, or external process lifecycle is the thing being tested.
 7. Use fuzz tests for parsers, shorthand/input decoding, OpenAPI schema handling, filters, and other input-heavy code. Seed fuzzers with realistic examples and past crashes; keep deterministic regression seeds runnable under normal `go test`.
 
@@ -30,7 +30,7 @@ Write tests that prove user-visible behavior and preserve important contracts wi
 - Request construction only: use fake transport plus `requestRecorder`.
 - Real HTTP semantics, redirects, compression, TLS, streaming, or server state: use `httptest.Server`.
 - Pure parser/formatter/schema/helper logic: write a package unit test, often table-driven.
-- Stable multi-line help, formatter, or tabular output: consider a golden file.
+- Stable multi-line help, formatter, or tabular output: consider a `testdata/` fixture.
 - Plugin protocol, subprocess lifecycle, shell setup, or binary packaging: use integration tests.
 - Input-heavy code with many edge cases: add or extend fuzz tests with realistic seeds.
 
@@ -39,6 +39,7 @@ When writing a test from scratch, load `references/patterns.md` for copyable Res
 ## Restish Patterns To Reuse
 
 - In `internal/cli`, prefer `newTestApp`, `newTestCLI`, `testArgs`, `requestRecorder`, `requireContains`, `writeTestFile`, and existing generated-command helpers when they fit.
+- Put new coverage where the contract already lives: `internal/cli/command_surface_test.go` for the built-in command tree, help grouping, and error-message UX; `internal/cli/generated_test.go` for OpenAPI command generation behavior.
 - Instantiate `CLI` directly instead of shelling out unless subprocess behavior is the point of the test.
 - Use `httptest.Server` for realistic HTTP behavior and real URLs; use fake transports for focused request-construction assertions.
 - Keep config, cache, home, plugin, and spec files under `t.TempDir()`.
@@ -46,14 +47,9 @@ When writing a test from scratch, load `references/patterns.md` for copyable Res
 - Register helper failures with `t.Helper()`.
 - Assert exact output when it is stable and meaningful. For JSON, prefer decoding and checking semantic fields when ordering or formatting is incidental.
 
-## Plain Go Over Gherkin
+## Plain Go Over Scenario DSLs
 
-Prefer plain Go tests with a small Restish-specific helper vocabulary over Gherkin/Cucumber-style scenario files.
-
-- Restish CLI tests often need precise Go-native control over `httptest.Server`, fake transports, temp config/cache/plugin paths, `CLI` hooks, stdout/stderr buffers, request bodies, auth state, and persisted files. Go helpers keep those details close to the assertion and make failures easier to debug.
-- Gherkin usually moves repeated setup into step definitions without removing the real complexity. Use it only if there is a concrete product need for executable acceptance specs readable and maintained by non-Go contributors.
-- When tests start to read like repeated scenarios, improve the Go vocabulary instead: add focused helpers for tiny OpenAPI operation specs, mock API servers that serve both specs and endpoint routes, config/profile/auth constructors, CLI run helpers, JSON stdout assertions, and request assertions for method/path/query/header/body.
-- Keep helper APIs scenario-like but explicit. A good test should read as setup, run command, assert observable output/request/state, without hiding important behavior behind broad "Given/When/Then" magic.
+Prefer plain Go tests with a small Restish-specific helper vocabulary over Gherkin/Cucumber-style scenario files. When tests start to read like repeated scenarios, improve the Go helper vocabulary instead; a good test reads as setup, run command, assert observable output/request/state, without hiding important behavior behind step-definition magic.
 
 ## High-Density Test Rules
 
@@ -85,7 +81,7 @@ Prefer plain Go tests with a small Restish-specific helper vocabulary over Gherk
 - Independent mismatches after setup: `t.Errorf` is fine, but keep failure output useful.
 - Raw text or line output: exact string when stable; substring checks when surrounding formatting is incidental.
 - JSON output: decode and assert semantic fields unless formatting is the feature.
-- Help, table, and formatter output: use exact strings or golden files when layout is the contract.
+- Help, table, and formatter output: use exact strings or `testdata/` fixtures when layout is the contract.
 - Errors: assert type/sentinel/exit behavior when available; assert full strings only for user-facing message contracts.
 - Diffs: label direction as `-want +got` when using a diff helper already present in the package.
 
@@ -100,12 +96,4 @@ Prefer plain Go tests with a small Restish-specific helper vocabulary over Gherk
 
 ## Verification
 
-Run the narrowest meaningful package first:
-
-```bash
-go test ./internal/cli/...
-go test ./internal/request/...
-go test ./internal/output/...
-```
-
-Then run `go test ./...` for shared behavior. Run `go test -tags=integration ./...` before commits that touch CLI/plugin behavior or real subprocess boundaries. Use `go test -race ./...` when changing concurrency, streaming, subprocess lifecycle, shared buffers, or caches.
+Run the AGENTS.md verification ladder: narrowest touched package first, then `go test ./...`, then `go test -tags=integration ./...` before commits that touch CLI/plugin behavior or real subprocess boundaries. Use `go test -race ./...` when changing concurrency, streaming, subprocess lifecycle, shared buffers, or caches.

@@ -29,16 +29,7 @@ User experience comes first. Developer experience comes second. Simplifications 
 
 ## Post-Review Shrink Pass
 
-After a PR has gone through review/fix loops, do a focused simplification pass before final handoff when the diff has grown substantially. Compare `git diff --stat` or `git diff --shortstat` before and after. Target duplicated test setup, repeated assertions, over-large inline fixtures, and helper code that obscures the behavior under test. Prefer deleting ceremony over deleting coverage.
-
-Good shrink-pass moves:
-
-- Table-drive cases that share setup and assertion shape.
-- Add small helpers for repeated config/cache/server setup when they make tests read more directly.
-- Share behavioral assertions that are repeated verbatim.
-- Keep edge-case tests for auth, redaction, redirects, cache metadata, migrations, and subprocess behavior when those edge cases are the point of the PR.
-
-Avoid code golf. A shorter diff that is harder to audit, especially around security/auth/cache behavior, is not a simplification.
+Follow the "PR Review and Cleanup Discipline" section in AGENTS.md. When shrinking a PR after review loops, target duplicated test setup, repeated assertions, over-large inline fixtures, and helper code that obscures the behavior under test. Prefer deleting ceremony over deleting coverage, and avoid code golf: a shorter diff that is harder to audit, especially around security/auth/cache behavior, is not a simplification.
 
 ## Process
 
@@ -50,7 +41,7 @@ Unless the user has pointed at a specific file, package, or area, survey the who
 find . -name '*.go' | grep -v '_test.go' | grep -v 'vendor/' | sort
 ```
 
-Read the key files in `internal/cli/`, `internal/`, `auth/`, `plugin/`, `cmd/`, and any top-level packages. Look specifically for:
+Read the key files in `internal/cli/`, the other `internal/` packages, `plugin/`, and `cmd/`. Look specifically for:
 
 - **Dead code**: unexported symbols with no callers, exported symbols not used outside the package, `TODO: remove` comments, disabled or no-op code paths
 - **Redundant abstraction**: interfaces with a single implementation that is never swapped out, wrapper types that add no logic, packages that contain a single file with a handful of functions that could live one level up
@@ -132,7 +123,7 @@ These patterns are common sources of unnecessary complexity in Go codebases. Tre
 An interface with one implementation that is never injected, mocked in tests, or documented as an extension point is almost always removable. Replace with the concrete type directly. Exception: the `CLI` struct boundary in `internal/cli/` where plugin and test substitution is real.
 
 ### Single-file packages
-A package that contains one `.go` file (excluding tests) and fewer than ~150 lines is usually a candidate for inlining into its parent. Exception: packages that are imported by external callers (plugin API, `auth/`, `plugin/`).
+A package that contains one `.go` file (excluding tests) and fewer than ~150 lines is usually a candidate for inlining into its parent. Exception: packages that are imported by external callers (the public `plugin/` API).
 
 ### Tiny helper wrappers
 Functions of the form:
@@ -166,14 +157,8 @@ If the only reason a production interface exists is to allow mocking in tests, p
 ### `internal/cli/` package
 This is the largest package. Before merging files here, check whether the split reflects distinct responsibilities or is just historical. Files like `http.go`, `api.go`, `generated.go`, and `request_exec.go` may have overlapping concerns worth consolidating.
 
-### `auth/` vs `internal/auth/`
-Two auth trees exist. Check whether `auth/` (the exported package) re-exports or wraps `internal/auth/` superfluously. Unnecessary re-export layers are good deletion targets.
-
 ### `plugin/` vs `internal/plugin/`
-Same pattern as auth. Trace what each package actually exports and whether the split is load-bearing for external plugin authors.
-
-### Vendored legacy source
-Old Restish v1 source should not be vendored into this repository. If anything in `internal/` or `cmd/` depends on archived v1 code, that is a simplification target.
+The top-level `plugin/` package is the public contract for external plugin authors; `internal/plugin/` is the host-side implementation. Trace what each package actually exports and whether any wrapping between them is load-bearing before collapsing it.
 
 ### `docs/design/` alignment
 When removing or collapsing a subsystem, check whether a design doc describes it. If so, update or retire the design doc. Stale design docs are a form of complexity.
@@ -183,5 +168,5 @@ When removing or collapsing a subsystem, check whether a design doc describes it
 - **Never remove user-visible features.** If unsure whether something is user-visible, treat it as if it is.
 - **Never weaken test coverage.** Tests may be reorganized, consolidated, or rewritten, but the behaviors they cover must remain covered. Deleting tests requires explicit user approval.
 - **Never break the plugin protocol boundary.** The wire format between `restish` and plugin subprocesses is a public contract. Internal reshuffling that does not change the wire format is fine.
-- **Never break exported API surface** in `auth/`, `plugin/`, or `cmd/` packages without confirming with the user that a breaking change is acceptable.
+- **Never break exported API surface** in the `plugin/` or `cmd/` packages without confirming with the user that a breaking change is acceptable.
 - **Prefer building on the standard library** over keeping a thin wrapper around it.
