@@ -21,9 +21,11 @@ go run ./cmd/restish-docgen --check
 # Validate the docs site after changes under site/ (quick check)
 hugo --source site --quiet
 
-# Full CI parity for the docs job: social preview images + Hugo
-# (npm ci needed once; social-images parses content front matter and can fail independently)
-npm --prefix site ci && npm --prefix site run build
+# Full CI parity for the docs job (npm ci needed once; social-images parses
+# content front matter and can fail independently of Hugo)
+npm --prefix site ci
+npm --prefix site run social-images
+hugo --source site --quiet --gc --minify --cacheDir /tmp/hugo_cache
 
 # Validate docs examples and links (CI runs both)
 scripts/check-doc-examples.rb
@@ -44,7 +46,7 @@ go test -race ./...              # when touching concurrency, streaming,
                                  # subprocess lifecycle, or shared buffers
 ```
 
-CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the docs-site build (`npm --prefix site ci`, `npm --prefix site run social-images`, then Hugo). A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
+CI requires all of: `go test ./...`, `go test -tags=integration ./...`, building all five binaries above, `go run ./cmd/restish-docgen --check`, `scripts/check-doc-links.rb`, `scripts/check-doc-examples.rb`, and the docs-site build (`npm --prefix site ci`, `npm --prefix site run social-images`, then Hugo). A weekly job also executes every docs `restish-example` live against `api.rest.sh`.
 
 ### Manual Smoke Test
 
@@ -72,7 +74,7 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state �
 - `internal/auth`, `internal/secrets` — auth schemes; credential-recognition allow-lists
 - `internal/config` — config files, profiles, comment-preserving JSONC edits, file locking
 - `internal/content`, `internal/input`, `internal/filter`, `internal/hypermedia` — content negotiation, shorthand request bodies, shorthand/jq filtering, link parsing
-- `internal/cache`, `internal/history` — size-bounded disk cache; request history
+- `internal/cache` — size-bounded disk cache for specs and responses
 - `internal/plugin`, `internal/procutil` — plugin discovery/manifests; subprocess lifecycle
 - `plugin/` (top level) — public plugin API contract; wire compatibility is a public promise
 
