@@ -235,21 +235,20 @@ When migrating older docs, track whether material was retired, already migrated,
 
 ## Validation
 
-After meaningful site changes, run what CI runs:
+After meaningful site changes, run what the CI docs job runs:
 
 ```bash
-hugo --source site --quiet          # site builds (quick check)
-npm --prefix site run build        # CI parity: social images + Hugo (npm ci once first)
-scripts/check-doc-examples.rb      # restish-example shortcodes are valid
-scripts/check-doc-links.rb         # internal links resolve
-go run ./cmd/restish-docgen --check # generated regions are not stale
+npm --prefix site ci                  # once, to install dependencies
+go run ./cmd/restish-docgen --check   # generated regions are not stale
+npm --prefix site run social-images   # social preview images build
+hugo --source site --quiet --gc --minify --cacheDir /tmp/hugo_cache
+scripts/check-doc-links.rb            # internal links resolve
+scripts/check-doc-examples.rb         # restish-example shortcodes are valid
 ```
 
+A plain `hugo --source site --quiet` is a fine quick check while iterating.
 `npm run social-images` parses front matter across `content/en` and can fail
-independently of Hugo, so run the npm build for blog and front-matter changes
-even when the quick Hugo check passes.
-
-When touching site JavaScript or interactive examples (playground, query
-runner, docs interactions), also run `npm --prefix site test`.
+independently of Hugo, so run it for blog and front-matter changes even when
+the quick Hugo check passes.
 
 Also verify new links, check examples against current CLI behavior, grep touched docs for stale `api.example.com` placeholders and leftover `Source material:` sections, and prefer examples that can later be validated against `api.rest.sh` or promoted into tests.
