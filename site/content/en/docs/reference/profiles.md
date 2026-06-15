@@ -51,7 +51,7 @@ The command-line flag wins over `RSH_PROFILE`.
 ## Fields
 
 <!-- BEGIN GENERATED: restish-docgen profile-schema -->
-Generated from `internal/config/config.go`.
+Generated from `config/config.go`.
 
 ### `ProfileConfig`
 

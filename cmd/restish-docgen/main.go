@@ -737,11 +737,11 @@ func renderMessageSchemaRegion(root string) (string, error) {
 }
 
 func renderConfigSchemaRegion(root string) (string, error) {
-	structs, err := loadStructDocs(root, []string{"internal/config/config.go"})
+	structs, err := loadStructDocs(root, []string{"config/config.go"})
 	if err != nil {
 		return "", err
 	}
-	return renderJSONStructTables("Generated from `internal/config/config.go`.", structs, []string{
+	return renderJSONStructTables("Generated from `config/config.go`.", structs, []string{
 		"Config",
 		"APIConfig",
 		"PaginationConfig",
@@ -751,11 +751,11 @@ func renderConfigSchemaRegion(root string) (string, error) {
 }
 
 func renderProfileSchemaRegion(root string) (string, error) {
-	structs, err := loadStructDocs(root, []string{"internal/config/config.go"})
+	structs, err := loadStructDocs(root, []string{"config/config.go"})
 	if err != nil {
 		return "", err
 	}
-	return renderJSONStructTables("Generated from `internal/config/config.go`.", structs, []string{
+	return renderJSONStructTables("Generated from `config/config.go`.", structs, []string{
 		"ProfileConfig",
 		"CredentialConfig",
 		"AuthConfig",
