@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/cache"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/spf13/cobra"
 )
 

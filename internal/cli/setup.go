@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/rest-sh/restish/v2/internal/fileutil"
+	"github.com/rest-sh/restish/v2/fileutil"
 	"github.com/spf13/cobra"
 )
 

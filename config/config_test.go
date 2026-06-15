@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 )
 
 // writeConfig writes content to a temp file and returns its path.

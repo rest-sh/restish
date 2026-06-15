@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	configpkg "github.com/rest-sh/restish/v2/internal/config"
-	"github.com/rest-sh/restish/v2/internal/fileutil"
+	configpkg "github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/fileutil"
 )
 
 var renameTokenCacheFile = os.Rename

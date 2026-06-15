@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/internal/cache"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/secrets"

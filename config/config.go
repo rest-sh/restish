@@ -17,7 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/rest-sh/restish/v2/internal/fileutil"
+	"github.com/rest-sh/restish/v2/fileutil"
 	"github.com/tidwall/jsonc"
 )
 

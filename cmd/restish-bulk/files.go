@@ -18,7 +18,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
-	"github.com/rest-sh/restish/v2/internal/fileutil"
+	"github.com/rest-sh/restish/v2/fileutil"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/zeebo/xxh3"

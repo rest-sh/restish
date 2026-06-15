@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/rest-sh/restish/v2/internal/cli"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 )
 
 type testApp struct {

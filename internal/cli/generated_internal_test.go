@@ -13,7 +13,7 @@ import (
 	"github.com/pb33f/libopenapi/index"
 	"github.com/spf13/cobra"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
