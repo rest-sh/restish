@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -46,8 +47,8 @@ type ExternalTool struct {
 	Timeout time.Duration
 }
 
-func (a *ExternalTool) Parameters() []Param {
-	return []Param{
+func (a *ExternalTool) Parameters() []auth.Param {
+	return []auth.Param{
 		{Name: "commandline", Description: "Shell command to run for auth (executed via cmd /c on Windows or /bin/sh -c elsewhere)", Required: true},
 		{Name: "omitbody", Description: "Set to \"true\" to skip sending the request body to the tool"},
 		{Name: "output", Description: "Set to \"bearer-token\" to treat stdout as an OAuth bearer token"},
@@ -178,7 +179,7 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 	return nil
 }
 
-func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
+func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac auth.AuthContext) error {
 	stderr := a.Stderr
 	if stderr == nil {
 		stderr = ac.Stderr

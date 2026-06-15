@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,13 +27,13 @@ type deviceAuthorizationResponse struct {
 
 // DeviceCode implements OAuth 2.0 Device Authorization Grant (RFC 8628).
 type DeviceCode struct {
-	Cache      TokenStore
+	Cache      auth.TokenStore
 	HTTPClient *http.Client
 	Stderr     io.Writer
 }
 
-func (h *DeviceCode) Parameters() []Param {
-	return appendOAuthPassthroughParams([]Param{
+func (h *DeviceCode) Parameters() []auth.Param {
+	return appendOAuthPassthroughParams([]auth.Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret (optional)", Required: false, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
@@ -60,12 +61,12 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 	cacheKey := params["_cache_key"]
 	var tokenURL string
 	var tokenURLErr error
-	accessToken, ok, err := cachedOAuthAccessToken(h.Cache, cacheKey, force, func(cached CachedToken) (CachedToken, error) {
+	accessToken, ok, err := cachedOAuthAccessToken(h.Cache, cacheKey, force, func(cached auth.CachedToken) (auth.CachedToken, error) {
 		if tokenURL == "" && tokenURLErr == nil {
 			tokenURL, tokenURLErr = h.resolveTokenURL(ctx, params)
 		}
 		if tokenURLErr != nil {
-			return CachedToken{}, tokenURLErr
+			return auth.CachedToken{}, tokenURLErr
 		}
 		return h.doRefresh(ctx, params, tokenURL, cached.RefreshToken)
 	})
@@ -97,7 +98,7 @@ func (h *DeviceCode) resolveToken(ctx context.Context, params map[string]string,
 	return token.AccessToken, nil
 }
 
-func (h *DeviceCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
+func (h *DeviceCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (auth.CachedToken, error) {
 	return refreshOAuthToken(ctx, h.HTTPClient, params, tokenURL, refreshToken)
 }
 
@@ -169,10 +170,10 @@ func (h *DeviceCode) resolveEndpoints(ctx context.Context, params map[string]str
 	return deviceURL, tokenURL, nil
 }
 
-func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, deviceURL, tokenURL string) (CachedToken, error) {
+func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, deviceURL, tokenURL string) (auth.CachedToken, error) {
 	deviceAuth, err := h.requestDeviceAuthorization(ctx, params, deviceURL)
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 
 	if h.Stderr != nil {
@@ -211,14 +212,14 @@ func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, devi
 		}
 		var tokenErr *tokenEndpointError
 		if !errors.As(err, &tokenErr) {
-			return CachedToken{}, err
+			return auth.CachedToken{}, err
 		}
 		switch tokenErr.ErrorCode {
 		case "authorization_pending":
 		case "slow_down":
 			interval = capDevicePollInterval(interval + 5*time.Second)
 		default:
-			return CachedToken{}, err
+			return auth.CachedToken{}, err
 		}
 
 		timer := time.NewTimer(interval)
@@ -226,9 +227,9 @@ func (h *DeviceCode) runFlow(ctx context.Context, params map[string]string, devi
 		case <-pollCtx.Done():
 			timer.Stop()
 			if errors.Is(pollCtx.Err(), context.Canceled) {
-				return CachedToken{}, pollCtx.Err()
+				return auth.CachedToken{}, pollCtx.Err()
 			}
-			return CachedToken{}, fmt.Errorf("timed out waiting for device authorization")
+			return auth.CachedToken{}, fmt.Errorf("timed out waiting for device authorization")
 		case <-timer.C:
 		}
 	}
@@ -302,7 +303,7 @@ func (h *DeviceCode) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-func (h *DeviceCode) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
+func (h *DeviceCode) Authenticate(ctx context.Context, req *http.Request, ac auth.AuthContext) error {
 	h2 := &DeviceCode{
 		Cache:      h.Cache,
 		HTTPClient: h.HTTPClient,

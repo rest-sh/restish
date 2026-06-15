@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"fmt"
 	"net/http"
@@ -9,13 +10,13 @@ import (
 // Bearer implements static HTTP Bearer token authentication.
 type Bearer struct{}
 
-func (h *Bearer) Parameters() []Param {
-	return []Param{
+func (h *Bearer) Parameters() []auth.Param {
+	return []auth.Param{
 		{Name: "token", Description: "Bearer token", Required: true, Secret: true},
 	}
 }
 
-func (h *Bearer) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+func (h *Bearer) Authenticate(_ context.Context, req *http.Request, ac auth.AuthContext) error {
 	token := ac.Params["token"]
 	if token == "" {
 		return fmt.Errorf("bearer: token is required")

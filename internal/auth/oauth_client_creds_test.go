@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -33,7 +34,7 @@ func TestClientCredentials_FetchesToken(t *testing.T) {
 	client := newTokenClient(t, &count, "access-abc", 3600)
 
 	h := &ClientCredentials{
-		Cache:      NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache:      auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
 		HTTPClient: client,
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
@@ -97,7 +98,7 @@ func TestClientCredentials_CachesToken(t *testing.T) {
 	var count atomic.Int32
 	client := newTokenClient(t, &count, "cached-token", 3600)
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	params := map[string]string{
 		"client_id":     "id1",
 		"client_secret": "sec1",
@@ -128,9 +129,9 @@ func TestClientCredentials_ExpiredToken_Refetches(t *testing.T) {
 	var count atomic.Int32
 	client := newTokenClient(t, &count, "fresh-token", 3600)
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken: "old-token",
 		Expiry:      time.Now().Add(-time.Hour),
 	})
@@ -176,7 +177,7 @@ func TestClientCredentials_OIDCDiscovery(t *testing.T) {
 	})
 
 	h := &ClientCredentials{
-		Cache:      NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache:      auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
 		HTTPClient: client,
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)

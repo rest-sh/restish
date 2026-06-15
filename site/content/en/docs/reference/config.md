@@ -136,7 +136,7 @@ valid API name in v2.
 ## Fields
 
 <!-- BEGIN GENERATED: restish-docgen config-schema -->
-Generated from `internal/config/config.go`.
+Generated from `config/config.go`.
 
 ### `Config`
 

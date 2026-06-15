@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/config"
-	"github.com/rest-sh/restish/v2/fileutil"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/secrets"

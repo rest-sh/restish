@@ -11,7 +11,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	configpkg "github.com/rest-sh/restish/v2/config"
-	"github.com/rest-sh/restish/v2/fileutil"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 var renameTokenCacheFile = os.Rename
@@ -235,4 +235,31 @@ func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 	c.cache = m
 	c.loaded = true
 	return nil
+}
+
+// DefaultTokenCachePath returns the path to the default token cache file,
+// honoring the same RSH_CONFIG_DIR / RSH_CONFIG / XDG overrides as
+// config.NewPaths. It is the canonical location for tools that want to
+// share the Restish token cache.
+func DefaultTokenCachePath() string {
+	return configpkg.NewPaths().TokenCache()
+}
+
+// LoadTokenCache reads the full token cache at path into a map. Returns an
+// empty map when the file does not exist. External readers that do not need
+// the in-process locking of TokenCache can call this directly.
+func LoadTokenCache(path string) (map[string]CachedToken, error) {
+	c := NewTokenCache(path)
+	lock, err := configpkg.LockSiblingFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Close()
+	return c.loadLocked()
+}
+
+// SaveTokenCache writes m as a CBOR token cache to path, atomically and
+// under the sibling file lock.
+func SaveTokenCache(path string, m map[string]CachedToken) error {
+	return NewTokenCache(path).saveLocked(m)
 }

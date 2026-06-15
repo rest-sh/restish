@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"net/http"
 	"net/url"
@@ -14,7 +15,7 @@ func TestDeviceCode_PollsUntilAuthorized(t *testing.T) {
 	var polls int
 	var gotStart url.Values
 	h := &DeviceCode{
-		Cache: NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache: auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			switch r.URL.String() {
 			case "https://auth.example.com/device":
@@ -148,8 +149,8 @@ func TestDeviceCodeResolvesRelativeEndpoints(t *testing.T) {
 }
 
 func TestDeviceCode_RefreshesCachedToken(t *testing.T) {
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.cbor"))
-	if err := cache.Set("svc:default", CachedToken{
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.cbor"))
+	if err := cache.Set("svc:default", auth.CachedToken{
 		AccessToken:  "expired-token",
 		RefreshToken: "refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -196,8 +197,8 @@ func TestDeviceCode_RefreshesCachedToken(t *testing.T) {
 }
 
 func TestDeviceCode_InvalidGrantFallsThroughToDeviceFlow(t *testing.T) {
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.cbor"))
-	if err := cache.Set("svc:default", CachedToken{
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.cbor"))
+	if err := cache.Set("svc:default", auth.CachedToken{
 		AccessToken:  "expired-token",
 		RefreshToken: "rejected-refresh",
 		Expiry:       time.Now().Add(-time.Hour),

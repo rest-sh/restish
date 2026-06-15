@@ -14,9 +14,11 @@ import (
 	"strings"
 	"time"
 
+	
 	"github.com/rest-sh/restish/v2/auth"
 	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/config"
+	internalconfig "github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
@@ -1599,7 +1601,7 @@ func (c *CLI) applyAPIShorthandConfig(apiName string, apiCfg *config.APIConfig, 
 	if err != nil {
 		return nil, err
 	}
-	_, patched, err := config.PatchConfigShorthandBytes(data, []string{"apis", apiName}, exprs)
+	_, patched, err := internalconfig.PatchConfigShorthandBytes(data, []string{"apis", apiName}, exprs)
 	if err != nil {
 		return nil, err
 	}

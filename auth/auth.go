@@ -1,9 +1,22 @@
+// Package auth is the public auth API for the restish config and CLI.
+//
+// The token cache (CachedToken, TokenStore, TokenCache) and the
+// auth-handler interfaces (Handler, Param, AuthContext, Prompter, Logger,
+// ForceCapable) are part of the supported public surface. External tools
+// that need to share the restish OAuth token cache, or embed restish in
+// a Go binary and register custom auth handlers, use this package.
+//
+// The restish CLI's bundled auth-handler implementations (api-key, basic,
+// bearer, oauth-*, and the external-tool approval flow) are not exposed
+// here; they live in the unexported internal/auth package because their
+// field shapes are tied to the restish auth registry and may change.
+// External embedders that need OAuth should use golang.org/x/oauth2
+// directly rather than depending on restish's handlers.
 package auth
 
 import (
 	"context"
 	"io"
-	"maps"
 	"net/http"
 )
 
@@ -16,6 +29,7 @@ type Param struct {
 }
 
 // TokenStore persists OAuth-style bearer tokens keyed by API/profile.
+// *TokenCache satisfies this interface.
 type TokenStore interface {
 	Get(key string) (*CachedToken, error)
 	Set(key string, token CachedToken) error
@@ -51,9 +65,7 @@ type AuthContext struct {
 
 // Handler is implemented by each auth mechanism.
 type Handler interface {
-	// Parameters returns the list of configuration parameters this handler needs.
 	Parameters() []Param
-	// Authenticate mutates req to add authentication credentials.
 	Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error
 }
 
@@ -63,27 +75,5 @@ type ForceCapable interface {
 	SupportsForce()
 }
 
-func bearerAuth(req *http.Request, token string) {
-	if getHeaderCaseInsensitive(req.Header, "Authorization") != "" {
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-}
-
-// authParams returns a copy of the user-supplied auth params with a synthetic
-// "_cache_key" entry added so token-cache lookups have a stable identity even
-// when callers pass an empty CacheKey.
-func authParams(ac AuthContext) map[string]string {
-	params := make(map[string]string, len(ac.Params)+1)
-	maps.Copy(params, ac.Params)
-	switch {
-	case ac.CacheKey != "":
-		params["_cache_key"] = ac.CacheKey
-	case ac.APIName != "" || ac.ProfileName != "":
-		params["_cache_key"] = ac.APIName + ":" + ac.ProfileName
-	}
-	if ac.BaseURL != "" {
-		params["_base_url"] = ac.BaseURL
-	}
-	return params
-}
+// Compile-time check that *TokenCache satisfies TokenStore.
+var _ TokenStore = (*TokenCache)(nil)

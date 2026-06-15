@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -46,7 +47,7 @@ const defaultRedirectScheme = "http"
 // token is used (if available), otherwise a new browser flow is started.
 type AuthorizationCode struct {
 	// Cache stores fetched tokens.
-	Cache TokenStore
+	Cache auth.TokenStore
 	// HTTPClient is used for token requests. Defaults to http.DefaultClient when nil.
 	HTTPClient *http.Client
 	// OpenBrowser is called with the authorization URL. When nil the default
@@ -78,8 +79,8 @@ type AuthorizationCode struct {
 	CallbackErrorHTML string
 }
 
-func (h *AuthorizationCode) Parameters() []Param {
-	return appendOAuthPassthroughParams([]Param{
+func (h *AuthorizationCode) Parameters() []auth.Param {
+	return appendOAuthPassthroughParams([]auth.Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret (optional for public clients)", Required: false, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
@@ -116,12 +117,12 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 	// Try cache first.
 	var tokenURL string
 	var tokenURLErr error
-	token, ok, err := cachedOAuthAccessToken(h.Cache, cacheKey, force, func(cached CachedToken) (CachedToken, error) {
+	token, ok, err := cachedOAuthAccessToken(h.Cache, cacheKey, force, func(cached auth.CachedToken) (auth.CachedToken, error) {
 		if tokenURL == "" && tokenURLErr == nil {
 			tokenURL, tokenURLErr = h.resolveTokenURL(ctx, params)
 		}
 		if tokenURLErr != nil {
-			return CachedToken{}, tokenURLErr
+			return auth.CachedToken{}, tokenURLErr
 		}
 		return h.doRefresh(ctx, params, tokenURL, cached.RefreshToken)
 	})
@@ -167,7 +168,7 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 	return ct.AccessToken, nil
 }
 
-func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
+func (h *AuthorizationCode) Authenticate(ctx context.Context, req *http.Request, ac auth.AuthContext) error {
 	h2 := &AuthorizationCode{
 		Cache:                h.Cache,
 		HTTPClient:           h.HTTPClient,
@@ -251,22 +252,22 @@ func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[str
 	return authorizeURL, tokenURL, nil
 }
 
-func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
+func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (auth.CachedToken, error) {
 	return refreshOAuthToken(ctx, h.HTTPClient, params, tokenURL, refreshToken)
 }
 
-func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string]string, authorizeURL, tokenURL string) (CachedToken, error) {
+func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string]string, authorizeURL, tokenURL string) (auth.CachedToken, error) {
 	// PKCE.
 	verifier, err := generateCodeVerifier()
 	if err != nil {
-		return CachedToken{}, fmt.Errorf("generating PKCE verifier: %w", err)
+		return auth.CachedToken{}, fmt.Errorf("generating PKCE verifier: %w", err)
 	}
 	challenge := codeChallenge(verifier)
 
 	// State to prevent CSRF.
 	stateBytes := make([]byte, 16)
 	if _, err := rand.Read(stateBytes); err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	state := base64.RawURLEncoding.EncodeToString(stateBytes)
 
@@ -275,7 +276,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	// Determine redirect URL.
 	redirect, err := oauthRedirectConfigFromParams(params, !manualOnly)
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	callbackPages := h.oauthCallbackPages(params)
 
@@ -328,7 +329,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		var receivedCode atomic.Bool
 		ln, err := net.Listen("tcp", "localhost:"+redirect.port)
 		if err != nil {
-			return CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", redirect.port, err)
+			return auth.CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", redirect.port, err)
 		}
 		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != redirect.path {
@@ -424,19 +425,19 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	if h.CanPrompt && (h.NoBrowser || openErr != nil) && h.Prompt != nil {
 		promptCode, promptErr := h.Prompt("Paste the authorization code: ")
 		if promptErr != nil {
-			return CachedToken{}, promptErr
+			return auth.CachedToken{}, promptErr
 		}
 		code = strings.TrimSpace(promptCode)
 	} else {
 		select {
 		case code = <-codeCh:
 		case err = <-errCh:
-			return CachedToken{}, fmt.Errorf("callback error: %w", err)
+			return auth.CachedToken{}, fmt.Errorf("callback error: %w", err)
 		case <-ctx2.Done():
 			if errors.Is(ctx2.Err(), context.Canceled) {
-				return CachedToken{}, ctx2.Err()
+				return auth.CachedToken{}, ctx2.Err()
 			}
-			return CachedToken{}, fmt.Errorf("timed out waiting for authorization callback")
+			return auth.CachedToken{}, fmt.Errorf("timed out waiting for authorization callback")
 		}
 	}
 
@@ -453,7 +454,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		trySendErr(doneCh, err)
 	}
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	return ct, nil
 }

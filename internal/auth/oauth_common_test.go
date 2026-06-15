@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
-	for name, params := range map[string][]Param{
+	for name, params := range map[string][]auth.Param{
 		"auth-code":          (&AuthorizationCode{}).Parameters(),
 		"device-code":        (&DeviceCode{}).Parameters(),
 		"client-credentials": (&ClientCredentials{}).Parameters(),
@@ -24,7 +25,7 @@ func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
 			}
 		}
 	}
-	for name, params := range map[string][]Param{
+	for name, params := range map[string][]auth.Param{
 		"auth-code":   (&AuthorizationCode{}).Parameters(),
 		"device-code": (&DeviceCode{}).Parameters(),
 	} {
@@ -36,8 +37,8 @@ func TestOAuthParametersDeclareCommonProviderParams(t *testing.T) {
 }
 
 func TestCachedUsableOAuthAccessTokenDoesNotRefreshExpiredToken(t *testing.T) {
-	cache := NewTokenCache(t.TempDir() + "/tokens.cbor")
-	if err := cache.Set("svc:default", CachedToken{
+	cache := auth.NewTokenCache(t.TempDir() + "/tokens.cbor")
+	if err := cache.Set("svc:default", auth.CachedToken{
 		AccessToken:  "old-token",
 		RefreshToken: "refresh-token",
 		Expiry:       time.Now().Add(-time.Minute),
@@ -55,8 +56,8 @@ func TestCachedUsableOAuthAccessTokenDoesNotRefreshExpiredToken(t *testing.T) {
 }
 
 func TestClearRejectedOAuthTokenDeletesCacheEntry(t *testing.T) {
-	cache := NewTokenCache(t.TempDir() + "/tokens.cbor")
-	if err := cache.Set("svc:default", CachedToken{AccessToken: "old", RefreshToken: "bad"}); err != nil {
+	cache := auth.NewTokenCache(t.TempDir() + "/tokens.cbor")
+	if err := cache.Set("svc:default", auth.CachedToken{AccessToken: "old", RefreshToken: "bad"}); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 	var stderr bytes.Buffer
@@ -73,24 +74,24 @@ func TestClearRejectedOAuthTokenDeletesCacheEntry(t *testing.T) {
 
 func TestWarnIfMissingOAuthRefreshToken(t *testing.T) {
 	var stderr bytes.Buffer
-	warnIfMissingOAuthRefreshToken(&stderr, map[string]string{"_cache_key": "svc:default"}, CachedToken{AccessToken: "token"})
+	warnIfMissingOAuthRefreshToken(&stderr, map[string]string{"_cache_key": "svc:default"}, auth.CachedToken{AccessToken: "token"})
 	if !strings.Contains(stderr.String(), "offline_access") {
 		t.Fatalf("expected offline_access warning, got %q", stderr.String())
 	}
 }
 
-func hasAuthParam(params []Param, name string) bool {
+func hasAuthParam(params []auth.Param, name string) bool {
 	_, ok := authParam(params, name)
 	return ok
 }
 
-func authParam(params []Param, name string) (Param, bool) {
+func authParam(params []auth.Param, name string) (auth.Param, bool) {
 	for _, param := range params {
 		if param.Name == name {
 			return param, true
 		}
 	}
-	return Param{}, false
+	return auth.Param{}, false
 }
 
 func TestValidateOIDCEndpoints(t *testing.T) {

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -25,15 +26,15 @@ const (
 	maxOAuthEndpointBodyBytes   = 1 << 20
 )
 
-func appendOAuthPassthroughParams(params []Param) []Param {
+func appendOAuthPassthroughParams(params []auth.Param) []auth.Param {
 	return append(params,
-		Param{Name: "audience", Description: "OAuth2 audience/resource server identifier to pass to the provider", Required: false},
-		Param{Name: "resource", Description: "OAuth2 resource identifier to pass to providers that require it", Required: false},
-		Param{Name: "organization", Description: "OAuth2 organization or tenant identifier to pass to providers that require it", Required: false},
+		auth.Param{Name: "audience", Description: "OAuth2 audience/resource server identifier to pass to the provider", Required: false},
+		auth.Param{Name: "resource", Description: "OAuth2 resource identifier to pass to providers that require it", Required: false},
+		auth.Param{Name: "organization", Description: "OAuth2 organization or tenant identifier to pass to providers that require it", Required: false},
 	)
 }
 
-func clearRejectedOAuthToken(cache TokenStore, cacheKey string, stderr io.Writer) {
+func clearRejectedOAuthToken(cache auth.TokenStore, cacheKey string, stderr io.Writer) {
 	if cache == nil || cacheKey == "" {
 		return
 	}
@@ -42,7 +43,7 @@ func clearRejectedOAuthToken(cache TokenStore, cacheKey string, stderr io.Writer
 	}
 }
 
-func warnIfMissingOAuthRefreshToken(stderr io.Writer, params map[string]string, token CachedToken) {
+func warnIfMissingOAuthRefreshToken(stderr io.Writer, params map[string]string, token auth.CachedToken) {
 	if stderr == nil || params["_cache_key"] == "" || strings.TrimSpace(token.RefreshToken) != "" {
 		return
 	}
@@ -327,9 +328,9 @@ func readOAuthEndpointBody(r io.Reader) ([]byte, error) {
 	return body, nil
 }
 
-// FetchToken posts a token request to tokenURL and returns a CachedToken.
+// FetchToken posts a token request to tokenURL and returns a auth.CachedToken.
 // Pass nil for client to use http.DefaultClient.
-func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form url.Values, params map[string]string) (CachedToken, error) {
+func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form url.Values, params map[string]string) (auth.CachedToken, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -339,39 +340,39 @@ func FetchToken(ctx context.Context, client *http.Client, tokenURL string, form 
 	}
 	applyOAuthTokenExtraParams(form, params)
 	if err := applyTokenAuthHeaders(form, params); err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	applyTokenAuthHeader(req, params)
 	resp, err := client.Do(req)
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	defer resp.Body.Close()
 	body, err := readOAuthEndpointBody(resp.Body)
 	if err != nil {
-		return CachedToken{}, fmt.Errorf("reading token endpoint response: %w", err)
+		return auth.CachedToken{}, fmt.Errorf("reading token endpoint response: %w", err)
 	}
 	if resp.StatusCode != 200 {
-		return CachedToken{}, parseTokenEndpointError(resp.StatusCode, body)
+		return auth.CachedToken{}, parseTokenEndpointError(resp.StatusCode, body)
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return CachedToken{}, fmt.Errorf("decoding token response: %w", err)
+		return auth.CachedToken{}, fmt.Errorf("decoding token response: %w", err)
 	}
 	if strings.TrimSpace(tok.AccessToken) == "" {
-		return CachedToken{}, fmt.Errorf("token endpoint response missing access_token")
+		return auth.CachedToken{}, fmt.Errorf("token endpoint response missing access_token")
 	}
 	if tt := strings.TrimSpace(tok.TokenType); tt != "" && !strings.EqualFold(tt, "bearer") {
-		return CachedToken{}, fmt.Errorf("token endpoint response has unsupported token_type %q", tok.TokenType)
+		return auth.CachedToken{}, fmt.Errorf("token endpoint response has unsupported token_type %q", tok.TokenType)
 	}
-	ct := CachedToken{
+	ct := auth.CachedToken{
 		AccessToken:  tok.AccessToken,
 		TokenType:    tok.TokenType,
 		RefreshToken: tok.RefreshToken,
@@ -505,7 +506,7 @@ func applyOAuthTokenExtraParams(form url.Values, params map[string]string) {
 	}
 }
 
-func refreshOAuthToken(ctx context.Context, client *http.Client, params map[string]string, tokenURL, refreshToken string) (CachedToken, error) {
+func refreshOAuthToken(ctx context.Context, client *http.Client, params map[string]string, tokenURL, refreshToken string) (auth.CachedToken, error) {
 	form := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
@@ -513,7 +514,7 @@ func refreshOAuthToken(ctx context.Context, client *http.Client, params map[stri
 	}
 	token, err := FetchToken(ctx, client, tokenURL, form, params)
 	if err != nil {
-		return CachedToken{}, err
+		return auth.CachedToken{}, err
 	}
 	nextRefreshToken := strings.TrimSpace(token.RefreshToken)
 	if nextRefreshToken == "" || nextRefreshToken == refreshToken {
@@ -525,11 +526,11 @@ func refreshOAuthToken(ctx context.Context, client *http.Client, params map[stri
 }
 
 type refreshTokenStore interface {
-	TokenStore
-	Refresh(key string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error)
+	auth.TokenStore
+	Refresh(key string, force bool, refresh func(auth.CachedToken) (auth.CachedToken, error)) (*auth.CachedToken, bool, error)
 }
 
-func refreshCachedOAuthToken(cache TokenStore, cacheKey string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error) {
+func refreshCachedOAuthToken(cache auth.TokenStore, cacheKey string, force bool, refresh func(auth.CachedToken) (auth.CachedToken, error)) (*auth.CachedToken, bool, error) {
 	if store, ok := cache.(refreshTokenStore); ok {
 		return store.Refresh(cacheKey, force, refresh)
 	}
@@ -553,7 +554,7 @@ func refreshCachedOAuthToken(cache TokenStore, cacheKey string, force bool, refr
 	return &refreshed, true, nil
 }
 
-func cachedOAuthAccessToken(cache TokenStore, cacheKey string, force bool, refresh func(CachedToken) (CachedToken, error)) (string, bool, error) {
+func cachedOAuthAccessToken(cache auth.TokenStore, cacheKey string, force bool, refresh func(auth.CachedToken) (auth.CachedToken, error)) (string, bool, error) {
 	if cache == nil || cacheKey == "" {
 		return "", false, nil
 	}
@@ -580,7 +581,7 @@ func cachedOAuthAccessToken(cache TokenStore, cacheKey string, force bool, refre
 	return "", false, nil
 }
 
-func cachedUsableOAuthAccessToken(cache TokenStore, cacheKey string) (string, bool, error) {
+func cachedUsableOAuthAccessToken(cache auth.TokenStore, cacheKey string) (string, bool, error) {
 	if cache == nil || cacheKey == "" {
 		return "", false, nil
 	}

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	configpkg "github.com/rest-sh/restish/v2/config"
-	"github.com/rest-sh/restish/v2/fileutil"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 // DefaultMaxBytes is the default maximum cache size (100 MiB).

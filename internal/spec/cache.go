@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/rest-sh/restish/v2/fileutil"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 // cacheEntry is the on-disk format for a cached spec.

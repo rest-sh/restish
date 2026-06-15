@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/rest-sh/restish/v2/auth"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -44,11 +45,11 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600}`), nil
 	})
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
 
 	// Pre-populate cache with expired token + refresh token.
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "my-refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -83,9 +84,9 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 
 func TestAuthCode_ConcurrentRefreshReusesStoredToken(t *testing.T) {
 	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
-	cache := NewTokenCache(cacheFile)
+	cache := auth.NewTokenCache(cacheFile)
 	cacheKey := "myapi:default"
-	if err := cache.Set(cacheKey, CachedToken{
+	if err := cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "my-refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -118,8 +119,8 @@ func TestAuthCode_ConcurrentRefreshReusesStoredToken(t *testing.T) {
 		"token_url":  "https://auth.example.com/token",
 		"_cache_key": cacheKey,
 	}
-	h1 := &AuthorizationCode{Cache: NewTokenCache(cacheFile), HTTPClient: client}
-	h2 := &AuthorizationCode{Cache: NewTokenCache(cacheFile), HTTPClient: client}
+	h1 := &AuthorizationCode{Cache: auth.NewTokenCache(cacheFile), HTTPClient: client}
+	h2 := &AuthorizationCode{Cache: auth.NewTokenCache(cacheFile), HTTPClient: client}
 	run := func(h *AuthorizationCode) (string, error) {
 		req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 		err := h.OnRequest(req, params)
@@ -164,7 +165,7 @@ func TestAuthCode_ConcurrentRefreshReusesStoredToken(t *testing.T) {
 	if got := refreshCalls.Load(); got != 1 {
 		t.Fatalf("refresh calls = %d, want 1", got)
 	}
-	cached, err := NewTokenCache(cacheFile).Get(cacheKey)
+	cached, err := auth.NewTokenCache(cacheFile).Get(cacheKey)
 	if err != nil {
 		t.Fatalf("cache.Get: %v", err)
 	}
@@ -181,9 +182,9 @@ func TestAuthCode_RefreshPreservesExistingRefreshToken(t *testing.T) {
 		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600}`), nil
 	})
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "my-refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -225,9 +226,9 @@ func TestAuthCode_RefreshIgnoresWhitespaceRefreshToken(t *testing.T) {
 		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600,"refresh_token":"   "}`), nil
 	})
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "my-refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -251,10 +252,10 @@ func TestAuthCode_RefreshIgnoresWhitespaceRefreshToken(t *testing.T) {
 // TestAuthCode_ValidCachedToken verifies that a still-valid cached token is
 // used without contacting any endpoint.
 func TestAuthCode_ValidCachedToken(t *testing.T) {
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
 
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken: "valid-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -360,7 +361,7 @@ func TestAuthCode_BrowserFlow_KeycloakIssuerURL(t *testing.T) {
 
 	cacheFile := filepath.Join(t.TempDir(), "tokens.cbor")
 	h := &AuthorizationCode{
-		Cache: NewTokenCache(cacheFile),
+		Cache: auth.NewTokenCache(cacheFile),
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			if strings.HasSuffix(r.URL.Path, "/.well-known/openid-configuration") {
 				body := `{
@@ -530,7 +531,7 @@ func TestAuthCodeAuthenticateUsesExplicitContext(t *testing.T) {
 	}
 
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
-	err := h.Authenticate(ctx, req, AuthContext{Params: map[string]string{
+	err := h.Authenticate(ctx, req, auth.AuthContext{Params: map[string]string{
 		"client_id":     "id1",
 		"authorize_url": "https://auth.example.com/authorize",
 		"token_url":     "https://auth.example.com/token",
@@ -605,9 +606,9 @@ func TestAuthCode_Refresh_ClientSecretBasic(t *testing.T) {
 		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600}`), nil
 	})
 
-	cache := NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
+	cache := auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json"))
 	cacheKey := "myapi:default"
-	_ = cache.Set(cacheKey, CachedToken{
+	_ = cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "my-refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -1239,7 +1240,7 @@ func TestAuthCode_NoBrowserManualPromptDoesNotStartCallbackListener(t *testing.T
 
 func TestAuthCode_RefreshNetworkFailureDoesNotFallback(t *testing.T) {
 	h := &AuthorizationCode{
-		Cache: NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
+		Cache: auth.NewTokenCache(filepath.Join(t.TempDir(), "tokens.json")),
 		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 			return nil, errors.New("dial failed")
 		}),
@@ -1250,7 +1251,7 @@ func TestAuthCode_RefreshNetworkFailureDoesNotFallback(t *testing.T) {
 	}
 
 	cacheKey := "myapi:default"
-	if err := h.Cache.Set(cacheKey, CachedToken{
+	if err := h.Cache.Set(cacheKey, auth.CachedToken{
 		AccessToken:  "old-access",
 		RefreshToken: "refresh-token",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -1398,7 +1399,7 @@ func TestAuthCode_BrowserFlow_ConcurrentProbesOpenOneBrowserWindow(t *testing.T)
 
 	newHandler := func() *AuthorizationCode {
 		return &AuthorizationCode{
-			Cache: NewTokenCache(cacheFile),
+			Cache: auth.NewTokenCache(cacheFile),
 			HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
 				tokenRequests.Add(1)
 				return testResponse(200, "application/json", `{"access_token":"shared-token","token_type":"bearer","expires_in":3600}`), nil
