@@ -190,7 +190,7 @@ Pair it with a filter that projects to a uniform list of records for the
 largest savings:
 
 ```bash
-restish api.rest.sh/images -f '.[] | {name, format}' -o toon
+restish api.rest.sh/images -f 'body.{name, format}' -o toon
 ```
 
 See [Output Formats](/docs/reference/output-formats/#toon-for-agents) for the
