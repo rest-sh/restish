@@ -14,6 +14,9 @@ for direct paths and projections; use jq for richer transforms.
 
 {{< restish-query-runner >}}
 
+Use **Trace filter** to inspect before and after values for every step of the
+filter.
+
 ## Filter Roots
 
 - `proto` for the response protocol string
@@ -52,7 +55,7 @@ restish api.rest.sh/images --rsh-collect -f 'body[format == jpeg].self' -o lines
 {{< /restish-example >}}
 
 ```bash
-restish api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish api.rest.sh/example -f 'body.basics.{name, label, profiles}'
 restish api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[0].self}'
 restish api.rest.sh/example -f 'body..url'
 ```
