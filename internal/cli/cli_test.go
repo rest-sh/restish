@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

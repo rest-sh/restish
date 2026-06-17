@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	configpkg "github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
@@ -196,7 +195,7 @@ func (c *DiskCache) evictIfNeeded() {
 		}()
 		c.evictMu.Lock()
 		defer c.evictMu.Unlock()
-		lock, err := configpkg.LockSiblingFile(filepath.Join(c.dir, ".evict"))
+		lock, err := fileutil.LockSiblingFile(filepath.Join(c.dir, ".evict"))
 		if err != nil {
 			return
 		}

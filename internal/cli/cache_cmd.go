@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/spf13/cobra"
 )
 

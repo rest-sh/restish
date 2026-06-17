@@ -195,17 +195,6 @@ func DefaultPath() string {
 	return NewPaths().ConfigFile()
 }
 
-// NeedsPatchToPreserveFormatting reports whether the config file at path
-// contains JSONC comments and should use patch-based writes to preserve formatting.
-// Returns false when the file does not exist or cannot be read.
-func NeedsPatchToPreserveFormatting(path string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	return string(jsonc.ToJSON(data)) != string(data)
-}
-
 // ErrPermissionCheckUnsupported reports that Restish cannot verify file
 // permissions on the current platform.
 var ErrPermissionCheckUnsupported = errors.New("permission check unsupported on this platform")
@@ -294,9 +283,8 @@ func LoadExplicitOrEmpty(path string) (*Config, error) {
 	return ParseConfigBytes(path, data)
 }
 
-// ParseConfigBytes parses a config payload from in-memory bytes. It is
-// exported primarily for use by the internal migration package; embedders
-// should use Load or LoadExplicit instead.
+// ParseConfigBytes parses a config payload from in-memory bytes using the same
+// JSONC stripping, strict-field checks, and validation as Load.
 func ParseConfigBytes(path string, data []byte) (*Config, error) {
 
 	// Strip JSONC comments before parsing so users can annotate their config.
@@ -1010,12 +998,6 @@ func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.
 	}
 	defer lock.Close()
 	return atomicWriteFileLocked(path, data, fileMode, dirMode, true)
-}
-
-// LockSiblingFile is a thin alias for fileutil.LockSiblingFile kept for the
-// existing embedding API. New code should import fileutil directly.
-func LockSiblingFile(path string) (io.Closer, error) {
-	return fileutil.LockSiblingFile(path)
 }
 
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, chmodExistingDir bool) error {

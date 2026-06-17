@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"github.com/rest-sh/restish/v2/auth"
 	"context"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"net/url"
 	"path/filepath"

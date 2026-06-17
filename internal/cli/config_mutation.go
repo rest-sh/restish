@@ -127,7 +127,7 @@ func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg 
 		return err
 	}
 	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
+	if internalconfig.NeedsPatchToPreserveFormatting(cfgPath) {
 		if err := internalconfig.DeleteAPIConfig(cfgPath, apiName); err != nil {
 			return err
 		}

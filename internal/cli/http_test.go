@@ -16,8 +16,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 // requestRecorder is a small helper that captures the last HTTP request

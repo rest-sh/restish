@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cache"
 	"golang.org/x/term"
 )
 

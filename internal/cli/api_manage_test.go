@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/config"
 	cachepkg "github.com/rest-sh/restish/v2/internal/cache"
 	restishcli "github.com/rest-sh/restish/v2/internal/cli"
-	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 

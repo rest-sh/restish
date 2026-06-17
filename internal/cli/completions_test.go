@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cli"
 )
 
 // runCompletion invokes cobra's __complete subcommand and returns stdout.

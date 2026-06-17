@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"github.com/rest-sh/restish/v2/auth"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -12,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/rest-sh/restish/v2/auth"
 	"io"
 	"math/big"
 	"net"

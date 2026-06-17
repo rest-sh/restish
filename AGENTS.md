@@ -71,8 +71,10 @@ The core design is a `CLI` struct in `internal/cli/cli.go` that owns all state �
 - `internal/request` — HTTP execution: retries, redirects, TLS, redaction
 - `internal/spec`, `internal/openapi` — spec discovery/loading/caching and OpenAPI → command generation
 - `internal/output` — response formatters (JSON, YAML, tables, TOON, …); regression fixtures in `testdata/`
-- `internal/auth`, `internal/secrets` — auth schemes; credential-recognition allow-lists
-- `internal/config` — config files, profiles, comment-preserving JSONC edits, file locking
+- `auth`, `config` — public Go API for Restish config structs/loading and OAuth token cache sharing
+- `internal/auth`, `internal/secrets` — bundled auth handler implementations; credential-recognition allow-lists
+- `internal/config` — v1 migration, embedder read helpers, comment-preserving JSONC edits
+- `internal/fileutil` — internal file locking and atomic-write helpers
 - `internal/content`, `internal/input`, `internal/filter`, `internal/hypermedia` — content negotiation, shorthand request bodies, shorthand/jq filtering, link parsing
 - `internal/cache` — size-bounded disk cache for specs and responses
 - `internal/plugin`, `internal/procutil` — plugin discovery/manifests; subprocess lifecycle

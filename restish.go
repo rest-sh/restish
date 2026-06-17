@@ -8,8 +8,8 @@ package restish
 
 import (
 	"github.com/rest-sh/restish/v2/auth"
-	internalcli "github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/config"
+	internalcli "github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/content"
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"github.com/rest-sh/restish/v2/internal/output"

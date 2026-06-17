@@ -1,12 +1,12 @@
 package auth
 
 import (
-	"github.com/rest-sh/restish/v2/auth"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rest-sh/restish/v2/auth"
 	"io"
 	"net"
 	"net/http"

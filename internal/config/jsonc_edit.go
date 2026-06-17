@@ -23,6 +23,17 @@ import (
 // ErrPathNotFound reports that a requested JSONC path did not exist.
 var ErrPathNotFound = errors.New("config: path not found")
 
+// NeedsPatchToPreserveFormatting reports whether the config file at path
+// contains JSONC comments and should use patch-based writes to preserve formatting.
+// Returns false when the file does not exist or cannot be read.
+func NeedsPatchToPreserveFormatting(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return string(jsonc.ToJSON(data)) != string(data)
+}
+
 // ConfigPatchOperation describes one config edit operation.
 // If Delete is true, Value is ignored and Path is removed.
 type ConfigPatchOperation struct {

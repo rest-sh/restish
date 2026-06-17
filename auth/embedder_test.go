@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 func TestLoadAndSaveTokenCache(t *testing.T) {
@@ -45,6 +47,40 @@ func TestLoadTokenCacheMissing(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("expected empty map, got %d entries", len(got))
+	}
+}
+
+func TestSaveTokenCacheWaitsForSiblingLock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.cbor")
+	lock, err := fileutil.LockSiblingFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- SaveTokenCache(path, map[string]CachedToken{
+			"billing:default": {AccessToken: "abc"},
+		})
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("SaveTokenCache completed while sibling lock was held: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("SaveTokenCache: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("SaveTokenCache did not complete after sibling lock was released")
 	}
 }
 

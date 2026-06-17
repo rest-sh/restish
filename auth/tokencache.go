@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	configpkg "github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
@@ -52,7 +52,7 @@ func NewTokenCache(path string) *TokenCache {
 func (c *TokenCache) Get(key string) (*CachedToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	lock, err := configpkg.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.path)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (c *TokenCache) Get(key string) (*CachedToken, error) {
 func (c *TokenCache) Set(key string, token CachedToken) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	lock, err := configpkg.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.path)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (c *TokenCache) Set(key string, token CachedToken) error {
 func (c *TokenCache) Delete(key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	lock, err := configpkg.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.path)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (c *TokenCache) Delete(key string) error {
 func (c *TokenCache) DeletePrefix(prefix string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	lock, err := configpkg.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.path)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (c *TokenCache) DeletePrefix(prefix string) error {
 func (c *TokenCache) Refresh(key string, force bool, refresh func(CachedToken) (CachedToken, error)) (*CachedToken, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	lock, err := configpkg.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.path)
 	if err != nil {
 		return nil, false, err
 	}
@@ -179,7 +179,7 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 }
 
 func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
-	if insecure, err := configpkg.ConfigFileHasInsecurePermissions(c.path); err != nil {
+	if insecure, err := config.ConfigFileHasInsecurePermissions(c.path); err != nil {
 		return nil, err
 	} else if insecure {
 		return nil, fmt.Errorf("token cache %s is group/world-readable; run chmod 600 %s", c.path, c.path)
@@ -242,7 +242,7 @@ func (c *TokenCache) saveLocked(m map[string]CachedToken) error {
 // config.NewPaths. It is the canonical location for tools that want to
 // share the Restish token cache.
 func DefaultTokenCachePath() string {
-	return configpkg.NewPaths().TokenCache()
+	return config.NewPaths().TokenCache()
 }
 
 // LoadTokenCache reads the full token cache at path into a map. Returns an
@@ -250,7 +250,7 @@ func DefaultTokenCachePath() string {
 // the in-process locking of TokenCache can call this directly.
 func LoadTokenCache(path string) (map[string]CachedToken, error) {
 	c := NewTokenCache(path)
-	lock, err := configpkg.LockSiblingFile(path)
+	lock, err := fileutil.LockSiblingFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -261,5 +261,10 @@ func LoadTokenCache(path string) (map[string]CachedToken, error) {
 // SaveTokenCache writes m as a CBOR token cache to path, atomically and
 // under the sibling file lock.
 func SaveTokenCache(path string, m map[string]CachedToken) error {
+	lock, err := fileutil.LockSiblingFile(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	return NewTokenCache(path).saveLocked(m)
 }

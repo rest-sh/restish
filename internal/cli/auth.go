@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/rest-sh/restish/v2/auth"
-	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/config"
+	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/procutil"
 	"github.com/rest-sh/restish/v2/internal/request"

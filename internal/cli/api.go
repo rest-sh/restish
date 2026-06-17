@@ -14,10 +14,9 @@ import (
 	"strings"
 	"time"
 
-	
 	"github.com/rest-sh/restish/v2/auth"
-	"github.com/rest-sh/restish/v2/internal/cache"
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/cache"
 	internalconfig "github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"
