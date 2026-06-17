@@ -126,6 +126,7 @@ type CLI struct {
 	silentMode              bool
 	requestExecutionStarted bool
 	bodyPrefixHinted        bool
+	rootApi                 string
 	runCtx                  context.Context
 	projectConfig           *projectConfigState
 }
@@ -159,6 +160,16 @@ func (c *CLI) AddFormatter(name string, f output.Formatter) {
 		c.formatters = output.DefaultFormatters()
 	}
 	c.formatters[name] = f
+}
+
+// SetRootApi promotes the named API to the CLI's root command, so its
+// generated operations appear as top-level subcommands (e.g. `mycli health`
+// instead of `mycli myapi health`) and the built-in command tree (api, cache,
+// config, generic HTTP verbs, etc.) is not registered. The API must be
+// configured (via SetDefaultConfig or user config) and its spec must be
+// loadable when Run executes.
+func (c *CLI) SetRootApi(apiName string) {
+	c.rootApi = apiName
 }
 
 // AddContentType registers an additional content type with the CLI's registry.
@@ -618,6 +629,23 @@ func (c *CLI) Run(args []string) error {
 		}
 	}
 
+	if c.rootApi != "" {
+		root, err := c.newAPIRootCmd(ctx, cfg, argScan.ProfileName)
+		if err != nil {
+			return err
+		}
+		err = c.executeRoot(ctx, root, args)
+		// When the context was cancelled by a signal (SIGINT/SIGTERM), return
+		// ExitCodeError{130} so main exits with 130 without printing any extra message.
+		if isSignalCancellation(err, ctx) {
+			return &ExitCodeError{Code: 130}
+		}
+		if c.shouldSuppressFinalError(err) {
+			return silentExitError(err)
+		}
+		return err
+	}
+
 	root := c.newRootCmd()
 	c.quietGeneratedWarnings = quietGeneratedWarningsForScan(argScan, cfg)
 	c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
@@ -672,6 +700,50 @@ func (c *CLI) Run(args []string) error {
 		return silentExitError(err)
 	}
 	return err
+}
+
+func (c *CLI) newAPIRootCmd(ctx context.Context, cfg *config.Config, profileName string) (*cobra.Command, error) {
+	apiCfg := cfg.APIs[c.rootApi]
+	if apiCfg == nil {
+		return nil, fmt.Errorf("root API %q is not configured", c.rootApi)
+	}
+
+	set, ok, err := c.operationSetForAPI(ctx, c.rootApi, apiCfg, profileName, false)
+	if err != nil {
+		return nil, fmt.Errorf("could not load generated commands for root API %q: %w", c.rootApi, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("generated commands for root API %q are not available; run %q", c.rootApi, "api sync "+c.rootApi)
+	}
+
+	root := c.buildAPICommandFromOperationSet(c.rootApi, apiCfg, set, effectiveOperationBase(apiCfg, profileName))
+	if root == nil {
+		return nil, fmt.Errorf("generated commands for root API %q are not available", c.rootApi)
+	}
+
+	origPersistentPreRunE := root.PersistentPreRunE
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		gf, err := parseGlobalFlags(cmd)
+		if err != nil {
+			return err
+		}
+		c.silentMode = gf.Silent
+		cmd.SetContext(withGlobalFlags(cmd.Context(), gf))
+		if origPersistentPreRunE != nil {
+			return origPersistentPreRunE(cmd, args)
+		}
+		return nil
+	}
+
+	root.Use = c.commandNameOrDefault()
+	root.Version = c.currentVersion()
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	root.SuggestionsMinimumDistance = 2
+
+	c.addGlobalFlags(root)
+	c.setupMarkdownHelp(root)
+	return root, nil
 }
 
 func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []string) error {

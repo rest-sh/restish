@@ -140,6 +140,33 @@ mycorp api connect billing https://billing.example.com --spec ./openapi.yaml
 Keep config explicit. `RSH_CONFIG_DIR`, `RSH_CONFIG`, and `--rsh-config` keep
 the same precedence rules as the stock binary.
 
+## Single-API CLI
+
+Embedders that ship a CLI dedicated to one API can promote that API to the
+root command so its generated operations appear as top-level subcommands:
+
+```go
+cli := restish.New()
+cli.SetCommandName("mycli")
+cli.SetDefaultConfig(&restish.Config{
+    APIs: map[string]*restish.APIConfig{
+        "myapi": {
+            BaseURL:   baseURL,
+            SpecFiles: []string{specPath},
+        },
+    },
+})
+cli.SetRootApi("myapi")
+```
+
+With `SetRootApi`, generated operations appear directly under the CLI's root
+command instead of being nested under the API name, the auto-generated
+`api auth inspect ...` hint is suppressed, and the built-in command tree
+(`api`, `cache`, `config`, generic HTTP verbs, etc.) is not registered.
+Global Restish flags (`--rsh-profile`, `--rsh-output-format`, …) remain
+available. The named API must be configured and its spec loadable when
+`Run` executes
+
 ## Related Pages
 
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)
