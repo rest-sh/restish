@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/spf13/cobra"

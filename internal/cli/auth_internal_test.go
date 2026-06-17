@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rest-sh/restish/v2/internal/auth"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/config"
+	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/spec"
 	"github.com/spf13/cobra"
@@ -395,9 +396,9 @@ func TestAuthHandlerForOAuthUsesThemeCallbackColors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authHandlerFor: %v", err)
 	}
-	oauthHandler, ok := handler.(*auth.AuthorizationCode)
+	oauthHandler, ok := handler.(*authpkg.AuthorizationCode)
 	if !ok {
-		t.Fatalf("handler = %T, want *auth.AuthorizationCode", handler)
+		t.Fatalf("handler = %T, want *authpkg.AuthorizationCode", handler)
 	}
 	if oauthHandler.CallbackSuccessColor != "#00ff00" {
 		t.Fatalf("success color = %q, want #00ff00", oauthHandler.CallbackSuccessColor)

@@ -275,8 +275,9 @@ Out-of-process plugins remain the normal extension path for the stock `restish`
 binary. Embedding is for organizations that intentionally ship a distinct CLI
 surface, not for every formatter or workflow extension.
 
-The public Go package should expose only the embedding surface that can be
-supported as a product contract. The current intended surface is:
+The public Go packages should expose only the embedding and lightweight
+config/cache surfaces that can be supported as product contracts. The current
+intended root `restish` package surface is:
 
 - `New()` to create an initialized runtime with default streams, paths,
   registries, and signal handling
@@ -293,6 +294,19 @@ supported as a product contract. The current intended surface is:
 - `Config()` for inspecting loaded config after a successful `Run`
 - `FetchResponse` for programmatic single-request execution when the embedder
   wants Restish auth/profile/header behavior but not CLI output planning
+
+Two focused subpackages are also public for tools that need Restish state without
+pulling in the full CLI:
+
+- `config` exposes the on-disk `restish.json` schema structs, path discovery,
+  strict JSONC load/parse/save, validation, diagnostics, and helpers that
+  interpret config field values such as URL overrides and operation bases.
+- `auth` exposes the OAuth token cache format and auth-handler interfaces used
+  by embedding. The stock CLI's concrete auth handlers remain internal because
+  their fields and flow wiring are tied to Restish runtime behavior.
+
+Comment-preserving config mutation, v1 migration mechanics, file locks, and
+atomic-write helpers are intentionally internal implementation details.
 
 `FetchResponse` is deliberately narrower than `Run`. It executes one prepared
 HTTP request, applies profile matching and auth when the URL or API short name

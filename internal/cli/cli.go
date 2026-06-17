@@ -12,14 +12,16 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/rest-sh/restish/v2/internal/auth"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/config"
+	internalconfig "github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/content"
 	"github.com/rest-sh/restish/v2/internal/hypermedia"
 	"github.com/rest-sh/restish/v2/internal/output"
@@ -381,6 +383,14 @@ func (c *CLI) loadConfig() (*config.Config, error) {
 }
 
 func (c *CLI) loadBaseConfig() (*config.Config, error) {
+	var migration *config.MigrationInfo
+	if c.shouldRunLegacyMigration() {
+		info, err := internalconfig.TryMigrate(c.configFilePath())
+		if err != nil {
+			return nil, fmt.Errorf("config migration: %w", err)
+		}
+		migration = info
+	}
 	var cfg *config.Config
 	var err error
 	if c.explicitConfigFile && c.createExplicitConfig {
@@ -393,7 +403,42 @@ func (c *CLI) loadBaseConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if migration != nil && cfg.Migration == nil {
+		cfg.Migration = migration
+	}
 	return cfg, nil
+}
+
+// shouldRunLegacyMigration is true when the restish CLI is being run with
+// the default config path and the v2 config does not yet exist. This
+// preserves the historical behaviour that a detected v1 apis.json is
+// migrated on first v2 run. The explicitConfigFile flag does not gate
+// this; an explicit --rsh-config to the default location should still
+// trigger migration.
+func (c *CLI) shouldRunLegacyMigration() bool {
+	if os.Getenv("RSH_CONFIG_DIR") != "" {
+		return false
+	}
+	defaultPath := legacyMigrationDefaultConfigPath()
+	if defaultPath == "" || filepath.Clean(c.configFilePath()) != filepath.Clean(defaultPath) {
+		return false
+	}
+	_, err := os.Stat(c.configFilePath())
+	return errors.Is(err, os.ErrNotExist)
+}
+
+func legacyMigrationDefaultConfigPath() string {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" && filepath.IsAbs(dir) {
+		return filepath.Join(dir, "restish", "restish.json")
+	}
+	if runtime.GOOS == "windows" {
+		if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish", "restish.json")
+		}
+	} else if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".config", "restish", "restish.json")
+	}
+	return ""
 }
 
 func cloneConfigForEmbedding(src *config.Config) *config.Config {

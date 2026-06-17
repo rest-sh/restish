@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 )
 
 // setupEnvWithSpec is like setupGeneratedEnv but serves a caller-supplied spec.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -31,5 +32,18 @@ func TestConfigFileHasInsecurePermissionsWindowsMissingFileOK(t *testing.T) {
 	}
 	if insecure {
 		t.Fatal("expected missing file not to report insecure")
+	}
+}
+
+func TestClosestJSONFieldScalesWithLengthAndRunes(t *testing.T) {
+	fields := jsonFieldTypes(reflect.TypeOf(APIConfig{}))
+	if got := closestJSONField("allow_cross_origin_specs", fields); got != "allow_cross_origin_spec" {
+		t.Fatalf("long suggestion = %q, want allow_cross_origin_spec", got)
+	}
+	if got := closestJSONField("x", fields); got != "" {
+		t.Fatalf("short suggestion = %q, want none", got)
+	}
+	if got := levenshteinDistance("café", "cafe"); got != 1 {
+		t.Fatalf("rune levenshtein = %d, want 1", got)
 	}
 }

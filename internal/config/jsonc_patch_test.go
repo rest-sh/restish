@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	publicconfig "github.com/rest-sh/restish/v2/config"
 	"github.com/tailscale/hujson"
 )
 
@@ -39,7 +40,7 @@ func TestJSONCSetPath_ReplacesValueAndPreservesInlineComment(t *testing.T) {
 	if !strings.Contains(out, `"base_url": "https://new.example.com" // keep`) {
 		t.Fatalf("expected updated value and preserved inline comment:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -58,7 +59,7 @@ func TestJSONCSetPath_CreatesNestedObjects(t *testing.T) {
 		t.Fatalf("jsoncSetPath: %v", err)
 	}
 
-	cfg, err := parseConfigBytes("test", patched)
+	cfg, err := publicconfig.ParseConfigBytes("test", patched)
 	if err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestJSONCDeletePath_RemovesMiddleMemberAndKeepsNeighbors(t *testing.T) {
 	if !strings.Contains(out, `"first"`) || !strings.Contains(out, `"last"`) {
 		t.Fatalf("expected neighbors to remain:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -147,7 +148,7 @@ func TestJSONCDeletePath_RemovesFirstMember(t *testing.T) {
 	if !strings.Contains(out, "second.example.com") {
 		t.Fatalf("expected second member to remain:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -176,7 +177,7 @@ func TestJSONCDeletePath_RemovesLastMember(t *testing.T) {
 	if strings.Contains(out, `},\n  }`) {
 		t.Fatalf("expected no trailing comma before object close:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -198,7 +199,7 @@ func TestJSONCDeletePath_RemovesOnlyMember(t *testing.T) {
 	if strings.Contains(out, "only.example.com") {
 		t.Fatalf("expected only member removed:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -227,19 +228,6 @@ func TestJSONCSetPathOverwritesNullParent(t *testing.T) {
 	}
 }
 
-func TestClosestJSONFieldScalesWithLengthAndRunes(t *testing.T) {
-	fields := jsonFieldTypes(reflect.TypeOf(APIConfig{}))
-	if got := closestJSONField("allow_cross_origin_specs", fields); got != "allow_cross_origin_spec" {
-		t.Fatalf("long suggestion = %q, want allow_cross_origin_spec", got)
-	}
-	if got := closestJSONField("x", fields); got != "" {
-		t.Fatalf("short suggestion = %q, want none", got)
-	}
-	if got := levenshteinDistance("café", "cafe"); got != 1 {
-		t.Fatalf("rune levenshtein = %d, want 1", got)
-	}
-}
-
 func TestJSONCSetPath_InsertsIntoEmptyMultilineObject(t *testing.T) {
 	input := []byte("{\n  \"apis\": {}\n}")
 
@@ -251,7 +239,7 @@ func TestJSONCSetPath_InsertsIntoEmptyMultilineObject(t *testing.T) {
 	if !strings.Contains(out, "\"myapi\"") {
 		t.Fatalf("expected inserted key:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -267,7 +255,7 @@ func TestJSONCSetPath_InsertsIntoEmptyInlineObject(t *testing.T) {
 	if !strings.Contains(out, `"myapi"`) {
 		t.Fatalf("expected inserted key:\n%s", out)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 }
@@ -290,7 +278,7 @@ func TestJSONCSetPath_ReplacesValueWithMultilineObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("jsoncSetPath: %v", err)
 	}
-	if _, err := parseConfigBytes("test", got); err != nil {
+	if _, err := publicconfig.ParseConfigBytes("test", got); err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
 	out := string(got)
@@ -421,7 +409,7 @@ func TestJSONCSetPath_PreservesTabIndentation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("jsoncSetPath: %v", err)
 	}
-	cfg, err := parseConfigBytes("test", got)
+	cfg, err := publicconfig.ParseConfigBytes("test", got)
 	if err != nil {
 		t.Fatalf("patched config should still parse: %v", err)
 	}
@@ -551,7 +539,7 @@ func TestSaveConfigValue_CreatesMissingConfigFile(t *testing.T) {
 		t.Fatalf("SaveConfigValue: %v", err)
 	}
 
-	cfg, err := Load(path)
+	cfg, err := publicconfig.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -655,7 +643,7 @@ func TestSaveConfigValue_ConcurrentWritesPreserveBothEdits(t *testing.T) {
 		}
 	}
 
-	cfg, err := Load(path)
+	cfg, err := publicconfig.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -706,7 +694,7 @@ func TestSaveConfigShorthand_FullObjectPatchPreservesComments(t *testing.T) {
 		t.Fatalf("expected comments to be preserved:\n%s", got)
 	}
 
-	cfg, err := Load(path)
+	cfg, err := publicconfig.Load(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -739,7 +727,7 @@ func TestSaveConfigShorthand_ArrayAppendInsertDeleteAndSwap(t *testing.T) {
 		t.Fatalf("SaveConfigShorthand: %v", err)
 	}
 
-	cfg, err := Load(path)
+	cfg, err := publicconfig.Load(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -774,7 +762,7 @@ func TestSaveConfigShorthand_SwapIsRootedAtAPI(t *testing.T) {
 		t.Fatalf("SaveConfigShorthand: %v", err)
 	}
 
-	cfg, err := Load(path)
+	cfg, err := publicconfig.Load(path)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}

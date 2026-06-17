@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/filter"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/request"

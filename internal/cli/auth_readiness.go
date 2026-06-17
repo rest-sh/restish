@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 

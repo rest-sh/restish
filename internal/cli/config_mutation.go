@@ -5,7 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
+	internalconfig "github.com/rest-sh/restish/v2/internal/config"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
@@ -21,12 +22,12 @@ func (c *CLI) unknownAPIError(apiName string) error {
 	return fmt.Errorf("unknown API %q; run %q to list configured APIs or %q to register one", apiName, c.commandNameOrDefault()+" api list", c.commandNameOrDefault()+" api connect")
 }
 
-func (c *CLI) saveConfigValues(label string, ops []config.ConfigPatchOperation) error {
+func (c *CLI) saveConfigValues(label string, ops []internalconfig.ConfigPatchOperation) error {
 	if err := c.ensureMutableConfigPatch(ops); err != nil {
 		return err
 	}
 	oldCfg := c.cfg
-	if err := config.SaveConfigValues(c.configFilePath(), ops); err != nil {
+	if err := internalconfig.SaveConfigValues(c.configFilePath(), ops); err != nil {
 		return err
 	}
 	return c.reloadConfigAfterMutation(label, oldCfg)
@@ -37,7 +38,7 @@ func (c *CLI) saveConfigShorthand(label string, rootPath []string, exprs []strin
 		return err
 	}
 	oldCfg := c.cfg
-	if err := config.SaveConfigShorthand(c.configFilePath(), rootPath, exprs, c.validateConfigRuntime); err != nil {
+	if err := internalconfig.SaveConfigShorthand(c.configFilePath(), rootPath, exprs, c.validateConfigRuntime); err != nil {
 		return err
 	}
 	return c.reloadConfigAfterMutation(label, oldCfg)
@@ -107,7 +108,7 @@ func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *c
 	}
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
-	if err := config.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
+	if err := internalconfig.SaveAPIConfig(cfgPath, apiName, apiCfg); err != nil {
 		return err
 	}
 	return c.reloadConfigAfterAPIMutation(label, oldCfg, apiName)
@@ -115,7 +116,7 @@ func (c *CLI) saveAPIConfig(label, apiName string, cfg *config.Config, apiCfg *c
 
 func (c *CLI) saveConfigMutation(label string, mutate func(*config.Config) error) error {
 	oldCfg := c.cfg
-	if err := config.SaveConfigMutation(c.configFilePath(), mutate, c.validateConfigRuntime); err != nil {
+	if err := internalconfig.SaveConfigMutation(c.configFilePath(), mutate, c.validateConfigRuntime); err != nil {
 		return err
 	}
 	return c.reloadConfigAfterMutation(label, oldCfg)
@@ -126,8 +127,8 @@ func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg 
 		return err
 	}
 	cfgPath := c.configFilePath()
-	if config.NeedsPatchToPreserveFormatting(cfgPath) {
-		if err := config.DeleteAPIConfig(cfgPath, apiName); err != nil {
+	if internalconfig.NeedsPatchToPreserveFormatting(cfgPath) {
+		if err := internalconfig.DeleteAPIConfig(cfgPath, apiName); err != nil {
 			return err
 		}
 	} else {
@@ -151,7 +152,7 @@ func (c *CLI) deleteAPIConfig(label, apiName string, cfg *config.Config, oldCfg 
 func (c *CLI) saveThemeConfig(entries map[string]string, source string) error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValues(cfgPath, []config.ConfigPatchOperation{
+	if err := internalconfig.SaveConfigValues(cfgPath, []internalconfig.ConfigPatchOperation{
 		{Path: []string{"theme_source"}, Value: source},
 		{Path: []string{"theme"}, Value: entries},
 	}); err != nil {
@@ -163,7 +164,7 @@ func (c *CLI) saveThemeConfig(entries map[string]string, source string) error {
 func (c *CLI) resetThemeConfig() error {
 	oldCfg := c.cfg
 	cfgPath := c.configFilePath()
-	if err := config.SaveConfigValues(cfgPath, []config.ConfigPatchOperation{
+	if err := internalconfig.SaveConfigValues(cfgPath, []internalconfig.ConfigPatchOperation{
 		{Path: []string{"theme"}, Delete: true},
 		{Path: []string{"theme_source"}, Delete: true},
 	}); err != nil {
@@ -209,7 +210,7 @@ func (c *CLI) reloadConfigAfterAPIMutation(label string, oldCfg *config.Config, 
 	return nil
 }
 
-func (c *CLI) ensureMutableConfigPatch(ops []config.ConfigPatchOperation) error {
+func (c *CLI) ensureMutableConfigPatch(ops []internalconfig.ConfigPatchOperation) error {
 	for _, op := range ops {
 		if err := c.ensureMutableConfigPath(op.Path); err != nil {
 			return err
