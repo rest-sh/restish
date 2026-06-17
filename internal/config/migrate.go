@@ -474,7 +474,8 @@ func ReadProfile(folder, apiName string) (*config.APIConfig, error) {
 // restish.json first, then apis.json, converting legacy entries.
 func ReadAll(folder string) (map[string]*config.APIConfig, error) {
 	v2Path := filepath.Join(folder, "restish.json")
-	if data, err := os.ReadFile(v2Path); err == nil {
+	data, err := os.ReadFile(v2Path)
+	if err == nil {
 		cfg, err := config.ParseConfigBytes(v2Path, data)
 		if err != nil {
 			return nil, err
@@ -486,10 +487,12 @@ func ReadAll(folder string) (map[string]*config.APIConfig, error) {
 			}
 		}
 		return out, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("config: cannot read %s: %w", v2Path, err)
 	}
 
 	v1Path := filepath.Join(folder, "apis.json")
-	data, err := os.ReadFile(v1Path)
+	data, err = os.ReadFile(v1Path)
 	if err != nil {
 		return nil, fmt.Errorf("config: no restish config found in %s (tried restish.json and apis.json)", folder)
 	}

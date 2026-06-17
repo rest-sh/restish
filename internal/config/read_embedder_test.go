@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,6 +77,27 @@ func TestReadAllV1Fallback(t *testing.T) {
 	}
 	if apis["myapi"].Profiles["default"].ClientCertPath != "/etc/cert.pem" {
 		t.Errorf("v1 cert conversion: client_cert = %q", apis["myapi"].Profiles["default"].ClientCertPath)
+	}
+}
+
+func TestReadAllV2ReadErrorDoesNotFallback(t *testing.T) {
+	dir := t.TempDir()
+	v2Path := filepath.Join(dir, "restish.json")
+	if err := os.Mkdir(v2Path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "apis.json"), []byte(`{
+		"legacy": { "base": "https://legacy.example.com" }
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	apis, err := ReadAll(dir)
+	if err == nil {
+		t.Fatalf("expected read error, got apis=%v", apis)
+	}
+	if !strings.Contains(err.Error(), "cannot read") || !strings.Contains(err.Error(), "restish.json") {
+		t.Fatalf("expected restish.json read error, got %v", err)
 	}
 }
 

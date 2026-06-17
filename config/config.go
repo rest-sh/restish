@@ -240,9 +240,9 @@ func Save(path string, cfg *Config) error {
 // Load reads and parses the JSONC config file at path.
 // If the file does not exist, an empty default Config is returned without error.
 // A missing config file is normal for first-time users; Load does not
-// perform a v1->v2 migration. The restish CLI calls migrate.TryMigrate
-// explicitly when it expects a legacy v1 apis.json. Embedders that do
-// not want filesystem side effects should use LoadExplicit.
+// perform a v1->v2 migration. The restish CLI runs its own legacy migration
+// step before calling Load. Use LoadExplicit when a missing file should be an
+// error.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

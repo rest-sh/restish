@@ -36,19 +36,19 @@ func TestLockSiblingFileContention(t *testing.T) {
 	}
 	defer lock1.Close()
 
-	// Try a second lock; flock blocks. We run it in a goroutine with a
-	// short timeout to confirm we *can* get the lock after release.
+	// Try a second lock; flock blocks. We run it in a goroutine to confirm we
+	// can get the lock after release.
 	holder := make(chan struct{})
-	got := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
 		close(holder)
 		lock2, err := LockSiblingFile(target)
 		if err != nil {
-			t.Errorf("second lock: %v", err)
+			done <- err
 			return
 		}
 		defer lock2.Close()
-		close(got)
+		done <- nil
 	}()
 
 	<-holder
@@ -57,7 +57,9 @@ func TestLockSiblingFileContention(t *testing.T) {
 	if err := lock1.Close(); err != nil {
 		t.Fatal(err)
 	}
-	<-got
+	if err := <-done; err != nil {
+		t.Fatalf("second lock: %v", err)
+	}
 }
 
 func TestAtomicWriteFileRoundTrip(t *testing.T) {

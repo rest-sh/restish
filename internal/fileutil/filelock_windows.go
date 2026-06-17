@@ -15,8 +15,8 @@ type FileLock struct {
 	file *os.File
 }
 
-// Close releases the lock and closes the underlying file. Lock-release
-// failures are best-effort and not surfaced to the caller.
+// Close releases the lock and closes the underlying file. Unlock failures are
+// returned to the caller after closing the file.
 func (l *FileLock) Close() error {
 	if l == nil || l.file == nil {
 		return nil

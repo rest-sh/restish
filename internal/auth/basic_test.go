@@ -86,7 +86,7 @@ func TestHTTPBasic_OnRequest_PromptedPassword(t *testing.T) {
 }
 
 func TestHTTPBasic_OnRequest_NoPrompter_NoPassword(t *testing.T) {
-	h := &HTTPBasic{} // auth.Prompter is nil
+	h := &HTTPBasic{} // HTTPBasic.Prompter is nil
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	err := h.OnRequest(req, map[string]string{"username": "alice"})
 	if err == nil {
