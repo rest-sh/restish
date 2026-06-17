@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -418,11 +419,26 @@ func (c *CLI) shouldRunLegacyMigration() bool {
 	if os.Getenv("RSH_CONFIG_DIR") != "" {
 		return false
 	}
-	if filepath.Clean(c.configFilePath()) != filepath.Clean(config.DefaultPath()) {
+	defaultPath := legacyMigrationDefaultConfigPath()
+	if defaultPath == "" || filepath.Clean(c.configFilePath()) != filepath.Clean(defaultPath) {
 		return false
 	}
 	_, err := os.Stat(c.configFilePath())
 	return errors.Is(err, os.ErrNotExist)
+}
+
+func legacyMigrationDefaultConfigPath() string {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" && filepath.IsAbs(dir) {
+		return filepath.Join(dir, "restish", "restish.json")
+	}
+	if runtime.GOOS == "windows" {
+		if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+			return filepath.Join(dir, "restish", "restish.json")
+		}
+	} else if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".config", "restish", "restish.json")
+	}
+	return ""
 }
 
 func cloneConfigForEmbedding(src *config.Config) *config.Config {
