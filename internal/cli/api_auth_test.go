@@ -760,3 +760,32 @@ func TestAPIAuthGetCredentialAPIKeyQuery(t *testing.T) {
 		t.Fatalf("auth get query = %q, want ?partner=secret", got)
 	}
 }
+
+func TestAPIAuthGetPrintHeaderHeader(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-API-Key", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "get", "myapi", "PartnerKey", "--print-header")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "X-API-Key: secret" {
+		t.Fatalf("auth get --print-header = %q, want %q", got, "X-API-Key: secret")
+	}
+}
+
+func TestAPIAuthGetPrintHeaderQueryFails(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("query", "partner", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "get", "myapi", "PartnerKey", "--print-header")
+	if err == nil {
+		t.Fatal("expected --print-header on query auth to fail")
+	}
+	if !strings.Contains(err.Error(), "query parameter") {
+		t.Errorf("error = %q, want it to mention query parameter", err)
+	}
+}

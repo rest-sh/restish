@@ -448,6 +448,43 @@ Restish should assume users may run multiple instances concurrently:
 That means in-memory mutexes are not sufficient for persistence safety.
 Cross-process locking is part of the design, not an optimization.
 
+## Public Embedder Surface
+
+External Go programs (custom CLIs, automation, IDE plugins) that want to read
+or write Restish config without depending on the full CLI rendering stack can
+import the top-level `config` and `auth` packages directly. These packages
+expose:
+
+- `config.Config` and the on-disk schema structs (`APIConfig`, `ProfileConfig`,
+  `AuthConfig`, `CacheConfig`, `PaginationConfig`, `CredentialConfig`)
+- `config.Load`, `config.Save`, `config.ParseConfigBytes`, `config.DefaultPath`,
+  `config.Validate`, `config.ApplyURLOverrides` for strict read/write of
+  `restish.json`
+- `config.ConvertLegacyAPI`, `config.ReadLegacyAPI`, `config.ReadLegacyAPIs`
+  for reading a v1 `apis.json` (or a single entry) and converting it to the
+  v2 shape in memory, without going through the CLI's automatic migration
+- `config.NewPaths`, `Paths.ConfigFile`, `Paths.Cache`, `Paths.TokenCache` for
+  XDG-aware path discovery
+- `auth.NewTokenCache`, `auth.LoadTokenCache`, `auth.SaveTokenCache`,
+  `auth.DefaultTokenCachePath` for sharing the OAuth token cache with the
+  restish CLI
+
+The file-locking and atomic-write helpers used internally are not part of the
+public surface; they live under `internal/fileutil` because they are tied to
+the internal config write path.
+
+The bundled auth-handler implementations (api-key, basic, bearer, oauth-*) and
+the external-tool approval flow are intentionally not in the public `auth`
+package; they live under `internal/auth` because their field shapes are tied
+to the restish auth registry. External embedders that need OAuth should use
+`golang.org/x/oauth2` directly.
+
+Embedders that need the resolved auth header for a profile without going
+through the restish CLI's full request flow should use
+`restish api auth get <api> --print-header`; this prints the single header as
+`Name: value` on stdout and exits non-zero for any non-header auth. This is
+the stable, parseable contract for shell scripts and external Go programs.
+
 ## Alternatives Considered
 
 ### Separate Files For APIs And Global Config
