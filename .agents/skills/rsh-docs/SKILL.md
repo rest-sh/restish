@@ -77,7 +77,28 @@ Use examples that look like real work:
 - Explain intentional placeholders when they might look accidental.
 - Prefer JSONC for config examples when comments clarify fields.
 
+### Command Example Style
+
+These apply to every command example in docs, guides, recipes, and blog posts:
+
+- Prefer shorthand in examples over `jq` or plain JSON when possible.
+- Do not use `get` or `post` in examples when the auto mode is clear (e.g.,
+  `restish api.rest.sh/example` instead of `restish get api.rest.sh/example`).
+- Do not add options for no reason. E.g. `--rsh-no-paginate` when not talking
+  explicitly about pagination, or `--rsh-columns` when the default output is
+  fine. Extra flags complicate commands and make examples harder to read.
+  Avoid `-o lines` unless it significantly improves output readability.
+
 ### Shorthand Examples
+
+`restish-example` shortcode commands are extracted and validated by
+`scripts/check-doc-examples.rb`: CI enforces that each one is a single direct
+`restish` invocation (no pipes, redirects, `;`, `&&`, command substitution, or
+backticks) that parses cleanly with shell word-splitting, and a weekly job
+executes every one live against `api.rest.sh` and fails on non-zero exit.
+Write shortcode examples as commands that actually succeed against the public
+API; use plain fenced code blocks for pipelines, local-only setup, or
+illustrative failures.
 
 Restish shorthand examples should be shell-safe and match how the docs display
 them:
@@ -168,6 +189,16 @@ Avoid making blog posts the only source for exact commands, migration steps, or
 security-sensitive behavior; link to durable docs and update those docs when the
 post reveals a gap.
 
+### Blog Improvement
+
+Whenever you write a new blog post or modify an existing one, do a separate review pass of the changes (use a sub-agent if available) and apply the resulting improvements. The review should check for:
+
+1. Clarity: Is the post easy to understand? Are there any ambiguous statements or jargon that could be clarified?
+2. Engagement: Does the post have a compelling hook? Does it maintain the reader's interest throughout?
+3. Accuracy: Are all technical details correct? Are there any factual errors or misleading statements? Do all examples follow the Command Example Style rules above?
+4. Structure: Is the post well-organized? Does it have a logical flow from introduction to conclusion? Do the headings make sense (and are they short enough to not wrap for common screen widths)?
+5. Do all the command examples actually make sense? Are they good examples, or could they be improved to better illustrate the point? Are the examples in the right place in the post or should they be moved?
+
 ## Plugin Docs
 
 Always separate operator docs from author docs. Operators need install/configure/run/verify/debug. Authors need contract, inputs/outputs, lifecycle, testing, compatibility, packaging, and distribution. Do not make operators read authoring internals to use a plugin.
@@ -204,13 +235,24 @@ When migrating older docs, track whether material was retired, already migrated,
 
 ## Validation
 
-After meaningful site changes, run:
+After meaningful site changes, run what the CI docs job runs:
 
 ```bash
-hugo --source site --quiet
+npm --prefix site ci                  # once, to install dependencies
+go run ./cmd/restish-docgen --check   # generated regions are not stale
+npm --prefix site run social-images   # social preview images build
+hugo --source site --quiet --gc --minify --cacheDir /tmp/hugo_cache
+scripts/check-doc-links.rb            # internal links resolve
+scripts/check-doc-examples.rb         # restish-example shortcodes are valid
 ```
 
-For blog changes that affect social cards, run `npm run social-images` from
-`site/` or `npm run build` if dependencies are available.
+A plain `hugo --source site --quiet` is a fine quick check while iterating.
+`npm run social-images` parses front matter across `content/en` and can fail
+independently of Hugo, so run it for blog and front-matter changes even when
+the quick Hugo check passes.
+
+When touching site JavaScript or interactive examples (playground, query
+runner, docs interactions), also run `npm --prefix site test`; CI does not
+run it in the docs job.
 
 Also verify new links, check examples against current CLI behavior, grep touched docs for stale `api.example.com` placeholders and leftover `Source material:` sections, and prefer examples that can later be validated against `api.rest.sh` or promoted into tests.

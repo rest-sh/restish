@@ -103,7 +103,7 @@ saves more tokens than re-encoding alone, and projecting to a uniform list is
 what keeps the tabular form:
 
 ```bash
-restish api.rest.sh/images -f '.[] | {name, format}' -o toon
+restish api.rest.sh/images -f 'body.{name, format}' -o toon
 ```
 
 ```text
@@ -115,13 +115,11 @@ restish api.rest.sh/images -f '.[] | {name, format}' -o toon
   heic,Chihuly glass in boats
 ```
 
-For paginated list endpoints, add `--rsh-collect` so every page is gathered into
-one array and rendered as a single table. Without it, each page's items render
-as separate documents and the tabular savings are lost:
-
-```bash
-restish api.rest.sh/images --rsh-collect -o toon
-```
+Paginated list endpoints need no extra flags: Restish follows `next` links
+automatically, and document formats gather every page into one body, so a
+multi-page collection renders as a single table. Use `--rsh-collect` only when
+a filter needs to see the whole collection at once; see
+[Collect Before Filtering](/docs/guides/pagination/#collect-before-filtering).
 
 ### How TOON compares
 

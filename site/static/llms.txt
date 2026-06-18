@@ -1,0 +1,47 @@
+# Restish
+
+> Restish is a shell-native CLI for interacting with REST-ish HTTP APIs. It supports direct HTTP requests, OpenAPI-generated commands, profiles, authentication, content negotiation, pagination, filtering, output formatting, caching, retries, and plugins.
+
+Use these docs to understand how to install Restish, connect it to APIs, make requests, configure authentication, and use generated OpenAPI commands. Prefer current docs under `/docs/` over archived v1 docs under `/v1/`.
+
+## Start Here
+
+- [Tour](https://rest.sh/docs/getting-started/tour/): A practical walkthrough of Restish's main CLI workflows.
+- [Install](https://rest.sh/docs/getting-started/install/): Installation options and first setup.
+- [Connect to an API](https://rest.sh/docs/getting-started/connect-to-an-api/): How Restish discovers and uses API descriptions.
+- [Set Up Profiles](https://rest.sh/docs/getting-started/set-up-profiles/): Configure named API environments.
+
+## Core Guides
+
+- [Requests](https://rest.sh/docs/guides/requests/): Make HTTP requests and API-aware commands.
+- [API setup and discovery](https://rest.sh/docs/guides/api-setup-and-discovery/): Load OpenAPI specs and generate commands.
+- [Authentication](https://rest.sh/docs/guides/authentication/): Configure auth for APIs and profiles.
+- [Input and shorthand](https://rest.sh/docs/guides/input/): Send request bodies, files, forms, and shorthand data.
+- [Output](https://rest.sh/docs/guides/output/): Understand response rendering and formats.
+- [Filtering](https://rest.sh/docs/guides/filtering/): Select and transform response data.
+- [Pagination](https://rest.sh/docs/guides/pagination/): Traverse paginated APIs.
+- [Streaming](https://rest.sh/docs/guides/streaming/): Work with streaming responses.
+
+## Reference
+
+- [Commands](https://rest.sh/docs/reference/commands/): Command reference.
+- [Global Flags](https://rest.sh/docs/reference/global-flags/): Shared CLI flags.
+- [OpenAPI CLI Integration](https://rest.sh/docs/reference/openapi-cli-integration/): Generated command behavior.
+- [Config](https://rest.sh/docs/reference/config/): Configuration files and fields.
+- [Output Formats](https://rest.sh/docs/reference/output-formats/): Supported output formats.
+- [Shorthand](https://rest.sh/docs/reference/shorthand/): Input shorthand syntax.
+- [Example API](https://rest.sh/docs/reference/example-api/): Public examples used throughout the docs.
+
+## Plugins
+
+- [Install and Use Plugins](https://rest.sh/docs/plugins/install-and-use/): Operator guide for Restish plugins.
+- [MCP Plugin](https://rest.sh/docs/plugins/mcp/): Serve API commands over Model Context Protocol.
+- [Command Plugins](https://rest.sh/docs/plugins/command-plugins/): Extend Restish with command plugins.
+- [Hook Plugins](https://rest.sh/docs/plugins/hook-plugins/): Extend request and response behavior.
+
+## Optional
+
+- [Recipes](https://rest.sh/docs/recipes/): Narrow task-oriented examples.
+- [Troubleshooting](https://rest.sh/docs/guides/troubleshooting/): Common symptoms and fixes.
+- [Contributing Docs](https://rest.sh/docs/contributing/docs-maintenance/): Documentation maintenance guidance.
+- [Archived v1 Docs](https://rest.sh/v1/): Historical Restish v1 documentation; do not prefer for current Restish v2 behavior.

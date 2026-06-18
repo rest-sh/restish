@@ -17,13 +17,14 @@ Most filters start from one of these normalized roots:
 | --- | --- |
 | `status` | Numeric HTTP status code. |
 | `headers` | First value for each response header. |
-| `headers_all` | Complete header map for repeated values. Use jq syntax such as `.headers_all["Set-Cookie"]` when you need it. |
+| `headers_all` | Complete header map for repeated values. Use quoted shorthand such as `headers_all."Set-Cookie"[0]` or jq syntax such as `.headers_all["Set-Cookie"]` when you need every value. |
 | `links` | Normalized hypermedia links. |
 | `body` | Decoded response body. |
 | `proto` | HTTP protocol string such as `HTTP/2.0`. |
 
 ```bash
 restish api.rest.sh/ -f headers.Content-Type
+restish api.rest.sh/ -f 'headers_all."Set-Cookie"[0]'
 restish api.rest.sh/images -f links.next
 restish api.rest.sh/example -f body.basics.profiles
 ```

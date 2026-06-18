@@ -2,6 +2,14 @@
 {{/* Automatically cache-bust the playground script when its file contents change. */}}
 {{ $playgroundVersion := readFile "static/js/restish-playground.js" | md5 }}
 <script src='{{ "js/restish-playground.js" | relURL }}?v={{ $playgroundVersion }}'></script>
+{{ range .Params.extra_js -}}
+  {{ $scriptPath := . }}
+  {{ if or (not (strings.HasPrefix $scriptPath "js/")) (strings.Contains $scriptPath "..") -}}
+    {{ errorf "extra_js path %q must be relative to site/static/js/ and must not contain parent traversal" $scriptPath }}
+  {{ end -}}
+  {{ $scriptVersion := readFile (printf "static/%s" $scriptPath) | md5 }}
+  <script src='{{ $scriptPath | relURL }}?v={{ $scriptVersion }}'></script>
+{{ end -}}
 <script>
   (function () {
     if (window.location.pathname === "/" && window.location.hash.indexOf("#/") === 0) {

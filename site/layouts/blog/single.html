@@ -40,6 +40,38 @@
           {{ . }}
         </div>
       {{ end -}}
+      {{ $pages := .CurrentSection.RegularPages.ByDate.Reverse -}}
+      {{ $newerPost := false -}}
+      {{ $olderPost := false -}}
+      {{ range $index, $page := $pages -}}
+        {{ if eq $page.RelPermalink $.RelPermalink -}}
+          {{ if gt $index 0 -}}
+            {{ $newerPost = index $pages (sub $index 1) -}}
+          {{ end -}}
+          {{ if lt (add $index 1) (len $pages) -}}
+            {{ $olderPost = index $pages (add $index 1) -}}
+          {{ end -}}
+        {{ end -}}
+      {{ end -}}
+      {{ if or $newerPost $olderPost -}}
+        <nav class="restish-blog-rail-card restish-blog-post-nav" aria-label="Adjacent blog posts">
+          <strong>More posts</strong>
+          {{ with $newerPost -}}
+            <a class="restish-blog-post-nav__link" href="{{ .RelPermalink }}">
+              <span>Newer post</span>
+              <b>{{ .LinkTitle | default .Title }}</b>
+              <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format ($.Site.Params.time_format_blog | default "Jan 2, 2006") }}</time>
+            </a>
+          {{ end -}}
+          {{ with $olderPost -}}
+            <a class="restish-blog-post-nav__link" href="{{ .RelPermalink }}">
+              <span>Older post</span>
+              <b>{{ .LinkTitle | default .Title }}</b>
+              <time datetime="{{ .Date.Format "2006-01-02" }}">{{ .Date.Format ($.Site.Params.time_format_blog | default "Jan 2, 2006") }}</time>
+            </a>
+          {{ end -}}
+        </nav>
+      {{ end -}}
     </aside>
   </div>
 </article>

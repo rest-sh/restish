@@ -1,0 +1,4 @@
+interface:
+  display_name: "Restish Review"
+  short_description: "Find bugs and risks in Restish changes"
+  default_prompt: "Use $rsh-review to review the current Restish code changes for bugs, regressions, missing tests, and repo-specific risks."

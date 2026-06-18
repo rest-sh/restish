@@ -6,6 +6,8 @@ description: Understand how Restish decodes, normalizes, filters, and renders re
 aliases:
   - /docs/guides/output/
   - /docs/recipes/show-only-response-headers/
+extra_js:
+  - js/restish-docs-interactions.js
 ---
 
 Restish output is built around one rule: stdout carries the selected HTTP
@@ -14,15 +16,7 @@ verbose traces.
 
 ## Processing Model
 
-```mermaid
-flowchart LR
-  A[HTTP response] --> B[Decompress]
-  B --> C[Decode by Content-Type]
-  C --> D[Normalize status, headers, links, body]
-  D --> E[Paginate or stream]
-  E --> F[Filter]
-  F --> G[Format]
-```
+{{< restish-output-pipeline >}}
 
 ## Choose A Format
 
@@ -68,11 +62,11 @@ shell-friendly scalar values.
 
 ## Document vs Record Output
 
-Use document output when the next program expects one complete value. Make the
-format explicit in scripts and redirects:
+Use document output when the next program expects one complete value. Make
+collection explicit when pagination should become one redirected document:
 
 ```bash
-restish api.rest.sh/images --rsh-collect -o json > images.json
+restish api.rest.sh/images --rsh-collect > images.json
 ```
 
 Use record output when you want one item per line:
@@ -139,7 +133,7 @@ Control exactly what stdout contains with `--rsh-print`:
 
 ```bash
 restish api.rest.sh/images --rsh-print hbpc
-restish api.rest.sh/images -o json > images.json
+restish api.rest.sh/images --rsh-collect > images.json
 restish api.rest.sh/images --rsh-print b > images.compact.json
 restish post api.rest.sh/post 'name: Alice' --rsh-print HBhbp
 ```
@@ -196,7 +190,7 @@ Pair it with a filter that projects to a uniform list of records for the
 largest savings:
 
 ```bash
-restish api.rest.sh/images -f '.[] | {name, format}' -o toon
+restish api.rest.sh/images -f 'body.{name, format}' -o toon
 ```
 
 See [Output Formats](/docs/reference/output-formats/#toon-for-agents) for the

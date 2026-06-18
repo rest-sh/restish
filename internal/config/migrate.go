@@ -8,17 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/tidwall/jsonc"
 )
-
-// MigrationInfo describes a one-time v1 -> v2 config migration performed while
-// loading restish.json.
-type MigrationInfo struct {
-	SourcePath string
-	BackupPath string
-	Warnings   []string
-}
 
 type legacyConfigSource struct {
 	dir        string
@@ -59,10 +54,10 @@ type legacyAPIConfig struct {
 	TLS           *legacyTLSConfig             `json:"tls,omitempty"`
 }
 
-func loadOrMigrate(path string) (*Config, error) {
+func loadOrMigrate(path string) (*config.Config, error) {
 	source, err := findLegacyConfigSource()
 	if err != nil || source == nil {
-		return &Config{}, err
+		return &config.Config{}, err
 	}
 
 	cfg, err := migrateLegacyConfig(path, source)
@@ -97,11 +92,11 @@ func legacyConfigDirs() []string {
 		dirs = append(dirs, dir)
 	}
 
-	if userDir, err := userConfigDirFunc(); err == nil && userDir != "" {
+	if userDir, err := os.UserConfigDir(); err == nil && userDir != "" {
 		dir := filepath.Join(userDir, "restish")
 		add(dir)
 	}
-	if home, err := userHomeDirFunc(); err == nil && home != "" {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		add(filepath.Join(home, "Library", "Application Support", "restish"))
 		add(filepath.Join(home, ".config", "restish"))
 	}
@@ -134,7 +129,7 @@ func loadLegacyConfigSource(dir string) (*legacyConfigSource, error) {
 	return source, nil
 }
 
-func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, error) {
+func migrateLegacyConfig(path string, source *legacyConfigSource) (*config.Config, error) {
 	cfg, warnings, err := parseLegacyConfig(source)
 	if err != nil {
 		return nil, err
@@ -149,16 +144,16 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := atomicWriteFile(path, data, 0o600, 0o700); err != nil {
+	if err := fileutil.AtomicWriteFile(path, data, fileutil.AtomicWriteOptions{FileMode: 0o600, DirMode: 0o700}); err != nil {
 		return nil, err
 	}
 
-	loaded, err := parseConfigBytes(path, data)
+	loaded, err := config.ParseConfigBytes(path, data)
 	if err != nil {
 		return nil, err
 	}
 	warnings = append(warnings, cleanupLegacyFiles(source)...)
-	loaded.Migration = &MigrationInfo{
+	loaded.Migration = &config.MigrationInfo{
 		SourcePath: source.dir,
 		BackupPath: backupDir,
 		Warnings:   warnings,
@@ -166,8 +161,8 @@ func migrateLegacyConfig(path string, source *legacyConfigSource) (*Config, erro
 	return loaded, nil
 }
 
-func parseLegacyConfig(source *legacyConfigSource) (*Config, []string, error) {
-	cfg := &Config{}
+func parseLegacyConfig(source *legacyConfigSource) (*config.Config, []string, error) {
+	cfg := &config.Config{}
 	if len(source.apisData) == 0 {
 		return cfg, nil, nil
 	}
@@ -181,7 +176,7 @@ func parseLegacyConfig(source *legacyConfigSource) (*Config, []string, error) {
 	}
 
 	var warnings []string
-	cfg.APIs = make(map[string]*APIConfig, len(raw))
+	cfg.APIs = make(map[string]*config.APIConfig, len(raw))
 	for name, legacy := range raw {
 		api, apiWarnings := convertLegacyAPIConfig(name, legacy)
 		cfg.APIs[name] = api
@@ -193,7 +188,7 @@ func parseLegacyConfig(source *legacyConfigSource) (*Config, []string, error) {
 func parseLegacyAPIMap(path string, data []byte) (map[string]*legacyAPIConfig, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(jsonc.ToJSON(data), &raw); err != nil {
-		return nil, &ParseError{Path: path, Err: err}
+		return nil, &config.ParseError{Path: path, Err: err}
 	}
 
 	result := make(map[string]*legacyAPIConfig, len(raw))
@@ -203,26 +198,26 @@ func parseLegacyAPIMap(path string, data []byte) (map[string]*legacyAPIConfig, e
 		}
 		var cfg legacyAPIConfig
 		if err := json.Unmarshal(value, &cfg); err != nil {
-			return nil, &ParseError{Path: path, Err: err}
+			return nil, &config.ParseError{Path: path, Err: err}
 		}
 		result[name] = &cfg
 	}
 	return result, nil
 }
 
-func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, []string) {
+func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*config.APIConfig, []string) {
 	if legacy == nil {
-		return &APIConfig{}, nil
+		return &config.APIConfig{}, nil
 	}
 	operationBase, warning := convertLegacyOperationBase(name, legacy.OperationBase)
 
-	api := &APIConfig{
+	api := &config.APIConfig{
 		BaseURL:       legacy.Base,
 		OperationBase: operationBase,
 		SpecFiles:     append([]string(nil), legacy.SpecFiles...),
 	}
 	if len(legacy.Profiles) > 0 {
-		api.Profiles = make(map[string]*ProfileConfig, len(legacy.Profiles))
+		api.Profiles = make(map[string]*config.ProfileConfig, len(legacy.Profiles))
 		for name, profile := range legacy.Profiles {
 			api.Profiles[name] = convertLegacyProfile(profile)
 		}
@@ -231,11 +226,11 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 	var migratedPKCS11 bool
 	if legacy.TLS != nil && legacy.TLS.PKCS11 != nil {
 		if api.Profiles == nil {
-			api.Profiles = map[string]*ProfileConfig{}
+			api.Profiles = map[string]*config.ProfileConfig{}
 		}
 		prof := api.Profiles["default"]
 		if prof == nil {
-			prof = &ProfileConfig{}
+			prof = &config.ProfileConfig{}
 			api.Profiles["default"] = prof
 		}
 		if prof.TLSSigner == "" {
@@ -255,11 +250,11 @@ func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, [
 
 	if legacy.TLS != nil && (legacy.TLS.Cert != "" || legacy.TLS.Key != "") {
 		if api.Profiles == nil {
-			api.Profiles = map[string]*ProfileConfig{}
+			api.Profiles = map[string]*config.ProfileConfig{}
 		}
 		prof := api.Profiles["default"]
 		if prof == nil {
-			prof = &ProfileConfig{}
+			prof = &config.ProfileConfig{}
 			api.Profiles["default"] = prof
 		}
 		if prof.ClientCertPath == "" && legacy.TLS.Cert != "" {
@@ -284,24 +279,24 @@ func convertLegacyOperationBase(apiName, operationBase string) (string, string) 
 	if operationBase == "" {
 		return "", ""
 	}
-	if err := ValidateOperationBase(operationBase); err == nil {
+	if err := config.ValidateOperationBase(operationBase); err == nil {
 		return operationBase, ""
 	}
 	return "", fmt.Sprintf("api %q: dropped invalid legacy operation_base %q; v2 operation_base must be an absolute path", apiName, operationBase)
 }
 
-func convertLegacyProfile(legacy *legacyAPIProfile) *ProfileConfig {
+func convertLegacyProfile(legacy *legacyAPIProfile) *config.ProfileConfig {
 	if legacy == nil {
-		return &ProfileConfig{}
+		return &config.ProfileConfig{}
 	}
 
-	prof := &ProfileConfig{
+	prof := &config.ProfileConfig{
 		BaseURL: legacy.Base,
 		Headers: sortedHeaderList(legacy.Headers),
 		Query:   sortedQueryList(legacy.Query),
 	}
 	if legacy.Auth != nil {
-		prof.Auth = &AuthConfig{
+		prof.Auth = &config.AuthConfig{
 			Type:   legacy.Auth.Name,
 			Params: cloneStringMap(legacy.Auth.Params),
 		}
@@ -425,7 +420,7 @@ func backupLegacyFiles(source *legacyConfigSource, backupDir string) error {
 			continue
 		}
 		target := filepath.Join(backupDir, file.name)
-		if err := atomicWriteFile(target, file.data, 0o600, 0o700); err != nil {
+		if err := fileutil.AtomicWriteFile(target, file.data, fileutil.AtomicWriteOptions{FileMode: 0o600, DirMode: 0o700}); err != nil {
 			return fmt.Errorf("config: backup %s: %w", file.name, err)
 		}
 	}
@@ -445,7 +440,7 @@ func cleanupLegacyFiles(source *legacyConfigSource) []string {
 	return warnings
 }
 
-func renderMigratedConfig(cfg *Config, backupDir string) ([]byte, error) {
+func renderMigratedConfig(cfg *config.Config, backupDir string) ([]byte, error) {
 	body, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("config: marshal migrated config: %w", err)
@@ -458,4 +453,86 @@ func renderMigratedConfig(cfg *Config, backupDir string) ([]byte, error) {
 	out.Write(body)
 	out.WriteByte('\n')
 	return out.Bytes(), nil
+}
+
+// ReadProfile loads the named API from folder, returning its v2-shaped
+// *config.APIConfig. It tries restish.json (v2) first and falls back to
+// apis.json (v1), converting legacy entries on the fly.
+func ReadProfile(folder, apiName string) (*config.APIConfig, error) {
+	all, err := ReadAll(folder)
+	if err != nil {
+		return nil, err
+	}
+	api, ok := all[apiName]
+	if !ok {
+		return nil, fmt.Errorf("config: api %q not found in %s", apiName, folder)
+	}
+	return api, nil
+}
+
+// ReadAll returns every API defined in folder, in v2 shape. Tries
+// restish.json first, then apis.json, converting legacy entries.
+func ReadAll(folder string) (map[string]*config.APIConfig, error) {
+	v2Path := filepath.Join(folder, "restish.json")
+	data, err := os.ReadFile(v2Path)
+	if err == nil {
+		cfg, err := config.ParseConfigBytes(v2Path, data)
+		if err != nil {
+			return nil, err
+		}
+		out := make(map[string]*config.APIConfig, len(cfg.APIs))
+		for name, api := range cfg.APIs {
+			if api != nil {
+				out[name] = api
+			}
+		}
+		return out, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("config: cannot read %s: %w", v2Path, err)
+	}
+
+	v1Path := filepath.Join(folder, "apis.json")
+	data, err = os.ReadFile(v1Path)
+	if err != nil {
+		return nil, fmt.Errorf("config: no restish config found in %s (tried restish.json and apis.json)", folder)
+	}
+
+	stripped := jsonc.ToJSON(data)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(stripped, &raw); err != nil {
+		return nil, fmt.Errorf("config: parsing %s: %w", v1Path, err)
+	}
+	out := make(map[string]*config.APIConfig, len(raw))
+	for name, r := range raw {
+		if strings.HasPrefix(name, "$") {
+			continue
+		}
+		var v1 legacyAPIConfig
+		if err := json.Unmarshal(r, &v1); err != nil {
+			return nil, fmt.Errorf("config: parsing %s entry %q: %w", v1Path, name, err)
+		}
+		api, _ := convertLegacyAPIConfig(name, &v1)
+		out[name] = api
+	}
+	return out, nil
+}
+
+// TryMigrate inspects the user's config directory for a legacy v1 config
+// (apis.json / config.json) and migrates it to a v2 restish.json at path.
+// Returns (nil, nil) when no legacy source is present. The restish CLI
+// calls this explicitly before config.Load; embedders using config.Load
+// do not see a migration triggered automatically.
+func TryMigrate(path string) (*config.MigrationInfo, error) {
+	source, err := findLegacyConfigSource()
+	if err != nil {
+		return nil, err
+	}
+	if source == nil {
+		return nil, nil
+	}
+	loaded, err := migrateLegacyConfig(path, source)
+	if err != nil {
+		return nil, err
+	}
+	return loaded.Migration, nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/rest-sh/restish/v2/auth"
 )
 
 // HTTPBasic implements HTTP Basic authentication (RFC 7617).
@@ -14,8 +16,8 @@ type HTTPBasic struct {
 	Prompter func(prompt string) (string, error)
 }
 
-func (h *HTTPBasic) Parameters() []Param {
-	return []Param{
+func (h *HTTPBasic) Parameters() []auth.Param {
+	return []auth.Param{
 		{Name: "username", Description: "HTTP Basic auth username", Required: true},
 		{Name: "password", Description: "HTTP Basic auth password (prompted if omitted)", Required: false, Secret: true},
 	}
@@ -43,7 +45,7 @@ func (h *HTTPBasic) OnRequest(req *http.Request, params map[string]string) error
 	return nil
 }
 
-func (h *HTTPBasic) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+func (h *HTTPBasic) Authenticate(_ context.Context, req *http.Request, ac auth.AuthContext) error {
 	prompter := h.Prompter
 	if prompter == nil && ac.Prompter != nil {
 		prompter = ac.Prompter.PromptSecret

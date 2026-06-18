@@ -10,7 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 )
 
 type externalToolApprovals struct {
@@ -79,7 +80,7 @@ func (c *CLI) saveExternalToolApprovals(approvals map[string]bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	lock, err := config.LockSiblingFile(path)
+	lock, err := fileutil.LockSiblingFile(path)
 	if err != nil {
 		return err
 	}

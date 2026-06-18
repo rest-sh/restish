@@ -5,16 +5,24 @@ weight: 45
 description: Select headers, links, and body fields with shorthand queries or jq filters.
 aliases:
   - /docs/recipes/filter-response-fields/
+extra_js:
+  - js/restish-docs-interactions.js
 ---
 
 Filtering trims a normalized Restish response before formatting. Use shorthand
 for direct paths and projections; use jq for richer transforms.
 
+{{< restish-query-runner >}}
+
+Use **Trace filter** to inspect before and after values for every step of the
+filter.
+
 ## Filter Roots
 
 - `proto` for the response protocol string
 - `status` for the numeric HTTP status
-- `headers` for response headers
+- `headers` for the first value of each response header
+- `headers_all` for repeated response headers such as `Set-Cookie`
 - `links` for normalized hypermedia links
 - `body` for decoded response body
 
@@ -23,6 +31,7 @@ restish api.rest.sh/ -f headers.Content-Type
 {{< /restish-example >}}
 
 ```bash
+restish api.rest.sh/ -f 'headers_all."Set-Cookie"[0]'
 restish api.rest.sh/images -f links.next
 restish api.rest.sh/example -f body.basics.profiles
 ```
@@ -46,7 +55,7 @@ restish api.rest.sh/images --rsh-collect -f 'body[format == jpeg].self' -o lines
 {{< /restish-example >}}
 
 ```bash
-restish api.rest.sh/example -f 'body.basics.{name, url, profiles}'
+restish api.rest.sh/example -f 'body.basics.{name, label, profiles}'
 restish api.rest.sh/images --rsh-no-paginate -f '{next: links.next, first: body[0].self}'
 restish api.rest.sh/example -f 'body..url'
 ```

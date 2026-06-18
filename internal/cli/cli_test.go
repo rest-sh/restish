@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -12,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/cli"
-	"github.com/rest-sh/restish/v2/internal/config"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -573,6 +574,60 @@ func TestRSHConfigReadsSelectedFile(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "project.example.com") {
 		t.Fatalf("expected RSH_CONFIG API in output, got %q", stdout.String())
+	}
+}
+
+func TestRSHConfigMissingDoesNotRunLegacyMigration(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("RSH_CONFIG", "")
+	t.Setenv("RSH_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	}
+
+	defaultConfigPath := config.DefaultPath()
+	defaultConfigDir := filepath.Dir(defaultConfigPath)
+	if err := os.MkdirAll(defaultConfigDir, 0o700); err != nil {
+		t.Fatalf("mkdir default config dir: %v", err)
+	}
+	legacyPath := filepath.Join(defaultConfigDir, "apis.json")
+	if err := os.WriteFile(legacyPath, []byte(`{
+  "legacy": {
+    "base": "https://legacy.example.com"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+
+	selectedPath := filepath.Join(t.TempDir(), "project-restish.json")
+	t.Setenv("RSH_CONFIG", selectedPath)
+
+	var stdout, stderr bytes.Buffer
+	c := cli.New()
+	c.Stdin = strings.NewReader("")
+	c.Stdout = &stdout
+	c.Stderr = &stderr
+	err := c.Run([]string{"restish", "api", "list"})
+	if err == nil {
+		t.Fatal("expected missing RSH_CONFIG file to error")
+	}
+	if !strings.Contains(err.Error(), selectedPath) || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, statErr := os.Stat(selectedPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("selected config was created or stat failed: %v", statErr)
+	}
+	if _, statErr := os.Stat(defaultConfigPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("default config was migrated or stat failed: %v", statErr)
+	}
+	if _, statErr := os.Stat(legacyPath); statErr != nil {
+		t.Fatalf("legacy config should remain in place: %v", statErr)
+	}
+	if _, statErr := os.Stat(defaultConfigDir + ".bak.v1"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("legacy config backup was created or stat failed: %v", statErr)
 	}
 }
 

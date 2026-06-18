@@ -14,12 +14,25 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/shorthand/v2"
+	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/fileutil"
 	"github.com/tailscale/hujson"
 	"github.com/tidwall/jsonc"
 )
 
 // ErrPathNotFound reports that a requested JSONC path did not exist.
 var ErrPathNotFound = errors.New("config: path not found")
+
+// NeedsPatchToPreserveFormatting reports whether the config file at path
+// contains JSONC comments and should use patch-based writes to preserve formatting.
+// Returns false when the file does not exist or cannot be read.
+func NeedsPatchToPreserveFormatting(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return string(jsonc.ToJSON(data)) != string(data)
+}
 
 // ConfigPatchOperation describes one config edit operation.
 // If Delete is true, Value is ignored and Path is removed.
@@ -36,7 +49,7 @@ type jsoncFormatStyle struct {
 
 // SaveAPIConfig updates a single API entry in the JSONC config file while
 // preserving surrounding comments and formatting when possible.
-func SaveAPIConfig(path, apiName string, apiCfg *APIConfig) error {
+func SaveAPIConfig(path, apiName string, apiCfg *config.APIConfig) error {
 	return patchConfig(path, true, func(data []byte) ([]byte, error) {
 		return jsoncSetPath(data, []string{"apis", apiName}, apiCfg)
 	})
@@ -92,7 +105,7 @@ func SaveConfigValues(path string, ops []ConfigPatchOperation) error {
 // SaveConfigShorthand applies shorthand patch expressions to the JSONC config
 // file under rootPath, validates the final config, and writes it atomically
 // while preserving comments where possible.
-func SaveConfigShorthand(path string, rootPath []string, exprs []string, validate func(*Config) error) error {
+func SaveConfigShorthand(path string, rootPath []string, exprs []string, validate func(*config.Config) error) error {
 	if len(exprs) == 0 {
 		return nil
 	}
@@ -116,9 +129,9 @@ func SaveConfigShorthand(path string, rootPath []string, exprs []string, validat
 // SaveConfigMutation applies a typed config mutation atomically under the
 // config file lock while preserving JSONC comments and formatting where
 // possible.
-func SaveConfigMutation(path string, mutate func(*Config) error, validate func(*Config) error) error {
+func SaveConfigMutation(path string, mutate func(*config.Config) error, validate func(*config.Config) error) error {
 	return patchConfig(path, true, func(data []byte) ([]byte, error) {
-		cfg, err := parseConfigBytes(path, data)
+		cfg, err := config.ParseConfigBytes(path, data)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +159,7 @@ func SaveConfigMutation(path string, mutate func(*Config) error, validate func(*
 
 // PatchConfigShorthandBytes applies shorthand patch expressions to JSONC config
 // bytes and returns the patched bytes plus the decoded typed config.
-func PatchConfigShorthandBytes(data []byte, rootPath []string, exprs []string) ([]byte, *Config, error) {
+func PatchConfigShorthandBytes(data []byte, rootPath []string, exprs []string) ([]byte, *config.Config, error) {
 	root, err := genericJSONC(data)
 	if err != nil {
 		return nil, nil, err
@@ -184,7 +197,7 @@ func PatchConfigShorthandBytes(data []byte, rootPath []string, exprs []string) (
 	if err != nil {
 		return nil, nil, fmt.Errorf("config: marshal patched config: %w", err)
 	}
-	cfg, err := parseConfigBytes("", raw)
+	cfg, err := config.ParseConfigBytes("", raw)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -508,10 +521,10 @@ func (e *ConfigShapeError) Error() string {
 	return b.String()
 }
 
-// ValidateShape validates generic decoded config data against the Config
+// ValidateShape validates generic decoded config data against the config.Config
 // schema generated from Go structs.
 func ValidateShape(value any) error {
-	errs := huma.NewModelValidator().Validate(reflect.TypeOf(Config{}), value)
+	errs := huma.NewModelValidator().Validate(reflect.TypeOf(config.Config{}), value)
 	if len(errs) == 0 {
 		return nil
 	}
@@ -533,7 +546,7 @@ func formatHumaValidationError(err error) string {
 }
 
 func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, error)) error {
-	lock, err := lockConfigFile(path)
+	lock, err := fileutil.LockSiblingFile(path)
 	if err != nil {
 		return err
 	}
@@ -555,10 +568,10 @@ func patchConfig(path string, createIfMissing bool, patch func([]byte) ([]byte, 
 	if err != nil {
 		return err
 	}
-	if _, err := parseConfigBytes(path, patched); err != nil {
+	if _, err := config.ParseConfigBytes(path, patched); err != nil {
 		return err
 	}
-	return atomicWriteFileLocked(path, patched, 0o600, 0o700, false)
+	return fileutil.AtomicWriteFile(path, patched, fileutil.AtomicWriteOptions{FileMode: 0o600, DirMode: 0o700})
 }
 
 func genericJSONC(data []byte) (any, error) {

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"strings"
 )
@@ -11,15 +12,15 @@ import (
 // parameter, or cookie.
 type APIKey struct{}
 
-func (h *APIKey) Parameters() []Param {
-	return []Param{
+func (h *APIKey) Parameters() []auth.Param {
+	return []auth.Param{
 		{Name: "in", Description: "API key location: header, query, or cookie", Required: true},
 		{Name: "name", Description: "API key header, query parameter, or cookie name", Required: true},
 		{Name: "value", Description: "API key value", Required: true, Secret: true},
 	}
 }
 
-func (h *APIKey) Authenticate(_ context.Context, req *http.Request, ac AuthContext) error {
+func (h *APIKey) Authenticate(_ context.Context, req *http.Request, ac auth.AuthContext) error {
 	location := ac.Params["in"]
 	name := ac.Params["name"]
 	value := ac.Params["value"]

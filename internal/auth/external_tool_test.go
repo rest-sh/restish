@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"runtime"
 	"strings"
@@ -182,7 +183,7 @@ func TestExternalTool_AuthenticateCancelsHungTool(t *testing.T) {
 	a := &ExternalTool{Timeout: 20 * time.Millisecond}
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	start := time.Now()
-	err := a.Authenticate(context.Background(), req, AuthContext{
+	err := a.Authenticate(context.Background(), req, auth.AuthContext{
 		Params: map[string]string{"commandline": "sleep 5"},
 	})
 	if err == nil {

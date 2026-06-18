@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rest-sh/restish/v2/internal/auth"
-	"github.com/rest-sh/restish/v2/internal/config"
+	"github.com/rest-sh/restish/v2/auth"
+	"github.com/rest-sh/restish/v2/config"
+	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/rest-sh/restish/v2/internal/procutil"
 	"github.com/rest-sh/restish/v2/internal/request"
@@ -71,18 +72,18 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	}
 	switch ac.Type {
 	case "api-key":
-		return &auth.APIKey{}, nil
+		return &authpkg.APIKey{}, nil
 	case "bearer":
-		return &auth.Bearer{}, nil
+		return &authpkg.Bearer{}, nil
 	case "http-basic":
-		return &auth.HTTPBasic{}, nil
+		return &authpkg.HTTPBasic{}, nil
 	case "oauth-client-credentials":
-		return &auth.ClientCredentials{
+		return &authpkg.ClientCredentials{
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 		}, nil
 	case "oauth-authorization-code":
-		return &auth.AuthorizationCode{
+		return &authpkg.AuthorizationCode{
 			Cache:                auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient:           &http.Client{Transport: c.baseHTTPTransport()},
 			Stderr:               c.Stderr,
@@ -93,13 +94,13 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 			CallbackFailureColor: output.ThemeTokenColor("status_error"),
 		}, nil
 	case "oauth-device-code":
-		return &auth.DeviceCode{
+		return &authpkg.DeviceCode{
 			Cache:      auth.NewTokenCache(c.tokenCachePath()),
 			HTTPClient: &http.Client{Transport: c.baseHTTPTransport()},
 			Stderr:     c.Stderr,
 		}, nil
 	case "external-tool":
-		return &auth.ExternalTool{Stderr: c.Stderr}, nil
+		return &authpkg.ExternalTool{Stderr: c.Stderr}, nil
 	default:
 		return nil, fmt.Errorf("unknown auth type %q; supported: api-key, bearer, http-basic, oauth-client-credentials, oauth-authorization-code, oauth-device-code, external-tool", ac.Type)
 	}

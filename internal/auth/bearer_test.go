@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 func TestBearerAuthenticate(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
-	err := (&Bearer{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+	err := (&Bearer{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 		"token": "secret-token",
 	}})
 	if err != nil {
@@ -23,7 +24,7 @@ func TestBearerAuthenticate(t *testing.T) {
 func TestBearerAuthenticateDoesNotOverwriteAuthorization(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
 	req.Header.Set("Authorization", "Bearer manual")
-	err := (&Bearer{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+	err := (&Bearer{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 		"token": "configured",
 	}})
 	if err != nil {
@@ -36,7 +37,7 @@ func TestBearerAuthenticateDoesNotOverwriteAuthorization(t *testing.T) {
 
 func TestBearerAuthenticateRequiresToken(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
-	err := (&Bearer{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{}})
+	err := (&Bearer{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{}})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

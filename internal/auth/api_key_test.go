@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ func TestAPIKeyParameters(t *testing.T) {
 	if len(params) != 3 {
 		t.Fatalf("len(params) = %d, want 3", len(params))
 	}
-	seen := map[string]Param{}
+	seen := map[string]auth.Param{}
 	for _, p := range params {
 		seen[p.Name] = p
 	}
@@ -29,7 +30,7 @@ func TestAPIKeyParameters(t *testing.T) {
 
 func TestAPIKeyAuthenticateHeader(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
-	err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+	err := (&APIKey{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 		"in":    "header",
 		"name":  "X-API-Key",
 		"value": "secret-key",
@@ -44,7 +45,7 @@ func TestAPIKeyAuthenticateHeader(t *testing.T) {
 
 func TestAPIKeyAuthenticateQuery(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items?page=1", nil)
-	err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+	err := (&APIKey{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 		"in":    "query",
 		"name":  "api_key",
 		"value": "secret-key",
@@ -62,7 +63,7 @@ func TestAPIKeyAuthenticateQuery(t *testing.T) {
 
 func TestAPIKeyAuthenticateCookie(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
-	err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+	err := (&APIKey{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 		"in":    "cookie",
 		"name":  "session_key",
 		"value": "secret-key",
@@ -142,7 +143,7 @@ func TestAPIKeyAuthenticateDoesNotOverwriteExistingValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
 			tt.setup(req)
-			err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: map[string]string{
+			err := (&APIKey{}).Authenticate(context.Background(), req, auth.AuthContext{Params: map[string]string{
 				"in":    tt.location,
 				"name":  "X-API-Key",
 				"value": "configured",
@@ -169,7 +170,7 @@ func TestAPIKeyAuthenticateValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://api.example.com/items", nil)
-			err := (&APIKey{}).Authenticate(context.Background(), req, AuthContext{Params: tt.params})
+			err := (&APIKey{}).Authenticate(context.Background(), req, auth.AuthContext{Params: tt.params})
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}

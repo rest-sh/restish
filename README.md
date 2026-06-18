@@ -27,7 +27,7 @@ Then format, filter, and page through real API responses:
 
 ```bash
 restish api.rest.sh/images -o table --rsh-columns name,format,self
-restish api.rest.sh/example -f 'body.basics.{name,url,profiles}'
+restish api.rest.sh/example -f 'body.basics.{name, label, profiles}'
 ```
 
 Example table output:

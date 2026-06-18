@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"github.com/rest-sh/restish/v2/auth"
 	"net/http"
 	"net/url"
 )
@@ -12,13 +13,13 @@ import (
 // token is expired the handler fetches a new one.
 type ClientCredentials struct {
 	// Cache stores fetched tokens. If nil, tokens are not cached.
-	Cache TokenStore
+	Cache auth.TokenStore
 	// HTTPClient is used for token requests. Defaults to http.DefaultClient when nil.
 	HTTPClient *http.Client
 }
 
-func (h *ClientCredentials) Parameters() []Param {
-	return appendOAuthPassthroughParams([]Param{
+func (h *ClientCredentials) Parameters() []auth.Param {
+	return appendOAuthPassthroughParams([]auth.Param{
 		{Name: "client_id", Description: "OAuth2 client ID", Required: true},
 		{Name: "client_secret", Description: "OAuth2 client secret", Required: true, Secret: true},
 		{Name: "auth_method", Description: "OAuth2 client auth method: client_secret_post (default) or client_secret_basic", Required: false},
@@ -41,7 +42,7 @@ func (h *ClientCredentials) authenticateRequest(req *http.Request, params map[st
 	return nil
 }
 
-func (h *ClientCredentials) Authenticate(ctx context.Context, req *http.Request, ac AuthContext) error {
+func (h *ClientCredentials) Authenticate(ctx context.Context, req *http.Request, ac auth.AuthContext) error {
 	h2 := &ClientCredentials{
 		Cache:      h.Cache,
 		HTTPClient: h.HTTPClient,

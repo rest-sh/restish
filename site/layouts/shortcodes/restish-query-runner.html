@@ -1,0 +1,70 @@
+<div class="restish-docs-tool restish-query-lab" data-restish-query-runner>
+  <div class="restish-docs-tool__header">
+    <div>
+      <p class="restish-docs-tool__eyebrow">Try filters</p>
+      <h3>Run A Shorthand Query</h3>
+    </div>
+    <p>Test shorthand filters against editable response JSON.</p>
+  </div>
+  <div class="restish-docs-tool__samples" aria-label="Shorthand query examples">
+    <button type="button" data-sample="body.account.{name, active, created_at, tags}">Account Summary</button>
+    <button type="button" data-sample='body.items[format == "jpeg"].{name, owner: owner.name, size_bytes}'>JPEG Owner</button>
+    <button type="button" data-sample="body.items[name.lower contains dragonfly].links.self">Case Search</button>
+    <button type="button" data-sample='body.events[type == deploy].changes.name'>Deploy Changes</button>
+    <button type="button" data-sample="body..download|[@ contains jpeg]">URL Contains</button>
+    <button type="button" data-sample='headers."Content-Type"'>Header</button>
+    <button type="button" data-sample='headers_all."Set-Cookie"[0]'>Repeated Header</button>
+  </div>
+  <label class="restish-docs-tool__label">
+    Filter
+    <div class="restish-code-editor restish-code-editor--single" data-highlight-editor data-highlight-mode="filter">
+      <pre aria-hidden="true"><code data-highlight-mirror></code></pre>
+      <input data-query-input type="text" spellcheck="false" value="body.account.{name, active, created_at, tags}">
+    </div>
+  </label>
+  <div class="restish-query-lab__panes">
+    <section>
+      <h4>Response JSON</h4>
+      <div class="restish-code-editor restish-code-editor--json" data-highlight-editor data-highlight-mode="json">
+        <pre aria-hidden="true"><code data-highlight-mirror></code></pre>
+        <textarea class="restish-docs-tool__code-input" data-query-source rows="18" spellcheck="false"></textarea>
+      </div>
+    </section>
+    <section>
+      <h4>Selected Value</h4>
+      <pre class="restish-docs-tool__output"><code data-query-output></code></pre>
+    </section>
+  </div>
+  <div class="restish-docs-tool__toolbar">
+    <span data-query-status>Ready</span>
+    <div class="restish-docs-tool__toolbar-actions">
+      <button type="button" data-toggle-trace aria-expanded="false">Trace filter</button>
+      <button type="button" data-share-example>Copy share link</button>
+    </div>
+  </div>
+  <div class="restish-filter-trace" data-filter-trace hidden>
+    <div class="restish-filter-trace__top">
+      <div>
+        <h4>Filter Trace</h4>
+        <p data-trace-summary>Step through how Restish satisfies this shorthand filter.</p>
+      </div>
+      <div class="restish-filter-trace__controls">
+        <button type="button" data-trace-prev aria-label="Previous trace step">Prev</button>
+        <button type="button" data-trace-play>Play</button>
+        <button type="button" data-trace-next aria-label="Next trace step">Next</button>
+      </div>
+    </div>
+    <div class="restish-filter-trace__tokens" data-trace-tokens aria-label="Filter trace tokens"></div>
+    <div class="restish-filter-trace__stage" data-trace-stage>
+      <section>
+        <h5>Before</h5>
+        <pre><code data-trace-before></code></pre>
+      </section>
+      <section>
+        <h5>After</h5>
+        <pre><code data-trace-after></code></pre>
+      </section>
+    </div>
+    <p class="restish-filter-trace__detail" data-trace-detail></p>
+  </div>
+</div>

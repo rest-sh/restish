@@ -1,0 +1,28 @@
+<div class="restish-docs-tool restish-shorthand-lab" data-restish-shorthand-body>
+  <div class="restish-docs-tool__header">
+    <div>
+      <p class="restish-docs-tool__eyebrow">Try shorthand</p>
+      <h3>Build A Request Body</h3>
+    </div>
+    <p>Edit the shorthand and see the JSON body Restish would send.</p>
+  </div>
+  <div class="restish-docs-tool__samples" aria-label="Shorthand body examples">
+    <button type="button" data-sample="user{name: Ada Lovelace, email: ada@example.com}, active: true, joined_at: 2026-06-08">Profile</button>
+    <button type="button" data-sample="order.id: ord-123,&#10;items: [&#10;  {sku: mug-01, qty: 2, price: 14.5},&#10;  {sku: tee-02, qty: 1, price: 28},&#10;],&#10;rush: false">Cart Items</button>
+    <button type="button" data-sample="metadata{&#10;  tags: [docs, cli, beta],&#10;  flags{dry_run: true, notify: false}&#10;},&#10;score: 98.6">Nested Literals</button>
+    <button type="button" data-sample='enabled: "true",&#10;missing: "null",&#10;blank: "",&#10;note: "keep exact strings"'>Quoted Strings</button>
+    <button type="button" data-sample='{&#10;  "name": "Ada Lovelace",&#10;  "tags": ["docs", "json"],&#10;  "active": true&#10;}'>Plain JSON</button>
+  </div>
+  <label class="restish-docs-tool__label">
+    Shorthand
+    <div class="restish-code-editor" data-highlight-editor data-highlight-mode="shorthand">
+      <pre aria-hidden="true"><code data-highlight-mirror></code></pre>
+      <textarea data-shorthand-input data-auto-size rows="2" spellcheck="false">user{name: Ada Lovelace, email: ada@example.com}, active: true, joined_at: 2026-06-08</textarea>
+    </div>
+  </label>
+  <div class="restish-docs-tool__toolbar">
+    <span data-shorthand-status>Ready</span>
+    <button type="button" data-share-example>Copy share link</button>
+  </div>
+  <pre class="restish-docs-tool__output"><code data-shorthand-output></code></pre>
+</div>

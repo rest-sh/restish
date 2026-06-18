@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -54,7 +53,17 @@ type Config struct {
 
 	// Migration describes a one-time v1 -> v2 config migration that happened
 	// while loading this config. It is not persisted back into restish.json.
+	// Embedders using config.Load will not see this populated; only the restish
+	// CLI's explicit migration step sets it.
 	Migration *MigrationInfo `json:"-"`
+}
+
+// MigrationInfo describes a one-time v1 -> v2 config migration performed
+// by the restish CLI when an old apis.json is detected.
+type MigrationInfo struct {
+	SourcePath string
+	BackupPath string
+	Warnings   []string
 }
 
 // APIConfig holds per-API configuration.
@@ -186,17 +195,6 @@ func DefaultPath() string {
 	return NewPaths().ConfigFile()
 }
 
-// NeedsPatchToPreserveFormatting reports whether the config file at path
-// contains JSONC comments and should use patch-based writes to preserve formatting.
-// Returns false when the file does not exist or cannot be read.
-func NeedsPatchToPreserveFormatting(path string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	return string(jsonc.ToJSON(data)) != string(data)
-}
-
 // ErrPermissionCheckUnsupported reports that Restish cannot verify file
 // permissions on the current platform.
 var ErrPermissionCheckUnsupported = errors.New("permission check unsupported on this platform")
@@ -229,33 +227,32 @@ func Save(path string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
-	lock, err := lockConfigFile(path)
+	lock, err := fileutil.LockSiblingFile(path)
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
-	return atomicWriteFileLocked(path, append(data, '\n'), 0o600, 0o700, false)
+	return fileutil.AtomicWriteFile(path, append(data, '\n'), fileutil.AtomicWriteOptions{
+		FileMode: 0o600, DirMode: 0o700,
+	})
 }
 
 // Load reads and parses the JSONC config file at path.
-// If the file does not exist, an empty default Config is returned without error —
-// a missing config file is normal for first-time users.
+// If the file does not exist, an empty default Config is returned without error.
+// A missing config file is normal for first-time users; Load does not
+// perform a v1->v2 migration. The restish CLI runs its own legacy migration
+// step before calling Load. Use LoadExplicit when a missing file should be an
+// error.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		if filepath.Clean(path) != filepath.Clean(DefaultPath()) {
-			return &Config{}, nil
-		}
-		if os.Getenv("RSH_CONFIG_DIR") != "" {
-			return &Config{}, nil
-		}
-		return loadOrMigrate(path)
+		return &Config{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
 
-	return parseConfigBytes(path, data)
+	return ParseConfigBytes(path, data)
 }
 
 // LoadExplicit reads a user-selected config file. Unlike Load, a missing file
@@ -269,7 +266,7 @@ func LoadExplicit(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
-	return parseConfigBytes(path, data)
+	return ParseConfigBytes(path, data)
 }
 
 // LoadExplicitOrEmpty reads a user-selected config file, returning an empty
@@ -283,10 +280,12 @@ func LoadExplicitOrEmpty(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read %s: %w", path, err)
 	}
-	return parseConfigBytes(path, data)
+	return ParseConfigBytes(path, data)
 }
 
-func parseConfigBytes(path string, data []byte) (*Config, error) {
+// ParseConfigBytes parses a config payload from in-memory bytes using the same
+// JSONC stripping, strict-field checks, and validation as Load.
+func ParseConfigBytes(path string, data []byte) (*Config, error) {
 
 	// Strip JSONC comments before parsing so users can annotate their config.
 	stripped := jsonc.ToJSON(data)
@@ -993,19 +992,12 @@ func byteOffsetToLineColumn(data []byte, offset int64) (line int, col int) {
 }
 
 func atomicWriteFile(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode) error {
-	lock, err := lockConfigFile(path)
+	lock, err := fileutil.LockSiblingFile(path)
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
 	return atomicWriteFileLocked(path, data, fileMode, dirMode, true)
-}
-
-// LockSiblingFile acquires the sibling advisory lock used for config-style
-// read-modify-write operations on path. Call Close on the returned closer to
-// release the lock.
-func LockSiblingFile(path string) (io.Closer, error) {
-	return lockConfigFile(path)
 }
 
 func atomicWriteFileLocked(path string, data []byte, fileMode os.FileMode, dirMode os.FileMode, chmodExistingDir bool) error {

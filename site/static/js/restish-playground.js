@@ -22,7 +22,7 @@
     ["--rsh-retry", "retry"],
     ["--rsh-retry-max-wait", "retryMaxWait"]
   ]);
-  const supportedOutputFormats = new Set(["auto", "json", "yaml", "ndjson", "lines", "table", "image", "gron", "csv"]);
+  const supportedOutputFormats = new Set(["auto", "json", "yaml", "ndjson", "lines", "table", "image", "gron", "csv", "toon"]);
   const boolFlags = new Map([
     ["-v", "verbose"],
     ["-vv", "verbose"],
@@ -132,6 +132,59 @@
     "put-method": { method: "PUT", path: "/put" },
     "put-types-example": { method: "PUT", path: "/types" }
   }));
+  const rootCompletions = [
+    "api",
+    "cache",
+    "config",
+    "delete",
+    "edit",
+    "example",
+    "get",
+    "head",
+    "links",
+    "options",
+    "patch",
+    "plugin",
+    "post",
+    "put",
+    "shell"
+  ];
+  const shellCompletions = ["completion", "setup"];
+  const shellCompletionCompletions = ["bash", "fish", "install", "powershell", "zsh"];
+  const apiCompletions = ["connect", "info", "list", "profiles", "set", "sync"];
+  const configCompletions = ["edit", "get", "path", "set"];
+  const cacheCompletions = ["clear", "dir", "list"];
+  const pluginCompletions = ["debug", "install", "list", "remove"];
+  const contentTypeCompletions = ["json", "form"];
+  const printCompletions = ["hbp", "hbpc", "h", "b", "HBhbp"];
+  const filterLangCompletions = ["restish", "jq"];
+  const imageFormatCompletions = ["jpeg", "png", "webp", "gif", "heic"];
+  const documentFormatCompletions = ["json", "yaml", "xml", "html", "text", "csv"];
+  const statusCodeCompletions = ["200", "201", "204", "301", "302", "400", "401", "403", "404", "409", "422", "429", "500", "503"];
+  const examplePathCompletions = [
+    "api.rest.sh/",
+    "api.rest.sh/auth/api-key-header",
+    "api.rest.sh/auth/api-key-query",
+    "api.rest.sh/books",
+    "api.rest.sh/books/restish-tour",
+    "api.rest.sh/cache",
+    "api.rest.sh/events",
+    "api.rest.sh/example",
+    "api.rest.sh/flaky",
+    "api.rest.sh/formats/json",
+    "api.rest.sh/headers",
+    "api.rest.sh/images",
+    "api.rest.sh/images/jpeg",
+    "api.rest.sh/items",
+    "api.rest.sh/items/docs-demo",
+    "api.rest.sh/logs",
+    "api.rest.sh/problem",
+    "api.rest.sh/status/200",
+    "api.rest.sh/types"
+  ];
+  const exampleAliasPathCompletions = examplePathCompletions
+    .filter((item) => item !== "api.rest.sh/")
+    .map((item) => `example/${item.slice("api.rest.sh/".length)}`);
 
   function shellWords(input) {
     const words = [];
@@ -182,6 +235,305 @@
       words.push(current);
     }
     return words;
+  }
+
+  function shellWordsPartial(input) {
+    const words = [];
+    let current = "";
+    let quote = "";
+    let escaped = false;
+    const text = input.replace(/\\\r?\n/g, " ");
+
+    for (const ch of text) {
+      if (escaped) {
+        current += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (quote) {
+        if (ch === quote) {
+          quote = "";
+        } else {
+          current += ch;
+        }
+        continue;
+      }
+      if (ch === "'" || ch === "\"") {
+        quote = ch;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        if (current) {
+          words.push(current);
+          current = "";
+        }
+        continue;
+      }
+      current += ch;
+    }
+
+    if (escaped) {
+      current += "\\";
+    }
+    if (current || !/\s$/.test(text)) {
+      words.push(current);
+    }
+    return words;
+  }
+
+  function completeCommand(input, cursor) {
+    const position = typeof cursor === "number" ? cursor : input.length;
+    const range = currentTokenRange(input, position);
+    if (/[`'"$\\]/.test(range.tokenBeforeCursor)) {
+      return { value: input, cursor: position, matches: [], applied: false };
+    }
+
+    const candidates = completionCandidates(input, position, range.tokenBeforeCursor);
+    const matches = uniqueSorted(candidates).filter((item) => item.toLowerCase().startsWith(range.tokenBeforeCursor.toLowerCase()));
+    if (!matches.length) {
+      return { value: input, cursor: position, matches: [], applied: false };
+    }
+
+    let replacement = "";
+    let applied = false;
+    if (matches.length === 1) {
+      replacement = completionInsertText(matches[0], true);
+      applied = replacement !== range.fullToken;
+    } else {
+      replacement = commonPrefix(matches);
+      applied = replacement.length > range.tokenBeforeCursor.length;
+    }
+
+    if (!applied) {
+      return { value: input, cursor: position, matches, applied: false };
+    }
+
+    const value = input.slice(0, range.start) + replacement + input.slice(range.end);
+    return {
+      value,
+      cursor: range.start + replacement.length,
+      matches,
+      applied: true
+    };
+  }
+
+  function currentTokenRange(input, cursor) {
+    let start = cursor;
+    while (start > 0 && !/\s/.test(input[start - 1])) {
+      start -= 1;
+    }
+    let end = cursor;
+    while (end < input.length && !/\s/.test(input[end])) {
+      end += 1;
+    }
+    return {
+      start,
+      end,
+      tokenBeforeCursor: input.slice(start, cursor),
+      fullToken: input.slice(start, end)
+    };
+  }
+
+  function completionCandidates(input, cursor, currentPrefix) {
+    const before = input.slice(0, cursor);
+    const endsAtBoundary = /\s$/.test(before);
+    const partialWords = shellWordsPartial(before);
+    const completedWords = endsAtBoundary ? partialWords : partialWords.slice(0, -1);
+    const tokenIndex = endsAtBoundary ? partialWords.length : Math.max(0, partialWords.length - 1);
+
+    if (tokenIndex === 0) {
+      return ["restish"];
+    }
+    if (completedWords[0] !== "restish") {
+      return [];
+    }
+
+    const inlineValue = inlineFlagValueCandidates(currentPrefix);
+    if (inlineValue) {
+      return inlineValue;
+    }
+
+    const previous = completedWords[completedWords.length - 1] || "";
+    const flagValues = valueCandidatesForFlag(previous);
+    if (flagValues) {
+      return flagValues;
+    }
+
+    if (currentPrefix.startsWith("-")) {
+      return flagCompletions(completedWords);
+    }
+
+    if (tokenIndex === 1) {
+      return rootCompletions.concat(requestTargetCompletions(completedWords, currentPrefix));
+    }
+
+    const first = completedWords[1];
+    if (first === "example") {
+      return exampleCommandCompletions(completedWords);
+    }
+    if (first === "shell") {
+      return nestedCompletions(completedWords, [shellCompletions, shellCompletionCompletions]);
+    }
+    if (first === "api") {
+      return nestedCompletions(completedWords, [apiCompletions]);
+    }
+    if (first === "config") {
+      return nestedCompletions(completedWords, [configCompletions]);
+    }
+    if (first === "cache") {
+      return nestedCompletions(completedWords, [cacheCompletions]);
+    }
+    if (first === "plugin") {
+      return nestedCompletions(completedWords, [pluginCompletions]);
+    }
+    if (first === "links") {
+      return linksCompletions(completedWords);
+    }
+    if (supportedVerbs.has(first) || first === "edit") {
+      return requestTargetCompletions(completedWords, currentPrefix);
+    }
+    if (looksLikeURL(first) || first.startsWith("example/")) {
+      return bodyOrFlagHintCompletions(currentPrefix);
+    }
+    return requestTargetCompletions(completedWords, currentPrefix);
+  }
+
+  function inlineFlagValueCandidates(currentPrefix) {
+    const match = currentPrefix.match(/^(--[^=]+=)(.*)$/);
+    if (!match) {
+      return null;
+    }
+    const flag = match[1].slice(0, -1);
+    const values = valueCandidatesForFlag(flag);
+    return values ? values.map((value) => match[1] + value) : null;
+  }
+
+  function valueCandidatesForFlag(flag) {
+    if (flag === "-o" || flag === "--rsh-output-format") {
+      return Array.from(supportedOutputFormats);
+    }
+    if (flag === "-c" || flag === "--rsh-content-type") {
+      return contentTypeCompletions;
+    }
+    if (flag === "--rsh-print") {
+      return printCompletions;
+    }
+    if (flag === "--rsh-filter-lang") {
+      return filterLangCompletions;
+    }
+    if (flag === "--format") {
+      return documentFormatCompletions.concat(imageFormatCompletions);
+    }
+    if (flag === "--status" || flag === "--status-code" || flag === "--status_code") {
+      return statusCodeCompletions;
+    }
+    if (flag === "--private") {
+      return ["true", "false"];
+    }
+    return null;
+  }
+
+  function shouldApplyCompletionKey(event) {
+    return event.key === "Tab" && !event.shiftKey;
+  }
+
+  function flagCompletions(completedWords) {
+    const flags = Array.from(valueFlags.keys())
+      .concat(Array.from(boolFlags.keys()))
+      .concat(Array.from(generatedValueFlags.keys()))
+      .concat(Array.from(generatedBoolFlags.keys()));
+    if (completedWords[1] !== "example") {
+      return flags.filter((item) => !generatedValueFlags.has(item) && !generatedBoolFlags.has(item));
+    }
+    return flags;
+  }
+
+  function exampleCommandCompletions(completedWords) {
+    if (completedWords.length <= 2) {
+      return Array.from(exampleOperations.keys());
+    }
+    const op = completedWords[2];
+    if (op === "get-image") {
+      return imageFormatCompletions;
+    }
+    if (op === "get-format") {
+      return documentFormatCompletions.concat(imageFormatCompletions);
+    }
+    if (op === "get-status") {
+      return statusCodeCompletions;
+    }
+    if (op === "get-item" || op === "patch-item" || op === "delete-item") {
+      return ["docs-demo", "docs-second"];
+    }
+    if (op === "get-book" || op === "put-book" || op === "patch-book" || op === "delete-book") {
+      return ["restish-tour", "api-field-guide"];
+    }
+    return bodyOrFlagHintCompletions("");
+  }
+
+  function nestedCompletions(completedWords, levels) {
+    const depth = completedWords.length - 2;
+    return levels[depth] || [];
+  }
+
+  function linksCompletions(completedWords) {
+    if (completedWords.length <= 2) {
+      return requestTargetCompletions(completedWords, "");
+    }
+    return ["self", "next", "prev", "first", "last", "item"];
+  }
+
+  function requestTargetCompletions(completedWords, currentPrefix) {
+    if (currentPrefix.startsWith("example/")) {
+      return exampleAliasPathCompletions;
+    }
+    if (currentPrefix.startsWith("https://api.rest.sh/")) {
+      return examplePathCompletions.map((item) => item.replace(/^api\.rest\.sh/, "https://api.rest.sh"));
+    }
+    return examplePathCompletions;
+  }
+
+  function bodyOrFlagHintCompletions(currentPrefix) {
+    if (currentPrefix.startsWith("-")) {
+      return flagCompletions(["restish"]);
+    }
+    return ["name:", "title:", "tags[]:", "enabled:", "count:"];
+  }
+
+  function completionInsertText(value, singleMatch) {
+    if (!singleMatch) {
+      return value;
+    }
+    if (value.endsWith(":") || value.endsWith("=") || value.endsWith("/")) {
+      return value;
+    }
+    return value + " ";
+  }
+
+  function uniqueSorted(values) {
+    return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }
+
+  function commonPrefix(values) {
+    if (!values.length) {
+      return "";
+    }
+    let prefix = values[0];
+    for (const value of values.slice(1)) {
+      let index = 0;
+      while (index < prefix.length && index < value.length && prefix[index].toLowerCase() === value[index].toLowerCase()) {
+        index += 1;
+      }
+      prefix = prefix.slice(0, index);
+      if (!prefix) {
+        break;
+      }
+    }
+    return prefix;
   }
 
   function parseCommand(command) {
@@ -1626,6 +1978,9 @@
     if (flags.outputFormat === "csv") {
       return csvOutput(value, flags.columns);
     }
+    if (flags.outputFormat === "toon") {
+      return toonOutput(value);
+    }
     if (explicitFilter) {
       return renderValue(value, flags);
     }
@@ -1927,6 +2282,9 @@
     if (flags.outputFormat === "csv") {
       return csvOutput(value, flags.columns);
     }
+    if (flags.outputFormat === "toon") {
+      return toonOutput(value);
+    }
     return readableFilteredOutput(value);
   }
 
@@ -2046,6 +2404,241 @@
     }
     return text;
   }
+
+  function toonOutput(value) {
+    return encodeTOONDocument(value) + "\n";
+  }
+
+  function encodeTOONDocument(value) {
+    return encodeTOONRoot(value).replace(/\n+$/, "");
+  }
+
+  function encodeTOONRoot(value) {
+    if (isTOONObject(value)) {
+      return encodeTOONObject(0, value);
+    }
+    if (Array.isArray(value)) {
+      if (!value.length) {
+        return "[]\n";
+      }
+      return encodeTOONArray(0, "", value, { allowTabular: true });
+    }
+    return encodeTOONScalar(value) + "\n";
+  }
+
+  function encodeTOONObject(depth, obj) {
+    return toonObjectFields(obj).map((field) => encodeTOONField(depth, field.key, field.value)).join("");
+  }
+
+  function encodeTOONField(depth, key, value) {
+    const keyToken = encodeTOONKey(key);
+    if (isTOONObject(value)) {
+      return `${toonIndent(depth)}${keyToken}:\n${encodeTOONObject(depth + 1, value)}`;
+    }
+    if (Array.isArray(value)) {
+      return encodeTOONArray(depth, keyToken, value, { allowTabular: true });
+    }
+    return `${toonIndent(depth)}${keyToken}: ${encodeTOONScalar(value)}\n`;
+  }
+
+  function encodeTOONArray(depth, keyToken, arr, context) {
+    const indent = toonIndent(depth);
+    if (!arr.length) {
+      if (keyToken) {
+        return `${indent}${keyToken}: []\n`;
+      }
+      return context.emptyArrayHeader ? `${indent}[0]:\n` : `${indent}[]\n`;
+    }
+
+    if (arr.every(isTOONPrimitive)) {
+      return `${indent}${keyToken}[${arr.length}]: ${arr.map(encodeTOONScalar).join(",")}\n`;
+    }
+
+    if (context.allowTabular) {
+      const fields = toonTabularFields(arr);
+      if (fields) {
+        let out = `${indent}${keyToken}[${arr.length}]{${fields.map(encodeTOONKey).join(",")}}:\n`;
+        for (const item of arr) {
+          out += `${toonIndent(depth + 1)}${fields.map((field) => encodeTOONScalar(item[field])).join(",")}\n`;
+        }
+        return out;
+      }
+    }
+
+    let out = `${indent}${keyToken}[${arr.length}]:\n`;
+    for (const item of arr) {
+      out += encodeTOONListItem(depth + 1, item);
+    }
+    return out;
+  }
+
+  function encodeTOONListItem(depth, item) {
+    if (isTOONObject(item)) {
+      const fields = toonObjectFields(item);
+      if (!fields.length) {
+        return `${toonIndent(depth)}-\n`;
+      }
+      return toonDashItem(depth, encodeTOONObject(depth + 1, item));
+    }
+    if (Array.isArray(item)) {
+      return toonDashArrayItem(depth, encodeTOONArray(depth + 1, "", item, {
+        allowTabular: false,
+        emptyArrayHeader: true
+      }));
+    }
+    return `${toonIndent(depth)}- ${encodeTOONScalar(item)}\n`;
+  }
+
+  function toonTabularFields(arr) {
+    let fields = null;
+    for (const item of arr) {
+      if (!isTOONObject(item)) {
+        return null;
+      }
+      const itemFields = toonObjectFields(item);
+      if (!itemFields.length || itemFields.some((field) => !isTOONPrimitive(field.value))) {
+        return null;
+      }
+      if (!fields) {
+        fields = itemFields.map((field) => field.key);
+        continue;
+      }
+      if (itemFields.length !== fields.length || fields.some((field) => !Object.prototype.hasOwnProperty.call(item, field))) {
+        return null;
+      }
+    }
+    return fields;
+  }
+
+  function isTOONObject(value) {
+    return value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isTOONPrimitive(value) {
+    return !isTOONObject(value) && !Array.isArray(value);
+  }
+
+  function toonObjectFields(obj) {
+    return Object.keys(obj).map((key) => ({ key, value: obj[key] }));
+  }
+
+  function encodeTOONScalar(value) {
+    if (value === null || value === undefined) {
+      return "null";
+    }
+    if (typeof value === "boolean") {
+      return value ? "true" : "false";
+    }
+    if (typeof value === "number") {
+      return encodeTOONNumber(value);
+    }
+    return encodeTOONString(String(value));
+  }
+
+  function encodeTOONNumber(value) {
+    if (!Number.isFinite(value)) {
+      return "null";
+    }
+    if (Object.is(value, -0)) {
+      return "0";
+    }
+    return String(value);
+  }
+
+  function encodeTOONString(value) {
+    return toonStringNeedsQuote(value) ? quoteTOONString(value) : value;
+  }
+
+  function encodeTOONKey(key) {
+    return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(key) ? key : quoteTOONString(key);
+  }
+
+  function toonStringNeedsQuote(value) {
+    if (value === "" || value === "true" || value === "false" || value === "null") {
+      return true;
+    }
+    if (value[0] === "-") {
+      return true;
+    }
+    if (value.trim() !== value) {
+      return true;
+    }
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value)) {
+      return true;
+    }
+    if (/[:"\\[\]{},]/.test(value)) {
+      return true;
+    }
+    for (const ch of value) {
+      if (ch.codePointAt(0) <= 0x1f) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function quoteTOONString(value) {
+    let out = "\"";
+    for (const ch of value) {
+      const code = ch.codePointAt(0);
+      if (ch === "\\") {
+        out += "\\\\";
+      } else if (ch === "\"") {
+        out += "\\\"";
+      } else if (ch === "\n") {
+        out += "\\n";
+      } else if (ch === "\r") {
+        out += "\\r";
+      } else if (ch === "\t") {
+        out += "\\t";
+      } else if (code <= 0x1f) {
+        out += `\\u${code.toString(16).padStart(4, "0")}`;
+      } else {
+        out += ch;
+      }
+    }
+    return out + "\"";
+  }
+
+  function toonDashItem(depth, content) {
+    const strip = toonIndentUnit.length * (depth + 1);
+    return `${toonIndent(depth)}- ${content.slice(strip)}`;
+  }
+
+  function toonDashArrayItem(depth, content) {
+    const firstLineStrip = toonIndentUnit.length * (depth + 1);
+    const lines = toonLines(content);
+    let out = `${toonIndent(depth)}- `;
+    lines.forEach((line, index) => {
+      if (index === 0) {
+        out += line.slice(firstLineStrip);
+      } else if (line.startsWith(toonIndentUnit)) {
+        out += line.slice(toonIndentUnit.length);
+      } else {
+        out += line;
+      }
+    });
+    return out;
+  }
+
+  function toonLines(content) {
+    const lines = content.split("\n");
+    const out = [];
+    lines.forEach((line, index) => {
+      if (index < lines.length - 1) {
+        out.push(line + "\n");
+      } else if (line) {
+        out.push(line);
+      }
+    });
+    return out;
+  }
+
+  function toonIndent(depth) {
+    return toonIndentUnit.repeat(depth);
+  }
+
+  const toonIndentUnit = "  ";
 
   function gronOutput(value) {
     const lines = [];
@@ -2351,6 +2944,7 @@
     root.dataset.restishReady = "true";
     const command = root.querySelector("[data-restish-command]");
     const commandHighlight = root.querySelector("[data-restish-command-highlight]");
+    const completions = root.querySelector("[data-restish-completions]");
     const output = root.querySelector("[data-restish-output]");
     const runButton = root.querySelector("[data-restish-run]");
     const copyButton = root.querySelector("[data-restish-copy]");
@@ -2452,6 +3046,58 @@
       }
     }
 
+    function hideCompletions() {
+      if (!completions) {
+        return;
+      }
+      completions.hidden = true;
+      completions.replaceChildren();
+    }
+
+    function showCompletions(matches) {
+      if (!completions) {
+        return;
+      }
+      completions.replaceChildren();
+      if (!matches || !matches.length) {
+        completions.hidden = true;
+        return;
+      }
+      const prompt = document.createElement("span");
+      prompt.className = "restish-playground__completion-prompt";
+      prompt.textContent = ">";
+      prompt.setAttribute("aria-hidden", "true");
+      completions.appendChild(prompt);
+      const list = document.createElement("span");
+      list.className = "restish-playground__completion-list";
+      for (const match of matches.slice(0, 18)) {
+        const item = document.createElement("span");
+        item.className = "restish-playground__completion-item";
+        item.textContent = match;
+        list.appendChild(item);
+      }
+      if (matches.length > 18) {
+        const more = document.createElement("span");
+        more.className = "restish-playground__completion-more";
+        more.textContent = `+${matches.length - 18}`;
+        list.appendChild(more);
+      }
+      completions.appendChild(list);
+      completions.hidden = false;
+    }
+
+    function applyCompletion() {
+      const result = completeCommand(command.value, command.selectionStart || 0);
+      if (result.applied) {
+        command.value = result.value;
+        command.setSelectionRange(result.cursor, result.cursor);
+        resetCommandScroll();
+        renderCommandHighlight();
+      }
+      showCompletions(result.matches);
+      setState(state, result.matches.length ? "Complete" : "No match", result.matches.length ? "ok" : "error");
+    }
+
     function enableCommandHighlight() {
       if (commandHighlightReady || !commandHighlight || !window.Prism) {
         return;
@@ -2480,6 +3126,7 @@
       if (runButton.disabled) {
         return;
       }
+      hideCompletions();
       let highlight = true;
       let language = "language-readable";
       try {
@@ -2544,7 +3191,9 @@
     }
 
     command.addEventListener("keydown", function (event) {
-      if (event.key === "Tab") {
+      if (shouldApplyCompletionKey(event)) {
+        event.preventDefault();
+        applyCompletion();
         resetCommandScroll();
         return;
       }
@@ -2555,12 +3204,23 @@
       runCommand();
     });
 
-    command.addEventListener("blur", resetCommandScroll);
+    command.addEventListener("input", function () {
+      hideCompletions();
+      if (state && state.dataset.mode !== "running") {
+        setState(state, "Ready", "");
+      }
+    });
+
+    command.addEventListener("blur", function () {
+      resetCommandScroll();
+      window.setTimeout(hideCompletions, 120);
+    });
 
     resetButton.addEventListener("click", function () {
       command.value = initial;
       resetCommandScroll();
       renderCommandHighlight();
+      hideCompletions();
       hideOutput(output);
       setState(state, "Ready", "");
       command.focus();
@@ -2569,6 +3229,17 @@
 
   function initAllPlaygrounds() {
     document.querySelectorAll("[data-restish-playground]").forEach(initPlayground);
+  }
+
+  if (window.__RESTISH_PLAYGROUND_TEST__) {
+    window.__restishPlaygroundTest = {
+      completeCommand,
+      encodeTOONDocument,
+      parseCommand,
+      render,
+      shouldApplyCompletionKey,
+      toonOutput
+    };
   }
 
   if (document.readyState === "loading") {
