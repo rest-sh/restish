@@ -786,6 +786,7 @@ func (c *CLI) newAPIRootCmd(ctx context.Context, cfg *config.Config, profileName
 	root.SilenceErrors = true
 	root.SuggestionsMinimumDistance = 2
 
+	setupGroupedUsage(root)
 	c.addGlobalFlags(root)
 	c.setupMarkdownHelp(root)
 	return root, nil

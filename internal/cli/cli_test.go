@@ -160,6 +160,38 @@ paths:
 	}
 }
 
+func TestSetRootAPIOperationHelpDoesNotPanic(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
+	specBody := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /ping:
+    get:
+      operationId: getPing
+      responses:
+        "200":
+          description: OK
+`
+	if err := os.WriteFile(specPath, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	configBody := `{"apis":{"svc":{"base_url":"https://api.example.com","spec_files":[` + strconv.Quote(specPath) + `]}}}`
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	c.SetRootApi("svc")
+
+	if err := c.Run([]string{"restish", "get-ping", "-h"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "get-ping") {
+		t.Fatalf("expected help output to mention command, got:\n%s", got)
+	}
+}
+
 func TestHelp(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	if err := c.Run([]string{"restish", "--help"}); err != nil {
