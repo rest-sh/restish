@@ -186,6 +186,90 @@ func TestReadLegacyAPI(t *testing.T) {
 	}
 }
 
+const v2RestishJSON = `{
+  "apis": {
+    "v2-api": {
+      "base_url": "https://v2.example.com/api",
+      "spec_files": ["openapi.json"]
+    }
+  }
+}`
+
+func TestReadAPIsPrefersRestishJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "restish.json"), []byte(v2RestishJSON), 0o600); err != nil {
+		t.Fatalf("write restish.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "apis.json"), []byte(legacyAPIsJSON), 0o600); err != nil {
+		t.Fatalf("write apis.json: %v", err)
+	}
+	all, err := ReadAPIs(dir)
+	if err != nil {
+		t.Fatalf("ReadAPIs: %v", err)
+	}
+	if _, ok := all["v2-api"]; !ok {
+		t.Error("v2-api from restish.json missing")
+	}
+	if _, ok := all["root-api"]; ok {
+		t.Error("v1 apis.json entry should not appear when restish.json is present")
+	}
+	if got := all["v2-api"].BaseURL; got != "https://v2.example.com/api" {
+		t.Errorf("BaseURL = %q", got)
+	}
+}
+
+func TestReadAPIsFallsBackToLegacy(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "apis.json"), []byte(legacyAPIsJSON), 0o600); err != nil {
+		t.Fatalf("write apis.json: %v", err)
+	}
+	all, err := ReadAPIs(dir)
+	if err != nil {
+		t.Fatalf("ReadAPIs: %v", err)
+	}
+	if len(all) != 2 {
+		t.Errorf("got %d APIs, want 2", len(all))
+	}
+	if all["root-api"].Profiles["default"].ClientCertPath != "/etc/exoscale/devel-cert.pem" {
+		t.Error("legacy cert path not migrated")
+	}
+}
+
+func TestReadAPIsMissingFiles(t *testing.T) {
+	dir := t.TempDir()
+	all, err := ReadAPIs(dir)
+	if err != nil {
+		t.Fatalf("ReadAPIs: %v", err)
+	}
+	if len(all) != 0 {
+		t.Errorf("got %d APIs, want 0", len(all))
+	}
+}
+
+func TestReadAPIsBadRestishJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "restish.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatalf("write restish.json: %v", err)
+	}
+	if _, err := ReadAPIs(dir); err == nil {
+		t.Fatal("expected error for malformed restish.json")
+	}
+}
+
+func TestReadAPIsEmptyRestishJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "restish.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write restish.json: %v", err)
+	}
+	all, err := ReadAPIs(dir)
+	if err != nil {
+		t.Fatalf("ReadAPIs: %v", err)
+	}
+	if len(all) != 0 {
+		t.Errorf("got %d APIs, want 0", len(all))
+	}
+}
+
 func legacyAPIsEntry(t *testing.T, name string) json.RawMessage {
 	t.Helper()
 	var raw map[string]json.RawMessage

@@ -123,6 +123,31 @@ func ReadLegacyAPI(folder, name string) (*APIConfig, error) {
 	return api, nil
 }
 
+// ReadAPIs returns every API configured in folder, in v2 shape, regardless of
+// whether the user's config is in v2 (restish.json) or v1 (apis.json) format.
+// This is the format-agnostic read path for embedders.
+//
+// restish.json is preferred when present. apis.json is read only when
+// restish.json does not exist, so a user who has already migrated is served
+// from the v2 file with no v1 conversion. ReadAPIs never modifies either
+// file; the restish CLI's TryMigrate step is responsible for that.
+func ReadAPIs(folder string) (map[string]*APIConfig, error) {
+	restishPath := filepath.Join(folder, "restish.json")
+	if _, err := os.Stat(restishPath); err == nil {
+		cfg, err := Load(restishPath)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.APIs == nil {
+			return map[string]*APIConfig{}, nil
+		}
+		return cfg.APIs, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("config: cannot stat %s: %w", restishPath, err)
+	}
+	return ReadLegacyAPIs(folder)
+}
+
 // convertLegacyAPIConfig converts one parsed v1 entry into the v2 shape and
 // emits migration-time warnings. Used by both the public ConvertLegacyAPI
 // helper and the internal automatic migrator.
