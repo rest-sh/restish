@@ -25,6 +25,14 @@ func TestTokenCache_MissingFile(t *testing.T) {
 	}
 }
 
+func TestTokenCache_Path(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tokens.cbor")
+	tc := NewTokenCache(path)
+	if got := tc.Path(); got != path {
+		t.Errorf("Path() = %q, want %q", got, path)
+	}
+}
+
 func TestTokenCache_RoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tokens.cbor")
 	tc := NewTokenCache(path)
