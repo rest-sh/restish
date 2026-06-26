@@ -75,8 +75,9 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	if long == "" {
 		long = strings.TrimSpace(set.Info.Summary)
 	}
+	isRootAPI := c.rootApi == apiName
 	long, fullLong := generatedAPIHelpDescription(apiName, long)
-	if generatedAPIHasAuth(ops) {
+	if generatedAPIHasAuth(ops) && !isRootAPI {
 		if long != "" {
 			long += "\n\n"
 		}
@@ -117,9 +118,16 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	for _, op := range ops {
 		tagCommandName := ""
 		examplePrefix := apiName
+		if isRootAPI {
+			examplePrefix = ""
+		}
 		if useTagLayout && len(op.Tags) > 0 {
 			tagCommandName = generatedTagCommandName(op.Tags[0], tagCommandNameByTag, tagCommands)
-			examplePrefix = apiName + " " + tagCommandName
+			if isRootAPI {
+				examplePrefix = tagCommandName
+			} else {
+				examplePrefix = apiName + " " + tagCommandName
+			}
 		}
 		cmd, err := c.buildOperationCommand(apiName, examplePrefix, op, operationBase)
 		if err != nil {
@@ -1334,18 +1342,22 @@ func generatedOperationExampleLine(commandName, apiName, use string, examples []
 	if commandName == "" {
 		commandName = "restish"
 	}
+	prefix := commandName
+	if apiName != "" {
+		prefix = commandName + " " + apiName
+	}
 	hasBody := strings.Contains(use, " [body...]") || strings.Contains(use, " <body...>")
 	use = strings.TrimSuffix(use, " [body...]")
 	use = strings.TrimSuffix(use, " <body...>")
 	if len(examples) == 0 {
-		example := "  " + commandName + " " + apiName + " " + use
+		example := "  " + prefix + " " + use
 		if hasBody {
 			example += " --rsh-generate-body"
 		}
 		return example
 	}
 	ex := examples[0]
-	example := "  " + commandName + " " + apiName + " " + use
+	example := "  " + prefix + " " + use
 	if ex != "" {
 		example += " " + shellQuoteGeneratedExample(ex)
 	}
