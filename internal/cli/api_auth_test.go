@@ -799,6 +799,22 @@ func TestAPIAuthGetPrintHeaderQueryFails(t *testing.T) {
 	}
 }
 
+func TestAPIAuthGetPrintHeaderCookieFails(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"Session": testCredential(apiKeyAuth("cookie", "session", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "get", "myapi", "Session", "--print-header")
+	if err == nil {
+		t.Fatal("expected --print-header on cookie auth to fail")
+	}
+	if !strings.Contains(err.Error(), "cookie") {
+		t.Errorf("error = %q, want it to mention cookie", err)
+	}
+}
+
 func TestAPIAuthGetPrintHeaderOperationHeader(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
@@ -839,6 +855,28 @@ func TestAPIAuthGetPrintHeaderOperationQueryFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "query parameter") {
 		t.Errorf("error = %q, want it to mention query parameter", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationCookieFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"Session":{"type":"apiKey","in":"cookie","name":"session"}`),
+			openAPIPaths(openAPIGet("/session", "sessionReport", `"security":[{"Session":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"Session": testCredential(apiKeyAuth("cookie", "session", "sekret")),
+	})))
+
+	c, _ := env.newCaptureCLI()
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "session-report", "--print-header"})
+	if err == nil {
+		t.Fatal("expected operation --print-header on cookie auth to fail")
+	}
+	if !strings.Contains(err.Error(), "cookie") {
+		t.Errorf("error = %q, want it to mention cookie", err)
 	}
 }
 

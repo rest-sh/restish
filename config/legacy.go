@@ -94,17 +94,15 @@ func ReadLegacyAPIs(folder string) (map[string]*APIConfig, error) {
 		return nil, &ParseError{Path: path, Err: err}
 	}
 	out := make(map[string]*APIConfig, len(raw))
-	var warnings []string
 	for name, value := range raw {
 		if strings.HasPrefix(name, "$") {
 			continue
 		}
-		api, entryWarnings, err := ConvertLegacyAPI(name, value)
+		api, _, err := ConvertLegacyAPI(name, value)
 		if err != nil {
 			return nil, fmt.Errorf("config: parsing %s entry %q: %w", path, name, err)
 		}
 		out[name] = api
-		warnings = append(warnings, entryWarnings...)
 	}
 	return out, nil
 }

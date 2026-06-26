@@ -80,6 +80,24 @@ func TestReadAllV1Fallback(t *testing.T) {
 	}
 }
 
+func TestParseLegacyConfigConvertErrorIncludesPathAndEntry(t *testing.T) {
+	dir := t.TempDir()
+	source := &legacyConfigSource{
+		dir:      dir,
+		apisPath: filepath.Join(dir, "apis.json"),
+		apisData: []byte(`{"broken":[]}`),
+	}
+
+	_, _, err := parseLegacyConfig(source)
+	if err == nil {
+		t.Fatal("expected malformed legacy entry error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, source.apisPath) || !strings.Contains(msg, `entry "broken"`) {
+		t.Fatalf("error = %q, want apis.json path and entry name", msg)
+	}
+}
+
 func TestReadAllV2ReadErrorDoesNotFallback(t *testing.T) {
 	dir := t.TempDir()
 	v2Path := filepath.Join(dir, "restish.json")

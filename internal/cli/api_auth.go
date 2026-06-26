@@ -440,6 +440,9 @@ func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.Auth
 	if req.URL != nil && req.URL.RawQuery != "" {
 		return fmt.Errorf("auth for %s:%s is applied as a query parameter, not a header; --print-header is not applicable", apiName, profileName)
 	}
+	if authInspectionAppliesCookie(configs) {
+		return fmt.Errorf("auth for %s:%s is applied as a cookie, not a header; --print-header is not applicable", apiName, profileName)
+	}
 	headers := 0
 	var name, value string
 	for _, h := range sortedHeaderKeys(req.Header) {
@@ -460,6 +463,15 @@ func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.Auth
 	default:
 		return fmt.Errorf("auth for %s:%s produced multiple header values; --print-header expects a single header", apiName, profileName)
 	}
+}
+
+func authInspectionAppliesCookie(configs []*config.AuthConfig) bool {
+	for _, ac := range configs {
+		if ac != nil && ac.Type == "api-key" && strings.EqualFold(strings.TrimSpace(ac.Params["in"]), "cookie") {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) error {

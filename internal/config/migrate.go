@@ -148,7 +148,7 @@ func parseLegacyConfig(source *legacyConfigSource) (*config.Config, []string, er
 	for name, legacy := range raw {
 		api, apiWarnings, err := config.ConvertLegacyAPI(name, legacy)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("config: parsing %s entry %q: %w", source.apisPath, name, err)
 		}
 		cfg.APIs[name] = api
 		warnings = append(warnings, apiWarnings...)
