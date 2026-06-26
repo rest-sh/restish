@@ -390,7 +390,8 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 		if credentialID != "" {
 			return fmt.Errorf("--operation and credential ID are mutually exclusive")
 		}
-		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation)
+		printHeader, _ := cmd.Flags().GetBool("print-header")
+		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation, printHeader)
 	}
 	if credentialID == "" {
 		resolvedProfile, err := c.resolveProfileAuth(apiName, profileName, prof)
@@ -461,7 +462,7 @@ func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.Auth
 	}
 }
 
-func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string) error {
+func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) error {
 	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
 	if err != nil {
 		return err
@@ -504,7 +505,11 @@ func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName st
 	if err != nil {
 		return err
 	}
-	fragment, err := authGetFragment(req, selectedOperationAuthConfigs(selected))
+	configs := selectedOperationAuthConfigs(selected)
+	if printHeader {
+		return c.runAPIAuthGetPrintHeader(req, configs, apiName, profileName)
+	}
+	fragment, err := authGetFragment(req, configs)
 	if err != nil {
 		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName+" --operation "+operationName)
 	}

@@ -12,41 +12,41 @@ import (
 	"github.com/tidwall/jsonc"
 )
 
-// LegacyAPIConfigAuth is the v1 `profiles.<name>.auth` shape.
-type LegacyAPIConfigAuth struct {
+// legacyAPIConfigAuth is the v1 `profiles.<name>.auth` shape.
+type legacyAPIConfigAuth struct {
 	Name   string            `json:"name"`
 	Params map[string]string `json:"params,omitempty"`
 }
 
-// LegacyPKCS11Config is the v1 `tls.pkcs11` shape.
-type LegacyPKCS11Config struct {
+// legacyPKCS11Config is the v1 `tls.pkcs11` shape.
+type legacyPKCS11Config struct {
 	Path  string `json:"path,omitempty"`
 	Label string `json:"label,omitempty"`
 }
 
-// LegacyTLSConfig is the v1 `tls` shape.
-type LegacyTLSConfig struct {
-	PKCS11 *LegacyPKCS11Config `json:"pkcs11,omitempty"`
+// legacyTLSConfig is the v1 `tls` shape.
+type legacyTLSConfig struct {
+	PKCS11 *legacyPKCS11Config `json:"pkcs11,omitempty"`
 	Cert   string              `json:"cert,omitempty"`
 	Key    string              `json:"key,omitempty"`
 	CACert string              `json:"ca_cert,omitempty"`
 }
 
-// LegacyAPIProfile is the v1 `profiles.<name>` shape.
-type LegacyAPIProfile struct {
-	Base    string                  `json:"base,omitempty"`
-	Headers map[string]string       `json:"headers,omitempty"`
-	Query   map[string]string       `json:"query,omitempty"`
-	Auth    *LegacyAPIConfigAuth    `json:"auth,omitempty"`
+// legacyAPIProfile is the v1 `profiles.<name>` shape.
+type legacyAPIProfile struct {
+	Base    string               `json:"base,omitempty"`
+	Headers map[string]string    `json:"headers,omitempty"`
+	Query   map[string]string    `json:"query,omitempty"`
+	Auth    *legacyAPIConfigAuth `json:"auth,omitempty"`
 }
 
-// LegacyAPIConfig is the v1 per-API shape from apis.json.
-type LegacyAPIConfig struct {
+// legacyAPIConfig is the v1 per-API shape from apis.json.
+type legacyAPIConfig struct {
 	Base          string                       `json:"base"`
 	OperationBase string                       `json:"operation_base,omitempty"`
 	SpecFiles     []string                     `json:"spec_files,omitempty"`
-	Profiles      map[string]*LegacyAPIProfile `json:"profiles,omitempty"`
-	TLS           *LegacyTLSConfig             `json:"tls,omitempty"`
+	Profiles      map[string]*legacyAPIProfile `json:"profiles,omitempty"`
+	TLS           *legacyTLSConfig             `json:"tls,omitempty"`
 }
 
 // ConvertLegacyAPI converts a single v1 (apis.json) APIConfig entry to the
@@ -63,7 +63,7 @@ type LegacyAPIConfig struct {
 // one-call read of an apis.json folder can use ReadLegacyAPIs.
 func ConvertLegacyAPI(name string, raw json.RawMessage) (*APIConfig, []string, error) {
 	stripped := jsonc.ToJSON(raw)
-	var legacy LegacyAPIConfig
+	var legacy legacyAPIConfig
 	if err := json.Unmarshal(stripped, &legacy); err != nil {
 		return nil, nil, &ParseError{Path: name, Err: err}
 	}
@@ -151,7 +151,7 @@ func ReadAPIs(folder string) (map[string]*APIConfig, error) {
 // convertLegacyAPIConfig converts one parsed v1 entry into the v2 shape and
 // emits migration-time warnings. Used by both the public ConvertLegacyAPI
 // helper and the internal automatic migrator.
-func convertLegacyAPIConfig(name string, legacy *LegacyAPIConfig) (*APIConfig, []string) {
+func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*APIConfig, []string) {
 	if legacy == nil {
 		return &APIConfig{}, nil
 	}
@@ -245,7 +245,7 @@ func convertLegacyOperationBase(apiName, operationBase string) (string, string) 
 	return "", fmt.Sprintf("api %q: dropped invalid legacy operation_base %q; v2 operation_base must be an absolute path", apiName, operationBase)
 }
 
-func convertLegacyProfile(legacy *LegacyAPIProfile) *ProfileConfig {
+func convertLegacyProfile(legacy *legacyAPIProfile) *ProfileConfig {
 	if legacy == nil {
 		return &ProfileConfig{}
 	}
