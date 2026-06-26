@@ -48,6 +48,11 @@ func NewTokenCache(path string) *TokenCache {
 	return &TokenCache{path: path}
 }
 
+// Path returns the file path the cache reads from and writes to.
+func (c *TokenCache) Path() string {
+	return c.path
+}
+
 // Get returns the cached token for key, or (nil, nil) if not found.
 func (c *TokenCache) Get(key string) (*CachedToken, error) {
 	c.mu.Lock()

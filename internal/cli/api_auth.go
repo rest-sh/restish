@@ -64,11 +64,13 @@ func (c *CLI) newAPIAuthCommand() *cobra.Command {
 		Example: fmt.Sprintf(`  %s api auth get demo UserBearer
   %s api auth get demo PartnerKey
   %s api auth get demo --operation list-items
-  curl -H "$(%s api auth get demo UserBearer)" https://api.rest.sh/items`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+  curl -H "$(%s api auth get demo UserBearer)" https://api.rest.sh/items
+  export AUTH_HEADER="$("%s" api auth get demo --print-header)"`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: usageRangeArgs(1, 2),
 		RunE: c.runAPIAuthGet,
 	}
 	getCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	getCmd.Flags().Bool("print-header", false, "Print the single resolved header as 'Name: value' on stdout and exit non-zero for any non-header auth")
 	cmd.AddCommand(getCmd)
 	inspectCmd := &cobra.Command{
 		Use:   "inspect <api>",
@@ -388,7 +390,8 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 		if credentialID != "" {
 			return fmt.Errorf("--operation and credential ID are mutually exclusive")
 		}
-		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation)
+		printHeader, _ := cmd.Flags().GetBool("print-header")
+		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation, printHeader)
 	}
 	if credentialID == "" {
 		resolvedProfile, err := c.resolveProfileAuth(apiName, profileName, prof)
@@ -415,6 +418,10 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	configs := []*config.AuthConfig{resolved.Config}
+	printHeader, _ := cmd.Flags().GetBool("print-header")
+	if printHeader {
+		return c.runAPIAuthGetPrintHeader(req, configs, apiName, profileName)
+	}
 	fragment, err := authGetFragment(req, configs)
 	if err != nil {
 		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName)
@@ -423,7 +430,51 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string) error {
+// runAPIAuthGetPrintHeader prints the single resolved auth header as
+// "Name: value" and returns an error if the resolved auth is not a single
+// header (for example, query parameter auth or a multi-credential
+// combination). This is the stable, parseable contract that shell scripts
+// and external Go binaries use to obtain a bearer token without going
+// through the restish CLI's full request flow.
+func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.AuthConfig, apiName, profileName string) error {
+	if req.URL != nil && req.URL.RawQuery != "" {
+		return fmt.Errorf("auth for %s:%s is applied as a query parameter, not a header; --print-header is not applicable", apiName, profileName)
+	}
+	if authInspectionAppliesCookie(configs) {
+		return fmt.Errorf("auth for %s:%s is applied as a cookie, not a header; --print-header is not applicable", apiName, profileName)
+	}
+	headers := 0
+	var name, value string
+	for _, h := range sortedHeaderKeys(req.Header) {
+		for _, v := range req.Header[h] {
+			headers++
+			if headers == 1 {
+				name = authInspectionDisplayHeaderName(configs, h)
+				value = v
+			}
+		}
+	}
+	switch headers {
+	case 0:
+		return fmt.Errorf("auth for %s:%s did not produce a header value", apiName, profileName)
+	case 1:
+		fmt.Fprintf(c.Stdout, "%s: %s\n", name, value)
+		return nil
+	default:
+		return fmt.Errorf("auth for %s:%s produced multiple header values; --print-header expects a single header", apiName, profileName)
+	}
+}
+
+func authInspectionAppliesCookie(configs []*config.AuthConfig) bool {
+	for _, ac := range configs {
+		if ac != nil && ac.Type == "api-key" && strings.EqualFold(strings.TrimSpace(ac.Params["in"]), "cookie") {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) error {
 	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
 	if err != nil {
 		return err
@@ -466,7 +517,11 @@ func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName st
 	if err != nil {
 		return err
 	}
-	fragment, err := authGetFragment(req, selectedOperationAuthConfigs(selected))
+	configs := selectedOperationAuthConfigs(selected)
+	if printHeader {
+		return c.runAPIAuthGetPrintHeader(req, configs, apiName, profileName)
+	}
+	fragment, err := authGetFragment(req, configs)
 	if err != nil {
 		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName+" --operation "+operationName)
 	}
