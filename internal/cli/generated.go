@@ -75,7 +75,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 	if long == "" {
 		long = strings.TrimSpace(set.Info.Summary)
 	}
-	isRootAPI := c.rootApi == apiName
+	isRootAPI := c.isPromotedAPI(apiName)
 	long, fullLong := generatedAPIHelpDescription(apiName, long)
 	if generatedAPIHasAuth(ops) && !isRootAPI {
 		if long != "" {

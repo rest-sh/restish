@@ -128,7 +128,7 @@ type CLI struct {
 	silentMode              bool
 	requestExecutionStarted bool
 	bodyPrefixHinted        bool
-	rootApi                 string
+	commandSurface          CommandSurface
 	runCtx                  context.Context
 	projectConfig           *projectConfigState
 }
@@ -162,16 +162,6 @@ func (c *CLI) AddFormatter(name string, f output.Formatter) {
 		c.formatters = output.DefaultFormatters()
 	}
 	c.formatters[name] = f
-}
-
-// SetRootApi promotes the named API to the CLI's root command, so its
-// generated operations appear as top-level subcommands (e.g. `mycli health`
-// instead of `mycli myapi health`) and the built-in command tree (api, cache,
-// config, generic HTTP verbs, etc.) is not registered. The API must be
-// configured (via SetDefaultConfig or user config) and its spec must be
-// loadable when Run executes.
-func (c *CLI) SetRootApi(apiName string) {
-	c.rootApi = apiName
 }
 
 // AddContentType registers an additional content type with the CLI's registry.
@@ -638,7 +628,7 @@ func (c *CLI) Run(args []string) error {
 		return fmt.Errorf("config theme: %w", err)
 	}
 	for apiName := range cfg.APIs {
-		if isBuiltinCommandName(apiName) {
+		if isBuiltinCommandName(apiName) && !c.isPromotedAPI(apiName) {
 			return fmt.Errorf("config: API name %q conflicts with a built-in command; rename it before continuing", apiName)
 		}
 		if err := config.ValidateAPIName(apiName); err != nil {
@@ -674,26 +664,14 @@ func (c *CLI) Run(args []string) error {
 		}
 	}
 
-	if c.rootApi != "" {
-		root, err := c.newAPIRootCmd(ctx, cfg, argScan.ProfileName)
-		if err != nil {
-			return err
-		}
-		err = c.executeRoot(ctx, root, args)
-		// When the context was cancelled by a signal (SIGINT/SIGTERM), return
-		// ExitCodeError{130} so main exits with 130 without printing any extra message.
-		if isSignalCancellation(err, ctx) {
-			return &ExitCodeError{Code: 130}
-		}
-		if c.shouldSuppressFinalError(err) {
-			return silentExitError(err)
-		}
-		return err
-	}
-
 	root := c.newRootCmd()
 	c.quietGeneratedWarnings = quietGeneratedWarningsForScan(argScan, cfg)
-	c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
+	if err := c.ensurePromotedAPICommandMetadata(ctx, argScan, cfg); err != nil {
+		return err
+	}
+	if !c.hasPromotedAPI() {
+		c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
+	}
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
@@ -701,6 +679,7 @@ func (c *CLI) Run(args []string) error {
 	// (Network discovery is not triggered here; use "restish api sync <name>"
 	// to prime the cache for an API.)
 	startupProfile := argScan.ProfileName
+	var promotedAPICmd *cobra.Command
 	for _, apiName := range c.generatedAPINamesForScan(argScan, cfg) {
 		apiCfg := cfg.APIs[apiName]
 		opOpts := spec.OperationOptions{
@@ -711,7 +690,14 @@ func (c *CLI) Run(args []string) error {
 		stateName := c.apiStateName(apiName)
 		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set, opOpts.OperationBase); apiCmd != nil {
-				root.AddCommand(apiCmd)
+				if c.isPromotedAPI(apiName) {
+					promotedAPICmd = apiCmd
+					if !rootHasCommand(root, apiName) {
+						root.AddCommand(apiCmd)
+					}
+				} else {
+					root.AddCommand(apiCmd)
+				}
 			}
 			continue
 		}
@@ -730,10 +716,20 @@ func (c *CLI) Run(args []string) error {
 			_ = spec.StoreOperationSetInCache(c.specCacheDir(), stateName, Version, opOpts, set)
 		}
 		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opOpts.OperationBase, opsErr); apiCmd != nil {
-			root.AddCommand(apiCmd)
+			if c.isPromotedAPI(apiName) {
+				promotedAPICmd = apiCmd
+				if !rootHasCommand(root, apiName) {
+					root.AddCommand(apiCmd)
+				}
+			} else {
+				root.AddCommand(apiCmd)
+			}
 		}
 	}
 	c.addAPIShortNameCommands(root, cfg)
+	if err := c.applyCommandSurface(root, promotedAPICmd, argScan, cfg); err != nil {
+		return err
+	}
 
 	err = c.executeRoot(ctx, root, args)
 	// When the context was cancelled by a signal (SIGINT/SIGTERM), return
@@ -745,51 +741,6 @@ func (c *CLI) Run(args []string) error {
 		return silentExitError(err)
 	}
 	return err
-}
-
-func (c *CLI) newAPIRootCmd(ctx context.Context, cfg *config.Config, profileName string) (*cobra.Command, error) {
-	apiCfg := cfg.APIs[c.rootApi]
-	if apiCfg == nil {
-		return nil, fmt.Errorf("root API %q is not configured", c.rootApi)
-	}
-
-	set, ok, err := c.operationSetForAPI(ctx, c.rootApi, apiCfg, profileName, false)
-	if err != nil {
-		return nil, fmt.Errorf("could not load generated commands for root API %q: %w", c.rootApi, err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("generated commands for root API %q are not available; run %q", c.rootApi, "api sync "+c.rootApi)
-	}
-
-	root := c.buildAPICommandFromOperationSet(c.rootApi, apiCfg, set, effectiveOperationBase(apiCfg, profileName))
-	if root == nil {
-		return nil, fmt.Errorf("generated commands for root API %q are not available", c.rootApi)
-	}
-
-	origPersistentPreRunE := root.PersistentPreRunE
-	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		gf, err := parseGlobalFlags(cmd)
-		if err != nil {
-			return err
-		}
-		c.silentMode = gf.Silent
-		cmd.SetContext(withGlobalFlags(cmd.Context(), gf))
-		if origPersistentPreRunE != nil {
-			return origPersistentPreRunE(cmd, args)
-		}
-		return nil
-	}
-
-	root.Use = c.commandNameOrDefault()
-	root.Version = c.currentVersion()
-	root.SilenceUsage = true
-	root.SilenceErrors = true
-	root.SuggestionsMinimumDistance = 2
-
-	setupGroupedUsage(root)
-	c.addGlobalFlags(root)
-	c.setupMarkdownHelp(root)
-	return root, nil
 }
 
 func (c *CLI) executeRoot(ctx context.Context, root *cobra.Command, args []string) error {
@@ -1130,7 +1081,7 @@ func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
 
 	for _, apiName := range names {
 		apiCfg := cfg.APIs[apiName]
-		if apiCfg == nil || isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
+		if apiCfg == nil || c.isPromotedAPI(apiName) || isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
 			continue
 		}
 		apiName := apiName
@@ -1265,6 +1216,12 @@ func quietGeneratedWarningsForScan(scan cliArgScan, cfg *config.Config) bool {
 func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
 	if scan.VersionFlag {
 		return nil
+	}
+	if promoted := c.promotedAPIName(); promoted != "" {
+		if !c.promotedAPICommandMetadataNeeded(scan) {
+			return nil
+		}
+		return []string{promoted}
 	}
 	if scan.GeneratedAPICommandTree {
 		if scan.FirstCommand != "" && !isBuiltinCommandName(scan.FirstCommand) {
