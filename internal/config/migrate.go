@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/config"
@@ -21,37 +20,6 @@ type legacyConfigSource struct {
 	configPath string
 	apisData   []byte
 	configData []byte
-}
-
-type legacyAPIAuth struct {
-	Name   string            `json:"name"`
-	Params map[string]string `json:"params,omitempty"`
-}
-
-type legacyPKCS11Config struct {
-	Path  string `json:"path,omitempty"`
-	Label string `json:"label,omitempty"`
-}
-
-type legacyTLSConfig struct {
-	PKCS11 *legacyPKCS11Config `json:"pkcs11,omitempty"`
-	Cert   string              `json:"cert,omitempty"`
-	Key    string              `json:"key,omitempty"`
-}
-
-type legacyAPIProfile struct {
-	Base    string            `json:"base,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Query   map[string]string `json:"query,omitempty"`
-	Auth    *legacyAPIAuth    `json:"auth,omitempty"`
-}
-
-type legacyAPIConfig struct {
-	Base          string                       `json:"base"`
-	OperationBase string                       `json:"operation_base,omitempty"`
-	SpecFiles     []string                     `json:"spec_files,omitempty"`
-	Profiles      map[string]*legacyAPIProfile `json:"profiles,omitempty"`
-	TLS           *legacyTLSConfig             `json:"tls,omitempty"`
 }
 
 func loadOrMigrate(path string) (*config.Config, error) {
@@ -178,166 +146,30 @@ func parseLegacyConfig(source *legacyConfigSource) (*config.Config, []string, er
 	var warnings []string
 	cfg.APIs = make(map[string]*config.APIConfig, len(raw))
 	for name, legacy := range raw {
-		api, apiWarnings := convertLegacyAPIConfig(name, legacy)
+		api, apiWarnings, err := config.ConvertLegacyAPI(name, legacy)
+		if err != nil {
+			return nil, nil, fmt.Errorf("config: parsing %s entry %q: %w", source.apisPath, name, err)
+		}
 		cfg.APIs[name] = api
 		warnings = append(warnings, apiWarnings...)
 	}
 	return cfg, warnings, nil
 }
 
-func parseLegacyAPIMap(path string, data []byte) (map[string]*legacyAPIConfig, error) {
+func parseLegacyAPIMap(path string, data []byte) (map[string]json.RawMessage, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(jsonc.ToJSON(data), &raw); err != nil {
 		return nil, &config.ParseError{Path: path, Err: err}
 	}
 
-	result := make(map[string]*legacyAPIConfig, len(raw))
+	result := make(map[string]json.RawMessage, len(raw))
 	for name, value := range raw {
 		if name == "$schema" {
 			continue
 		}
-		var cfg legacyAPIConfig
-		if err := json.Unmarshal(value, &cfg); err != nil {
-			return nil, &config.ParseError{Path: path, Err: err}
-		}
-		result[name] = &cfg
+		result[name] = value
 	}
 	return result, nil
-}
-
-func convertLegacyAPIConfig(name string, legacy *legacyAPIConfig) (*config.APIConfig, []string) {
-	if legacy == nil {
-		return &config.APIConfig{}, nil
-	}
-	operationBase, warning := convertLegacyOperationBase(name, legacy.OperationBase)
-
-	api := &config.APIConfig{
-		BaseURL:       legacy.Base,
-		OperationBase: operationBase,
-		SpecFiles:     append([]string(nil), legacy.SpecFiles...),
-	}
-	if len(legacy.Profiles) > 0 {
-		api.Profiles = make(map[string]*config.ProfileConfig, len(legacy.Profiles))
-		for name, profile := range legacy.Profiles {
-			api.Profiles[name] = convertLegacyProfile(profile)
-		}
-	}
-
-	var migratedPKCS11 bool
-	if legacy.TLS != nil && legacy.TLS.PKCS11 != nil {
-		if api.Profiles == nil {
-			api.Profiles = map[string]*config.ProfileConfig{}
-		}
-		prof := api.Profiles["default"]
-		if prof == nil {
-			prof = &config.ProfileConfig{}
-			api.Profiles["default"] = prof
-		}
-		if prof.TLSSigner == "" {
-			prof.TLSSigner = "pkcs11"
-		}
-		if prof.TLSSignerParams == nil {
-			prof.TLSSignerParams = map[string]string{}
-		}
-		if legacy.TLS.PKCS11.Path != "" && prof.TLSSignerParams["path"] == "" {
-			prof.TLSSignerParams["path"] = legacy.TLS.PKCS11.Path
-		}
-		if legacy.TLS.PKCS11.Label != "" && prof.TLSSignerParams["label"] == "" {
-			prof.TLSSignerParams["label"] = legacy.TLS.PKCS11.Label
-		}
-		migratedPKCS11 = true
-	}
-
-	if legacy.TLS != nil && (legacy.TLS.Cert != "" || legacy.TLS.Key != "") {
-		if api.Profiles == nil {
-			api.Profiles = map[string]*config.ProfileConfig{}
-		}
-		prof := api.Profiles["default"]
-		if prof == nil {
-			prof = &config.ProfileConfig{}
-			api.Profiles["default"] = prof
-		}
-		if prof.ClientCertPath == "" && legacy.TLS.Cert != "" {
-			prof.ClientCertPath = legacy.TLS.Cert
-		}
-		if prof.ClientKeyPath == "" && legacy.TLS.Key != "" {
-			prof.ClientKeyPath = legacy.TLS.Key
-		}
-	}
-
-	var warnings []string
-	if warning != "" {
-		warnings = append(warnings, warning)
-	}
-	if migratedPKCS11 {
-		warnings = append(warnings, fmt.Sprintf("api %q: migrated PKCS#11 TLS config; install the restish-pkcs11 plugin to continue using it (see https://github.com/rest-sh/restish)", name))
-	}
-	return api, warnings
-}
-
-func convertLegacyOperationBase(apiName, operationBase string) (string, string) {
-	if operationBase == "" {
-		return "", ""
-	}
-	if err := config.ValidateOperationBase(operationBase); err == nil {
-		return operationBase, ""
-	}
-	return "", fmt.Sprintf("api %q: dropped invalid legacy operation_base %q; v2 operation_base must be an absolute path", apiName, operationBase)
-}
-
-func convertLegacyProfile(legacy *legacyAPIProfile) *config.ProfileConfig {
-	if legacy == nil {
-		return &config.ProfileConfig{}
-	}
-
-	prof := &config.ProfileConfig{
-		BaseURL: legacy.Base,
-		Headers: sortedHeaderList(legacy.Headers),
-		Query:   sortedQueryList(legacy.Query),
-	}
-	if legacy.Auth != nil {
-		prof.Auth = &config.AuthConfig{
-			Type:   legacy.Auth.Name,
-			Params: cloneStringMap(legacy.Auth.Params),
-		}
-	}
-	return prof
-}
-
-func sortedHeaderList(values map[string]string) []string {
-	return sortedPairs(values, ": ")
-}
-
-func sortedQueryList(values map[string]string) []string {
-	return sortedPairs(values, "=")
-}
-
-func sortedPairs(values map[string]string, sep string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	items := make([]string, 0, len(keys))
-	for _, key := range keys {
-		items = append(items, key+sep+values[key])
-	}
-	return items
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
 }
 
 func prepareLegacyBackup(source *legacyConfigSource, preferredDir string) (string, error) {
@@ -507,11 +339,10 @@ func ReadAll(folder string) (map[string]*config.APIConfig, error) {
 		if strings.HasPrefix(name, "$") {
 			continue
 		}
-		var v1 legacyAPIConfig
-		if err := json.Unmarshal(r, &v1); err != nil {
+		api, _, err := config.ConvertLegacyAPI(name, r)
+		if err != nil {
 			return nil, fmt.Errorf("config: parsing %s entry %q: %w", v1Path, name, err)
 		}
-		api, _ := convertLegacyAPIConfig(name, &v1)
 		out[name] = api
 	}
 	return out, nil

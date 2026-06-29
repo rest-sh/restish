@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +14,14 @@ import (
 	"github.com/rest-sh/restish/v2/auth"
 	"github.com/rest-sh/restish/v2/config"
 )
+
+type noopAuthHandler struct{}
+
+func (noopAuthHandler) Parameters() []auth.Param { return nil }
+
+func (noopAuthHandler) Authenticate(context.Context, *http.Request, auth.AuthContext) error {
+	return nil
+}
 
 func TestAPIAuthInspectAddRemove(t *testing.T) {
 	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", &config.ProfileConfig{}))
@@ -758,5 +767,163 @@ func TestAPIAuthGetCredentialAPIKeyQuery(t *testing.T) {
 	app.Run("api", "auth", "get", "myapi", "PartnerKey")
 	if got := strings.TrimSpace(app.Stdout.String()); got != "?partner=secret" {
 		t.Fatalf("auth get query = %q, want ?partner=secret", got)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderHeader(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-API-Key", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	app.Run("api", "auth", "get", "myapi", "PartnerKey", "--print-header")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "X-API-Key: secret" {
+		t.Fatalf("auth get --print-header = %q, want %q", got, "X-API-Key: secret")
+	}
+}
+
+func TestAPIAuthGetPrintHeaderQueryFails(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("query", "partner", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "get", "myapi", "PartnerKey", "--print-header")
+	if err == nil {
+		t.Fatal("expected --print-header on query auth to fail")
+	}
+	if !strings.Contains(err.Error(), "query parameter") {
+		t.Errorf("error = %q, want it to mention query parameter", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderCookieFails(t *testing.T) {
+	cfgFile := writeAPIConfigObject(t, "myapi", testAPIConfig("https://api.example.com", profileCredentials(map[string]*config.CredentialConfig{
+		"Session": testCredential(apiKeyAuth("cookie", "session", "secret")),
+	})))
+
+	app := newTestApp(t)
+	app.SetConfigPath(cfgFile)
+	err := app.RunErr("api", "auth", "get", "myapi", "Session", "--print-header")
+	if err == nil {
+		t.Fatal("expected --print-header on cookie auth to fail")
+	}
+	if !strings.Contains(err.Error(), "cookie") {
+		t.Errorf("error = %q, want it to mention cookie", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationHeader(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "sekret")),
+	})))
+
+	c, out := env.newCaptureCLI()
+	if err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "partner-report", "--print-header"}); err != nil {
+		t.Fatalf("api auth get operation --print-header: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "X-Partner-Key: sekret" {
+		t.Fatalf("auth get operation --print-header = %q, want X-Partner-Key: sekret", got)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationQueryFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"query","name":"partner"}`),
+			openAPIPaths(openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"PartnerKey": testCredential(apiKeyAuth("query", "partner", "sekret")),
+	})))
+
+	c, _ := env.newCaptureCLI()
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "partner-report", "--print-header"})
+	if err == nil {
+		t.Fatal("expected operation --print-header on query auth to fail")
+	}
+	if !strings.Contains(err.Error(), "query parameter") {
+		t.Errorf("error = %q, want it to mention query parameter", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationCookieFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"Session":{"type":"apiKey","in":"cookie","name":"session"}`),
+			openAPIPaths(openAPIGet("/session", "sessionReport", `"security":[{"Session":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"Session": testCredential(apiKeyAuth("cookie", "session", "sekret")),
+	})))
+
+	c, _ := env.newCaptureCLI()
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "session-report", "--print-header"})
+	if err == nil {
+		t.Fatal("expected operation --print-header on cookie auth to fail")
+	}
+	if !strings.Contains(err.Error(), "cookie") {
+		t.Errorf("error = %q, want it to mention cookie", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationNoHeaderFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(`"NoHeader":{"type":"apiKey","in":"header","name":"X-No-Header"}`),
+			openAPIPaths(openAPIGet("/silent", "silentReport", `"security":[{"NoHeader":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"NoHeader": testCredential(&config.AuthConfig{Type: "noop-auth"}),
+	})))
+
+	c, _ := env.newCaptureCLI()
+	c.AddAuthHandler("noop-auth", noopAuthHandler{})
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "silent-report", "--print-header"})
+	if err == nil {
+		t.Fatal("expected operation --print-header with no header to fail")
+	}
+	if !strings.Contains(err.Error(), "did not produce a header value") {
+		t.Errorf("error = %q, want it to mention no header value", err)
+	}
+}
+
+func TestAPIAuthGetPrintHeaderOperationMultipleHeadersFails(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Auth API",
+			openAPISecuritySchemes(
+				`"UserKey":{"type":"apiKey","in":"header","name":"X-User-Key"}`,
+				`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+			openAPIPaths(openAPIGet("/signed", "signedReport", `"security":[{"UserKey":[],"PartnerKey":[]}]`)))
+	})
+	env.writeAPIConfig(t, testAPIConfig(env.baseURL(t), profileCredentials(map[string]*config.CredentialConfig{
+		"UserKey":    testCredential(apiKeyAuth("header", "X-User-Key", "user-secret")),
+		"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "partner-secret")),
+	})))
+
+	c, _ := env.newCaptureCLI()
+	err := c.Run([]string{"restish", "api", "auth", "get", "tapi", "--operation", "signed-report", "--print-header"})
+	if err == nil {
+		t.Fatal("expected operation --print-header with multiple headers to fail")
+	}
+	if !strings.Contains(err.Error(), "produced multiple header values") {
+		t.Errorf("error = %q, want it to mention multiple header values", err)
 	}
 }

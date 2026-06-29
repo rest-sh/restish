@@ -374,6 +374,8 @@ Print curl-friendly auth material that Restish would apply for an API profile.
 
 Use this when another tool, such as curl, needs the configured auth without sending the target request through Restish. Header auth prints as `Name: value`; query auth prints as `?name=value`. Pass a credential ID when the profile has more than one configured credential, or use `--operation` to inspect operation-specific security requirements.
 
+Add `--print-header` to print the single resolved auth header as `Name: value` on stdout and exit non-zero for any non-header auth. This is the stable, parseable contract for shell scripts and external tools that need just the bearer header.
+
 Usage:
 
 ```text
@@ -387,6 +389,7 @@ Examples:
   restish api auth get demo PartnerKey
   restish api auth get demo --operation list-items
   curl -H "$(restish api auth get demo UserBearer)" https://api.rest.sh/items
+  export AUTH_HEADER="$("restish" api auth get demo --print-header)"
 ```
 
 Flags:
@@ -396,6 +399,12 @@ Flags:
 Type: `string`; default: none
 
 Operation ID or command name to inspect
+
+**`--print-header`**
+
+Type: `bool`; default: `false`
+
+Print the single resolved header as 'Name: value' on stdout and exit non-zero for any non-header auth
 
 
 

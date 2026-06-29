@@ -56,7 +56,8 @@ const apiAuthLogoutLong = "Delete cached API auth tokens.\n\n" +
 	"- Use `--auth-profile` to clear a shared auth profile cache without naming an API."
 
 const apiAuthGetLong = "Print curl-friendly auth material that Restish would apply for an API profile.\n\n" +
-	"Use this when another tool, such as curl, needs the configured auth without sending the target request through Restish. Header auth prints as `Name: value`; query auth prints as `?name=value`. Pass a credential ID when the profile has more than one configured credential, or use `--operation` to inspect operation-specific security requirements."
+	"Use this when another tool, such as curl, needs the configured auth without sending the target request through Restish. Header auth prints as `Name: value`; query auth prints as `?name=value`. Pass a credential ID when the profile has more than one configured credential, or use `--operation` to inspect operation-specific security requirements.\n\n" +
+	"Add `--print-header` to print the single resolved auth header as `Name: value` on stdout and exit non-zero for any non-header auth. This is the stable, parseable contract for shell scripts and external tools that need just the bearer header."
 
 const apiAuthInspectLong = "Inspect auth readiness and material for an API profile.\n\n" +
 	"By default this shows configured credentials, generated-operation coverage, and the auth values Restish would apply. Use `--operation` for operation-specific OpenAPI security requirements or `--credential` for one credential binding. Add `--redact` before sharing output so sensitive header, token, and credential values are masked."
