@@ -1,0 +1,379 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/spec"
+	"github.com/spf13/cobra"
+)
+
+// CommandSurface controls the command tree exposed by embedded custom CLIs.
+// The zero value preserves the stock Restish command surface.
+type CommandSurface struct {
+	// PromotedAPI promotes generated operations for this configured API to the
+	// root command.
+	PromotedAPI string
+
+	// SupportCommandNamespace moves support commands under this root command.
+	SupportCommandNamespace string
+	// HideSupportCommands removes support commands from the custom CLI surface.
+	HideSupportCommands bool
+}
+
+// SetCommandSurface changes the command tree exposed by an embedded CLI.
+// Invalid combinations panic so mistakes fail during host application setup.
+func (c *CLI) SetCommandSurface(surface CommandSurface) {
+	surface.PromotedAPI = strings.TrimSpace(surface.PromotedAPI)
+	surface.SupportCommandNamespace = strings.TrimSpace(surface.SupportCommandNamespace)
+	if surface.HideSupportCommands && surface.SupportCommandNamespace != "" {
+		panic("restish: CommandSurface SupportCommandNamespace and HideSupportCommands are mutually exclusive")
+	}
+	if surface.PromotedAPI == "" && (surface.SupportCommandNamespace != "" || surface.HideSupportCommands) {
+		panic("restish: CommandSurface support command layout requires PromotedAPI")
+	}
+	c.commandSurface = surface
+}
+
+func (c *CLI) promotedAPIName() string {
+	return c.commandSurface.PromotedAPI
+}
+
+func (c *CLI) hasPromotedAPI() bool {
+	return c.promotedAPIName() != ""
+}
+
+func (c *CLI) isPromotedAPI(apiName string) bool {
+	return apiName != "" && apiName == c.promotedAPIName()
+}
+
+func (c *CLI) ensurePromotedAPICommandMetadata(ctx context.Context, scan cliArgScan, cfg *config.Config) error {
+	apiName := c.promotedAPIName()
+	if apiName == "" || !c.promotedAPICommandMetadataNeeded(scan) {
+		return nil
+	}
+	apiCfg := cfg.APIs[apiName]
+	if apiCfg == nil {
+		return fmt.Errorf("command surface: promoted API %q is not configured", apiName)
+	}
+	opts := spec.OperationOptions{
+		BaseURL:         effectiveProfileBaseURL(apiCfg, scan.ProfileName),
+		OperationBase:   effectiveOperationBase(apiCfg, scan.ProfileName),
+		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
+	}
+	stateName := c.apiStateName(apiName)
+	if _, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, false); ok && !status.Stale {
+		return nil
+	}
+
+	refreshCtx, cancel := context.WithTimeout(ctx, staleGeneratedOperationRefreshTimeout)
+	defer cancel()
+	if _, err := c.discoverSpecForProfile(refreshCtx, apiName, scan.ProfileName, false, staleGeneratedOperationRefreshTimeout); err != nil {
+		if status, ok := c.promotedAPIStaleMetadataStatus(apiName, apiCfg, opts); ok {
+			c.warnf("could not refresh API metadata for %q; using last synced metadata from %s: %v", apiName, formatCacheTime(status.FetchedAt), err)
+			return nil
+		}
+		return fmt.Errorf("generated commands for promoted API %q are unavailable: %w", apiName, err)
+	}
+	return nil
+}
+
+func (c *CLI) promotedAPIStaleMetadataStatus(apiName string, apiCfg *config.APIConfig, opts spec.OperationOptions) (spec.OperationCacheStatus, bool) {
+	stateName := c.apiStateName(apiName)
+	if _, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, true); ok {
+		return status, true
+	}
+	return spec.RawSpecCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles)
+}
+
+func (c *CLI) promotedAPICommandMetadataNeeded(scan cliArgScan) bool {
+	if scan.VersionFlag {
+		return false
+	}
+	if scan.FirstCommand == "" {
+		return true
+	}
+	if scan.FirstCommand == "help" {
+		return scan.SecondCommand == "" || !c.isSupportCommandToken(scan.SecondCommand)
+	}
+	if scan.FirstCommand == "__complete" || scan.FirstCommand == "__completeNoDesc" {
+		return true
+	}
+	return !c.isSupportCommandToken(scan.FirstCommand)
+}
+
+func (c *CLI) isSupportCommandToken(token string) bool {
+	if token == "" || c.commandSurface.HideSupportCommands {
+		return false
+	}
+	if ns := c.commandSurface.SupportCommandNamespace; ns != "" {
+		return token == ns
+	}
+	return promotedSupportCommandNames()[token]
+}
+
+func promotedSupportCommandNames() map[string]bool {
+	return map[string]bool{
+		"auth":       true,
+		"cache":      true,
+		"completion": true,
+		"config":     true,
+		"doctor":     true,
+		"version":    true,
+	}
+}
+
+func (c *CLI) applyCommandSurface(root, promotedAPICmd *cobra.Command, scan cliArgScan, cfg *config.Config, originalArgs []string) error {
+	apiName := c.promotedAPIName()
+	if apiName == "" {
+		return nil
+	}
+	if promotedAPICmd == nil && c.promotedAPICommandMetadataNeeded(scan) {
+		return fmt.Errorf("generated commands for promoted API %q are unavailable", apiName)
+	}
+
+	support := c.promotedSupportCommands(root, apiName)
+	for _, cmd := range root.Commands() {
+		root.RemoveCommand(cmd)
+	}
+
+	var promoted []*cobra.Command
+	if promotedAPICmd != nil {
+		root.Example = promotedAPICmd.Example
+		for _, group := range promotedAPICmd.Groups() {
+			if !rootCommandHasGroup(root, group.ID) {
+				root.AddGroup(group)
+			}
+		}
+		promoted = append(promoted, promotedAPICmd.Commands()...)
+	}
+
+	if err := c.checkPromotedCommandCollisions(promoted, support); err != nil {
+		return err
+	}
+
+	c.addSupportCommandsForSurface(root, support)
+	for _, cmd := range promoted {
+		root.AddCommand(cmd)
+	}
+	c.installPromotedRootFallback(root, cfg, originalArgs)
+	return nil
+}
+
+func (c *CLI) promotedSupportCommands(root *cobra.Command, apiName string) map[string]*cobra.Command {
+	support := map[string]*cobra.Command{}
+	if !c.commandSurface.HideSupportCommands {
+		for _, cmd := range root.Commands() {
+			if promotedSupportCommandNames()[cmd.Name()] {
+				support[cmd.Name()] = cmd
+			}
+		}
+		if support["completion"] != nil {
+			support["completion"].Hidden = false
+		}
+		if support["auth"] == nil {
+			support["auth"] = c.newPromotedAPIAuthCommand(apiName)
+		}
+		c.brandPromotedSupportCommands(support)
+	}
+	return support
+}
+
+func (c *CLI) brandPromotedSupportCommands(support map[string]*cobra.Command) {
+	name := c.commandNameOrDefault()
+	if cmd := support["config"]; cmd != nil {
+		cmd.Short = fmt.Sprintf("Manage local %s configuration", name)
+	}
+	if cmd := support["doctor"]; cmd != nil {
+		cmd.Short = fmt.Sprintf("Diagnose %s configuration and runtime paths", name)
+	}
+	if cmd := support["version"]; cmd != nil {
+		cmd.Short = fmt.Sprintf("Print the %s version", name)
+	}
+}
+
+func (c *CLI) checkPromotedCommandCollisions(promoted []*cobra.Command, support map[string]*cobra.Command) error {
+	ns := c.commandSurface.SupportCommandNamespace
+	for _, cmd := range promoted {
+		name := cmd.Name()
+		if name == "" {
+			continue
+		}
+		if ns != "" && name == ns {
+			return fmt.Errorf("command surface: promoted operation %q collides with support command namespace %q; choose another SupportCommandNamespace or hide support commands", name, ns)
+		}
+		if ns == "" && !c.commandSurface.HideSupportCommands && support[name] != nil {
+			return fmt.Errorf("command surface: promoted operation %q collides with support command %q; set SupportCommandNamespace or HideSupportCommands", name, name)
+		}
+	}
+	return nil
+}
+
+func (c *CLI) addSupportCommandsForSurface(root *cobra.Command, support map[string]*cobra.Command) {
+	if c.commandSurface.HideSupportCommands {
+		return
+	}
+	if ns := c.commandSurface.SupportCommandNamespace; ns != "" {
+		nsCmd := &cobra.Command{
+			Use:     ns,
+			Short:   "CLI support commands",
+			GroupID: rootGroupConfig,
+			Args:    cobra.ArbitraryArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if len(args) > 0 {
+					return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see support commands")
+				}
+				return cmd.Help()
+			},
+		}
+		for _, name := range sortedSupportCommandNames(support) {
+			cmd := support[name]
+			cmd.GroupID = ""
+			nsCmd.AddCommand(cmd)
+		}
+		root.AddCommand(nsCmd)
+		return
+	}
+	for _, name := range sortedSupportCommandNames(support) {
+		root.AddCommand(support[name])
+	}
+}
+
+func sortedSupportCommandNames(commands map[string]*cobra.Command) []string {
+	names := make([]string, 0, len(commands))
+	for name := range commands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (c *CLI) installPromotedRootFallback(root *cobra.Command, cfg *config.Config, originalArgs []string) {
+	originalArgs = append([]string(nil), originalArgs...)
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+		if c.shouldSyncPromotedRootCommand(cfg, args) {
+			return c.runSyncedPromotedAPICommand(cmd, cfg, args, originalArgs)
+		}
+		return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see available commands")
+	}
+}
+
+func (c *CLI) shouldSyncPromotedRootCommand(cfg *config.Config, args []string) bool {
+	if len(args) == 0 || !looksLikeGeneratedCommandToken(args[0]) {
+		return false
+	}
+	apiCfg := cfg.APIs[c.promotedAPIName()]
+	return apiHasSpecSource(apiCfg)
+}
+
+func (c *CLI) runSyncedPromotedAPICommand(cmd *cobra.Command, cfg *config.Config, args, originalArgs []string) error {
+	apiName := c.promotedAPIName()
+	apiCfg := cfg.APIs[apiName]
+	profileName := c.profileFromCmd(cmd)
+	refreshCtx, cancel := context.WithTimeout(cmd.Context(), staleGeneratedOperationRefreshTimeout)
+	defer cancel()
+	set, ok, err := c.operationSetForAPI(refreshCtx, apiName, apiCfg, profileName, true)
+	if err != nil {
+		return fmt.Errorf("generated commands for promoted API %q are not available: %w", apiName, err)
+	}
+	if !ok {
+		return fmt.Errorf("generated commands for promoted API %q are not available", apiName)
+	}
+	apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set, effectiveOperationBase(apiCfg, profileName))
+	if apiCmd == nil {
+		return fmt.Errorf("generated commands for promoted API %q are unavailable after sync", apiName)
+	}
+	root := c.newRootCmd()
+	scan := cliArgScan{FirstCommand: args[0], ProfileName: profileName}
+	if err := c.applyCommandSurface(root, apiCmd, scan, cfg, originalArgs); err != nil {
+		return err
+	}
+	if !commandPathExists(root, args) {
+		return unknownCommandError(root, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see generated operations")
+	}
+	if len(originalArgs) == 0 {
+		originalArgs = append([]string{c.commandNameOrDefault()}, args...)
+	}
+	return c.executeRoot(cmd.Context(), root, originalArgs)
+}
+
+func (c *CLI) newPromotedAPIAuthCommand(apiName string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "auth",
+		Short:   "Inspect API auth credentials",
+		Long:    apiAuthLong,
+		GroupID: rootGroupConfig,
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+			}
+			return cmd.Help()
+		},
+	}
+	getCmd := &cobra.Command{
+		Use:   "get [credential-id]",
+		Short: "Print curl-friendly auth material for the API profile",
+		Long:  apiAuthGetLong,
+		Args:  usageMaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.runAPIAuthGet(cmd, append([]string{apiName}, args...))
+		},
+	}
+	getCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	getCmd.Flags().Bool("print-header", false, "Print the single resolved header as 'Name: value' on stdout and exit non-zero for any non-header auth")
+	cmd.AddCommand(getCmd)
+
+	headerCmd := &cobra.Command{
+		Use:   "header [credential-id]",
+		Short: "Print one HTTP auth header for the API profile",
+		Long:  apiAuthGetLong,
+		Args:  usageMaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fragment, err := c.apiAuthGetHeaderFragment(cmd, append([]string{apiName}, args...))
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(c.Stdout, fragment)
+			return nil
+		},
+	}
+	headerCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	cmd.AddCommand(headerCmd)
+
+	inspectCmd := &cobra.Command{
+		Use:   "inspect",
+		Short: "Inspect the auth material applied for the API profile",
+		Long:  apiAuthInspectLong,
+		Args:  usageNoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.runAPIAuthInspect(cmd, []string{apiName})
+		},
+	}
+	inspectCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
+	inspectCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	inspectCmd.Flags().Bool("redact", false, "Redact sensitive auth values for shareable output")
+	cmd.AddCommand(inspectCmd)
+
+	logoutCmd := &cobra.Command{
+		Use:   "logout",
+		Short: "Delete cached API auth tokens",
+		Long:  apiAuthLogoutLong,
+		Args:  usageNoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if authProfile, _ := cmd.Flags().GetString("auth-profile"); authProfile != "" {
+				return c.runAPIAuthLogout(cmd, nil)
+			}
+			return c.runAPIAuthLogout(cmd, []string{apiName})
+		},
+	}
+	addAPIAuthLogoutFlags(logoutCmd)
+	cmd.AddCommand(logoutCmd)
+	return cmd
+}
