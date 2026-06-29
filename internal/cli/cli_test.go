@@ -3,8 +3,10 @@ package cli_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -115,7 +117,7 @@ paths:
 	}
 }
 
-func TestSetRootAPIMakesGeneratedOperationsTopLevel(t *testing.T) {
+func TestCommandSurfacePromotesGeneratedOperationsToRoot(t *testing.T) {
 	c, _, _ := newTestCLI(t)
 	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
 	specBody := `openapi: "3.1.0"
@@ -137,7 +139,7 @@ paths:
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(configBody), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	c.SetRootApi("svc")
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "svc"})
 
 	var rr requestRecorder
 	useTransport(c, func(r *http.Request) (*http.Response, error) {
@@ -160,7 +162,7 @@ paths:
 	}
 }
 
-func TestSetRootAPIOperationHelpDoesNotPanic(t *testing.T) {
+func TestCommandSurfacePromotedOperationHelpDoesNotPanic(t *testing.T) {
 	c, out, _ := newTestCLI(t)
 	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
 	specBody := `openapi: "3.1.0"
@@ -182,13 +184,159 @@ paths:
 	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(configBody), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	c.SetRootApi("svc")
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "svc"})
 
 	if err := c.Run([]string{"restish", "get-ping", "-h"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := out.String(); !strings.Contains(got, "get-ping") {
 		t.Fatalf("expected help output to mention command, got:\n%s", got)
+	}
+}
+
+func TestCommandSurfacePromotedAPIHelpFetchesSpecURLOnFirstRun(t *testing.T) {
+	var specRequests int
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.yaml":
+			specRequests++
+			w.Header().Set("Content-Type", "application/yaml")
+			fmt.Fprintf(w, `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+servers:
+  - url: %s
+paths:
+  /ping:
+    get:
+      operationId: getPing
+      responses:
+        "200":
+          description: OK
+`, baseURL)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	c, out, _ := newTestCLI(t)
+	c.SetDefaultConfig(&config.Config{APIs: map[string]*config.APIConfig{
+		"api": {
+			BaseURL: baseURL,
+			SpecURL: baseURL + "/openapi.yaml",
+		},
+	}})
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+
+	if err := c.Run([]string{"example", "--help"}); err != nil {
+		t.Fatalf("help: %v", err)
+	}
+	if specRequests != 1 {
+		t.Fatalf("spec requests = %d, want 1", specRequests)
+	}
+	if got := out.String(); !strings.Contains(got, "get-ping") {
+		t.Fatalf("help missing promoted operation:\n%s", got)
+	}
+}
+
+func TestCommandSurfaceSupportCommandsUnderNamespace(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	writeCommandSurfaceSpecConfig(t, c, "api", "getPing")
+	c.SetCommandSurface(cli.CommandSurface{
+		PromotedAPI:             "api",
+		SupportCommandNamespace: "cli",
+	})
+
+	if err := c.Run([]string{"example", "cli", "cache", "--help"}); err != nil {
+		t.Fatalf("support command help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "clear") {
+		t.Fatalf("namespaced cache help missing subcommand:\n%s", got)
+	}
+}
+
+func TestCommandSurfaceHideSupportCommands(t *testing.T) {
+	c, out, _ := newTestCLI(t)
+	writeCommandSurfaceSpecConfig(t, c, "api", "getPing")
+	c.SetCommandSurface(cli.CommandSurface{
+		PromotedAPI:         "api",
+		HideSupportCommands: true,
+	})
+
+	err := c.Run([]string{"example", "version"})
+	if err == nil || !strings.Contains(err.Error(), `unknown command "version"`) {
+		t.Fatalf("version command error = %v, want unknown command", err)
+	}
+
+	c, out, _ = newTestCLI(t)
+	writeCommandSurfaceSpecConfig(t, c, "api", "getPing")
+	c.SetCommandSurface(cli.CommandSurface{
+		PromotedAPI:         "api",
+		HideSupportCommands: true,
+	})
+	if err := c.Run([]string{"example", "--version"}); err != nil {
+		t.Fatalf("--version: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "2.0.0") {
+		t.Fatalf("--version output = %q", got)
+	}
+}
+
+func TestCommandSurfaceSupportCommandCollisionErrors(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	writeCommandSurfaceSpecConfig(t, c, "api", "cache")
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+
+	err := c.Run([]string{"example", "--help"})
+	if err == nil || !strings.Contains(err.Error(), "SupportCommandNamespace") {
+		t.Fatalf("collision error = %v, want SupportCommandNamespace hint", err)
+	}
+}
+
+func TestCommandSurfaceRootAuthHeader(t *testing.T) {
+	app := newTestApp(t)
+	app.SetConfigPath(writeAPIConfigObject(t, "api", testAPIConfig("https://api.example.com", profileAuth(apiKeyAuth("header", "X-Partner-Key", "secret")))))
+	app.CLI.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+
+	app.Run("auth", "header")
+	if got := strings.TrimSpace(app.Stdout.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth header = %q, want X-Partner-Key: secret", got)
+	}
+
+	app = newTestApp(t)
+	app.SetConfigPath(writeAPIConfigObject(t, "api", testAPIConfig("https://api.example.com", profileAuth(apiKeyAuth("query", "api_key", "secret")))))
+	app.CLI.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	err := app.RunErr("auth", "header")
+	if err == nil || !strings.Contains(err.Error(), "query string") {
+		t.Fatalf("query auth header error = %v, want query string error", err)
+	}
+}
+
+func writeCommandSurfaceSpecConfig(t *testing.T, c *cli.CLI, apiName, operationID string) {
+	t.Helper()
+	specPath := filepath.Join(t.TempDir(), "openapi.yaml")
+	specBody := fmt.Sprintf(`openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths:
+  /ping:
+    get:
+      operationId: %s
+      responses:
+        "200":
+          description: OK
+`, operationID)
+	if err := os.WriteFile(specPath, []byte(specBody), 0o600); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+	configBody := `{"apis":{` + strconv.Quote(apiName) + `:{"base_url":"https://api.example.com","spec_files":[` + strconv.Quote(specPath) + `]}}}`
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
 }
 

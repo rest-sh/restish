@@ -143,29 +143,52 @@ the same precedence rules as the stock binary.
 ## Single-API CLI
 
 Embedders that ship a CLI dedicated to one API can promote that API to the
-root command so its generated operations appear as top-level subcommands:
+root command so its generated operations appear as top-level subcommands.
+
+For a complete starting point, see
+[`examples/example-cli`](https://github.com/rest-sh/restish/tree/main/examples/example-cli).
 
 ```go
 cli := restish.New()
 cli.SetCommandName("mycli")
 cli.SetDefaultConfig(&restish.Config{
     APIs: map[string]*restish.APIConfig{
-        "myapi": {
-            BaseURL:   baseURL,
-            SpecFiles: []string{specPath},
+        "api": {
+            BaseURL: "https://api.example.com",
+            SpecURL: "https://api.example.com/openapi.yaml",
         },
     },
 })
-cli.SetRootApi("myapi")
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI: "api",
+})
 ```
 
-With `SetRootApi`, generated operations appear directly under the CLI's root
-command instead of being nested under the API name, the auto-generated
-`api auth inspect ...` hint is suppressed, and the built-in command tree
-(`api`, `cache`, `config`, generic HTTP verbs, etc.) is not registered.
-Global Restish flags (`--rsh-profile`, `--rsh-output-format`, …) remain
-available. The named API must be configured and its spec loadable when
-`Run` executes
+With `SetCommandSurface`, generated operations appear directly under the CLI's
+root command instead of being nested under the API name. Support commands such
+as `auth`, `cache`, `config`, `doctor`, `completion`, and `version` remain at
+root by default. Move them under a namespace when the API's operation names need
+the entire root:
+
+```go
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI:             "api",
+    SupportCommandNamespace: "cli",
+})
+```
+
+Or hide the support commands entirely:
+
+```go
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI:         "api",
+    HideSupportCommands: true,
+})
+```
+
+Global Restish flags (`--rsh-profile`, `--rsh-output-format`, ...) remain
+available. The promoted API must be configured and its spec loadable when
+generated commands are needed. For a reliable first run, configure `SpecURL`.
 
 ## Related Pages
 

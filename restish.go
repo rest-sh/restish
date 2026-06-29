@@ -73,11 +73,14 @@ type AuthParam = auth.Param
 // AuthContext is passed to custom auth handlers during request authentication.
 type AuthContext = auth.AuthContext
 
+// CommandSurface controls the command tree exposed by embedded custom CLIs.
+type CommandSurface = internalcli.CommandSurface
+
 // New returns a CLI wired to the real OS stdin/stdout/stderr and the default
 // Restish registries. Customize it with SetCommandName,
 // SetCommandDescription, SetVersion, SetSignalHandling, SetDefaultConfig,
-// SetRootApi, AddAuthHandler, AddContentType, AddEncoding, AddLinkParser,
-// AddLoader, and AddFormatter before calling Run.
+// SetCommandSurface, AddAuthHandler, AddContentType, AddEncoding,
+// AddLinkParser, AddLoader, and AddFormatter before calling Run.
 func New() *CLI {
 	return internalcli.New()
 }
