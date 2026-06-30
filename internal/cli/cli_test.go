@@ -17,6 +17,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/cli"
+	internalspec "github.com/rest-sh/restish/v2/internal/spec"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -307,6 +308,58 @@ func TestCommandSurfaceSyncedFallbackPreservesOriginalArgs(t *testing.T) {
 	}
 }
 
+func TestCommandSurfaceBaseURLFallbackRefreshesUnknownOperation(t *testing.T) {
+	specIncludesNew := false
+	var specRequests int
+	var lastPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			specRequests++
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, commandSurfaceRefreshSpec(specIncludesNew))
+		case "/new":
+			lastPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"ok":true}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	cfgFile := writeTestConfig(t, &config.Config{APIs: map[string]*config.APIConfig{
+		"api": {BaseURL: srv.URL},
+	}})
+	cacheDir := t.TempDir()
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "--help"}); err != nil {
+		t.Fatalf("prime help: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, "get-old") || strings.Contains(got, "get-new") {
+		t.Fatalf("expected initial help to use old cached operations, got:\n%s", got)
+	}
+
+	specIncludesNew = true
+	c, _, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "get-new"}); err != nil {
+		t.Fatalf("refreshed generated command: %v", err)
+	}
+	if lastPath != "/new" {
+		t.Fatalf("request path = %q, want /new", lastPath)
+	}
+	if specRequests < 2 {
+		t.Fatalf("spec requests = %d, want initial discovery and refresh", specRequests)
+	}
+}
+
 func commandSurfaceRefreshSpec(includeNew bool) string {
 	paths := `"/old":{"get":{"operationId":"getOld","responses":{"200":{"description":"OK"}}}}`
 	if includeNew {
@@ -402,6 +455,233 @@ func TestCommandSurfaceRootAuthHeader(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cookie") {
 		t.Fatalf("cookie auth header error = %v, want cookie error", err)
 	}
+}
+
+func TestCommandSurfaceRootAuthOperationFetchesMetadataOnFirstRun(t *testing.T) {
+	var specRequests int
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			specRequests++
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, commandSurfaceAuthSpec(baseURL, true))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	cfgFile := writeTestConfig(t, &config.Config{APIs: map[string]*config.APIConfig{
+		"api": {
+			BaseURL: srv.URL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": profileCredentials(map[string]*config.CredentialConfig{
+					"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+				}),
+			},
+		},
+	}})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "auth", "header", "--operation", "partner-report"}); err != nil {
+		t.Fatalf("auth header operation: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth header operation = %q, want X-Partner-Key: secret", got)
+	}
+	if specRequests != 1 {
+		t.Fatalf("spec requests = %d, want 1", specRequests)
+	}
+}
+
+func TestCommandSurfaceRootAuthOperationRefreshesMissingFreshOperation(t *testing.T) {
+	specIncludesPartner := false
+	var specRequests int
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			specRequests++
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, commandSurfaceAuthSpec(baseURL, specIncludesPartner))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	cfgFile := writeTestConfig(t, &config.Config{APIs: map[string]*config.APIConfig{
+		"api": {
+			BaseURL: srv.URL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": profileCredentials(map[string]*config.CredentialConfig{
+					"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+				}),
+			},
+		},
+	}})
+	cacheDir := t.TempDir()
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "--help"}); err != nil {
+		t.Fatalf("prime help: %v", err)
+	}
+	if got := out.String(); strings.Contains(got, "partner-report") {
+		t.Fatalf("expected initial help to omit partner-report, got:\n%s", got)
+	}
+
+	specIncludesPartner = true
+	c, out, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "auth", "header", "--operation", "partner-report"}); err != nil {
+		t.Fatalf("auth header operation: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth header operation = %q, want X-Partner-Key: secret", got)
+	}
+	if specRequests < 2 {
+		t.Fatalf("spec requests = %d, want initial discovery and refresh", specRequests)
+	}
+}
+
+func TestCommandSurfaceRootAuthOperationUsesRawSpecCacheBeforeRefresh(t *testing.T) {
+	var originRequests int
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originRequests++
+		http.NotFound(w, r)
+	}))
+	defer origin.Close()
+	var profileRequests int
+	profile := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		profileRequests++
+		http.NotFound(w, r)
+	}))
+	defer profile.Close()
+
+	rawSpec := openAPISpec(origin.URL, "Auth API",
+		openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+		openAPIPaths(openAPIGet("/v2/private", "", `"security":[{"PartnerKey":[]}]`)))
+	apiSpec, err := internalspec.OpenAPILoader{}.Load([]byte(rawSpec))
+	if err != nil {
+		t.Fatalf("load spec: %v", err)
+	}
+	cacheDir := t.TempDir()
+	if err := internalspec.StoreSpecInCache(cacheDir, "api", cli.Version, apiSpec, nil, internalspec.OperationOptions{
+		BaseURL:       origin.URL,
+		OperationBase: "/v1",
+	}, time.Hour); err != nil {
+		t.Fatalf("store spec cache: %v", err)
+	}
+
+	cfgFile := writeTestConfig(t, &config.Config{APIs: map[string]*config.APIConfig{
+		"api": {
+			BaseURL:       origin.URL,
+			OperationBase: "/v1",
+			Profiles: map[string]*config.ProfileConfig{
+				"staging": {
+					BaseURL:       profile.URL,
+					OperationBase: "/v2",
+					Credentials: map[string]*config.CredentialConfig{
+						"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+					},
+				},
+			},
+		},
+	}})
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = cacheDir
+	c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+	if err := c.Run([]string{"example", "--rsh-profile", "staging", "auth", "header", "--operation", "get-private"}); err != nil {
+		t.Fatalf("auth header operation: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "X-Partner-Key: secret" {
+		t.Fatalf("auth header operation = %q, want X-Partner-Key: secret", got)
+	}
+	if originRequests != 0 || profileRequests != 0 {
+		t.Fatalf("discovery requests: origin=%d profile=%d, want 0", originRequests, profileRequests)
+	}
+}
+
+func TestCommandSurfaceRootAuthOperationConflictsDoNotRefreshMetadata(t *testing.T) {
+	var specRequests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/openapi.json" {
+			specRequests++
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	cfgFile := writeTestConfig(t, &config.Config{APIs: map[string]*config.APIConfig{
+		"api": {
+			BaseURL: srv.URL,
+			Profiles: map[string]*config.ProfileConfig{
+				"default": profileCredentials(map[string]*config.CredentialConfig{
+					"PartnerKey": testCredential(apiKeyAuth("header", "X-Partner-Key", "secret")),
+				}),
+			},
+		},
+	}})
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "auth get credential and operation",
+			args: []string{"example", "auth", "get", "PartnerKey", "--operation", "partner-report"},
+			want: "--operation and credential ID are mutually exclusive",
+		},
+		{
+			name: "auth inspect credential and operation",
+			args: []string{"example", "auth", "inspect", "--credential", "PartnerKey", "--operation", "partner-report"},
+			want: "--operation and --credential are mutually exclusive",
+		},
+		{
+			name: "auth inspect operation and output format",
+			args: []string{"example", "auth", "inspect", "--operation", "partner-report", "-o", "json"},
+			want: "does not support -o/--rsh-output-format",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			specRequests = 0
+			c, _, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = cfgFile
+			c.SetCommandSurface(cli.CommandSurface{PromotedAPI: "api"})
+
+			err := c.Run(tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+			if specRequests != 0 {
+				t.Fatalf("spec requests = %d, want 0", specRequests)
+			}
+		})
+	}
+}
+
+func commandSurfaceAuthSpec(baseURL string, includePartner bool) string {
+	paths := []string{openAPIGet("/old", "oldReport", `"security":[{"PartnerKey":[]}]`)}
+	if includePartner {
+		paths = append(paths, openAPIGet("/partner", "partnerReport", `"security":[{"PartnerKey":[]}]`))
+	}
+	return openAPISpec(baseURL, "Auth API",
+		openAPISecuritySchemes(`"PartnerKey":{"type":"apiKey","in":"header","name":"X-Partner-Key"}`),
+		openAPIPaths(paths...))
 }
 
 func writeCommandSurfaceSpecConfig(t *testing.T, c *cli.CLI, apiName, operationID string) {

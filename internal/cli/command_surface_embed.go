@@ -59,10 +59,14 @@ func (c *CLI) ensurePromotedAPICommandMetadata(ctx context.Context, scan cliArgS
 	if apiCfg == nil {
 		return fmt.Errorf("command surface: promoted API %q is not configured", apiName)
 	}
+	return c.ensurePromotedAPIMetadata(ctx, apiName, scan.ProfileName, apiCfg)
+}
+
+func (c *CLI) ensurePromotedAPIMetadata(ctx context.Context, apiName, profileName string, apiCfg *config.APIConfig) error {
 	opts := spec.OperationOptions{
-		BaseURL:         effectiveProfileBaseURL(apiCfg, scan.ProfileName),
-		OperationBase:   effectiveOperationBase(apiCfg, scan.ProfileName),
-		ServerVariables: effectiveServerVariables(apiCfg, scan.ProfileName),
+		BaseURL:         effectiveProfileBaseURL(apiCfg, profileName),
+		OperationBase:   effectiveOperationBase(apiCfg, profileName),
+		ServerVariables: effectiveServerVariables(apiCfg, profileName),
 	}
 	stateName := c.apiStateName(apiName)
 	if _, status, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opts, false); ok && !status.Stale {
@@ -71,7 +75,7 @@ func (c *CLI) ensurePromotedAPICommandMetadata(ctx context.Context, scan cliArgS
 
 	refreshCtx, cancel := context.WithTimeout(ctx, staleGeneratedOperationRefreshTimeout)
 	defer cancel()
-	if _, err := c.discoverSpecForProfile(refreshCtx, apiName, scan.ProfileName, false, staleGeneratedOperationRefreshTimeout); err != nil {
+	if _, err := c.discoverSpecForProfile(refreshCtx, apiName, profileName, false, staleGeneratedOperationRefreshTimeout); err != nil {
 		if status, ok := c.promotedAPIStaleMetadataStatus(apiName, apiCfg, opts); ok {
 			c.warnf("could not refresh API metadata for %q; using last synced metadata from %s: %v", apiName, formatCacheTime(status.FetchedAt), err)
 			return nil
@@ -257,19 +261,65 @@ func (c *CLI) installPromotedRootFallback(root *cobra.Command, cfg *config.Confi
 		if len(args) == 0 {
 			return cmd.Help()
 		}
-		if c.shouldSyncPromotedRootCommand(cfg, args) {
+		if c.shouldSyncPromotedRootCommand(cmd, cfg, args) {
 			return c.runSyncedPromotedAPICommand(cmd, cfg, args, originalArgs)
 		}
 		return unknownCommandError(cmd, args[0], "run "+strconvQuote(cmd.CommandPath()+" --help")+" to see available commands")
 	}
 }
 
-func (c *CLI) shouldSyncPromotedRootCommand(cfg *config.Config, args []string) bool {
+func (c *CLI) shouldSyncPromotedRootCommand(cmd *cobra.Command, cfg *config.Config, args []string) bool {
 	if len(args) == 0 || !looksLikeGeneratedCommandToken(args[0]) {
 		return false
 	}
 	apiCfg := cfg.APIs[c.promotedAPIName()]
-	return apiHasSpecSource(apiCfg)
+	return promotedAPIHasRefreshSource(apiCfg, c.profileFromCmd(cmd))
+}
+
+func promotedAPIHasRefreshSource(apiCfg *config.APIConfig, profileName string) bool {
+	if apiCfg == nil {
+		return false
+	}
+	return apiHasSpecSource(apiCfg) || effectiveProfileBaseURL(apiCfg, profileName) != ""
+}
+
+func (c *CLI) ensurePromotedAPIAuthOperationMetadata(cmd *cobra.Command, apiName string, args []string) error {
+	operation, _ := cmd.Flags().GetString("operation")
+	operation = strings.TrimSpace(operation)
+	if operation == "" || promotedAPIAuthOperationValidationDeferred(cmd, args) {
+		return nil
+	}
+	apiCfg, err := c.requireAPI(apiName)
+	if err != nil {
+		return err
+	}
+	ctx := requestContext(cmd)
+	profileName := c.profileFromCmd(cmd)
+	if _, ok, err := c.cachedOperationForAPI(ctx, apiName, apiCfg, profileName, operation); err != nil {
+		return err
+	} else if ok || !promotedAPIHasRefreshSource(apiCfg, profileName) {
+		return nil
+	}
+
+	refreshCtx, cancel := context.WithTimeout(ctx, staleGeneratedOperationRefreshTimeout)
+	defer cancel()
+	if _, ok, err := c.operationSetForAPI(refreshCtx, apiName, apiCfg, profileName, true); err != nil {
+		return fmt.Errorf("generated commands for promoted API %q are not available: %w", apiName, err)
+	} else if !ok {
+		return fmt.Errorf("generated commands for promoted API %q are not available", apiName)
+	}
+	return nil
+}
+
+func promotedAPIAuthOperationValidationDeferred(cmd *cobra.Command, args []string) bool {
+	if len(args) > 0 {
+		return true
+	}
+	credential, _ := cmd.Flags().GetString("credential")
+	if strings.TrimSpace(credential) != "" {
+		return true
+	}
+	return false
 }
 
 func (c *CLI) runSyncedPromotedAPICommand(cmd *cobra.Command, cfg *config.Config, args, originalArgs []string) error {
@@ -328,6 +378,9 @@ func (c *CLI) newPromotedAPIAuthCommand(apiName string) *cobra.Command {
 	}
 	getCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
 	getCmd.Flags().Bool("print-header", false, "Print the single resolved header as 'Name: value' on stdout and exit non-zero for any non-header auth")
+	getCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		return c.ensurePromotedAPIAuthOperationMetadata(cmd, apiName, args)
+	}
 	cmd.AddCommand(getCmd)
 
 	headerCmd := &cobra.Command{
@@ -345,6 +398,9 @@ func (c *CLI) newPromotedAPIAuthCommand(apiName string) *cobra.Command {
 		},
 	}
 	headerCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
+	headerCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		return c.ensurePromotedAPIAuthOperationMetadata(cmd, apiName, args)
+	}
 	cmd.AddCommand(headerCmd)
 
 	inspectCmd := &cobra.Command{
@@ -359,6 +415,12 @@ func (c *CLI) newPromotedAPIAuthCommand(apiName string) *cobra.Command {
 	inspectCmd.Flags().String("credential", "", "Credential ID to inspect instead of profile-level auth")
 	inspectCmd.Flags().String("operation", "", "Operation ID or command name to inspect")
 	inspectCmd.Flags().Bool("redact", false, "Redact sensitive auth values for shareable output")
+	inspectCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := rejectResponseTransformFlags(cmd); err != nil {
+			return err
+		}
+		return c.ensurePromotedAPIAuthOperationMetadata(cmd, apiName, args)
+	}
 	cmd.AddCommand(inspectCmd)
 
 	logoutCmd := &cobra.Command{
