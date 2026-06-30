@@ -140,6 +140,56 @@ mycorp api connect billing https://billing.example.com --spec ./openapi.yaml
 Keep config explicit. `RSH_CONFIG_DIR`, `RSH_CONFIG`, and `--rsh-config` keep
 the same precedence rules as the stock binary.
 
+## Single-API CLI
+
+Embedders that ship a CLI dedicated to one API can promote that API to the
+root command so its generated operations appear as top-level subcommands.
+
+For a complete starting point, see
+[`examples/example-cli`](https://github.com/rest-sh/restish/tree/main/examples/example-cli).
+
+```go
+cli := restish.New()
+cli.SetCommandName("mycli")
+cli.SetDefaultConfig(&restish.Config{
+    APIs: map[string]*restish.APIConfig{
+        "api": {
+            BaseURL: "https://api.example.com",
+            SpecURL: "https://api.example.com/openapi.yaml",
+        },
+    },
+})
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI: "api",
+})
+```
+
+With `SetCommandSurface`, generated operations appear directly under the CLI's
+root command instead of being nested under the API name. Support commands such
+as `auth`, `cache`, `config`, `doctor`, `completion`, and `version` remain at
+root by default. Move them under a namespace when the API's operation names need
+the entire root:
+
+```go
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI:             "api",
+    SupportCommandNamespace: "cli",
+})
+```
+
+Or hide the support commands entirely:
+
+```go
+cli.SetCommandSurface(restish.CommandSurface{
+    PromotedAPI:         "api",
+    HideSupportCommands: true,
+})
+```
+
+Global Restish flags (`--rsh-profile`, `--rsh-output-format`, ...) remain
+available. The promoted API must be configured and its spec loadable when
+generated commands are needed. For a reliable first run, configure `SpecURL`.
+
 ## Related Pages
 
 - [API Setup and Discovery](/docs/guides/api-setup-and-discovery/)

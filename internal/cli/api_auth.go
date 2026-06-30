@@ -373,9 +373,27 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 }
 
 func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
+	fragment, err := c.apiAuthGetFragment(cmd, args)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(c.Stdout, fragment)
+	return nil
+}
+
+func (c *CLI) apiAuthGetFragment(cmd *cobra.Command, args []string) (string, error) {
+	printHeader, _ := cmd.Flags().GetBool("print-header")
+	return c.apiAuthGetFragmentMode(cmd, args, printHeader)
+}
+
+func (c *CLI) apiAuthGetHeaderFragment(cmd *cobra.Command, args []string) (string, error) {
+	return c.apiAuthGetFragmentMode(cmd, args, true)
+}
+
+func (c *CLI) apiAuthGetFragmentMode(cmd *cobra.Command, args []string, printHeader bool) (string, error) {
 	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
-		return fmt.Errorf("api auth get expects an API name, not a URL")
+		return "", fmt.Errorf("api auth get expects an API name, not a URL")
 	}
 	credentialID := ""
 	if len(args) == 2 {
@@ -384,47 +402,53 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if operation, _ := cmd.Flags().GetString("operation"); operation != "" {
 		if credentialID != "" {
-			return fmt.Errorf("--operation and credential ID are mutually exclusive")
+			return "", fmt.Errorf("--operation and credential ID are mutually exclusive")
 		}
-		printHeader, _ := cmd.Flags().GetBool("print-header")
-		return c.runAPIAuthGetOperation(cmd, apiName, profileName, apiCfg, prof, operation, printHeader)
+		return c.apiAuthGetOperationFragment(cmd, apiName, profileName, apiCfg, prof, operation, printHeader)
 	}
 	if credentialID == "" {
 		resolvedProfile, err := c.resolveProfileAuth(apiName, profileName, prof)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if resolvedProfile.Config == nil {
 			ids := configuredCredentialIDs(prof)
 			if len(ids) > 1 {
-				return fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass a credential ID: %s api auth get %s <credential-id>", profileName, apiName, strings.Join(ids, ", "), c.commandNameOrDefault(), apiName)
+				return "", fmt.Errorf("profile %q of API %q has multiple configured credentials (%s); pass a credential ID: %s api auth get %s <credential-id>", profileName, apiName, strings.Join(ids, ", "), c.commandNameOrDefault(), apiName)
 			}
 		}
 	}
 
 	resolved, _, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, credentialID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if resolved.Config == nil {
-		return c.missingAuthConfigError(apiName, profileName)
+		return "", c.missingAuthConfigError(apiName, profileName)
 	}
 	req, err := c.authInspectionRequest(cmd, apiName, profileName, resolved)
 	if err != nil {
-		return err
+		return "", err
 	}
 	configs := []*config.AuthConfig{resolved.Config}
-	printHeader, _ := cmd.Flags().GetBool("print-header")
 	if printHeader {
-		return c.runAPIAuthGetPrintHeader(req, configs, apiName, profileName)
+		return authHeaderFragment(req, configs, apiName, profileName)
 	}
 	fragment, err := authGetFragment(req, configs)
 	if err != nil {
-		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName)
+		return "", fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName)
+	}
+	return fragment, nil
+}
+
+func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) error {
+	fragment, err := c.apiAuthGetOperationFragment(cmd, apiName, profileName, apiCfg, prof, operationName, printHeader)
+	if err != nil {
+		return err
 	}
 	fmt.Fprintln(c.Stdout, fragment)
 	return nil
@@ -437,11 +461,20 @@ func (c *CLI) runAPIAuthGet(cmd *cobra.Command, args []string) error {
 // and external Go binaries use to obtain a bearer token without going
 // through the restish CLI's full request flow.
 func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.AuthConfig, apiName, profileName string) error {
+	fragment, err := authHeaderFragment(req, configs, apiName, profileName)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(c.Stdout, fragment)
+	return nil
+}
+
+func authHeaderFragment(req *http.Request, configs []*config.AuthConfig, apiName, profileName string) (string, error) {
 	if req.URL != nil && req.URL.RawQuery != "" {
-		return fmt.Errorf("auth for %s:%s is applied as a query parameter, not a header; --print-header is not applicable", apiName, profileName)
+		return "", fmt.Errorf("auth for %s:%s is applied as a query parameter, not a header; --print-header is not applicable", apiName, profileName)
 	}
 	if authInspectionAppliesCookie(configs) {
-		return fmt.Errorf("auth for %s:%s is applied as a cookie, not a header; --print-header is not applicable", apiName, profileName)
+		return "", fmt.Errorf("auth for %s:%s is applied as a cookie, not a header; --print-header is not applicable", apiName, profileName)
 	}
 	headers := 0
 	var name, value string
@@ -456,12 +489,11 @@ func (c *CLI) runAPIAuthGetPrintHeader(req *http.Request, configs []*config.Auth
 	}
 	switch headers {
 	case 0:
-		return fmt.Errorf("auth for %s:%s did not produce a header value", apiName, profileName)
+		return "", fmt.Errorf("auth for %s:%s did not produce a header value", apiName, profileName)
 	case 1:
-		fmt.Fprintf(c.Stdout, "%s: %s\n", name, value)
-		return nil
+		return name + ": " + value, nil
 	default:
-		return fmt.Errorf("auth for %s:%s produced multiple header values; --print-header expects a single header", apiName, profileName)
+		return "", fmt.Errorf("auth for %s:%s produced multiple header values; --print-header expects a single header", apiName, profileName)
 	}
 }
 
@@ -474,19 +506,19 @@ func authInspectionAppliesCookie(configs []*config.AuthConfig) bool {
 	return false
 }
 
-func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) error {
+func (c *CLI) apiAuthGetOperationFragment(cmd *cobra.Command, apiName, profileName string, apiCfg *config.APIConfig, prof *config.ProfileConfig, operationName string, printHeader bool) (string, error) {
 	op, ok, err := c.cachedOperationForAPI(requestContext(cmd), apiName, apiCfg, profileName, operationName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !ok {
-		return fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
+		return "", fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
 	}
 	if op.NoAuth {
-		return fmt.Errorf("operation %q has security: [] and does not send auth material", op.ID)
+		return "", fmt.Errorf("operation %q has security: [] and does not send auth material", op.ID)
 	}
 	if op.OptionalAuth && len(op.CredentialAlternatives) == 0 {
-		return fmt.Errorf("operation %q has anonymous-only security and does not send auth material", op.ID)
+		return "", fmt.Errorf("operation %q has anonymous-only security and does not send auth material", op.ID)
 	}
 
 	var selected []selectedOperationAuth
@@ -497,36 +529,35 @@ func (c *CLI) runAPIAuthGetOperation(cmd *cobra.Command, apiName, profileName st
 			CredentialAlternatives: op.CredentialAlternatives,
 		})
 		if err != nil {
-			return err
+			return "", err
 		}
 		if !selectedOK || len(selected) == 0 {
-			return fmt.Errorf("operation %q did not select auth material", op.ID)
+			return "", fmt.Errorf("operation %q did not select auth material", op.ID)
 		}
 	} else {
 		resolved, selectedCredential, err := c.resolveAuthInspectionConfig(apiName, profileName, prof, "")
 		if err != nil {
-			return err
+			return "", err
 		}
 		if resolved.Config == nil {
-			return fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
+			return "", fmt.Errorf("profile %q of API %q has no auth config", profileName, apiName)
 		}
 		selected = []selectedOperationAuth{{requirement: spec.CredentialRequirement{ID: selectedCredential}, resolved: resolved, source: "profile auth"}}
 	}
 
 	req, err := c.operationAuthInspectionRequest(cmd, apiName, profileName, selected)
 	if err != nil {
-		return err
+		return "", err
 	}
 	configs := selectedOperationAuthConfigs(selected)
 	if printHeader {
-		return c.runAPIAuthGetPrintHeader(req, configs, apiName, profileName)
+		return authHeaderFragment(req, configs, apiName, profileName)
 	}
 	fragment, err := authGetFragment(req, configs)
 	if err != nil {
-		return fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName+" --operation "+operationName)
+		return "", fmt.Errorf("%w; run %q for details", err, c.commandNameOrDefault()+" api auth inspect "+apiName+" --operation "+operationName)
 	}
-	fmt.Fprintln(c.Stdout, fragment)
-	return nil
+	return fragment, nil
 }
 
 func authGetFragment(req *http.Request, configs []*config.AuthConfig) (string, error) {

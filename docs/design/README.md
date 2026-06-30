@@ -176,6 +176,7 @@ were a recurring source of remediation work.
 
 - [../plugin-quickstart.md](../plugin-quickstart.md) - Fastest path to a working plugin, with small formatter and command-plugin examples.
 - [018-plugin-architecture-overview.md](./018-plugin-architecture-overview.md) - Discovery, manifests, plugin trust model, lifecycle ownership, and the relationship to the in-process registry model.
+- [042-custom-cli-embedding-surface.md](./042-custom-cli-embedding-surface.md) - Proposed custom CLI embedding surface for single-API branded binaries, including root API promotion, on-demand spec refresh, support command placement, and app-shaped auth/cache/config/doctor sugar.
 - [019-hook-plugins.md](./019-hook-plugins.md) - Short-lived auth, middleware, loader, and formatter plugins, including timeout, error, and output contracts.
 - [020-command-plugins.md](./020-command-plugins.md) - Long-lived workflow commands that delegate HTTP and formatting back to Restish, with message lifecycle and stdio rules.
 - [021-tls-signer-plugins.md](./021-tls-signer-plugins.md) - External mTLS signing for hardware-backed or otherwise non-exportable client keys, including signer lifecycle and teardown.

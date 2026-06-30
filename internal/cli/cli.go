@@ -128,6 +128,7 @@ type CLI struct {
 	silentMode              bool
 	requestExecutionStarted bool
 	bodyPrefixHinted        bool
+	commandSurface          CommandSurface
 	runCtx                  context.Context
 	projectConfig           *projectConfigState
 }
@@ -627,7 +628,7 @@ func (c *CLI) Run(args []string) error {
 		return fmt.Errorf("config theme: %w", err)
 	}
 	for apiName := range cfg.APIs {
-		if isBuiltinCommandName(apiName) {
+		if isBuiltinCommandName(apiName) && !c.isPromotedAPI(apiName) {
 			return fmt.Errorf("config: API name %q conflicts with a built-in command; rename it before continuing", apiName)
 		}
 		if err := config.ValidateAPIName(apiName); err != nil {
@@ -665,7 +666,12 @@ func (c *CLI) Run(args []string) error {
 
 	root := c.newRootCmd()
 	c.quietGeneratedWarnings = quietGeneratedWarningsForScan(argScan, cfg)
-	c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
+	if err := c.ensurePromotedAPICommandMetadata(ctx, argScan, cfg); err != nil {
+		return err
+	}
+	if !c.hasPromotedAPI() {
+		c.refreshStaleGeneratedMetadataForCommand(ctx, argScan, cfg)
+	}
 
 	// Register generated commands for APIs whose spec is already cached.
 	// When the first positional arg names a configured API, only load that
@@ -673,6 +679,7 @@ func (c *CLI) Run(args []string) error {
 	// (Network discovery is not triggered here; use "restish api sync <name>"
 	// to prime the cache for an API.)
 	startupProfile := argScan.ProfileName
+	var promotedAPICmd *cobra.Command
 	for _, apiName := range c.generatedAPINamesForScan(argScan, cfg) {
 		apiCfg := cfg.APIs[apiName]
 		opOpts := spec.OperationOptions{
@@ -683,7 +690,14 @@ func (c *CLI) Run(args []string) error {
 		stateName := c.apiStateName(apiName)
 		if set, _, ok := spec.LoadOperationSetFromCacheStatus(c.specCacheDir(), stateName, Version, apiCfg.SpecFiles, opOpts, true); ok {
 			if apiCmd := c.buildAPICommandFromOperationSet(apiName, apiCfg, set, opOpts.OperationBase); apiCmd != nil {
-				root.AddCommand(apiCmd)
+				if c.isPromotedAPI(apiName) {
+					promotedAPICmd = apiCmd
+					if !rootHasCommand(root, apiName) {
+						root.AddCommand(apiCmd)
+					}
+				} else {
+					root.AddCommand(apiCmd)
+				}
 			}
 			continue
 		}
@@ -702,10 +716,20 @@ func (c *CLI) Run(args []string) error {
 			_ = spec.StoreOperationSetInCache(c.specCacheDir(), stateName, Version, opOpts, set)
 		}
 		if apiCmd := c.buildAPICommandFromOperationResult(apiName, apiCfg, set, opOpts.OperationBase, opsErr); apiCmd != nil {
-			root.AddCommand(apiCmd)
+			if c.isPromotedAPI(apiName) {
+				promotedAPICmd = apiCmd
+				if !rootHasCommand(root, apiName) {
+					root.AddCommand(apiCmd)
+				}
+			} else {
+				root.AddCommand(apiCmd)
+			}
 		}
 	}
 	c.addAPIShortNameCommands(root, cfg)
+	if err := c.applyCommandSurface(root, promotedAPICmd, argScan, cfg, args); err != nil {
+		return err
+	}
 
 	err = c.executeRoot(ctx, root, args)
 	// When the context was cancelled by a signal (SIGINT/SIGTERM), return
@@ -1057,7 +1081,7 @@ func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
 
 	for _, apiName := range names {
 		apiCfg := cfg.APIs[apiName]
-		if apiCfg == nil || isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
+		if apiCfg == nil || c.isPromotedAPI(apiName) || isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
 			continue
 		}
 		apiName := apiName
@@ -1192,6 +1216,12 @@ func quietGeneratedWarningsForScan(scan cliArgScan, cfg *config.Config) bool {
 func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []string {
 	if scan.VersionFlag {
 		return nil
+	}
+	if promoted := c.promotedAPIName(); promoted != "" {
+		if !c.promotedAPICommandMetadataNeeded(scan) {
+			return nil
+		}
+		return []string{promoted}
 	}
 	if scan.GeneratedAPICommandTree {
 		if scan.FirstCommand != "" && !isBuiltinCommandName(scan.FirstCommand) {
