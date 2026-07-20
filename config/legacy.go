@@ -254,9 +254,18 @@ func convertLegacyProfile(legacy *legacyAPIProfile) *ProfileConfig {
 		Query:   sortedQueryList(legacy.Query),
 	}
 	if legacy.Auth != nil {
+		params := cloneStringMap(legacy.Auth.Params)
+		switch legacy.Auth.Name {
+		case "oauth-authorization-code", "oauth-client-credentials":
+			// v1 accepted scope as an endpoint pass-through; v2 names it scopes.
+			if scope, ok := params["scope"]; ok {
+				params["scopes"] = scope
+				delete(params, "scope")
+			}
+		}
 		prof.Auth = &AuthConfig{
 			Type:   legacy.Auth.Name,
-			Params: cloneStringMap(legacy.Auth.Params),
+			Params: params,
 		}
 	}
 	return prof
