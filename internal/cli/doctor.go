@@ -37,7 +37,7 @@ func (c *CLI) addDoctorCommand(root *cobra.Command) {
 	doctorCmd.AddCommand(&cobra.Command{
 		Use:   "api <name>",
 		Short: "Diagnose a registered API",
-		Long:  doctorAPILong,
+		Long:  doctorAPILongFor(c.commandNameOrDefault()),
 		Example: fmt.Sprintf(`  %s doctor api demo
   %s doctor api demo --check-network`, c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: usageExactArgs(1),
@@ -332,11 +332,11 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "Spec cache: %s\n", style.ok("present"))
 		}
 	} else {
-		fmt.Fprintf(out, "Spec cache: %s (%s)\n", style.warn("missing"), style.hint("run \"restish api sync "+name+"\""))
+		fmt.Fprintf(out, "Spec cache: %s (%s)\n", style.warn("missing"), style.hint("run \""+c.commandNameOrDefault()+" api sync "+name+"\""))
 	}
 	if opInfo.Available {
 		if opInfo.Cached && opInfo.CacheStatus.Stale {
-			fmt.Fprintf(out, "Generated operations: %d %s (%s; %s)\n", len(opInfo.Set.Operations), style.ok("available"), style.warn("stale"), style.hint("refresh with \"restish api sync "+name+"\""))
+			fmt.Fprintf(out, "Generated operations: %d %s (%s; %s)\n", len(opInfo.Set.Operations), style.ok("available"), style.warn("stale"), style.hint("refresh with \""+c.commandNameOrDefault()+" api sync "+name+"\""))
 		} else {
 			fmt.Fprintf(out, "Generated operations: %d %s\n", len(opInfo.Set.Operations), style.ok("available"))
 		}
@@ -345,7 +345,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 		}
 		printXCLIExtensionDoctorDetails(out, style, opInfo.Set.XCLIExtensions)
 	} else {
-		fmt.Fprintf(out, "Generated operations: %s (%s)\n", style.warn("unavailable"), style.hint("run \"restish api sync "+name+"\""))
+		fmt.Fprintf(out, "Generated operations: %s (%s)\n", style.warn("unavailable"), style.hint("run \""+c.commandNameOrDefault()+" api sync "+name+"\""))
 	}
 	if auth := c.doctorAuthForProfile(name, profileName, profileForName(api, profileName)); auth.Status == "configured" {
 		if len(auth.Sources) > 0 {
@@ -362,7 +362,7 @@ func (c *CLI) runDoctorAPI(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(out, "Auth: %s\n", style.warn("no profile auth configured"))
 	}
-	fmt.Fprintf(out, "Auth details: restish api auth inspect %s\n", name)
+	fmt.Fprintf(out, "Auth details: %s api auth inspect %s\n", c.commandNameOrDefault(), name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		c.printAPIReachability(out, style, c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName))
@@ -467,7 +467,7 @@ func (c *CLI) doctorRootReport() doctorRootReport {
 		PluginDirectory:       c.pluginDir(),
 		InstalledPlugins:      c.doctorInstalledPluginsReport(),
 		ContentTypes:          c.doctorContentTypesReport(),
-		ShellSetup:            doctorShellSetupReportValue(),
+		ShellSetup:            doctorShellSetupReportValue(c.commandNameOrDefault()),
 	}
 }
 
@@ -714,7 +714,7 @@ func doctorFilePermissionReport(path, remediation string) doctorPermissionReport
 	return doctorPermissionReport{Status: "ok"}
 }
 
-func doctorShellSetupReportValue() doctorShellSetupReport {
+func doctorShellSetupReportValue(commandName string) doctorShellSetupReport {
 	shell, source := detectRunningShell()
 	if shell == "" {
 		return doctorShellSetupReport{Status: "unknown"}
@@ -722,7 +722,7 @@ func doctorShellSetupReportValue() doctorShellSetupReport {
 	if _, ok := shellSetups[shell]; !ok {
 		return doctorShellSetupReport{Status: "unsupported", Shell: shell, Source: source}
 	}
-	hint := fmt.Sprintf("run `restish shell setup %s` if glob expansion causes trouble", shell)
+	hint := fmt.Sprintf("run `%s shell setup %s` if glob expansion causes trouble", commandName, shell)
 	if source == "$SHELL" {
 		hint += " (detected via $SHELL)"
 	}
@@ -783,7 +783,7 @@ func (c *CLI) doctorAPIReport(cmd *cobra.Command, name string) doctorAPIReport {
 		}
 	}
 	report.Auth = c.doctorAuthForProfile(name, profileName, profileForName(api, profileName))
-	report.Auth.Hint = fmt.Sprintf("run `restish api auth inspect %s` for credential coverage and auth material", name)
+	report.Auth.Hint = fmt.Sprintf("run `%s api auth inspect %s` for credential coverage and auth material", c.commandNameOrDefault(), name)
 	checkNetwork, _ := cmd.Flags().GetBool("check-network")
 	if checkNetwork {
 		report.Reachability = c.checkAPIReachability(requestContext(cmd), name, effectiveProfileBaseURL(api, profileName), api, profileName)
@@ -933,10 +933,10 @@ func (c *CLI) printShellSetupDiagnostic(out io.Writer, style humanTextStyle) {
 		return
 	}
 	if source == "$SHELL" {
-		fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble (detected via $SHELL)\n", style.hint("run `restish shell setup "+shell+"`"))
+		fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble (detected via $SHELL)\n", style.hint("run `"+c.commandNameOrDefault()+" shell setup "+shell+"`"))
 		return
 	}
-	fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble\n", style.hint("run `restish shell setup "+shell+"`"))
+	fmt.Fprintf(out, "Shell setup: %s if glob expansion causes trouble\n", style.hint("run `"+c.commandNameOrDefault()+" shell setup "+shell+"`"))
 }
 
 func (c *CLI) checkAPIReachability(ctx context.Context, apiName, baseURL string, apiCfg *config.APIConfig, profileName string) doctorReachabilityReport {

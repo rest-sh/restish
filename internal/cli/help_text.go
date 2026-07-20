@@ -1,11 +1,15 @@
 package cli
 
-const rootLongDefault = "**Restish** is a CLI for interacting with REST-ish HTTP APIs.\n\n" +
-	"Every API deserves a CLI. Restish gives you:\n\n" +
-	"- Generic HTTP commands for quick one-off requests.\n" +
-	"- OpenAPI-backed commands for registered APIs.\n" +
-	"- Output, filtering, auth, pagination, retries, caching, and plugins that stay friendly to the shell.\n\n" +
-	"Run `restish api connect` when an API should become a named command surface. Run `restish get`, `restish post`, and the other HTTP commands when a direct URL is enough."
+import "fmt"
+
+func rootLongDefaultFor(commandName string) string {
+	return "**Restish** is a CLI for interacting with REST-ish HTTP APIs.\n\n" +
+		"Every API deserves a CLI. Restish gives you:\n\n" +
+		"- Generic HTTP commands for quick one-off requests.\n" +
+		"- OpenAPI-backed commands for registered APIs.\n" +
+		"- Output, filtering, auth, pagination, retries, caching, and plugins that stay friendly to the shell.\n\n" +
+		fmt.Sprintf("Run `%s api connect` when an API should become a named command surface. Run `%s get`, `%s post`, and the other HTTP commands when a direct URL is enough.", commandName, commandName, commandName)
+}
 
 const versionLong = "Print the Restish version and exit.\n\n" +
 	"Use this in bug reports, release checks, and scripts that need to confirm which Restish binary is running."
@@ -35,9 +39,11 @@ const apiConnectLong = "Connect Restish to an API, discover its OpenAPI descript
 const apiInspectLong = "Print the saved config for one registered API as redacted JSON.\n\n" +
 	"Use this when you need the local API entry, including profiles, headers, query defaults, auth config, spec URLs, and generated-command settings. Sensitive auth values, credential-like headers, and credential-like query parameters are redacted in the output."
 
-const apiSetLong = "Patch one registered API using Restish shorthand syntax.\n\n" +
-	"Use this for durable local overrides such as profile URLs, default headers, query parameters, auth settings, and server variables. Patches are applied to the saved config file; they do not update the remote API or the cached OpenAPI document.\n\n" +
-	"Run `restish api inspect <name>` first when you want to confirm the current config shape."
+func apiSetLongFor(commandName string) string {
+	return "Patch one registered API using Restish shorthand syntax.\n\n" +
+		"Use this for durable local overrides such as profile URLs, default headers, query parameters, auth settings, and server variables. Patches are applied to the saved config file; they do not update the remote API or the cached OpenAPI document.\n\n" +
+		fmt.Sprintf("Run `%s api inspect <name>` first when you want to confirm the current config shape.", commandName)
+}
 
 const apiAuthLong = "Manage auth material for a registered API profile.\n\n" +
 	"Use these commands when a generated OpenAPI command reports missing auth, when you want to see which credentials satisfy secured operations, or when cached OAuth tokens need to be cleared.\n\n" +
@@ -135,8 +141,10 @@ const linksLong = "Perform a `GET` request and print hypermedia links found in t
 const doctorLong = "Diagnose Restish configuration and runtime paths.\n\n" +
 	"Use this when Restish is reading the wrong config, permissions look suspicious, shell setup is incomplete, caches are in unexpected locations, or plugin discovery is confusing. Pass `-o json` for structured diagnostics."
 
-const doctorAPILong = "Diagnose one registered API.\n\n" +
-	"The report checks registration, spec cache freshness, generated operation availability, shallow auth readiness, and optional network reachability. Use `--check-network` when you want Restish to make a bounded request to the API base URL. For detailed credential coverage and auth material, run `restish api auth inspect <api>`."
+func doctorAPILongFor(commandName string) string {
+	return "Diagnose one registered API.\n\n" +
+		fmt.Sprintf("The report checks registration, spec cache freshness, generated operation availability, shallow auth readiness, and optional network reachability. Use `--check-network` when you want Restish to make a bounded request to the API base URL. For detailed credential coverage and auth material, run `%s api auth inspect <api>`.", commandName)
+}
 
 const doctorPluginLong = "Diagnose one Restish plugin executable.\n\n" +
 	"The report checks plugin discovery, executable status, manifest loading, declared capabilities, and Restish plugin protocol compatibility."
