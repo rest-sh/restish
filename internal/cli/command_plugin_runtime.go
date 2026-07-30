@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -120,6 +121,26 @@ func (w *commandPluginWaiter) Wait(grace time.Duration) error {
 }
 
 func (c *CLI) runCommandPlugin(cmd *cobra.Command, pluginPath string, decl pluginwire.CommandDecl, args []string) error {
+	if globalFlagsFromContext(requestContext(cmd)).Raw {
+		return fmt.Errorf("%s does not support -r/--rsh-raw", cmd.CommandPath())
+	}
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--rsh-raw" {
+			return fmt.Errorf("%s does not support -r/--rsh-raw", cmd.CommandPath())
+		}
+		if value, ok := strings.CutPrefix(arg, "--rsh-raw="); ok {
+			enabled, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid --rsh-raw value %q: %w", value, err)
+			}
+			if enabled {
+				return fmt.Errorf("%s does not support -r/--rsh-raw", cmd.CommandPath())
+			}
+		}
+	}
 	syncErr := &commandPluginWriter{w: cmd.ErrOrStderr()}
 	cmd.SetErr(syncErr)
 	args = stripHostPersistentFlags(cmd, args)

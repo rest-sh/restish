@@ -50,6 +50,9 @@ func rejectUnsupportedResponseTransformFlags(cmd *cobra.Command, gf GlobalFlags,
 
 func unsupportedResponseTransformFlagNames(cmd *cobra.Command, gf GlobalFlags) []string {
 	var names []string
+	if gf.Raw {
+		names = append(names, "-r/--rsh-raw")
+	}
 	if gf.PrintSet {
 		names = append(names, "--rsh-print")
 	}

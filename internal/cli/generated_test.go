@@ -551,6 +551,42 @@ func TestGeneratedCommandRefreshesStaleOperationCacheOnUse(t *testing.T) {
 	}
 }
 
+func TestLazyGeneratedCommandPreservesRawOutputFlag(t *testing.T) {
+	mux := http.NewServeMux()
+	var serverURL string
+	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, specWithOperations(serverURL))
+	})
+	raw := "[ { \"id\": 1 } ]\n"
+	mux.HandleFunc("/items", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, raw)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	serverURL = srv.URL
+
+	cfgData, _ := json.Marshal(&config.Config{APIs: map[string]*config.APIConfig{
+		"tapi": {BaseURL: srv.URL, SpecURL: srv.URL + "/openapi.json"},
+	}})
+	cfgFile := t.TempDir() + "/restish.json"
+	if err := os.WriteFile(cfgFile, cfgData, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+
+	if err := c.Run([]string{"restish", "-r", "tapi", "list-items"}); err != nil {
+		t.Fatalf("generated command: %v", err)
+	}
+	if got := out.String(); got != raw {
+		t.Fatalf("raw generated output = %q, want %q", got, raw)
+	}
+}
+
 func TestGeneratedCommandRefreshesStaleRawSpecWhenOperationCacheMissing(t *testing.T) {
 	var specHits atomic.Int32
 	mux := http.NewServeMux()

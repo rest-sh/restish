@@ -99,13 +99,26 @@ func TestStreamingRawRedirectDecompressesContentEncoding(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
-	if err := c.Run([]string{"restish", "get", srv.URL + "/stream"}); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got := out.String(); got != raw {
-		t.Fatalf("raw streaming output = %q, want decompressed %q", got, raw)
+	for _, tt := range []struct {
+		name string
+		args []string
+		tty  bool
+	}{
+		{name: "automatic redirect"},
+		{name: "explicit TTY", args: []string{"--rsh-raw"}, tty: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return tt.tty }
+			args := append([]string{"restish", "get", srv.URL + "/stream"}, tt.args...)
+			if err := c.Run(args); err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if got := out.String(); got != raw {
+				t.Fatalf("raw streaming output = %q, want decompressed %q", got, raw)
+			}
+		})
 	}
 }
 
@@ -274,61 +287,74 @@ func TestNDJSONLineLimitUsesMaxBodySize(t *testing.T) {
 }
 
 func TestNDJSONFlushesBeforeResponseCompletes(t *testing.T) {
-	firstLineWritten := make(chan struct{})
-	finishResponse := make(chan struct{})
-	var finishOnce sync.Once
-	finish := func() {
-		finishOnce.Do(func() { close(finishResponse) })
-	}
-	defer finish()
+	for _, tt := range []struct {
+		name   string
+		args   []string
+		needle string
+		second string
+	}{
+		{name: "rendered", args: []string{"--rsh-print", "bp"}, needle: `"n": 1`, second: `"n": 2`},
+		{name: "raw", args: []string{"--rsh-raw"}, needle: `{"n":1}`, second: `{"n":2}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			firstLineWritten := make(chan struct{})
+			finishResponse := make(chan struct{})
+			var finishOnce sync.Once
+			finish := func() {
+				finishOnce.Do(func() { close(finishResponse) })
+			}
+			defer finish()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			t.Fatal("response writer does not implement http.Flusher")
-		}
-		fmt.Fprintln(w, `{"n":1}`)
-		flusher.Flush()
-		close(firstLineWritten)
-		<-finishResponse
-		fmt.Fprintln(w, `{"n":2}`)
-		flusher.Flush()
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+			mux := http.NewServeMux()
+			mux.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/x-ndjson")
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					t.Fatal("response writer does not implement http.Flusher")
+				}
+				fmt.Fprintln(w, `{"n":1}`)
+				flusher.Flush()
+				close(firstLineWritten)
+				<-finishResponse
+				fmt.Fprintln(w, `{"n":2}`)
+				flusher.Flush()
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
 
-	out := &signalWriter{needle: []byte(`"n": 1`), seen: make(chan struct{})}
-	c, _, _ := newTestCLI(t)
-	c.Stdout = out
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+			out := &signalWriter{needle: []byte(tt.needle), seen: make(chan struct{})}
+			c, _, _ := newTestCLI(t)
+			c.Stdout = out
+			c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- c.Run([]string{"restish", "get", "--rsh-print", "bp", srv.URL + "/stream"})
-	}()
+			errCh := make(chan error, 1)
+			go func() {
+				args := append([]string{"restish", "get", srv.URL + "/stream"}, tt.args...)
+				errCh <- c.Run(args)
+			}()
 
-	select {
-	case <-firstLineWritten:
-	case <-time.After(time.Second):
-		t.Fatal("server did not write first stream line")
-	}
+			select {
+			case <-firstLineWritten:
+			case <-time.After(time.Second):
+				t.Fatal("server did not write first stream line")
+			}
 
-	select {
-	case <-out.seen:
-	case err := <-errCh:
-		t.Fatalf("command finished before response completed: %v", err)
-	case <-time.After(time.Second):
-		t.Fatal("first NDJSON line was not rendered before response completed")
-	}
+			select {
+			case <-out.seen:
+			case err := <-errCh:
+				t.Fatalf("command finished before response completed: %v", err)
+			case <-time.After(time.Second):
+				t.Fatal("first NDJSON line was not flushed before response completed")
+			}
 
-	finish()
-	if err := <-errCh; err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got := out.String(); !strings.Contains(got, `"n": 2`) {
-		t.Fatalf("expected second line after response completed, got:\n%s", got)
+			finish()
+			if err := <-errCh; err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if got := out.String(); !strings.Contains(got, tt.second) {
+				t.Fatalf("expected second line after response completed, got:\n%s", got)
+			}
+		})
 	}
 }
 
@@ -866,6 +892,28 @@ func TestSSEErrorStatusFailsBeforeStreaming(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("expected no stream output before status error, got %q", out.String())
+	}
+}
+
+func TestRawStreamWritesBodyBeforeStatusError(t *testing.T) {
+	body := sseBody(`{"error":"missing"}`)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, body)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	err := c.Run([]string{"restish", "get", "--rsh-raw", srv.URL + "/events"})
+	if exitCode(err) != 4 {
+		t.Fatalf("exit code = %v, want 4 (err=%v)", exitCode(err), err)
+	}
+	if got := out.String(); got != body {
+		t.Fatalf("raw stream body = %q, want %q", got, body)
 	}
 }
 

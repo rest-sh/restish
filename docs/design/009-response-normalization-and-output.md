@@ -118,12 +118,12 @@ That dual representation is what lets Restish support:
 
 without forcing an irreversible choice too early in the pipeline.
 
-For redirected unfiltered responses, raw output is byte-oriented. It must write
-the original response body bytes after transfer decoding, not a Go value
-formatted through `fmt` and not a decode/re-encode approximation. Once the user
-selects a transformed logical value with a filter, byte fidelity no longer
-applies to that transformed value. Shell-friendly filtered scalar output belongs
-to the `lines` output format instead.
+For redirected unfiltered responses and explicit `-r` / `--rsh-raw`, raw output
+is byte-oriented. It must write the original response body bytes after transfer
+decoding, not a Go value formatted through `fmt` and not a decode/re-encode
+approximation. Once the user selects a transformed logical value with a filter,
+byte fidelity no longer applies to that transformed value. Shell-friendly
+filtered scalar output belongs to the `lines` output format instead.
 
 ## Hypermedia Integration
 
@@ -141,6 +141,7 @@ This keeps link handling out of individual formatter or command implementations.
 The formatting model is intentionally adaptive:
 
 - `--rsh-print` selects the HTTP exchange parts Restish writes to stdout
+- `-r` / `--rsh-raw` explicitly selects only original response body bytes
 - `-o <format>` formats the rendered body/value selected by `--rsh-print=b`
 - `-f` selects the body/value used by `b`
 - omitted `-f` selects `body`
@@ -153,6 +154,10 @@ The formatting model is intentionally adaptive:
   metadata shortcut, pagination collection, or explicit output format is set;
   this raw-download path bypasses response middleware so installed plugins
   cannot silently rewrite saved files
+- explicit `-r` / `--rsh-raw` selects the same raw-download path regardless of
+  whether stdout is a TTY and rejects filters, formats, collection, item limits,
+  metadata shortcuts, and explicit print selections
+- commands without original HTTP response body bytes reject explicit raw output
 - non-TTY filtered or transformed values default to the rendered body part with
   pretty formatting (`bp`); explicit `--rsh-print=b` keeps JSON output compact
   for scripts
@@ -176,8 +181,9 @@ Restish separates `-o` output formats into two families:
   formatter plugins
 
 `raw` is not an `-o` output format and is not a public print part. Raw byte
-output is the automatic non-TTY path for unfiltered, unformatted responses.
-Plain scalar line output is requested with `-o lines`.
+output is the automatic non-TTY path for unfiltered, unformatted responses and
+the explicit `-r` / `--rsh-raw` path on any stdout. Plain scalar line output is
+requested with `-o lines`.
 
 Document formats must preserve framing guarantees:
 
@@ -371,6 +377,7 @@ Output behavior must not corrupt data:
   writing raw bytes or base64 JSON strings
 - redirected or piped unfiltered responses should write the payload bytes
   exactly unless the user explicitly selected a different formatter
+- explicit `-r` / `--rsh-raw` should write those bytes even on a TTY
 - JSON formatters should emit stable JSON without unnecessary HTML escaping
 
 Binary-to-string coercion is a design bug because it damages fidelity and later
@@ -405,6 +412,7 @@ Supported print parts are:
 
 The important separation is:
 
+- `--rsh-raw` selects the original response body byte path
 - `--rsh-print` decides which parts go to stdout
 - `-o` decides how `b` is rendered
 - `-f` decides which value `b` renders

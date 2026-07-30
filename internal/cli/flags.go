@@ -25,6 +25,7 @@ type GlobalFlags struct {
 	OutputFormatSet  bool
 	Print            string
 	PrintSet         bool
+	Raw              bool
 	Silent           bool
 	Columns          string
 	SortBy           string
@@ -92,6 +93,7 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 	gf.Timeout, _ = cmd.Flags().GetString("rsh-timeout")
 
 	// Bool flags
+	gf.Raw, _ = cmd.Flags().GetBool("rsh-raw")
 	gf.Silent, _ = cmd.Flags().GetBool("rsh-silent")
 	gf.HeadersShorthand, _ = cmd.Flags().GetBool("rsh-headers")
 	gf.StatusShorthand, _ = cmd.Flags().GetBool("rsh-status")
@@ -206,6 +208,9 @@ func parseGlobalFlags(cmd *cobra.Command) (GlobalFlags, error) {
 		return gf, err
 	}
 	if err := validateTLSMinVersionFlag(cmd, gf); err != nil {
+		return gf, err
+	}
+	if err := validateRawOutputFlags(cmd, gf); err != nil {
 		return gf, err
 	}
 	return gf, nil

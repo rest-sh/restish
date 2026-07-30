@@ -122,6 +122,8 @@ meaningful.
 
 Restish therefore treats:
 
+- `-r` / `--rsh-raw` as incremental passthrough of the decompressed stream
+  bytes, without event parsing or response middleware
 - `-o ndjson` as the explicit record-oriented JSON stream format
 - `-o auto` as an incremental human view
 - `-o json` as a bounded-document request that should reject clearly live
@@ -150,6 +152,9 @@ The stream planner should decide:
 3. whether the filter can be evaluated per event
 4. whether the user requested a bounded stop such as `--rsh-max-items`
 5. whether the requested format must fail because the stream is unbounded
+
+Explicit raw output rejects `--rsh-max-items` because a record limit requires
+parsing stream framing rather than passing through the original body bytes.
 
 This ties streaming into the same output-family model as design 028.
 

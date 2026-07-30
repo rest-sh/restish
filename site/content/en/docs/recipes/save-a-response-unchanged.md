@@ -10,10 +10,13 @@ shortcut, or output format, Restish writes the response body bytes. That matters
 for binary files, structured fixtures such as CBOR, and anything another
 program will parse directly. Response middleware plugins are skipped for this
 raw-download path, so installed plugins cannot silently alter saved files.
+Pass `-r` / `--rsh-raw` when the command should use this path whether stdout is
+a terminal, pipe, or file.
 
 ```bash
 restish api.rest.sh/bytes/64 > sample.bin
 restish api.rest.sh/formats/cbor > response.cbor
+restish -r api.rest.sh/bytes/64
 ```
 
 For an image:

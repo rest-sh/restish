@@ -177,9 +177,10 @@ Silent discarding of user intent is not acceptable.
 
 Redirected stdout writes the original response body bytes after transfer
 decoding when no filter, metadata shortcut, collection, or rendered output
-format is requested. This raw-download path bypasses response middleware.
-Filters always select decoded normalized values; they do not have a raw-byte
-rendering mode.
+format is requested. `-r` / `--rsh-raw` selects the same path explicitly and
+cannot be combined with a filter. This raw-download path bypasses response
+middleware. Filters always select decoded normalized values; they do not have a
+raw-byte rendering mode.
 
 Filtered scalar values print plainly by default:
 
