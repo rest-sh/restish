@@ -141,7 +141,7 @@ func operationSecurityIssueText(requirement spec.CredentialRequirement) (string,
 	switch {
 	case requirement.Undeclared:
 		return fmt.Sprintf("security scheme %q is referenced by operations but is not declared in components.securitySchemes", requirement.ID), true
-	case !authRequirementKindSupported(requirement.Kind):
+	case !spec.IsRecognizedCredentialRequirementKind(requirement.Kind):
 		return fmt.Sprintf("security scheme %q uses unsupported kind %q", requirement.ID, requirement.Kind), true
 	default:
 		return "", false

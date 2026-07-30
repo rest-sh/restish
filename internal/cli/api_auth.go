@@ -995,7 +995,7 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 		if len(satisfies) > 0 {
 			parts = append(parts, "satisfies "+strings.Join(satisfies, " "))
 		}
-		if !authRequirementKindSupported(summary.kind) {
+		if !spec.IsRecognizedCredentialRequirementKind(summary.kind) {
 			parts = append(parts, "unsupported "+summary.kind)
 		}
 		if summary.undeclared {
@@ -1018,7 +1018,7 @@ func (c *CLI) printAPIAuthRequirementSummary(apiName, profileName string, ops []
 
 func nextMissingCredentialID(ops []spec.Operation, prof *config.ProfileConfig, coverage operationAuthCoverage) string {
 	for _, summary := range authRequirementSummaries(ops) {
-		if !authRequirementKindSupported(summary.kind) || summary.undeclared || summary.external {
+		if !spec.IsRecognizedCredentialRequirementKind(summary.kind) || summary.undeclared || summary.external {
 			continue
 		}
 		if coverage.FallbackByID[summary.id] > 0 {
@@ -1084,15 +1084,6 @@ func mergeStringSet(existing, values []string) []string {
 		}
 	}
 	return existing
-}
-
-func authRequirementKindSupported(kind string) bool {
-	switch kind {
-	case "api-key", "http-basic", "http-bearer", "oauth2", "mtls":
-		return true
-	default:
-		return false
-	}
 }
 
 func (c *CLI) cachedCredentialDefaultNeeds(ctx context.Context, apiName string, apiCfg *config.APIConfig, profileName, credentialID string) []string {

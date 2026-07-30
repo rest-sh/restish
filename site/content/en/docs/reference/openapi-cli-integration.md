@@ -372,6 +372,11 @@ Prefer standard OpenAPI security schemes first. Restish derives basic auth,
 API keys, and supported OAuth setup from the spec. Use `x-cli-config` only for
 Restish-specific prompting and defaults.
 
+Restish recognizes the standard DPoP HTTP authentication scheme as a named
+credential requirement. DPoP proof generation still requires a configured
+proof-capable auth provider or plugin; Restish does not treat DPoP as a static
+Bearer token.
+
 Document-level `x-cli-config` pre-populates API profiles during `api connect`:
 
 ```yaml

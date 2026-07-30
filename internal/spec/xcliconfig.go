@@ -255,7 +255,7 @@ func SchemeToXCLIAuth(scheme *v3high.SecurityScheme, params map[string]string) *
 		p["name"] = scheme.Name
 		p["value"] = ""
 	case "http":
-		switch scheme.Scheme {
+		switch strings.ToLower(scheme.Scheme) {
 		case "basic":
 			authType = "http-basic"
 			p["username"] = ""

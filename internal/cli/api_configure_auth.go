@@ -69,8 +69,10 @@ func (c *CLI) printAPIDiscovery(apiName, baseURL string, d configureAuthDiscover
 		}
 		if scheme.Kind == "mtls" {
 			details = append(details, "use TLS client certificate or signer")
-		} else if !scheme.Supported {
+		} else if !scheme.Recognized {
 			details = append(details, "unsupported")
+		} else if !scheme.AutoConfigurable {
+			details = append(details, "requires explicit credential")
 		}
 		if scheme.Deprecated {
 			details = append(details, "deprecated")
@@ -105,7 +107,7 @@ func (c *CLI) configureFallbackAuth(ctx context.Context, apiCfg *config.APIConfi
 	configured := map[string]bool{}
 	for _, scheme := range d.schemes {
 		credential := prof.Credentials[scheme.ID]
-		if !scheme.Supported || credential == nil || credential.Auth == nil {
+		if !scheme.AutoConfigurable || credential == nil || credential.Auth == nil {
 			delete(prof.Credentials, scheme.ID)
 			continue
 		}
@@ -159,7 +161,7 @@ func (c *CLI) validateFallbackCredentialAnswers(profileName string, prof *config
 	}
 	valid := map[string]map[string]bool{}
 	for _, scheme := range d.schemes {
-		if !scheme.Supported {
+		if !scheme.AutoConfigurable {
 			continue
 		}
 		credential := prof.Credentials[scheme.ID]
@@ -233,7 +235,7 @@ func defaultConfigureSchemeID(schemes []spec.SecuritySchemeSummary, opCounts map
 	var best string
 	bestCount := -1
 	for _, scheme := range schemes {
-		if !scheme.Supported || scheme.Deprecated {
+		if !scheme.AutoConfigurable || scheme.Deprecated {
 			continue
 		}
 		count := opCounts[scheme.ID]
@@ -450,7 +452,7 @@ func yesNoDefaultSuffix(def bool) string {
 func supportedSchemeIDs(schemes []spec.SecuritySchemeSummary) []string {
 	var ids []string
 	for _, scheme := range schemes {
-		if scheme.Supported {
+		if scheme.AutoConfigurable {
 			ids = append(ids, scheme.ID)
 		}
 	}

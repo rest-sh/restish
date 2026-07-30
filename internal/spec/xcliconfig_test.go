@@ -184,6 +184,30 @@ components:
 	}
 }
 
+func TestSchemeToXCLIAuth_HTTPNamesAreCaseInsensitive(t *testing.T) {
+	raw := `
+openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+paths: {}
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: Bearer`
+	doc := loadDoc(t, raw)
+	model, err := doc.V3Model()
+	if err != nil || model == nil {
+		t.Fatalf("BuildV3Model: %v", err)
+	}
+	scheme := model.Model.Components.SecuritySchemes.GetOrZero("bearer")
+	auth := SchemeToXCLIAuth(scheme, nil)
+	if auth == nil || auth.Type != "bearer" {
+		t.Fatalf("auth = %#v, want bearer", auth)
+	}
+}
+
 func TestSchemeToXCLIAuth_OAuth2AuthCode(t *testing.T) {
 	raw := `
 openapi: "3.1.0"

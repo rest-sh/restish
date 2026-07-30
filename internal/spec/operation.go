@@ -481,6 +481,8 @@ func credentialRequirementKind(scheme *v3.SecurityScheme) string {
 			return "http-basic"
 		case "bearer":
 			return "http-bearer"
+		case "dpop":
+			return "http-dpop"
 		default:
 			return "http"
 		}

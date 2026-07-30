@@ -10,12 +10,13 @@ import (
 // SecuritySchemeSummary describes one declared security scheme in a
 // loader-neutral shape suitable for CLI setup and diagnostics.
 type SecuritySchemeSummary struct {
-	ID            string
-	Kind          string
-	Detail        string
-	Supported     bool
-	GlobalDefault bool
-	Deprecated    bool
+	ID               string
+	Kind             string
+	Detail           string
+	Recognized       bool
+	AutoConfigurable bool
+	GlobalDefault    bool
+	Deprecated       bool
 }
 
 // SecuritySchemeSummaries returns the declared OpenAPI security schemes in
@@ -42,16 +43,30 @@ func (s *APISpec) SecuritySchemeSummaries() ([]SecuritySchemeSummary, error) {
 
 	var out []SecuritySchemeSummary
 	for id, scheme := range model.Model.Components.SecuritySchemes.FromOldest() {
+		kind := credentialRequirementKind(scheme)
 		out = append(out, SecuritySchemeSummary{
-			ID:            id,
-			Kind:          credentialRequirementKind(scheme),
-			Detail:        securitySchemeDetail(scheme),
-			Supported:     SchemeToXCLIAuth(scheme, nil) != nil,
-			GlobalDefault: global[id],
-			Deprecated:    scheme.Deprecated,
+			ID:               id,
+			Kind:             kind,
+			Detail:           securitySchemeDetail(scheme),
+			Recognized:       IsRecognizedCredentialRequirementKind(kind),
+			AutoConfigurable: SchemeToXCLIAuth(scheme, nil) != nil,
+			GlobalDefault:    global[id],
+			Deprecated:       scheme.Deprecated,
 		})
 	}
 	return out, nil
+}
+
+// IsRecognizedCredentialRequirementKind reports whether Restish understands
+// how a credential kind is satisfied, even when setup requires an explicit
+// credential provider.
+func IsRecognizedCredentialRequirementKind(kind string) bool {
+	switch kind {
+	case "api-key", "http-basic", "http-bearer", "http-dpop", "oauth2", "mtls":
+		return true
+	default:
+		return false
+	}
 }
 
 func securitySchemeDetail(scheme *v3high.SecurityScheme) string {
