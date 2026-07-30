@@ -13,6 +13,7 @@ import (
 )
 
 type operationAuthPolicy struct {
+	ID                     string
 	OptionalAuth           bool
 	NoAuth                 bool
 	CredentialAlternatives []spec.CredentialAlternative

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -96,8 +97,9 @@ func (c *CLI) resolveTLSSigner(opts request.Options) (request.Options, error) {
 // Plugins that declare auth_api_names in their manifest are only called when
 // apiName appears in that list.
 func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
+	operation := authHookOperationFromContext(req.Context())
 	if c.hooks.AuthHookFunc != nil {
-		return c.hooks.AuthHookFunc(apiName, profileName, rawParams, secretKeys, req)
+		return c.hooks.AuthHookFunc(apiName, profileName, rawParams, secretKeys, operation, req)
 	}
 	plugins := append([]plugin.Plugin(nil), c.globalAuthPlugins...)
 	plugins = append(plugins, c.authPluginsByAPI[apiName]...)
@@ -117,11 +119,12 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 			params = redacted
 		}
 		in := pluginwire.AuthHookInput{
-			Type:    "auth",
-			API:     apiName,
-			Profile: profileName,
-			Params:  params,
-			Request: hookRequestForPlugin(req, p),
+			Type:      "auth",
+			API:       apiName,
+			Profile:   profileName,
+			Params:    params,
+			Operation: operation,
+			Request:   hookRequestForPlugin(req, p),
 		}
 		var out pluginwire.AuthHookOutput
 		if err := plugin.CallHookWithTimeoutContext(req.Context(), p.Path, plugin.HookTimeout(p.Manifest, "auth"), in, &out); err != nil {
@@ -130,6 +133,36 @@ func (c *CLI) runAuthHookPlugins(apiName, profileName string, rawParams map[stri
 		applyRequestUpdate(req, out.Request)
 	}
 	return nil
+}
+
+type authHookOperationContextKey struct{}
+
+func authHookOperationContext(ctx context.Context, policy *operationAuthPolicy) context.Context {
+	if policy == nil || policy.ID == "" {
+		return ctx
+	}
+	security := make([]map[string][]string, 0, len(policy.CredentialAlternatives)+1)
+	if policy.OptionalAuth {
+		security = append(security, map[string][]string{})
+	}
+	for _, alternative := range policy.CredentialAlternatives {
+		requirements := make(map[string][]string, len(alternative))
+		for _, requirement := range alternative {
+			requirements[requirement.ID] = append([]string{}, requirement.Needs...)
+		}
+		security = append(security, requirements)
+	}
+	return context.WithValue(ctx, authHookOperationContextKey{}, &pluginwire.AuthHookOperation{
+		ID:           policy.ID,
+		Security:     security,
+		NoAuth:       policy.NoAuth,
+		OptionalAuth: policy.OptionalAuth,
+	})
+}
+
+func authHookOperationFromContext(ctx context.Context) *pluginwire.AuthHookOperation {
+	operation, _ := ctx.Value(authHookOperationContextKey{}).(*pluginwire.AuthHookOperation)
+	return operation
 }
 
 // runRequestMiddlewarePlugins invokes all "request-middleware" hook plugins.

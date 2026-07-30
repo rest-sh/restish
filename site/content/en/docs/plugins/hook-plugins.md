@@ -58,6 +58,14 @@ multi-credential case the hook input does not include individual credential
 params; single-credential auth continues to include params with secrets redacted
 unless the manifest opts into auth secrets.
 
+When Restish resolves the request to an OpenAPI operation, auth hooks also
+receive `operation.id` and its effective `operation.security`. Security keeps
+OpenAPI's OR-list of AND-sets, so each object is one alternative and every
+scheme in an object is required. `operation.no_auth` identifies an explicit
+`security: []`, while `operation.optional_auth` identifies an anonymous
+alternative such as `{}`. Requests that cannot be matched to one operation omit
+`operation`, which keeps existing plugins compatible.
+
 ## Pitfalls
 
 - Keep hooks narrow and deterministic.

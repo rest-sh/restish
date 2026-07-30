@@ -25,6 +25,7 @@ type preparedRequest struct {
 	bodyContentType string
 	actualRequest   *http.Request
 	authEnabled     bool
+	operationAuth   *operationAuthPolicy
 	closer          io.Closer
 	stopClose       func() bool
 }
@@ -204,6 +205,7 @@ func (c *CLI) prepareRequest(
 		bodyRaw:         bodyRaw,
 		bodyContentType: bodyContentType,
 		authEnabled:     authEnabled,
+		operationAuth:   operationAuth,
 		closer:          transportCloser,
 		stopClose:       stopTransportClose,
 	}
@@ -340,6 +342,7 @@ func isRawBinaryContentType(contentType string) bool {
 }
 
 func (c *CLI) sendPreparedRequest(ctx context.Context, method string, prepared *preparedRequest) (*http.Response, error) {
+	ctx = authHookOperationContext(ctx, prepared.operationAuth)
 	bodyReader := func() io.Reader {
 		if len(prepared.bodyRaw) == 0 {
 			return nil

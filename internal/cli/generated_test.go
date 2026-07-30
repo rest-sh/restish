@@ -24,6 +24,7 @@ import (
 	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/cli"
 	"github.com/rest-sh/restish/v2/internal/spec"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 // specWithOperations returns an OpenAPI 3.1 spec JSON string.
@@ -1046,6 +1047,51 @@ func TestGenericURLAppliesMatchedOperationAuth(t *testing.T) {
 	for i, auth := range got {
 		if !strings.HasPrefix(auth, "Basic ") {
 			t.Fatalf("request %d Authorization = %q, want Basic auth", i+1, auth)
+		}
+	}
+}
+
+func TestAuthHookReceivesResolvedOperationForGeneratedAndGenericRequests(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wallet", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{}`)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+	env := setupEnvWithSpec(t, mux, func(baseURL string) string {
+		return openAPISpec(baseURL, "Wallet API",
+			openAPISecuritySchemes(`"WalletKey":{"type":"apiKey","in":"header","name":"X-Wallet-Key"}`),
+			openAPIPaths(openAPIGet("/wallet", "showWallet", `"security":[{"WalletKey":[]}]`)))
+	})
+	baseURL := env.baseURL(t)
+	env.writeAPIConfig(t, testAPIConfig(baseURL, profileCredentials(map[string]*config.CredentialConfig{
+		"WalletKey": testCredential(apiKeyAuth("header", "X-Wallet-Key", "secret")),
+	})))
+
+	c := env.newCLI()
+	var operations []*pluginwire.AuthHookOperation
+	c.Hooks().AuthHookFunc = func(_ string, _ string, _ map[string]string, _ map[string]bool, operation *pluginwire.AuthHookOperation, _ *http.Request) error {
+		operations = append(operations, operation)
+		return nil
+	}
+	if err := c.Run([]string{"restish", "tapi", "show-wallet"}); err != nil {
+		t.Fatalf("generated request failed: %v", err)
+	}
+	if err := c.Run([]string{"restish", baseURL + "/wallet"}); err != nil {
+		t.Fatalf("generic request failed: %v", err)
+	}
+
+	if len(operations) != 2 {
+		t.Fatalf("auth hook operations = %#v, want generated and generic requests", operations)
+	}
+	for i, operation := range operations {
+		want := &pluginwire.AuthHookOperation{
+			ID:       "showWallet",
+			Security: []map[string][]string{{"WalletKey": {}}},
+		}
+		if !reflect.DeepEqual(operation, want) {
+			t.Fatalf("operation %d = %#v, want %#v", i+1, operation, want)
 		}
 	}
 }

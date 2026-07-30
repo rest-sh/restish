@@ -60,13 +60,14 @@ func (c *CLI) operationAuthForGenericRequest(ctx context.Context, method, rawURL
 		return genericOperationAuthMatch{}, false
 	}
 	if best.NoAuth {
-		return genericOperationAuthMatch{noAuth: true}, true
-	}
-	if len(best.CredentialAlternatives) == 0 && !best.OptionalAuth {
-		return genericOperationAuthMatch{}, false
+		return genericOperationAuthMatch{
+			noAuth: true,
+			policy: &operationAuthPolicy{ID: best.ID, NoAuth: true},
+		}, true
 	}
 	return genericOperationAuthMatch{
 		policy: &operationAuthPolicy{
+			ID:                     best.ID,
 			OptionalAuth:           best.OptionalAuth,
 			CredentialAlternatives: best.CredentialAlternatives,
 		},

@@ -835,9 +835,34 @@ CBOR: `profile`; JSON: `profile`; type: `string`; required: yes
 
 CBOR: `params`; JSON: `params`; type: `map[string]string`; required: yes
 
+**`Operation`**
+
+CBOR: `operation`; JSON: `operation`; type: `*AuthHookOperation`; required: no
+
 **`Request`**
 
 CBOR: `request`; JSON: `request`; type: `HookRequest`; required: yes
+
+
+### `AuthHookOperation`
+
+AuthHookOperation identifies the OpenAPI operation resolved for an authenticated request. Security preserves OpenAPI's OR-list of AND-sets: each map is one alternative, and every scheme in that map is required.
+
+**`ID`**
+
+CBOR: `id`; JSON: `id`; type: `string`; required: yes
+
+**`Security`**
+
+CBOR: `security`; JSON: `security`; type: `[]map[string][]string`; required: yes
+
+**`NoAuth`**
+
+CBOR: `no_auth`; JSON: `no_auth`; type: `bool`; required: no
+
+**`OptionalAuth`**
+
+CBOR: `optional_auth`; JSON: `optional_auth`; type: `bool`; required: no
 
 
 ### `AuthHookOutput`

@@ -56,7 +56,8 @@
 // return one CBOR reply map.
 //
 //   - auth:
-//     request contains api_name, profile_name, params, and request metadata
+//     request contains API, profile, params, optional resolved operation
+//     security, and request metadata
 //     reply typically returns request.header updates
 //   - request-middleware:
 //     request contains the outbound request metadata

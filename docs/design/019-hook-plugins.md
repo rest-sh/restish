@@ -87,6 +87,8 @@ The `auth` hook runs during request preparation. Restish sends:
 - API name
 - profile name
 - auth params from config
+- the resolved OpenAPI operation ID and effective security requirements, when
+  method and path identify one operation
 - the outbound request method, URI, and headers
 
 The plugin replies with request updates, typically header changes. The reply is
@@ -102,6 +104,13 @@ per-credential `params` in that multi-credential case until the protocol grows
 an explicit combined credential context; single-credential auth continues to
 send the credential params with secrets redacted according to the plugin
 manifest.
+
+Resolved operation security preserves OpenAPI's OR-list of AND-sets. Generated
+commands carry their operation directly; generic API-relative and absolute URL
+requests use the same method/path matcher as operation-aware authentication.
+Unmatched or ambiguous requests omit operation metadata. The additive optional
+field keeps older hook plugins wire-compatible while allowing scope-aware
+plugins to select credentials without reparsing the API contract.
 
 Provider-specific OAuth token exchange is a good fit for this hook/plugin
 boundary when the built-in OAuth flows are too small. The plugin can own the

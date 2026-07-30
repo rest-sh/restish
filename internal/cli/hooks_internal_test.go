@@ -13,6 +13,7 @@ import (
 	"time"
 
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
+	"github.com/rest-sh/restish/v2/internal/spec"
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
@@ -98,6 +99,34 @@ func TestHookRequestForPluginIncludesBodyHashAndOptInBody(t *testing.T) {
 	}
 	if got := firstHeaderValue(withBody.Headers, "Authorization"); got != "<redacted>" {
 		t.Fatalf("Authorization header = %q, want redacted", got)
+	}
+}
+
+func TestAuthHookOperationPreservesEffectiveSecurity(t *testing.T) {
+	ctx := authHookOperationContext(context.Background(), &operationAuthPolicy{
+		ID:           "showWallet",
+		OptionalAuth: true,
+		CredentialAlternatives: []spec.CredentialAlternative{
+			{
+				{ID: "WalletOAuth", Needs: []string{"wallet:read", "wallet:budget"}},
+				{ID: "DeviceKey"},
+			},
+			{{ID: "OperatorOAuth", Needs: []string{"wallet:read"}}},
+		},
+	})
+
+	got := authHookOperationFromContext(ctx)
+	want := &pluginwire.AuthHookOperation{
+		ID:           "showWallet",
+		OptionalAuth: true,
+		Security: []map[string][]string{
+			{},
+			{"WalletOAuth": {"wallet:read", "wallet:budget"}, "DeviceKey": {}},
+			{"OperatorOAuth": {"wallet:read"}},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("operation = %#v, want %#v", got, want)
 	}
 }
 

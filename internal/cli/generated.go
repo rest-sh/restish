@@ -491,7 +491,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			}
 			acceptOverride := c.generatedOperationAcceptHeader(op.ResponseMediaTypes, op.ResponseMediaType)
 			rawBinaryBody := op.Help.Request != nil && op.Help.Request.RawBinary
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.Help, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.ID, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.Help, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1374,7 +1374,7 @@ func shellQuoteGeneratedExample(ex string) string {
 // runGeneratedOp is the RunE handler for generated operation commands.
 func (c *CLI) runGeneratedOp(
 	cmd *cobra.Command,
-	apiName, opPath, operationServer, method, requestMediaType, responseMediaType string,
+	apiName, operationID, opPath, operationServer, method, requestMediaType, responseMediaType string,
 	requestMultipartContentTypes map[string]string,
 	help spec.OperationHelp,
 	bodyRequired bool,
@@ -1508,6 +1508,7 @@ func (c *CLI) runGeneratedOp(
 		rawBinaryBody:             rawBinaryBody,
 		explicitAPIName:           apiName,
 		operationAuth: &operationAuthPolicy{
+			ID:                     operationID,
 			OptionalAuth:           optionalAuth,
 			NoAuth:                 noAuth,
 			CredentialAlternatives: credentialAlternatives,

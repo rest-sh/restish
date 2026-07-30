@@ -11,6 +11,7 @@ import (
 	"github.com/rest-sh/restish/v2/config"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
 type forceRecordingAuth struct {
@@ -611,7 +612,7 @@ func TestOperationAuthCallbacksForceCapableUnauthorizedRetry(t *testing.T) {
 func TestOperationAuthCallbacksRunHookOnceForMultipleCredentials(t *testing.T) {
 	c := New()
 	var hookCalls atomic.Int32
-	c.Hooks().AuthHookFunc = func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error {
+	c.Hooks().AuthHookFunc = func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, operation *pluginwire.AuthHookOperation, req *http.Request) error {
 		hookCalls.Add(1)
 		req.Header.Set("X-Hook", "called")
 		return nil

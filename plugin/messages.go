@@ -398,11 +398,22 @@ type HookRequestHeaderUpdate struct {
 
 // AuthHookInput is sent to plugins registered for the "auth" hook.
 type AuthHookInput struct {
-	Type    string            `cbor:"type" json:"type"`
-	API     string            `cbor:"api" json:"api"`
-	Profile string            `cbor:"profile" json:"profile"`
-	Params  map[string]string `cbor:"params" json:"params"`
-	Request HookRequest       `cbor:"request" json:"request"`
+	Type      string             `cbor:"type" json:"type"`
+	API       string             `cbor:"api" json:"api"`
+	Profile   string             `cbor:"profile" json:"profile"`
+	Params    map[string]string  `cbor:"params" json:"params"`
+	Operation *AuthHookOperation `cbor:"operation,omitempty" json:"operation,omitempty"`
+	Request   HookRequest        `cbor:"request" json:"request"`
+}
+
+// AuthHookOperation identifies the OpenAPI operation resolved for an
+// authenticated request. Security preserves OpenAPI's OR-list of AND-sets:
+// each map is one alternative, and every scheme in that map is required.
+type AuthHookOperation struct {
+	ID           string                `cbor:"id" json:"id"`
+	Security     []map[string][]string `cbor:"security" json:"security"`
+	NoAuth       bool                  `cbor:"no_auth,omitempty" json:"no_auth,omitempty"`
+	OptionalAuth bool                  `cbor:"optional_auth,omitempty" json:"optional_auth,omitempty"`
 }
 
 // AuthHookOutput is the reply from an "auth" hook plugin.
