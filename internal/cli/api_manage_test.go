@@ -32,6 +32,7 @@ func specWithXCLIConfig(baseURL string) string {
   "info": {"title": "Managed API", "version": "1.0"},
   "servers": [{"url": %q}],
   "x-cli-config": {
+    "command_layout": "tags",
     "profiles": {
       "default": {
         "headers": ["Accept: application/json"],
@@ -114,6 +115,9 @@ func TestAPIConnect(t *testing.T) {
 	if api.BaseURL != "https://api.example.com" {
 		t.Errorf("base_url: got %q, want %q", api.BaseURL, "https://api.example.com")
 	}
+	if api.CommandLayout != "tags" {
+		t.Errorf("command_layout: got %q, want tags", api.CommandLayout)
+	}
 	prof := api.Profiles["default"]
 	if prof == nil {
 		t.Fatal("expected default profile in config")
@@ -123,6 +127,84 @@ func TestAPIConnect(t *testing.T) {
 	}
 	if len(prof.Headers) == 0 || !strings.Contains(prof.Headers[0], "application/json") {
 		t.Errorf("expected Accept header in default profile, got: %v", prof.Headers)
+	}
+}
+
+func TestAPIConnectPreservesExplicitCommandLayoutByDefault(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, specWithXCLIConfig("https://api.example.com"))
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("first api connect: %v", err)
+	}
+	if err := c.Run([]string{"restish", "api", "set", "myapi", "command_layout: flat"}); err != nil {
+		t.Fatalf("api set: %v", err)
+	}
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("second api connect: %v", err)
+	}
+
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].CommandLayout; got != "flat" {
+		t.Fatalf("command_layout = %q, want explicit local value flat", got)
+	}
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com", "--replace"}); err != nil {
+		t.Fatalf("replacement api connect: %v", err)
+	}
+	written, err = config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load replaced config: %v", err)
+	}
+	if got := written.APIs["myapi"].CommandLayout; got != "tags" {
+		t.Fatalf("command_layout = %q, want contract default tags after --replace", got)
+	}
+}
+
+func TestAPIConnectRejectsInvalidXCLICommandLayout(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {"command_layout": "nested"},
+  "paths": {}
+}`)
+
+	err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"})
+	if err == nil || !strings.Contains(err.Error(), `x-cli-config.command_layout: must be "flat" or "tags"`) {
+		t.Fatalf("api connect error = %v", err)
+	}
+}
+
+func TestAPIConnectAppliesXCLICommandLayoutWithoutProfiles(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
+	c.Hooks().SpecCachePath = t.TempDir()
+	useOpenAPISpecTransport(c, `{
+  "openapi": "3.1.0",
+  "info": {"title": "Managed API", "version": "1.0"},
+  "x-cli-config": {"command_layout": "tags"},
+  "paths": {}
+}`)
+
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].CommandLayout; got != "tags" {
+		t.Fatalf("command_layout = %q, want tags", got)
 	}
 }
 

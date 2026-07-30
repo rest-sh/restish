@@ -61,7 +61,7 @@ When you reconnect an existing API with `api connect`, Restish preserves
 existing profiles by default because they may contain credentials or auth
 references. API-level fields are refreshed from the new connect run. Add
 `--replace` only when you want OpenAPI or `x-cli-config` profile defaults to
-replace existing profiles.
+replace existing profiles and reapply contract-provided defaults.
 
 ## Operation Base
 

@@ -13,6 +13,9 @@ import (
 // XCLIConfig is the x-cli-config extension at the OpenAPI document root.
 // It drives `restish api connect` pre-population of the config file.
 type XCLIConfig struct {
+	// CommandLayout selects the default arrangement for generated commands.
+	CommandLayout string `json:"command_layout,omitempty" yaml:"command_layout,omitempty"`
+
 	// Profiles maps profile names to their pre-populated settings.
 	Profiles map[string]*XCLIProfile `json:"profiles,omitempty" yaml:"profiles,omitempty"`
 
@@ -349,7 +352,8 @@ func (xcli *XCLIConfig) Normalize() *XCLIConfig {
 		return nil
 	}
 	out := &XCLIConfig{
-		Profiles: make(map[string]*XCLIProfile, len(xcli.Profiles)),
+		CommandLayout: xcli.CommandLayout,
+		Profiles:      make(map[string]*XCLIProfile, len(xcli.Profiles)),
 	}
 	for name, profile := range xcli.Profiles {
 		out.Profiles[name] = normalizeXCLIProfile(cloneXCLIProfile(profile))
@@ -531,7 +535,8 @@ func (xcli *XCLIConfig) Resolve(s *APISpec) *XCLIConfig {
 	}
 
 	resolved := &XCLIConfig{
-		Profiles: make(map[string]*XCLIProfile, len(xcli.Profiles)),
+		CommandLayout: xcli.CommandLayout,
+		Profiles:      make(map[string]*XCLIProfile, len(xcli.Profiles)),
 	}
 
 	for name, xp := range xcli.Profiles {

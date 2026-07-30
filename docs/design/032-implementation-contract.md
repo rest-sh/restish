@@ -229,7 +229,7 @@ preserve.
 
 | Command | Local state touched | Safety contract |
 | --- | --- | --- |
-| `api connect` | `restish.json`, spec cache, generated-operation cache | Without `--replace`, refresh API-level metadata and cache state while preserving existing profiles and credentials. With `--replace`, regenerate replaceable profiles while preserving values that cannot be rediscovered safely. |
+| `api connect` | `restish.json`, spec cache, generated-operation cache | Without `--replace`, refresh API-level metadata and cache state while preserving existing profiles, credentials, and explicit local defaults. With `--replace`, regenerate replaceable profiles and reapply contract-provided defaults while preserving values that cannot be rediscovered safely. |
 | `api sync` | spec cache, generated-operation cache, sometimes `restish.json` API metadata | Refresh discovered API metadata and generated operations without replacing credential-containing profiles. |
 | `api set` | one API section in `restish.json` | Patch only the requested API fields and preserve comments/formatting when possible. |
 | `api remove` | `restish.json`, API-owned HTTP cache namespaces, API-scoped auth token cache entries | Remove the API and clean API-owned local state. Shared auth-profile tokens are removed only when no remaining API references that shared profile. |
