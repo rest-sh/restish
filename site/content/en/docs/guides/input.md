@@ -94,7 +94,7 @@ printf 'hello from docs\n' > upload.txt
 restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.txt'
 ```
 
-The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size. A multipart `@path` value must point to a readable file; use `@@value` when a text field should start with a literal `@`.
+The response echoes multipart field values. When a client sends real file parts, `/uploads` also reports file metadata such as field name, filename, content type, and size. A multipart `@path` value must point to a readable file; use `@@value` when a text field should start with a literal `@`. Append `;type=<media-type>` to set a part's `Content-Type` (for example `file: @payload.json;type=application/json`).
 
 ## File Loading
 
