@@ -78,9 +78,11 @@ The migration carries over the main API-specific settings:
 - PKCS#11 TLS signer settings
 
 Comments from the v1 files remain in the backup copies. The generated
-`restish.json` is JSONC: it includes a short migration header, converted v2
-config, and comments that Restish preserves during later config edits where
-possible.
+`restish.json` is JSONC: it starts with a JSONC mode line
+(`// -*- mode: jsonc -*-`), a short migration header, converted v2 config,
+and comments that Restish preserves during later config edits where
+possible. Strict JSON tools such as `jq` still reject the file; use
+`restish config show -o json` for comment-free output.
 
 ## Deliberate Behavior Changes
 

@@ -278,7 +278,11 @@ func renderMigratedConfig(cfg *config.Config, backupDir string) ([]byte, error) 
 		return nil, fmt.Errorf("config: marshal migrated config: %w", err)
 	}
 
+	// restish.json is JSONC. Lead with the recommended mode line so editors
+	// and tools know the .json file intentionally contains comments
+	// (https://jsonc.org/#filename-extension).
 	var out bytes.Buffer
+	out.WriteString("// -*- mode: jsonc -*-\n")
 	out.WriteString("// Migrated from Restish v1.\n")
 	fmt.Fprintf(&out, "// Original v1 files were copied to %s.\n", backupDir)
 	out.WriteString("// Secrets are intentionally not duplicated in comments.\n")
