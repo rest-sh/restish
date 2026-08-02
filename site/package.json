@@ -12,7 +12,7 @@
     "@fontsource/space-grotesk": "^5.2.10",
     "@resvg/resvg-js": "^2.6.2",
     "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.25",
     "postcss-cli": "^11.0.1",
     "yaml": "^2.9.0"
   }
