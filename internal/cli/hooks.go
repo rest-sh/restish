@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -166,7 +167,7 @@ type HookFollowRequest struct {
 // runResponseMiddlewarePlugins invokes all "response-middleware" hook plugins.
 // Returns (drop, follow, err). drop=true means suppress all output. follow is
 // non-nil when the plugin wants Restish to issue a new request.
-func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
+func (c *CLI) runResponseMiddlewarePlugins(ctx context.Context, req *http.Request, resp *output.Response) (drop bool, follow *HookFollowRequest, err error) {
 	for _, p := range c.pluginsByHook["response-middleware"] {
 		if trace := requestTraceFromContext(req.Context()); trace != nil {
 			trace.AddInfo("Plugin", pluginInvocationTrace("response", p))
@@ -186,7 +187,7 @@ func (c *CLI) runResponseMiddlewarePlugins(req *http.Request, resp *output.Respo
 			},
 		}
 		var out pluginwire.ResponseMiddlewareOutput
-		if err := plugin.CallHookWithTimeoutContext(req.Context(), p.Path, plugin.HookTimeout(p.Manifest, "response-middleware"), in, &out); err != nil {
+		if err := plugin.CallHookWithTimeoutContext(ctx, p.Path, plugin.HookTimeout(p.Manifest, "response-middleware"), in, &out); err != nil {
 			return false, nil, fmt.Errorf("response-middleware plugin %s: %w", p.Manifest.Name, err)
 		}
 

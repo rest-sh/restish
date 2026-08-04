@@ -230,6 +230,25 @@ func TestResponseMiddlewarePluginModify(t *testing.T) {
 	}
 }
 
+// TestResponseMiddlewarePluginRunsAfterTimedResponseBodyClose verifies that
+// closing a bounded response body does not cancel the command-scoped plugin
+// invocation that follows it.
+func TestResponseMiddlewarePluginRunsAfterTimedResponseBodyClose(t *testing.T) {
+	installHookPlugin(t)
+	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
+
+	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := c.Run([]string{"restish", "get", "--rsh-timeout", "1s", "-o", "json", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "plugin_added") {
+		t.Errorf("expected plugin_added in output, got:\n%s", out.String())
+	}
+}
+
 func TestResponseMiddlewarePluginBypassedForRawRedirect(t *testing.T) {
 	installHookPlugin(t)
 	t.Setenv("RSH_HOOK_RM_BEHAVIOR", "")
