@@ -95,6 +95,7 @@ type operationSecurityIssueKey struct {
 
 func operationSecurityIssues(ops []spec.Operation) []string {
 	counts := map[operationSecurityIssueKey]int{}
+	tagsByIssue := map[operationSecurityIssueKey]map[string]bool{}
 	for _, op := range ops {
 		seen := map[operationSecurityIssueKey]bool{}
 		for _, alternative := range op.CredentialAlternatives {
@@ -109,9 +110,18 @@ func operationSecurityIssues(ops []spec.Operation) []string {
 		}
 		for key := range seen {
 			counts[key]++
+			for _, tag := range op.Tags {
+				if tag == "" {
+					continue
+				}
+				if tagsByIssue[key] == nil {
+					tagsByIssue[key] = map[string]bool{}
+				}
+				tagsByIssue[key][tag] = true
+			}
 		}
 	}
-	return formatOperationSecurityIssues(counts, "operation")
+	return formatOperationSecurityIssues(counts, "operation", tagsByIssue)
 }
 
 func operationSecurityIssuesFromAlternatives(alternatives []spec.CredentialAlternative) []string {
@@ -134,7 +144,7 @@ func operationSecurityIssuesFromAlternatives(alternatives []spec.CredentialAlter
 			counts[key]++
 		}
 	}
-	return formatOperationSecurityIssues(counts, "alternative")
+	return formatOperationSecurityIssues(counts, "alternative", nil)
 }
 
 func operationSecurityIssueText(requirement spec.CredentialRequirement) (string, bool) {
@@ -148,7 +158,7 @@ func operationSecurityIssueText(requirement spec.CredentialRequirement) (string,
 	}
 }
 
-func formatOperationSecurityIssues(counts map[operationSecurityIssueKey]int, unit string) []string {
+func formatOperationSecurityIssues(counts map[operationSecurityIssueKey]int, unit string, tagsByIssue map[operationSecurityIssueKey]map[string]bool) []string {
 	keys := make([]operationSecurityIssueKey, 0, len(counts))
 	for key := range counts {
 		keys = append(keys, key)
@@ -165,7 +175,16 @@ func formatOperationSecurityIssues(counts map[operationSecurityIssueKey]int, uni
 		if counts[key] == 1 {
 			unitWord = unit
 		}
-		out = append(out, fmt.Sprintf("%s (%d %s); fix the OpenAPI document or use --rsh-auth %s with configured credentials if you know what to send", key.text, counts[key], unitWord, key.id))
+		tagNames := make([]string, 0, len(tagsByIssue[key]))
+		for tag := range tagsByIssue[key] {
+			tagNames = append(tagNames, tag)
+		}
+		sort.Strings(tagNames)
+		tagSummary := ""
+		if len(tagNames) > 0 {
+			tagSummary = "; tags: " + strings.Join(tagNames, ", ")
+		}
+		out = append(out, fmt.Sprintf("%s (%d %s%s); fix the OpenAPI document or use --rsh-auth %s with configured credentials if you know what to send", key.text, counts[key], unitWord, tagSummary, key.id))
 	}
 	return out
 }
