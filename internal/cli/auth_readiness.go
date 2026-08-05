@@ -185,16 +185,24 @@ func formatOperationSecurityIssues(counts map[operationSecurityIssueKey]int, uni
 			tagNames = append(tagNames, tag)
 		}
 		sort.Strings(tagNames)
-		tagSummary := ""
-		if len(tagNames) > 0 {
-			tagSummary = "; tags: " + strings.Join(tagNames, ", ")
-		}
-		operationSummary := ""
 		operationNames := sortedStringSet(operationsByIssue[key])
-		if len(operationNames) > 0 {
-			operationSummary = "; operations: " + strings.Join(operationNames, ", ")
+		action := fmt.Sprintf("fix the OpenAPI document or use --rsh-auth %s with configured credentials if you know what to send", key.id)
+		if len(tagNames) == 0 && len(operationNames) == 0 {
+			out = append(out, fmt.Sprintf("%s (%d %s); %s", key.text, counts[key], unitWord, action))
+			continue
 		}
-		out = append(out, fmt.Sprintf("%s (%d %s%s%s); fix the OpenAPI document or use --rsh-auth %s with configured credentials if you know what to send", key.text, counts[key], unitWord, tagSummary, operationSummary, key.id))
+		var details []string
+		if len(tagNames) > 0 {
+			details = append(details, "  tags: "+strings.Join(tagNames, ", "))
+		}
+		if len(operationNames) > 0 {
+			details = append(details, "  operations:")
+			for _, operationName := range operationNames {
+				details = append(details, "    - "+operationName)
+			}
+		}
+		details = append(details, "  action: "+action)
+		out = append(out, fmt.Sprintf("%s (%d %s)\n%s", key.text, counts[key], unitWord, strings.Join(details, "\n")))
 	}
 	return out
 }
