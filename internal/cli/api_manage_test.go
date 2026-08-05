@@ -3592,8 +3592,13 @@ func TestAPISyncWarnsAboutUndeclaredSecurityScheme(t *testing.T) {
 	if !strings.Contains(errOut.String(), `warning: OpenAPI security: security scheme "BearerAuth" is referenced`) {
 		t.Fatalf("expected undeclared security warning, got:\n%s", errOut.String())
 	}
-	if !strings.Contains(errOut.String(), `(2 operations; tags: admin, reports)`) {
+	if !strings.Contains(errOut.String(), `(2 operations; tags: admin, reports; operations: `) {
 		t.Fatalf("expected affected operation tags, got:\n%s", errOut.String())
+	}
+	for _, want := range []string{"GET /audit (getAudit)", "POST /audit (createAudit)"} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Fatalf("expected affected operation %q, got:\n%s", want, errOut.String())
+		}
 	}
 }
 
