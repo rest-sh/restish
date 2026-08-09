@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -115,6 +116,18 @@ type CredentialRequirement struct {
 // CredentialAlternative is one AND-set within OpenAPI's OR-list security model.
 type CredentialAlternative []CredentialRequirement
 
+// ConditionalSecurityRule narrows an operation's standard security
+// alternatives when a concrete path parameter has the configured prefix.
+type ConditionalSecurityRule struct {
+	When         ConditionalSecurityPredicate `json:"when" cbor:"when" yaml:"when"`
+	Alternatives []int                        `json:"alternatives" cbor:"alternatives" yaml:"alternatives"`
+}
+
+type ConditionalSecurityPredicate struct {
+	PathParameter string `json:"pathParameter" cbor:"path_parameter" yaml:"pathParameter"`
+	Prefix        string `json:"prefix" cbor:"prefix" yaml:"prefix"`
+}
+
 // Operation is a single HTTP operation extracted from a spec, expressed in
 // format-neutral terms so command generators need not import libopenapi.
 type Operation struct {
@@ -143,6 +156,7 @@ type Operation struct {
 	// CredentialAlternatives is the OR-list of AND credential requirements
 	// derived from the effective OpenAPI security requirement.
 	CredentialAlternatives []CredentialAlternative
+	ConditionalSecurity    []ConditionalSecurityRule
 	// MCPIgnore is true when x-mcp-ignore is set.
 	MCPIgnore bool
 	// RequestMediaType is the deterministic preferred content type from
@@ -278,7 +292,10 @@ func (s *APISpec) buildOperations(opts OperationOptions) ([]Operation, []string,
 				}
 			}
 			fullPath := joinOperationPath(basePath, rawPath)
-			op := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components), openAPIJSONSchemaDialect(model.Model))
+			op, err := extractOperation(mo.Method, fullPath, pathParams, mo.Op, model.Model.Security, securitySchemes(model.Model.Components), openAPIJSONSchemaDialect(model.Model))
+			if err != nil {
+				return nil, nil, fmt.Errorf("extract %s %s: %w", mo.Method, rawPath, err)
+			}
 			op.OperationServer = operationServer
 			if op.XCLI.Ignore {
 				continue
@@ -302,7 +319,7 @@ func emitOperationWarnings(warnf func(format string, args ...any), warnings []st
 }
 
 // extractOperation converts a single libopenapi operation to the neutral form.
-func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation, docSecurity []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme, schemaDialect string) Operation {
+func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Operation, docSecurity []*base.SecurityRequirement, schemes map[string]*v3.SecurityScheme, schemaDialect string) (Operation, error) {
 	effectiveSecurity := docSecurity
 	if op.Security != nil {
 		effectiveSecurity = op.Security
@@ -333,6 +350,11 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 	o.Help = buildOperationHelp(op, o.RequestMediaType, schemaDialect)
 	o.RequestMultipartContentTypes = buildRequestMultipartContentTypes(op, o.RequestMediaType)
 	o.OptionalAuth, o.CredentialAlternatives = credentialAlternatives(effectiveSecurity, schemes)
+	conditionalSecurity, err := operationConditionalSecurity(op, path, len(o.CredentialAlternatives))
+	if err != nil {
+		return Operation{}, err
+	}
+	o.ConditionalSecurity = conditionalSecurity
 
 	merged := MergeParameters(pathParams, op.Parameters)
 	for _, p := range merged {
@@ -381,7 +403,43 @@ func extractOperation(method, path string, pathParams []*v3.Parameter, op *v3.Op
 			},
 		})
 	}
-	return o
+	return o, nil
+}
+
+func operationConditionalSecurity(op *v3.Operation, operationPath string, alternativeCount int) ([]ConditionalSecurityRule, error) {
+	if op.Extensions == nil || op.Extensions.GetOrZero("x-restish-security-alternatives") == nil {
+		return nil, nil
+	}
+	var rules []ConditionalSecurityRule
+	if err := op.Extensions.GetOrZero("x-restish-security-alternatives").Decode(&rules); err != nil {
+		return nil, fmt.Errorf("x-restish-security-alternatives: %w", err)
+	}
+	parameters := map[string]bool{}
+	for _, match := range regexp.MustCompile(`\{([^}]+)\}`).FindAllStringSubmatch(operationPath, -1) {
+		parameters[match[1]] = true
+	}
+	for ruleIndex, rule := range rules {
+		if !parameters[rule.When.PathParameter] {
+			return nil, fmt.Errorf("x-restish-security-alternatives[%d] references unknown path parameter %q", ruleIndex, rule.When.PathParameter)
+		}
+		if rule.When.Prefix == "" {
+			return nil, fmt.Errorf("x-restish-security-alternatives[%d] prefix must not be empty", ruleIndex)
+		}
+		if len(rule.Alternatives) == 0 {
+			return nil, fmt.Errorf("x-restish-security-alternatives[%d] must select at least one alternative", ruleIndex)
+		}
+		seen := map[int]bool{}
+		for _, index := range rule.Alternatives {
+			if index < 0 || index >= alternativeCount {
+				return nil, fmt.Errorf("x-restish-security-alternatives[%d] selects out-of-range alternative %d", ruleIndex, index)
+			}
+			if seen[index] {
+				return nil, fmt.Errorf("x-restish-security-alternatives[%d] repeats alternative %d", ruleIndex, index)
+			}
+			seen[index] = true
+		}
+	}
+	return rules, nil
 }
 
 func securitySchemes(components *v3.Components) map[string]*v3.SecurityScheme {

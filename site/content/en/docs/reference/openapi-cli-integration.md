@@ -442,6 +442,25 @@ are not reported as statically callable by `api auth inspect`.
 OpenAPI scope and role arrays are matched against credential `satisfies` values.
 When a required binding is missing, Restish fails before sending the request.
 
+When a concrete path parameter determines which standard security alternative
+applies, use `x-restish-security-alternatives` on the operation:
+
+```yaml
+security:
+  - ProviderAuth: [contents:write]
+  - ProviderAuth: [contents:write, workflows:write]
+x-restish-security-alternatives:
+  - when:
+      pathParameter: path
+      prefix: .github/workflows/
+    alternatives: [1]
+```
+
+The zero-based indexes refer to the operation's standard `security` array. A
+matching rule narrows selection to those alternatives after Restish knows the
+concrete request path. The extension cannot add authority that is absent from
+standard OpenAPI security, and malformed rules fail API synchronization.
+
 Never put secrets in the OpenAPI document. Use prompts, environment references,
 or external tools.
 

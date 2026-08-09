@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -76,6 +77,44 @@ func TestPlanOperationAuthDerivesSatisfiesFromAuthProfileScopes(t *testing.T) {
 	}
 	if !handled || len(selected) != 1 || selected[0].resolved.Ref != "shared-oauth" {
 		t.Fatalf("selected = %#v handled=%v, want shared auth profile", selected, handled)
+	}
+}
+
+func TestPlanOperationAuthSelectsConditionalAlternativeFromConcretePath(t *testing.T) {
+	c := &CLI{}
+	prof := &config.ProfileConfig{Credentials: map[string]*config.CredentialConfig{
+		"provider": {
+			Auth:      &config.AuthConfig{Type: "api-key", Params: map[string]string{"in": "header", "name": "Authorization", "value": "token"}},
+			Satisfies: []string{"contents:write", "workflows:write"},
+		},
+	}}
+	policy := operationAuthPolicy{
+		URL:           "https://adapter.example.com/github/repos/acme/widgets/contents/.github/workflows/release.yml",
+		OperationPath: "/repos/{owner}/{repo}/contents/{path}",
+		CredentialAlternatives: []spec.CredentialAlternative{
+			{{ID: "provider", Needs: []string{"contents:write"}}},
+			{{ID: "provider", Needs: []string{"contents:write", "workflows:write"}}},
+		},
+		ConditionalSecurity: []spec.ConditionalSecurityRule{{
+			When:         spec.ConditionalSecurityPredicate{PathParameter: "path", Prefix: ".github/workflows/"},
+			Alternatives: []int{1},
+		}},
+	}
+	selected, handled, err := c.planOperationAuth("github", "default", prof, &policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth: %v", err)
+	}
+	if !handled || len(selected) != 1 || !reflect.DeepEqual(selected[0].requirement.Needs, []string{"contents:write", "workflows:write"}) {
+		t.Fatalf("selected = %#v handled=%v, want workflow conjunction", selected, handled)
+	}
+
+	policy.URL = "https://adapter.example.com/github/repos/acme/widgets/contents/README.md"
+	selected, handled, err = c.planOperationAuth("github", "default", prof, &policy)
+	if err != nil {
+		t.Fatalf("planOperationAuth ordinary path: %v", err)
+	}
+	if !handled || len(selected) != 1 || !reflect.DeepEqual(selected[0].requirement.Needs, []string{"contents:write"}) {
+		t.Fatalf("selected = %#v handled=%v, want ordinary contents authority", selected, handled)
 	}
 }
 

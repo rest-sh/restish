@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -21,6 +23,8 @@ type operationAuthPolicy struct {
 	OptionalAuth           bool
 	NoAuth                 bool
 	CredentialAlternatives []spec.CredentialAlternative
+	OperationPath          string
+	ConditionalSecurity    []spec.ConditionalSecurityRule
 	Override               string
 	Transport              request.Options
 }
@@ -34,6 +38,13 @@ type selectedOperationAuth struct {
 }
 
 func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
+	if policy != nil {
+		resolved, err := conditionalOperationAuthPolicy(*policy)
+		if err != nil {
+			return nil, false, err
+		}
+		policy = &resolved
+	}
 	if policy != nil && strings.TrimSpace(policy.Override) != "" {
 		return c.planOperationAuthOverride(apiName, profileName, prof, policy)
 	}
@@ -144,6 +155,61 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 	}
 	sort.Strings(missing)
 	return nil, false, fmt.Errorf("profile %q of API %q is missing credential bindings for this operation: %s%s%s; %s", profileName, apiName, strings.Join(uniqueStrings(missing), ", "), securityIssueSuffix, operationAuthConfiguredOverrideHint(prof, policy.CredentialAlternatives), operationAuthSetupHint(apiName, profileName))
+}
+
+func conditionalOperationAuthPolicy(policy operationAuthPolicy) (operationAuthPolicy, error) {
+	if len(policy.ConditionalSecurity) == 0 || policy.URL == "" {
+		return policy, nil
+	}
+	u, err := url.Parse(policy.URL)
+	if err != nil {
+		return operationAuthPolicy{}, fmt.Errorf("conditional operation security: parse request URL: %w", err)
+	}
+	for _, rule := range policy.ConditionalSecurity {
+		value, ok := operationPathParameter(policy.OperationPath, u.EscapedPath(), rule.When.PathParameter)
+		if !ok || !strings.HasPrefix(value, rule.When.Prefix) {
+			continue
+		}
+		alternatives := make([]spec.CredentialAlternative, 0, len(rule.Alternatives))
+		for _, index := range rule.Alternatives {
+			if index < 0 || index >= len(policy.CredentialAlternatives) {
+				return operationAuthPolicy{}, fmt.Errorf("conditional operation security selects unavailable alternative %d", index)
+			}
+			alternatives = append(alternatives, policy.CredentialAlternatives[index])
+		}
+		policy.CredentialAlternatives = alternatives
+		return policy, nil
+	}
+	return policy, nil
+}
+
+func operationPathParameter(template, escapedRequestPath, name string) (string, bool) {
+	var source strings.Builder
+	source.WriteString(`^.*`)
+	index := 0
+	found := false
+	for _, match := range regexp.MustCompile(`\{([^}]+)\}`).FindAllStringSubmatchIndex(template, -1) {
+		source.WriteString(regexp.QuoteMeta(template[index:match[0]]))
+		parameterName := template[match[2]:match[3]]
+		if parameterName == name {
+			source.WriteString(`(.+)`)
+			found = true
+		} else {
+			source.WriteString(`[^/]+`)
+		}
+		index = match[1]
+	}
+	if !found {
+		return "", false
+	}
+	source.WriteString(regexp.QuoteMeta(template[index:]))
+	source.WriteString(`$`)
+	match := regexp.MustCompile(source.String()).FindStringSubmatch(escapedRequestPath)
+	if len(match) != 2 {
+		return "", false
+	}
+	value, err := url.PathUnescape(match[1])
+	return value, err == nil
 }
 
 func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
