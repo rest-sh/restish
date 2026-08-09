@@ -75,6 +75,9 @@ plain bearer credential is not acceptable.
   same Resource indicator, and scopes covering the current operation.
 - Cache identity includes the API, profile, credential binding, source, and
   reference. A cached entry whose source metadata differs is not reused.
+- Credential acquisition is serialized per cache identity. Provider network
+  or interactive work does not hold the shared token-cache file lock, so an
+  acquisition waiting on one identity does not block unrelated credentials.
 - Restish sends a token only when the final target has the same origin as its
   Resource indicator and falls on that indicator's path boundary.
 - Every protected-resource request gets a new proof bound to its actual method,

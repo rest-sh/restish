@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -175,31 +177,28 @@ func (c *TokenCache) Refresh(key string, force bool, refresh func(CachedToken) (
 // processes. The resolver receives nil when no entry exists and returns the
 // complete canonical entry that should replace it.
 func (c *TokenCache) Resolve(key string, resolve func(*CachedToken) (CachedToken, error)) (*CachedToken, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	lock, err := fileutil.LockSiblingFile(c.path)
+	lock, err := fileutil.LockSiblingFile(c.resolveLockPath(key))
 	if err != nil {
 		return nil, err
 	}
 	defer lock.Close()
-	m, err := c.loadLocked()
+	current, err := c.Get(key)
 	if err != nil {
 		return nil, err
 	}
-	var current *CachedToken
-	if cached, ok := m[key]; ok {
-		copy := cached
-		current = &copy
-	}
 	next, err := resolve(current)
-	m[key] = next
-	if err := c.saveLocked(m); err != nil {
-		return nil, err
+	if saveErr := c.Set(key, next); saveErr != nil {
+		return nil, saveErr
 	}
 	if err != nil {
 		return &next, err
 	}
 	return &next, nil
+}
+
+func (c *TokenCache) resolveLockPath(key string) string {
+	digest := sha256.Sum256([]byte(key))
+	return c.path + ".resolve-" + hex.EncodeToString(digest[:])
 }
 
 func (c *TokenCache) load() (map[string]CachedToken, error) {
