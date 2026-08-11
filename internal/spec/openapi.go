@@ -167,7 +167,7 @@ func topLevelDocumentVersion(body []byte, key string) (string, bool) {
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(body, &doc); err != nil {
-		return "", false
+		return topLevelYAMLDocumentVersion(body, key)
 	}
 	root := &doc
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
@@ -180,6 +180,22 @@ func topLevelDocumentVersion(body []byte, key string) (string, bool) {
 		if root.Content[i].Value == key && root.Content[i+1].Kind == yaml.ScalarNode {
 			return strings.TrimSpace(root.Content[i+1].Value), true
 		}
+	}
+	return "", false
+}
+
+func topLevelYAMLDocumentVersion(body []byte, key string) (string, bool) {
+	prefix := key + ":"
+	for _, line := range strings.Split(string(body), "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		var field map[string]string
+		if err := yaml.Unmarshal([]byte(line), &field); err != nil {
+			return "", false
+		}
+		version, ok := field[key]
+		return strings.TrimSpace(version), ok
 	}
 	return "", false
 }

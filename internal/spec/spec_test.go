@@ -115,6 +115,14 @@ func TestOpenAPILoader_Detect_MalformedDocumentWithDeclaredVersion(t *testing.T)
 	}
 }
 
+func TestOpenAPILoader_Detect_MalformedYAMLWithDeclaredVersion(t *testing.T) {
+	l := OpenAPILoader{}
+	body := []byte("openapi: 3.1.0\ninfo: [")
+	if !l.Detect("application/yaml", body) {
+		t.Error("should detect a declared OpenAPI version so loading reports the malformed YAML document")
+	}
+}
+
 func TestOpenAPILoader_Detect_WrongContentType(t *testing.T) {
 	l := OpenAPILoader{}
 	// image/png with openapi body: content-type mismatch should reject.
