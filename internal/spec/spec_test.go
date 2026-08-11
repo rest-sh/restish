@@ -67,6 +67,54 @@ func TestOpenAPILoader_Detect_NotOpenAPI(t *testing.T) {
 	}
 }
 
+func TestOpenAPILoader_Detect_RejectsOpenAPIURLMetadata(t *testing.T) {
+	l := OpenAPILoader{}
+	body := []byte(`{"name":"Example API","openapi":"https://api.example.com/openapi.json"}`)
+	if l.Detect("application/json", body) {
+		t.Error("should not detect service metadata containing an OpenAPI URL")
+	}
+}
+
+func TestOpenAPILoader_Detect_RejectsNestedOpenAPIVersion(t *testing.T) {
+	l := OpenAPILoader{}
+	body := []byte(`{"metadata":{"openapi":"3.1.0"}}`)
+	if l.Detect("application/json", body) {
+		t.Error("should not detect a nested OpenAPI version")
+	}
+}
+
+func TestOpenAPILoader_Detect_RejectsInvalidOpenAPIVersions(t *testing.T) {
+	l := OpenAPILoader{}
+	for _, body := range []string{
+		`{"openapi":"3"}`,
+		`{"openapi":"3.1"}`,
+		`{"openapi":"3.1.x"}`,
+		`{"openapi":"4.0.0"}`,
+		`["openapi", "3.1.0"]`,
+		`openapi: [3, 1, 0]`,
+		`{`,
+	} {
+		if l.Detect("application/json", []byte(body)) {
+			t.Errorf("should not detect invalid OpenAPI document %q", body)
+		}
+	}
+}
+
+func TestOpenAPILoader_Detect_Swagger2ForUnsupportedVersionError(t *testing.T) {
+	l := OpenAPILoader{}
+	if !l.Detect("application/json", []byte(`{"swagger":"2.0","paths":{}}`)) {
+		t.Error("should detect Swagger 2 so loading can return its unsupported-version error")
+	}
+}
+
+func TestOpenAPILoader_Detect_MalformedDocumentWithDeclaredVersion(t *testing.T) {
+	l := OpenAPILoader{}
+	body := []byte(`{"openapi":"3.1.0","info":`)
+	if !l.Detect("application/json", body) {
+		t.Error("should detect a declared OpenAPI version so loading reports the malformed document")
+	}
+}
+
 func TestOpenAPILoader_Detect_WrongContentType(t *testing.T) {
 	l := OpenAPILoader{}
 	// image/png with openapi body: content-type mismatch should reject.

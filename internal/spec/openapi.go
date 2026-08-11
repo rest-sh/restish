@@ -3,6 +3,7 @@ package spec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,7 +28,7 @@ func (OpenAPILoader) Priority() int { return 10 }
 
 // Detect returns true when the content type or body look like an OpenAPI spec.
 // It accepts JSON, YAML, text-ish raw files, and the official OpenAPI MIME
-// types, then confirms by sniffing for an "openapi:" / `"openapi"` key.
+// types, then confirms generic documents have a top-level OpenAPI version.
 func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 	ct := strings.ToLower(contentType)
 	if strings.Contains(ct, "openapi") {
@@ -41,15 +42,7 @@ func (OpenAPILoader) Detect(contentType string, body []byte) bool {
 		return false
 	}
 
-	// Body sniff: look for the "openapi" field. Some generated specs write
-	// the top-level openapi field late in the document, so generic JSON/YAML
-	// cannot rely on a tiny prefix sniff.
-	sniff := body
-	low := bytes.ToLower(sniff)
-	return bytes.Contains(low, []byte(`"openapi"`)) ||
-		bytes.Contains(low, []byte("openapi:")) ||
-		bytes.Contains(low, []byte(`"swagger"`)) ||
-		bytes.Contains(low, []byte("swagger:"))
+	return isOpenAPI3Document(body) || isSwagger2Document(body)
 }
 
 // Load parses body as an OpenAPI 3.x document.
@@ -143,23 +136,78 @@ func shouldIgnoreDescriptionRefPath(path []string) bool {
 }
 
 func isSwagger2Document(body []byte) bool {
+	version, ok := topLevelDocumentVersion(body, "swagger")
+	return ok && version == "2.0"
+}
+
+func isOpenAPI3Document(body []byte) bool {
+	version, ok := topLevelDocumentVersion(body, "openapi")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 || parts[0] != "3" {
+		return false
+	}
+	for _, part := range parts[1:] {
+		if part == "" {
+			return false
+		}
+		if _, err := strconv.ParseUint(part, 10, 64); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func topLevelDocumentVersion(body []byte, key string) (string, bool) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		return topLevelJSONDocumentVersion(trimmed, key)
+	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(body, &doc); err != nil {
-		return false
+		return "", false
 	}
 	root := &doc
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
 		root = doc.Content[0]
 	}
 	if root.Kind != yaml.MappingNode {
-		return false
+		return "", false
 	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "swagger" && strings.TrimSpace(root.Content[i+1].Value) == "2.0" {
-			return true
+		if root.Content[i].Value == key && root.Content[i+1].Kind == yaml.ScalarNode {
+			return strings.TrimSpace(root.Content[i+1].Value), true
 		}
 	}
-	return false
+	return "", false
+}
+
+func topLevelJSONDocumentVersion(body []byte, key string) (string, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return "", false
+	}
+	for decoder.More() {
+		name, err := decoder.Token()
+		if err != nil {
+			return "", false
+		}
+		if name == key {
+			var version string
+			if err := decoder.Decode(&version); err != nil {
+				return "", false
+			}
+			return strings.TrimSpace(version), true
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return "", false
+		}
+	}
+	return "", false
 }
 
 func openAPIConfig(opts LoadOptions) *datamodel.DocumentConfiguration {
