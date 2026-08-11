@@ -115,13 +115,13 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 		return nil, true, nil
 	}
 
-	if prof != nil && canUseProfileAuthFallback(policy) {
+	if prof != nil {
 		resolved, err := c.resolveProfileAuth(apiName, profileName, prof)
 		if err != nil {
 			return nil, false, err
 		}
-		if resolved.Config != nil {
-			return []selectedOperationAuth{{requirement: policy.CredentialAlternatives[0][0], resolved: resolved, source: "profile auth fallback"}}, true, nil
+		if requirement, ok := profileAuthFallbackRequirement(policy, resolved.Config); ok {
+			return []selectedOperationAuth{{requirement: requirement, resolved: resolved, source: "profile auth fallback"}}, true, nil
 		}
 	}
 
@@ -536,11 +536,30 @@ func operationMTLSMissingRequirementMessage(requirement spec.CredentialRequireme
 	return fmt.Sprintf("%s requires mutual TLS; supply --rsh-client-cert and --rsh-client-key, or configure profile client_cert/client_key or tls_signer", id)
 }
 
-func canUseProfileAuthFallback(policy *operationAuthPolicy) bool {
-	return policy != nil &&
-		len(policy.CredentialAlternatives) == 1 &&
+func profileAuthFallbackRequirement(policy *operationAuthPolicy, authConfig *config.AuthConfig) (spec.CredentialRequirement, bool) {
+	if policy == nil || authConfig == nil {
+		return spec.CredentialRequirement{}, false
+	}
+	if len(policy.CredentialAlternatives) == 1 &&
 		len(policy.CredentialAlternatives[0]) == 1 &&
-		policy.CredentialAlternatives[0][0].Kind != "mtls"
+		policy.CredentialAlternatives[0][0].Kind != "mtls" {
+		return policy.CredentialAlternatives[0][0], true
+	}
+	var matched *spec.CredentialRequirement
+	for _, alternative := range policy.CredentialAlternatives {
+		if len(alternative) != 1 || !profileFallbackObviouslyMatches(alternative[0], authConfig) {
+			continue
+		}
+		if matched != nil {
+			return spec.CredentialRequirement{}, false
+		}
+		value := alternative[0]
+		matched = &value
+	}
+	if matched == nil {
+		return spec.CredentialRequirement{}, false
+	}
+	return *matched, true
 }
 
 func parseAuthOverride(value string) (map[string]bool, error) {

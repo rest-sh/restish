@@ -1335,6 +1335,9 @@ func discoveryAuthOrigins(apiCfg *config.APIConfig, profileName string) []*url.U
 	if apiCfg == nil {
 		return nil
 	}
+	if apiCfg.UnauthenticatedSpec {
+		return nil
+	}
 	var origins []*url.URL
 	addNormalized := func(raw string) {
 		if raw == "" {

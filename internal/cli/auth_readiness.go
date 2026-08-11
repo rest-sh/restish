@@ -216,14 +216,14 @@ func (c *CLI) operationAuthCoverage(apiName, profileName string, prof *config.Pr
 			continue
 		}
 		policy := &operationAuthPolicy{OptionalAuth: op.OptionalAuth, CredentialAlternatives: op.CredentialAlternatives}
-		if !canUseProfileAuthFallback(policy) {
-			continue
-		}
 		resolved, ready, err := c.profileAuthReadiness(apiName, profileName, prof)
 		if err != nil || !ready.Usable {
 			continue
 		}
-		requirement := op.CredentialAlternatives[0][0]
+		requirement, ok := profileAuthFallbackRequirement(policy, resolved.Config)
+		if !ok {
+			continue
+		}
 		coverage.Callable++
 		coverage.FallbackByID[requirement.ID]++
 		coverage.FallbackLabels[requirement.ID] = profileFallbackLabel(requirement, resolved.Config)

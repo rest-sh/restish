@@ -77,7 +77,16 @@ var OAuthErrorBodyKeys = map[string]bool{
 }
 
 func IsHeaderName(name string) bool {
-	return HeaderNames[http.CanonicalHeaderKey(name)]
+	canonical := http.CanonicalHeaderKey(name)
+	if HeaderNames[canonical] {
+		return true
+	}
+	for _, suffix := range []string{"-Authorization", "-Cookie", "-Dpop", "-Api-Key", "-Api-Token", "-Auth-Token"} {
+		if strings.HasSuffix(canonical, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func IsHeaderValue(name, value string) bool {
