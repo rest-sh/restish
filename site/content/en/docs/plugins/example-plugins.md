@@ -1,8 +1,8 @@
 ---
-title: Built-In Example Plugins
+title: Example Plugins
 linkTitle: Example Plugins
 weight: 20
-description: Map first-party plugin binaries and fixtures to user and author goals.
+description: Find first-party reference implementations and independently maintained Restish plugins.
 ---
 
 The repository includes plugin binaries that are both useful tools and reference
@@ -13,7 +13,7 @@ If you are only trying to install and run a plugin, start with
 [Install and Use Plugins](../install-and-use/). If you are writing one, read
 the relevant author guide after finding the closest example here.
 
-## Operator-Facing Plugins
+## First-Party Plugins
 
 | Plugin | Path | Use it for |
 | --- | --- | --- |
@@ -25,6 +25,18 @@ the relevant author guide after finding the closest example here.
 These binaries are built like normal Go commands. Once installed where Restish
 can discover them, they participate in the same plugin lifecycle as third-party
 plugins.
+
+## Third-Party Plugins
+
+Third-party plugins are maintained outside the Restish project. Review their
+source and installation instructions before running them.
+
+| Plugin | Repository | Use it for |
+| --- | --- | --- |
+| `restish-workflow` | [`natalie-o-perret/restish-plugin-workflow`](https://github.com/natalie-o-perret/restish-plugin-workflow) | Run Arazzo 1.0.x workflows across configured Restish APIs. |
+
+Restish validates plugin protocol compatibility, but does not verify publishers
+or audit third-party behavior.
 
 ## Author Fixtures
 
