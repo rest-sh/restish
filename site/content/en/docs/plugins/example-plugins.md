@@ -33,7 +33,7 @@ source and installation instructions before running them.
 
 | Plugin | Repository | Use it for |
 | --- | --- | --- |
-| `restish-workflow` | [`natalie-o-perret/restish-plugin-workflow`](https://github.com/natalie-o-perret/restish-plugin-workflow) | Run Arazzo 1.0.x workflows across configured Restish APIs. |
+| `restish-workflow` | [`natalie-o-perret/restish-plugin-arazzo`](https://github.com/natalie-o-perret/restish-plugin-arazzo) | Run Arazzo 1.0.x workflows across configured Restish APIs. |
 
 Restish validates plugin protocol compatibility, but does not verify publishers
 or audit third-party behavior.
