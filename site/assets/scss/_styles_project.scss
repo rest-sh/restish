@@ -183,7 +183,7 @@
 
   .td-404 main,
   .td-main main {
-    padding-top: calc(var(--td-main-padding-top) + 4rem + var(--restish-sponsor-height));
+    padding-top: calc(var(--td-main-padding-top, 1.5rem) + 4rem + var(--restish-sponsor-height));
   }
 
   .td-sidebar {
