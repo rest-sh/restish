@@ -156,7 +156,7 @@ func (c *CLI) runConfigTrust(cmd *cobra.Command, args []string) error {
 
 func (c *CLI) printConfigShowAPIs(style humanTextStyle, cfg *config.Config) {
 	if cfg == nil || len(cfg.APIs) == 0 {
-		fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("APIs:"), style.warn("none"), style.hint("run \"restish api connect <name> <url>\""))
+		fmt.Fprintf(c.Stdout, "%s %s (%s)\n", style.key("APIs:"), style.warn("none"), style.hint("run \""+c.commandNameOrDefault()+" api connect <name> <url>\""))
 		return
 	}
 	names := sortedConfigKeys(cfg.APIs)

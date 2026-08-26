@@ -76,7 +76,7 @@ func (c *CLI) buildAPICommandFromOperationSet(apiName string, apiCfg *config.API
 		long = strings.TrimSpace(set.Info.Summary)
 	}
 	isRootAPI := c.isPromotedAPI(apiName)
-	long, fullLong := generatedAPIHelpDescription(apiName, long)
+	long, fullLong := generatedAPIHelpDescription(c.commandNameOrDefault(), apiName, long)
 	if generatedAPIHasAuth(ops) && !isRootAPI {
 		if long != "" {
 			long += "\n\n"
@@ -202,7 +202,7 @@ func generatedAPIHasAuth(ops []spec.Operation) bool {
 	return false
 }
 
-func generatedAPIHelpDescription(apiName, description string) (string, string) {
+func generatedAPIHelpDescription(commandName, apiName, description string) (string, string) {
 	description = strings.TrimSpace(description)
 	if description == "" {
 		return "", ""
@@ -215,7 +215,7 @@ func generatedAPIHelpDescription(apiName, description string) (string, string) {
 	if short != "" && !strings.HasSuffix(short, "...") {
 		short += "\n..."
 	}
-	note := fmt.Sprintf("Description truncated; run \"restish %s --help-all\" to show the full API description.", apiName)
+	note := fmt.Sprintf("Description truncated; run \"%s %s --help-all\" to show the full API description.", commandName, apiName)
 	if short == "" {
 		return note, description
 	}

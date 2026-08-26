@@ -41,8 +41,8 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 		Short: "Generate or install shell completion scripts",
 		Long:  completionLong,
 		Example: fmt.Sprintf(`  %s shell completion zsh
-  %s shell completion bash > restish.bash
-  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
+  %s shell completion bash > %s.bash
+  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown completion command %q", args[0])
@@ -62,8 +62,8 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	bash := &cobra.Command{
 		Use:                   "bash",
 		Short:                 fmt.Sprintf(shortDesc, "bash"),
-		Long:                  shellCompletionLong("bash", "restish shell completion bash > restish.bash"),
-		Example:               fmt.Sprintf("  %s shell completion bash > restish.bash", c.commandNameOrDefault()),
+		Long:                  shellCompletionLong("bash", fmt.Sprintf("%s shell completion bash > %s.bash", c.commandNameOrDefault(), c.commandNameOrDefault())),
+		Example:               fmt.Sprintf("  %s shell completion bash > %s.bash", c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args:                  usageNoArgs,
 		DisableFlagsInUseLine: true,
 		ValidArgsFunction:     cobra.NoFileCompletions,
@@ -74,9 +74,9 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	zsh := &cobra.Command{
 		Use:   "zsh",
 		Short: fmt.Sprintf(shortDesc, "zsh"),
-		Long:  shellCompletionLong("zsh", "restish shell completion install zsh"),
-		Example: fmt.Sprintf(`  %s shell completion zsh > _restish
-  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Long:  shellCompletionLong("zsh", fmt.Sprintf("%s shell completion install zsh", c.commandNameOrDefault())),
+		Example: fmt.Sprintf(`  %s shell completion zsh > _%s
+  %s shell completion install zsh`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -86,9 +86,9 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	fish := &cobra.Command{
 		Use:   "fish",
 		Short: fmt.Sprintf(shortDesc, "fish"),
-		Long:  shellCompletionLong("fish", "restish shell completion install fish"),
-		Example: fmt.Sprintf(`  %s shell completion fish > restish.fish
-  %s shell completion install fish`, c.commandNameOrDefault(), c.commandNameOrDefault()),
+		Long:  shellCompletionLong("fish", fmt.Sprintf("%s shell completion install fish", c.commandNameOrDefault())),
+		Example: fmt.Sprintf(`  %s shell completion fish > %s.fish
+  %s shell completion install fish`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
 		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -98,7 +98,7 @@ func (c *CLI) newCompletionCommand(root *cobra.Command) *cobra.Command {
 	powershell := &cobra.Command{
 		Use:               "powershell",
 		Short:             fmt.Sprintf(shortDesc, "powershell"),
-		Long:              shellCompletionLong("powershell", "restish shell completion powershell | Out-String | Invoke-Expression"),
+		Long:              shellCompletionLong("powershell", fmt.Sprintf("%s shell completion powershell | Out-String | Invoke-Expression", c.commandNameOrDefault())),
 		Example:           fmt.Sprintf("  %s shell completion powershell | Out-String | Invoke-Expression", c.commandNameOrDefault()),
 		Args:              usageNoArgs,
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -582,7 +582,7 @@ func (c *CLI) installZshCompletion(cmd *cobra.Command, opts completionInstallOpt
 	if err := generateCompletionScript(cmd.Root(), opts.Shell, opts.NoDesc, &script); err != nil {
 		return err
 	}
-	rcBlock := zshCompletionRCBlock(scriptPath)
+	rcBlock := zshCompletionRCBlock(c.commandNameOrDefault(), scriptPath)
 
 	existingRCBytes, _ := os.ReadFile(rcPath)
 	existingRC := string(existingRCBytes)
@@ -728,11 +728,11 @@ func sanitizePathComponent(value string) string {
 	return b.String()
 }
 
-func zshCompletionRCBlock(scriptPath string) string {
+func zshCompletionRCBlock(commandName, scriptPath string) string {
 	quotedPath := shellSingleQuote(scriptPath)
 	return strings.Join([]string{
 		completionBlockStart,
-		"# Managed by `restish completion install zsh`.",
+		"# Managed by `" + commandName + " completion install zsh`.",
 		"autoload -Uz compinit",
 		"if ! whence -w compdef >/dev/null 2>&1; then",
 		"  compinit",

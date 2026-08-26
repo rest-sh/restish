@@ -109,7 +109,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	apiCmd.AddCommand(&cobra.Command{
 		Use:   "set <name> <patch> [patch...]",
 		Short: "Patch API config using shorthand syntax",
-		Long:  apiSetLong,
+		Long:  apiSetLongFor(c.commandNameOrDefault()),
 		Example: fmt.Sprintf(`  %s api set demo 'profiles.default.headers[]: X-Trace-Id: abc'
   %s api set demo 'base_url: https://staging.example.com'
   %s api set demo 'profiles.prod.auth.type: oauth-client-credentials'`, c.commandNameOrDefault(), c.commandNameOrDefault(), c.commandNameOrDefault()),
@@ -135,10 +135,10 @@ Use api connect to register an API explicitly:
 
 In many cases replacing "configure" with "connect" is enough. If the v1
 command prompted for auth, profiles, or other defaults, connect first and then
-adjust the API with "restish api set".
+adjust the API with "%s api set".
 
 Upgrade guide: https://rest.sh/docs/getting-started/upgrade-from-v1/
-Archived v1 docs: https://rest.sh/v1/`, replacement)
+Archived v1 docs: https://rest.sh/v1/`, replacement, commandName)
 }
 
 // runAPIAuthLogout deletes the token cache entry for the named API+profile.
@@ -351,7 +351,7 @@ func (c *CLI) syncOneAPI(cmd *cobra.Command, apiName string, sharedTransport htt
 			ServerVariables: effectiveServerVariables(apiCfg, profileName),
 		}
 		if err := spec.StoreSpecInCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
-			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
+			c.warnf("could not cache generated commands for API %q: %v; run '%s api sync %s' before using generated help", apiName, err, c.commandNameOrDefault(), apiName)
 		}
 		style := humanTextStyleFor(c.Stdout)
 		if report, err := apiSpec.XCLIExtensionReport(); err == nil {
@@ -513,7 +513,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			ServerVariables: effectiveServerVariables(apiCfg, "default"),
 		}
 		if err := spec.StoreSpecInCache(c.specCacheDir(), c.apiStateName(apiName), Version, apiSpec, apiCfg.SpecFiles, opOpts, 0); err != nil {
-			c.warnf("could not cache generated commands for API %q: %v; run 'restish api sync %s' before using generated help", apiName, err, apiName)
+			c.warnf("could not cache generated commands for API %q: %v; run '%s api sync %s' before using generated help", apiName, err, c.commandNameOrDefault(), apiName)
 		}
 	}
 	c.printConfigWrittenPath()
@@ -528,11 +528,11 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	}
 	if apiSpec != nil {
 		opCount := connectedOperationCount(apiSpec, apiCfg)
-		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%d operations discovered — %s)\n", style.ok("Connected"), apiName, baseURL, opCount, style.hint("run 'restish "+apiName+" --help'"))
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%d operations discovered — %s)\n", style.ok("Connected"), apiName, baseURL, opCount, style.hint("run '"+c.commandNameOrDefault()+" "+apiName+" --help'"))
 	} else if noDiscover {
-		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("discovery skipped"), style.hint("run 'restish api sync "+apiName+"' later"))
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("discovery skipped"), style.hint("run '"+c.commandNameOrDefault()+" api sync "+apiName+"' later"))
 	} else {
-		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("no spec found"), style.hint("run 'restish api sync "+apiName+"' after connecting"))
+		fmt.Fprintf(c.Stdout, "%s API %q with base URL %s (%s — %s)\n", style.ok("Connected"), apiName, baseURL, style.warn("no spec found"), style.hint("run '"+c.commandNameOrDefault()+" api sync "+apiName+"' after connecting"))
 	}
 	return nil
 }
@@ -580,7 +580,7 @@ func (c *CLI) configureAllowedOperationOrigins(cmd *cobra.Command, apiName strin
 		return nil
 	}
 	if !output.IsTerminalReader(c.Stdin) {
-		c.warnf("cross-origin operation servers ignored: %s; allow with: restish api set %s 'allowed_operation_origins[]: %s'", strings.Join(origins, ", "), apiName, suggestions[0])
+		c.warnf("cross-origin operation servers ignored: %s; allow with: %s api set %s 'allowed_operation_origins[]: %s'", strings.Join(origins, ", "), c.commandNameOrDefault(), apiName, suggestions[0])
 		return nil
 	}
 	label := fmt.Sprintf("Allow generated operations to call %s? This writes allowed_operation_origins: %s [Y/n] ", strings.Join(origins, ", "), strings.Join(suggestions, ", "))

@@ -117,7 +117,7 @@ func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName stri
 	if hasOps {
 		fmt.Fprintf(c.Stdout, "Callable secured operations: %d/%d\n", coverage.Callable, coverage.Secured)
 	} else {
-		fmt.Fprintf(c.Stdout, "Operation metadata: %s (%s)\n", style.warn("unavailable"), style.hint("run \"restish api sync "+apiName+"\" to refresh"))
+		fmt.Fprintf(c.Stdout, "Operation metadata: %s (%s)\n", style.warn("unavailable"), style.hint("run \""+c.commandNameOrDefault()+" api sync "+apiName+"\" to refresh"))
 	}
 	if len(ids) == 0 {
 		fmt.Fprintf(c.Stdout, "Credentials: %s\n", style.warn("none"))
@@ -138,7 +138,7 @@ func (c *CLI) printAPIAuthOverview(cmd *cobra.Command, apiName, profileName stri
 		coverage := c.operationAuthCoverage(apiName, profileName, prof, set.Operations)
 		c.printAPIAuthRequirementSummary(apiName, profileName, set.Operations, prof, coverage)
 		if credentialID := nextMissingCredentialID(set.Operations, prof, coverage); credentialID != "" {
-			fmt.Fprintf(c.Stdout, "%s run \"restish api auth add %s %s\".\n", style.hint("Next:"), apiName, credentialID)
+			fmt.Fprintf(c.Stdout, "%s run \"%s api auth add %s %s\".\n", style.hint("Next:"), c.commandNameOrDefault(), apiName, credentialID)
 		}
 	}
 }
@@ -185,7 +185,7 @@ func (c *CLI) runAPIAuthAdd(cmd *cobra.Command, args []string) error {
 	style := humanTextStyleFor(c.Stdout)
 	fmt.Fprintf(c.Stdout, "%s credential %q to API %q profile %q.\n", style.ok("Added"), credentialID, apiName, profileName)
 	if prof.Credentials[credentialID].Auth == nil && prof.Credentials[credentialID].AuthRef == "" {
-		fmt.Fprintf(c.Stdout, "%s run \"restish api auth inspect %s\" to review credential readiness.\n", style.hint("Next:"), apiName)
+		fmt.Fprintf(c.Stdout, "%s run \"%s api auth inspect %s\" to review credential readiness.\n", style.hint("Next:"), c.commandNameOrDefault(), apiName)
 	}
 	return nil
 }
@@ -215,7 +215,7 @@ func (c *CLI) runAPIAuthInspect(cmd *cobra.Command, args []string) error {
 	}
 	apiName := args[0]
 	if looksLikeURLArgument(apiName) {
-		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: restish api auth get <api-name>")
+		return fmt.Errorf("api auth inspect expects an API name, not a URL\nv2 form: %s api auth get <api-name>", c.commandNameOrDefault())
 	}
 	profileName := c.profileFromCmd(cmd)
 	apiCfg, prof, err := c.apiProfileForAuth(apiName, profileName, false)
@@ -325,7 +325,7 @@ func (c *CLI) runAPIAuthInspectOperation(cmd *cobra.Command, apiName, profileNam
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
+		return fmt.Errorf("operation %q not found in cached metadata for API %q; run \"%s api sync %s\"", operationName, apiName, c.commandNameOrDefault(), apiName)
 	}
 	if op.NoAuth {
 		fmt.Fprintf(c.Stdout, "Operation: %s\nAuth: none (security: [])\n", op.ID)
@@ -512,7 +512,7 @@ func (c *CLI) apiAuthGetOperationFragment(cmd *cobra.Command, apiName, profileNa
 		return "", err
 	}
 	if !ok {
-		return "", fmt.Errorf("operation %q not found in cached metadata for API %q; run \"restish api sync %s\"", operationName, apiName, apiName)
+		return "", fmt.Errorf("operation %q not found in cached metadata for API %q; run \"%s api sync %s\"", operationName, apiName, c.commandNameOrDefault(), apiName)
 	}
 	if op.NoAuth {
 		return "", fmt.Errorf("operation %q has security: [] and does not send auth material", op.ID)
@@ -600,7 +600,7 @@ func (c *CLI) resolveAuthInspectionConfig(apiName, profileName string, prof *con
 	switch len(ids) {
 	case 0:
 		if len(prof.Credentials) > 0 {
-			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"restish api auth inspect %s\"", profileName, apiName, apiName)
+			return resolvedAuthConfig{}, "", fmt.Errorf("profile %q of API %q has credentials but none have auth configured; run \"%s api auth inspect %s\"", profileName, apiName, c.commandNameOrDefault(), apiName)
 		}
 		return resolvedAuthConfig{}, "", nil
 	case 1:
@@ -799,7 +799,7 @@ func selectedOperationAuthConfigs(selected []selectedOperationAuth) []*config.Au
 func (c *CLI) apiProfileForAuth(apiName, profileName string, create bool) (*config.APIConfig, *config.ProfileConfig, error) {
 	apiCfg, err := c.requireAPI(apiName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w; run \"restish api list\" to see configured APIs", err)
+		return nil, nil, fmt.Errorf("%w; run \"%s api list\" to see configured APIs", err, c.commandNameOrDefault())
 	}
 	if apiCfg.Profiles != nil && apiCfg.Profiles[profileName] != nil {
 		return apiCfg, apiCfg.Profiles[profileName], nil
@@ -881,7 +881,7 @@ func (c *CLI) operationSetForAPI(ctx context.Context, apiName string, apiCfg *co
 	if err != nil || s == nil {
 		if !spec.HasLocalSpecFiles(apiCfg.SpecFiles) {
 			if err == nil && !forceRefresh && (apiCfg.BaseURL != "" || apiCfg.SpecURL != "" || len(apiCfg.SpecFiles) > 0) {
-				c.hintf("spec cache for API %q is empty; run \"restish api sync %s\" to populate it", apiName, apiName)
+				c.hintf("spec cache for API %q is empty; run \"%s api sync %s\" to populate it", apiName, c.commandNameOrDefault(), apiName)
 			}
 			return spec.OperationSet{}, false, err
 		}

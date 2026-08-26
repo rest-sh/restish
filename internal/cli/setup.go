@@ -195,10 +195,10 @@ func (c *CLI) hintShellSetup() {
 		return
 	}
 	if source == "$SHELL" {
-		c.tipf("run `restish shell setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)", shell)
+		c.tipf("run `%s shell setup %s` to configure your shell (prevents glob expansion issues; detected via $SHELL)", c.commandNameOrDefault(), shell)
 		return
 	}
-	c.tipf("run `restish shell setup %s` to configure your shell (prevents glob expansion issues)", shell)
+	c.tipf("run `%s shell setup %s` to configure your shell (prevents glob expansion issues)", c.commandNameOrDefault(), shell)
 }
 
 func detectRunningShell() (string, string) {

@@ -32,7 +32,7 @@ func (c *CLI) newRootCmd() *cobra.Command {
 	}
 	long := c.commandLong
 	if long == "" {
-		long = rootLongDefault
+		long = rootLongDefaultFor(use)
 	}
 	root := &cobra.Command{
 		Use:   use,
