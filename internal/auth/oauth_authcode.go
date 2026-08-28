@@ -133,7 +133,7 @@ func (h *AuthorizationCode) resolveToken(ctx context.Context, params map[string]
 		if h.Stderr != nil {
 			fmt.Fprintf(h.Stderr, "OAuth refresh failed: %v\n", err)
 		}
-		if !isTokenEndpointErrorCode(err, "invalid_grant") {
+		if !isRefreshTokenRejected(err) {
 			return "", err
 		}
 		clearRejectedOAuthToken(h.Cache, cacheKey, h.Stderr)
