@@ -837,10 +837,11 @@ func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
 		case "darwin":
 			cmd = exec.Command("open", "--", rawURL)
 		case "windows":
-			// Pass an explicit empty title ("") before the URL so that special
-			// characters in the URL are not misinterpreted as window title or
-			// cmd /c start flags.
-			cmd = exec.Command("cmd", "/c", "start", "", "--", rawURL)
+			// Do not go through cmd.exe: "start" has no "--" convention (it tries
+			// to launch a program named "--"), and cmd splits an unquoted command
+			// line at "&", which every authorization URL contains. rundll32 hands
+			// the URL to the default browser with no shell in between.
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
 		default:
 			cmd = exec.Command("xdg-open", rawURL)
 		}
