@@ -39,6 +39,22 @@ Origami under blacklight   webp    /images/webp
 Andy Warhol mural in Miami gif     /images/gif
 ```
 
+## Sponsors
+
+A big thank you to our sponsor!
+
+<div>
+	<a href="https://serpapi.com/?utm_source=restish">
+		<img src="site/static/img/sponsors/serpapi-banner.png" alt="SerpApi" width="260" align="right">
+	</a>
+	<h3>SerpApi: Web Search API</h3>
+	<p>
+		Access Google Search, Maps, Shopping, and other search engine data with a simple API by SerpApi.
+	</p>
+	<a href="https://serpapi.com/?utm_source=restish">Learn more</a>
+</div>
+<hr/>
+
 ## Install
 
 Use Homebrew for the easiest managed install on macOS:
@@ -142,22 +158,6 @@ Development docs:
 - [Release Packaging](https://rest.sh/docs/contributing/release-packaging/)
 - [Design Docs](docs/design/README.md)
 - [Docs Source](site/)
-
-## Sponsors
-
-A big thank you to our sponsor!
-
-<div>
-	<a href="https://serpapi.com/?utm_source=restish">
-		<img src="site/static/img/sponsors/serpapi-banner.png" alt="SerpApi" width="260" align="right">
-	</a>
-	<h3>SerpApi: Web Search API</h3>
-	<p>
-		Access Google Search, Maps, Shopping, and other search engine data with a simple API by SerpApi.
-	</p>
-	<a href="https://serpapi.com/?utm_source=restish">Learn more</a>
-</div>
-<hr/>
 
 ## License
 
