@@ -491,7 +491,7 @@ func (c *CLI) buildOperationCommand(apiName, examplePrefix string, op spec.Opera
 			}
 			acceptOverride := c.generatedOperationAcceptHeader(op.ResponseMediaTypes, op.ResponseMediaType)
 			rawBinaryBody := op.Help.Request != nil && op.Help.Request.RawBinary
-			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.Help, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, required, optional, args)
+			return c.runGeneratedOp(cmd, apiName, op.Path, op.OperationServer, op.Method, op.RequestMediaType, acceptOverride, op.RequestMultipartContentTypes, op.Help, op.BodyRequired, rawBinaryBody, op.NoAuth, op.OptionalAuth, op.CredentialAlternatives, op.ConditionalSecurity, required, optional, args)
 		},
 	}
 	if candidates := authOverrideCandidates(op.OptionalAuth, op.CredentialAlternatives); len(candidates) > 0 {
@@ -1382,6 +1382,7 @@ func (c *CLI) runGeneratedOp(
 	noAuth bool,
 	optionalAuth bool,
 	credentialAlternatives []spec.CredentialAlternative,
+	conditionalSecurity []spec.ConditionalSecurityRule,
 	required, optional []*paramInfo,
 	args []string,
 ) error {
@@ -1511,6 +1512,8 @@ func (c *CLI) runGeneratedOp(
 			OptionalAuth:           optionalAuth,
 			NoAuth:                 noAuth,
 			CredentialAlternatives: credentialAlternatives,
+			OperationPath:          opPath,
+			ConditionalSecurity:    conditionalSecurity,
 			Override:               gf.Auth,
 		},
 	})

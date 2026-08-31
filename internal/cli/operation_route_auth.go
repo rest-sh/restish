@@ -44,7 +44,7 @@ func (c *CLI) operationAuthForGenericRequest(ctx context.Context, method, rawURL
 		if !ok {
 			continue
 		}
-		score, ok := routeTemplateMatchScore(routePath, requestPath)
+		score, ok := routeTemplateMatchScore(routePath, requestPath, conditionalSecurityPathParameters(op.ConditionalSecurity))
 		if !ok || score < bestScore {
 			continue
 		}
@@ -69,6 +69,8 @@ func (c *CLI) operationAuthForGenericRequest(ctx context.Context, method, rawURL
 		policy: &operationAuthPolicy{
 			OptionalAuth:           best.OptionalAuth,
 			CredentialAlternatives: best.CredentialAlternatives,
+			OperationPath:          best.Path,
+			ConditionalSecurity:    best.ConditionalSecurity,
 		},
 	}, true
 }
@@ -112,7 +114,7 @@ func operationRoutePath(apiCfg *config.APIConfig, profileName, opPath string) (s
 	return urlpath.Clean(path), true
 }
 
-func routeTemplateMatchScore(templatePath, requestPath string) (int, bool) {
+func routeTemplateMatchScore(templatePath, requestPath string, greedyParameters map[string]bool) (int, bool) {
 	templatePath = urlpath.Clean(templatePath)
 	requestPath = urlpath.Clean(requestPath)
 	if templatePath == requestPath && !strings.Contains(templatePath, "{") {
@@ -120,12 +122,25 @@ func routeTemplateMatchScore(templatePath, requestPath string) (int, bool) {
 	}
 	templateSegments := splitCleanPath(templatePath)
 	requestSegments := splitCleanPath(requestPath)
-	if len(templateSegments) != len(requestSegments) {
+	greedyName := ""
+	if len(templateSegments) > 0 {
+		last := templateSegments[len(templateSegments)-1]
+		if strings.HasPrefix(last, "{") && strings.HasSuffix(last, "}") {
+			name := strings.TrimSuffix(strings.TrimPrefix(last, "{"), "}")
+			if greedyParameters[name] {
+				greedyName = name
+			}
+		}
+	}
+	if len(templateSegments) != len(requestSegments) && (greedyName == "" || len(requestSegments) < len(templateSegments)) {
 		return 0, false
 	}
 	score := 0
 	for i, templateSegment := range templateSegments {
 		requestSegment := requestSegments[i]
+		if i == len(templateSegments)-1 && greedyName != "" {
+			requestSegment = strings.Join(requestSegments[i:], "/")
+		}
 		if strings.Contains(templateSegment, "{") && strings.Contains(templateSegment, "}") {
 			if requestSegment == "" {
 				return 0, false
@@ -139,6 +154,14 @@ func routeTemplateMatchScore(templatePath, requestPath string) (int, bool) {
 		score += len(templateSegment) * 4
 	}
 	return score, true
+}
+
+func conditionalSecurityPathParameters(rules []spec.ConditionalSecurityRule) map[string]bool {
+	parameters := map[string]bool{}
+	for _, rule := range rules {
+		parameters[rule.When.PathParameter] = true
+	}
+	return parameters
 }
 
 func splitCleanPath(p string) []string {
