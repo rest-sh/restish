@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func (c *CLI) externalToolApprovalsPath() string {
 
 func (c *CLI) loadExternalToolApprovals(hash string) (map[string]bool, bool, error) {
 	path := c.externalToolApprovalsPath()
-	if insecure, err := config.ConfigFileHasInsecurePermissions(path); err != nil {
+	if insecure, err := config.ConfigFileHasInsecurePermissions(path); err != nil && !errors.Is(err, config.ErrPermissionCheckUnsupported) {
 		return nil, false, err
 	} else if insecure {
 		return nil, false, fmt.Errorf("external-tool approvals %s is group/world-readable; run chmod 600 %s", path, path)
