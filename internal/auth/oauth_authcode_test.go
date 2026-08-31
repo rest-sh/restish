@@ -1293,15 +1293,24 @@ func TestDefaultOpenBrowserReturnsAfterStart(t *testing.T) {
 }
 
 func TestDefaultOpenBrowserCommandUsesArgumentSeparator(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		// xdg-open does not support --, so we skip the separator check on Linux.
-		// Real OAuth URLs always start with https://, so this is safe in practice.
-		t.Skip("xdg-open does not accept --")
+	if runtime.GOOS != "darwin" {
+		// Only macOS "open" accepts --; xdg-open and rundll32 do not. Real OAuth
+		// URLs always start with https://, so this is safe in practice.
+		t.Skip("only the darwin opener accepts --")
 	}
 	cmd := defaultOpenBrowserCommand("-https://example.com")
 	args := strings.Join(cmd.Args, "\x00")
 	if !strings.Contains(args, "\x00--\x00-https://example.com") {
 		t.Fatalf("browser command should pass -- before URL, got %#v", cmd.Args)
+	}
+}
+
+func TestDefaultOpenBrowserCommandWindowsUsesRundll32WithoutShell(t *testing.T) {
+	url := "https://example.com/authorize?client_id=abc&state=xyz&code_challenge=q"
+	cmd := defaultOpenBrowserCommandForGOOS("windows", url)
+	want := []string{"rundll32", "url.dll,FileProtocolHandler", url}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("windows browser command args = %#v, want %#v", cmd.Args, want)
 	}
 }
 
