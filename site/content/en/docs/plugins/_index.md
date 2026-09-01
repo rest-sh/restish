@@ -16,7 +16,7 @@ keeping HTTP execution and output behavior anchored in the host CLI.
 Start here when you want to use an existing plugin:
 
 - [Install and Use Plugins](./install-and-use/) for installation, listing, removal, and debugging.
-- [Built-In Example Plugins](./example-plugins/) to find first-party plugin binaries.
+- [Example Plugins](./example-plugins/) to find first-party references and independently maintained plugins.
 - [TLS Signer Plugins](./tls-signer-plugins/) for hardware-backed or external mTLS signing.
 - [Bulk Management](/docs/plugins/bulk-management/) for `restish-bulk`.
 - [MCP](/docs/plugins/mcp/) for `restish-mcp`.

@@ -109,8 +109,8 @@ flags.
 | Expose APIs to another protocol | `cmd/restish-mcp/main.go` | [Command Plugins](../command-plugins/) and [MCP](../mcp/) |
 | Sign mTLS with external key material | `cmd/restish-pkcs11/main.go` | [TLS Signer Plugins](../tls-signer-plugins/) |
 
-Use [Built-In Example Plugins](../example-plugins/) as the map from binary to
-source path.
+Use the first-party section of [Example Plugins](../example-plugins/) as the map
+from binary to source path.
 
 ## Compatibility
 
@@ -127,7 +127,7 @@ read the wire protocol reference.
 
 - [Hook Plugins](../hook-plugins/)
 - [Command Plugins](../command-plugins/)
-- [Built-In Example Plugins](../example-plugins/)
+- [Example Plugins](../example-plugins/)
 - [Plugin Manifest](/docs/reference/plugin-manifest/)
 - [Plugin Messages](/docs/reference/plugin-messages/)
 - [Plugin Command](/docs/reference/plugin-command/)
