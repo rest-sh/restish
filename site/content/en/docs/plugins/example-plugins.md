@@ -34,6 +34,7 @@ source and installation instructions before running them.
 | Plugin | Repository | Use it for |
 | --- | --- | --- |
 | `restish-arazzo` | [`natalie-o-perret/restish-plugin-arazzo`](https://github.com/natalie-o-perret/restish-plugin-arazzo) | Run [Arazzo 1.0.x](https://spec.openapis.org/arazzo/v1.0.1.html) workflows across configured Restish APIs. |
+| `restish-progress` | [`natalie-o-perret/restish-plugin-progress`](https://github.com/natalie-o-perret/restish-plugin-progress) | Render SSE and NDJSON progress events as terminal progress bars. |
 
 Restish validates plugin protocol compatibility, but does not verify publishers
 or audit third-party behavior.
