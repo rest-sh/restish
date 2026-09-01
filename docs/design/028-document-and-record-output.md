@@ -122,6 +122,7 @@ unknown payloads.
 This keeps a clean product distinction:
 
 - redirection saves the response body bytes
+- `-r` / `--rsh-raw` selects those bytes explicitly on any stdout
 - `-o <format>` transforms the decoded body or selected value
 - filters and metadata shortcuts render normalized values
 - `--rsh-collect` opts into a synthesized multi-page document
@@ -399,6 +400,8 @@ Clear failure is better than silently emitting invalid or misleading output.
   on stdout
 - default redirected non-TTY without filters or formats: first response body
   bytes, with automatic pagination skipped
+- `-r` / `--rsh-raw`: first response body bytes on any stdout, with automatic
+  pagination skipped
 - `-o json`: valid pretty JSON document by default; unfiltered pagination
   merges items, filtered pagination renders filtered item results
 - `-o yaml`: valid YAML document; unfiltered pagination merges items, filtered
@@ -411,6 +414,7 @@ Clear failure is better than silently emitting invalid or misleading output.
 ### True SSE / NDJSON Stream
 
 - default TTY: auto incremental event output
+- `-r` / `--rsh-raw`: incremental passthrough of decompressed stream bytes
 - default non-TTY: NDJSON-style item output when the payload is structured
 - `-o ndjson`: one JSON value per line
 - `-o auto`: incremental human-readable event view

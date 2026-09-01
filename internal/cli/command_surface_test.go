@@ -521,6 +521,11 @@ func TestPlainUtilityCommandsRejectResponseTransformFlags(t *testing.T) {
 			want: "does not support -f/--rsh-filter",
 		},
 		{
+			name: "version raw output",
+			args: []string{"restish", "version", "--rsh-raw"},
+			want: "does not support -r/--rsh-raw",
+		},
+		{
 			name: "cert output format",
 			args: []string{"restish", "cert", "https://example.com", "-o", "json"},
 			want: "does not support -o/--rsh-output-format",

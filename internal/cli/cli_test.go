@@ -974,6 +974,7 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 		"General Options",
 		"--rsh-auth",
 		"--rsh-config",
+		"--rsh-raw",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected root --help-all to contain %q:\n%s", want, got)
@@ -981,9 +982,10 @@ func TestHelpGroupsTopLevelCommands(t *testing.T) {
 	}
 	outputGroupIdx := strings.Index(got, "Output Options")
 	printFlagIdx := strings.Index(got, "--rsh-print")
+	rawFlagIdx := strings.Index(got, "--rsh-raw")
 	authGroupIdx := strings.Index(got, "Auth and Profile Options")
-	if outputGroupIdx < 0 || printFlagIdx < outputGroupIdx || authGroupIdx < 0 || printFlagIdx > authGroupIdx {
-		t.Fatalf("--rsh-print should be grouped under Output Options in --help-all:\n%s", got)
+	if outputGroupIdx < 0 || printFlagIdx < outputGroupIdx || rawFlagIdx < outputGroupIdx || authGroupIdx < 0 || printFlagIdx > authGroupIdx || rawFlagIdx > authGroupIdx {
+		t.Fatalf("--rsh-print and --rsh-raw should be grouped under Output Options in --help-all:\n%s", got)
 	}
 }
 

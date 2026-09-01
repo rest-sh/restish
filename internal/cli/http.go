@@ -290,9 +290,11 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 			return specErr
 		}
 		if spec.rawBodyOnly() {
-			if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
-				_ = httpResp.Body.Close()
-				return err
+			if !gf.Raw {
+				if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
+					_ = httpResp.Body.Close()
+					return err
+				}
 			}
 			reader, err := c.decompressedResponseBody(httpResp)
 			if err != nil {
@@ -303,8 +305,10 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 			trace.Info("Output", "raw")
 			trace.Step("raw")
 			trace.RenderAfter(c.Stderr, gf.Verbose)
-			_, err = io.Copy(c.Stdout, reader)
-			return err
+			if _, err := io.Copy(c.Stdout, reader); err != nil {
+				return err
+			}
+			return c.statusError(cmd, httpResp.StatusCode)
 		}
 		if err := c.statusError(cmd, httpResp.StatusCode); err != nil {
 			_ = httpResp.Body.Close()
@@ -494,6 +498,9 @@ func (c *CLI) formatResponse(cmd *cobra.Command, resp *output.Response, prepared
 	statusOnly := gf.StatusShorthand
 
 	if printPlan.rawBodyOnly() {
+		if gf.Raw && resp.Raw == nil {
+			return fmt.Errorf("raw response body is unavailable for this command")
+		}
 		if resp.Raw == nil && resp.Body != nil && !gf.PrintSet {
 			printPlan = printSpec{order: []rune{printRenderedBody}}
 		} else {

@@ -998,6 +998,77 @@ func TestExplicitPrintBodyImageNonTTYWritesOriginalBytes(t *testing.T) {
 	}
 }
 
+func TestExplicitRawOutputPreservesDecompressedBytes(t *testing.T) {
+	raw := "{\n  \"z\": 1\n}\n"
+	encoded := gzipBytes(t, raw)
+	tests := []struct {
+		name string
+		args []string
+		tty  bool
+	}{
+		{name: "long flag on TTY", args: []string{"restish", "get", "--rsh-raw", "https://api.example.com/data"}, tty: true},
+		{name: "short flag off TTY", args: []string{"restish", "-r", "get", "https://api.example.com/data"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return tt.tty }
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header: http.Header{
+						"Content-Type":     []string{"application/json"},
+						"Content-Encoding": []string{"gzip"},
+					},
+					Body:    io.NopCloser(bytes.NewReader(encoded)),
+					Request: r,
+				}, nil
+			})
+			if err := c.Run(tt.args); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := out.String(); got != raw {
+				t.Fatalf("raw output = %q, want decompressed bytes %q", got, raw)
+			}
+		})
+	}
+}
+
+func TestRawOutputRejectsIncompatibleFlagsBeforeRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "output format", args: []string{"-o", "auto"}, want: "-o/--rsh-output-format"},
+		{name: "print", args: []string{"--rsh-print", "auto"}, want: "--rsh-print"},
+		{name: "filter", args: []string{"-f", "body"}, want: "-f/--rsh-filter"},
+		{name: "headers", args: []string{"--rsh-headers"}, want: "--rsh-headers"},
+		{name: "status", args: []string{"--rsh-status"}, want: "--rsh-status"},
+		{name: "collect", args: []string{"--rsh-collect"}, want: "--rsh-collect"},
+		{name: "max items", args: []string{"--rsh-max-items", "1"}, want: "--rsh-max-items"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requested := false
+			c, _, _ := newTestCLI(t)
+			c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				requested = true
+				return jsonResponse(http.StatusOK, `{}`), nil
+			})
+			args := append([]string{"restish", "get", "--rsh-raw", "https://api.example.com/items"}, tt.args...)
+			err := c.Run(args)
+			if err == nil || !strings.Contains(err.Error(), "--rsh-raw cannot be combined with "+tt.want) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if requested {
+				t.Fatal("request should not be sent with incompatible raw output flags")
+			}
+		})
+	}
+}
+
 func TestBinaryResponseDefaultNonTTYWritesOriginalBytes(t *testing.T) {
 	data := []byte{0x00, 0x01, 0xff, 0x7f}
 	for _, contentType := range []string{"application/octet-stream", "application/zip", "application/x-custom"} {

@@ -236,17 +236,29 @@ func TestResponseMiddlewarePluginBypassedForRawRedirect(t *testing.T) {
 
 	raw := `{"hello":"world"}`
 	srv := hookJSONServer(t, 200, raw)
-	c, out, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
-	if err := c.Run([]string{"restish", "get", srv.URL}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got := out.String(); got != raw {
-		t.Fatalf("raw redirect path changed body bytes:\ngot  %q\nwant %q", got, raw)
-	}
-	if strings.Contains(out.String(), "plugin_added") {
-		t.Fatalf("response middleware ran on raw redirect path:\n%s", out.String())
+	for _, tt := range []struct {
+		name string
+		args []string
+		tty  bool
+	}{
+		{name: "automatic redirect"},
+		{name: "explicit TTY", args: []string{"--rsh-raw"}, tty: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+			c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return tt.tty }
+			args := append([]string{"restish", "get", srv.URL}, tt.args...)
+			if err := c.Run(args); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := out.String(); got != raw {
+				t.Fatalf("raw output changed body bytes:\ngot  %q\nwant %q", got, raw)
+			}
+			if strings.Contains(out.String(), "plugin_added") {
+				t.Fatalf("response middleware ran on raw output path:\n%s", out.String())
+			}
+		})
 	}
 }
 

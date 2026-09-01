@@ -54,8 +54,10 @@ Restish prints the response status line, headers, and formatted body to stdout.
 Redirected output preserves raw response body bytes when there is no filter,
 metadata shortcut, collection, or explicit `-o` format. That raw-download path
 bypasses response middleware plugins so installed plugins cannot rewrite saved
-files. When you do ask Restish to select or transform a value, redirected output
-is pretty by default. Use `--rsh-print=b` for compact rendered output.
+files. Use `-r` / `--rsh-raw` to select the same path explicitly regardless of
+whether stdout is a terminal. When you do ask Restish to select or transform a
+value, redirected output is pretty by default. Use `--rsh-print=b` for compact
+rendered output.
 `json`, `yaml`, and `cbor` are document formats.
 `ndjson` is a record format for structured streams, and `lines` is for
 shell-friendly scalar values.
@@ -111,6 +113,7 @@ CBOR, YAML, images, octet streams, zip files, text, and unknown payloads:
 restish api.rest.sh/images/jpeg > dragonfly.jpg
 restish api.rest.sh/bytes/64 > sample.bin
 restish api.rest.sh/formats/cbor > response.cbor
+restish -r api.rest.sh/bytes/64
 ```
 
 Choose an output format when you want Restish to transform the decoded body:
@@ -126,8 +129,13 @@ for a different representation: default `Accept` negotiation still prefers
 JSON and other text-friendly structured formats unless you set `Accept`
 yourself. `raw` is not an `-o` format. To save bytes unchanged, redirect stdout
 without choosing a filter, metadata shortcut, collection, or explicit output
-format. Response middleware plugins are skipped on this raw-download path; they
-run when Restish renders, filters, collects, or prints an interpreted response.
+format, or pass `-r` / `--rsh-raw` to make the choice independent of the output
+destination. Explicit raw output cannot be combined with `-o`, `-f`,
+`--rsh-print`, `--rsh-collect`, `--rsh-max-items`, `--rsh-headers`, or
+`--rsh-status`. Response middleware plugins are skipped on this raw-download
+path; they run when Restish renders, filters, collects, or prints an interpreted
+response. Utility workflows and command plugins reject `--rsh-raw` when they
+cannot expose original HTTP response body bytes.
 
 Control exactly what stdout contains with `--rsh-print`:
 
