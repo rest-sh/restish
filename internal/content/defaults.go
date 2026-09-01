@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/textproto"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -41,8 +43,8 @@ func Default() *Registry {
 			return json.Marshal(v)
 		},
 		Unmarshal: func(data []byte) (any, error) {
-			var v any
-			if err := json.Unmarshal(data, &v); err != nil {
+			v, err := UnmarshalJSON(data)
+			if err != nil {
 				if seq, seqErr := unmarshalJSONSequence(data); seqErr == nil {
 					return seq, nil
 				}
@@ -65,8 +67,8 @@ func Default() *Registry {
 				if len(line) == 0 {
 					continue
 				}
-				var v any
-				if err := json.Unmarshal(line, &v); err != nil {
+				v, err := UnmarshalJSON(line)
+				if err != nil {
 					return nil, err
 				}
 				out = append(out, v)
@@ -274,8 +276,62 @@ func Default() *Registry {
 	return r
 }
 
+// UnmarshalJSON decodes one JSON value while preserving integers that float64
+// cannot represent exactly.
+func UnmarshalJSON(data []byte) (any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("multiple JSON values")
+		}
+		return nil, err
+	}
+	return normalizeJSONNumbers(v), nil
+}
+
+func normalizeJSONNumbers(v any) any {
+	switch value := v.(type) {
+	case json.Number:
+		if value.String() == "-0" {
+			return math.Copysign(0, -1)
+		}
+		if !strings.ContainsAny(value.String(), ".eE") {
+			if i, err := value.Int64(); err == nil {
+				const maxExactFloatInteger = int64(1 << 53)
+				if -maxExactFloatInteger <= i && i <= maxExactFloatInteger {
+					return float64(i)
+				}
+				return i
+			}
+			if u, err := strconv.ParseUint(value.String(), 10, 64); err == nil {
+				return u
+			}
+			return value
+		}
+		if f, err := value.Float64(); err == nil {
+			return f
+		}
+		return value
+	case []any:
+		for i := range value {
+			value[i] = normalizeJSONNumbers(value[i])
+		}
+	case map[string]any:
+		for key := range value {
+			value[key] = normalizeJSONNumbers(value[key])
+		}
+	}
+	return v
+}
+
 func unmarshalJSONSequence(data []byte) ([]any, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
 	out := make([]any, 0)
 	for {
 		var v any
@@ -285,7 +341,7 @@ func unmarshalJSONSequence(data []byte) ([]any, error) {
 			}
 			return nil, err
 		}
-		out = append(out, v)
+		out = append(out, normalizeJSONNumbers(v))
 	}
 	if len(out) < 2 {
 		return nil, fmt.Errorf("JSON sequence must contain at least two values")

@@ -72,6 +72,33 @@ func TestJSONOutput(t *testing.T) {
 	}
 }
 
+func TestJSONOutputPreservesLargeInteger(t *testing.T) {
+	for _, id := range []string{"9007199254740993", "18446744073709551616"} {
+		t.Run(id, func(t *testing.T) {
+			c, out, _ := newTestCLI(t)
+			useJSONResponse(c, 200, `{"id":`+id+`}`)
+			if err := c.Run([]string{"restish", "get", "-o", "json", "https://api.example.com/items"}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got, want := out.String(), "{\n  \"id\": "+id+"\n}\n"; got != want {
+				t.Fatalf("output = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestYAMLOutputPreservesLargeInteger(t *testing.T) {
+	const id = "9007199254740993"
+	c, out, _ := newTestCLI(t)
+	useJSONResponse(c, 200, `{"id":`+id+`}`)
+	if err := c.Run([]string{"restish", "get", "-o", "yaml", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.String(), "id: "+id+"\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestDefaultTTYOutputPrintsResponseTranscript(t *testing.T) {
 	c, out, errOut := newTestCLI(t)
 	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
