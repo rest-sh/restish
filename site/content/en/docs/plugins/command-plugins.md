@@ -101,8 +101,8 @@ Older Restish versions ignore the additional fields and continue printing
 
 `current` and `total` are optional, but must be supplied together. Use the same
 `id` for updates to one task, and send a terminal `state` such as `success` or
-`failed` on its final update. Progress remains on stderr and never changes the
-command's primary stdout result.
+`failed` on its final update. Set `unit` when the count is not steps. Progress
+remains on stderr and never changes the command's primary stdout result.
 
 ## Lifecycle
 

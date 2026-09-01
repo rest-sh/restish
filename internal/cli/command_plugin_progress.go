@@ -77,6 +77,7 @@ func (r *commandProgressRenderer) Write(msg pluginwire.ProgressMsg) (bool, error
 		"state":   msg.State,
 		"current": msg.Current,
 		"total":   msg.Total,
+		"unit":    msg.Unit,
 		"message": msg.Message,
 	}
 	stream := r.stream

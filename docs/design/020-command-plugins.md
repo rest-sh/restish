@@ -98,7 +98,7 @@ Prompt/confirm style interactions are also valid protocol concepts when a
 plugin needs host-owned prompting behavior.
 
 `progress` always includes `text` as a plain fallback. It may also include
-`id`, `label`, `state`, `current`, `total`, and `message`. When a streaming
+`id`, `label`, `state`, `current`, `total`, `unit`, and `message`. When a streaming
 formatter named `progress` is registered and the record has an `id` or `label`,
 the host sends those structured fields through one formatter session for the
 command. Otherwise it prints `text` as a normal stderr line. Formatter startup

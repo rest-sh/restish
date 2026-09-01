@@ -44,6 +44,7 @@ func TestCommandClientProgressUpdateWritesStructuredProgress(t *testing.T) {
 		State:   "running",
 		Current: &current,
 		Total:   &total,
+		Unit:    "steps",
 		Message: "fetch owner",
 	}); err != nil {
 		t.Fatalf("ProgressUpdate: %v", err)
@@ -53,7 +54,7 @@ func TestCommandClientProgressUpdateWritesStructuredProgress(t *testing.T) {
 	if err := NewDecoder(bytes.NewReader(out.Bytes())).ReadMessage(&msg); err != nil {
 		t.Fatalf("ReadMessage: %v", err)
 	}
-	if msg.Type != MsgTypeProgress || msg.Text != "Running step 2 of 4" || msg.ID != "workflow" || msg.Label != "Run workflow" || msg.State != "running" || msg.Current == nil || *msg.Current != 2 || msg.Total == nil || *msg.Total != 4 || msg.Message != "fetch owner" {
+	if msg.Type != MsgTypeProgress || msg.Text != "Running step 2 of 4" || msg.ID != "workflow" || msg.Label != "Run workflow" || msg.State != "running" || msg.Current == nil || *msg.Current != 2 || msg.Total == nil || *msg.Total != 4 || msg.Unit != "steps" || msg.Message != "fetch owner" {
 		t.Fatalf("message = %#v", msg)
 	}
 }

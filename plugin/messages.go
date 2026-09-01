@@ -317,6 +317,7 @@ type ProgressMsg struct {
 	State   string `cbor:"state,omitempty"`
 	Current *int64 `cbor:"current,omitempty"`
 	Total   *int64 `cbor:"total,omitempty"`
+	Unit    string `cbor:"unit,omitempty"`
 	Message string `cbor:"message,omitempty"`
 }
 

@@ -660,6 +660,10 @@ CBOR: `current`; type: `*int64`; required: no
 
 CBOR: `total`; type: `*int64`; required: no
 
+**`Unit`**
+
+CBOR: `unit`; type: `string`; required: no
+
 **`Message`**
 
 CBOR: `message`; type: `string`; required: no
