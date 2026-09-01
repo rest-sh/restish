@@ -21,7 +21,10 @@ import (
 )
 
 // MultipartBody carries a structured multipart/form-data body plus optional
-// per-field Content-Type metadata from an OpenAPI encoding object.
+// per-field Content-Type metadata (OpenAPI encoding.contentType or equivalent).
+// Scalar values may also set a part Content-Type with a curl-style
+// ";type=<media-type>" suffix; an inline type overrides ContentTypes for that
+// field.
 type MultipartBody struct {
 	Value        any
 	ContentTypes map[string]string
@@ -446,17 +449,51 @@ func addMultipartParts(writer *multipart.Writer, prefix string, v any, opts mult
 		if prefix == "" {
 			return fmt.Errorf("multipart bodies must be an object")
 		}
-		if literal, ok := multipartEscapedAtLiteral(v); ok {
-			return writeMultipartField(writer, prefix, literal, opts.contentTypes[prefix])
+		value, inlineType := splitMultipartPartValue(v)
+		contentType := opts.contentTypes[prefix]
+		if inlineType != "" {
+			contentType = inlineType
 		}
-		if filePath, ok := multipartFilePath(v); ok {
-			return addMultipartFile(writer, prefix, filePath, opts.contentTypes[prefix])
-		} else if err := multipartFileReferenceError(v); err != nil {
+		if literal, ok := multipartEscapedAtLiteral(value); ok {
+			return writeMultipartField(writer, prefix, literal, contentType)
+		}
+		if filePath, ok := multipartFilePath(value); ok {
+			return addMultipartFile(writer, prefix, filePath, contentType)
+		} else if err := multipartFileReferenceError(value); err != nil {
 			return err
 		}
-		return writeMultipartField(writer, prefix, v, opts.contentTypes[prefix])
+		return writeMultipartField(writer, prefix, value, contentType)
 	}
 	return nil
+}
+
+// splitMultipartPartValue strips an optional curl-style ";type=<media-type>"
+// suffix from multipart scalar values so callers can set per-part Content-Type
+// without OpenAPI encoding metadata.
+func splitMultipartPartValue(v any) (any, string) {
+	s, ok := v.(string)
+	if !ok {
+		return v, ""
+	}
+	value, contentType := splitMultipartContentType(s)
+	if contentType == "" {
+		return v, ""
+	}
+	return value, contentType
+}
+
+func splitMultipartContentType(s string) (value, contentType string) {
+	const marker = ";type="
+	lower := strings.ToLower(s)
+	idx := strings.LastIndex(lower, marker)
+	if idx < 0 {
+		return s, ""
+	}
+	contentType = strings.TrimSpace(s[idx+len(marker):])
+	if contentType == "" {
+		return s, ""
+	}
+	return s[:idx], contentType
 }
 
 func writeMultipartField(writer *multipart.Writer, fieldName string, value any, contentType string) error {

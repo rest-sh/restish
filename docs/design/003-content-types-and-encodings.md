@@ -326,10 +326,14 @@ values become file parts. Array file fields are represented by repeated parts
 with the same field name, because that is what common multipart APIs expect for
 multi-file uploads. Generated OpenAPI commands pass `encoding.contentType`
 metadata into the multipart encoder so individual parts can carry the media
-type declared by the spec. A scalar string beginning with `@` is an explicit
-multipart file reference; missing files and directories fail before the request
-is sent. A scalar string beginning with `@@` escapes this behavior and sends a
-literal text value beginning with `@`.
+type declared by the spec. Generic multipart commands can set the same per-part
+`Content-Type` with a curl-style `;type=<media-type>` suffix on a scalar value
+(for example `file: @payload.json;type=application/json` or
+`name: daniel;type=text/foo`). An inline `;type=` overrides OpenAPI
+`encoding.contentType` for that part when both are present. A scalar string
+beginning with `@` is an explicit multipart file reference; missing files and
+directories fail before the request is sent. A scalar string beginning with
+`@@` escapes this behavior and sends a literal text value beginning with `@`.
 
 For `application/octet-stream` and other binary request media, Restish preserves
 raw bytes from files or stdin rather than re-encoding them as structured text.
