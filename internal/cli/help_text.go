@@ -29,7 +29,7 @@ const apiConnectLong = "Connect Restish to an API, discover its OpenAPI descript
 	"- Use `--spec` when discovery is blocked, the API does not advertise its spec, or you want to pin setup to a known OpenAPI URL or local file.\n" +
 	"- Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local; use `--spec` when you need to name a private spec URL directly.\n" +
 	"- Use `--no-discover` to save a base URL without fetching a spec.\n" +
-	"- Use `--replace` when reconnecting should replace existing profiles with generated OpenAPI or `x-cli-config` profile defaults. Without it, existing profiles are preserved, while API-level discovery fields are refreshed from the new connect run.\n" +
+	"- Use `--replace` when reconnecting should replace existing profiles and reapply generated OpenAPI or `x-cli-config` defaults. Without it, existing profiles and explicit local defaults are preserved, while other API-level discovery fields are refreshed from the new connect run.\n" +
 	"- Use `--yes` only for safe connect prompts you have already decided to accept in automation."
 
 const apiInspectLong = "Print the saved config for one registered API as redacted JSON.\n\n" +

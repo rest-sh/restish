@@ -86,7 +86,7 @@ func (c *CLI) addAPICommand(root *cobra.Command) {
 	connectCmd.Flags().Bool("allow-cross-origin-spec", false, "Allow safe Link-header spec discovery from another host; private/local follow targets are still rejected")
 	connectCmd.Flags().Bool("no-discover", false, "Register the API locally without network spec discovery")
 	connectCmd.Flags().String("spec", "", "OpenAPI spec URL or local file to use instead of discovery")
-	connectCmd.Flags().Bool("replace", false, "Replace existing profiles with discovered OpenAPI/x-cli-config defaults")
+	connectCmd.Flags().Bool("replace", false, "Replace existing profiles and reapply discovered x-cli-config defaults")
 	connectCmd.Flags().Bool("yes", false, "Accept safe api connect prompts without asking")
 	apiCmd.AddCommand(connectCmd)
 	apiCmd.AddCommand(&cobra.Command{
@@ -376,7 +376,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 	allowCrossOrigin, _ := cmd.Flags().GetBool("allow-cross-origin-spec")
 	noDiscover, _ := cmd.Flags().GetBool("no-discover")
 	explicitSpec, _ := cmd.Flags().GetString("spec")
-	replaceProfiles, _ := cmd.Flags().GetBool("replace")
+	replaceDefaults, _ := cmd.Flags().GetBool("replace")
 	yes, _ := cmd.Flags().GetBool("yes")
 	promptAnswers, setupExprs, err := parseAPIConfigureSetupExpressions(args[2:])
 	if err != nil {
@@ -455,7 +455,7 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 		}
 		if xcli != nil {
 			xcli = xcli.Normalize()
-			if !replaceProfiles {
+			if !replaceDefaults {
 				removeExistingXCLIProfiles(xcli, existingAPI)
 			}
 			if !fallbackXCLI {
@@ -463,12 +463,12 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 					return err
 				}
 			}
-			if len(xcli.Profiles) > 0 {
-				c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec))
-				if fallbackXCLI {
-					if err := c.configureFallbackAuth(requestContext(cmd), apiCfg, discovery, promptAnswers); err != nil {
-						return err
-					}
+			if err := c.applyXCLIConfig(apiCfg, xcli.Resolve(apiSpec)); err != nil {
+				return err
+			}
+			if fallbackXCLI && len(xcli.Profiles) > 0 {
+				if err := c.configureFallbackAuth(requestContext(cmd), apiCfg, discovery, promptAnswers); err != nil {
+					return err
 				}
 			}
 		}
@@ -481,12 +481,15 @@ func (c *CLI) runAPIConnect(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	if !replaceProfiles {
+	if !replaceDefaults {
 		if err := preserveExistingProfiles(apiCfg, existingAPI); err != nil {
 			return err
 		}
+		if existingAPI != nil && existingAPI.CommandLayout != "" {
+			apiCfg.CommandLayout = existingAPI.CommandLayout
+		}
 	}
-	preservedProfiles := preservedProfileNames(existingAPI, replaceProfiles)
+	preservedProfiles := preservedProfileNames(existingAPI, replaceDefaults)
 	if len(setupExprs) > 0 {
 		patched, err := c.applyAPIShorthandConfig(apiName, apiCfg, setupExprs)
 		if err != nil {
@@ -1095,9 +1098,15 @@ func xcliPromptLooksSecret(name string) bool {
 // Auth type "external-tool" is rejected: a server-provided x-cli-config
 // could otherwise pre-seed arbitrary shell-command execution on the next
 // authenticated request.
-func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
+func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) error {
+	if err := config.ValidateCommandLayout(xcli.CommandLayout); err != nil {
+		return fmt.Errorf("x-cli-config.command_layout: %w", err)
+	}
+	if xcli.CommandLayout != "" {
+		apiCfg.CommandLayout = xcli.CommandLayout
+	}
 	if len(xcli.Profiles) == 0 {
-		return
+		return nil
 	}
 	if apiCfg.Profiles == nil {
 		apiCfg.Profiles = make(map[string]*config.ProfileConfig)
@@ -1145,6 +1154,7 @@ func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) {
 		}
 		apiCfg.Profiles[name] = prof
 	}
+	return nil
 }
 
 func (c *CLI) discoveryTransport(ctx context.Context, apiCfg *config.APIConfig, profileName string) (http.RoundTripper, interface{ Close() error }, error) {

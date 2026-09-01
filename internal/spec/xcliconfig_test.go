@@ -20,6 +20,7 @@ func loadDoc(t *testing.T, raw string) *APISpec {
 func TestReadXCLIConfig_Present(t *testing.T) {
 	raw := []byte(`
 x-cli-config:
+  command_layout: tags
   profiles:
     default:
       auth:
@@ -39,6 +40,9 @@ paths: {}`)
 	if cfg == nil {
 		t.Fatal("expected non-nil config")
 	}
+	if cfg.CommandLayout != "tags" {
+		t.Fatalf("command layout = %q, want tags", cfg.CommandLayout)
+	}
 	if cfg.Profiles["default"] == nil {
 		t.Fatal("expected default profile")
 	}
@@ -47,6 +51,9 @@ paths: {}`)
 	}
 	if cfg.Profiles["default"].Auth.Type != "bearer" {
 		t.Errorf("auth type: got %q, want %q", cfg.Profiles["default"].Auth.Type, "bearer")
+	}
+	if resolved := cfg.Resolve(spec); resolved.CommandLayout != "tags" {
+		t.Fatalf("resolved command layout = %q, want tags", resolved.CommandLayout)
 	}
 }
 
