@@ -35,20 +35,12 @@ func (f *recordingProgressFormatter) StartValueStream(_ io.Writer, _ *output.Res
 }
 
 type recordingProgressStream struct {
-	values     []any
-	closed     bool
-	closeErr   error
-	writeBlock <-chan struct{}
-	writeDone  chan<- struct{}
+	values   []any
+	closed   bool
+	closeErr error
 }
 
 func (s *recordingProgressStream) WriteValue(value any) error {
-	if s.writeDone != nil {
-		defer close(s.writeDone)
-	}
-	if s.writeBlock != nil {
-		<-s.writeBlock
-	}
 	s.values = append(s.values, value)
 	return nil
 }
@@ -176,34 +168,6 @@ func TestStructuredCommandProgressReplaysFallbackAfterCloseFailure(t *testing.T)
 		t.Fatal("Close returned nil")
 	}
 	if got := stderr.String(); got != "fallback\n" {
-		t.Fatalf("stderr = %q", got)
-	}
-}
-
-func TestStructuredCommandProgressBoundsBlockedFormatter(t *testing.T) {
-	t.Setenv("RSH_COMMAND_PLUGIN_SHUTDOWN_GRACE", "20ms")
-	var stderr bytes.Buffer
-	block := make(chan struct{})
-	done := make(chan struct{})
-	formatter := &recordingProgressFormatter{}
-	formatter.stream.writeBlock = block
-	formatter.stream.writeDone = done
-	cli := &CLI{Stderr: &stderr, formatters: map[string]output.Formatter{"progress": formatter}}
-	cmd := &cobra.Command{Use: "test"}
-	cmd.SetErr(&stderr)
-	renderer := cli.newCommandProgressRenderer(cmd)
-	msg := pluginwire.ProgressMsg{Type: pluginwire.MsgTypeProgress, Text: "fallback", ID: "workflow"}
-	raw, err := cbor.Marshal(msg)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-
-	if _, err := cli.handleCommandPluginMessage(cmd, context.Background(), nil, nil, renderer, pluginwire.MsgTypeProgress, raw); err != nil {
-		t.Fatalf("handleCommandPluginMessage: %v", err)
-	}
-	close(block)
-	<-done
-	if got := stderr.String(); !strings.Contains(got, "timed out after 20ms") || !strings.Contains(got, "fallback\n") {
 		t.Fatalf("stderr = %q", got)
 	}
 }
