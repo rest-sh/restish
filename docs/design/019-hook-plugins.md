@@ -191,8 +191,8 @@ directly define commands.
 
 ### Formatter Hook
 
-Formatter plugins declare `formatter_names` in the manifest. Each declared name
-becomes available through `-o <name>`.
+Formatter plugins declare `formatter_names` or `interactive_formatter_names` in
+the manifest. Each declared name becomes available through `-o <name>`.
 
 Formatter hooks are slightly different from the other hook types because stdout
 is treated as raw formatted bytes rather than a CBOR reply.
@@ -219,6 +219,20 @@ same formatter handle:
 
 The plugin writes raw formatted bytes to stdout as values arrive and exits after
 the `end` message or EOF on stdin.
+
+Names in `interactive_formatter_names` opt into a second phase after `end`.
+Restish keeps the protocol pipe open, switches terminal stdin to raw mode, and
+sends:
+
+- `terminal-resize` with the initial `columns` and `rows`, then again whenever
+  the window size changes
+- `stdin-data` with terminal input bytes
+- `stdin-close` if terminal input reaches EOF
+
+The formatter remains active until it exits or the command is cancelled.
+Restish restores terminal state on every exit path. Interactive formatters
+require both stdin and stdout to be terminals. Ordinary formatter names keep
+the existing close-and-wait lifecycle.
 
 This model is intentionally narrow:
 

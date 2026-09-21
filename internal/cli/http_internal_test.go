@@ -1,10 +1,34 @@
 package cli
 
 import (
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/rest-sh/restish/v2/config"
+	"github.com/rest-sh/restish/v2/internal/output"
+	"github.com/spf13/cobra"
 )
+
+func TestSelectInteractiveFormatterRequiresTerminalInputAndOutput(t *testing.T) {
+	c := &CLI{
+		Stdin: strings.NewReader(""),
+		formatters: map[string]output.Formatter{
+			"pretty-live": &output.PluginFormatter{FormatName: "pretty-live", Interactive: true},
+		},
+	}
+	c.hooks.StdinIsTerminal = func(io.Reader) bool { return false }
+	if _, err := c.selectFormatter(&cobra.Command{}, "pretty-live", true); err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("non-terminal stdin error = %v", err)
+	}
+	c.hooks.StdinIsTerminal = func(io.Reader) bool { return true }
+	if _, err := c.selectFormatter(&cobra.Command{}, "pretty-live", false); err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("non-terminal stdout error = %v", err)
+	}
+	if _, err := c.selectFormatter(&cobra.Command{}, "pretty-live", true); err != nil {
+		t.Fatalf("terminal selection failed: %v", err)
+	}
+}
 
 func TestParseByteSize(t *testing.T) {
 	tests := []struct {

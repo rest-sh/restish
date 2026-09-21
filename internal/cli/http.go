@@ -1378,6 +1378,11 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 		}
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
+	if pluginFormatter, ok := formatter.(*output.PluginFormatter); ok && pluginFormatter.Interactive {
+		if !tty || !c.stdinIsTerminal() {
+			return nil, fmt.Errorf("interactive output format %q requires terminal stdin and stdout", fmtName)
+		}
+	}
 	return formatter, nil
 }
 

@@ -84,7 +84,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 		if statErr == nil && manifestCacheFile != "" {
 			mtime := info.ModTime().UnixNano()
 			size := info.Size()
-			if entry, ok := cache[path]; ok && entry.Mtime == mtime && entry.Size == size {
+			if entry, ok := cache[path]; ok && entry.Schema == manifestCacheSchemaVersion && entry.Mtime == mtime && entry.Size == size {
 				m := entry.Manifest
 				return &m, nil
 			}
@@ -92,7 +92,7 @@ func Discover(pluginDir string, errFn func(path string, err error), manifestCach
 			if err != nil {
 				return nil, err
 			}
-			cache[path] = manifestCacheEntry{Mtime: mtime, Size: size, Manifest: *m}
+			cache[path] = manifestCacheEntry{Schema: manifestCacheSchemaVersion, Mtime: mtime, Size: size, Manifest: *m}
 			cacheUpdated = true
 			return m, nil
 		}
@@ -278,11 +278,24 @@ func validateManifest(m Manifest) error {
 			return fmt.Errorf("manifest requires unsupported feature %q", feature)
 		}
 	}
-	if declaredHooks["formatter"] && len(m.FormatterNames) == 0 {
-		return fmt.Errorf("manifest declares formatter hook but omits formatter_names")
+	if declaredHooks["formatter"] && len(m.FormatterNames) == 0 && len(m.InteractiveFormatterNames) == 0 {
+		return fmt.Errorf("manifest declares formatter hook but omits formatter_names and interactive_formatter_names")
 	}
 	if !declaredHooks["formatter"] && len(m.FormatterNames) > 0 {
 		return fmt.Errorf("manifest sets formatter_names without declaring formatter hook")
+	}
+	if !declaredHooks["formatter"] && len(m.InteractiveFormatterNames) > 0 {
+		return fmt.Errorf("manifest sets interactive_formatter_names without declaring formatter hook")
+	}
+	formatterNames := make(map[string]bool, len(m.FormatterNames)+len(m.InteractiveFormatterNames))
+	for _, name := range append(append([]string(nil), m.FormatterNames...), m.InteractiveFormatterNames...) {
+		if name == "" {
+			return fmt.Errorf("manifest formatter name must not be empty")
+		}
+		if formatterNames[name] {
+			return fmt.Errorf("manifest declares duplicate formatter name %q", name)
+		}
+		formatterNames[name] = true
 	}
 	if declaredHooks["loader"] && len(m.LoaderContentTypes) == 0 {
 		return fmt.Errorf("manifest declares loader hook but omits loader_content_types")
@@ -299,10 +312,13 @@ func validateManifest(m Manifest) error {
 // manifestCacheEntry stores one plugin's cached manifest along with the
 // modification time of the executable at the time it was cached.
 type manifestCacheEntry struct {
+	Schema   int      `cbor:"schema,omitempty"`
 	Mtime    int64    `cbor:"mtime"`
 	Size     int64    `cbor:"size,omitempty"`
 	Manifest Manifest `cbor:"manifest"`
 }
+
+const manifestCacheSchemaVersion = 1
 
 // manifestCache maps plugin executable path to its cached entry.
 type manifestCache map[string]manifestCacheEntry

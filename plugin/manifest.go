@@ -60,6 +60,9 @@ type Manifest struct {
 	// FormatterNames lists the output format names this plugin registers when
 	// the "formatter" hook is declared.
 	FormatterNames []string `cbor:"formatter_names,omitempty" json:"formatter_names,omitempty"`
+	// InteractiveFormatterNames lists formatter names that keep control of the
+	// terminal after the response ends to receive input and resize events.
+	InteractiveFormatterNames []string `cbor:"interactive_formatter_names,omitempty" json:"interactive_formatter_names,omitempty"`
 	// LoaderContentTypes lists the MIME types this plugin handles when the
 	// "loader" hook is declared.
 	LoaderContentTypes []string `cbor:"loader_content_types,omitempty" json:"loader_content_types,omitempty"`

@@ -10,9 +10,10 @@ import (
 )
 
 type fakeFormatterStream struct {
-	sendErr  error
-	closeErr error
-	closed   bool
+	sendErr    error
+	closeErr   error
+	closed     bool
+	interacted bool
 }
 
 func (s *fakeFormatterStream) Send(any) error {
@@ -21,6 +22,11 @@ func (s *fakeFormatterStream) Send(any) error {
 
 func (s *fakeFormatterStream) Close() error {
 	s.closed = true
+	return s.closeErr
+}
+
+func (s *fakeFormatterStream) Interact(io.Reader, io.Writer) error {
+	s.interacted = true
 	return s.closeErr
 }
 
@@ -89,5 +95,25 @@ func TestPluginFormatterFormatValueJoinsItemSendAndCloseErrors(t *testing.T) {
 	}
 	if !errors.Is(err, sendErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("expected joined send and close errors, got %v", err)
+	}
+}
+
+func TestInteractivePluginFormatterEntersInteractionAfterEnd(t *testing.T) {
+	fake := &fakeFormatterStream{}
+	oldStart := startPluginFormatterStream
+	startPluginFormatterStream = func(ctx context.Context, path string, w io.Writer, in any) (formatterStream, error) {
+		return fake, nil
+	}
+	t.Cleanup(func() { startPluginFormatterStream = oldStart })
+
+	err := (&PluginFormatter{FormatName: "pretty-live", Interactive: true, Input: strings.NewReader("q")}).Format(&bytes.Buffer{}, &Response{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fake.interacted {
+		t.Fatal("interactive formatter did not enter interaction after the end event")
+	}
+	if fake.closed {
+		t.Fatal("interactive formatter used the ordinary close path")
 	}
 }

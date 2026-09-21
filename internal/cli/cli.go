@@ -81,6 +81,8 @@ type testHooks struct {
 	AuthHookFunc func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error
 	// StdoutIsTerminal overrides terminal detection in tests.
 	StdoutIsTerminal func(io.Writer) bool
+	// StdinIsTerminal overrides terminal detection in tests.
+	StdinIsTerminal func(io.Reader) bool
 }
 
 func (c *CLI) stdoutIsTerminal() bool {
@@ -88,6 +90,13 @@ func (c *CLI) stdoutIsTerminal() bool {
 		return c.hooks.StdoutIsTerminal(c.Stdout)
 	}
 	return output.IsTerminal(c.Stdout)
+}
+
+func (c *CLI) stdinIsTerminal() bool {
+	if c.hooks.StdinIsTerminal != nil {
+		return c.hooks.StdinIsTerminal(c.Stdin)
+	}
+	return output.IsTerminalReader(c.Stdin)
 }
 
 // CLI holds all state for a Restish instance. Using a struct instead of
@@ -652,6 +661,16 @@ func (c *CLI) Run(args []string) error {
 					PluginPath: p.Path,
 					FormatName: name,
 					Context:    ctx,
+					Input:      c.Stdin,
+				}
+			}
+			for _, name := range p.Manifest.InteractiveFormatterNames {
+				c.formatters[name] = &output.PluginFormatter{
+					PluginPath:  p.Path,
+					FormatName:  name,
+					Context:     ctx,
+					Input:       c.Stdin,
+					Interactive: true,
 				}
 			}
 		}

@@ -492,6 +492,45 @@ printf 'ROGUE FORMATTER\n'
 	}
 }
 
+func TestInteractiveFormatterRequiresTerminalBeforeRequest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell plugin fixture")
+	}
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-interactive")
+	script := `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  printf '%s\n' '{"name":"interactive","restish_api_version":2,"hooks":["formatter"],"interactive_formatter_names":["pretty-live"]}'
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+
+	requested := false
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "pretty-live", "https://api.example.com/items"})
+	if err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("interactive formatter error = %v", err)
+	}
+	if requested {
+		t.Fatal("request was sent before interactive terminal validation")
+	}
+}
+
 func TestCSVFormatterPlugin(t *testing.T) {
 	installCSVPlugin(t)
 

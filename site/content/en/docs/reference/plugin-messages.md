@@ -50,6 +50,7 @@ Generated from `plugin/messages.go`.
 | `MsgTypeTLSSignerReady` | `ready` |
 | `MsgTypeTLSSignerShutdown` | `shutdown` |
 | `MsgTypeTLSSignerSign` | `sign` |
+| `MsgTypeTerminalResize` | `terminal-resize` |
 | `MsgTypeWarn` | `warn` |
 
 ### `InitMsg`
@@ -689,6 +690,23 @@ StdinCloseMsg signals that the host's stdin has reached EOF.
 CBOR: `type`; type: `string`; required: yes
 
 
+### `TerminalResizeMsg`
+
+TerminalResizeMsg reports the current interactive terminal dimensions.
+
+**`Type`**
+
+CBOR: `type`; type: `string`; required: yes
+
+**`Columns`**
+
+CBOR: `columns`; type: `int`; required: yes
+
+**`Rows`**
+
+CBOR: `rows`; type: `int`; required: yes
+
+
 ### `FormatterResponse`
 
 FormatterResponse is the normalized response shape forwarded to formatter plugins. The host may include the full response body on "start" for a normal one-shot render, or send body values incrementally on subsequent "item" messages for paginated and event-stream output.
@@ -1152,6 +1170,12 @@ and `response`. `event` is `start`, `item`, or `end`. For full-response renders,
 `start` usually includes the whole normalized response body. For paginated or
 event-stream output, Restish sends `start`, then one or more `item` messages,
 then `end`.
+
+Formatter names declared through `interactive_formatter_names` remain active
+after `end`. Restish sends an initial `terminal-resize` message with `columns`
+and `rows`, sends another whenever the terminal size changes, and forwards input
+as `stdin-data` or `stdin-close`. The formatter exits when the user closes its
+view. Interactive formatters require terminal stdin and stdout.
 
 ## TLS Signer Messages
 

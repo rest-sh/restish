@@ -247,5 +247,8 @@ experimental, or too workflow-shaped for a generic request flag.
   CBOR reply envelope.
 - Formatter plugins receive a sequence of `formatter` messages with
   `start`/`item`/`end` events, not a single one-shot request.
+- Formatter names declared in `interactive_formatter_names` may remain active
+  after `end`. They receive `terminal-resize`, `stdin-data`, and `stdin-close`
+  messages until they exit or the command is cancelled.
 - If you start a subprocess or long-lived goroutine inside a plugin, make sure
   it exits cleanly when stdin closes.

@@ -32,8 +32,9 @@ const (
 	MsgTypeConfirmResponse      = "confirm-response"
 
 	// Host → plugin passthrough-stdio data.
-	MsgTypeStdinData  = "stdin-data"
-	MsgTypeStdinClose = "stdin-close"
+	MsgTypeStdinData      = "stdin-data"
+	MsgTypeStdinClose     = "stdin-close"
+	MsgTypeTerminalResize = "terminal-resize"
 
 	// TLS signer plugin protocol.
 	MsgTypeTLSSignerSign     = "sign"     // host → plugin: sign request
@@ -335,6 +336,13 @@ type StdinDataMsg struct {
 // StdinCloseMsg signals that the host's stdin has reached EOF.
 type StdinCloseMsg struct {
 	Type string `cbor:"type"`
+}
+
+// TerminalResizeMsg reports the current interactive terminal dimensions.
+type TerminalResizeMsg struct {
+	Type    string `cbor:"type"`
+	Columns int    `cbor:"columns"`
+	Rows    int    `cbor:"rows"`
 }
 
 // ─── TLS signer plugin protocol ──────────────────────────────────────────────
