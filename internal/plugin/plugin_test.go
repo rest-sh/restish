@@ -488,6 +488,15 @@ func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
 			},
 		},
 		{
+			name: "existing duplicate formatter names remain valid",
+			m: Manifest{
+				Name:              "duplicate-ordinary",
+				RestishAPIVersion: CurrentPluginAPIVersion,
+				Hooks:             []string{"formatter"},
+				FormatterNames:    []string{"pretty", "pretty"},
+			},
+		},
+		{
 			name: "valid interactive formatter",
 			m: Manifest{
 				Name:                      "good-live",
@@ -774,7 +783,10 @@ func TestCallHookWithTimeoutContextCancellationKillsProcess(t *testing.T) {
 	path := writeScript(t, dir, "restish-hook-block", "#!/bin/sh\nsleep 30\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
 
 	start := time.Now()
 	var out pluginwire.AuthHookOutput
@@ -951,5 +963,51 @@ func TestFormatterStreamForwardsTerminalInputMessages(t *testing.T) {
 	}
 	if closed.Type != pluginwire.MsgTypeStdinClose {
 		t.Fatalf("stdin close message = %#v", closed)
+	}
+}
+
+func TestFormatterStreamInteractRestoresTerminalOnCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	path := writeScript(t, t.TempDir(), "restish-format-interactive", "#!/bin/sh\nsleep 30\n")
+	input, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	defer inputWriter.Close()
+	outputReader, output, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outputReader.Close()
+	defer output.Close()
+
+	oldIsTerminal, oldMakeRaw := formatterIsTerminal, formatterMakeRaw
+	oldRestore, oldGetSize := formatterRestore, formatterGetSize
+	restored := false
+	formatterIsTerminal = func(int) bool { return true }
+	formatterMakeRaw = func(int) (*term.State, error) { return &term.State{}, nil }
+	formatterRestore = func(int, *term.State) error { restored = true; return nil }
+	formatterGetSize = func(int) (int, int, error) { return 80, 24, nil }
+	t.Cleanup(func() {
+		formatterIsTerminal, formatterMakeRaw = oldIsTerminal, oldMakeRaw
+		formatterRestore, formatterGetSize = oldRestore, oldGetSize
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := StartFormatterStream(ctx, path, output, pluginwire.FormatterRequest{
+		Type: "formatter", Format: "interactive", Event: "end",
+	})
+	if err != nil {
+		t.Fatalf("StartFormatterStream: %v", err)
+	}
+	cancel()
+	if err := stream.Interact(input, output); err == nil {
+		t.Fatal("expected cancelled formatter to return an error")
+	}
+	if !restored {
+		t.Fatal("terminal state was not restored after cancellation")
 	}
 }

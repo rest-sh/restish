@@ -89,6 +89,7 @@ func callHookRaw(ctx context.Context, path string, timeout time.Duration, in any
 // provided stdout writer.
 type FormatterStream struct {
 	path   string
+	ctx    context.Context
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stderr limitedBuffer
@@ -111,6 +112,7 @@ func StartFormatterStream(ctx context.Context, path string, w io.Writer, in any)
 
 	stream := &FormatterStream{
 		path:  path,
+		ctx:   ctx,
 		cmd:   cmd,
 		stdin: stdin,
 		stderr: limitedBuffer{
@@ -175,16 +177,19 @@ func (s *FormatterStream) Interact(input io.Reader, output io.Writer) (result er
 	defer func() {
 		result = errors.Join(result, formatterRestore(int(in.Fd()), state))
 	}()
+	wait := make(chan error, 1)
+	go func() { wait <- s.cmd.Wait() }()
 
 	columns, rows, err := formatterGetSize(int(out.Fd()))
 	if err != nil {
-		return errors.Join(fmt.Errorf("interactive formatter: terminal size: %w", err), s.Close())
+		return errors.Join(s.stopInteractive(wait, fmt.Errorf("interactive formatter: terminal size: %w", err)), s.closeStdin())
 	}
 	if err := s.Send(pluginwire.TerminalResizeMsg{Type: pluginwire.MsgTypeTerminalResize, Columns: columns, Rows: rows}); err != nil {
-		return errors.Join(err, s.Close())
+		return errors.Join(s.stopInteractive(wait, err), s.closeStdin())
 	}
 
 	done := make(chan struct{})
+	protocolInput := s.stdin
 	inputErr := make(chan error, 1)
 	var inputWG sync.WaitGroup
 	inputWG.Add(1)
@@ -192,8 +197,6 @@ func (s *FormatterStream) Interact(input io.Reader, output io.Writer) (result er
 		defer inputWG.Done()
 		inputErr <- s.forwardTerminalInput(in, done)
 	}()
-	wait := make(chan error, 1)
-	go func() { wait <- s.cmd.Wait() }()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -206,33 +209,51 @@ func (s *FormatterStream) Interact(input io.Reader, output io.Writer) (result er
 			}
 		case err := <-inputErr:
 			if err != nil {
-				_ = s.cmd.Process.Kill()
-				waitErr = errors.Join(err, <-wait)
+				waitErr = s.stopInteractive(wait, err)
 			}
 			inputErr = nil
+		case <-s.ctx.Done():
+			waitErr = s.stopInteractive(wait, s.ctx.Err())
 		case <-ticker.C:
 			newColumns, newRows, sizeErr := formatterGetSize(int(out.Fd()))
 			if sizeErr != nil {
-				_ = s.cmd.Process.Kill()
-				waitErr = errors.Join(sizeErr, <-wait)
+				waitErr = s.stopInteractive(wait, sizeErr)
 				continue
 			}
 			if newColumns != columns || newRows != rows {
 				columns, rows = newColumns, newRows
 				if sendErr := s.Send(pluginwire.TerminalResizeMsg{Type: pluginwire.MsgTypeTerminalResize, Columns: columns, Rows: rows}); sendErr != nil {
-					_ = s.cmd.Process.Kill()
-					waitErr = errors.Join(sendErr, <-wait)
+					waitErr = s.stopInteractive(wait, sendErr)
 				}
 			}
 		}
 	}
 	close(done)
+	_ = protocolInput.Close()
 	inputWG.Wait()
 	closeErr := s.closeStdin()
 	if errors.Is(waitErr, io.EOF) {
 		waitErr = nil
 	}
 	return errors.Join(s.processError(waitErr), closeErr)
+}
+
+const interactiveStopTimeout = time.Second
+
+var errInteractiveStopTimeout = errors.New("interactive formatter did not stop")
+
+func (s *FormatterStream) stopInteractive(wait <-chan error, cause error) error {
+	if s.cmd.Cancel != nil {
+		_ = s.cmd.Cancel()
+	} else {
+		_ = s.cmd.Process.Kill()
+	}
+	select {
+	case err := <-wait:
+		return errors.Join(cause, err)
+	case <-time.After(interactiveStopTimeout):
+		return errors.Join(cause, fmt.Errorf("%w within %s", errInteractiveStopTimeout, interactiveStopTimeout))
+	}
 }
 
 func (s *FormatterStream) forwardTerminalInput(in interactiveTerminalInput, done <-chan struct{}) error {
@@ -284,6 +305,9 @@ func (s *FormatterStream) processError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, errInteractiveStopTimeout) {
+		return fmt.Errorf("hook %s: exec: %w", filepath.Base(s.path), err)
+	}
 	if msg := strings.TrimSpace(s.stderr.String()); msg != "" {
 		return fmt.Errorf("hook %s: exec: %w\n  plugin stderr: %s", filepath.Base(s.path), err, secrets.RedactDiagnosticText(msg))
 	}
@@ -312,7 +336,6 @@ func (s *FormatterStream) Close() error {
 		<-done
 		return fmt.Errorf("hook %s: plugin did not exit within %s; killed", filepath.Base(s.path), formatterCloseTimeout)
 	}
-	return nil
 }
 
 // CallHook spawns the plugin at path, writes in as a CBOR message to the

@@ -288,9 +288,12 @@ func validateManifest(m Manifest) error {
 		return fmt.Errorf("manifest sets interactive_formatter_names without declaring formatter hook")
 	}
 	formatterNames := make(map[string]bool, len(m.FormatterNames)+len(m.InteractiveFormatterNames))
-	for _, name := range append(append([]string(nil), m.FormatterNames...), m.InteractiveFormatterNames...) {
+	for _, name := range m.FormatterNames {
+		formatterNames[name] = true
+	}
+	for _, name := range m.InteractiveFormatterNames {
 		if name == "" {
-			return fmt.Errorf("manifest formatter name must not be empty")
+			return fmt.Errorf("manifest interactive formatter name must not be empty")
 		}
 		if formatterNames[name] {
 			return fmt.Errorf("manifest declares duplicate formatter name %q", name)

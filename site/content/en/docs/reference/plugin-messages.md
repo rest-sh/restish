@@ -670,7 +670,7 @@ CBOR: `text`; type: `string`; required: yes
 
 ### `StdinDataMsg`
 
-StdinDataMsg carries a chunk of stdin bytes from the host to the plugin (passthrough_stdio mode).
+StdinDataMsg carries a chunk of stdin bytes from the host to a command plugin in passthrough_stdio mode or an interactive formatter.
 
 **`Type`**
 
@@ -1120,8 +1120,8 @@ list. Each operation includes fields such as `id`, `method`, `path`, `summary`,
 - `stdin-data`
 - `stdin-close`
 
-`stdin-data` and `stdin-close` are used only for command plugins that opt into
-passthrough stdio.
+`stdin-data` and `stdin-close` are used for command plugins that opt into
+passthrough stdio and for interactive formatters after their `end` event.
 
 ## Hook Plugins
 

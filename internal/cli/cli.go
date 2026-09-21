@@ -99,6 +99,13 @@ func (c *CLI) stdinIsTerminal() bool {
 	return output.IsTerminalReader(c.Stdin)
 }
 
+func (c *CLI) interactiveTerminalsAvailable(stdoutTTY bool) bool {
+	if c.hooks.StdinIsTerminal != nil || c.hooks.StdoutIsTerminal != nil {
+		return stdoutTTY && c.stdinIsTerminal()
+	}
+	return stdoutTTY && output.SupportsInteractiveTerminal(c.Stdin) && output.SupportsInteractiveTerminal(c.Stdout)
+}
+
 // CLI holds all state for a Restish instance. Using a struct instead of
 // package-level globals makes it safe to instantiate multiple independent
 // instances and trivially testable with in-memory I/O.

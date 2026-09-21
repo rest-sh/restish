@@ -3,6 +3,7 @@
 package plugin
 
 import (
+	"errors"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -10,6 +11,11 @@ import (
 
 func terminalInputReady(fd uintptr, timeout time.Duration) (bool, error) {
 	fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
-	n, err := unix.Poll(fds, int(timeout.Milliseconds()))
-	return n > 0, err
+	for {
+		n, err := unix.Poll(fds, int(timeout.Milliseconds()))
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		return n > 0, err
+	}
 }

@@ -139,13 +139,15 @@ func (c *CLI) runInferredHTTP(cmd *cobra.Command, args []string) error {
 }
 
 func (c *CLI) validateHTTPOutputFlags(cmd *cobra.Command, gf GlobalFlags) error {
-	if _, err := c.resolvePrintSpec(gf, c.stdoutIsTerminal(), printBoundedResponse); err != nil {
+	tty := c.stdoutIsTerminal()
+	printSpec, err := c.resolvePrintSpec(gf, tty, printBoundedResponse)
+	if err != nil {
 		return err
 	}
-	if gf.OutputFormat == "" {
+	if gf.Silent || !printSpec.has(printRenderedBody) {
 		return nil
 	}
-	_, err := c.selectFormatter(cmd, gf.OutputFormat, c.stdoutIsTerminal())
+	_, err = c.selectFormatter(cmd, gf.OutputFormat, tty)
 	return err
 }
 
@@ -1364,12 +1366,12 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 
 	if fmtName == "" {
 		if explicitAutoOutputFormat(globalFlagsFromContext(requestContext(cmd))) {
-			return fmts["auto"], nil
+			fmtName = "auto"
+		} else if tty {
+			fmtName = "auto"
+		} else {
+			fmtName = "json"
 		}
-		if tty {
-			return fmts["auto"], nil
-		}
-		return fmts["json"], nil
 	}
 	formatter, ok := fmts[fmtName]
 	if !ok {
@@ -1379,7 +1381,7 @@ func (c *CLI) selectFormatter(cmd *cobra.Command, fmtName string, tty bool) (out
 		return nil, fmt.Errorf("unknown output format %q; available: %s", fmtName, output.FormatterNames(fmts))
 	}
 	if pluginFormatter, ok := formatter.(*output.PluginFormatter); ok && pluginFormatter.Interactive {
-		if !tty || !c.stdinIsTerminal() {
+		if !c.interactiveTerminalsAvailable(tty) {
 			return nil, fmt.Errorf("interactive output format %q requires terminal stdin and stdout", fmtName)
 		}
 	}

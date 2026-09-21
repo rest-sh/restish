@@ -326,8 +326,8 @@ type LogMsg struct {
 	Text string `cbor:"text"`
 }
 
-// StdinDataMsg carries a chunk of stdin bytes from the host to the plugin
-// (passthrough_stdio mode).
+// StdinDataMsg carries a chunk of stdin bytes from the host to a command plugin
+// in passthrough_stdio mode or an interactive formatter.
 type StdinDataMsg struct {
 	Type string `cbor:"type"`
 	Data []byte `cbor:"data"`

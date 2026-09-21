@@ -28,6 +28,11 @@ func TestSelectInteractiveFormatterRequiresTerminalInputAndOutput(t *testing.T) 
 	if _, err := c.selectFormatter(&cobra.Command{}, "pretty-live", true); err != nil {
 		t.Fatalf("terminal selection failed: %v", err)
 	}
+	c.formatters["auto"] = &output.PluginFormatter{FormatName: "auto", Interactive: true}
+	c.hooks.StdinIsTerminal = func(io.Reader) bool { return false }
+	if _, err := c.selectFormatter(&cobra.Command{}, "", true); err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("implicit interactive auto error = %v", err)
+	}
 }
 
 func TestParseByteSize(t *testing.T) {
