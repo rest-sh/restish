@@ -41,6 +41,9 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 		if gt := r.FormValue("grant_type"); gt != "refresh_token" {
 			t.Fatalf("unexpected grant_type %q", gt)
 		}
+		if got := r.FormValue("redirect_url"); got != "" {
+			t.Fatalf("redirect_url forwarded to refresh request: %q", got)
+		}
 		refreshCallCount.Add(1)
 		return testResponse(200, "application/json", `{"access_token":"refreshed-token","token_type":"bearer","expires_in":3600}`), nil
 	})
@@ -67,9 +70,10 @@ func TestAuthCode_RefreshToken(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
 	params := map[string]string{
-		"client_id":  "id1",
-		"token_url":  "https://auth.example.com/token",
-		"_cache_key": cacheKey,
+		"client_id":    "id1",
+		"token_url":    "https://auth.example.com/token",
+		"redirect_url": "http://restish.localhost:3000/callback",
+		"_cache_key":   cacheKey,
 	}
 	if err := h.OnRequest(req, params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -760,6 +764,72 @@ func TestAuthCode_RedirectPath(t *testing.T) {
 	}
 }
 
+func TestAuthCode_RedirectURL(t *testing.T) {
+	port := availablePort(t)
+	wantRedirectURL := "http://restish.localhost:" + port + "/oauth/callback"
+	var authorizeURL string
+	var gotForm url.Values
+	h := &AuthorizationCode{
+		HTTPClient: testHTTPClient(func(r *http.Request) (*http.Response, error) {
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("ParseForm: %v", err)
+			}
+			gotForm = r.Form
+			return testResponse(200, "application/json", `{"access_token":"browser-token","token_type":"bearer","expires_in":3600}`), nil
+		}),
+		OpenBrowser: func(raw string) error {
+			authorizeURL = raw
+			authURL, err := url.Parse(raw)
+			if err != nil {
+				return err
+			}
+			callbackURL, err := url.Parse(authURL.Query().Get("redirect_uri"))
+			if err != nil {
+				return err
+			}
+			callbackURL.Host = net.JoinHostPort("localhost", callbackURL.Port())
+			callbackURL.RawQuery = url.Values{
+				"state": {authURL.Query().Get("state")},
+				"code":  {"good-code"},
+			}.Encode()
+			resp, err := http.Get(callbackURL.String())
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			return nil
+		},
+	}
+
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	err := h.OnRequest(req, map[string]string{
+		"client_id":     "id1",
+		"authorize_url": "https://auth.example.com/authorize",
+		"token_url":     "https://auth.example.com/token",
+		"redirect_url":  wantRedirectURL,
+		"redirect_port": port,
+	})
+	if err != nil {
+		t.Fatalf("OnRequest: %v", err)
+	}
+	parsedAuthorize, err := url.Parse(authorizeURL)
+	if err != nil {
+		t.Fatalf("parse authorize URL: %v", err)
+	}
+	if got := parsedAuthorize.Query().Get("redirect_uri"); got != wantRedirectURL {
+		t.Fatalf("authorize redirect_uri = %q, want %q", got, wantRedirectURL)
+	}
+	if got := parsedAuthorize.Query().Get("redirect_url"); got != "" {
+		t.Fatalf("redirect_url forwarded to authorize endpoint: %q", got)
+	}
+	if got := gotForm.Get("redirect_uri"); got != wantRedirectURL {
+		t.Fatalf("token redirect_uri = %q, want %q", got, wantRedirectURL)
+	}
+	if got := gotForm.Get("redirect_url"); got != "" {
+		t.Fatalf("redirect_url forwarded to token endpoint: %q", got)
+	}
+}
+
 func TestAuthCode_HTTPSCallback(t *testing.T) {
 	certPath, keyPath := writeOAuthCallbackCert(t)
 	tlsClient := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
@@ -854,6 +924,41 @@ func TestOAuthRedirectConfig(t *testing.T) {
 			wantURI: "https://localhost:9443/callback",
 		},
 		{
+			name: "full redirect URL",
+			params: map[string]string{
+				"redirect_url":    "http://restish.localhost:3000/callback",
+				"redirect_scheme": "https",
+				"redirect_port":   "9443",
+				"redirect_path":   "/ignored",
+			},
+			wantURI: "http://restish.localhost:3000/callback",
+		},
+		{
+			name: "full HTTPS redirect URL",
+			params: map[string]string{
+				"redirect_url":  "https://restish.localhost:9443/callback",
+				"redirect_cert": "cert.pem",
+				"redirect_key":  "key.pem",
+			},
+			requireTLSFiles: true,
+			wantURI:         "https://restish.localhost:9443/callback",
+		},
+		{
+			name:    "IPv4 loopback redirect URL",
+			params:  map[string]string{"redirect_url": "http://127.0.0.1:3000/callback"},
+			wantURI: "http://127.0.0.1:3000/callback",
+		},
+		{
+			name:    "IPv6 loopback redirect URL",
+			params:  map[string]string{"redirect_url": "http://[::1]:3000/callback"},
+			wantURI: "http://[::1]:3000/callback",
+		},
+		{
+			name:      "redirect URL must remain local",
+			params:    map[string]string{"redirect_url": "https://192.0.2.1/callback"},
+			wantError: "redirect_url host must resolve only to loopback",
+		},
+		{
 			name:      "invalid scheme",
 			params:    map[string]string{"redirect_scheme": "ftp"},
 			wantError: "redirect_scheme must be http or https",
@@ -880,7 +985,7 @@ func TestOAuthRedirectConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := oauthRedirectConfigFromParams(tc.params, tc.requireTLSFiles)
+			got, err := oauthRedirectConfigFromParams(context.Background(), tc.params, tc.requireTLSFiles)
 			if tc.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("error = %v, want containing %q", err, tc.wantError)
@@ -894,6 +999,17 @@ func TestOAuthRedirectConfig(t *testing.T) {
 				t.Fatalf("uri = %q, want %q", got.uri, tc.wantURI)
 			}
 		})
+	}
+}
+
+func TestOAuthRedirectConfigHonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := oauthRedirectConfigFromParams(ctx, map[string]string{
+		"redirect_url": "http://cancelled.invalid:3000/callback",
+	}, false)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
 	}
 }
 

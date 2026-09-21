@@ -17,7 +17,7 @@ need different security schemes or alternatives.
 | `http-basic` | `username` | `password` | Sets HTTP Basic auth. If `password` is omitted and prompting is available, Restish prompts. |
 | `api-key` | `in`, `name`, `value` | | Sends an API key in a `header`, `query`, or `cookie`. |
 | `oauth-client-credentials` | `client_id`, `client_secret`, plus `token_url` or `issuer_url` | `auth_method`, `scopes`, provider-specific token params such as `audience` | Fetches and caches a bearer token with the OAuth client credentials flow. |
-| `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_scheme`, `redirect_port`, `redirect_path`, `redirect_cert`, `redirect_key`, `callback_success_html`, `callback_error_html`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
+| `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_url`, `redirect_scheme`, `redirect_port`, `redirect_path`, `redirect_cert`, `redirect_key`, `callback_success_html`, `callback_error_html`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
 | `oauth-device-code` | `client_id`, plus `device_authorization_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, provider-specific token params | Runs the OAuth device-code flow and caches the token. |
 | `external-tool` | `commandline` | `omitbody`, `output` | Runs a local helper that can mutate request headers or URI. |
 
@@ -45,15 +45,20 @@ to copy the authorization URL and pasted code manually.
 For `oauth-authorization-code`, the default browser callback URL to allow in
 the OAuth app is `http://localhost:8484/`. `redirect_port` changes `8484`, and
 `redirect_path` changes `/`, for example `http://localhost:8484/callback`.
-Some providers distinguish `localhost` from `127.0.0.1` or require loopback IP
-redirects. Restish currently sends `localhost` in the authorization request, so
-providers that perform exact redirect URI matching must allow the `localhost`
-callback URL.
+Without `redirect_url`, Restish sends `localhost` in the authorization request.
+
+Set `redirect_url` when the provider requires an exact local callback URI such
+as `http://app.localhost:3000/callback`. It overrides `redirect_scheme`,
+`redirect_port`, and `redirect_path`, and Restish sends the configured value
+unchanged in both the authorization request and token exchange. Its host must
+be `localhost`, a `.localhost` name, a loopback IP address, or another hostname
+that resolves only to loopback addresses.
 
 Set `redirect_scheme` to `https` when the OAuth app requires an HTTPS localhost
 callback. HTTPS callbacks require `redirect_cert` and `redirect_key`, both PEM
 paths used by the local callback server. Restish does not generate certificates
-or install browser trust roots.
+or install browser trust roots. The certificate must cover the hostname in
+`redirect_url` when one is configured.
 
 The browser callback page uses the active Restish theme by default.
 `callback_success_html` and `callback_error_html` replace the full success or
