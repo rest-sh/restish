@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +17,25 @@ import (
 )
 
 type testAuth struct{}
+
+func TestPublicFetchOptions(test *testing.T) {
+	test.Setenv("RSH_CONFIG_DIR", test.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("X-Request") != "public-options" {
+			test.Errorf("public fetch did not apply headers: %v", request.Header)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		io.WriteString(writer, `{"public":true}`)
+	}))
+	defer server.Close()
+	client := restish.New()
+	response, err := client.FetchResponseWithOptions(context.Background(), http.MethodGet, server.URL, restish.FetchOptions{
+		Headers: []string{"X-Request: public-options"}, NoBrowser: true,
+	})
+	if err != nil || response.Status != http.StatusOK || string(response.Raw) != `{"public":true}` {
+		test.Fatalf("public fetch options: response=%v err=%v", response, err)
+	}
+}
 
 func (testAuth) Parameters() []restish.AuthParam {
 	return []restish.AuthParam{{Name: "token", Required: true, Secret: true}}

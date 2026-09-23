@@ -88,6 +88,33 @@ response without pagination, filtering, streaming, or writing output.
 Disable caching with normal Restish config or flags for ad hoc credentialed raw
 requests that do not have a stable profile boundary.
 
+## Programmatic Authentication Policy
+
+Use `FetchResponseWithOptions` when a programmatic request must not open a
+browser automatically:
+
+```go
+response, err := cli.FetchResponseWithOptions(
+    ctx, "GET", "https://api.example.com/items",
+    restish.FetchOptions{
+        ProfileName: "work",
+        Headers:     []string{"X-Request-ID: example"},
+        NoBrowser:   true,
+    },
+)
+```
+
+The private API and profile are placeholders for the embedder's configured
+service. The supplied context controls HTTP work. Interactive authorization-code
+flows use manual entry instead of automatic browser launch, matching
+`--rsh-no-browser`. These options apply only to this request and do not change
+the CLI configuration or token-cache identity.
+
+The existing `FetchResponse` method retains its current behavior. Its profile
+and header arguments correspond to `ProfileName` and `Headers`; `NoBrowser`
+defaults to false. Neither fetch method renders the response or runs CLI
+commands recursively.
+
 ## Custom Content Or Output
 
 Embedder-facing registration methods let custom CLIs add content types,

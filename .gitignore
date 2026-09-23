@@ -25,6 +25,7 @@
 /.agents/skills/zoom-out/
 
 .claude/worktrees/
+.worktrees/
 
 site/node_modules/
 site/dist/

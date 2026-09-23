@@ -454,6 +454,25 @@ When implemented, update:
 - command reference/help generated regions if public command shape changes
 - this design record with the accepted public API names
 
+## Programmatic Authentication Options
+
+Embedders may perform prerequisite reads before a generated command. Those
+reads must be able to honor the same browser policy without calling `Run`
+recursively or losing the caller's context.
+
+Add `FetchResponseWithOptions(ctx, method, rawURL, FetchOptions)`, with
+`ProfileName`, `Headers`, and `NoBrowser` fields. A zero-value options struct
+retains the current default profile and browser behavior. Keep `FetchResponse`
+as a compatibility wrapper using its existing profile and header arguments.
+Options belong to one call, do not mutate CLI defaults, and do not change
+credential-cache identity. Execution continues through the existing request
+and authentication pipeline; there is no second OAuth implementation.
+
+The context still controls programmatic HTTP work. Response normalization,
+single-request behavior, header negotiation, and error handling remain
+unchanged. Tests cover explicit manual authentication, legacy browser behavior,
+profile/header selection, and caller-context cancellation.
+
 ## Open Questions
 
 - How should JSON doctor output represent generated operation metadata source,

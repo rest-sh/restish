@@ -49,6 +49,9 @@ type Formatter = output.Formatter
 // returned by FetchResponse.
 type Response = output.Response
 
+// FetchOptions controls one programmatic request, including its browser policy.
+type FetchOptions = internalcli.FetchOptions
+
 // LinkParser extracts hypermedia links from response headers or bodies.
 type LinkParser = hypermedia.Parser
 
