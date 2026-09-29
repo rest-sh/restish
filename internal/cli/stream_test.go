@@ -682,6 +682,15 @@ func TestNDJSONYAMLOutputUsesFormatter(t *testing.T) {
 	}
 }
 
+func TestNDJSONJQFilterPreservesLargeInteger(t *testing.T) {
+	const id = "18446744073709551615"
+	app := runStream(t, "application/x-ndjson", `{"id":`+id+"}\n", "/records",
+		"--rsh-filter-lang", "jq", "-f", "+.body.id", "-o", "lines")
+	if got, want := app.Stdout.String(), id+"\n"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestNDJSONExplicitFormatterStreamsCompactJSON(t *testing.T) {
 	got := strings.TrimSpace(runStream(t, "application/x-ndjson", "{\"id\":1}\n{\"id\":2}\n", "/stream", "-o", "ndjson").Stdout.String())
 	lines := strings.Split(got, "\n")

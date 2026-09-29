@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rest-sh/restish/v2/internal/content"
 	"github.com/rest-sh/restish/v2/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -126,8 +126,7 @@ func (c *CLI) handleSSE(cmd *cobra.Command, resp *http.Response, prepared *prepa
 }
 
 func parseJSONOrString(data string) (any, bool) {
-	var parsed any
-	if err := json.Unmarshal([]byte(data), &parsed); err == nil {
+	if parsed, err := content.UnmarshalJSON([]byte(data)); err == nil {
 		return parsed, true
 	}
 	return data, false
