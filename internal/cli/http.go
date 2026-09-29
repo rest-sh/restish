@@ -389,7 +389,7 @@ func (c *CLI) runHTTPWithOptions(cmd *cobra.Command, method string, args []strin
 	// Response-middleware plugins: can modify, drop, or follow.
 	// Skipped in follow mode to prevent infinite loops.
 	if !followMode && httpResp.Request != nil && !printSpec.rawBodyOnly() {
-		drop, followReq, mwErr := c.runResponseMiddlewarePlugins(httpResp.Request, resp)
+		drop, followReq, mwErr := c.runResponseMiddlewarePlugins(requestContext(cmd), httpResp.Request, resp)
 		if mwErr != nil {
 			return mwErr
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/rest-sh/restish/v2/auth"
 	"html"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -88,6 +89,7 @@ func (h *AuthorizationCode) Parameters() []auth.Param {
 		{Name: "token_url", Description: "OAuth2 token endpoint URL", Required: false},
 		{Name: "issuer_url", Description: "OIDC issuer URL (used for discovery when authorize_url/token_url are absent)", Required: false},
 		{Name: "scopes", Description: "Space-separated OAuth2 scopes to request; some providers require offline_access for refresh tokens", Required: false},
+		{Name: "redirect_url", Description: "Full local callback URL. Overrides redirect_scheme, redirect_port, and redirect_path", Required: false},
 		{Name: "redirect_scheme", Description: "Local callback URL scheme: http (default) or https", Required: false},
 		{Name: "redirect_port", Description: fmt.Sprintf("Local port for the redirect callback (default %s)", defaultRedirectPort), Required: false},
 		{Name: "redirect_path", Description: "Local path for the redirect callback (default /)", Required: false},
@@ -253,6 +255,8 @@ func (h *AuthorizationCode) resolveEndpoints(ctx context.Context, params map[str
 }
 
 func (h *AuthorizationCode) doRefresh(ctx context.Context, params map[string]string, tokenURL, refreshToken string) (auth.CachedToken, error) {
+	params = maps.Clone(params)
+	delete(params, "redirect_url")
 	return refreshOAuthToken(ctx, h.HTTPClient, params, tokenURL, refreshToken)
 }
 
@@ -272,9 +276,11 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	state := base64.RawURLEncoding.EncodeToString(stateBytes)
 
 	manualOnly := h.CanPrompt && h.NoBrowser && h.Prompt != nil
+	ctx2, cancel := context.WithTimeout(ctx, authTimeout)
+	defer cancel()
 
 	// Determine redirect URL.
-	redirect, err := oauthRedirectConfigFromParams(params, !manualOnly)
+	redirect, err := oauthRedirectConfigFromParams(ctx2, params, !manualOnly)
 	if err != nil {
 		return auth.CachedToken{}, err
 	}
@@ -300,6 +306,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		"issuer_url":             true,
 		callbackErrorHTMLParam:   true,
 		callbackSuccessHTMLParam: true,
+		"redirect_url":           true,
 		"redirect_path":          true,
 		"redirect_port":          true,
 		"redirect_scheme":        true,
@@ -313,9 +320,6 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 	}
 	fullAuthorizeURL := authorizeURL + "?" + q.Encode()
 
-	ctx2, cancel := context.WithTimeout(ctx, authTimeout)
-	defer cancel()
-
 	var (
 		codeCh chan string
 		errCh  chan error
@@ -327,9 +331,9 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		errCh = make(chan error, 1)
 		doneCh = make(chan error, 1)
 		var receivedCode atomic.Bool
-		ln, err := net.Listen("tcp", "localhost:"+redirect.port)
+		listeners, err := listenOAuthCallback(redirect.hosts, redirect.port)
 		if err != nil {
-			return auth.CachedToken{}, fmt.Errorf("starting callback server on port %s: %w", redirect.port, err)
+			return auth.CachedToken{}, err
 		}
 		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != redirect.path {
@@ -384,11 +388,13 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		})}
 		// No keep-alives: lets the socket close promptly after Shutdown.
 		srv.SetKeepAlivesEnabled(false)
-		go func() {
-			if e := serveOAuthCallback(srv, ln, redirect); e != nil && e != http.ErrServerClosed {
-				trySendErr(errCh, e)
-			}
-		}()
+		for _, ln := range listeners {
+			go func() {
+				if e := serveOAuthCallback(srv, ln, redirect); e != nil && e != http.ErrServerClosed {
+					trySendErr(errCh, e)
+				}
+			}()
+		}
 		defer func() {
 			ctx2, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -449,7 +455,9 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		"client_id":     {params["client_id"]},
 		"code_verifier": {verifier},
 	}
-	ct, err := FetchToken(ctx, h.HTTPClient, tokenURL, form, params)
+	tokenParams := maps.Clone(params)
+	delete(tokenParams, "redirect_url")
+	ct, err := FetchToken(ctx, h.HTTPClient, tokenURL, form, tokenParams)
 	if doneCh != nil {
 		trySendErr(doneCh, err)
 	}
@@ -461,6 +469,7 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 
 type oauthRedirectConfig struct {
 	scheme string
+	hosts  []string
 	port   string
 	path   string
 	uri    string
@@ -468,35 +477,119 @@ type oauthRedirectConfig struct {
 	key    string
 }
 
-func oauthRedirectConfigFromParams(params map[string]string, requireTLSFiles bool) (oauthRedirectConfig, error) {
-	scheme := strings.ToLower(strings.TrimSpace(params["redirect_scheme"]))
-	if scheme == "" {
-		scheme = defaultRedirectScheme
+// listenOAuthCallback binds the callback server on every resolved loopback
+// address. A host name such as localhost often resolves to both 127.0.0.1 and
+// ::1, and one family may be unavailable (for example IPv6 disabled in a
+// container), so the flow only fails when no address can be bound.
+func listenOAuthCallback(hosts []string, port string) ([]net.Listener, error) {
+	listeners := make([]net.Listener, 0, len(hosts))
+	var firstErr error
+	for _, host := range hosts {
+		address := net.JoinHostPort(host, port)
+		ln, err := net.Listen("tcp", address)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("starting callback server on %s: %w", address, err)
+			}
+			continue
+		}
+		listeners = append(listeners, ln)
 	}
-	if scheme != "http" && scheme != "https" {
-		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_scheme must be http or https")
+	if len(listeners) == 0 {
+		return nil, firstErr
 	}
-	cert := params["redirect_cert"]
-	key := params["redirect_key"]
-	if scheme == "https" && requireTLSFiles && (cert == "" || key == "") {
-		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_cert and redirect_key are required when redirect_scheme is https")
+	return listeners, nil
+}
+
+// oauthRedirectConfigFromParams builds the callback configuration. When listen
+// is false (manual code entry), no callback server runs on this host, so the
+// redirect_url host is not resolved here and TLS files are not required: the
+// browser may be on another machine where the name resolves differently.
+func oauthRedirectConfigFromParams(ctx context.Context, params map[string]string, listen bool) (oauthRedirectConfig, error) {
+	redirect := oauthRedirectConfig{
+		cert: params["redirect_cert"],
+		key:  params["redirect_key"],
 	}
-	port := params["redirect_port"]
-	if port == "" {
-		port = defaultRedirectPort
+	if rawURL := strings.TrimSpace(params["redirect_url"]); rawURL != "" {
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: invalid redirect_url %q: %w", rawURL, err)
+		}
+		redirect.scheme = strings.ToLower(u.Scheme)
+		if !u.IsAbs() || u.Host == "" || (redirect.scheme != "http" && redirect.scheme != "https") {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url must be an absolute http or https URL")
+		}
+		if u.User != nil {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url must not include credentials")
+		}
+		if u.Fragment != "" {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url must not include a fragment")
+		}
+		hostname := u.Hostname()
+		host := strings.TrimSuffix(strings.ToLower(hostname), ".")
+		if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+			hostname = "localhost"
+		}
+		if ip := net.ParseIP(hostname); ip != nil && !ip.IsLoopback() {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
+		}
+		if listen {
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, hostname)
+			if err != nil {
+				return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: resolving redirect_url host %q: %w", u.Hostname(), err)
+			}
+			seen := map[string]bool{}
+			for _, ip := range ips {
+				if !ip.IP.IsLoopback() {
+					return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
+				}
+				value := ip.IP.String()
+				if !seen[value] {
+					seen[value] = true
+					redirect.hosts = append(redirect.hosts, value)
+				}
+			}
+			if len(redirect.hosts) == 0 {
+				return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
+			}
+		}
+		redirect.port = u.Port()
+		if redirect.port == "" {
+			if redirect.scheme == "https" {
+				redirect.port = "443"
+			} else {
+				redirect.port = "80"
+			}
+		}
+		redirect.path = u.Path
+		if redirect.path == "" {
+			redirect.path = "/"
+		}
+		redirect.uri = rawURL
+	} else {
+		redirect.scheme = strings.ToLower(strings.TrimSpace(params["redirect_scheme"]))
+		if redirect.scheme == "" {
+			redirect.scheme = defaultRedirectScheme
+		}
+		if redirect.scheme != "http" && redirect.scheme != "https" {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_scheme must be http or https")
+		}
+		redirect.hosts = []string{"localhost"}
+		redirect.port = params["redirect_port"]
+		if redirect.port == "" {
+			redirect.port = defaultRedirectPort
+		}
+		path, err := oauthRedirectPath(params["redirect_path"])
+		if err != nil {
+			return oauthRedirectConfig{}, err
+		}
+		redirect.path = path
+		redirect.uri = redirect.scheme + "://localhost:" + redirect.port + redirect.path
 	}
-	path, err := oauthRedirectPath(params["redirect_path"])
-	if err != nil {
-		return oauthRedirectConfig{}, err
+	if redirect.scheme == "https" && listen && (redirect.cert == "" || redirect.key == "") {
+		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_cert and redirect_key are required when the callback URL uses https")
 	}
-	return oauthRedirectConfig{
-		scheme: scheme,
-		port:   port,
-		path:   path,
-		uri:    scheme + "://localhost:" + port + path,
-		cert:   cert,
-		key:    key,
-	}, nil
+	return redirect, nil
 }
 
 func serveOAuthCallback(srv *http.Server, ln net.Listener, redirect oauthRedirectConfig) error {
@@ -837,10 +930,11 @@ func defaultOpenBrowserCommandForGOOS(goos, rawURL string) *exec.Cmd {
 		case "darwin":
 			cmd = exec.Command("open", "--", rawURL)
 		case "windows":
-			// Pass an explicit empty title ("") before the URL so that special
-			// characters in the URL are not misinterpreted as window title or
-			// cmd /c start flags.
-			cmd = exec.Command("cmd", "/c", "start", "", "--", rawURL)
+			// Do not go through cmd.exe: "start" has no "--" convention (it tries
+			// to launch a program named "--"), and cmd splits an unquoted command
+			// line at "&", which every authorization URL contains. rundll32 hands
+			// the URL to the default browser with no shell in between.
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
 		default:
 			cmd = exec.Command("xdg-open", rawURL)
 		}

@@ -140,9 +140,29 @@ With the example above, allow:
 http://localhost:8484/callback
 ```
 
-Some providers distinguish `localhost` from `127.0.0.1`. Restish sends
-`localhost` in the authorization request, so exact-match providers must allow
-the `localhost` URL.
+Some providers require another local hostname or loopback IP. Set the full
+callback URL when the provider performs exact redirect URI matching:
+
+```jsonc
+{
+  "type": "oauth-authorization-code",
+  "params": {
+    "authorize_url": "https://issuer.test/authorize",
+    "token_url": "https://issuer.test/oauth/token",
+    "client_id": "env:CLIENT_ID",
+    "redirect_url": "http://app.localhost:3000/callback"
+  }
+}
+```
+
+`redirect_url` overrides `redirect_scheme`, `redirect_port`, and
+`redirect_path`. Restish uses its exact value in the authorization request and
+token exchange. Its host must be `localhost`, a `.localhost` name, or a
+loopback IP address. Other hostnames must resolve only to loopback addresses.
+Include a port: without one the callback uses port 80 or 443, which usually
+needs elevated privileges. With `--rsh-no-browser`, Restish does not start a
+callback server, so it skips the hostname lookup and you paste the code
+instead.
 
 If your provider requires an HTTPS redirect URL, provide your own local
 callback certificate and key:
@@ -164,8 +184,8 @@ callback certificate and key:
 ```
 
 Allow `https://localhost:8484/callback` in the OAuth app. Restish does not
-generate certificates or install local trust roots; use a certificate that your
-browser accepts for `localhost`.
+generate certificates or install local trust roots. Use a certificate that your
+browser accepts for the configured callback hostname.
 
 The browser callback page uses the active Restish theme. To brand that local
 page, set `callback_success_html` and/or `callback_error_html` on the
