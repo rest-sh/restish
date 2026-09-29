@@ -24,7 +24,7 @@ const legacyAPIsJSON = `{
           "params": {
             "authorize_url": "https://dex.internal.example.com/auth",
             "client_id":     "restish",
-            "scopes":        "openid email",
+            "scope":         "openid email",
             "token_url":     "https://dex.internal.example.com/token"
           }
         }
@@ -78,10 +78,30 @@ func TestConvertLegacyAPIFileCert(t *testing.T) {
 	if got := prof.Auth.Params["client_id"]; got != "restish" {
 		t.Errorf("Auth.Params[client_id] = %q", got)
 	}
+	if got := prof.Auth.Params["scopes"]; got != "openid email" {
+		t.Errorf("Auth.Params[scopes] = %q", got)
+	}
+	if _, ok := prof.Auth.Params["scope"]; ok {
+		t.Error("legacy Auth.Params[scope] should be removed")
+	}
 	for _, w := range warnings {
 		if strings.Contains(w, "PKCS") {
 			t.Errorf("unexpected PKCS#11 warning for cert/key entry: %s", w)
 		}
+	}
+}
+
+func TestConvertLegacyProfileClientCredentialsScope(t *testing.T) {
+	prof := convertLegacyProfile(&legacyAPIProfile{Auth: &legacyAPIConfigAuth{
+		Name:   "oauth-client-credentials",
+		Params: map[string]string{"scope": "read write"},
+	}})
+
+	if got := prof.Auth.Params["scopes"]; got != "read write" {
+		t.Errorf("Auth.Params[scopes] = %q", got)
+	}
+	if _, ok := prof.Auth.Params["scope"]; ok {
+		t.Error("legacy Auth.Params[scope] should be removed")
 	}
 }
 
