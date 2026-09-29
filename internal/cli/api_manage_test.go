@@ -167,9 +167,10 @@ func TestAPIConnectPreservesExplicitCommandLayoutByDefault(t *testing.T) {
 	}
 }
 
-func TestAPIConnectRejectsInvalidXCLICommandLayout(t *testing.T) {
-	c, _, _ := newTestCLI(t)
-	c.Hooks().ConfigPath = t.TempDir() + "/restish.json"
+func TestAPIConnectIgnoresInvalidXCLICommandLayout(t *testing.T) {
+	cfgFile := t.TempDir() + "/restish.json"
+	c, _, stderr := newTestCLI(t)
+	c.Hooks().ConfigPath = cfgFile
 	c.Hooks().SpecCachePath = t.TempDir()
 	useOpenAPISpecTransport(c, `{
   "openapi": "3.1.0",
@@ -178,9 +179,18 @@ func TestAPIConnectRejectsInvalidXCLICommandLayout(t *testing.T) {
   "paths": {}
 }`)
 
-	err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"})
-	if err == nil || !strings.Contains(err.Error(), `x-cli-config.command_layout: must be "flat" or "tags"`) {
-		t.Fatalf("api connect error = %v", err)
+	if err := c.Run([]string{"restish", "api", "connect", "myapi", "https://api.example.com"}); err != nil {
+		t.Fatalf("api connect: %v", err)
+	}
+	if !strings.Contains(stderr.String(), `ignoring x-cli-config.command_layout: must be "flat" or "tags"`) {
+		t.Fatalf("stderr = %q, want invalid command_layout warning", stderr.String())
+	}
+	written, err := config.Load(cfgFile)
+	if err != nil {
+		t.Fatalf("load written config: %v", err)
+	}
+	if got := written.APIs["myapi"].CommandLayout; got != "" {
+		t.Fatalf("command_layout = %q, want unset", got)
 	}
 }
 

@@ -746,7 +746,8 @@ x-cli-config:
       credentials: {}
 ```
 
-`command_layout` accepts `flat` or `tags`. `api connect` applies it as a remote
+`command_layout` accepts `flat` or `tags`; other values are ignored with a
+warning so a bad hint never blocks `api connect`. `api connect` applies it as a remote
 default, while an existing non-empty local value remains operator-owned unless
 the user reconnects with `--replace`. `api sync` does not overwrite it.
 

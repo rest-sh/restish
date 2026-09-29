@@ -398,7 +398,8 @@ x-cli-config:
           satisfies: ["items:read"]
 ```
 
-`command_layout` is an API-level default and accepts `flat` or `tags`. An
+`command_layout` is an API-level default and accepts `flat` or `tags`; any
+other value is ignored with a warning. An
 existing non-empty local value is preserved when reconnecting; use `--replace`
 to reapply the document default.
 

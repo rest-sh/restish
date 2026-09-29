@@ -1099,10 +1099,11 @@ func xcliPromptLooksSecret(name string) bool {
 // could otherwise pre-seed arbitrary shell-command execution on the next
 // authenticated request.
 func (c *CLI) applyXCLIConfig(apiCfg *config.APIConfig, xcli *spec.XCLIConfig) error {
+	// command_layout is a server-supplied hint, so an invalid value is
+	// ignored with a warning instead of failing the whole connect.
 	if err := config.ValidateCommandLayout(xcli.CommandLayout); err != nil {
-		return fmt.Errorf("x-cli-config.command_layout: %w", err)
-	}
-	if xcli.CommandLayout != "" {
+		c.warnf("ignoring x-cli-config.command_layout: %v", err)
+	} else if xcli.CommandLayout != "" {
 		apiCfg.CommandLayout = xcli.CommandLayout
 	}
 	if len(xcli.Profiles) == 0 {
