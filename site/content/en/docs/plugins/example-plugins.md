@@ -34,6 +34,7 @@ source and installation instructions before running them.
 | Plugin | Repository | Use it for |
 | --- | --- | --- |
 | `restish-arazzo` | [`restish-plugins/arazzo`](https://github.com/natalie-o-perret/restish-plugins/tree/main/arazzo) | Run [Arazzo 1.0.x](https://spec.openapis.org/arazzo/v1.0.1.html) workflows across configured Restish APIs. |
+| `restish-pretty` | [`restish-plugins/pretty`](https://github.com/natalie-o-perret/restish-plugins/tree/main/pretty) | Render structured response bodies as readable trees and tables. |
 
 Restish validates plugin protocol compatibility, but does not verify publishers
 or audit third-party behavior.
