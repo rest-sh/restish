@@ -86,16 +86,28 @@ func TestOpenAPILoader_Detect_RejectsNestedOpenAPIVersion(t *testing.T) {
 func TestOpenAPILoader_Detect_RejectsInvalidOpenAPIVersions(t *testing.T) {
 	l := OpenAPILoader{}
 	for _, body := range []string{
-		`{"openapi":"3"}`,
-		`{"openapi":"3.1"}`,
-		`{"openapi":"3.1.x"}`,
 		`{"openapi":"4.0.0"}`,
+		`{"openapi":"https://3.example.com/openapi.json"}`,
 		`["openapi", "3.1.0"]`,
 		`openapi: [3, 1, 0]`,
 		`{`,
 	} {
 		if l.Detect("application/json", []byte(body)) {
 			t.Errorf("should not detect invalid OpenAPI document %q", body)
+		}
+	}
+}
+
+func TestOpenAPILoader_Detect_AcceptsLooseOpenAPI3Versions(t *testing.T) {
+	l := OpenAPILoader{}
+	for _, body := range []string{
+		`{"openapi":"3"}`,
+		`{"openapi":"3.1"}`,
+		"openapi: 3.1\npaths: {}",
+		`{"openapi":"3.1.0-rc1"}`,
+	} {
+		if !l.Detect("application/json", []byte(body)) {
+			t.Errorf("should detect OpenAPI 3 document %q", body)
 		}
 	}
 }

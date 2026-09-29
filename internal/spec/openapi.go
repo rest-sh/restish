@@ -140,24 +140,13 @@ func isSwagger2Document(body []byte) bool {
 	return ok && version == "2.0"
 }
 
+// isOpenAPI3Document reports whether body declares a top-level OpenAPI 3
+// version. Loose versions such as "3.1" are accepted because the loader parses
+// them today; the check only needs to reject non-version values such as a
+// service root advertising `"openapi": "https://…/openapi.json"`.
 func isOpenAPI3Document(body []byte) bool {
 	version, ok := topLevelDocumentVersion(body, "openapi")
-	if !ok {
-		return false
-	}
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 || parts[0] != "3" {
-		return false
-	}
-	for _, part := range parts[1:] {
-		if part == "" {
-			return false
-		}
-		if _, err := strconv.ParseUint(part, 10, 64); err != nil {
-			return false
-		}
-	}
-	return true
+	return ok && (version == "3" || strings.HasPrefix(version, "3."))
 }
 
 func topLevelDocumentVersion(body []byte, key string) (string, bool) {
