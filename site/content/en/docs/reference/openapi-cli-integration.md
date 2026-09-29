@@ -376,6 +376,7 @@ Document-level `x-cli-config` pre-populates API profiles during `api connect`:
 
 ```yaml
 x-cli-config:
+  command_layout: tags
   profiles:
     default:
       headers:
@@ -396,6 +397,11 @@ x-cli-config:
               value: "{api_key}"
           satisfies: ["items:read"]
 ```
+
+`command_layout` is an API-level default and accepts `flat` or `tags`; any
+other value is ignored with a warning. An
+existing non-empty local value is preserved when reconnecting; use `--replace`
+to reapply the document default.
 
 Supported profile fields are `headers`, `query`, `auth`, `credentials`,
 `security`, `params`, and `prompt`. Credential entries support `auth`,
@@ -429,12 +435,15 @@ or external tools.
 
 ## Command Layout
 
-Flat layout is the default. Restish does not guess an automatic layout from the
-spec. Tag layout can help large APIs when the tags are stable and useful:
+Flat layout is the default. Tag layout can help large APIs when the tags are
+stable and useful. Set it locally:
 
 ```bash
 restish api set myapi 'command_layout: tags'
 ```
+
+API providers can also select the initial layout with
+`x-cli-config.command_layout`.
 
 Keep tags short and user-facing if you expect them to become command groups.
 

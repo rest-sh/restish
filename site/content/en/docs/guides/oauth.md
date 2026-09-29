@@ -277,7 +277,11 @@ restish api auth inspect myapi
 Restish caches OAuth tokens by API/profile or shared auth profile. Expired
 access tokens are refreshed when a refresh token is available. If refresh fails
 with `invalid_grant`, Restish clears that cached token and reruns the
-interactive flow when the flow supports it.
+interactive flow when the flow supports it. Supabase GoTrue reports the same
+condition with an `error_code` of `refresh_token_not_found`,
+`refresh_token_already_used`, `session_not_found`, or `session_expired`, and
+Restish treats those the same way. Network errors and server errors never
+trigger the interactive fallback.
 
 If an API returns `401 Unauthorized` for a token-bearing OAuth request, Restish
 forces fresh auth and retries that request once. This handles tokens that look

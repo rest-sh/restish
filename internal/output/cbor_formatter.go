@@ -11,7 +11,7 @@ import (
 type CBORFormatter struct{}
 
 func (f *CBORFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	data, err := cbor.Marshal(resp.Body)
+	data, err := cbor.Marshal(cborBigNumbers(resp.Body))
 	if err != nil {
 		return err
 	}

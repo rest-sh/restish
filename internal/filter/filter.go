@@ -4,9 +4,13 @@ package filter
 import (
 	"container/list"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -416,7 +420,7 @@ func applyJQ(expr string, doc map[string]any) (result any, err error) {
 		if err, ok := v.(error); ok {
 			return nil, fmt.Errorf("jq: %w", err)
 		}
-		results = append(results, v)
+		results = append(results, normalizeJQResult(v))
 	}
 
 	if len(results) == 0 {
@@ -426,6 +430,39 @@ func applyJQ(expr string, doc map[string]any) (result any, err error) {
 		return results[0], nil
 	}
 	return results, nil
+}
+
+func normalizeJQResult(value any) any {
+	switch v := value.(type) {
+	case json.Number:
+		if v.String() == "-0" {
+			return math.Copysign(0, -1)
+		}
+		if !strings.ContainsAny(v.String(), ".eE") {
+			if i, err := v.Int64(); err == nil {
+				return i
+			}
+			if u, err := strconv.ParseUint(v.String(), 10, 64); err == nil {
+				return u
+			}
+		}
+	case *big.Int:
+		if v.IsInt64() {
+			return v.Int64()
+		}
+		if v.IsUint64() {
+			return v.Uint64()
+		}
+	case []any:
+		for i := range v {
+			v[i] = normalizeJQResult(v[i])
+		}
+	case map[string]any:
+		for key := range v {
+			v[key] = normalizeJQResult(v[key])
+		}
+	}
+	return value
 }
 
 func normalizeJQValue(value any) any {
@@ -459,6 +496,18 @@ func normalizeJQValue(value any) any {
 			result[i] = normalizeJQValue(rv.Index(i).Interface())
 		}
 		return result
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		i := rv.Int()
+		if int64(int(i)) == i {
+			return int(i)
+		}
+		return json.Number(strconv.FormatInt(i, 10))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		u := rv.Uint()
+		if i := int(u); i >= 0 && uint64(i) == u {
+			return i
+		}
+		return json.Number(strconv.FormatUint(u, 10))
 	default:
 		return value
 	}

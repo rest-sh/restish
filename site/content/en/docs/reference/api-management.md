@@ -64,7 +64,7 @@ Common choices:
 - Use `--spec` when discovery is blocked, the API does not advertise its spec, or you want to pin setup to a known OpenAPI URL or local file.
 - Use `--allow-cross-origin-spec` only when you trust a `Link` header that points to an OpenAPI document on another host. Private, loopback, link-local, and unspecified follow targets are still rejected unless the original API is already private/local; use `--spec` when you need to name a private spec URL directly.
 - Use `--no-discover` to save a base URL without fetching a spec.
-- Use `--replace` when reconnecting should replace existing profiles with generated OpenAPI or `x-cli-config` profile defaults. Without it, existing profiles are preserved, while API-level discovery fields are refreshed from the new connect run.
+- Use `--replace` when reconnecting should replace existing profiles and reapply generated OpenAPI or `x-cli-config` defaults. Without it, existing profiles and explicit local defaults are preserved, while other API-level discovery fields are refreshed from the new connect run.
 - Use `--yes` only for safe connect prompts you have already decided to accept in automation.
 
 Usage:
@@ -99,7 +99,7 @@ Register the API locally without network spec discovery
 
 Type: `bool`; default: `false`
 
-Replace existing profiles with discovered OpenAPI/x-cli-config defaults
+Replace existing profiles and reapply discovered x-cli-config defaults
 
 **`--spec`**
 
