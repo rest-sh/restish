@@ -79,6 +79,12 @@ fidelity.
 JSON, YAML, CBOR, msgpack, and similar responses become structured values that
 filters and formatters can traverse.
 
+JSON integers keep their exact value. Integers within ±2^53 decode as
+`float64`; larger ones decode as `int64`/`uint64`, and anything beyond that
+stays a `json.Number` (jq results may produce `*big.Int`). Formatters must
+render these as numbers: JSON, TOON, tables, and gron print the digits, YAML
+emits a plain numeric scalar, and CBOR encodes a bignum (tags 2/3).
+
 ### Printable Text
 
 Text payloads should remain text when that preserves meaning. Human-oriented

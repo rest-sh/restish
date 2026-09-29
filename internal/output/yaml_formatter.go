@@ -11,7 +11,7 @@ import (
 type YAMLFormatter struct{}
 
 func (f *YAMLFormatter) Format(w io.Writer, resp *Response, color bool) error {
-	data, err := yaml.Marshal(resp.Body)
+	data, err := yaml.Marshal(yamlBigNumbers(resp.Body))
 	if err != nil {
 		return fmt.Errorf("yaml: %w", err)
 	}
@@ -21,7 +21,7 @@ func (f *YAMLFormatter) Format(w io.Writer, resp *Response, color bool) error {
 
 // FormatValue writes a body/sub-value as YAML.
 func (f *YAMLFormatter) FormatValue(w io.Writer, value any, color bool) error {
-	data, err := yaml.Marshal(value)
+	data, err := yaml.Marshal(yamlBigNumbers(value))
 	if err != nil {
 		return fmt.Errorf("yaml: %w", err)
 	}
