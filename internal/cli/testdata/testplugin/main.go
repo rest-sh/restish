@@ -280,6 +280,9 @@ func runFormatter(dec *plugin.Decoder, raw []byte) {
 	for {
 		if req.Event == "start" {
 			fmt.Fprint(os.Stdout, "HOOK FORMATTED\n")
+			if req.PluginConfig != nil {
+				fmt.Fprintf(os.Stdout, "PLUGIN CONFIG %s\n", req.PluginConfig)
+			}
 		}
 		if req.Event == "end" {
 			break

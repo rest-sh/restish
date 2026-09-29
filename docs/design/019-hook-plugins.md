@@ -207,8 +207,13 @@ starts one plugin process, then sends:
 3. one final `formatter` message with `event: "end"`
 
 The `start` message carries response metadata (`proto`, `status`, `headers`,
-`links`) and may also include a full `body` for ordinary non-streaming
-responses.
+`links`), the formatter's optional raw JSON `plugin_config` from
+`plugins[<manifest name>]` in `restish.json`, and may also include a full `body`
+for ordinary non-streaming responses.
+
+On the CBOR wire, `plugin_config` is a byte string containing the exact UTF-8
+JSON bytes. Restish omits it when the plugin has no configuration. An explicit
+JSON `null` remains the four bytes `null`.
 
 Each `item` message carries one body/sub-value to render. This is what lets the
 same formatter handle:

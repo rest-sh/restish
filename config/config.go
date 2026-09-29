@@ -43,7 +43,9 @@ type Config struct {
 	// Plugins holds per-plugin configuration keyed by plugin name (without the
 	// "restish-" prefix). Each value is stored as raw JSON so that restish
 	// itself does not need to know the shape of each plugin's config.
-	// Plugins can read their config via the "config-read" message.
+	// Command plugins can read their config via the "config-read" message.
+	// Formatter plugins receive the UTF-8 JSON bytes as a CBOR byte string in
+	// the formatter "start" message.
 	//
 	// Example restish.json entry:
 	//   "plugins": {

@@ -457,6 +457,24 @@ func TestFormatterPlugin(t *testing.T) {
 	}
 }
 
+func TestFormatterPluginReceivesConfig(t *testing.T) {
+	installHookPlugin(t)
+
+	srv := hookJSONServer(t, 200, `{"hello":"world"}`)
+	c, out, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	if err := os.WriteFile(c.Hooks().ConfigPath, []byte(`{"plugins":{"hookplugin":{"mode":"compact","limit":9007199254740993}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Run([]string{"restish", "get", "-o", "hookformat", srv.URL}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out.String(), `PLUGIN CONFIG {"mode":"compact","limit":9007199254740993}`) {
+		t.Fatalf("formatter output omitted plugin config:\n%s", out.String())
+	}
+}
+
 // TestFormatterPluginNotInvokedWithoutFlag verifies that the formatter plugin is
 // not invoked when a different (or no) output format is requested.
 func TestFormatterPluginNotInvokedWithoutFlag(t *testing.T) {
