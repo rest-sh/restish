@@ -195,6 +195,10 @@ Refresh semantics matter:
 - transient refresh failures should be surfaced clearly
 - automatic fallback from refresh failure to a browser flow should only happen
   when the failure mode justifies it
+- the fallback triggers on OAuth `invalid_grant` and on a small, explicit list
+  of provider `error_code` values that mean the refresh token or session is
+  gone (currently Supabase GoTrue's); unknown codes, network errors, and 5xx
+  responses are surfaced instead
 
 ## OAuth Design
 
