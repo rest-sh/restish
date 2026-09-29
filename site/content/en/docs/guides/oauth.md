@@ -159,6 +159,10 @@ callback URL when the provider performs exact redirect URI matching:
 `redirect_path`. Restish uses its exact value in the authorization request and
 token exchange. Its host must be `localhost`, a `.localhost` name, or a
 loopback IP address. Other hostnames must resolve only to loopback addresses.
+Include a port: without one the callback uses port 80 or 443, which usually
+needs elevated privileges. With `--rsh-no-browser`, Restish does not start a
+callback server, so it skips the hostname lookup and you paste the code
+instead.
 
 If your provider requires an HTTPS redirect URL, provide your own local
 callback certificate and key:

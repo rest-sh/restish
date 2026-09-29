@@ -303,7 +303,11 @@ the operator should choose it in config.
 Local HTTPS callbacks are supported for providers that reject HTTP redirect
 URIs. The callback listener stays on loopback. `redirect_url` can select an
 exact `localhost`, `.localhost`, loopback IP, or loopback-resolving hostname
-and overrides the separate scheme, port, and path settings. HTTPS requires
+and overrides the separate scheme, port, and path settings. The listener binds
+every loopback address the host resolves to and succeeds if at least one binds,
+so an unavailable address family (such as `::1` with IPv6 disabled) does not
+break login. Manual code entry skips the hostname lookup because no listener
+runs on this machine; non-loopback IP literals are still rejected. HTTPS requires
 operator-supplied `redirect_cert` and `redirect_key` files. Restish does not
 generate certificates, install trust roots, or broaden OAuth endpoint scheme
 validation on the user's behalf.
