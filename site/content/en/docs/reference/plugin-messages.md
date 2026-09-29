@@ -734,6 +734,12 @@ CBOR: `color`; JSON: `color`; type: `bool`; required: no
 
 CBOR: `event`; JSON: `event`; type: `string`; required: yes
 
+**`PluginConfig`**
+
+CBOR: `plugin_config`; JSON: `plugin_config`; type: `json.RawMessage`; required: no
+
+PluginConfig holds the UTF-8 JSON bytes from plugins[name] in restish.json on the "start" event. It is a CBOR byte string, or omitted when no config is stored for the plugin. An explicit JSON null is sent as the bytes "null".
+
 **`Response`**
 
 CBOR: `response`; JSON: `response`; type: `FormatterResponse`; required: yes

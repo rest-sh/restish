@@ -2,6 +2,7 @@ package output
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,9 +15,10 @@ import (
 // receives a short formatter session over CBOR on stdin and writes its
 // formatted output directly to stdout (raw bytes, no CBOR reply framing).
 type PluginFormatter struct {
-	PluginPath string
-	FormatName string
-	Context    context.Context
+	PluginPath   string
+	FormatName   string
+	PluginConfig json.RawMessage
+	Context      context.Context
 }
 
 var startPluginFormatterStream = func(ctx context.Context, path string, w io.Writer, in any) (formatterStream, error) {
@@ -27,10 +29,11 @@ var startPluginFormatterStream = func(ctx context.Context, path string, w io.Wri
 // and copies the plugin's raw output to w.
 func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error {
 	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
-		Type:   "formatter",
-		Format: f.FormatName,
-		Color:  color,
-		Event:  "start",
+		Type:         "formatter",
+		Format:       f.FormatName,
+		Color:        color,
+		Event:        "start",
+		PluginConfig: f.PluginConfig,
 		Response: pluginwire.FormatterResponse{
 			Proto:   resp.Proto,
 			Status:  resp.Status,
@@ -56,11 +59,12 @@ func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error 
 // without implying that the value is a full HTTP response.
 func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error {
 	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
-		Type:     "formatter",
-		Format:   f.FormatName,
-		Color:    color,
-		Event:    "start",
-		Response: pluginwire.FormatterResponse{},
+		Type:         "formatter",
+		Format:       f.FormatName,
+		Color:        color,
+		Event:        "start",
+		PluginConfig: f.PluginConfig,
+		Response:     pluginwire.FormatterResponse{},
 	})
 	if err != nil {
 		return fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
@@ -88,10 +92,11 @@ func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error 
 // StartValueStream starts a long-lived formatter plugin session.
 func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bool) (ValueStream, error) {
 	stream, err := startPluginFormatterStream(f.context(), f.PluginPath, w, pluginwire.FormatterRequest{
-		Type:   "formatter",
-		Format: f.FormatName,
-		Color:  color,
-		Event:  "start",
+		Type:         "formatter",
+		Format:       f.FormatName,
+		Color:        color,
+		Event:        "start",
+		PluginConfig: f.PluginConfig,
 		Response: pluginwire.FormatterResponse{
 			Proto:   base.Proto,
 			Status:  base.Status,

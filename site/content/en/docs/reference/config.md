@@ -149,7 +149,7 @@ Config is the top-level configuration for Restish, loaded from restish.json.
 | `cache` | `Cache` | `CacheConfig` | no | Cache holds global cache settings. |
 | `theme` | `Theme` | `map[string]string` | no | Theme customizes syntax highlighting for readable terminal output. Keys are Chroma token names or Restish theme aliases; values are Chroma style descriptors such as "#afd787" or "bold #ff5f87". |
 | `theme_source` | `ThemeSource` | `string` | no | ThemeSource records the source URL last used by `config theme set`. |
-| `plugins` | `Plugins` | `map[string]json.RawMessage` | no | Plugins holds per-plugin configuration keyed by plugin name (without the "restish-" prefix). Each value is stored as raw JSON so that restish itself does not need to know the shape of each plugin's config. Plugins can read their config via the "config-read" message. Example restish.json entry: "plugins": { "bulk": { "concurrency": 4, "retry": true } } |
+| `plugins` | `Plugins` | `map[string]json.RawMessage` | no | Plugins holds per-plugin configuration keyed by plugin name (without the "restish-" prefix). Each value is stored as raw JSON so that restish itself does not need to know the shape of each plugin's config. Command plugins can read their config via the "config-read" message. Formatter plugins receive the UTF-8 JSON bytes as a CBOR byte string in the formatter "start" message. Example restish.json entry: "plugins": { "bulk": { "concurrency": 4, "retry": true } } |
 
 ### `APIConfig`
 
@@ -305,8 +305,9 @@ does not fetch from the network.
 
 The `plugins` object stores plugin-specific config keyed by plugin name
 without the `restish-` prefix. Restish preserves each value as raw JSON and
-plugins can read it with the `config-read` plugin message. Users normally
-manage plugin installation separately with:
+command plugins can read it with the `config-read` plugin message. Formatter
+plugins receive the UTF-8 JSON bytes in the formatter `start` message. Users
+normally manage plugin installation separately with:
 
 ```bash
 restish plugin list

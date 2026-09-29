@@ -1,5 +1,7 @@
 package plugin
 
+import "encoding/json"
+
 // Message type constants for the command plugin protocol.
 // Use these instead of bare strings to avoid typos; a mismatched type string
 // causes the host or plugin to silently ignore the message.
@@ -246,11 +248,15 @@ type FormatterResponse struct {
 // FormatterRequest is sent to formatter plugins. Type is always "formatter"
 // and Event is one of "start", "item", or "end".
 type FormatterRequest struct {
-	Type     string            `cbor:"type" json:"type"`
-	Format   string            `cbor:"format" json:"format"`
-	Color    bool              `cbor:"color,omitempty" json:"color,omitempty"`
-	Event    string            `cbor:"event" json:"event"`
-	Response FormatterResponse `cbor:"response" json:"response"`
+	Type   string `cbor:"type" json:"type"`
+	Format string `cbor:"format" json:"format"`
+	Color  bool   `cbor:"color,omitempty" json:"color,omitempty"`
+	Event  string `cbor:"event" json:"event"`
+	// PluginConfig holds the UTF-8 JSON bytes from plugins[name] in restish.json
+	// on the "start" event. It is a CBOR byte string, or omitted when no config
+	// is stored for the plugin. An explicit JSON null is sent as the bytes "null".
+	PluginConfig json.RawMessage   `cbor:"plugin_config,omitempty" json:"plugin_config,omitempty"`
+	Response     FormatterResponse `cbor:"response" json:"response"`
 }
 
 // LoaderRequest is sent to plugins registered for the "loader" hook. Body
