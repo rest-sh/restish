@@ -273,10 +273,10 @@ responses remain visible to Restish.
 
 Authorization code flow should support both:
 
-- local-browser callback on localhost
+- local-browser callback on loopback
 - explicit headless/manual fallback for SSH/remote use
 
-The localhost callback server must:
+The local callback server must:
 
 - validate path and state
 - ignore irrelevant requests like `/favicon.ico`
@@ -301,10 +301,12 @@ registration, redirect URI policy, consent UX, token semantics, and debugging;
 the operator should choose it in config.
 
 Local HTTPS callbacks are supported for providers that reject HTTP redirect
-URIs. The callback listener stays on `localhost`; `redirect_scheme` selects
-`http` or `https`, and HTTPS requires operator-supplied `redirect_cert` and
-`redirect_key` files. Restish does not generate certificates, install trust
-roots, or broaden OAuth endpoint scheme validation on the user's behalf.
+URIs. The callback listener stays on loopback. `redirect_url` can select an
+exact `localhost`, `.localhost`, loopback IP, or loopback-resolving hostname
+and overrides the separate scheme, port, and path settings. HTTPS requires
+operator-supplied `redirect_cert` and `redirect_key` files. Restish does not
+generate certificates, install trust roots, or broaden OAuth endpoint scheme
+validation on the user's behalf.
 
 ### Client Credentials Flow
 
