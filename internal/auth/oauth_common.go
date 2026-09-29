@@ -91,6 +91,9 @@ type tokenEndpointError struct {
 	ErrorCode   string
 	Description string
 	Body        string
+	// ProviderCode is a non-RFC 6749 machine-readable code some providers send
+	// alongside or instead of "error" (Supabase GoTrue: "error_code").
+	ProviderCode string
 }
 
 func (e *tokenEndpointError) Error() string {
@@ -398,19 +401,45 @@ func parseTokenEndpointError(statusCode int, body []byte) error {
 	var decoded struct {
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
+		ProviderCode     string `json:"error_code"`
 	}
 	_ = json.Unmarshal(body, &decoded)
 	return &tokenEndpointError{
-		StatusCode:  statusCode,
-		ErrorCode:   decoded.Error,
-		Description: decoded.ErrorDescription,
-		Body:        redactTokenEndpointBody(body),
+		StatusCode:   statusCode,
+		ErrorCode:    decoded.Error,
+		Description:  decoded.ErrorDescription,
+		Body:         redactTokenEndpointBody(body),
+		ProviderCode: decoded.ProviderCode,
 	}
 }
 
 func isTokenEndpointErrorCode(err error, code string) bool {
 	var tokenErr *tokenEndpointError
 	return errors.As(err, &tokenErr) && tokenErr.ErrorCode == code
+}
+
+// rejectedRefreshProviderCodes are provider-specific codes that mean the
+// refresh token itself is dead (revoked, rotated away, or its session gone), the
+// same situation RFC 6749 expresses as invalid_grant. Supabase GoTrue answers a
+// refresh with 400 {"error_code":"refresh_token_not_found"} rather than
+// {"error":"invalid_grant"}.
+var rejectedRefreshProviderCodes = map[string]bool{
+	"refresh_token_not_found":    true,
+	"refresh_token_already_used": true,
+	"session_not_found":          true,
+	"session_expired":            true,
+}
+
+// isRefreshTokenRejected reports whether a refresh failure means the cached
+// refresh token can never succeed again, so the caller should clear it and fall
+// back to interactive auth instead of failing every request until a manual
+// logout. Network errors and 5xx responses are not rejections.
+func isRefreshTokenRejected(err error) bool {
+	if isTokenEndpointErrorCode(err, "invalid_grant") {
+		return true
+	}
+	var tokenErr *tokenEndpointError
+	return errors.As(err, &tokenErr) && rejectedRefreshProviderCodes[tokenErr.ProviderCode]
 }
 
 func redactTokenEndpointBody(body []byte) string {
