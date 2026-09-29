@@ -331,17 +331,9 @@ func (h *AuthorizationCode) doBrowserFlow(ctx context.Context, params map[string
 		errCh = make(chan error, 1)
 		doneCh = make(chan error, 1)
 		var receivedCode atomic.Bool
-		listeners := make([]net.Listener, 0, len(redirect.hosts))
-		for _, host := range redirect.hosts {
-			address := net.JoinHostPort(host, redirect.port)
-			ln, err := net.Listen("tcp", address)
-			if err != nil {
-				for _, listener := range listeners {
-					_ = listener.Close()
-				}
-				return auth.CachedToken{}, fmt.Errorf("starting callback server on %s: %w", address, err)
-			}
-			listeners = append(listeners, ln)
+		listeners, err := listenOAuthCallback(redirect.hosts, redirect.port)
+		if err != nil {
+			return auth.CachedToken{}, err
 		}
 		srv = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != redirect.path {
@@ -485,7 +477,35 @@ type oauthRedirectConfig struct {
 	key    string
 }
 
-func oauthRedirectConfigFromParams(ctx context.Context, params map[string]string, requireTLSFiles bool) (oauthRedirectConfig, error) {
+// listenOAuthCallback binds the callback server on every resolved loopback
+// address. A host name such as localhost often resolves to both 127.0.0.1 and
+// ::1, and one family may be unavailable (for example IPv6 disabled in a
+// container), so the flow only fails when no address can be bound.
+func listenOAuthCallback(hosts []string, port string) ([]net.Listener, error) {
+	listeners := make([]net.Listener, 0, len(hosts))
+	var firstErr error
+	for _, host := range hosts {
+		address := net.JoinHostPort(host, port)
+		ln, err := net.Listen("tcp", address)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("starting callback server on %s: %w", address, err)
+			}
+			continue
+		}
+		listeners = append(listeners, ln)
+	}
+	if len(listeners) == 0 {
+		return nil, firstErr
+	}
+	return listeners, nil
+}
+
+// oauthRedirectConfigFromParams builds the callback configuration. When listen
+// is false (manual code entry), no callback server runs on this host, so the
+// redirect_url host is not resolved here and TLS files are not required: the
+// browser may be on another machine where the name resolves differently.
+func oauthRedirectConfigFromParams(ctx context.Context, params map[string]string, listen bool) (oauthRedirectConfig, error) {
 	redirect := oauthRedirectConfig{
 		cert: params["redirect_cert"],
 		key:  params["redirect_key"],
@@ -510,23 +530,28 @@ func oauthRedirectConfigFromParams(ctx context.Context, params map[string]string
 		if host == "localhost" || strings.HasSuffix(host, ".localhost") {
 			hostname = "localhost"
 		}
-		ips, err := net.DefaultResolver.LookupIPAddr(ctx, hostname)
-		if err != nil {
-			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: resolving redirect_url host %q: %w", u.Hostname(), err)
+		if ip := net.ParseIP(hostname); ip != nil && !ip.IsLoopback() {
+			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
 		}
-		seen := map[string]bool{}
-		for _, ip := range ips {
-			if !ip.IP.IsLoopback() {
+		if listen {
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, hostname)
+			if err != nil {
+				return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: resolving redirect_url host %q: %w", u.Hostname(), err)
+			}
+			seen := map[string]bool{}
+			for _, ip := range ips {
+				if !ip.IP.IsLoopback() {
+					return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
+				}
+				value := ip.IP.String()
+				if !seen[value] {
+					seen[value] = true
+					redirect.hosts = append(redirect.hosts, value)
+				}
+			}
+			if len(redirect.hosts) == 0 {
 				return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
 			}
-			value := ip.IP.String()
-			if !seen[value] {
-				seen[value] = true
-				redirect.hosts = append(redirect.hosts, value)
-			}
-		}
-		if len(redirect.hosts) == 0 {
-			return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_url host must resolve only to loopback addresses")
 		}
 		redirect.port = u.Port()
 		if redirect.port == "" {
@@ -561,7 +586,7 @@ func oauthRedirectConfigFromParams(ctx context.Context, params map[string]string
 		redirect.path = path
 		redirect.uri = redirect.scheme + "://localhost:" + redirect.port + redirect.path
 	}
-	if redirect.scheme == "https" && requireTLSFiles && (redirect.cert == "" || redirect.key == "") {
+	if redirect.scheme == "https" && listen && (redirect.cert == "" || redirect.key == "") {
 		return oauthRedirectConfig{}, fmt.Errorf("oauth-authorization-code: redirect_cert and redirect_key are required when the callback URL uses https")
 	}
 	return redirect, nil

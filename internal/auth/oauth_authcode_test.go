@@ -901,11 +901,11 @@ func TestAuthCode_HTTPSCallback(t *testing.T) {
 
 func TestOAuthRedirectConfig(t *testing.T) {
 	cases := []struct {
-		name            string
-		params          map[string]string
-		requireTLSFiles bool
-		wantURI         string
-		wantError       string
+		name      string
+		params    map[string]string
+		listen    bool
+		wantURI   string
+		wantError string
 	}{
 		{
 			name:    "default",
@@ -940,8 +940,8 @@ func TestOAuthRedirectConfig(t *testing.T) {
 				"redirect_cert": "cert.pem",
 				"redirect_key":  "key.pem",
 			},
-			requireTLSFiles: true,
-			wantURI:         "https://restish.localhost:9443/callback",
+			listen:  true,
+			wantURI: "https://restish.localhost:9443/callback",
 		},
 		{
 			name:    "IPv4 loopback redirect URL",
@@ -959,15 +959,26 @@ func TestOAuthRedirectConfig(t *testing.T) {
 			wantError: "redirect_url host must resolve only to loopback",
 		},
 		{
+			name:    "manual entry does not resolve redirect URL host",
+			params:  map[string]string{"redirect_url": "http://laptop-only.invalid:3000/callback"},
+			wantURI: "http://laptop-only.invalid:3000/callback",
+		},
+		{
+			name:      "listening resolves redirect URL host",
+			params:    map[string]string{"redirect_url": "http://laptop-only.invalid:3000/callback"},
+			listen:    true,
+			wantError: "resolving redirect_url host",
+		},
+		{
 			name:      "invalid scheme",
 			params:    map[string]string{"redirect_scheme": "ftp"},
 			wantError: "redirect_scheme must be http or https",
 		},
 		{
-			name:            "https requires cert and key for callback listener",
-			params:          map[string]string{"redirect_scheme": "https", "redirect_cert": "cert.pem"},
-			requireTLSFiles: true,
-			wantError:       "redirect_cert and redirect_key are required",
+			name:      "https requires cert and key for callback listener",
+			params:    map[string]string{"redirect_scheme": "https", "redirect_cert": "cert.pem"},
+			listen:    true,
+			wantError: "redirect_cert and redirect_key are required",
 		},
 		{
 			name: "https manual URL does not require cert and key",
@@ -985,7 +996,7 @@ func TestOAuthRedirectConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := oauthRedirectConfigFromParams(context.Background(), tc.params, tc.requireTLSFiles)
+			got, err := oauthRedirectConfigFromParams(context.Background(), tc.params, tc.listen)
 			if tc.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("error = %v, want containing %q", err, tc.wantError)
@@ -1007,9 +1018,28 @@ func TestOAuthRedirectConfigHonorsContextCancellation(t *testing.T) {
 	cancel()
 	_, err := oauthRedirectConfigFromParams(ctx, map[string]string{
 		"redirect_url": "http://cancelled.invalid:3000/callback",
-	}, false)
+	}, true)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context cancellation", err)
+	}
+}
+
+func TestListenOAuthCallbackToleratesUnavailableAddress(t *testing.T) {
+	// 192.0.2.1 (TEST-NET-1) is never a local address, so binding it fails
+	// the same way ::1 does on a host with IPv6 disabled.
+	listeners, err := listenOAuthCallback([]string{"192.0.2.1", "127.0.0.1"}, "0")
+	if err != nil {
+		t.Fatalf("listenOAuthCallback: %v", err)
+	}
+	for _, ln := range listeners {
+		_ = ln.Close()
+	}
+	if len(listeners) != 1 {
+		t.Fatalf("got %d listeners, want 1", len(listeners))
+	}
+
+	if _, err := listenOAuthCallback([]string{"192.0.2.1"}, "0"); err == nil || !strings.Contains(err.Error(), "starting callback server on 192.0.2.1:0") {
+		t.Fatalf("error = %v, want bind failure", err)
 	}
 }
 
