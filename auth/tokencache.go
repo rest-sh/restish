@@ -184,7 +184,10 @@ func (c *TokenCache) load() (map[string]CachedToken, error) {
 }
 
 func (c *TokenCache) loadLocked() (map[string]CachedToken, error) {
-	if insecure, err := config.ConfigFileHasInsecurePermissions(c.path); err != nil {
+	// On platforms where the check is unsupported (Windows), fall through:
+	// failing closed here would force a fresh browser login on every request
+	// because the token written by the previous login could never be read back.
+	if insecure, err := config.ConfigFileHasInsecurePermissions(c.path); err != nil && !errors.Is(err, config.ErrPermissionCheckUnsupported) {
 		return nil, err
 	} else if insecure {
 		return nil, fmt.Errorf("token cache %s is group/world-readable; run chmod 600 %s", c.path, c.path)
