@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/mattn/go-isatty"
+	"golang.org/x/term"
 )
 
 // IsTerminal reports whether w is a real terminal (TTY).
@@ -16,6 +17,13 @@ func IsTerminal(w io.Writer) bool {
 // Used to detect whether stdin is interactive.
 func IsTerminalReader(r io.Reader) bool {
 	return isFDTerminal(r)
+}
+
+// SupportsInteractiveTerminal reports whether v exposes a terminal file
+// descriptor that x/term can switch to raw mode.
+func SupportsInteractiveTerminal(v any) bool {
+	f, ok := v.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // ColorEnabled reports whether ANSI color output should be used for w.

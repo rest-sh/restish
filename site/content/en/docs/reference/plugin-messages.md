@@ -50,6 +50,7 @@ Generated from `plugin/messages.go`.
 | `MsgTypeTLSSignerReady` | `ready` |
 | `MsgTypeTLSSignerShutdown` | `shutdown` |
 | `MsgTypeTLSSignerSign` | `sign` |
+| `MsgTypeTerminalResize` | `terminal-resize` |
 | `MsgTypeWarn` | `warn` |
 
 ### `InitMsg`
@@ -669,7 +670,7 @@ CBOR: `text`; type: `string`; required: yes
 
 ### `StdinDataMsg`
 
-StdinDataMsg carries a chunk of stdin bytes from the host to the plugin (passthrough_stdio mode).
+StdinDataMsg carries a chunk of stdin bytes from the host to a command plugin in passthrough_stdio mode or an interactive formatter.
 
 **`Type`**
 
@@ -687,6 +688,23 @@ StdinCloseMsg signals that the host's stdin has reached EOF.
 **`Type`**
 
 CBOR: `type`; type: `string`; required: yes
+
+
+### `TerminalResizeMsg`
+
+TerminalResizeMsg reports the current interactive terminal dimensions.
+
+**`Type`**
+
+CBOR: `type`; type: `string`; required: yes
+
+**`Columns`**
+
+CBOR: `columns`; type: `int`; required: yes
+
+**`Rows`**
+
+CBOR: `rows`; type: `int`; required: yes
 
 
 ### `FormatterResponse`
@@ -1102,8 +1120,8 @@ list. Each operation includes fields such as `id`, `method`, `path`, `summary`,
 - `stdin-data`
 - `stdin-close`
 
-`stdin-data` and `stdin-close` are used only for command plugins that opt into
-passthrough stdio.
+`stdin-data` and `stdin-close` are used for command plugins that opt into
+passthrough stdio and for interactive formatters after their `end` event.
 
 ## Hook Plugins
 
@@ -1152,6 +1170,12 @@ and `response`. `event` is `start`, `item`, or `end`. For full-response renders,
 `start` usually includes the whole normalized response body. For paginated or
 event-stream output, Restish sends `start`, then one or more `item` messages,
 then `end`.
+
+Formatter names declared through `interactive_formatter_names` remain active
+after `end`. Restish sends an initial `terminal-resize` message with `columns`
+and `rows`, sends another whenever the terminal size changes, and forwards input
+as `stdin-data` or `stdin-close`. The formatter exits when the user closes its
+view. Interactive formatters require terminal stdin and stdout.
 
 ## TLS Signer Messages
 

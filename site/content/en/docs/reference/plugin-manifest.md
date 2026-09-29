@@ -59,6 +59,12 @@ CBOR: `formatter_names`; JSON: `formatter_names`; type: `[]string`; required: no
 
 FormatterNames lists the output format names this plugin registers when the "formatter" hook is declared.
 
+**`InteractiveFormatterNames`**
+
+CBOR: `interactive_formatter_names`; JSON: `interactive_formatter_names`; type: `[]string`; required: no
+
+InteractiveFormatterNames lists formatter names that keep control of the terminal after the response ends to receive input and resize events.
+
 **`LoaderContentTypes`**
 
 CBOR: `loader_content_types`; JSON: `loader_content_types`; type: `[]string`; required: no
@@ -148,6 +154,7 @@ CBOR: `commands`; JSON: `commands`; type: `[]CommandDecl`; required: yes
 | `hooks` | Hook families such as `auth`, `request-middleware`, `response-middleware`, `loader`, `formatter`, `command`, or `tls-signer`. |
 | `required_features` | Additive protocol features the host must support before the plugin can run. Unknown optional fields are ignored; unknown required features fail loading. |
 | `formatter_names` | Required when `hooks` includes `formatter`; lists output format names. |
+| `interactive_formatter_names` | Optional formatter names that keep control of terminal input after the response ends. |
 | `loader_content_types` | Required when `hooks` includes `loader`; lists source MIME types. |
 | `auth_api_names` | Optional API-name allowlist for `auth` hooks, so the plugin is not invoked for unrelated APIs. |
 | `needs_auth_secrets` | Forward secret auth params and credential-bearing request headers to the plugin. Defaults to `false`; secrets are otherwise omitted or redacted. |

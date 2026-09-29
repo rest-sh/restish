@@ -88,6 +88,9 @@ func pluginCapabilitySummary(m plugin.Manifest) string {
 	if pluginDeclaresHook(m, "formatter") && len(m.FormatterNames) > 0 {
 		caps = append(caps, "formatter("+strings.Join(m.FormatterNames, ",")+")")
 	}
+	if pluginDeclaresHook(m, "formatter") && len(m.InteractiveFormatterNames) > 0 {
+		caps = append(caps, "formatter-interactive("+strings.Join(m.InteractiveFormatterNames, ",")+")")
+	}
 	if pluginDeclaresHook(m, "loader") && len(m.LoaderContentTypes) > 0 {
 		caps = append(caps, "loader("+strings.Join(m.LoaderContentTypes, ",")+")")
 	}

@@ -93,13 +93,14 @@ type doctorContentTypeReport struct {
 }
 
 type doctorInstalledPluginReport struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version,omitempty"`
-	Path         string   `json:"path"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	Commands     []string `json:"commands,omitempty"`
-	Formatters   []string `json:"formatters,omitempty"`
-	Loaders      []string `json:"loaders,omitempty"`
+	Name                  string   `json:"name"`
+	Version               string   `json:"version,omitempty"`
+	Path                  string   `json:"path"`
+	Capabilities          []string `json:"capabilities,omitempty"`
+	Commands              []string `json:"commands,omitempty"`
+	Formatters            []string `json:"formatters,omitempty"`
+	InteractiveFormatters []string `json:"interactive_formatters,omitempty"`
+	Loaders               []string `json:"loaders,omitempty"`
 }
 
 type doctorRuntimeReport struct {
@@ -593,13 +594,14 @@ func (c *CLI) doctorInstalledPluginsReport() []doctorInstalledPluginReport {
 			commands = c.doctorCommandPluginNames(p.Path)
 		}
 		out = append(out, doctorInstalledPluginReport{
-			Name:         p.Manifest.Name,
-			Version:      p.Manifest.Version,
-			Path:         p.Path,
-			Capabilities: append([]string(nil), p.Manifest.Hooks...),
-			Commands:     commands,
-			Formatters:   append([]string(nil), p.Manifest.FormatterNames...),
-			Loaders:      append([]string(nil), p.Manifest.LoaderContentTypes...),
+			Name:                  p.Manifest.Name,
+			Version:               p.Manifest.Version,
+			Path:                  p.Path,
+			Capabilities:          append([]string(nil), p.Manifest.Hooks...),
+			Commands:              commands,
+			Formatters:            append([]string(nil), p.Manifest.FormatterNames...),
+			InteractiveFormatters: append([]string(nil), p.Manifest.InteractiveFormatterNames...),
+			Loaders:               append([]string(nil), p.Manifest.LoaderContentTypes...),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -613,11 +615,12 @@ func (c *CLI) doctorInstalledPluginsReport() []doctorInstalledPluginReport {
 
 func installedPluginCapabilitySummary(p doctorInstalledPluginReport) string {
 	m := internalplugin.Manifest{
-		Name:               p.Name,
-		Version:            p.Version,
-		Hooks:              p.Capabilities,
-		FormatterNames:     p.Formatters,
-		LoaderContentTypes: p.Loaders,
+		Name:                      p.Name,
+		Version:                   p.Version,
+		Hooks:                     p.Capabilities,
+		FormatterNames:            p.Formatters,
+		InteractiveFormatterNames: p.InteractiveFormatters,
+		LoaderContentTypes:        p.Loaders,
 	}
 	return pluginCapabilitySummary(m)
 }

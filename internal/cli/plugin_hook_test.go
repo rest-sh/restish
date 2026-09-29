@@ -511,6 +511,94 @@ printf 'ROGUE FORMATTER\n'
 	}
 }
 
+func TestInteractiveFormatterRequiresTerminalBeforeRequest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell plugin fixture")
+	}
+	pluginsParent := t.TempDir()
+	pluginDir := filepath.Join(pluginsParent, "plugins")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pluginPath := filepath.Join(pluginDir, "restish-interactive")
+	script := `#!/bin/sh
+if [ "$1" = "--rsh-plugin-manifest" ]; then
+  printf '%s\n' '{"name":"interactive","restish_api_version":2,"hooks":["formatter"],"interactive_formatter_names":["pretty-live","auto"]}'
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(pluginPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write plugin: %v", err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+
+	requested := false
+	c, _, _ := newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	err := c.Run([]string{"restish", "get", "-o", "pretty-live", "https://api.example.com/items"})
+	if err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("interactive formatter error = %v", err)
+	}
+	if requested {
+		t.Fatal("request was sent before interactive terminal validation")
+	}
+
+	requested = false
+	c, _, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	c.Hooks().StdinIsTerminal = func(io.Reader) bool { return false }
+	c.Hooks().HTTPTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	err = c.Run([]string{"restish", "get", "https://api.example.com/items"})
+	if err == nil || !strings.Contains(err.Error(), "requires terminal stdin and stdout") {
+		t.Fatalf("implicit interactive formatter error = %v", err)
+	}
+	if requested {
+		t.Fatal("request was sent before implicit interactive terminal validation")
+	}
+
+	requested = false
+	c, _, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	c.Hooks().StdinIsTerminal = func(io.Reader) bool { return false }
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-print", "h", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("header-only request failed: %v", err)
+	}
+	if !requested {
+		t.Fatal("header-only request was rejected even though it does not invoke the formatter")
+	}
+
+	requested = false
+	c, _, _ = newTestCLI(t)
+	c.Hooks().ConfigPath = sharedPluginConfigPath(t)
+	c.Hooks().StdoutIsTerminal = func(io.Writer) bool { return true }
+	c.Hooks().StdinIsTerminal = func(io.Reader) bool { return false }
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		requested = true
+		return jsonResponse(200, `{}`), nil
+	})
+	if err := c.Run([]string{"restish", "get", "--rsh-silent", "https://api.example.com/items"}); err != nil {
+		t.Fatalf("silent request failed: %v", err)
+	}
+	if !requested {
+		t.Fatal("silent request was rejected even though it does not invoke the formatter")
+	}
+}
+
 func TestCSVFormatterPlugin(t *testing.T) {
 	installCSVPlugin(t)
 

@@ -97,26 +97,28 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	}
 
 	type pluginListEntry struct {
-		Name         string   `json:"name"`
-		Version      string   `json:"version,omitempty"`
-		Description  string   `json:"description,omitempty"`
-		Path         string   `json:"path"`
-		Capabilities []string `json:"capabilities"`
-		Commands     []string `json:"commands,omitempty"`
-		Formatters   []string `json:"formatters,omitempty"`
-		Loaders      []string `json:"loaders,omitempty"`
+		Name                  string   `json:"name"`
+		Version               string   `json:"version,omitempty"`
+		Description           string   `json:"description,omitempty"`
+		Path                  string   `json:"path"`
+		Capabilities          []string `json:"capabilities"`
+		Commands              []string `json:"commands,omitempty"`
+		Formatters            []string `json:"formatters,omitempty"`
+		InteractiveFormatters []string `json:"interactive_formatters,omitempty"`
+		Loaders               []string `json:"loaders,omitempty"`
 	}
 	entries := make([]pluginListEntry, 0, len(plugins))
 	for _, p := range plugins {
 		m := p.Manifest
 		entry := pluginListEntry{
-			Name:         m.Name,
-			Version:      m.Version,
-			Description:  m.Description,
-			Path:         p.Path,
-			Capabilities: append([]string{}, m.Hooks...),
-			Formatters:   append([]string(nil), m.FormatterNames...),
-			Loaders:      append([]string(nil), m.LoaderContentTypes...),
+			Name:                  m.Name,
+			Version:               m.Version,
+			Description:           m.Description,
+			Path:                  p.Path,
+			Capabilities:          append([]string{}, m.Hooks...),
+			Formatters:            append([]string(nil), m.FormatterNames...),
+			InteractiveFormatters: append([]string(nil), m.InteractiveFormatterNames...),
+			Loaders:               append([]string(nil), m.LoaderContentTypes...),
 		}
 		if pluginDeclaresHook(m, "command") {
 			decls, err := loadCommandPluginCommands(cmd.Context(), p.Path)
@@ -138,12 +140,13 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 	style := humanTextStyleFor(c.Stdout)
 	for _, entry := range entries {
 		m := plugin.Manifest{
-			Name:               entry.Name,
-			Version:            entry.Version,
-			Description:        entry.Description,
-			Hooks:              entry.Capabilities,
-			FormatterNames:     entry.Formatters,
-			LoaderContentTypes: entry.Loaders,
+			Name:                      entry.Name,
+			Version:                   entry.Version,
+			Description:               entry.Description,
+			Hooks:                     entry.Capabilities,
+			FormatterNames:            entry.Formatters,
+			InteractiveFormatterNames: entry.InteractiveFormatters,
+			LoaderContentTypes:        entry.Loaders,
 		}
 		fmt.Fprintf(c.Stdout, "%s %-10s %s %s\n", style.key(fmt.Sprintf("%-20s", m.Name)), m.Version, style.key("capabilities:"), pluginCapabilitySummary(m))
 		if len(entry.Commands) > 0 {
@@ -151,6 +154,9 @@ func (c *CLI) runPluginList(cmd *cobra.Command, args []string) error {
 		}
 		if len(entry.Formatters) > 0 {
 			fmt.Fprintf(c.Stdout, "  %s %s\n", style.key("formatters:"), strings.Join(entry.Formatters, ", "))
+		}
+		if len(entry.InteractiveFormatters) > 0 {
+			fmt.Fprintf(c.Stdout, "  %s %s\n", style.key("interactive formatters:"), strings.Join(entry.InteractiveFormatters, ", "))
 		}
 		if m.Description != "" {
 			fmt.Fprintf(c.Stdout, "  %s\n", m.Description)

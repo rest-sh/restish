@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
+	"golang.org/x/term"
 )
 
 // writeScript writes an executable shell script (or .bat on Windows) to dir
@@ -30,6 +31,10 @@ func writeScript(t *testing.T, dir, name, content string) string {
 	}
 	return p
 }
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
 
 // jsonManifest returns a JSON-encoded Manifest for a plugin.
 func jsonManifest(m Manifest) string {
@@ -448,6 +453,22 @@ func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
 			wantErr: "formatter_names without declaring formatter hook",
 		},
 		{
+			name:    "interactive formatter names require hook",
+			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, InteractiveFormatterNames: []string{"bad-live"}},
+			wantErr: "interactive_formatter_names without declaring formatter hook",
+		},
+		{
+			name: "duplicate formatter names",
+			m: Manifest{
+				Name:                      "bad",
+				RestishAPIVersion:         CurrentPluginAPIVersion,
+				Hooks:                     []string{"formatter"},
+				FormatterNames:            []string{"pretty"},
+				InteractiveFormatterNames: []string{"pretty"},
+			},
+			wantErr: `duplicate formatter name "pretty"`,
+		},
+		{
 			name:    "loader hook requires content types",
 			m:       Manifest{Name: "bad", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"loader"}},
 			wantErr: "omits loader_content_types",
@@ -464,6 +485,24 @@ func TestLoadManifest_ValidatesHooksAndHookSpecificFields(t *testing.T) {
 				RestishAPIVersion: CurrentPluginAPIVersion,
 				Hooks:             []string{"formatter"},
 				FormatterNames:    []string{"good"},
+			},
+		},
+		{
+			name: "existing duplicate formatter names remain valid",
+			m: Manifest{
+				Name:              "duplicate-ordinary",
+				RestishAPIVersion: CurrentPluginAPIVersion,
+				Hooks:             []string{"formatter"},
+				FormatterNames:    []string{"pretty", "pretty"},
+			},
+		},
+		{
+			name: "valid interactive formatter",
+			m: Manifest{
+				Name:                      "good-live",
+				RestishAPIVersion:         CurrentPluginAPIVersion,
+				Hooks:                     []string{"formatter"},
+				InteractiveFormatterNames: []string{"pretty-live"},
 			},
 		},
 	}
@@ -555,6 +594,34 @@ echo '%s'
 	}
 	if string(bytes.TrimSpace(count)) != "1" {
 		t.Fatalf("cached discover counter = %q, want 1", bytes.TrimSpace(count))
+	}
+}
+
+func TestDiscover_IgnoresOldManifestCacheSchema(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	cacheFile := filepath.Join(t.TempDir(), "plugin-manifest-cache.cbor")
+	fresh := Manifest{Name: "fresh", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"}}
+	path := writeScript(t, dir, "restish-fresh", fmt.Sprintf("#!/bin/sh\necho '%s'\n", jsonManifest(fresh)))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveManifestCache(cacheFile, manifestCache{
+		path: {
+			Mtime: info.ModTime().UnixNano(),
+			Size:  info.Size(),
+			Manifest: Manifest{
+				Name: "stale", RestishAPIVersion: CurrentPluginAPIVersion, Hooks: []string{"auth"},
+			},
+		},
+	}, nil)
+
+	plugins := Discover(dir, nil, cacheFile, nil)
+	if len(plugins) != 1 || plugins[0].Manifest.Name != "fresh" {
+		t.Fatalf("plugins = %#v, want refreshed manifest", plugins)
 	}
 }
 
@@ -716,7 +783,10 @@ func TestCallHookWithTimeoutContextCancellationKillsProcess(t *testing.T) {
 	path := writeScript(t, dir, "restish-hook-block", "#!/bin/sh\nsleep 30\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
 
 	start := time.Now()
 	var out pluginwire.AuthHookOutput
@@ -790,5 +860,154 @@ func TestStartFormatterStreamContextCancellationKillsProcess(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("formatter close waited too long after context cancellation: %v", elapsed)
+	}
+}
+
+func TestFormatterStreamInteractWaitsAndRestoresTerminal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	dir := t.TempDir()
+	capturePath := filepath.Join(dir, "messages.cbor")
+	start := pluginwire.FormatterRequest{Type: "formatter", Format: "interactive", Event: "end"}
+	var expected bytes.Buffer
+	if err := pluginwire.WriteMessage(&expected, start); err != nil {
+		t.Fatal(err)
+	}
+	if err := pluginwire.WriteMessage(&expected, pluginwire.TerminalResizeMsg{Type: pluginwire.MsgTypeTerminalResize, Columns: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	path := writeScript(t, dir, "restish-format-interactive", fmt.Sprintf("#!/bin/sh\ndd bs=1 count=%d of=%q 2>/dev/null\n", expected.Len(), capturePath))
+	input, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	defer inputWriter.Close()
+	outputReader, output, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outputReader.Close()
+	defer output.Close()
+
+	oldIsTerminal, oldMakeRaw := formatterIsTerminal, formatterMakeRaw
+	oldRestore, oldGetSize := formatterRestore, formatterGetSize
+	restored := false
+	formatterIsTerminal = func(int) bool { return true }
+	formatterMakeRaw = func(int) (*term.State, error) { return &term.State{}, nil }
+	formatterRestore = func(int, *term.State) error { restored = true; return nil }
+	formatterGetSize = func(int) (int, int, error) { return 80, 24, nil }
+	t.Cleanup(func() {
+		formatterIsTerminal, formatterMakeRaw = oldIsTerminal, oldMakeRaw
+		formatterRestore, formatterGetSize = oldRestore, oldGetSize
+	})
+
+	stream, err := StartFormatterStream(context.Background(), path, output, start)
+	if err != nil {
+		t.Fatalf("StartFormatterStream: %v", err)
+	}
+	if err := stream.Interact(input, output); err != nil {
+		t.Fatalf("Interact: %v", err)
+	}
+	if !restored {
+		t.Fatal("terminal state was not restored")
+	}
+	captured, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := pluginwire.NewDecoder(bytes.NewReader(captured))
+	var gotStart pluginwire.FormatterRequest
+	if err := decoder.ReadMessage(&gotStart); err != nil {
+		t.Fatal(err)
+	}
+	var gotResize pluginwire.TerminalResizeMsg
+	if err := decoder.ReadMessage(&gotResize); err != nil {
+		t.Fatal(err)
+	}
+	if gotResize.Type != pluginwire.MsgTypeTerminalResize || gotResize.Columns != 80 || gotResize.Rows != 24 {
+		t.Fatalf("resize message = %#v", gotResize)
+	}
+}
+
+func TestFormatterStreamForwardsTerminalInputMessages(t *testing.T) {
+	input, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	var messages bytes.Buffer
+	stream := &FormatterStream{path: "test", stdin: nopWriteCloser{Writer: &messages}}
+	if _, err := inputWriter.Write([]byte("q")); err != nil {
+		t.Fatal(err)
+	}
+	if err := inputWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.forwardTerminalInput(input, make(chan struct{})); err != nil {
+		t.Fatal(err)
+	}
+
+	decoder := pluginwire.NewDecoder(&messages)
+	var data pluginwire.StdinDataMsg
+	if err := decoder.ReadMessage(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data.Type != pluginwire.MsgTypeStdinData || string(data.Data) != "q" {
+		t.Fatalf("stdin data message = %#v", data)
+	}
+	var closed pluginwire.StdinCloseMsg
+	if err := decoder.ReadMessage(&closed); err != nil {
+		t.Fatal(err)
+	}
+	if closed.Type != pluginwire.MsgTypeStdinClose {
+		t.Fatalf("stdin close message = %#v", closed)
+	}
+}
+
+func TestFormatterStreamInteractRestoresTerminalOnCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script tests not supported on Windows")
+	}
+	path := writeScript(t, t.TempDir(), "restish-format-interactive", "#!/bin/sh\nsleep 30\n")
+	input, inputWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	defer inputWriter.Close()
+	outputReader, output, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outputReader.Close()
+	defer output.Close()
+
+	oldIsTerminal, oldMakeRaw := formatterIsTerminal, formatterMakeRaw
+	oldRestore, oldGetSize := formatterRestore, formatterGetSize
+	restored := false
+	formatterIsTerminal = func(int) bool { return true }
+	formatterMakeRaw = func(int) (*term.State, error) { return &term.State{}, nil }
+	formatterRestore = func(int, *term.State) error { restored = true; return nil }
+	formatterGetSize = func(int) (int, int, error) { return 80, 24, nil }
+	t.Cleanup(func() {
+		formatterIsTerminal, formatterMakeRaw = oldIsTerminal, oldMakeRaw
+		formatterRestore, formatterGetSize = oldRestore, oldGetSize
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := StartFormatterStream(ctx, path, output, pluginwire.FormatterRequest{
+		Type: "formatter", Format: "interactive", Event: "end",
+	})
+	if err != nil {
+		t.Fatalf("StartFormatterStream: %v", err)
+	}
+	cancel()
+	if err := stream.Interact(input, output); err == nil {
+		t.Fatal("expected cancelled formatter to return an error")
+	}
+	if !restored {
+		t.Fatal("terminal state was not restored after cancellation")
 	}
 }

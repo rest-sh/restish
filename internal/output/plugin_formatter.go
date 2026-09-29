@@ -14,9 +14,11 @@ import (
 // receives a short formatter session over CBOR on stdin and writes its
 // formatted output directly to stdout (raw bytes, no CBOR reply framing).
 type PluginFormatter struct {
-	PluginPath string
-	FormatName string
-	Context    context.Context
+	PluginPath  string
+	FormatName  string
+	Context     context.Context
+	Input       io.Reader
+	Interactive bool
 }
 
 var startPluginFormatterStream = func(ctx context.Context, path string, w io.Writer, in any) (formatterStream, error) {
@@ -46,7 +48,7 @@ func (f *PluginFormatter) Format(w io.Writer, resp *Response, color bool) error 
 		Type:   "formatter",
 		Format: f.FormatName,
 		Event:  "end",
-	}); err != nil {
+	}, f.Interactive, f.Input, w); err != nil {
 		return err
 	}
 	return nil
@@ -73,13 +75,13 @@ func (f *PluginFormatter) FormatValue(w io.Writer, value any, color bool) error 
 			Body: value,
 		},
 	}); err != nil {
-		return finishPluginFormatterSession(f.FormatName, stream, nil, err)
+		return finishPluginFormatterSession(f.FormatName, stream, nil, false, nil, nil, err)
 	}
 	if err := finishPluginFormatterSession(f.FormatName, stream, pluginwire.FormatterRequest{
 		Type:   "formatter",
 		Format: f.FormatName,
 		Event:  "end",
-	}); err != nil {
+	}, f.Interactive, f.Input, w); err != nil {
 		return err
 	}
 	return nil
@@ -103,18 +105,26 @@ func (f *PluginFormatter) StartValueStream(w io.Writer, base *Response, color bo
 		return nil, fmt.Errorf("formatter plugin %s: %w", f.FormatName, err)
 	}
 	return &pluginFormatterStream{
-		pluginPath: f.PluginPath,
-		formatName: f.FormatName,
-		stream:     stream,
+		pluginPath:  f.PluginPath,
+		formatName:  f.FormatName,
+		stream:      stream,
+		input:       f.Input,
+		output:      w,
+		interactive: f.Interactive,
 	}, nil
 }
 
-func finishPluginFormatterSession(formatName string, stream formatterStream, final any, priorErr ...error) error {
+func finishPluginFormatterSession(formatName string, stream formatterStream, final any, interactive bool, input io.Reader, output io.Writer, priorErr ...error) error {
 	var sendErr error
 	if final != nil {
 		sendErr = stream.Send(final)
 	}
-	closeErr := stream.Close()
+	var closeErr error
+	if errors.Join(append(priorErr, sendErr)...) == nil && interactive {
+		closeErr = stream.Interact(input, output)
+	} else {
+		closeErr = stream.Close()
+	}
 	if joined := errors.Join(append(priorErr, sendErr, closeErr)...); joined != nil {
 		return fmt.Errorf("formatter plugin %s: %w", formatName, joined)
 	}
@@ -129,14 +139,18 @@ func (f *PluginFormatter) context() context.Context {
 }
 
 type pluginFormatterStream struct {
-	pluginPath string
-	formatName string
-	stream     formatterStream
+	pluginPath  string
+	formatName  string
+	stream      formatterStream
+	input       io.Reader
+	output      io.Writer
+	interactive bool
 }
 
 type formatterStream interface {
 	Send(any) error
 	Close() error
+	Interact(io.Reader, io.Writer) error
 }
 
 func (s *pluginFormatterStream) WriteValue(value any) error {
@@ -158,5 +172,5 @@ func (s *pluginFormatterStream) Close() error {
 		Type:   "formatter",
 		Format: s.formatName,
 		Event:  "end",
-	})
+	}, s.interactive, s.input, s.output)
 }
