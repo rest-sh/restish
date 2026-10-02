@@ -172,12 +172,14 @@ arrays and streams of scalar values and rejects structured objects.
 
 ## Raw Bytes
 
-Raw byte output is automatic for redirected unfiltered responses. It is not an
-`-o` format and not a `--rsh-print` part:
+Raw byte output is automatic for redirected unfiltered responses. Use `-r` /
+`--rsh-raw` to select it explicitly on either terminal or redirected stdout. It
+is not an `-o` format and not a `--rsh-print` part:
 
 ```bash
 restish api.rest.sh/bytes/64 > sample.bin
 restish api.rest.sh/images/jpeg > dragonfly.jpg
+restish -r api.rest.sh/bytes/64
 ```
 
 Choose a format such as `-o json`, `-o lines`, or `-o table` when you want

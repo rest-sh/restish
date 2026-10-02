@@ -223,6 +223,12 @@ Type: `stringArray`; default: none
 
 Query parameter in "key=value" format (repeatable)
 
+**`-r`, `--rsh-raw`**
+
+Type: `bool`; default: `false`
+
+Write only HTTP response body bytes; bypass decoding, filtering, formatting, pagination, and response middleware
+
 **`-s`, `--rsh-server`**
 
 Type: `string`; default: none

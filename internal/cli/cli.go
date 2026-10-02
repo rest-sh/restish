@@ -210,6 +210,9 @@ func (w *cascadingFlushWriter) ReadFrom(r io.Reader) (int64, error) {
 			if nw != nr {
 				return written, io.ErrShortWrite
 			}
+			if err := w.Flush(); err != nil {
+				return written, err
+			}
 		}
 		if er == io.EOF {
 			return written, nil
@@ -1268,12 +1271,12 @@ func flagConsumesNextArg(token string) bool {
 
 var boolLikeLongFlags = map[string]bool{
 	"help": true, "version": true,
-	"rsh-silent": true, "rsh-headers": true,
+	"rsh-raw": true, "rsh-silent": true, "rsh-headers": true,
 	"rsh-verbose": true, "rsh-insecure": true, "rsh-ignore-status-code": true,
 	"rsh-no-cache": true, "rsh-no-browser": true, "rsh-no-paginate": true,
 	"rsh-collect": true,
 }
 
 var boolLikeShortFlags = map[rune]bool{
-	'S': true, 'v': true,
+	'r': true, 'S': true, 'v': true,
 }

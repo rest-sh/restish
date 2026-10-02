@@ -19,6 +19,7 @@ override built-in defaults only when the matching flag was not set.
 | `--rsh-server` | `-s` | string | | empty | Overrides scheme/host; path prefixes request path. |
 | `--rsh-output-format` | `-o` | string | `RSH_OUTPUT_FORMAT` | auto | Formats the rendered body/value selected by `--rsh-print=b`; `lines` for scalar line output; no `raw` format. |
 | `--rsh-print` | | string | `RSH_PRINT` | auto | Chooses stdout parts: `H` request headers, `B` request body, `h` response status/headers, `b` rendered body, `p` pretty, `c` color. `auto` is `hbpc` on a terminal, body bytes for redirected unfiltered responses with no explicit output transform, and `bp` for filters, metadata shortcuts, and formatted/collected output. |
+| `--rsh-raw` | `-r` | bool | | false | Direct HTTP requests write only response body bytes after HTTP content-encoding decompression on any stdout; bypasses decoding, filtering, formatting, pagination, and response middleware. |
 | `--rsh-silent` | `-S` | bool | | false | Suppress output. |
 | `--rsh-columns` | | string | | empty | Table columns. |
 | `--rsh-sort-by` | | string | | empty | Table sort column. |

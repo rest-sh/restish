@@ -328,6 +328,29 @@ func TestStripHostPersistentFlagsPreservesPluginArgs(t *testing.T) {
 	}
 }
 
+func TestCommandPluginRejectsRawOutput(t *testing.T) {
+	root := &cobra.Command{Use: "restish"}
+	cmd := &cobra.Command{Use: "plug"}
+	root.AddCommand(cmd)
+	cmd.SetContext(withGlobalFlags(context.Background(), GlobalFlags{Raw: true}))
+	if err := (&CLI{}).runCommandPlugin(cmd, "missing-plugin", pluginwire.CommandDecl{}, nil); err == nil || !strings.Contains(err.Error(), "restish plug does not support -r/--rsh-raw") {
+		t.Fatalf("parsed raw flag: unexpected error: %v", err)
+	}
+	cmd.SetContext(context.Background())
+	for _, flag := range []string{"--rsh-raw", "--rsh-raw=true"} {
+		err := (&CLI{}).runCommandPlugin(cmd, "missing-plugin", pluginwire.CommandDecl{}, []string{flag})
+		if err == nil || !strings.Contains(err.Error(), "restish plug does not support -r/--rsh-raw") {
+			t.Fatalf("%s: unexpected error: %v", flag, err)
+		}
+	}
+	for _, flag := range []string{"-r", "--rsh-raw=false"} {
+		err := (&CLI{}).runCommandPlugin(cmd, "missing-plugin", pluginwire.CommandDecl{}, []string{flag})
+		if err == nil || strings.Contains(err.Error(), "does not support -r/--rsh-raw") {
+			t.Fatalf("%s should remain plugin-owned: %v", flag, err)
+		}
+	}
+}
+
 func TestValidatePluginCommandNameRejectsCollisions(t *testing.T) {
 	c := &CLI{cfg: &config.Config{APIs: map[string]*config.APIConfig{"svc": {}}}}
 	root := &cobra.Command{Use: "restish"}

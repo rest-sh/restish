@@ -145,8 +145,8 @@ Response middleware runs on the interpreted response path: interactive output,
 explicit filters, metadata shortcuts, collection, explicit output formats, and
 explicit `--rsh-print` values. It does not run for the automatic raw-download
 path (`restish URL > file` with no filter, collection, metadata shortcut, or
-output format), because that path preserves the original response body bytes for
-files and shell pipelines.
+output format) or explicit `-r` / `--rsh-raw`, because those paths preserve the
+original response body bytes.
 
 The response update's `headers` object is a partial update: keys returned by the
 plugin replace those individual response header values, while omitted inbound

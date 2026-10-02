@@ -51,6 +51,11 @@ func (c *CLI) newRootCmd() *cobra.Command {
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: c.completeRootURL,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Lazy generated-command redispatch already parsed the global flags.
+			if gf, ok := cmd.Context().Value(globalFlagsContextKey{}).(GlobalFlags); ok {
+				c.silentMode = gf.Silent
+				return nil
+			}
 			gf, err := parseGlobalFlags(cmd)
 			if err != nil {
 				return err
@@ -237,6 +242,7 @@ func (c *CLI) addGlobalFlags(root *cobra.Command) {
 	pf.StringP("rsh-server", "s", "", "Override scheme://host for all requests (e.g. https://staging.example.com)")
 	pf.StringP("rsh-output-format", "o", "auto", "Output format for rendered response bodies: "+output.FormatterNames(c.formatters)+" (use -o lines for shell-friendly filtered values; see --rsh-columns, --rsh-sort-by for table)")
 	pf.String("rsh-print", "auto", "Output parts to print: auto or any of H=request headers, B=request body, h=response headers, b=rendered body, p=pretty, c=color")
+	pf.BoolP("rsh-raw", "r", false, "Write only HTTP response body bytes; bypass decoding, filtering, formatting, pagination, and response middleware")
 	pf.BoolP("rsh-silent", "S", false, "Suppress all output; only the exit code conveys success or failure")
 	pf.String("rsh-columns", "", "Comma-separated column names for -o table (e.g. id,name,status)")
 	pf.String("rsh-sort-by", "", "Sort -o table rows by this column name")

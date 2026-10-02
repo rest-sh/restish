@@ -42,6 +42,9 @@ func (c *CLI) addEditCommand(root *cobra.Command) {
 }
 
 func (c *CLI) runEdit(cmd *cobra.Command, args []string) error {
+	if globalFlagsFromContext(requestContext(cmd)).Raw {
+		return fmt.Errorf("%s does not support -r/--rsh-raw", cmd.CommandPath())
+	}
 	rawURL := args[0]
 	patchArgs := args[1:]
 	opts, err := c.httpOptsFromFlags(cmd)

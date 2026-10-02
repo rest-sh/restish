@@ -97,8 +97,9 @@ These changes are intentional in v2 and are not treated as regressions:
 - redirected non-TTY output preserves response body bytes when no filter,
   collection, metadata shortcut, or output format is set; use `-o json` when a
   script needs Restish to render decoded structured data as JSON
-- `-r` is removed. Redirect stdout without a filter, metadata shortcut,
-  collection, or output format when you want to save response body bytes.
+- `-r` / `--rsh-raw` writes only response body bytes on both terminal and
+  redirected stdout. Unlike v1, it cannot be combined with filtering; use
+  `-o lines` for shell-friendly filtered scalar values.
 - interactive HTTP requests now print status, response headers, and formatted
   body to stdout when no explicit filter is set. Use `--rsh-print` to choose
   request/response parts, or `-f @` for the normalized response envelope.
@@ -128,6 +129,7 @@ Use this as the fast lookup table when muscle memory collides with v2.
 | profile `base`                        | profile `base_url`                                          | API/profile base field renamed                        |
 | API `base`                            | API `base_url`                                              | API base field renamed                                |
 | `-p`, `--rsh-profile`                 | `-p`, `--rsh-profile`                                       | Same flag, but invalid profile names now error        |
+| `-r`, `--rsh-raw`                     | `-r`, `--rsh-raw`                                           | Raw now means response body bytes only; use `-o lines` for filtered scalars |
 | external auth command hook            | `external-tool` auth                                        | Same local-helper idea; v2 plugin system is separate  |
 
 ## Extension Changes

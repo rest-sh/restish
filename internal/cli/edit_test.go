@@ -289,6 +289,18 @@ func TestEditCommandNoEditorPrintsEditableResource(t *testing.T) {
 	}
 }
 
+func TestEditRejectsRawOutputBeforeRequest(t *testing.T) {
+	c, _, _ := newTestCLI(t)
+	c.Hooks().HTTPTransport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("request should not be sent when edit rejects raw output")
+		return nil, nil
+	})
+	err := c.Run([]string{"restish", "edit", "--rsh-raw", "https://api.example.com/items/1"})
+	if err == nil || !strings.Contains(err.Error(), "restish edit does not support -r/--rsh-raw") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestEditCommandUpdateUsesProfileHeaders(t *testing.T) {
 	installFakeEditor(t, "{\n  \"name\": \"after\"\n}\n")
 
