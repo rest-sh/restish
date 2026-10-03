@@ -27,6 +27,7 @@ import (
 	"github.com/rest-sh/restish/v2/internal/output"
 	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/spec"
+	pluginwire "github.com/rest-sh/restish/v2/plugin"
 	"github.com/spf13/cobra"
 )
 
@@ -79,6 +80,8 @@ type testHooks struct {
 	SignalAwareContext func() (context.Context, context.CancelFunc)
 	// AuthHookFunc overrides auth hook plugin execution in tests.
 	AuthHookFunc func(apiName, profileName string, rawParams map[string]string, secretKeys map[string]bool, req *http.Request) error
+	// AuthResolverHookFunc overrides one auth-resolver plugin invocation in tests.
+	AuthResolverHookFunc func(internalplugin.Plugin, pluginwire.AuthResolverInput) (bool, error)
 	// StdoutIsTerminal overrides terminal detection in tests.
 	StdoutIsTerminal func(io.Writer) bool
 }

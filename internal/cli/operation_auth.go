@@ -1,32 +1,50 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/rest-sh/restish/v2/auth"
 	"github.com/rest-sh/restish/v2/config"
+	internalplugin "github.com/rest-sh/restish/v2/internal/plugin"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
 
 type operationAuthPolicy struct {
+	Context                context.Context
+	Method                 string
+	URL                    string
 	OptionalAuth           bool
 	NoAuth                 bool
 	CredentialAlternatives []spec.CredentialAlternative
+	OperationPath          string
+	ConditionalSecurity    []spec.ConditionalSecurityRule
 	Override               string
 	Transport              request.Options
 }
 
 type selectedOperationAuth struct {
-	requirement spec.CredentialRequirement
-	resolved    resolvedAuthConfig
-	source      string
+	requirement  spec.CredentialRequirement
+	requirements spec.CredentialAlternative
+	resolved     resolvedAuthConfig
+	source       string
+	resolver     *internalplugin.Plugin
 }
 
 func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
+	if policy != nil {
+		resolved, err := conditionalOperationAuthPolicy(*policy)
+		if err != nil {
+			return nil, false, err
+		}
+		policy = &resolved
+	}
 	if policy != nil && strings.TrimSpace(policy.Override) != "" {
 		return c.planOperationAuthOverride(apiName, profileName, prof, policy)
 	}
@@ -94,6 +112,15 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 			return selected, true, nil
 		}
 	}
+	if policy.URL != "" {
+		resolved, ok, err := c.resolveOperationAuth(apiName, profileName, policy)
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			return []selectedOperationAuth{resolved}, true, nil
+		}
+	}
 
 	if policy.OptionalAuth {
 		return nil, true, nil
@@ -128,6 +155,61 @@ func (c *CLI) planOperationAuth(apiName, profileName string, prof *config.Profil
 	}
 	sort.Strings(missing)
 	return nil, false, fmt.Errorf("profile %q of API %q is missing credential bindings for this operation: %s%s%s; %s", profileName, apiName, strings.Join(uniqueStrings(missing), ", "), securityIssueSuffix, operationAuthConfiguredOverrideHint(prof, policy.CredentialAlternatives), operationAuthSetupHint(apiName, profileName))
+}
+
+func conditionalOperationAuthPolicy(policy operationAuthPolicy) (operationAuthPolicy, error) {
+	if len(policy.ConditionalSecurity) == 0 || policy.URL == "" {
+		return policy, nil
+	}
+	u, err := url.Parse(policy.URL)
+	if err != nil {
+		return operationAuthPolicy{}, fmt.Errorf("conditional operation security: parse request URL: %w", err)
+	}
+	for _, rule := range policy.ConditionalSecurity {
+		value, ok := operationPathParameter(policy.OperationPath, u.EscapedPath(), rule.When.PathParameter)
+		if !ok || !strings.HasPrefix(value, rule.When.Prefix) {
+			continue
+		}
+		alternatives := make([]spec.CredentialAlternative, 0, len(rule.Alternatives))
+		for _, index := range rule.Alternatives {
+			if index < 0 || index >= len(policy.CredentialAlternatives) {
+				return operationAuthPolicy{}, fmt.Errorf("conditional operation security selects unavailable alternative %d", index)
+			}
+			alternatives = append(alternatives, policy.CredentialAlternatives[index])
+		}
+		policy.CredentialAlternatives = alternatives
+		return policy, nil
+	}
+	return policy, nil
+}
+
+func operationPathParameter(template, escapedRequestPath, name string) (string, bool) {
+	var source strings.Builder
+	source.WriteString(`^.*`)
+	index := 0
+	found := false
+	for _, match := range regexp.MustCompile(`\{([^}]+)\}`).FindAllStringSubmatchIndex(template, -1) {
+		source.WriteString(regexp.QuoteMeta(template[index:match[0]]))
+		parameterName := template[match[2]:match[3]]
+		if parameterName == name {
+			source.WriteString(`(.+)`)
+			found = true
+		} else {
+			source.WriteString(`[^/]+`)
+		}
+		index = match[1]
+	}
+	if !found {
+		return "", false
+	}
+	source.WriteString(regexp.QuoteMeta(template[index:]))
+	source.WriteString(`$`)
+	match := regexp.MustCompile(source.String()).FindStringSubmatch(escapedRequestPath)
+	if len(match) != 2 {
+		return "", false
+	}
+	value, err := url.PathUnescape(match[1])
+	return value, err == nil
 }
 
 func (c *CLI) planOperationAuthOverride(apiName, profileName string, prof *config.ProfileConfig, policy *operationAuthPolicy) ([]selectedOperationAuth, bool, error) {
@@ -319,6 +401,14 @@ func (c *CLI) operationAuthCallbacks(apiName, profileName string, selected []sel
 	if len(selected) == 0 {
 		return authCallbacks{}, nil
 	}
+	if len(selected) == 1 && selected[0].resolver != nil {
+		resolver := *selected[0].resolver
+		requirements := pluginAuthRequirements(selected[0].requirements)
+		apply := func(req *http.Request) error {
+			return c.runSelectedAuthPlugin(resolver, apiName, profileName, requirements, req)
+		}
+		return authCallbacks{OnRequest: apply, OnRetryRequest: apply}, nil
+	}
 	steps := make([]operationAuthStep, 0, len(selected))
 	for _, item := range selected {
 		step, err := c.operationAuthStep(apiName, profileName, item, opts)
@@ -336,6 +426,12 @@ func (c *CLI) operationAuthCallbacks(apiName, profileName string, selected []sel
 			}
 			return c.runOperationAuthHookPlugins(req, steps)
 		},
+	}
+	for _, step := range steps {
+		if step.requestBound {
+			callbacks.OnRetryRequest = callbacks.OnRequest
+			break
+		}
 	}
 	for _, step := range steps {
 		if step.forceCapable {
@@ -373,10 +469,12 @@ type operationAuthStep struct {
 	rawParams    map[string]string
 	cacheKey     string
 	forceCapable bool
+	requestBound bool
 	secretKeys   map[string]bool
 	apiName      string
 	profileName  string
 	authType     string
+	needs        []string
 }
 
 func (c *CLI) operationAuthStep(apiName, profileName string, selected selectedOperationAuth, opts authHandlerOptions) (operationAuthStep, error) {
@@ -391,15 +489,18 @@ func (c *CLI) operationAuthStep(apiName, profileName string, selected selectedOp
 		}
 	}
 	_, forceCapable := handler.(auth.ForceCapable)
+	_, requestBound := handler.(auth.RequestBound)
 	return operationAuthStep{
 		handler:      handler,
 		rawParams:    selected.resolved.Config.Params,
 		cacheKey:     selected.resolved.CacheKey,
 		forceCapable: forceCapable,
+		requestBound: requestBound,
 		secretKeys:   secretKeys,
 		apiName:      apiName,
 		profileName:  profileName,
 		authType:     selected.resolved.Config.Type,
+		needs:        append([]string(nil), selected.requirement.Needs...),
 	}, nil
 }
 
@@ -410,6 +511,12 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 	params, err := c.buildAuthParams(s.rawParams)
 	if err != nil {
 		return err
+	}
+	if s.authType == "dpop" {
+		if params == nil {
+			params = map[string]string{}
+		}
+		params["scopes"] = strings.Join(s.needs, " ")
 	}
 	if s.authType == "external-tool" {
 		if err := c.ensureExternalToolApproved(req.Context(), s.apiName, s.profileName, params["commandline"]); err != nil {
@@ -432,6 +539,9 @@ func (c *CLI) applyOperationAuthStep(req *http.Request, s operationAuthStep, for
 
 func credentialSatisfies(requirement spec.CredentialRequirement, credential *config.CredentialConfig, authCfg *config.AuthConfig) error {
 	if len(requirement.Needs) == 0 {
+		return nil
+	}
+	if authCfg != nil && authCfg.Type == "dpop" && authCfg.Params["source"] != "" && authCfg.Params["reference"] != "" {
 		return nil
 	}
 	satisfies := credential.Satisfies
@@ -583,7 +693,7 @@ func authMutationKey(ac *config.AuthConfig) string {
 		default:
 			return ""
 		}
-	case "bearer", "http-basic", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code":
+	case "bearer", "http-basic", "dpop", "oauth-client-credentials", "oauth-authorization-code", "oauth-device-code":
 		return "header:authorization"
 	case "external-tool":
 		// External tools may return complete header/query mutations, so the

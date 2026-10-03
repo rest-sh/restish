@@ -47,6 +47,51 @@ paths:
 	}
 }
 
+func TestOperationsExtractsAndValidatesConditionalSecurityAlternatives(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info: {title: Test, version: "1.0.0"}
+components:
+  securitySchemes:
+    provider: {type: openIdConnect, openIdConnectUrl: https://issuer.example.com/.well-known/openid-configuration}
+paths:
+  /files/{path}:
+    put:
+      parameters:
+        - {name: path, in: path, required: true, schema: {type: string}}
+      security:
+        - provider: [contents:write]
+        - provider: [contents:write, workflows:write]
+      x-restish-security-alternatives:
+        - when: {pathParameter: path, prefix: .github/workflows/}
+          alternatives: [1]
+      responses:
+        "204": {description: Updated}`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ops, err := loaded.Operations(OperationOptions{})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+	want := []ConditionalSecurityRule{{
+		When:         ConditionalSecurityPredicate{PathParameter: "path", Prefix: ".github/workflows/"},
+		Alternatives: []int{1},
+	}}
+	if !reflect.DeepEqual(ops[0].ConditionalSecurity, want) {
+		t.Fatalf("ConditionalSecurity = %#v, want %#v", ops[0].ConditionalSecurity, want)
+	}
+
+	invalid := strings.Replace(raw, "alternatives: [1]", "alternatives: [2]", 1)
+	loaded, err = load("application/yaml", []byte(invalid), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load invalid document: %v", err)
+	}
+	if _, err := loaded.Operations(OperationOptions{}); err == nil || !strings.Contains(err.Error(), "out-of-range alternative 2") {
+		t.Fatalf("expected conditional security validation error, got %v", err)
+	}
+}
+
 func TestOperationsExtractsPreferredResponseMediaType(t *testing.T) {
 	raw := `openapi: "3.1.0"
 info:
@@ -461,6 +506,40 @@ paths:
 	op := operationByID(t, ops, "getAudit")
 	requireCredential(t, op, [][]CredentialRequirement{{
 		{ID: "BearerAuth", Ref: "#/components/securitySchemes/BearerAuth", Kind: "unknown", Source: "openapi", Undeclared: true},
+	}})
+}
+
+func TestOperationsRecognizesDPoPSecurityScheme(t *testing.T) {
+	raw := `openapi: "3.1.0"
+info:
+  title: Test
+  version: "1.0.0"
+components:
+  securitySchemes:
+    DPoP:
+      type: http
+      scheme: DPoP
+paths:
+  /wallet:
+    get:
+      operationId: getWallet
+      security:
+        - DPoP: []
+      responses:
+        "200":
+          description: OK`
+	loaded, err := load("application/yaml", []byte(raw), DefaultLoaders())
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	ops, err := loaded.Operations(OperationOptions{BaseURL: "https://api.example.com"})
+	if err != nil {
+		t.Fatalf("operations: %v", err)
+	}
+
+	requireCredential(t, operationByID(t, ops, "getWallet"), [][]CredentialRequirement{{
+		{ID: "DPoP", Ref: "#/components/securitySchemes/DPoP", Kind: "http-dpop", Source: "openapi"},
 	}})
 }
 

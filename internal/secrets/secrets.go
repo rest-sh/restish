@@ -13,6 +13,7 @@ import (
 var HeaderNames = map[string]bool{
 	"Authorization":             true,
 	"Cookie":                    true,
+	"Dpop":                      true,
 	"Api-Key":                   true,
 	"Ocp-Apim-Subscription-Key": true,
 	"Proxy-Authorization":       true,
@@ -137,6 +138,7 @@ func RedactDiagnosticText(value string) string {
 		"authorization",
 		"proxy-authorization",
 		"cookie",
+		"dpop",
 		"set-cookie",
 		"x-api-key",
 		"x-api-token",
@@ -247,7 +249,7 @@ func redactDiagnosticAssignment(value, marker string) string {
 
 func diagnosticMarkerStopsAtSpace(marker string) bool {
 	switch marker {
-	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-api-token", "x-auth-token":
+	case "authorization", "proxy-authorization", "cookie", "dpop", "set-cookie", "x-api-key", "x-api-token", "x-auth-token":
 		return false
 	default:
 		return true
