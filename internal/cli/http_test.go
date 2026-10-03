@@ -1180,3 +1180,59 @@ func TestMultipartBodyRejectsMissingFileBeforeRequest(t *testing.T) {
 		t.Fatal("request was sent despite missing multipart file reference")
 	}
 }
+
+func TestMultipartBodyInlinePartContentType(t *testing.T) {
+	var rr requestRecorder
+	c, _, _ := newTestCLI(t)
+	useTransport(c, func(r *http.Request) (*http.Response, error) {
+		rr.capture(r)
+		return jsonResponse(200, `{}`), nil
+	})
+	uploadPath := filepath.Join("testdata", "upload.txt")
+	err := c.Run([]string{
+		"restish", "post", "-c", "multipart", "https://api.example.com/items",
+		"name:", "daniel;type=text/foo,",
+		"file:", "@" + uploadPath + ";type=text/plain",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := rr.Last()
+	contentType := req.Header.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(rr.body), params["boundary"])
+	parts := map[string]string{}
+	partTypes := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		content, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		parts[part.FormName()] = string(content)
+		partTypes[part.FormName()] = part.Header.Get("Content-Type")
+	}
+
+	if parts["name"] != "daniel" {
+		t.Fatalf("name part: got %q", parts["name"])
+	}
+	if partTypes["name"] != "text/foo" {
+		t.Fatalf("name Content-Type: got %q, want text/foo", partTypes["name"])
+	}
+	if parts["file"] != "hello from upload\n" {
+		t.Fatalf("file part: got %q", parts["file"])
+	}
+	if partTypes["file"] != "text/plain" {
+		t.Fatalf("file Content-Type: got %q, want text/plain", partTypes["file"])
+	}
+}

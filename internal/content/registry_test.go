@@ -638,6 +638,97 @@ func TestMultipartEncodingEscapesAtLiteral(t *testing.T) {
 	}
 }
 
+func TestMultipartEncodingInlinePartContentType(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "payload.json")
+	if err := os.WriteFile(path, []byte(`{"hello":"there"}`), 0o644); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+
+	data, contentType, err := reg.EncodeWithType("multipart/form-data", map[string]any{
+		"name": "daniel;type=text/foo",
+		"file": "@" + path + ";type=application/json",
+	})
+	if err != nil {
+		t.Fatalf("encode with type: %v", err)
+	}
+
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(data), params["boundary"])
+	parts := map[string]string{}
+	partTypes := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		content, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		name := part.FormName()
+		parts[name] = string(content)
+		partTypes[name] = part.Header.Get("Content-Type")
+		filenames[name] = part.FileName()
+	}
+
+	if parts["name"] != "daniel" {
+		t.Fatalf("name part: got %q", parts["name"])
+	}
+	if partTypes["name"] != "text/foo" {
+		t.Fatalf("name Content-Type: got %q", partTypes["name"])
+	}
+	if parts["file"] != `{"hello":"there"}` {
+		t.Fatalf("file part: got %q", parts["file"])
+	}
+	if partTypes["file"] != "application/json" {
+		t.Fatalf("file Content-Type: got %q, want application/json", partTypes["file"])
+	}
+	if filenames["file"] != "payload.json" {
+		t.Fatalf("file name: got %q", filenames["file"])
+	}
+}
+
+func TestMultipartEncodingInlineTypeOverridesOpenAPIMap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "payload.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+
+	data, contentType, err := reg.EncodeWithType("multipart/form-data", content.MultipartBody{
+		Value: map[string]any{
+			"file": "@" + path + ";type=text/plain",
+		},
+		ContentTypes: map[string]string{
+			"file": "application/octet-stream",
+		},
+	})
+	if err != nil {
+		t.Fatalf("encode with type: %v", err)
+	}
+
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(data), params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("next part: %v", err)
+	}
+	if got := part.Header.Get("Content-Type"); got != "text/plain" {
+		t.Fatalf("Content-Type = %q, want text/plain (inline override)", got)
+	}
+}
+
 // jsonRoundTrip is a test helper that serialises v to JSON and back, so
 // that test assertions can compare normalised representations instead of
 // direct struct equality (which fails across CBOR/msgpack integer widths).

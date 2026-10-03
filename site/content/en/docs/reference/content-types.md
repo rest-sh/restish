@@ -78,7 +78,19 @@ per line.
 
 For multipart bodies, `@path` creates a file part and fails locally if the file
 cannot be read. Use `@@value` when a text field should start with a literal
-`@`.
+`@`. Append `;type=<media-type>` to set that part's `Content-Type` (curl-style),
+for file or text parts:
+
+```bash
+restish post -c multipart api.rest.sh/uploads \
+  'description: docs;type=text/plain, file: @upload.txt;type=text/plain'
+restish post -c multipart api.example.test/items \
+  'file: @payload.json;type=application/json'
+```
+
+Generated OpenAPI commands also apply `encoding.contentType` from the operation
+spec. An inline `;type=` on the value overrides that encoding entry for the
+part.
 
 ## Response Decoding
 

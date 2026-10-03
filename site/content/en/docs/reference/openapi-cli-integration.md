@@ -210,10 +210,14 @@ Generated commands use the normal Restish body syntax. JSON and `+json` media
 types use shorthand assignments, form bodies use form encoding, multipart
 bodies can include fields, repeated file-array fields, and
 `encoding.contentType` per-part metadata, and opaque body media types such as
-`application/octet-stream`, XML, and NDJSON send raw string or file input:
+`application/octet-stream`, XML, and NDJSON send raw string or file input.
+Generic multipart values can also set per-part types with `;type=<media-type>`
+(for example `file: @photo.jpg;type=image/jpeg`), which overrides
+`encoding.contentType` for that part when both are present:
 
 ```bash
 restish myapi upload-item 'name: alice, file: @photo.jpg'
+restish post -c multipart https://api.example.test/items 'file: @payload.json;type=application/json'
 restish myapi put-blob @payload.bin
 restish myapi webdav-operation @propfind.xml
 restish myapi insert-json-line @events.ndjson

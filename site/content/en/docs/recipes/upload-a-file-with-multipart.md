@@ -17,7 +17,14 @@ restish post -c multipart api.rest.sh/uploads 'description: docs, file: @upload.
 The response echoes multipart fields. If a client sends real file parts,
 `/uploads` also reports file metadata. Missing file paths fail before the
 request is sent. Use `@@value` when a text field should start with a literal
-`@`. For plain URL-encoded forms, use `-c form` instead; both encodings are
+`@`. To set a part's `Content-Type`, append `;type=<media-type>`:
+
+```bash
+restish post -c multipart api.rest.sh/uploads \
+  'description: docs, file: @upload.txt;type=text/plain'
+```
+
+For plain URL-encoded forms, use `-c form` instead; both encodings are
 explained in [Input and Shorthand](/docs/guides/input/).
 
 Related: [Input and Shorthand](/docs/guides/input/), [Content Types](/docs/reference/content-types/).
