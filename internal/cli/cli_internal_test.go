@@ -280,6 +280,39 @@ func TestGeneratedAPINames_HelpAndCompletionLoadAll(t *testing.T) {
 	}
 }
 
+func TestGeneratedAPINames_CompletionLoadsOnlyMatchingAPIs(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"aaa":     {BaseURL: "https://a.example.com"},
+			"aaa-ext": {BaseURL: "https://ae.example.com"},
+			"bbb":     {BaseURL: "https://b.example.com"},
+		},
+	}
+	c := &CLI{}
+	all := []string{"aaa", "aaa-ext", "bbb"}
+
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		// operations of one API: that API (and the APIs it prefixes)
+		{[]string{"restish", "__complete", "aaa", ""}, []string{"aaa", "aaa-ext"}},
+		{[]string{"restish", "__completeNoDesc", "bbb", "list-"}, []string{"bbb"}},
+		{[]string{"restish", "__complete", "-p", "prod", "bbb", ""}, []string{"bbb"}},
+		// API name being typed: the APIs it is a prefix of
+		{[]string{"restish", "__complete", "aa"}, []string{"aaa", "aaa-ext"}},
+		{[]string{"restish", "__complete", "zzz"}, []string{}},
+		// top level and built-in commands: unchanged, everything
+		{[]string{"restish", "__complete", ""}, all},
+		{[]string{"restish", "__complete", "get", ""}, all},
+	} {
+		got := c.generatedAPINames(tc.args, cfg)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%v: got %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
 func TestGeneratedAPINames_TargetedAPIHelpLoadsOnlyThatAPI(t *testing.T) {
 	cfg := &config.Config{
 		APIs: map[string]*config.APIConfig{
