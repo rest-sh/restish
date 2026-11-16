@@ -1229,6 +1229,14 @@ func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []st
 				return []string{scan.FirstCommand}
 			}
 		}
+		// Shell completion: the API name is the word after __complete. Only the
+		// APIs it can still name are needed, i.e. those it is a prefix of: the API
+		// being typed, or the API whose operations are being completed. Loading
+		// every cached spec here made each <TAB> decode all of them.
+		if isShellCompletionCommand(scan.FirstCommand) && scan.SecondCommand != "" &&
+			!isBuiltinCommandName(scan.SecondCommand) {
+			return apiNamesWithPrefix(cfg, scan.SecondCommand)
+		}
 		return sortedAPINames(cfg)
 	}
 	if scan.FirstCommand == "" {
@@ -1238,6 +1246,22 @@ func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []st
 		return []string{scan.FirstCommand}
 	}
 	return nil
+}
+
+func isShellCompletionCommand(name string) bool {
+	return name == "__complete" || name == "__completeNoDesc"
+}
+
+// apiNamesWithPrefix returns the sorted names of the configured APIs starting
+// with prefix.
+func apiNamesWithPrefix(cfg *config.Config, prefix string) []string {
+	names := []string{}
+	for _, name := range sortedAPINames(cfg) {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func sortedAPINames(cfg *config.Config) []string {
