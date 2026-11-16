@@ -76,6 +76,33 @@ func cacheFile(cacheDir, apiName string) string {
 	return filepath.Join(cacheDir, apiName+".cbor")
 }
 
+// SpecLikelyAvailable is a cheap approximation, for completion descriptions,
+// of whether generated commands can be built for apiName without the network:
+// all its local spec files exist or, without local spec files, a spec cache
+// file exists. It only stats files: it neither reads nor validates them.
+func SpecLikelyAvailable(cacheDir, apiName string, specFiles []string) bool {
+	if HasLocalSpecFiles(specFiles) {
+		for _, src := range specFiles {
+			if !isLocalPath(src) {
+				continue
+			}
+			path, err := localPathFromSource(src)
+			if err != nil {
+				return false
+			}
+			if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+				return false
+			}
+		}
+		return true
+	}
+	if !validCacheAPIName(apiName) {
+		return false
+	}
+	info, err := os.Stat(cacheFile(cacheDir, apiName))
+	return err == nil && info.Mode().IsRegular() && info.Size() > 0
+}
+
 func validCacheAPIName(apiName string) bool {
 	if apiName == "" || apiName == "." || apiName == ".." {
 		return false
