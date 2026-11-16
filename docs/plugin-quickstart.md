@@ -132,15 +132,16 @@ package main
 import "github.com/rest-sh/restish/v2/plugin"
 
 func main() {
+	commands := []plugin.CommandDecl{
+		{Name: "hello", Short: "Print a greeting"},
+	}
 	manifest := plugin.Manifest{
 		Name:              "hello-cmd",
 		Version:           "0.1.0",
 		Description:       "Example command plugin",
 		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
-	}
-	commands := []plugin.CommandDecl{
-		{Name: "hello", Short: "Print a greeting"},
+		Commands:          commands,
 	}
 
 	plugin.Run(manifest, commands, func(command string, args []string, c *plugin.CommandClient) error {
@@ -154,6 +155,14 @@ That binary will show up as:
 ```bash
 restish hello
 ```
+
+Declaring the commands in the manifest (`Commands`) is optional. Restish caches
+manifests per plugin binary, so it can then add the commands without starting
+the plugin with `--rsh-plugin-commands` on every invocation. Leave it empty if
+the command list depends on the environment: Restish asks the plugin each time.
+Hosts that predate the field ignore it, so keep answering
+`--rsh-plugin-commands` with the same list (`plugin.Run` and
+`plugin.HandleStartupFlags` do).
 
 To make authenticated delegated requests from a command plugin:
 

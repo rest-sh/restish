@@ -8,6 +8,15 @@ import (
 	pluginwire "github.com/rest-sh/restish/v2/plugin"
 )
 
+var commands = []pluginwire.CommandDecl{
+	{
+		Name:  "bulk",
+		Short: "Git-like bulk resource management for API resources",
+		Long: "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.\n\n" +
+			"Use `bulk init` on a list endpoint that returns resource URLs and versions. Then use `bulk status`, `bulk diff`, `bulk pull`, and `bulk push` in the checkout directory.",
+	},
+}
+
 func main() {
 	pluginwire.Run(
 		pluginwire.Manifest{
@@ -16,15 +25,9 @@ func main() {
 			Description:       "Git-like bulk resource management for API collections",
 			RestishAPIVersion: 2,
 			Hooks:             []string{"command"},
+			Commands:          commands,
 		},
-		[]pluginwire.CommandDecl{
-			{
-				Name:  "bulk",
-				Short: "Git-like bulk resource management for API resources",
-				Long: "Check out collections of remote API resources to disk, track local and remote changes, diff them, and push updates back in bulk.\n\n" +
-					"Use `bulk init` on a list endpoint that returns resource URLs and versions. Then use `bulk status`, `bulk diff`, `bulk pull`, and `bulk push` in the checkout directory.",
-			},
-		},
+		commands,
 		func(command string, args []string, base *pluginwire.CommandClient) error {
 			if command != "bulk" {
 				return fmt.Errorf("unknown command: %s", command)

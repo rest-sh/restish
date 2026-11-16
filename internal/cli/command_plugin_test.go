@@ -50,6 +50,38 @@ func installCmdPlugin(t *testing.T) {
 	t.Setenv("PATH", "")
 }
 
+// TestCommandPluginManifestCommandsSkipDiscovery checks that commands declared
+// in the manifest are used without running --rsh-plugin-commands: the test
+// plugin exits with an error if it is asked for them.
+func TestCommandPluginManifestCommandsSkipDiscovery(t *testing.T) {
+	skipNoCmdPlugin(t)
+	pluginsParent, _ := installSharedPlugin(t, "staticcmd", testCmdPluginBin, "restish-staticcmdplugin")
+	if err := os.WriteFile(filepath.Join(pluginsParent, "restish.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write plugin test config: %v", err)
+	}
+	t.Setenv("RSH_CONFIG_DIR", pluginsParent)
+	t.Setenv("PATH", "")
+
+	c, out, errOut := newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
+	_ = c.Run([]string{"restish", "--help"})
+	if !strings.Contains(out.String(), "greet") {
+		t.Errorf("expected 'greet' in help output, got:\n%s", out.String())
+	}
+	if strings.Contains(errOut.String(), "discovery") {
+		t.Errorf("command discovery ran although the manifest declares the commands:\n%s", errOut.String())
+	}
+
+	c, out, errOut = newTestCLI(t)
+	c.Hooks().ConfigPath = filepath.Join(pluginsParent, "restish.json")
+	if err := c.Run([]string{"restish", "greet"}); err != nil {
+		t.Fatalf("greet: %v\nstderr: %s", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Hello from plugin!") {
+		t.Errorf("expected greeting, got:\n%s", out.String())
+	}
+}
+
 func TestCommandPluginHelp(t *testing.T) {
 	installCmdPlugin(t)
 

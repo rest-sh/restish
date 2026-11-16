@@ -76,6 +76,14 @@ type Manifest struct {
 	// names (e.g. "auth", "request-middleware"). The default is 30 s for all
 	// hooks except "auth", which defaults to 5 minutes.
 	HookTimeouts map[string]time.Duration `cbor:"hook_timeouts,omitempty" json:"hook_timeouts,omitempty"`
+	// Commands optionally declares, for the "command" hook, the commands the
+	// plugin contributes when they do not change between runs. Restish caches
+	// the manifest per plugin binary, so declaring them here spares a
+	// --rsh-plugin-commands subprocess on every Restish invocation. Plugins
+	// whose command list depends on the environment leave it empty and keep
+	// answering --rsh-plugin-commands. Hosts that do not know this field ignore
+	// it, so a plugin should declare its commands in both places.
+	Commands []CommandDecl `cbor:"commands,omitempty" json:"commands,omitempty"`
 }
 
 // CommandDecl describes one command that a command-plugin exposes.

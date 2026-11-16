@@ -23,6 +23,8 @@ func main() {
 		runManifestOnlyPlugin()
 	case "restish-cmdplugin":
 		runCommandPlugin()
+	case "restish-staticcmdplugin":
+		runStaticCommandPlugin()
 	case "restish-hookplugin":
 		runHookPlugin()
 	case "restish-test-tls-signer":
@@ -55,14 +57,37 @@ var commandPluginCommands = []plugin.CommandDecl{
 	{Name: "hangdone", Short: "Send done and keep running"},
 }
 
+// runStaticCommandPlugin declares its commands in its manifest and refuses
+// command discovery, so tests can check that the host does not run it.
+func runStaticCommandPlugin() {
+	for _, arg := range os.Args[1:] {
+		if arg == plugin.StartupFlagCommands {
+			fmt.Fprintln(os.Stderr, "command discovery must not run when the manifest declares commands")
+			os.Exit(3)
+		}
+	}
+	runCommandPluginWithManifest(plugin.Manifest{
+		Name:              "staticcmdplugin",
+		Version:           "1.0.0",
+		Description:       "Test command plugin declaring its commands in its manifest",
+		RestishAPIVersion: 2,
+		Hooks:             []string{"command"},
+		Commands:          commandPluginCommands,
+	})
+}
+
 func runCommandPlugin() {
-	if plugin.HandleStartupFlags(os.Stdout, plugin.Manifest{
+	runCommandPluginWithManifest(plugin.Manifest{
 		Name:              "cmdplugin",
 		Version:           "1.0.0",
 		Description:       "Test command plugin",
 		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
-	}, commandPluginCommands) {
+	})
+}
+
+func runCommandPluginWithManifest(manifest plugin.Manifest) {
+	if plugin.HandleStartupFlags(os.Stdout, manifest, commandPluginCommands) {
 		return
 	}
 
