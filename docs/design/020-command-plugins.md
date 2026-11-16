@@ -40,6 +40,14 @@ That command returns a CBOR payload describing one or more commands, including:
 
 Each declaration becomes a Cobra command on the root CLI.
 
+A plugin whose command list does not change between runs can also declare it
+in its manifest (`commands`). Manifests are cached per plugin binary (path,
+modification time, size), so Restish then builds the commands without
+starting the plugin at all: discovery used to cost a subprocess on every
+invocation, including `--version` and shell completion. Plugins without
+manifest commands keep the `--rsh-plugin-commands` discovery, and hosts that
+do not know the field ignore it.
+
 Restish deliberately disables host-side flag parsing for those commands before
 launching the plugin. That lets the plugin receive raw arguments such as
 `bulk init --url-template=...` and implement its own subcommand tree, flags,

@@ -11,6 +11,15 @@ import (
 	"github.com/rest-sh/restish/v2/plugin"
 )
 
+var commands = []plugin.CommandDecl{
+	{
+		Name:             "mcp",
+		Short:            "Serve registered APIs over the Model Context Protocol",
+		Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.\n\nUse `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.",
+		PassthroughStdio: true,
+	},
+}
+
 func main() {
 	if plugin.HandleStartupFlags(os.Stdout, plugin.Manifest{
 		Name:              "mcp",
@@ -18,14 +27,8 @@ func main() {
 		Description:       "Expose registered APIs as MCP tools",
 		RestishAPIVersion: 2,
 		Hooks:             []string{"command"},
-	}, []plugin.CommandDecl{
-		{
-			Name:             "mcp",
-			Short:            "Serve registered APIs over the Model Context Protocol",
-			Long:             "Expose OpenAPI operations as MCP tools via Restish-authenticated HTTP delegation.\n\nUse `restish mcp serve <api...>` from an MCP client command configuration. Restish loads each registered API's OpenAPI operations and forwards tool calls through the same auth, profile, TLS, and request pipeline as the CLI.",
-			PassthroughStdio: true,
-		},
-	}) {
+		Commands:          commands,
+	}, commands) {
 		return
 	}
 

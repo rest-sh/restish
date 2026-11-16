@@ -86,10 +86,16 @@ func (c *CLI) addCommandPlugins(root *cobra.Command) {
 	seen := map[string]string{}
 	c.pluginCommandNames = map[string]string{}
 	for _, p := range c.pluginsByHook["command"] {
-		cmds, err := loadCommandPluginCommands(c.runCtx, p.Path)
-		if err != nil {
-			c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
-			continue
+		// Commands declared in the (cached) manifest avoid starting the plugin
+		// on every invocation just to list them.
+		cmds := p.Manifest.Commands
+		if len(cmds) == 0 {
+			var err error
+			cmds, err = loadCommandPluginCommands(c.runCtx, p.Path)
+			if err != nil {
+				c.warnf("plugin %s: %v", filepath.Base(p.Path), err)
+				continue
+			}
 		}
 		if len(cmds) == 0 {
 			continue
