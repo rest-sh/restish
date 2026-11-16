@@ -726,6 +726,9 @@ func (c *CLI) Run(args []string) error {
 			}
 		}
 	}
+	if completingRootCommand(argScan) && !c.hasPromotedAPI() {
+		c.addAPICompletionCommands(root, cfg)
+	}
 	c.addAPIShortNameCommands(root, cfg)
 	if err := c.applyCommandSurface(root, promotedAPICmd, argScan, cfg, args); err != nil {
 		return err
@@ -851,6 +854,8 @@ type cliArgScan struct {
 	Silent                  bool
 	Bootstrap               bool
 	GeneratedAPICommandTree bool
+	// Positionals counts the non-flag arguments, the command names included.
+	Positionals int
 }
 
 func scanCLIArgs(args []string) cliArgScan {
@@ -923,6 +928,7 @@ func scanCLIArgs(args []string) cliArgScan {
 		}
 
 		if !strings.HasPrefix(arg, "-") {
+			scan.Positionals++
 			if scan.FirstCommand == "" {
 				scan.FirstCommand = arg
 			} else if scan.SecondCommand == "" {
@@ -1067,6 +1073,37 @@ func effectiveURLOverrides(apiCfg *config.APIConfig, profileName string) map[str
 		}
 	}
 	return out
+}
+
+// completingRootCommand reports whether the shell is completing the first word
+// (`restish <TAB>`, `restish ap<TAB>`): __complete followed by that word only.
+func completingRootCommand(scan cliArgScan) bool {
+	return (scan.FirstCommand == "__complete" || scan.FirstCommand == "__completeNoDesc") && scan.Positionals == 2
+}
+
+// addAPICompletionCommands registers, for root completion, a placeholder for
+// every API whose spec looks available (spec.SpecLikelyAvailable), carrying
+// the short description its generated command would have. Decoding every cached spec only to list the API names
+// made `restish <TAB>` slow with many APIs. APIs without a cached spec keep the
+// "Generic requests" command added by addAPIShortNameCommands.
+func (c *CLI) addAPICompletionCommands(root *cobra.Command, cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	for _, apiName := range sortedAPINames(cfg) {
+		if isBuiltinCommandName(apiName) || rootHasCommand(root, apiName) {
+			continue
+		}
+		if !spec.SpecLikelyAvailable(c.specCacheDir(), c.apiStateName(apiName), cfg.APIs[apiName].SpecFiles) {
+			continue
+		}
+		root.AddCommand(&cobra.Command{
+			Use:     apiName,
+			Short:   fmt.Sprintf("Commands generated from the %s API spec", apiName),
+			GroupID: rootGroupAPI,
+			RunE:    func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+		})
+	}
 }
 
 func (c *CLI) addAPIShortNameCommands(root *cobra.Command, cfg *config.Config) {
@@ -1222,6 +1259,11 @@ func (c *CLI) generatedAPINamesForScan(scan cliArgScan, cfg *config.Config) []st
 			return nil
 		}
 		return []string{promoted}
+	}
+	if completingRootCommand(scan) {
+		// Root command names and short descriptions do not need any spec:
+		// see addAPICompletionCommands.
+		return nil
 	}
 	if scan.GeneratedAPICommandTree {
 		if scan.FirstCommand != "" && !isBuiltinCommandName(scan.FirstCommand) {

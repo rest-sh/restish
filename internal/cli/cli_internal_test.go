@@ -271,11 +271,31 @@ func TestGeneratedAPINames_HelpAndCompletionLoadAll(t *testing.T) {
 	for _, args := range [][]string{
 		{"restish", "--help"},
 		{"restish", "help", "aaa"},
-		{"restish", "__complete", ""},
+		{"restish", "__complete", "aaa", ""},
 	} {
 		got := c.generatedAPINames(args, cfg)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %v, want %v", args, got, want)
+		}
+	}
+}
+
+func TestGeneratedAPINames_RootCompletionLoadsNoSpec(t *testing.T) {
+	cfg := &config.Config{
+		APIs: map[string]*config.APIConfig{
+			"aaa": {BaseURL: "https://a.example.com"},
+			"bbb": {BaseURL: "https://b.example.com"},
+		},
+	}
+	c := &CLI{}
+	for _, args := range [][]string{
+		{"restish", "__complete", ""},
+		{"restish", "__complete", "aa"},
+		{"restish", "__completeNoDesc", ""},
+		{"restish", "__complete", "-p", "prod", ""},
+	} {
+		if got := c.generatedAPINames(args, cfg); len(got) != 0 {
+			t.Errorf("%v: got %v, want no API", args, got)
 		}
 	}
 }
