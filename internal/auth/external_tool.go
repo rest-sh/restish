@@ -3,11 +3,14 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/rest-sh/restish/v2/auth"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +33,9 @@ const (
 //	omitbody     (optional) "true" skips sending the request body to the tool;
 //	             use for binary bodies because body is v1-compatible JSON text
 //	output       (optional) "bearer-token" treats stdout as a bearer token
+//	cachettl     (optional) duration (e.g. "10m") during which the headers the
+//	             tool added are reused for the requests to the same host,
+//	             instead of running the tool for each request
 //
 // Wire format (stdin → tool):
 //
@@ -52,6 +58,7 @@ func (a *ExternalTool) Parameters() []auth.Param {
 		{Name: "commandline", Description: "Shell command to run for auth (executed via cmd /c on Windows or /bin/sh -c elsewhere)", Required: true},
 		{Name: "omitbody", Description: "Set to \"true\" to skip sending the request body to the tool"},
 		{Name: "output", Description: "Set to \"bearer-token\" to treat stdout as an OAuth bearer token"},
+		{Name: "cachettl", Description: "Reuse the headers the tool adds for this long (e.g. \"10m\") instead of running it for every request; only for tools whose output depends on the host alone, not on the request (no request signing)"},
 	}
 }
 
@@ -168,16 +175,15 @@ func (a *ExternalTool) run(ctx context.Context, req *http.Request, params map[st
 		req.Host = parsed.Host
 	}
 
-	// Use Del+Add so multi-value headers are fully replaced, not overwritten
-	// one value at a time (which would only keep the last value).
-	for key, vals := range updates.Headers {
-		req.Header.Del(key)
-		for _, v := range vals {
-			req.Header.Add(key, v)
-		}
-	}
+	// Del+Add so multi-value headers are fully replaced, not overwritten one value at a
+	// time (which would only keep the last value).
+	applyHeaders(req, updates.Headers)
 	return nil
 }
+
+// SupportsForce: after a 401, the headers cached by cachettl are dropped and the tool runs
+// again. Restish only retries when cachettl is set (see the CLI).
+func (a *ExternalTool) SupportsForce() {}
 
 func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac auth.AuthContext) error {
 	stderr := a.Stderr
@@ -187,7 +193,83 @@ func (a *ExternalTool) Authenticate(ctx context.Context, req *http.Request, ac a
 	if ctx == nil && req.Context() != nil {
 		ctx = req.Context()
 	}
-	return (&ExternalTool{Stderr: stderr, Timeout: a.Timeout}).run(ctx, req, ac.Params)
+	tool := &ExternalTool{Stderr: stderr, Timeout: a.Timeout}
+	ttl, err := externalToolCacheTTL(ac.Params)
+	if err != nil {
+		return err
+	}
+	if ttl == 0 || ac.TokenStore == nil {
+		return tool.run(ctx, req, ac.Params)
+	}
+
+	// cachettl: the headers the tool added are kept in the token cache, keyed by API
+	// profile, command line and host, and reused until they expire. Force (a retry after
+	// the API rejected them) runs the tool again.
+	key := externalToolCacheKey(ac, req)
+	if !ac.Force {
+		if cached, err := ac.TokenStore.Get(key); err == nil && cached != nil && time.Now().Before(cached.Expiry) {
+			var headers http.Header
+			if json.Unmarshal([]byte(cached.AccessToken), &headers) == nil {
+				applyHeaders(req, headers)
+				return nil
+			}
+		}
+	}
+	before, uri := req.Header.Clone(), req.URL.String()
+	if err := tool.run(ctx, req, ac.Params); err != nil {
+		return err
+	}
+	if req.URL.String() != uri {
+		return nil // a rewritten URI belongs to this request alone: nothing to reuse
+	}
+	added := http.Header{}
+	for name, values := range req.Header {
+		if !slices.Equal(before.Values(name), values) {
+			added[name] = values
+		}
+	}
+	if len(added) == 0 {
+		return nil
+	}
+	if encoded, err := json.Marshal(added); err == nil {
+		// A cache that cannot be written only costs the next run of the tool.
+		_ = ac.TokenStore.Set(key, auth.CachedToken{AccessToken: string(encoded), TokenType: "external-tool", Expiry: time.Now().Add(ttl)})
+	}
+	return nil
+}
+
+func externalToolCacheTTL(params map[string]string) (time.Duration, error) {
+	value := strings.TrimSpace(params["cachettl"])
+	if value == "" {
+		return 0, nil
+	}
+	ttl, err := time.ParseDuration(value)
+	if err != nil || ttl < 0 {
+		return 0, fmt.Errorf("external-tool auth: cachettl %q is not a duration such as \"10m\"", value)
+	}
+	return ttl, nil
+}
+
+// externalToolCacheKey identifies what a cached answer is valid for: the API profile, the
+// command line (changing it drops the cache) and the host (a tool may give other
+// credentials to another host).
+func externalToolCacheKey(ac auth.AuthContext, req *http.Request) string {
+	base := ac.CacheKey
+	if base == "" {
+		base = ac.APIName + ":" + ac.ProfileName
+	}
+	sum := sha256.Sum256([]byte(ac.Params["commandline"] + "\n" + req.URL.Scheme + "://" + req.URL.Host))
+	return base + ":external-tool:" + hex.EncodeToString(sum[:8])
+}
+
+// applyHeaders replaces each header of headers in the request.
+func applyHeaders(req *http.Request, headers http.Header) {
+	for key, vals := range headers {
+		req.Header.Del(key)
+		for _, v := range vals {
+			req.Header.Add(key, v)
+		}
+	}
 }
 
 type limitedBuffer struct {

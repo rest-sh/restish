@@ -19,7 +19,7 @@ need different security schemes or alternatives.
 | `oauth-client-credentials` | `client_id`, `client_secret`, plus `token_url` or `issuer_url` | `auth_method`, `scopes`, provider-specific token params such as `audience` | Fetches and caches a bearer token with the OAuth client credentials flow. |
 | `oauth-authorization-code` | `client_id`, plus `authorize_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, `redirect_url`, `redirect_scheme`, `redirect_port`, `redirect_path`, `redirect_cert`, `redirect_key`, `callback_success_html`, `callback_error_html`, provider-specific token params | Runs an OAuth authorization-code flow with PKCE and caches the token. |
 | `oauth-device-code` | `client_id`, plus `device_authorization_url` and `token_url`, or `issuer_url` | `client_secret`, `auth_method`, `scopes`, provider-specific token params | Runs the OAuth device-code flow and caches the token. |
-| `external-tool` | `commandline` | `omitbody`, `output` | Runs a local helper that can mutate request headers or URI. |
+| `external-tool` | `commandline` | `omitbody`, `output`, `cachettl` | Runs a local helper that can mutate request headers or URI. |
 
 OAuth `auth_method` accepts `client_secret_post` by default or
 `client_secret_basic`. OAuth endpoints must use HTTPS except for localhost or
@@ -206,10 +206,34 @@ Set `output` to `bearer-token` when stdout is a plain bearer token instead of
 the JSON response shape. Restish records approved command hashes so a changed
 external tool must be approved again.
 
+Set `cachettl` (a duration such as `10m`) when the helper's answer depends only
+on the host, not on the request: a credential helper that adds the same
+`Authorization` header to every request, for instance. Restish then runs the
+helper once, keeps the headers it added in the token cache (keyed by API
+profile, command line and host, with the token cache's file permissions), and
+reuses them until the duration expires. Each restish run would otherwise start
+the helper again, which dominates the cost of short commands and scripts that
+call an API many times. A helper that rewrites the URI is never cached. When
+the API answers `401 Unauthorized`, Restish drops the cached headers, runs the
+helper again and retries the request once. Leave `cachettl` unset for helpers
+that sign each request.
+
+```jsonc
+{
+  "auth": {
+    "type": "external-tool",
+    "params": {
+      "commandline": "corp-credentials",
+      "cachettl": "10m"
+    }
+  }
+}
+```
+
 ## OAuth 401 Recovery
 
-For token-bearing OAuth handlers, Restish may retry once after the target API
-returns `401 Unauthorized`. The retry forces fresh auth state, then sends the
+For token-bearing OAuth handlers, and for `external-tool` auth with `cachettl`,
+Restish may retry once after the target API returns `401 Unauthorized`. The retry forces fresh auth state, then sends the
 same request one more time. This recovers from cached access tokens that appear
 unexpired locally but were revoked or rejected by the API. Restish does not
 loop beyond the single auth recovery attempt; persistent failures should be

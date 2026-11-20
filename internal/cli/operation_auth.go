@@ -390,7 +390,7 @@ func (c *CLI) operationAuthStep(apiName, profileName string, selected selectedOp
 			secretKeys[p.Name] = true
 		}
 	}
-	_, forceCapable := handler.(auth.ForceCapable)
+	forceCapable := authRetriesAfterUnauthorized(handler, selected.resolved.Config)
 	return operationAuthStep{
 		handler:      handler,
 		rawParams:    selected.resolved.Config.Params,
