@@ -40,6 +40,11 @@ external-tool auth wire format is compatible with Restish v1 and sends `body`
 as JSON text, so binary payloads should be omitted or represented by a digest
 that your helper can verify separately.
 
+Set `cachettl=10m` (any duration) when the helper adds the same headers to every
+request of a host, such as a credential helper: Restish runs it once and reuses
+its headers until they expire or the API answers `401`, instead of starting it
+for every request. Leave it unset for helpers that sign each request.
+
 Use this when another program owns credentials, signing, or token refresh. Keep
 the helper small and auditable, because it runs locally with the same access as
 your shell. The [Authentication guide](/docs/guides/authentication/) explains

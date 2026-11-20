@@ -106,6 +106,19 @@ func (c *CLI) authHandlerFor(ac *config.AuthConfig, opts authHandlerOptions) (au
 	}
 }
 
+// authRetriesAfterUnauthorized tells whether a 401 should be retried once with fresh
+// auth state. External-tool auth only has state to refresh when it caches the tool's
+// headers (cachettl).
+func authRetriesAfterUnauthorized(handler auth.Handler, ac *config.AuthConfig) bool {
+	if _, ok := handler.(auth.ForceCapable); !ok {
+		return false
+	}
+	if ac != nil && ac.Type == "external-tool" {
+		return strings.TrimSpace(ac.Params["cachettl"]) != ""
+	}
+	return true
+}
+
 // authOnRequest returns auth callbacks for the given profile's auth config,
 // or zero values when no auth is configured.
 func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileConfig, opts authHandlerOptions) authCallbacks {
@@ -155,7 +168,7 @@ func (c *CLI) authOnRequest(apiName, profileName string, prof *config.ProfileCon
 			markAuthCredentialTargets(req, resolvedAuth.Config.Type, params)
 			return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)
 		}
-		if _, ok := handler.(auth.ForceCapable); ok {
+		if authRetriesAfterUnauthorized(handler, resolvedAuth.Config) {
 			callbacks.OnUnauthorized = func(req *http.Request) error {
 				if c.applyCachedOAuthClientCredentials(req, resolvedAuth.Config.Type, resolvedAuth.CacheKey, apiName, profileName, true) {
 					return c.runAuthHookPlugins(apiName, profileName, rawParams, secretKeys, req)

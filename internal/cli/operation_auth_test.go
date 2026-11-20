@@ -9,6 +9,7 @@ import (
 
 	"github.com/rest-sh/restish/v2/auth"
 	"github.com/rest-sh/restish/v2/config"
+	authpkg "github.com/rest-sh/restish/v2/internal/auth"
 	"github.com/rest-sh/restish/v2/internal/request"
 	"github.com/rest-sh/restish/v2/internal/spec"
 )
@@ -702,5 +703,30 @@ func TestOperationAuthPreserveHeaderCaseDoesNotRewriteManualHeader(t *testing.T)
 	}
 	if got := req.Header["X-Sourcesystem"]; len(got) != 0 {
 		t.Fatalf("operation auth added canonicalized duplicate: %#v", req.Header)
+	}
+}
+
+// External-tool auth retries after a 401 only when it caches the tool's headers
+// (cachettl): without a cache, a second run of the tool would give the same answer.
+func TestAuthRetriesAfterUnauthorized(t *testing.T) {
+	tool := &authpkg.ExternalTool{}
+	cases := []struct {
+		params map[string]string
+		want   bool
+	}{
+		{map[string]string{"commandline": "x"}, false},
+		{map[string]string{"commandline": "x", "cachettl": "10m"}, true},
+		{map[string]string{"commandline": "x", "cachettl": " "}, false},
+	}
+	for _, tc := range cases {
+		if got := authRetriesAfterUnauthorized(tool, &config.AuthConfig{Type: "external-tool", Params: tc.params}); got != tc.want {
+			t.Errorf("external-tool %v: %v, want %v", tc.params, got, tc.want)
+		}
+	}
+	if !authRetriesAfterUnauthorized(&authpkg.ClientCredentials{}, &config.AuthConfig{Type: "oauth-client-credentials"}) {
+		t.Error("oauth-client-credentials must keep its retry after a 401")
+	}
+	if authRetriesAfterUnauthorized(&authpkg.Bearer{}, &config.AuthConfig{Type: "bearer"}) {
+		t.Error("bearer has nothing to refresh: no retry")
 	}
 }

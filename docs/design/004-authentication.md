@@ -348,6 +348,15 @@ header or URI updates on stdout. A new opt-in output mode,
 `params.output: bearer-token`, treats stdout as the bearer token and sets
 `Authorization: Bearer <token>`.
 
+`params.cachettl` (a duration, unset by default) keeps the headers the tool
+added in the token cache, keyed by API profile, command line and host, and
+reuses them until the duration expires instead of running the tool for every
+request. It is meant for credential helpers whose answer depends on the host
+alone; a tool that rewrites the URI is never cached, and request signers leave
+it unset. A cached `external-tool` is the one external-tool case that takes part
+in 401 recovery: the cached headers are dropped, the tool runs again and the
+request is retried once.
+
 External auth commands remain trusted local code. Restish requires command
 approval, streams stderr to the user, captures a bounded stderr excerpt for
 errors, and redacts common secret assignments in the returned diagnostic.
